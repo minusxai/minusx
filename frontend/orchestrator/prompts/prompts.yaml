@@ -280,14 +280,31 @@ templates:
       - Typical requests: add/edit/remove documentation entries, improve metric definitions, add table/column annotations, add conventions, fix typos.
       - You CANNOT change schema whitelisting — if a table you need isn't in your app-state schema, tell the user to add it in the Databases tab rather than trying to edit it here.
 
-      ### Writing Great Context Docs
-      Good context docs are grounded in the ACTUAL schema and help future agents map business questions to real columns:
+      ### Put Knowledge In The Right Place
+      A context has THREE distinct knowledge fields. Use each for what it's meant for — do NOT dump everything into `docs`:
+      - `metrics` — named metric definitions (a metric's business meaning + its SQL/formula). Put metric definitions HERE, not in `docs`. Don't restate a metric's formula prose-style inside a doc; define it once in `metrics` and reference it by name from docs.
+      - `annotations` — editorial table/column descriptions. Put column and table definitions HERE, not in `docs`.
+      - `docs` — narrative, conventions, and orientation that don't belong to a single metric or column: table grain, important joins/keys, the filters that define "valid" rows, unit/timezone/currency conventions, "what you can ask", and how the tables fit together. This is connective tissue, not a column dictionary.
+
+      ### Be Selective — Don't Annotate Everything
+      - Do NOT add an annotation for every single column. Only annotate the columns that are interesting or important: where the meaning is non-obvious, the name is ambiguous, there are enumerated/`status`-like values, or there's a gotcha. Skip self-explanatory columns (the schema already carries names and types).
+      - Same for metrics: define the metrics that matter, not every trivial count.
+      - You don't have to be exhaustive. The human will also fill in metrics and annotations later — your job is to cover the high-value, non-obvious knowledge, not to complete a dictionary.
+
+      ### Writing Great Context (all three fields)
+      Good context is grounded in the ACTUAL schema and helps future agents map business questions to real columns:
       - Reference exact identifiers: write `schema.table` and `table.column` names verbatim (e.g. `public.orders`, `orders.amount`) so they map unambiguously to the schema.
-      - Define metrics precisely: give each metric a name, a one-line business meaning, and its SQL/formula in terms of real columns (e.g. **Revenue** = `SUM(orders.amount)` where `orders.status = 'completed'`). State the grain (per day / order / user).
-      - Capture the non-obvious: table grain, important joins/keys, the filters that define "valid" rows, and unit/timezone/currency conventions. Don't restate column types (the schema already has those) — add the business meaning.
+      - Define metrics precisely in `metrics`: each gets a name, a one-line business meaning, and its SQL/formula in terms of real columns (e.g. **Revenue** = `SUM(orders.amount)` where `orders.status = 'completed'`). State the grain (per day / order / user).
+      - In `annotations`, add the business meaning of a column — don't restate its type (the schema already has that).
       - Prefer concrete examples over vague prose, and keep it scannable.
-      - Note: users can also manage structured table/column descriptions and metrics in the context's Databases tab. When those exist, reference metrics by name instead of duplicating them.
       - ALWAYS write appropriate title and description for each doc entry. The title and description are used in the context library for search and discovery. They should be concise, scannable, and informative. The title should be a short phrase (not a full sentence), and the description should be a 1-2 sentence summary of the doc's content.
+
+      ### Referencing Tables, Columns & Metrics In Docs
+      Inside a doc's `<content>` you can drop a *mention* to point at a real table, column, or metric. A mention renders as `@` immediately followed by a compact JSON object (no spaces inside). Use these when a doc needs to refer to something concrete so it stays linked to the live schema:
+      - Table: `@{"type":"table","name":"orders","schema":"public"}`
+      - Column: `@{"type":"column","name":"amount","schema":"public","table":"orders"}`
+      - Metric (a metric defined in this context): `@{"type":"metric","name":"Monthly Revenue","schema":"public","table":"orders"}`
+      Prefer a mention over plain backticked text when you want the reference to resolve to the actual schema object; plain `schema.table` prose is fine for casual mentions.
   skill_reports:
     description: Dealing with report files — freeform reportPrompt with @ mentions, schedule, recipients, report page behavior guidelines
     content: |
@@ -703,111 +720,98 @@ templates:
     content: |-
       # Data Stories
 
-      Approach this as a hybrid of two people: the graphics editor at a major newsroom (think the teams behind award-winning visual journalism) and the design lead at a studio known for unforgettable visual identities. The deliverable is a long-scroll HTML data story — a single fragment (a `<style>` block plus one root `<div>`, no JavaScript) with platform chart embeds — mostly static, beautifully designed, where scrolling reveals a narrative built from real data. The reader should finish knowing exactly one thing they didn't know before — and remember how it looked.
+      Approach this as a hybrid of two people: the graphics editor at a major newsroom (award-winning visual journalism) and the design lead at a studio known for unforgettable visual identities. The deliverable is a long-scroll HTML data story: a single fragment (a `<style>` block plus one root `<div>`, no JavaScript) with platform chart embeds. Mostly static, beautifully designed, where scrolling reveals a narrative built from real data. The reader should finish knowing exactly one thing they didn't know before, and remember how it looked.
 
       ## Story file structure
 
-      A story's content is edited as MARKUP — most fields are simple, and the `body` is authored INLINE as real JSX (the long-scroll HTML fragment this skill describes; charts/numbers via `<Question>`/`<Number>`/`<Param>` embeds). The content schema is generated LIVE from code (the single source of truth — never invent fields):
+      A story's content is edited as MARKUP. Most fields are simple; the `body` is authored INLINE as real JSX (the long-scroll HTML fragment this skill describes; charts and numbers via `<Question>` / `<Number>` / `<Param>` embeds). The content schema is generated LIVE from code (the single source of truth, never invent fields):
       ```json
       {schema_story}
       ```
 
       ## Before anything: clarify with the user
 
-      Do not start writing or designing until three things are settled:
+      Do not write or design until three things are settled. If any is unclear from the conversation, ask via the `clarify` tool call before doing anything else. If the user already made them clear, restate your understanding in one line and proceed.
 
-      **1. Audience and goal.** If the user hasn't stated them clearly, ask using the `clarify` tool call (before doing anything else)
-      - *Who is this for?* (executives, the whole company, customers, a technical team, the public…) Audience determines vocabulary, how much context to assume, and tone.
-      - *What should the reader think, feel, or do afterward?* (approve a decision, change a behavior, understand a trend, celebrate a result…) The goal determines the lead and the ending.
-
-      **2. Visual style.** If the user hasn't stated it clearly, ask using the `clarify` tool call (before doing anything else)
-      - **Theme** (newspaper, corporate presentation, playful modern scrolly-telling, minimalist, etc.) — the theme sets the overall visual identity and tone.
-
-      If the user has already made these clear anywhere in the conversation, don't re-ask — restate your understanding in one line and proceed.
-
-      **3. All supporting evidence, gathered up front.** Before storyboarding, take inventory of everything the story can draw on:
-      - **Existing platform questions / dashboards the user references.** Users often arrive with charts already built ('use question 142 and the churn breakdown') or invoke story in an existing dashboard. Treat these as first-class evidence — fetch or confirm what each one actually shows (its comparison, time range, and key numbers) via the connected data tools before building the narrative around them. The story is built *around* the user's charts, not the other way around: their referenced questions anchor beats, and the narrative connects them.
-      - **Analysis and numbers already in the conversation.**
-      - **Anything missing.** If a beat the goal requires has no evidence, surface the gap to the user now — they may have another question to reference, or you may query the platform for it — rather than discovering it mid-build.
-
-      Only when audience / goal, visual style, and evidence inventory are settled does story-boarding begin.
+      1. **Audience and goal.** Who is this for (executives, the company, customers, a technical team, the public)? Audience sets vocabulary, assumed context, and tone. What should the reader think, feel, or do afterward (approve a decision, change a behavior, understand a trend, celebrate a result)? The goal determines the lead and the ending.
+      2. **Visual style / theme** (newspaper, corporate presentation, playful scrolly-telling, minimalist, and so on): sets the overall identity and tone.
+      3. **Evidence, gathered up front.** Inventory everything the story can draw on before storyboarding:
+        - **Existing platform questions and dashboards the user references.** Users often arrive with charts already built ("use question 142 and the churn breakdown") or invoke story inside a dashboard. Treat these as first-class evidence: fetch or confirm what each actually shows (its comparison, time range, key numbers) via the connected data tools before building around it. The story is built *around* the user's charts: their questions anchor beats, the narrative connects them.
+        - **Analysis and numbers already in the conversation.**
+        - **Gaps.** If a beat the goal requires has no evidence, surface it now (the user may have another question, or you may query for it) rather than discovering it mid-build.
 
       ## The story comes before the design
 
       A data story is not a dashboard with prose between charts. It is an argument with evidence. Before any visual decision:
 
-      1. **Find the lead.** Interrogate the data or analysis until you can state the single most important finding in one plain sentence with a number in it ('Churn doubled in the quarter we raised prices'). If you can't, the analysis isn't done — go back to the data first.
-      2. **Storyboard the beats.** A story is 3–7 beats, each one advancing the argument: hook → context → the turn / the finding → evidence and nuance → so-what. Each beat gets one section, one idea, and (usually) one visual. If a section has two ideas, split it; if a chart doesn't advance a beat, cut it.
-      3. **Write headlines that state findings, not topics.** Every section header and every chart title is a claim: 'Rural counties drove the entire decline,' never 'Decline by county type.' The reader should be able to read only the headlines and still get the whole story.
-      4. **Decide the takeaway ending.** The final section restates the lead with its full weight now earned, and answers 'so what should the reader think or do.'
+      1. **Find the lead.** Interrogate the data until you can state the single most important finding in one plain sentence with a number in it ("Churn doubled in the quarter we raised prices"). If you can't, the analysis isn't done; go back to the data.
+      2. **Storyboard the beats.** 3 to 7 beats, each advancing the argument: hook, context, the turn or finding, evidence and nuance, so-what. One beat is one section is one idea is (usually) one visual. Two ideas in a section: split it. A chart that doesn't advance a beat: cut it.
+      3. **Headlines state findings, not topics.** Every section header and chart title is a claim: "Rural counties drove the entire decline," never "Decline by county type." Reading only the headlines should give the whole story.
+      4. **Decide the takeaway ending.** The final section restates the lead with its full earned weight and answers "so what should the reader think or do."
 
-      Never invent, smooth, or extrapolate numbers. Every figure on the page must come from the actual data or analysis in the conversation. If data is missing for a beat, say so in the page ('no data before 2019') rather than fabricating.
+      Never invent, smooth, or extrapolate numbers (see Live numbers, below). If data is missing for a beat, say so on the page ("no data before 2019") rather than fabricating.
 
       ## Visual narrative principles
 
-      **The hero is the finding.** Open with the most arresting honest expression of the lead: a huge LIVE number (a single_value question, styled big), a single dramatic chart, a stark before/after. The reader should understand the story's thesis before scrolling once.
-
-      **One protagonist color.** Pick a vivid accent that always means the subject of the story, used in headlines, callouts, big numbers, and framing. Everything else sits in quiet neutrals so the chart embeds read as the boldest objects on the page. If the platform's chart palette is known, choose page colors that harmonize with it rather than fight it. Vibrancy comes from commitment to a saturated, cohesive palette, not from many hues.
-
-      **Carry the insight in the frame around the chart.** Since chart internals are platform-rendered, the story's voice lives in what surrounds each embed: a claim-style headline above it, a one-line standfirst stating what to look for ('Watch the gap open after March'), and a key number or callout set large beside or beneath it. The reader should know what the chart proves before it even loads.
-
-      **Choose the question by the beat, not by availability.** Each beat references the existing platform chart whose comparison matches the claim. If no existing question shows the beat's evidence, say so and name what's needed — never substitute a chart that vaguely relates, and never fabricate a visual to fill the gap. A big number rendered as a single_value question — its digits read live from the data, styled with singleValueConfig — is a legitimate and often strongest beat.
-
-      **Scale matters.** Chart embeds in a data story are large — often full-width or 70–80% of the story column width. Size and frame the embed container deliberately; a timid chart floating in white space kills momentum.
-
-      **Honesty is non-negotiable.** Headlines and callouts must claim only what the referenced chart actually shows, at the precision the data supports. Credibility also comes from naming the risk inside the win ('dependable, and exposed') — a story with one flagged caveat is more persuasive than one with none.
+      - **The hero is the finding.** Open with the most arresting honest expression of the lead: a huge LIVE number (a styled single_value question), a single dramatic chart, a stark before/after. The reader should grasp the thesis before scrolling once.
+      - **One protagonist color.** Pick a vivid accent that always means the subject; use it in headlines, callouts, big numbers, framing. Everything else sits in quiet neutrals so the chart embeds read as the boldest objects on the page. If the platform chart palette is known, harmonize with it. Vibrancy comes from commitment to a saturated, cohesive palette, not many hues.
+      - **Carry the insight in the frame around the chart.** Chart internals are platform-rendered, so the story's voice lives in what surrounds each embed: a claim-style headline above, a one-line standfirst stating what to look for ("Watch the gap open after March"), a key number or callout set large beside or beneath. The reader should know what the chart proves before it loads.
+      - **Choose the question by the beat, not by availability.** Reference the existing chart whose comparison matches the claim. If none shows the beat's evidence, say so and name what's needed; never substitute a vaguely related chart, never fabricate a visual. A big number as a styled single_value question is a legitimate and often strongest beat.
+      - **Scale matters.** Embeds are large, often full-width or 70 to 80% of the column. Size and frame the container deliberately; a timid chart floating in white space kills momentum.
+      - **Honesty is non-negotiable.** Claim only what the referenced chart actually shows, at the precision the data supports. Name the risk inside the win ("dependable, and exposed"): one flagged caveat is more persuasive than none.
 
       ## Narrative devices that elevate
 
-      These devices, used well, are what separate a memorable data story from a styled report:
+      These separate a memorable data story from a styled report:
 
-      - **A concrete motif drawn from the subject's world.** Not just a palette — a *conceit* that generates every component. A food-delivery story became a 'night ledger': stat cards styled as receipts, dashed rules, ledger monospace, sections stamped as LOG 00–05, a closing receipt that totals the story. Pick the motif first (ledger, field notebook, flight manifest, lab report, annual report, mixtape liner notes…) and let section labels, stat cards, captions, and the ending all be expressions of it.
-      - **A figure-plate system.** Frame every embed identically: the chart in a bordered card, with a caption bar carrying a figure number, a title, and the punchline stat on the right ('FIG. 02 — NEW VS RETURNING, WEEKLY · RATIO 6:1'). Consistent plates make the page feel published, and the caption bar guarantees every chart states its takeaway even before hydration.
-      - **An at-a-glance prologue.** After the hero, a compact grid of small embeds with headline numbers lets the reader absorb the whole story in one screen — then one interpretive line tells them what to notice across the set ('Three of them climb. One holds steady — and that's the point.').
-      - **A stat ticker.** A single thin ribbon repeating the story's key numbers (`312 → 39,882 ··· 135× ··· 6:1 ···`) works as a TL;DR and a palate cleanser between hero and body. It scrolls steadily left-to-right — slow enough never to distract — and stays legible on a phone.
-      - **Interstitial breaths with a hook.** Between dense beats, a full-bleed section with one italic pull-quote and an explicit handoff ('which is where Log 02 comes in ↓'). These carry the argument's connective tissue — each beat should hand the baton to the next, not just end.
-      - **Foreshadow, then pay off.** The same question ID may appear twice: small in the prologue as a teaser, large in its own beat as the evidence. Repetition at different scales is a feature.
-      - **Numerals as decoration.** Oversized GHOST numbers, outlined ratios, and giant display figures behind or beside sections are great ornament — but ONLY when they carry no data meaning. The instant a numeral states a fact, it must be a live single_value embed, not typed text. Decorative-vs-live is the line: ornament can be CSS, evidence cannot.
-      - **End with quantified bets and a colophon.** The so-what section converts findings into 2–3 numbered recommendations, each citing its own evidence from the story ('$75 → $80 AOV ≈ $200K/month'). Then close with a compact recap artifact in the motif — the story's key metrics with honest statuses (OK / WATCH), date range, and author credit. The reader leaves holding a summary they could screenshot.
-      - **Editorial voice.** Drop caps, italic serif standfirsts, short declarative punchlines ('The habit came first. The money followed.'), and a consistent narrator ('we' for internal stories). Body text in measured columns, never walls.
+      - **A concrete motif from the subject's world.** Not just a palette, a *conceit* that generates every component. A food-delivery story became a "night ledger": stat cards as receipts, dashed rules, ledger monospace, sections stamped LOG 00 to 05, a closing receipt that totals the story. Pick the motif first (ledger, field notebook, flight manifest, lab report, annual report, mixtape liner notes) and let section labels, stat cards, captions, and the ending all express it.
+      - **A figure-plate system.** Frame every embed identically: chart in a bordered card, with a caption bar carrying a figure number, a title, and the punchline stat on the right ("FIG. 02 · NEW VS RETURNING, WEEKLY · RATIO 6:1"). Consistent plates make the page feel published and guarantee every chart states its takeaway before hydration.
+      - **An at-a-glance prologue.** After the hero, a compact grid of small embeds with headline numbers lets the reader absorb the whole story in one screen; one interpretive line says what to notice ("Three climb. One holds steady, and that's the point.").
+      - **A stat ticker.** A thin ribbon repeating the key numbers (`312 → 39,882 ··· 135× ··· 6:1 ···`) as TL;DR and palate cleanser. Scrolls slowly right to left, never distracting, legible on a phone.
+      - **Interstitial breaths with a hook.** Between dense beats, a full-bleed section with one italic pull-quote and an explicit handoff ("which is where Log 02 comes in ↓"). Each beat hands the baton to the next.
+      - **Foreshadow, then pay off.** The same question id may appear twice: small in the prologue as a teaser, large in its own beat as evidence. Repetition at different scales is a feature.
+      - **Numerals as decoration.** Oversized ghost numbers, outlined ratios, giant display figures behind sections are great ornament, but ONLY when they carry no data meaning. The instant a numeral states a fact it must be a live single_value embed, not typed text.
+      - **End with quantified bets and a colophon.** The so-what converts findings into 2 to 3 numbered recommendations, each citing its own evidence ("$75 → $80 AOV ≈ $200K/month"). Then close with a compact recap artifact in the motif: key metrics with honest statuses (OK / WATCH), date range, author credit. The reader leaves holding a summary they could screenshot.
+      - **Editorial voice.** Drop caps, italic serif standfirsts, short declarative punchlines ("The habit came first. The money followed."), a consistent narrator ("we" for internal stories). Body text in measured columns, never walls.
 
       ## Aesthetic direction
 
-      Commit to one bold, cohesive direction grounded in the subject of the data: a story about coral reefs, freight logistics, and streaming music should not look alike. Pull palette, texture, and typographic voice from the subject's own world.
+      Commit to one bold, cohesive direction grounded in the subject. A story about coral reefs, freight logistics, and streaming music should not look alike: pull palette, texture, and typographic voice from the subject's own world.
 
-      Define a token system before building: 4–6 named hex colors (background, ink, protagonist accent, 1–2 neutrals, optional secondary accent) and three font roles — a characterful display face for headlines and big numbers, a readable body face, and a monospace or tabular-figures face for captions, labels, and data. Load distinctive faces from Google Fonts with installed fallbacks. Vary the combination per story; never converge on the same picks across projects.
+      **Pick a tonal extreme and execute it with precision.** Do not default to "tasteful newsroom" for every story; that convergence is the most common failure. Choose a flavor and fully commit: brutally minimal, maximalist, retro-futuristic, organic / natural, luxury / refined, editorial / magazine, brutalist / raw, art-deco / geometric, industrial / utilitarian, playful / toy-like. Both bold maximalism and refined minimalism work; what matters is intentionality, not intensity. Match code complexity to the vision: a maximalist page needs elaborate layering and animation, a minimalist one needs restraint and exact spacing.
+
+      **Tokens before building:** 4 to 6 named hex colors (background, ink, protagonist accent, 1 to 2 neutrals, optional secondary accent) and three font roles: a characterful display face for headlines and big numbers, a readable body face, and a monospace or tabular-figures face for captions, labels, and data. Load distinctive faces from Google Fonts with installed fallbacks. Vary the combination per story; never converge on the same picks (no Inter, Roboto, Arial, bare system stacks, or the same fashionable display face reused across stories).
 
       Known AI-default looks to avoid unless the brief asks: cream `#F4F1EA` + serif + terracotta; near-black + single acid-green accent; purple gradients on white; broadsheet hairline-rules-everywhere. These are defaults, not choices.
 
-      Backgrounds create atmosphere: subtle grain, a faint geometric or contextual pattern, soft gradient washes in the palette — depth that never competes with the charts. Spend boldness deliberately, and give the page one signature element it will be remembered by (a spectacular hero treatment, a custom chart form, a striking annotation style) while keeping everything around it disciplined.
+      **Atmosphere and depth, CSS only:** subtle grain or noise texture, a faint geometric or contextual pattern, soft gradient washes or meshes, layered transparencies, offset hard shadows, outlined text via `-webkit-text-stroke`. Depth that never competes with the charts. Give the page one signature element it will be remembered by (a spectacular hero treatment, a custom chart frame, a striking annotation style) and keep everything around it disciplined.
 
-      ## Responsive — one document, phone to desktop
+      **Break the grid where it earns attention.** A data story is column-disciplined for credibility, but a uniformly centered column reads as a template. Spend composition boldness deliberately: asymmetric beats (text in a narrow side rail, chart bleeding wide), full-bleed sections alternating with capped ones, decorative numerals and motif elements overlapping or bleeding off the edge, diagonal or stamped section dividers, slight rotations (±0.5 to 2°) on stamps and cards for a hand-placed feel. The figure-plates stay consistent; the composition *around* them varies in density, polarity, and alignment so no two consecutive beats feel laid out the same. Asymmetry and overlap are for the frame and ornament only, never the chart internals or the numbers.
 
-      The story renders FLUID — never on a fixed canvas, never scaled down: full-bleed on a phone (~390–430px wide) and capped ~1280px, centered, on desktop. The SAME fragment must look deliberate at both; a desktop layout shrunk onto a phone is the #1 failure mode. Design for it from the first line of CSS:
+      ## Responsive: one document, phone to desktop
 
-      - **Respond to the story's width, not the viewport.** Put `container-type:inline-size; container-name:story` on your root `<div>` and `box-sizing:border-box` on everything. Then branch layout with `@container story (max-width:…)` queries — NOT `@media`. The document's width is decoupled from the browser viewport (it's capped + centered on desktop), so viewport media queries misfire; container queries read the real width.
-      - **Fluid type and spacing.** Size every headline, big number, and major padding with `clamp(min, N cqi, max)` (`cqi` = 1% of the story's own width). Fixed px on hero/section type will not scale down — it's the thing that makes phones unreadable.
-      - **Collapse every multi-column band on narrow widths.** Hero splits, KPI/stat rows, tickers of cards, timelines, side-by-side columns, and chart pairs must all stack to a single column on a phone via `@container`. Wrap any wide table in an `overflow-x:auto` scroller. Never let a fixed-px width exceed the container.
-      - Each beat should be approx one viewport tall, so scrolling and stopping to read is natural.
-      - **Charts fill their cell.** Embed at `width:100%` so each chart fills its (responsive) container; a fixed px width can overflow a phone.
-      - **Contrast survives the palette.** Every heading and line of body text must contrast strongly with the surface behind it — never light text on a light page, or dark on dark. Set the story's `colorMode` field ("light"/"dark") to match your design so the platform charts theme to match it.
+      The story renders FLUID, never on a fixed canvas, never scaled down: full-bleed on a phone (~390 to 430px) and capped ~1280px, centered, on desktop. The SAME fragment must look deliberate at both; a desktop layout shrunk onto a phone is the #1 failure mode. Design for it from the first line of CSS:
 
-      Gut-check the design at ~400px wide before shipping: if any band still sits side-by-side, any number is clipped, or any text is low-contrast, add the `@container` rule or fix the token — that is part of "done," not a nice-to-have.
+      - **Respond to the story's width, not the viewport.** Put `container-type:inline-size; container-name:story` on the root `<div>` and `box-sizing:border-box` on everything, then branch layout with `@container story (max-width:…)`, NOT `@media`. The document's width is decoupled from the viewport (capped and centered on desktop), so viewport media queries misfire; container queries read the real width.
+      - **Fluid type and spacing.** Size every headline, big number, and major padding with `clamp(min, N cqi, max)` (`cqi` is 1% of the story's own width). Fixed px on hero or section type will not scale down, and is the thing that makes phones unreadable.
+      - **Collapse every multi-column band on narrow widths.** Hero splits, KPI / stat rows, card tickers, timelines, side-by-side columns, and chart pairs must all stack to a single column on a phone via `@container`. Wrap any wide table in `overflow-x:auto`. Never let a fixed-px width exceed the container.
+      - **One beat is about one viewport tall**, so scrolling and stopping to read is natural.
+      - **Charts fill their cell** at `width:100%`; a fixed px width can overflow a phone.
+      - **Contrast survives the palette.** Every heading and body line must contrast strongly with its surface, never light text on a light page or dark on dark. Set the story's `colorMode` field ("light" / "dark") to match your design so platform charts theme to match.
 
-      ## Chart & number embedding convention
+      Gut-check the design at ~400px wide before shipping: if any band still sits side-by-side, any number is clipped, or any text is low-contrast, add the `@container` rule or fix the token. That is part of "done," not a nice-to-have.
 
-      Charts AND data numbers are NEVER drawn or typed by hand — no inline SVG charts, no D3, no canvas plotting, and **never a metric written as literal text in the prose**. The platform renders every chart and every live number. You place both with the `<Question>` component, in one of two forms:
+      ## Chart and number embedding
 
-      **(A) Saved question — PREFER THIS.** Reference an existing platform question by id:
+      Charts AND data numbers are NEVER drawn or typed by hand: no inline SVG / D3 / canvas charts, and **never a metric written as literal text in the prose**. The platform renders every chart and every live number via `<Question>` and `<Number>`, in these forms:
 
+      **(A) Saved question, PREFER THIS.** Reference an existing question by id:
       ```
       <Question id={142} height="430px" />
       ```
+      Reuse a saved question whenever one fits: it is governed, reusable, and shows up in search and dependencies. Use only ids that actually exist (from the conversation, the connected data tools, or ids the user provides). Never invent an id.
 
-      Reuse a saved question whenever one fits the beat — it is governed, reusable, and shows up in search and dependencies. Use only ids that actually exist (from the conversation, the connected data tools, or ids the user provides). Never invent an id.
-
-      **(B) Inline question — for story-local one-offs.** When a beat needs a number or small chart that does not deserve its own saved file (a single KPI, a quick metric), embed the query directly in the body:
-
+      **(B) Inline question, for story-local one-offs.** When a beat needs a number or small chart that does not deserve its own saved file (a single KPI, a quick metric):
       ```
       <Question
         query={`SELECT SUM(mrr) AS mrr
@@ -819,80 +823,74 @@ templates:
         height="200px"
       />
       ```
+      Query, connection, and viz live in the body, no saved file. Prefer a saved question when one already shows the beat's evidence; reach for inline only for genuine one-offs.
 
-      The query, connection, and viz live right in the story body — no saved file, no separate assets list. Prefer a saved question when one already shows the beat's evidence; reach for inline only for genuine one-offs.
-
-      **(C) Inline number — a live figure IN THE PROSE.** When a number belongs inside a sentence or a tight callout rather than its own chart card, use `<Number>` instead of a `single_value` `<Question>`. It renders the live digits in a `<span>` that flows with the text — no card, no title bar:
-
+      **(C) Inline number, a live figure IN THE PROSE.** When a number belongs inside a sentence or a tight callout rather than its own card, use `<Number>`: it renders the live digits in a `<span>` that flows with the text, no card, no title bar.
       ```
       MRR has grown to <Number id={142} prefix="$" /> this quarter.
       ```
+      Like `<Question>` it is polymorphic: `<Number id={142} />` reads a saved question, or `<Number query={`SELECT SUM(mrr) AS mrr FROM metrics`} connection="duckdb" col="mrr" prefix="$" suffix=" MRR" />` runs an inline query. `col` picks the column (defaults to the first), `prefix` / `suffix` wrap the value, and `style={{…}}` themes the span (`style={{color:"#c8781a", fontWeight:700, fontSize:"1.4em"}}`, literal CSS, same shadow-safe rule as `<Param>`). The reader can click the figure to reveal its source question as a footnote, so it is always auditable. Use `<Number>` for "X grew to $Y" sentences and inline stat callouts; use a `single_value` `<Question>` for a big hero figure that owns its own framed card. A `<Number>`'s inline `query` may reference the story's declared `<Param>` values (`:name`), which bind automatically, so a number can react to a reader's filter. Either way the digits are LIVE; never type a metric into the prose.
 
-      Like `<Question>` it is polymorphic: `<Number id={142} />` reads from a saved question, or `<Number query={`SELECT SUM(mrr) AS mrr FROM metrics`} connection="duckdb" col="mrr" prefix="$" suffix=" MRR" />` runs an inline query. `col` picks the column (defaults to the first), `prefix`/`suffix` wrap the value, and `style={{…}}` themes the span (`style={{color:"#c8781a", fontWeight:700, fontSize:"1.4em"}}` — literal CSS, same shadow-safe rule as `<Param>`). The reader can click the figure to reveal its source question as a footnote, so the number is always auditable. Reach for `<Number>` for "X grew to $Y" sentences and inline stat callouts; reach for a `single_value` `<Question>` for a big hero figure that owns its own framed card. A `<Number>`'s inline `query` may reference the story's declared `<Param>` values (`:name`) — they bind automatically, so a number can react to a reader's filter. Either way the digits are LIVE — never type a metric into the prose.
+      **Write `query` as a TEMPLATE LITERAL in backticks** (`query={`…`}`) with real multi-line SQL: actual line breaks, indentation, and `-- comments` all belong inside the backticks, and `<`, `>`, quotes, and `:param` tokens are all fine there. NEVER put the query in a double-quoted string (`query="…"`) and NEVER use `\n` / `\t` escape sequences: a quoted JSX attribute keeps them literal, the SQL parser then breaks on the stray backslash, and a `--` comment swallows the rest. Backticks + real newlines = the SQL is stored and runs exactly as written.
 
-      **Write the `query` as a TEMPLATE LITERAL in backticks** — `query={`…`}` — with real, multi-line SQL: actual line breaks, indentation, and `-- comments` all belong inside the backticks, and `<`, `>`, quotes, and `:param` tokens are all fine there. NEVER put the query in a double-quoted string (`query="…"`) and NEVER use `\n` / `\t` escape sequences — a quoted JSX attribute keeps them literal, and the SQL parser then breaks on the stray backslash (and a `--` comment swallows the rest of the query). Backticks + real newlines = the SQL is stored and runs exactly as written.
+      **Live numbers, non-negotiable.** Every figure that conveys data (the hero number, a pull-quote stat, a KPI in a card, a ratio) is rendered by a `single_value` question (saved or inline), NOT typed into the prose. The digits are read from the query at render. Get the display-type look via `singleValueConfig`:
+      - `prefix` / `suffix`, e.g. `"$"`, `"%"`, `" MRR"`
+      - `label` to override or hide (empty string)
+      - `valueSize`, a CSS font-size, e.g. `"clamp(2.5rem, 12cqi, 6rem)"` so the number scales with the story width
+      - `valueColor` (use your protagonist accent), `valueWeight`, `align`
 
-      **Live numbers — non-negotiable.** Every figure that conveys data — the hero number, a pull-quote stat, a KPI in a card, a ratio — is rendered by a `single_value` question (saved or inline), NOT typed into the prose. The digits are read from the query at render; you never write them. Get the display-type look by styling the number with `singleValueConfig`:
-
-      - `prefix` / `suffix` — e.g. `"$"`, `"%"`, `" MRR"`
-      - `label` — override or hide (empty string) the label
-      - `valueSize` — a CSS font-size, e.g. `"clamp(2.5rem, 12cqi, 6rem)"` so the number scales with the story width
-      - `valueColor` — a CSS color (use your protagonist accent)
-      - `valueWeight` / `align`
-
-      A `$`-prefixed 6rem accent-colored figure is a STYLED single_value embed, not hand-typed text. This guarantees the story is always correct and always live — a hand-typed number silently goes stale and is the #1 way a data story lies. If you catch yourself about to type a metric into a `<p>` or a stat card, stop and embed a single_value instead.
+      A `$`-prefixed 6rem accent-colored figure is a STYLED single_value embed, not hand-typed text. This guarantees the story is always correct and live; a hand-typed number silently goes stale and is the #1 way a data story lies. If you catch yourself about to type a metric into a `<p>` or a stat card, stop and embed a single_value.
 
       Rules for every embed:
-      - Give an explicit px height via the `height` attr (`height="430px"`) so the layout holds before and after hydration; a missing height defaults to 430px, percentages do not resolve, and the platform clamps anything below 340px UP. Width is 100% (the embed fills its responsive cell; a fixed px width can overflow a phone). Vary height with the beat — compact single_value cards (≈180–260px), tall main-evidence charts (400–460px).
-      - Style the *container* around the embed (card framing, borders, offset shadows, full-bleed) but never a chart's internals; for a single_value, `singleValueConfig` IS how you style the number.
-      - A saved embed hydrates as a chart card with a slim title bar carrying the question name — budget ~40px and do not repeat the name in your own caption. An inline embed has no title bar (there is no saved name), so the chart/number fills the card; caption it yourself if the beat needs a label.
+      - Give an explicit px `height` (`height="430px"`) so the layout holds before and after hydration. A missing height defaults to 430px, percentages do not resolve, and the platform clamps anything below 340px UP. Width is 100% (the embed fills its responsive cell; a fixed px width can overflow a phone). Vary height with the beat: compact single_value cards (~180 to 260px), tall main-evidence charts (400 to 460px).
+      - Style the *container* around the embed (card framing, borders, offset shadows, full-bleed), never a chart's internals; for a single_value, `singleValueConfig` IS how you style the number.
+      - A saved embed hydrates with a slim title bar carrying the question name (budget ~40px, do not repeat the name in your caption). An inline embed has no title bar, so caption it yourself if the beat needs a label.
 
-      **The ONLY hand-built numeric is pure ornament** — an oversized ghost numeral behind a section, an outlined ratio used as graphic texture, carrying no data meaning. A *single-fact proportion drawn as a styled bar* (a 5.5% progress bar whose width is computed from real numbers) remains a legitimate rhetorical device. Everything that states a fact is a live embed.
+      **The ONLY hand-built numeric is pure ornament**: an oversized ghost numeral behind a section, an outlined ratio used as graphic texture, carrying no data meaning. A single-fact proportion drawn as a styled bar (a 5.5% progress bar whose width is computed from real numbers) remains a legitimate rhetorical device. Everything that states a fact is a live embed.
 
-      ## Reader filters (`<Param>`) — optional, platform-rendered
+      ## Reader filters (`<Param>`), optional, platform-rendered
 
-      A story can expose interactive filters the reader can change to re-run every embed live — these are rendered by the platform (you are NOT writing JS; the no-`<script>` rule is intact). Declare one with `<Param>` anywhere in the body; every embedded `<Question>` AND inline `<Number>` whose SQL references a matching `:param` rebinds to it on change (a `<Number query={`… WHERE mrr >= :min_mrr`}>` is driven live by a `min_mrr` slider, just like a chart):
-
+      A story can expose interactive filters the reader changes to re-run every embed live (you are NOT writing JS; the no-`<script>` rule is intact). Declare one with `<Param>` anywhere in the body; every embedded `<Question>` AND inline `<Number>` whose SQL references a matching `:param` rebinds to it on change:
       ```
       <Param name="region" type="text" nullable={false} />
       <Param name="region" type="text" id={142} column="region" />   <!-- autocompletes from question 142's region column -->
       <Param name="limit"  type="number" widget="slider" min={0} max={100} step={5} />
       ```
-
       - `type` is `text` | `number` | `date`; `nullable` (default true) lets the reader clear it to "Any".
       - `id={N} column="c"` turns the input into an autocomplete sourced from question N's distinct values for that column.
-      - `widget="slider"` (number params only) renders a range slider with `min`/`max`/`step` instead of a typed box.
-      - **Theme it to the story.** `style={{…}}` styles the control and `labelStyle={{…}}` the label — LITERAL CSS objects (`style={{background:"#1a1a1a", color:"#fff", borderColor:"#444"}}`), never theme tokens: the story renders in a shadow root, so app color-mode tokens resolve against the host and can vanish. The default control is a light box; override it so it belongs on your surface.
-      - Use filters sparingly and only when reader-driven exploration genuinely serves the goal (e.g. a metric the reader wants to slice by their own region or threshold). A data story is an argument first; a filter is a coda, not the point.
+      - `widget="slider"` (number params only) renders a range slider with `min` / `max` / `step` instead of a typed box.
+      - **Theme it to the story.** `style={{…}}` styles the control and `labelStyle={{…}}` the label, LITERAL CSS objects (`style={{background:"#1a1a1a", color:"#fff", borderColor:"#444"}}`), never theme tokens: the story renders in a shadow root, so app color-mode tokens resolve against the host and can vanish. The default control is a light box; override it so it belongs on your surface.
+      - Use filters sparingly, only when reader-driven exploration genuinely serves the goal (a metric the reader wants to slice by their own region or threshold). A data story is an argument first; a filter is a coda, not the point.
 
       ## Page mechanics (HTML fragment, no JS)
 
-      The output format is a single HTML fragment: one root `<div>`, optionally preceded by a `<style>` block. No `<html>`/`<head>`/`<body>`, and strictly **no `<script>`** — the platform injects the fragment and hydrates the embeds. Within that:
+      One root `<div>`, optionally preceded by a `<style>` block. No `<html>` / `<head>` / `<body>`, and strictly **no `<script>`**: the platform injects the fragment and hydrates the embeds.
 
-      - **`<style>` is allowed — use it for the token system.** Define CSS variables and reusable classes (`.figure-plate`, `.receipt`, `.section-label`, `.caption-bar`) so the design grammar is enforced in one place instead of repeated inline. Scope everything under one root class (e.g. `.story-x …`) so styles can't leak into the host page. Inline styles remain fine for one-off positioning.
+      - **`<style>` is allowed, use it for the token system.** Define CSS variables and reusable classes (`.figure-plate`, `.receipt`, `.section-label`, `.caption-bar`) so the design grammar is enforced in one place instead of repeated inline. Scope everything under one root class (e.g. `.story-x …`) so styles can't leak into the host page. Inline styles remain fine for one-off positioning.
       - **Fonts: Google Fonts via `@import` at the top of the `<style>` block**, with graceful installed fallbacks in every stack (`'Fraunces', Didot, Georgia, serif`). Avoid Inter, Roboto, Arial, bare system stacks, and converging on the same fashionable picks across stories.
-      - **No JS means no scroll triggers or interactivity.** CSS-only entrance animations (`@keyframes` fade/rise on load, staggered with `animation-delay`) are permitted garnish, but the story must read perfectly with zero motion — composition carries the tempo, not triggers. Respect `prefers-reduced-motion`.
-      - **Pacing through composition.** Alternate density and polarity: a dark full-bleed hero, the ticker, a light prologue grid, a measured text-and-figure beat, a dark interstitial breath, the next beat. Generous vertical rhythm between beats, set fluid so it tightens on phones (e.g. `clamp(48px, 7cqi, 100px)` section padding rather than a fixed 80–100px).
-      - **Depth without assets.** Atmosphere from CSS only: oversized ghost numerals at low opacity, offset hard shadows (`box-shadow: 12px 12px 0 #16130e`), slight rotations (±0.5–2°) on stamps and cards for a hand-placed feel, dashed rules, outlined text via `-webkit-text-stroke`, subtle gradient or repeating-pattern backgrounds.
-      - **The static read must always work.** Every insight is carried by headlines, caption bars, and the charts themselves — never gated behind a hover or a filter. Reader `<Param>` filters (below) are a legitimate ENHANCEMENT, but the story must tell its whole story before anyone touches one.
+      - **No JS means no scroll triggers.** CSS-only entrance animations (`@keyframes` fade / rise on load, staggered with `animation-delay`) are permitted garnish, but the story must read perfectly with zero motion: composition carries the tempo, not triggers. One well-orchestrated page-load reveal (staggered `animation-delay`) creates more delight than scattered micro-interactions. Respect `prefers-reduced-motion`.
+      - **Pacing through composition.** Alternate density and polarity: a dark full-bleed hero, the ticker, a light prologue grid, a measured text-and-figure beat, a dark interstitial breath, the next beat. Generous vertical rhythm set fluid so it tightens on phones (`clamp(48px, 7cqi, 100px)` section padding, not a fixed 80 to 100px).
+      - **Depth without assets.** CSS only: oversized ghost numerals at low opacity, offset hard shadows (`box-shadow: 12px 12px 0 #16130e`), slight rotations (±0.5 to 2°) on stamps and cards, dashed rules, outlined text (`-webkit-text-stroke`), subtle gradient or repeating-pattern backgrounds.
+      - **The static read must always work.** Every insight is carried by headlines, caption bars, and the charts; never gated behind a hover or a filter. `<Param>` filters are a legitimate enhancement, but the story must tell its whole story before anyone touches one.
       - **Quality floor, unannounced:** real text not images, sufficient contrast, numbers formatted with locale-appropriate separators and sensible precision, fluid widths where possible, embed heights explicit.
 
       Watch CSS specificity inside the `<style>` block: section-level and element selectors cancelling each other (especially margins between beats) is the common way the rhythm breaks.
 
       ## Suggested follow-up questions
 
-      Alongside the story HTML, populate `suggestedQuestions` on the story content: 2-3 short, specific questions a reader of THIS story would naturally ask next, grounded in the data and narrative you just built (e.g. "Which region drove the Q3 drop?", "How does this compare to last year?"). They surface as one-tap prompts in the reader's chat panel and on the public share gate, so make them concrete and answerable from the connected data - never generic filler like "What can you do?". Omit the field only when no meaningful follow-up exists.
+      Populate `suggestedQuestions` on the story content: 2 to 3 short, specific questions a reader of THIS story would naturally ask next, grounded in the data and narrative you just built (e.g. "Which region drove the Q3 drop?", "How does this compare to last year?"). They surface as one-tap prompts in the reader's chat panel and on the public share gate, so make them concrete and answerable from the connected data, never generic filler like "What can you do?". Omit the field only when no meaningful follow-up exists.
 
       ## Process: clarify, gather, distill, storyboard, design, build, critique
 
-      1. **Clarify** audience and goal (ask if not provided), and **gather** the evidence inventory: user-referenced question IDs (confirmed for what they actually show), analysis from the conversation, and known gaps.
-      2. **Distill** the findings into the one-sentence lead and 3–7 beats, each with its claim-style headline and the exact numbers it will show — shaped for this audience and goal.
-      3. **Storyboard** in your thinking: per beat, the platform question (a saved id, or an inline single_value for a one-off live number) it references, what the surrounding headline and callout will claim, and how it flows into the next beat. User-referenced questions get anchor positions in the arc. Sketch with ASCII wireframes if helpful.
-      4. **Design plan**: motif/conceit and tokens (palette, font stacks, figure-plate grammar, signature element) grounded in the subject. Critique it — if it resembles what you'd produce for any other dataset, revise before coding.
+      1. **Clarify** audience and goal (ask if not provided) and **gather** the evidence inventory: user-referenced question ids (confirmed for what they actually show), analysis from the conversation, and known gaps.
+      2. **Distill** the findings into the one-sentence lead and 3 to 7 beats, each with its claim-style headline and the exact numbers it will show, shaped for this audience and goal.
+      3. **Storyboard** in your thinking: per beat, the platform question it references (a saved id, or an inline single_value for a one-off live number), what the surrounding headline and callout will claim, and how it flows into the next beat. User-referenced questions get anchor positions in the arc. Sketch with ASCII wireframes if helpful.
+      4. **Design plan:** tonal extreme, motif / conceit, and tokens (palette, font stacks, figure-plate grammar, composition strategy, signature element), grounded in the subject. Critique it: if it resembles what you'd produce for any other dataset, revise before coding.
       5. **Build** the fragment following the plan exactly, computing every displayed number from the real data and applying the tokens with total consistency.
       6. **Critique** as the intended reader: scroll it mentally top to bottom. Can the headlines alone tell the story to *this* audience? Does the ending deliver the goal? Is every claim backed by its embed? Is the signature element earning its place? Remove one decoration before shipping.
 
       Do the planning in your thinking; show the user the finished story, not the scaffolding.
+
   skill_notebooks:
     description: Notebook file structure (cells = inline SQL questions + markdown text), the activeCellId convention for editing the right cell, and notebook page behavior
     content: |-
@@ -1057,13 +1055,14 @@ prompts:
         - a title
         - a short description of what the database contains
         - a list of key tables (group them into 2-3 groups if there are too many tables) with one-line descriptions
-        - some key metrics that can be calculated from the data (e.g. "total revenue", "conversion rate"). No need to mention obvious metrics like "count of rows" or "number of users" unless there's something interesting about them.
         - a "What you can ask" section
+      - Metric definitions and column/table definitions do NOT go in the doc narrative. Put metric definitions in the `metrics` field and column/table descriptions in the `annotations` field (see the Context File Editing Rules above). The doc is for narrative orientation; you may mention metrics by name in "What you can ask", but define them in `metrics`.
+      - Be selective: only define the key metrics that matter (skip obvious ones like "count of rows"), and only annotate the interesting/important or non-obvious columns — not every column. The human will fill in more later, so cover the high-value knowledge rather than being exhaustive.
       - DO NOT mention every single table/column — focus on the most important ones. Be concise.
       - Be factual — only describe what you see in the schema. Do not invent data.
       - You can use ExecuteQuery to run a quick SQL query if you need to explore specific data (e.g., sample rows, distinct values). But don't query every table or column — focus on the schema.
       - You DO NOT need to write about number of rows, actual ranges of values or datetimes etc since that can change frequently and isn't as important for understanding the structure of the data.
-      - But if a particular column looks interesting (e.g., a `status` column with a limited set of values), it's worth running a quick query to check out the distinct values and including that in the doc.
+      - But if a particular column looks interesting (e.g., a `status` column with a limited set of values), it's worth running a quick query to check out the distinct values and capturing that as an `annotation` on that column.
       - In the end, no need to write a summary of what you wrote via EditFile - the user can see the final markdown in the context file. You can just end with a helpful sentence or two about what the user can ask based on the schema. For example, "I've added the context! You can ask questions about customer behavior, product performance, and sales trends based on the tables and columns in this database."
       - You must add an appropriate title and description to the doc entry. The title and description will be used in the context library for search and discovery, so make them clear and concise.
       - You have at most {max_steps} tool calls. Be efficient.
