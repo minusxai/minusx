@@ -90,6 +90,25 @@ describe('executeQueryCached (SWR orchestration)', () => {
     expect(exec).toHaveBeenCalledTimes(1);
   });
 
+  it('forceRefresh re-executes even when fresh, and refreshes the cached blob', async () => {
+    const { opts, exec } = makeOpts();
+    await getCachedResult(opts);                       // miss → n=1, cached
+    await getCachedResult(opts);                       // fresh hit, no execute
+    expect(exec).toHaveBeenCalledTimes(1);
+
+    // "Run query": bypass the fresh serve, re-execute, update the cache.
+    const forced = await getCachedResult({ ...opts, forceRefresh: true });
+    expect(forced.meta.fromCache).toBe(false);
+    expect(forced.result.rows).toEqual([{ n: 2 }]);    // freshly executed
+    expect(exec).toHaveBeenCalledTimes(2);
+
+    // A subsequent normal call now serves the REFRESHED value from cache.
+    const after = await getCachedResult(opts);
+    expect(after.meta.fromCache).toBe(true);
+    expect(after.result.rows).toEqual([{ n: 2 }]);
+    expect(exec).toHaveBeenCalledTimes(2);
+  });
+
   it('stale → serves cached value immediately AND revalidates in the background', async () => {
     const { opts, exec } = makeOpts();
     await getCachedResult(opts);              // populate (n=1)

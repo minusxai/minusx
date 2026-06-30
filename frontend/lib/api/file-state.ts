@@ -1704,7 +1704,9 @@ export async function getQueryResult(
           ...(parameterTypes && { parameterTypes }),
           ...(filePath && { filePath }),
           ...(fileId !== undefined && { fileId }),
-          ...(fileVersion !== undefined && { fileVersion })
+          ...(fileVersion !== undefined && { fileVersion }),
+          // "Run query" / retry (forceLoad) forces a fresh server execution + cache refresh.
+          ...(forceLoad && { forceRefresh: true })
         })
       });
       responseStatus = response.status;
