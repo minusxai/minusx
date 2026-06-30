@@ -126,10 +126,19 @@ POST /api/query  { fileId, params }   (guest session)
 
 ---
 
-## Phase 2 (deferred)
+## Connector-level streaming — IMPLEMENTED (streaming-first)
 
-### Connector-level streaming — NOT YET IMPLEMENTED
-Today every connector's `query()` returns a fully-materialized `QueryResult` (bounded by the 10k row cap). The *response* and *cache write* are stream-shaped, but the connector→server hop buffers the (capped) result. True streaming = each connector yields row batches from its driver's native cursor (`pg-query-stream`, DuckDB chunk reader, BigQuery `createQueryStream`, Mongo cursor, SQLite `.iterate()`, Athena pagination), piped `connector → JSONL → {S3 tee, client}` with peak RAM = one batch. Deferred because (1) it's 8 connectors × different driver APIs, (2) `QueryResult` is consumed widely (agent text/chart, viz, augmentation) so it needs a streaming *variant* alongside `query()`, and (3) the 10k cap bounds per-result RAM today — the payoff is the uncapped/large-result future.
+The connector contract is streaming-first: `NodeConnector.queryStream()` is the primary method (`query()` drains it via `drainQueryStream`), and `runQueryStream` is the server seam the cache-write/response path consumes — so the server pipes rows `connector → JSONL → gzip → object store` write-through, **never materializing** (peak RAM = one chunk/batch). `runQuery()` (materialized) just drains the stream, so the agent (which needs the full set for text/chart) still works.
+
+**Streams natively** (driver cursor, true zero-buffer):
+- **DuckDB / SQLite / CSV(parquet)** — `conn.stream()` + `fetchChunk()` + `convertRows(JSDuckDBValueConverter)` (shared `lib/connections/duckdb-stream.ts`); connection held open across iteration, closed in the generator's `finally`. Per-chunk conversion is byte-identical to materialized `getRowObjectsJS()`.
+- **Postgres** — `pg-cursor` batched server-side cursor; columns/types from the first read; client released in `finally`.
+
+**Stream via the materialized default wrapper** (correct, but buffers the capped result — convert per-driver as needed): **BigQuery** (`createQueryStream`), **Athena** (pagination), **Mongo** (cursor), **ClickHouse**, **internal_db**.
+
+Tests: real un-mocked DuckDB streaming (multi-chunk, exact-match, lazy, no leak), mocked-cursor Postgres streaming, contract tests. Verified live in the browser: miss→hit through the streaming CSV connector.
+
+## Phase 2 (deferred)
 
 ### DuckDB cross-connection joins — JSONL is enough; NO Parquet needed
 DuckDB reads NDJSON natively (`read_ndjson`/`read_json_auto`), **including gzip** — so the cache blobs we already write are directly join-able: `read_ndjson('s3://…/<key>.jsonl.gz')` over the relevant entries. No Parquet, no recompaction. The cache only does get/put/delete by key (`blob_ref` lives in Postgres) — **no `ListBucket`**. One small detail for when this lands: the blob's first line is a metadata header, so the join read must skip line 1 (or move `columns`/`types` into the `query_cache` row to make the blob pure rows). Parquet stays a *possible future optimization* only if repeated-scan performance on large cached tables becomes a bottleneck (columnar + predicate pushdown) — not a requirement.
