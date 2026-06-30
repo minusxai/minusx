@@ -1,5 +1,6 @@
 import 'server-only';
-import type { QueryResult, SchemaEntry, TableIndex, TestConnectionResult } from './base';
+import Cursor from 'pg-cursor';
+import type { QueryResult, QueryStream, SchemaEntry, TableIndex, TestConnectionResult } from './base';
 import { NodeConnector as NodeConnectorBase } from './base';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 import { getOrCreatePgPool } from './pg-registry';
@@ -57,6 +58,58 @@ export class PostgresConnector extends NodeConnectorBase {
     const types = result.fields.map((f: any) => PG_OID_TO_TYPE[f.dataTypeID as number] ?? 'text');
 
     return { columns, types, rows: result.rows, finalQuery };
+  }
+
+  /**
+   * Streaming variant — a server-side cursor (pg-cursor) reads the result in
+   * batches so the server never buffers the whole result. The column metadata
+   * (names + OID→type) comes from the cursor's first read; a dedicated client is
+   * checked out for the cursor's lifetime and released in the generator's
+   * `finally`.
+   */
+  override async queryStream(sql: string, params?: Record<string, string | number>): Promise<QueryStream> {
+    const pool = getOrCreatePgPool(this.config);
+    const { sql: positionalSql, values: paramValues } = namedToPositional(sql, params);
+    const finalQuery = inlineSqlParams(sql, params);
+
+    const client = await pool.connect();
+    let released = false;
+    const release = () => { if (!released) { released = true; try { client.release(); } catch { /* ignore */ } } };
+
+    try {
+      const cursor = client.query(new Cursor(positionalSql, paramValues as any[]));
+      const BATCH = 500;
+      const read = (n: number): Promise<{ rows: Record<string, unknown>[]; fields: any[] }> =>
+        new Promise((resolve, reject) => {
+          // pg-cursor's read callback: (err, rows, result) — result.fields has the column descriptors.
+          (cursor as any).read(n, (err: Error | null, rows: Record<string, unknown>[], result: any) => {
+            if (err) reject(err); else resolve({ rows, fields: result?.fields ?? [] });
+          });
+        });
+
+      // First read populates the column descriptors (even for 0 rows).
+      const firstBatch = await read(BATCH);
+      const columns = firstBatch.fields.map((f) => f.name as string);
+      const types = firstBatch.fields.map((f) => PG_OID_TO_TYPE[f.dataTypeID as number] ?? 'text');
+
+      async function* rows(): AsyncGenerator<Record<string, unknown>> {
+        try {
+          let batch = firstBatch.rows;
+          while (batch.length > 0) {
+            for (const row of batch) yield row;
+            batch = (await read(BATCH)).rows;
+          }
+        } finally {
+          await new Promise<void>((res) => (cursor as any).close(() => res())).catch(() => { /* ignore */ });
+          release();
+        }
+      }
+
+      return { columns, types, finalQuery, rows: rows() };
+    } catch (err) {
+      release();
+      throw err;
+    }
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
