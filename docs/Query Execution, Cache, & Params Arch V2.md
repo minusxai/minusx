@@ -10,7 +10,7 @@ Status: **design** (not yet implemented). Supersedes the in-process `queryCache`
 
 ## Non-goals (deferred)
 
-- DuckDB cross-connection joins / Parquet materialization layer (phase 2 — see end).
+- Connector-level streaming (connectors still return materialized, row-capped results) + DuckDB cross-connection joins (phase 2 — see end). JSONL suffices for joins; no Parquet.
 - Raising the 10k row cap (`lib/sql/limit-enforcer.ts`) — stays as-is; it keeps single results bounded.
 
 ---
@@ -126,9 +126,13 @@ POST /api/query  { fileId, params }   (guest session)
 
 ---
 
-## Phase 2 (deferred): Parquet materialization layer
+## Phase 2 (deferred)
 
-For DuckDB cross-connection joins, a *separate* uncapped layer: full tables streamed per-connector → **Parquet** on S3 (or DuckDB `COPY … TO 's3://'` directly), produced by background compaction. Parquet (not Arrow) for columnar + stats + predicate pushdown on repeated scans. Independent of the interactive JSONL cache above.
+### Connector-level streaming — NOT YET IMPLEMENTED
+Today every connector's `query()` returns a fully-materialized `QueryResult` (bounded by the 10k row cap). The *response* and *cache write* are stream-shaped, but the connector→server hop buffers the (capped) result. True streaming = each connector yields row batches from its driver's native cursor (`pg-query-stream`, DuckDB chunk reader, BigQuery `createQueryStream`, Mongo cursor, SQLite `.iterate()`, Athena pagination), piped `connector → JSONL → {S3 tee, client}` with peak RAM = one batch. Deferred because (1) it's 8 connectors × different driver APIs, (2) `QueryResult` is consumed widely (agent text/chart, viz, augmentation) so it needs a streaming *variant* alongside `query()`, and (3) the 10k cap bounds per-result RAM today — the payoff is the uncapped/large-result future.
+
+### DuckDB cross-connection joins — JSONL is enough; NO Parquet needed
+DuckDB reads NDJSON natively (`read_ndjson`/`read_json_auto`), **including gzip** — so the cache blobs we already write are directly join-able: `read_ndjson('s3://…/<key>.jsonl.gz')` over the relevant entries. No Parquet, no recompaction. The cache only does get/put/delete by key (`blob_ref` lives in Postgres) — **no `ListBucket`**. One small detail for when this lands: the blob's first line is a metadata header, so the join read must skip line 1 (or move `columns`/`types` into the `query_cache` row to make the blob pure rows). Parquet stays a *possible future optimization* only if repeated-scan performance on large cached tables becomes a bottleneck (columnar + predicate pushdown) — not a requirement.
 
 ---
 
