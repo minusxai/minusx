@@ -106,6 +106,7 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
             fluid
             editable={editing}
             readOnly={readOnly}
+            filePath={storyPath}
             paramValues={content.parameterValues ?? undefined}
             onEditNumber={setNumberEdit}
             onChange={onStoryChange}

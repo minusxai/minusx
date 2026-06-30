@@ -47,6 +47,8 @@ interface AgentHtmlProps {
   selectionSource?: EditWithAgentSource;
   /** Fired (debounced) with the serialized story while editing, so the caller can sync dirty state. */
   onChange?: (story: string) => void;
+  /** Path of the file being rendered — forwarded to embeds' /api/query so share guests pass the embed allowlist. */
+  filePath?: string;
 }
 
 export interface NumberQueryEditRequest {
@@ -80,7 +82,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource, onChange },
+  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource, onChange, filePath },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -249,9 +251,10 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         paramValues={paramValues}
         onParamValuesChange={onParamValuesChange}
         onEditNumber={onEditNumber}
+        storyPath={filePath}
       />,
     );
-  }, [targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber]);
+  }, [targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, filePath]);
 
   // Keep the iframe's color-mode class in sync without rebuilding the whole document.
   useEffect(() => {
