@@ -1,4 +1,4 @@
-// Defense-in-depth CSP for the agent-authored HTML iframe (data stories).
+// Defense-in-depth CSP for the agent-authored HTML iframe (stories).
 //
 // The nested React root runs in the TOP realm (it only renders DOM into the iframe) and chart data
 // is fetched there too, so NOTHING executes or fetches in the iframe realm — `default-src 'none'`

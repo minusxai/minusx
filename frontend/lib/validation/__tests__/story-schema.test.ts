@@ -1,6 +1,6 @@
 /**
  * Story schema — `story` is a top-level file type whose content is a single agent-authored
- * HTML document (the `story` field) rendered as a scrolling data-story page. The BODY is the
+ * HTML document (the `story` field) rendered as a scrolling story page. The BODY is the
  * single source of truth: there is NO `assets` field — saved-question dependencies derive from
  * its `<Question id>` embeds, inline questions live in the body. The TypeBox schema is the
  * agent-facing contract: it must advertise the FLUID responsive rules and the <Question> embeds.
