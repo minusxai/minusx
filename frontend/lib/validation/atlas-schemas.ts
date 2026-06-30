@@ -309,7 +309,7 @@ export type DashboardContent = Static<typeof DashboardContent>;
 export const StoryContent = Type.Object({
   description: Nullable(Type.String()),
   story: NullableD(Type.String({ format: 'jsx' }),
-    'One self-contained, FLUID RESPONSIVE HTML document rendered as a single scrolling data-story page (height ' +
+    'One self-contained, FLUID RESPONSIVE HTML document rendered as a single scrolling story page (height ' +
     'unlimited — the page scrolls). It is NOT a fixed canvas and is NOT scaled: it renders full-bleed on a phone ' +
     '(~390–430px wide) and capped ~1280px wide, centered, on desktop. The SAME document must look great at BOTH, ' +
     'so you MUST design responsively. It renders in an isolated frame, so go all-out on design: <style> blocks, ' +

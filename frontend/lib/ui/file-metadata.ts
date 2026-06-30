@@ -42,7 +42,7 @@ export const FILE_TYPE_METADATA = {
     h: 'none',
   },
   story: {
-    label: 'Data Story',
+    label: 'Story',
     icon: LuScrollText,
     color: 'accent.sun',         // Turquoise cyan (#1abc9c)
     category: 'analytics',

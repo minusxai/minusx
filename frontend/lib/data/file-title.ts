@@ -16,7 +16,7 @@ const TITLE_BEARING_TYPES = immutableSet<FileType>([
 
 /** Default placeholder names the UI treats as "no real title yet" (mirror of DocumentHeader). */
 const PLACEHOLDER_NAMES = immutableSet([
-  'new question', 'new dashboard', 'new notebook', 'new story', 'new story',
+  'new question', 'new dashboard', 'new notebook', 'new story',
   'new report', 'new digest', 'new alert', 'untitled',
 ]);
 
