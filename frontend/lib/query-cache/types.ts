@@ -96,28 +96,3 @@ export interface JsonlHeader {
   rowCount: number;
 }
 
-/**
- * Optional validation rule on a query param. Type-validation alone is the
- * security floor (declared params only, bound not concatenated); these are
- * defense-in-depth. There is no published_queries table — a public (guest)
- * request derives its spec from the file's declared `parameters` (name+type),
- * so `rules` are absent unless the question schema later carries them.
- */
-export interface ParamRule {
-  /** Max string length (text params). */
-  maxLength?: number;
-  /** Closed set of allowed values; anything else is rejected. */
-  enum?: Array<string | number>;
-  /** Inclusive numeric bounds (number params). */
-  min?: number;
-  max?: number;
-  /** Anchored regex source the value must fully match (text params). */
-  pattern?: string;
-}
-
-/** One param a caller may override, with its validation contract (derived from the file's params). */
-export interface QueryParamSpec {
-  name: string;
-  type: 'text' | 'number' | 'date';
-  rules?: ParamRule;
-}

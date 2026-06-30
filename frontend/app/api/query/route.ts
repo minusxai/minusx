@@ -17,8 +17,7 @@ import { getWhitelistForPath, WhitelistSchema } from '@/lib/sql/whitelist-resolv
 import { getModules } from '@/lib/modules/registry';
 import { getCachedJsonlStream } from '@/lib/query-cache/execute.server';
 import { resolveCachePolicy } from '@/lib/query-cache/policy.server';
-import { validatePublicParams, ParamValidationError } from '@/lib/query-cache/param-validation';
-import type { QueryParamSpec } from '@/lib/query-cache/types';
+import { assertGuestQueryAllowed, sanitizeGuestParams, GuestQueryDeniedError } from '@/lib/query-cache/guest-query.server';
 
 function whitelistToSchemaContext(whitelist: WhitelistSchema): Array<{ schema: string; table: string; columns: string[] }> {
   return whitelist.flatMap(w => w.tables.map(t => ({ schema: w.schema, table: t.table, columns: [] })));
@@ -45,43 +44,31 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       Object.assign(bodyParams, parameters);
     }
 
-    // ── Resolve the EFFECTIVE (connection, query, params, policy) ──────────────
-    // Guests (anonymous public-share viewers) may NOT run raw SQL. They execute
-    // strictly by file id: the server loads the file, uses its FROZEN query, and
-    // validates the supplied params against the file's declared parameter TYPES.
-    let connectionName: string = bodyConnection;
-    let query: string = bodyQuery;
+    const connectionName: string = bodyConnection;
+    const query: string = bodyQuery;
     let paramValues: ParamMap = bodyParams;
-    let policy = resolveCachePolicy(bodyPolicy);
-
-    if (user.guest) {
-      if (typeof fileId !== 'number') {
-        return ApiErrors.forbidden('Guests must execute a saved question by fileId.');
-      }
-      let content: QuestionContent;
-      try {
-        const loaded = await FilesAPI.loadFile(fileId, user);
-        content = loaded.data.content as QuestionContent;
-      } catch {
-        return ApiErrors.notFound('Question');
-      }
-      if (!content || typeof content.query !== 'string') {
-        return ApiErrors.notFound('Question');
-      }
-      connectionName = content.connection_name;
-      query = content.query; // FROZEN — body.query is ignored for guests
-      const spec: QueryParamSpec[] = (content.parameters ?? []).map(p => ({ name: p.name, type: p.type }));
-      try {
-        paramValues = validatePublicParams(spec, (content.parameterValues ?? {}) as ParamMap, bodyParams);
-      } catch (err) {
-        if (err instanceof ParamValidationError) return ApiErrors.badRequest(err.message);
-        throw err;
-      }
-      policy = resolveCachePolicy(content.cachePolicy);
-    }
+    const policy = resolveCachePolicy(bodyPolicy);
 
     if (typeof query !== 'string' || query.length === 0) {
       return ApiErrors.validationError('query is required');
+    }
+
+    // ── Guest guard ────────────────────────────────────────────────────────────
+    // Anonymous public-share viewers may NOT run arbitrary SQL. The submitted
+    // (query, connection) must be one embedded in the page they're viewing
+    // (filePath); params are sanitized to bind-safe primitives. This is the
+    // boundary that closes the "anon user queries the DB directly" hole.
+    if (user.guest) {
+      if (!filePath) {
+        return ApiErrors.forbidden('Guests must execute within a shared page.');
+      }
+      try {
+        await assertGuestQueryAllowed(filePath, query, connectionName, user);
+      } catch (err) {
+        if (err instanceof GuestQueryDeniedError) return ApiErrors.forbidden(err.message);
+        return ApiErrors.forbidden('You do not have access to this query.');
+      }
+      paramValues = sanitizeGuestParams(bodyParams);
     }
 
     const queryHash = getQueryHash(query, paramValues as Record<string, unknown>, connectionName);
