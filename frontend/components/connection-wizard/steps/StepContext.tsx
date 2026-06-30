@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { Box, VStack, HStack, Text, Heading, Button, Collapsible, Icon, Progress } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Heading, Button, Collapsible, Icon, Progress, Link } from '@chakra-ui/react';
 import { LuSparkles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import SchemaTreeView, { type WhitelistItem, type SchemaTreeItem } from '@/components/SchemaTreeView';
 import { pulseKeyframes, sparkleKeyframes, cursorBlinkKeyframes } from '@/lib/ui/animations';
@@ -224,6 +224,19 @@ export default function StepContext({
     return allDocs.map(d => d.content).filter(c => c.trim()).join('\n\n---\n\n');
   }, [allDocs]);
 
+  // Structured knowledge the agent wrote into the latest version. The docs editor
+  // only renders `docs`, so we surface a small summary of the metrics/annotations
+  // (editable later in the context's Databases tab) so they aren't invisible.
+  const knowledgeCounts = useMemo(() => {
+    const latest = effectiveContent?.versions?.[effectiveContent.versions.length - 1];
+    const metrics = latest?.metrics?.length ?? 0;
+    const annotations = (latest?.annotations ?? []).reduce(
+      (n, a) => n + (a.description ? 1 : 0) + (a.columns?.length ?? 0),
+      0,
+    );
+    return { metrics, annotations };
+  }, [effectiveContent]);
+
   // Capture once, on first load, whether the context already had docs BEFORE the
   // agent ran. Lets us label the panel "Current Docs" (these pre-date this session)
   // vs "Auto-generated context" (the agent wrote them fresh) — instead of always
@@ -344,9 +357,12 @@ export default function StepContext({
       const existingVersion = effectiveContent?.versions?.[effectiveContent.versions.length - 1];
       const contextContent: ContextContent = {
         versions: [{
+          ...existingVersion,
           version: existingVersion?.version ?? 1,
           whitelist: wl,
           docs: docsToSave,
+          // metrics/annotations the onboarding agent authored are carried via the
+          // spread above — never rebuilt from docs alone (would drop them on save).
           createdAt: existingVersion?.createdAt ?? new Date().toISOString(),
           createdBy: existingVersion?.createdBy ?? 0,
           lastEditedAt: new Date().toISOString(),
@@ -659,6 +675,30 @@ export default function StepContext({
           onExpandedChange={setExpandedDocIndices}
         />
       </Box>}
+
+      {/* Structured-knowledge summary — metrics/annotations live in the Databases
+          tab, not the docs editor above, so surface them here so they're visible. */}
+      {(knowledgeCounts.metrics > 0 || knowledgeCounts.annotations > 0) && (
+        <HStack
+          gap={2}
+          fontSize="xs"
+          color="fg.muted"
+          bg="bg.muted"
+          borderRadius="md"
+          px={3}
+          py={2}
+          flexWrap="wrap"
+        >
+          <Icon as={LuSparkles} color="accent.teal" boxSize={3.5} />
+          <Text>
+            Also added
+            {knowledgeCounts.metrics > 0 && <Text as="span" fontWeight="600" color="fg.default"> {knowledgeCounts.metrics} metric{knowledgeCounts.metrics === 1 ? '' : 's'}</Text>}
+            {knowledgeCounts.metrics > 0 && knowledgeCounts.annotations > 0 && ' and'}
+            {knowledgeCounts.annotations > 0 && <Text as="span" fontWeight="600" color="fg.default"> {knowledgeCounts.annotations} annotation{knowledgeCounts.annotations === 1 ? '' : 's'}</Text>}
+            .
+          </Text>
+        </HStack>
+      )}
 
       {/* Error */}
       {error && (

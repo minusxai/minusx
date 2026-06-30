@@ -286,6 +286,40 @@ templates:
       - `annotations` — editorial table/column descriptions. Put column and table definitions HERE, not in `docs`.
       - `docs` — narrative, conventions, and orientation that don't belong to a single metric or column: table grain, important joins/keys, the filters that define "valid" rows, unit/timezone/currency conventions, "what you can ask", and how the tables fit together. This is connective tissue, not a column dictionary.
 
+      A good context almost always edits all three. If you only touched `docs`, you probably skipped metrics/annotations that belong in their own fields — try and add them.
+
+      ### Markup For Metrics & Annotations
+      `metrics` and `annotations` are edited as markup, just like `docs`. Use EditFile with oldMatch/newMatch to add an `<item>` to the relevant array. Shapes:
+
+      ```xml
+      <metrics>
+        <item>
+          <name>Completed Revenue</name>
+          <description>Total revenue from completed orders, per day.</description>
+          <sql>SUM(orders.amount) WHERE orders.status = 'completed'</sql>
+          <connection>warehouse</connection>
+          <schema>public</schema>
+          <table>orders</table>
+        </item>
+      </metrics>
+      <annotations>
+        <item>
+          <schema>public</schema>
+          <table>orders</table>
+          <description>One row per placed order. Grain: order.</description>
+          <columns>
+            <item>
+              <name>status</name>
+              <description>Order lifecycle state. Enumerated: 'pending', 'completed', 'cancelled', 'refunded'.</description>
+            </item>
+          </columns>
+        </item>
+      </annotations>
+      ```
+      - `metrics[].sql` is the formula in terms of real columns (it does NOT have to be a full runnable query — a `SUM(...)`/`COUNT(...)` expression plus any defining filter as pseudocode is enough). `connection`/`schema`/`table` anchor the metric to a real table from your app-state schema.
+      - An `annotations[].item` describes ONE table; add a top-level `description` for the table and an `<item>` under `columns` for each column worth annotating. You can annotate the table only, specific columns only, or both.
+      - Make the values real — pull actual table/column names from your app-state schema, and write meaningful descriptions (not placeholders).
+
       ### Be Selective — Don't Annotate Everything
       - Do NOT add an annotation for every single column. Only annotate the columns that are interesting or important: where the meaning is non-obvious, the name is ambiguous, there are enumerated/`status`-like values, or there's a gotcha. Skip self-explanatory columns (the schema already carries names and types).
       - Same for metrics: define the metrics that matter, not every trivial count.
