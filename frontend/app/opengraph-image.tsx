@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const size = OG_SIZE;
 export const contentType = 'image/png';
-export const alt = 'MinusX — your data stack, staffed by agents';
+export const alt = 'Social preview card';
 
 /** Generic branded MinusX preview card for all non-share pages (`/`, `/login`, …). */
 export default async function Image() {

@@ -672,7 +672,7 @@ function SettingsContent() {
       custom: (
         <VStack align="stretch" gap={3}>
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-            Connect external services to your MinusX workspace.
+            Connect external services to your {config.branding.displayName} workspace.
           </Text>
           <SlackIntegration />
           <McpIntegration />

@@ -199,6 +199,8 @@ interface SlackReplyBlocksOptions {
   suggestedQuestions?: string[];
   trustInfo?: ParsedTrustInfo | null;
   viewUrl?: string;
+  /** Agent/product name for the "View in …" button label. Defaults to "MinusX". */
+  appName?: string;
 }
 
 const TRUST_DISPLAY: Record<ParsedTrustInfo['level'], { emoji: string; label: string }> = {
@@ -269,13 +271,13 @@ export function buildSlackReplyBlocks(options: SlackReplyBlocksOptions): unknown
     }
   }
 
-  // "View in MinusX" button
+  // "View in <app>" button
   if (options.viewUrl) {
     blocks.push({
       type: 'actions',
       elements: [{
         type: 'button',
-        text: { type: 'plain_text', text: 'View in MinusX', emoji: true },
+        text: { type: 'plain_text', text: `View in ${options.appName ?? 'MinusX'}`, emoji: true },
         url: options.viewUrl,
         action_id: 'view_in_minusx',
         style: 'primary',

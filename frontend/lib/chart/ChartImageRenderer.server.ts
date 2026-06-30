@@ -9,6 +9,7 @@
  */
 import 'server-only'
 
+import path from 'path'
 import { renderChartToJpeg } from '@/lib/chart/render-chart'
 import { getChartHeight } from '@/lib/chart/render-chart-svg'
 import type { IChartImageRenderer, ChartInput, ChartRenderOptions, RenderedChart } from './IChartImageRenderer'
@@ -18,8 +19,12 @@ const NO_LOGO = '/dev/null/no-logo'
 
 export const serverChartImageRenderer: IChartImageRenderer = {
   async renderCharts(inputs: ChartInput[], options: ChartRenderOptions): Promise<RenderedChart[]> {
-    const { width, colorMode, addWatermark, padding } = options
-    const logoPath = addWatermark ? undefined : NO_LOGO
+    const { width, colorMode, addWatermark, padding, logoSrc } = options
+    // logoSrc is a public-relative URL (e.g. "/static/logo.svg"); resolve to a file under public/.
+    // Omitted → renderChartToJpeg uses the default brand mark; watermark off → NO_LOGO sentinel.
+    const logoPath = addWatermark
+      ? (logoSrc ? path.join(process.cwd(), 'public', logoSrc.replace(/^\//, '')) : undefined)
+      : NO_LOGO
     const results: RenderedChart[] = []
 
     for (const { queryResult, vizSettings, titleOverride } of inputs) {

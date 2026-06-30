@@ -7,6 +7,7 @@ import { LuRefreshCw, LuX, LuCopy, LuCheck } from 'react-icons/lu';
 import { GIT_COMMIT_SHA, BUILD_TIME, DISABLE_UPDATE_BANNER } from '@/lib/constants';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 
 const INSTALL_CMD = 'curl -fsSL https://minusx.ai/install.sh | bash';
 const CACHE_KEY = 'minusx-update-check';
@@ -40,6 +41,7 @@ function writeCache(patch: Partial<UpdateCache>) {
 
 export default function UpdateBanner() {
   const user = useAppSelector(selectEffectiveUser);
+  const { config } = useConfigs();
   const [visible, setVisible] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -115,7 +117,7 @@ export default function UpdateBanner() {
     >
       <Icon as={LuRefreshCw} boxSize={4} flexShrink={0} aria-hidden="true" />
       <Text fontSize="sm" fontWeight="500" flexShrink={0}>
-        A new version of MinusX is available.
+        A new version of {config.branding.agentName} is available.
       </Text>
       <Text fontSize="xs" opacity={0.85} flexShrink={0}>Update by re-running (in the same directory):</Text>
       <Tooltip content="Click to copy">

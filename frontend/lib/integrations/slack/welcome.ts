@@ -49,11 +49,16 @@ export function buildWelcomeBlocks(appName: string): { text: string; blocks: unk
 /**
  * Builds the App Home tab view — a static help page shown when users click the Home tab.
  */
-export function buildHomeView(appName: string, platformUrl: string = 'https://minusx.app'): unknown {
+export function buildHomeView(
+  appName: string,
+  platformUrl: string = 'https://minusx.app',
+  logoUrl: string = 'https://minusx.ai/logo_light.png',
+  docsUrl: string = 'https://docs.minusx.ai/docs',
+): unknown {
   const blocks: unknown[] = [
     {
       type: 'image',
-      image_url: 'https://minusx.ai/logo_light.png',
+      image_url: logoUrl,
       alt_text: `${appName} logo`,
     },
     {
@@ -68,7 +73,7 @@ export function buildHomeView(appName: string, platformUrl: string = 'https://mi
       elements: [
         {
           type: 'button',
-          text: { type: 'plain_text', text: ':rocket: MinusX Platform', emoji: true },
+          text: { type: 'plain_text', text: `:rocket: ${appName} Platform`, emoji: true },
           url: platformUrl,
           action_id: 'home_open_platform',
           style: 'primary',
@@ -76,7 +81,7 @@ export function buildHomeView(appName: string, platformUrl: string = 'https://mi
         {
           type: 'button',
           text: { type: 'plain_text', text: ':book:  Documentation', emoji: true },
-          url: 'https://docs.minusx.ai/docs',
+          url: docsUrl,
           action_id: 'home_open_docs',
         },
       ],
@@ -123,7 +128,7 @@ export function buildHomeView(appName: string, platformUrl: string = 'https://mi
       text: {
         type: 'mrkdwn',
         text: [
-          '1. Your message is matched to your MinusX account by email.',
+          `1. Your message is matched to your ${appName} account by email.`,
           '2. The agent uses your team\'s data connections and Knowledge Base context.',
           '3. It writes and runs SQL queries, then summarizes the results.',
           '4. :eyes: means the bot is working. :white_check_mark: means it\'s done. :x: means something went wrong.',

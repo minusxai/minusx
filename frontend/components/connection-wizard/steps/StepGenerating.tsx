@@ -18,6 +18,7 @@ import { useContext } from '@/lib/hooks/useContext';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import ChatInterface from '@/components/explore/ChatInterface';
 import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 
 const TYPEWRITER_SPEED = 35;
@@ -59,6 +60,8 @@ interface StepGeneratingProps {
 export default function StepGenerating({ connectionName, contextFileId, greeting, onComplete, staticSchemas, initialPreference, questionnaireAnswers }: StepGeneratingProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  const { config } = useConfigs();
+  const agentName = config.branding.agentName;
   const reduxState = useAppSelector(state => state);
   const showDebug = useAppSelector(state => state.ui.devMode);
   const user = useAppSelector(state => state.auth.user);
@@ -287,8 +290,8 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
           {isDone
             ? 'Done! Go check out your awesome new dashboard.'
             : isGenerating
-              ? 'MinusX is writing queries, building visualizations and assembling a fantastic dashboard for you.'
-              : 'MinusX will analyze your schema and create a dashboard with interesting queries automatically.'
+              ? `${agentName} is writing queries, building visualizations and assembling a fantastic dashboard for you.`
+              : `${agentName} will analyze your schema and create a dashboard with interesting queries automatically.`
           }
         </Text>
       </VStack>
@@ -423,7 +426,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
               <HStack>
                 <Icon as={LuSparkles} boxSize={3.5} color="accent.teal" />
                 <Text fontSize="sm" fontFamily="mono" fontWeight="500" color="accent.teal">
-                  {showTrace ? 'Hide MinusX agent trace' : 'See MinusX agent in action'}
+                  {showTrace ? `Hide ${agentName} agent trace` : `See ${agentName} agent in action`}
                 </Text>
               </HStack>
               <HStack>

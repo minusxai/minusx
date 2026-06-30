@@ -28,6 +28,7 @@ import {
 } from 'react-icons/lu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 import {
   setSidebarPendingMessage,
   setActiveSidebarSection,
@@ -88,8 +89,8 @@ const TUTORIAL_ITEMS: Omit<GettingStartedItem, 'isCompleted'>[] = [
   },
   {
     id: 'explore',
-    label: 'Dive into Data',         
-    description: 'MinusX exploration mode',
+    label: 'Dive into Data',
+    description: 'AI exploration mode',
     icon: LuRocket,
     href: '/explore?mode=tutorial',
   },
@@ -105,6 +106,8 @@ const TUTORIAL_ITEMS: Omit<GettingStartedItem, 'isCompleted'>[] = [
 export default function GettingStartedSection() {
   const dispatch = useAppDispatch();
   const user = useAppSelector(state => state.auth.user);
+  const { config } = useConfigs();
+  const agentName = config.branding.agentName;
   const { connections: connectionsMap } = useConnections({ skip: true });
   const [clickedItems, setClickedItems] = useState<Set<string>>(() => getClickedItems());
   const { users: allUsers } = useUsers();
@@ -146,7 +149,7 @@ export default function GettingStartedSection() {
   const clearChat = useClearChat();
   const handleAskAI = () => {
     clearChat();
-    dispatch(setSidebarPendingMessage('What can MinusX do?'));
+    dispatch(setSidebarPendingMessage(`What can ${agentName} do?`));
     dispatch(setActiveSidebarSection('chat'));
     dispatch(setRightSidebarCollapsed(false));
   };
@@ -167,8 +170,8 @@ export default function GettingStartedSection() {
         },
         {
           id: 'askAI',
-          label: 'Talk to MinusX',
-          description: '"What all can MinusX do?"',
+          label: `Talk to ${agentName}`,
+          description: `"What all can ${agentName} do?"`,
           icon: LuSparkles,
           onClick: handleAskAI,
           isCompleted: clickedItems.has('askAI'),

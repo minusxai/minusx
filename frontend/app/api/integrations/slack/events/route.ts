@@ -10,6 +10,7 @@ import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
 import { extractSlackReply, extractQueryCharts, markdownToSlackMrkdwn, buildSlackReplyBlocks, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
 import { serverChartImageRenderer } from '@/lib/chart/ChartImageRenderer.server';
+import { getBrandLogoUrl, getBrandLogoExpandedUrl } from '@/lib/branding/whitelabel';
 import { buildHomeView, buildWelcomeBlocks, shouldSendWelcome } from '@/lib/integrations/slack/welcome';
 import {
   findSlackInstallationByTeam,
@@ -81,7 +82,8 @@ export async function processSlackEvent(
       if (ev.tab === 'home' && ev.user) {
         const appName = installation.config.branding?.agentName || 'MinusX';
         const platformUrl = await resolveBaseUrl();
-        const homeView = buildHomeView(appName, platformUrl);
+        const logoUrl = new URL(getBrandLogoExpandedUrl(installation.config.branding, 'light'), platformUrl).toString();
+        const homeView = buildHomeView(appName, platformUrl, logoUrl, installation.config.links?.docsUrl);
         await publishHomeView(installation.bot.bot_token, ev.user, homeView);
         if (eventId) markSlackEventDone(eventId);
         return;
@@ -149,7 +151,7 @@ export async function processSlackEvent(
         installation,
         ev.channel,
         threadTs,
-        `Sorry, ${slackEmail} is not configured in MinusX.`,
+        `Sorry, ${slackEmail} is not configured in ${installation.config.branding?.agentName || 'MinusX'}.`,
       );
       return;
     }
@@ -193,7 +195,7 @@ export async function processSlackEvent(
       const queryCharts = extractQueryCharts(result.logDiff);
       const renderedCharts = await serverChartImageRenderer.renderCharts(
         queryCharts.map(c => ({ queryResult: c.queryResult, vizSettings: c.vizSettings })),
-        { width: 1024, colorMode: 'dark', addWatermark: true, padding: true },
+        { width: 1024, colorMode: 'dark', addWatermark: true, padding: true, logoSrc: getBrandLogoUrl(installation.config.branding, 'dark') },
       ).catch(err => { console.warn('[Slack] Chart rendering failed:', err); return []; });
       for (const rendered of renderedCharts) {
         try {
@@ -210,12 +212,13 @@ export async function processSlackEvent(
         }
       }
 
-      // Then send the text reply with trust info, suggested follow-ups, and "View in MinusX" button
+      // Then send the text reply with trust info, suggested follow-ups, and "View in <app>" button
       const blocks = buildSlackReplyBlocks({
         text: mrkdwnText,
         suggestedQuestions: slackReply.suggestedQuestions,
         trustInfo: slackReply.trustInfo,
         viewUrl,
+        appName: installation.config.branding?.agentName || 'MinusX',
       });
 
       await postSlackMessage(installation.bot.bot_token, {

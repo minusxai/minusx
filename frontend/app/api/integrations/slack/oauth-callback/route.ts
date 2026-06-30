@@ -14,7 +14,7 @@ function handleDirectInstall(): NextResponse {
   return new NextResponse(
     `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Log in to MinusX</title>
+<title>Log in to your workspace</title>
 <style>
   body{font-family:system-ui,sans-serif;max-width:480px;margin:80px auto;padding:0 24px;color:#e2e8f0;background:#0d1117;}
   h1{font-size:1.25rem;font-weight:600;margin-bottom:12px;}
@@ -24,10 +24,10 @@ function handleDirectInstall(): NextResponse {
 </style>
 </head><body>
 <h1>Almost there</h1>
-<p>Please log in to your MinusX workspace first, then go to
+<p>Please log in to your workspace first, then go to
 <strong>Settings → Integrations → Slack</strong> and click
 <strong>Add to Slack</strong> from there.</p>
-<a href="https://${rootDomain}">Go to MinusX</a>
+<a href="https://${rootDomain}">Go to your workspace</a>
 </body></html>`,
     { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
   );
