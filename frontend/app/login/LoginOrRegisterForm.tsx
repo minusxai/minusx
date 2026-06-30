@@ -430,21 +430,23 @@ export function LoginOrRegisterForm({
                       type="text"
                       placeholder="Workspace Name"
                       value={workspaceName}
-                      onChange={(e) => setWorkspaceName(e.target.value)}
+                      onChange={(e) => { const v = e.target.value; setWorkspaceName(v); if (workspaceNameError) { const r = validateWorkspaceName(v); setWorkspaceNameError(r.valid ? null : r.error!); } }}
                       onBlur={() => { const r = validateWorkspaceName(workspaceName); setWorkspaceNameError(r.valid ? null : r.error!); }}
                       required
                       autoFocus
                       size="lg"
                       borderColor={workspaceNameError ? 'accent.danger' : undefined}
                     />
-                    {workspaceNameError && <Text fontSize="xs" color="accent.danger" mt={1}>{workspaceNameError}</Text>}
+                    {workspaceNameError
+                      ? <Text fontSize="xs" color="accent.danger" mt={1}>{workspaceNameError}</Text>
+                      : <Text fontSize="xs" color="fg.muted" mt={1}>Letters, numbers, hyphens, and underscores — no spaces.</Text>}
                   </Box>
                   <Box w="full">
                     <Input
                       type="text"
                       placeholder="Your Name"
                       value={adminName}
-                      onChange={(e) => setAdminName(e.target.value)}
+                      onChange={(e) => { const v = e.target.value; setAdminName(v); if (adminNameError) { const r = validateFullName(v); setAdminNameError(r.valid ? null : r.error!); } }}
                       onBlur={() => { const r = validateFullName(adminName); setAdminNameError(r.valid ? null : r.error!); }}
                       required
                       size="lg"
@@ -457,7 +459,7 @@ export function LoginOrRegisterForm({
                       type="email"
                       placeholder="Email"
                       value={adminEmail}
-                      onChange={(e) => setAdminEmail(e.target.value)}
+                      onChange={(e) => { const v = e.target.value; setAdminEmail(v); if (adminEmailError) { const r = validateEmail(v); setAdminEmailError(r.valid ? null : r.error!); } }}
                       onBlur={() => { const r = validateEmail(adminEmail); setAdminEmailError(r.valid ? null : r.error!); }}
                       required
                       size="lg"
@@ -470,7 +472,7 @@ export function LoginOrRegisterForm({
                       type="password"
                       placeholder="Password"
                       value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
+                      onChange={(e) => { const v = e.target.value; setAdminPassword(v); if (adminPasswordError) { const r = validatePassword(v); setAdminPasswordError(r.valid ? null : r.error!); } }}
                       onBlur={() => { const r = validatePassword(adminPassword); setAdminPasswordError(r.valid ? null : r.error!); }}
                       required
                       size="lg"

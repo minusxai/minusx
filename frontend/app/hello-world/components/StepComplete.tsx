@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Box, VStack, HStack, Text, Heading, Button, Icon, Flex, Collapsible } from '@chakra-ui/react';
 import {
   LuRocket,
@@ -21,6 +21,7 @@ import { Link as NextLink } from '@/components/ui/Link';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { useContexts } from '@/lib/hooks/useContexts';
+import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { sparkleKeyframes } from '@/lib/ui/animations';
 
 // ── Guide configuration ──────────────────────────────────────────────
@@ -226,6 +227,16 @@ export default function StepComplete() {
   const { contexts } = useContexts();
   const firstContext = contexts[0];
 
+  // The onboarding "Build" step creates a dashboard ("Getting Started Dashboard"). Surface a direct
+  // link to it here — the most recently created dashboard (highest id) the user can access — so the
+  // completion screen closes the loop instead of only offering generic CTAs.
+  const dashboardCriteria = useMemo(() => ({ type: 'dashboard' as const }), []);
+  const { files: dashboardFiles } = useFilesByCriteria({ criteria: dashboardCriteria, partial: true });
+  const latestDashboard = useMemo(() => {
+    const real = dashboardFiles.filter((f) => (f.id as number) > 0);
+    return real.length ? real.reduce((a, b) => ((a.id as number) > (b.id as number) ? a : b)) : null;
+  }, [dashboardFiles]);
+
   const resolveTemplate = (s: string) => s.replace(/\{agentName\}/g, agentName);
 
   const resolveLink = (link: GuideItemConfig['link']): ResolvedLink | undefined => {
@@ -251,6 +262,23 @@ export default function StepComplete() {
           You&apos;re all set!
         </Heading>
       </VStack>
+
+      {/* Primary CTA: jump straight to the dashboard the onboarding just built */}
+      {latestDashboard && (
+        <HStack justify="center" pb={1}>
+          <Button
+            bg="accent.teal"
+            color="white"
+            size="md"
+            fontFamily="mono"
+            _hover={{ opacity: 0.9 }}
+            onClick={() => router.push(`/f/${latestDashboard.id}`)}
+          >
+            <LuLayoutDashboard size={16} />
+            View your dashboard
+          </Button>
+        </HStack>
+      )}
 
       {/* Quick actions */}
       <HStack justify="center" gap={4}>

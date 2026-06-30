@@ -144,14 +144,25 @@ function ChatInputInner({
     }
   }, [prefillText]);
 
-  // Handle pending message from floating chat — wait for connections/context to finish loading
-  // before sending, so the message isn't discarded by the loading guard in handleSendMessage.
+  // Handle pending message handed off from the floating chat bar (user typed there, then the
+  // sidebar opened). Two-stage so the message is NEVER silently lost: while connections/context are
+  // still loading we PREFILL the input (visible + recoverable — the user can press Enter manually);
+  // once loading finishes we auto-send exactly once. Previously this only auto-sent and, if the load
+  // hadn't settled or the send was gated, the text vanished and the user had to retype.
+  const sentPendingRef = useRef<string | null>(null);
   useEffect(() => {
-    if (pendingMessage && container === 'sidebar' && !connectionsLoading && !contextsLoading) {
-      onSend(pendingMessage, attachments);
-      dispatch(setSidebarPendingMessage(null));
-      dispatch(clearChatAttachments());
+    if (!pendingMessage || container !== 'sidebar') return;
+    if (connectionsLoading || contextsLoading) {
+      // Not ready to send yet — surface the text so it's visible and never dropped.
+      setInput(pendingMessage);
+      editorRef.current?.setText(pendingMessage);
+      return;
     }
+    if (sentPendingRef.current === pendingMessage) return; // already auto-sent this one
+    sentPendingRef.current = pendingMessage;
+    onSend(pendingMessage, attachments);
+    dispatch(setSidebarPendingMessage(null));
+    dispatch(clearChatAttachments());
   }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading, attachments]);
 
   const chatLocked = isAgentRunning && !allowChatQueue;

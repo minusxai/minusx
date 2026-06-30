@@ -177,6 +177,8 @@ export default function ConnectionWizard({
             contextFileId={contextFileId!}
             greeting={greeting('generating')}
             onComplete={handleGeneratingComplete}
+            onFinish={onComplete}
+            showSlackStep={showSlackStep}
             staticSchemas={staticSchemas}
             initialPreference={questionnaireAnswers?.dashboardPreference}
             questionnaireAnswers={questionnaireAnswers}
