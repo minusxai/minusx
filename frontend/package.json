@@ -23,7 +23,7 @@
     "postinstall": "node scripts/copy-duckdb-wasm.mjs && patch-package --error-on-fail",
     "benchmark:dab": "node --env-file=.env --max-old-space-size=8192 node_modules/.bin/tsx --conditions react-server benchmarks/dataanalystbench.ts",
     "dump-llm-calls": "node --env-file=.env node_modules/.bin/tsx scripts/dump-llm-calls.ts",
-    "migrate-conversations-to-v3": "node --env-file=.env node_modules/.bin/tsx --conditions react-server scripts/migrate-conversations-to-v3.ts"
+    "migrate-conversations-to-v3": "node --env-file-if-exists=.env node_modules/.bin/tsx --conditions react-server scripts/migrate-conversations-to-v3.ts"
   },
   "dependencies": {
     "@aws-sdk/client-athena": "^3.1032.0",

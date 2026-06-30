@@ -8,11 +8,17 @@
  * Usage:  npm run migrate-conversations-to-v3            (migrate)
  *         npm run migrate-conversations-to-v3 -- --dry   (report only)
  */
-import { getModules } from '../lib/modules/registry';
+import { getModules, isModulesRegistered } from '../lib/modules/registry';
+import { registerWithModules } from '../lib/instrumentation/register-modules';
 import { migrateConversationsToV3 } from '../lib/data/migrate-conversations-v3.server';
 
 async function main() {
   const dry = process.argv.includes('--dry');
+  // A standalone CLI never runs Next's instrumentation hook, so the runtime modules
+  // (db/auth/store/cache) this migration needs aren't registered yet — do it here.
+  if (!isModulesRegistered()) {
+    await registerWithModules();
+  }
   const db = getModules().db;
   await db.init?.();
   const report = await migrateConversationsToV3({ dry });
