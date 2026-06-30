@@ -12,7 +12,7 @@ import { getCachedResult, getCachedJsonlStream } from '../execute.server';
 import { createQueryCacheBlobStore } from '../blob-store';
 import { decodeJsonl } from '../jsonl';
 import type { ObjectStore } from '@/lib/object-store';
-import { queryResultToStream, type QueryResult, type QueryStream } from '@/lib/connections/base';
+import { queryResultToStream, type QueryStream } from '@/lib/connections/base';
 import type { CachePolicy } from '../types';
 import { Readable } from 'stream';
 
