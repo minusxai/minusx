@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { Box, VStack, HStack, Text, Heading, Button, Collapsible, Icon, Progress, Link } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Heading, Button, Collapsible, Icon, Progress } from '@chakra-ui/react';
 import { LuSparkles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import SchemaTreeView, { type WhitelistItem, type SchemaTreeItem } from '@/components/SchemaTreeView';
 import { pulseKeyframes, sparkleKeyframes, cursorBlinkKeyframes } from '@/lib/ui/animations';
@@ -688,6 +688,7 @@ export default function StepContext({
           px={3}
           py={2}
           flexWrap="wrap"
+          aria-label="Added metrics and annotations summary"
         >
           <Icon as={LuSparkles} color="accent.teal" boxSize={3.5} />
           <Text>

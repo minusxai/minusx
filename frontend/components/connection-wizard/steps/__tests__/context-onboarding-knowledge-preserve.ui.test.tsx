@@ -118,10 +118,12 @@ describe('Setup wizard — preserves onboarding metrics & annotations on save', 
     expect(version.annotations).toEqual(ANNOTATIONS);
   });
 
-  it('surfaces a summary chip linking to the Databases tab when knowledge exists', async () => {
+  it('surfaces a summary chip of the metrics and annotations when knowledge exists', async () => {
     renderWizard();
     await userEvent.click(await screen.findByLabelText('Continue to documentation'));
-    const link = await screen.findByLabelText('Review metrics and annotations in the Databases tab');
-    expect(link).toHaveAttribute('href', `/f/${CONTEXT_ID}`);
+    const chip = await screen.findByLabelText('Added metrics and annotations summary');
+    expect(chip).toHaveTextContent('1 metric');
+    // 1 table description + 1 column note = 2 annotations.
+    expect(chip).toHaveTextContent('2 annotations');
   });
 });
