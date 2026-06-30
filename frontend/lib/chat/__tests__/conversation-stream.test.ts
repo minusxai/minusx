@@ -8,7 +8,7 @@ vi.mock('@/lib/database/db-config', () => ({
   getDbType: () => 'pglite' as const,
 }));
 
-import { subscribe, notifyMessage, notifyDelta } from '@/lib/chat/conversation-stream.server';
+import { subscribe, notifyMessage, notifyDelta, setConversationChannelNamespace } from '@/lib/chat/conversation-stream.server';
 import type { ConversationNotify } from '@/lib/data/conversations.types';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -60,5 +60,32 @@ describe('conversation stream bus (LISTEN/NOTIFY)', () => {
 
     await unsubA();
     await unsubB();
+  });
+
+  describe('channel namespace (scoped id-spaces)', () => {
+    // When conversation ids are NOT globally unique (e.g. allocated within a narrower request
+    // scope), a namespace keeps two scopes that share a raw id from cross-delivering —
+    // including the inline `delta` text payload, which would otherwise leak across the scope.
+    afterEach(() => setConversationChannelNamespace(async () => '')); // restore default
+
+    it('two scopes sharing one conversation id do not cross-deliver', async () => {
+      let ns = 'a';
+      setConversationChannelNamespace(async () => ns);
+
+      const a: ConversationNotify[] = [];
+      const b: ConversationNotify[] = [];
+      ns = 'a'; const unsubA = await subscribe(7, (n) => a.push(n));
+      ns = 'b'; const unsubB = await subscribe(7, (n) => b.push(n)); // same id, other scope
+
+      ns = 'a'; await notifyDelta(7, 0, 'scope-a-secret-token');
+      await waitFor(a, 1);
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(a).toEqual([{ kind: 'delta', seq: 0, text: 'scope-a-secret-token' }]);
+      expect(b).toHaveLength(0); // scope b never saw scope a's delta
+
+      await unsubA();
+      await unsubB();
+    });
   });
 });

@@ -80,7 +80,7 @@ export async function claimLease(
        (cache_key, query, connection_name, params, status,
         created_at, revalidate_at, expire_at, lease_expires_at)
      VALUES ($1, $2, $3, $4::jsonb, 'pending', $5, $6, $7, $8)
-     ON CONFLICT (cache_key) DO UPDATE
+     ON CONFLICT ON CONSTRAINT query_cache_pkey DO UPDATE
        SET status = 'pending',
            lease_expires_at = $8,
            query = EXCLUDED.query,

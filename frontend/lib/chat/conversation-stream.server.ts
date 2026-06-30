@@ -12,9 +12,23 @@
 import { getModules } from '@/lib/modules/registry';
 import type { ConversationNotify, RunStatus } from '@/lib/data/conversations.types';
 
-/** Channel for a conversation. Ids are integers (shared global id-space) → always a safe identifier. */
-function channelFor(conversationId: number): string {
-  return `conv_${conversationId}`;
+// Optional channel namespace. By default conversation ids form one shared id-space, so the
+// channel is just `conv_<id>`. A deployment whose conversation ids are NOT globally unique
+// (e.g. allocated within a narrower request scope) can install a namespace so ids that
+// repeat across scopes never share a LISTEN/NOTIFY channel — the transport is process/DB-
+// global and not scope-aware on its own. Default: no namespace (single id-space).
+let channelNamespace: () => Promise<string> = async () => '';
+
+/** Install a channel-namespace provider (returns a safe identifier fragment, or '' for none). */
+export function setConversationChannelNamespace(fn: () => Promise<string>): void {
+  channelNamespace = fn;
+}
+
+/** Fully-qualified, safe-identifier channel for a conversation, including any namespace. */
+async function resolveChannel(conversationId: number): Promise<string> {
+  const ns = await channelNamespace();
+  const base = `conv_${conversationId}`;
+  return ns ? `${ns}_${base}` : base;
 }
 
 type Handler = (n: ConversationNotify) => void;
@@ -25,11 +39,12 @@ interface ChannelSub {
   unlisten: () => Promise<void>;
 }
 
-// Intentionally process-global: this is the per-conversation LISTEN fan-out registry, keyed by the
-// globally-unique conversation id (not request-scoped). It's bounded by live SSE connections and
+// Intentionally process-global: the per-conversation LISTEN fan-out registry. Keyed by the
+// fully-resolved channel string (incl. any namespace) so ids that repeat across scopes
+// never collide on one registry entry. Bounded by live SSE connections and
 // fully rebuildable (the DB is the source of truth) — see docs/chat-architecture-v3.md §7.
 // eslint-disable-next-line no-restricted-syntax
-const channels = new Map<number, ChannelSub>();
+const channels = new Map<string, ChannelSub>();
 
 function db() {
   const mod = getModules().db;
@@ -39,7 +54,7 @@ function db() {
 
 /** Emit a wakeup pointer on the conversation's channel. */
 export async function publish(conversationId: number, n: ConversationNotify): Promise<void> {
-  await db().notify(channelFor(conversationId), JSON.stringify(n));
+  await db().notify(await resolveChannel(conversationId), JSON.stringify(n));
 }
 
 /** New committed message(s) up to `seq` are available — go SELECT them. */
@@ -63,10 +78,11 @@ export const notifyInterrupt = (conversationId: number): Promise<void> =>
  * unsubscribe closes it. Returns an async unsubscribe.
  */
 export async function subscribe(conversationId: number, handler: Handler): Promise<() => Promise<void>> {
-  let sub = channels.get(conversationId);
+  const channel = await resolveChannel(conversationId);
+  let sub = channels.get(channel);
   if (!sub) {
     const handlers = new Set<Handler>();
-    const unlisten = await db().listen(channelFor(conversationId), (payload) => {
+    const unlisten = await db().listen(channel, (payload) => {
       let parsed: ConversationNotify;
       try { parsed = JSON.parse(payload) as ConversationNotify; } catch { return; }
       // Snapshot to tolerate handlers unsubscribing during iteration.
@@ -75,16 +91,16 @@ export async function subscribe(conversationId: number, handler: Handler): Promi
       }
     });
     sub = { handlers, unlisten };
-    channels.set(conversationId, sub);
+    channels.set(channel, sub);
   }
   sub.handlers.add(handler);
 
   return async () => {
-    const current = channels.get(conversationId);
+    const current = channels.get(channel);
     if (!current) return;
     current.handlers.delete(handler);
     if (current.handlers.size === 0) {
-      channels.delete(conversationId);
+      channels.delete(channel);
       try { await current.unlisten(); } catch { /* connection already gone */ }
     }
   };
