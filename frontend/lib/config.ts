@@ -70,6 +70,9 @@ interface EnvironmentConfig {
   MAX_AGENTS_CONCURRENCY: string | undefined;
   MAX_CONCURRENT_QUERIES: number;
   QUERY_CACHE_TTL_MS: number;
+  QUERY_CACHE_REVALIDATE_MS: number;
+  QUERY_CACHE_EXPIRY_MS: number;
+  QUERY_CACHE_LEASE_MS: number;
 }
 
 const errors: string[] = [];
@@ -165,6 +168,10 @@ const config: EnvironmentConfig = {
   MAX_AGENTS_CONCURRENCY: process.env.MAX_AGENTS_CONCURRENCY,
   MAX_CONCURRENT_QUERIES: getOptionalNumber(process.env.MAX_CONCURRENT_QUERIES, 10),
   QUERY_CACHE_TTL_MS: getOptionalNumber(process.env.QUERY_CACHE_TTL_MS, 60_000),
+  // Query Execution, Cache & Params Arch V2 — default SWR windows + execution lease TTL.
+  QUERY_CACHE_REVALIDATE_MS: getOptionalNumber(process.env.QUERY_CACHE_REVALIDATE_MS, 20 * 60_000),
+  QUERY_CACHE_EXPIRY_MS: getOptionalNumber(process.env.QUERY_CACHE_EXPIRY_MS, 60 * 60_000),
+  QUERY_CACHE_LEASE_MS: getOptionalNumber(process.env.QUERY_CACHE_LEASE_MS, 2 * 60_000),
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -251,6 +258,9 @@ export const DISABLE_APP_STATE_IMAGES = config.DISABLE_APP_STATE_IMAGES;
 export const SHARE_GUEST_CHAT_ENABLED = config.SHARE_GUEST_CHAT_ENABLED;
 export const MAX_CONCURRENT_QUERIES = config.MAX_CONCURRENT_QUERIES;
 export const QUERY_CACHE_TTL_MS = config.QUERY_CACHE_TTL_MS;
+export const QUERY_CACHE_REVALIDATE_MS = config.QUERY_CACHE_REVALIDATE_MS;
+export const QUERY_CACHE_EXPIRY_MS = config.QUERY_CACHE_EXPIRY_MS;
+export const QUERY_CACHE_LEASE_MS = config.QUERY_CACHE_LEASE_MS;
 export const LOCAL_UPLOAD_PATH = config.LOCAL_UPLOAD_PATH;
 export const MXFOOD_DUCKDB_URL = config.MXFOOD_DUCKDB_URL;
 export const MD_HOME = config.MD_HOME;

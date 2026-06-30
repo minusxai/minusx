@@ -25,6 +25,7 @@ import 'server-only';
  */
 
 import { randomUUID } from 'crypto';
+import type { Readable } from 'stream';
 import { S3Adapter } from './s3-adapter';
 import { LocalFsAdapter } from './local-fs-adapter';
 import { ensureLocalMxfoodSeeds } from './local-seed';
@@ -44,6 +45,10 @@ export interface ObjectStore {
   getUploadUrl(params: { key: string; contentType: string }): Promise<UploadUrlResult>;
   /** Server-side direct upload — returns publicUrl. */
   put(key: string, body: Buffer, contentType: string): Promise<string>;
+  /** Stream bytes IN without buffering the whole object (S3 multipart / local write-stream). */
+  putStream(key: string, body: Readable, contentType?: string): Promise<void>;
+  /** Stream bytes OUT without buffering, or null if the object is missing. */
+  getStream(key: string): Promise<Readable | null>;
   delete(key: string): Promise<void>;
   /** Server-side S3 copy — no data transfer through Node.js. */
   copyObject(sourceKey: string, destKey: string): Promise<void>;

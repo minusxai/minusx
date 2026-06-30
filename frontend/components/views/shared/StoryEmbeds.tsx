@@ -48,10 +48,12 @@ export interface StoryEmbedsProps {
   paramValues?: Record<string, unknown>;
   onParamValuesChange?: (values: Record<string, unknown>) => void;
   onEditNumber?: (req: NumberQueryEditRequest) => void;
+  /** Path of the hosting story — forwarded to embeds' /api/query so guests pass the embed allowlist. */
+  storyPath?: string;
 }
 
 export default function StoryEmbeds({
-  doc, targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber,
+  doc, targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, storyPath,
 }: StoryEmbedsProps) {
   // Shared param context (reader's current values), seeded once from the story defaults. StoryEmbeds
   // remounts (with the iframe) when the story content changes, re-seeding.
@@ -100,6 +102,7 @@ export default function StoryEmbeds({
                 externalParameters={extParams}
                 externalParamValues={extValues}
                 enableDrilldown={false}
+                filePath={storyPath}
               />
             </Box>,
             t.el,
@@ -110,6 +113,7 @@ export default function StoryEmbeds({
               embed={t.embed}
               externalParamValues={extValues}
               editable={editable}
+              filePath={storyPath}
               onRequestEdit={(editable && onEditNumber && t.embed.query) ? () => onEditNumber({
                 query: t.embed.query ?? '',
                 connection: t.embed.connection,

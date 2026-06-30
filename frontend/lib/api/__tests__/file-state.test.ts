@@ -94,6 +94,24 @@ const mockSaveFile = FilesAPI.saveFile as MockedFunction<typeof FilesAPI.saveFil
 const mockCreateFile = FilesAPI.createFile as MockedFunction<typeof FilesAPI.createFile>;
 const mockFetch = global.fetch as MockedFunction<typeof fetch>;
 
+// /api/query now streams a JSONL body. Build a fake Response matching that wire
+// format (text() + X-Cached-At header), the way the real route + client speak.
+function jsonlQueryResponse(result: { columns: string[]; types: string[]; rows: Record<string, unknown>[]; finalQuery?: string }): Response {
+  const lines = [JSON.stringify({ columns: result.columns, types: result.types, finalQuery: result.finalQuery ?? '', rowCount: result.rows.length })];
+  for (const row of result.rows) lines.push(JSON.stringify(row));
+  const text = lines.join('\n') + '\n';
+  return {
+    ok: true, status: 200,
+    headers: new Headers({ 'X-Cache': 'miss', 'X-Cached-At': '0' }),
+    text: async () => text,
+    json: async () => JSON.parse(lines[0]),
+  } as unknown as Response;
+}
+/** The decoded shape the client returns for `result` (adds finalQuery + cachedAt). */
+function decodedShape(result: { columns: string[]; types: string[]; rows: Record<string, unknown>[]; finalQuery?: string }) {
+  return { columns: result.columns, types: result.types, rows: result.rows, finalQuery: result.finalQuery ?? '', cachedAt: 0 };
+}
+
 // Base time for testing (Jan 1, 2024)
 const BASE_TIME = new Date('2024-01-01T00:00:00Z').getTime();
 
@@ -159,16 +177,9 @@ describe('readFiles - File State Manager', () => {
     filePromises.clear();
 
     // Set default fetch response for query execution (can be overridden in specific tests)
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        data: {
-          columns: ['id'],
-          types: ['INTEGER'],
-          rows: [{ id: 1 }]
-        }
-      })
-    } as Response);
+    mockFetch.mockResolvedValue(
+      jsonlQueryResponse({ columns: ['id'], types: ['INTEGER'], rows: [{ id: 1 }] }),
+    );
   });
 
   afterEach(() => {
@@ -1088,10 +1099,7 @@ describe('readFiles - File State Manager', () => {
         rows: [{ id: 1, name: 'Alice' }]
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: queryResult })
-      } as Response);
+      mockFetch.mockResolvedValueOnce(jsonlQueryResponse(queryResult));
 
       const result = await getQueryResult({
         query: 'SELECT * FROM users',
@@ -1109,12 +1117,12 @@ describe('readFiles - File State Manager', () => {
         })
       }));
 
-      expect(result).toEqual(queryResult);
+      expect(result).toEqual(decodedShape(queryResult));
 
       // Should be in Redux cache
       const state = mockStore.getState() as RootState;
       const cached = state.queryResults.results['SELECT * FROM users::{}::test_db'];
-      expect(cached?.data).toEqual(queryResult);
+      expect(cached?.data).toEqual(decodedShape(queryResult));
     });
 
     it('should return cached result on second call (TTL cache)', async () => {
@@ -1124,10 +1132,7 @@ describe('readFiles - File State Manager', () => {
         rows: [{ id: 1 }]
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: queryResult })
-      } as Response);
+      mockFetch.mockResolvedValueOnce(jsonlQueryResponse(queryResult));
 
       // First call
       await getQueryResult({
@@ -1147,7 +1152,7 @@ describe('readFiles - File State Manager', () => {
       });
 
       expect(mockFetch).not.toHaveBeenCalled();
-      expect(cachedResult).toEqual(queryResult);
+      expect(cachedResult).toEqual(decodedShape(queryResult));
     });
 
     it('should deduplicate concurrent requests', async () => {
@@ -1166,10 +1171,7 @@ describe('readFiles - File State Manager', () => {
       // Simulate slow query
       mockFetch.mockImplementation(() => {
         callCount++;
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ data: queryResult })
-        } as Response);
+        return Promise.resolve(jsonlQueryResponse(queryResult));
       });
 
       // Fire 3 concurrent requests
@@ -1183,7 +1185,8 @@ describe('readFiles - File State Manager', () => {
 
       // Should only call API once (deduplication)
       expect(callCount).toBe(1);
-      expect(results).toEqual([queryResult, queryResult, queryResult]);
+      const expected = decodedShape(queryResult);
+      expect(results).toEqual([expected, expected, expected]);
     });
 
     it('should handle query errors', async () => {
@@ -1211,16 +1214,16 @@ describe('readFiles - File State Manager', () => {
       const result2 = { columns: ['name'], types: ['TEXT'], rows: [{ name: 'Bob' }] };
 
       mockFetch
-        .mockResolvedValueOnce({ ok: true, json: async () => ({ data: result1 }) } as Response)
-        .mockResolvedValueOnce({ ok: true, json: async () => ({ data: result2 }) } as Response);
+        .mockResolvedValueOnce(jsonlQueryResponse(result1))
+        .mockResolvedValueOnce(jsonlQueryResponse(result2));
 
       // Different params = different cache entries
       const r1 = await getQueryResult({ query: 'SELECT name FROM users WHERE id = :id', params: { id: 1 }, database: 'test_db' });
       const r2 = await getQueryResult({ query: 'SELECT name FROM users WHERE id = :id', params: { id: 2 }, database: 'test_db' });
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
-      expect(r1).toEqual(result1);
-      expect(r2).toEqual(result2);
+      expect(r1).toEqual(decodedShape(result1));
+      expect(r2).toEqual(decodedShape(result2));
     });
   });
 });

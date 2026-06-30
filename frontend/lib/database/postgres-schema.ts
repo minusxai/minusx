@@ -468,4 +468,39 @@ export const POSTGRES_SCHEMA = `
   ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_conversation_id_fkey;
   DROP TABLE IF EXISTS conversation_errors;
 
+  -- ===========================================================================
+  -- Query Execution, Cache & Params Arch V2.
+  -- query_cache: the control-plane index for the durable, cross-instance query
+  -- result cache (the big result blob lives in the object store at blob_ref).
+  -- It also carries the SWR windows (revalidate_at / expire_at) and the
+  -- execution lease (status + lease_expires_at) that dedupes concurrent
+  -- misses/revalidations across instances. Replaces the old in-process maps.
+  -- (Keep these comments semicolon-free -- splitSQLStatements is comment-unaware.)
+  -- ===========================================================================
+  CREATE TABLE IF NOT EXISTS query_cache (
+    cache_key         TEXT PRIMARY KEY,
+    query             TEXT NOT NULL,
+    connection_name   TEXT NOT NULL,
+    params            JSONB NOT NULL DEFAULT '{}',
+    blob_ref          TEXT,
+    final_query       TEXT,
+    row_count         INTEGER,
+    col_count         INTEGER,
+    byte_size         INTEGER,
+    status            TEXT NOT NULL DEFAULT 'pending',
+    created_at        BIGINT NOT NULL,
+    revalidate_at     BIGINT NOT NULL,
+    expire_at         BIGINT NOT NULL,
+    lease_expires_at  BIGINT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_query_cache_expire ON query_cache(expire_at);
+
+  -- NOTE: there is intentionally NO separate published_queries table. The public
+  -- contract is "the published file, executed by id with type-validated params":
+  -- a guest sends {fileId, params}, the server loads the file (gated by
+  -- canAccessFile to the guest's shared folder), uses the file's FROZEN query,
+  -- validates params by their declared type, and binds (never concatenates).
+  -- Results land in query_cache like any other query (mode-scoped, so guest and
+  -- authenticated runs of the same query share one blob). See arch doc §6.
+
 `;

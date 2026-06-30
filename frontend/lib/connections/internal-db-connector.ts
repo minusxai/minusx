@@ -28,6 +28,11 @@ async function assertReadOnly(sql: string): Promise<void> {
   }
 }
 
+// NOTE: InternalDbConnector intentionally does NOT override queryStream — it runs
+// against the document DB through the `getModules().db.exec` abstraction, which has
+// no cursor/streaming primitive. It uses NodeConnector's default (materialized)
+// streaming wrapper. This is internals-mode-only and serves small admin queries, so
+// buffering the (row-capped) result is fine.
 export class InternalDbConnector extends NodeConnector {
 
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {

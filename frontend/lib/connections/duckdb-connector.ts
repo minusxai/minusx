@@ -2,18 +2,19 @@ import 'server-only';
 import * as path from 'path';
 import * as fs from 'fs';
 import { BASE_DUCKDB_DATA_PATH } from '@/lib/config';
-import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
-import { withDuckDbConnection } from './duckdb-registry';
+import { NodeConnector, SchemaEntry, QueryResult, QueryStream, TestConnectionResult } from './base';
+import { withDuckDbConnection, getOrCreateDuckDbInstance } from './duckdb-registry';
 import { collectDuckDbIndexes } from './duckdb-indexes';
 import { runDuckDbWithTimeout } from './duckdb-query';
+import { duckDbStreamFromConn } from './duckdb-stream';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 import { namedToPositional } from './named-to-positional';
 
 const SKIP_SCHEMAS = immutableSet(['system', 'temp']);
 
-// Make rows JSON-safe: JSON.stringify handles Date→ISO string natively;
-// BigInt needs an explicit replacer since it throws otherwise.
+// Make rows JSON-safe: JSON.stringify handles Date→ISO natively; BigInt needs an
+// explicit replacer (it throws otherwise).
 function makeJsonSafe(rows: Record<string, unknown>[]): Record<string, unknown>[] {
   return JSON.parse(JSON.stringify(rows, (_, v) => {
     if (typeof v === 'bigint') {
@@ -99,6 +100,27 @@ export class DuckDbConnector extends NodeConnector {
       const rawRows = await result.getRowObjectsJS() as Record<string, unknown>[];
       const rows = makeJsonSafe(rawRows);
       return { columns, types, rows, finalQuery };
+    });
+  }
+
+  /**
+   * Streaming variant — reads the result chunk-by-chunk via `conn.stream()` and
+   * yields rows as DuckDB produces them, so the server never holds the whole
+   * result. The connection is held open across the (lazy) iteration and closed
+   * in the generator's `finally`. Per-chunk `convertRows(JSDuckDBValueConverter)`
+   * gives the SAME JS values as the materialized `getRowObjectsJS()`.
+   */
+  override async queryStream(
+    sql: string,
+    params?: Record<string, string | number>,
+    timeoutMs?: number,
+  ): Promise<QueryStream> {
+    const instance = await getOrCreateDuckDbInstance(this.absPath, 'READ_ONLY');
+    const conn = await instance.connect();
+    const { sql: positionalSql, values } = namedToPositional(sql, params);
+    return duckDbStreamFromConn({
+      conn, positionalSql, values, finalQuery: inlineSqlParams(sql, params), timeoutMs,
+      onClose: () => conn.closeSync(),
     });
   }
 

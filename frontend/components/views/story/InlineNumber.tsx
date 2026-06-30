@@ -90,12 +90,12 @@ function NumberSpan({ embed, text, source, query, editable, onEditQuery }: {
 
 /** Saved-question figure: load the question, read its value, show the chart in the footnote. The
  *  query is shown READ-ONLY — editing a saved question's SQL belongs on the question file, not here. */
-function SavedNumber({ id, embed, externalParamValues }: { id: number; embed: InlineNumberEmbed; externalParamValues?: Record<string, unknown> }) {
+function SavedNumber({ id, embed, externalParamValues, filePath }: { id: number; embed: InlineNumberEmbed; externalParamValues?: Record<string, unknown>; filePath?: string }) {
   useFile(id);
   const content = useAppSelector((s) => selectMergedContent(s, id)) as QuestionContent | undefined;
   const params = buildQueryParamValues(content?.parameters ?? [], content?.parameterValues ?? {}, externalParamValues);
   const { data } = useQueryResult(content?.query ?? '', params, content?.connection_name ?? '', content?.references ?? undefined, {
-    skip: !content?.query || !content?.connection_name,
+    skip: !content?.query || !content?.connection_name, filePath,
   });
   const col = embed.col ?? data?.columns?.[0];
   const text = formatCell(data?.rows?.[0] && col ? data.rows[0][col] : null);
@@ -108,16 +108,16 @@ function SavedNumber({ id, embed, externalParamValues }: { id: number; embed: In
 
 /** Inline-query figure: run the query, read its value, show the result chart in the footnote. In
  *  edit mode the popover offers "Edit query", which opens the full SqlEditor drawer (onRequestEdit). */
-function InlineQueryNumber({ embed, externalParamValues, editable, onRequestEdit }: {
+function InlineQueryNumber({ embed, externalParamValues, editable, onRequestEdit, filePath }: {
   embed: InlineNumberEmbed; externalParamValues?: Record<string, unknown>;
-  editable?: boolean; onRequestEdit?: () => void;
+  editable?: boolean; onRequestEdit?: () => void; filePath?: string;
 }) {
   // Bind the story <Param> values this number's SQL references (`:name`) so a reader's slider /
   // the story's default params drive the figure live. Same helper the augmentation uses → the
   // rendered number and the agent-seen number share a cache key.
   const params = bindReferencedParams(embed.query, externalParamValues);
   const { data } = useQueryResult(embed.query ?? '', params, embed.connection ?? '', undefined, {
-    skip: !embed.query || !embed.connection,
+    skip: !embed.query || !embed.connection, filePath,
   });
   const col = embed.col ?? data?.columns?.[0];
   const text = formatCell(data?.rows?.[0] && col ? data.rows[0][col] : null);
@@ -127,12 +127,14 @@ function InlineQueryNumber({ embed, externalParamValues, editable, onRequestEdit
   return <NumberSpan embed={embed} text={text} query={embed.query} editable={editable} onEditQuery={onRequestEdit} />;
 }
 
-export default function InlineNumber({ embed, externalParamValues, editable, onRequestEdit }: {
+export default function InlineNumber({ embed, externalParamValues, editable, onRequestEdit, filePath }: {
   embed: InlineNumberEmbed; externalParamValues?: Record<string, unknown>;
   editable?: boolean; onRequestEdit?: () => void;
+  /** Path of the page hosting this number — forwarded to /api/query so guests pass the embed allowlist. */
+  filePath?: string;
 }) {
   // Conditional RENDER (not conditional hooks) so each path calls its hooks unconditionally.
   return embed.id != null
-    ? <SavedNumber id={embed.id} embed={embed} externalParamValues={externalParamValues} />
-    : <InlineQueryNumber embed={embed} externalParamValues={externalParamValues} editable={editable} onRequestEdit={onRequestEdit} />;
+    ? <SavedNumber id={embed.id} embed={embed} externalParamValues={externalParamValues} filePath={filePath} />
+    : <InlineQueryNumber embed={embed} externalParamValues={externalParamValues} editable={editable} onRequestEdit={onRequestEdit} filePath={filePath} />;
 }

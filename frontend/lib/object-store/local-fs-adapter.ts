@@ -1,7 +1,9 @@
 import 'server-only';
 
-import { mkdirSync, writeFileSync, readFileSync, unlinkSync, copyFileSync, existsSync } from 'fs';
+import { mkdirSync, writeFileSync, readFileSync, unlinkSync, copyFileSync, existsSync, createWriteStream, createReadStream } from 'fs';
 import { dirname, join, resolve } from 'path';
+import { pipeline } from 'stream/promises';
+import type { Readable } from 'stream';
 import { LOCAL_UPLOAD_PATH } from '@/lib/config';
 import type { ObjectStore, UploadUrlResult } from './index';
 
@@ -42,6 +44,18 @@ export class LocalFsAdapter implements ObjectStore {
     mkdirSync(dirname(filePath), { recursive: true });
     writeFileSync(filePath, body);
     return `/api/object-store/serve/${key}`;
+  }
+
+  async putStream(key: string, body: Readable): Promise<void> {
+    const filePath = this.resolvePath(key);
+    mkdirSync(dirname(filePath), { recursive: true });
+    await pipeline(body, createWriteStream(filePath));
+  }
+
+  async getStream(key: string): Promise<Readable | null> {
+    const filePath = this.resolvePath(key);
+    if (!existsSync(filePath)) return null;
+    return createReadStream(filePath);
   }
 
   async delete(key: string): Promise<void> {

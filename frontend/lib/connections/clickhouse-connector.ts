@@ -1,5 +1,5 @@
 import 'server-only';
-import type { QueryResult, SchemaEntry, TestConnectionResult } from './base';
+import type { QueryResult, QueryStream, SchemaEntry, TestConnectionResult } from './base';
 import { NodeConnector as NodeConnectorBase } from './base';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 import { getOrCreateClickHouseClient } from './clickhouse-registry';
@@ -100,6 +100,52 @@ export class ClickHouseConnector extends NodeConnectorBase {
       rows: json.data ?? [],
       finalQuery,
     };
+  }
+
+  /**
+   * Streaming variant — uses the JSONCompactEachRowWithNamesAndTypes format so
+   * the server streams rows as ClickHouse produces them. The first two streamed
+   * rows are the column NAMES then TYPES (preserving the typed metadata); the
+   * rest are value arrays zipped back into row objects.
+   */
+  override async queryStream(
+    sql: string,
+    params?: Record<string, string | number>,
+    timeoutMs?: number,
+  ): Promise<QueryStream> {
+    const client = getOrCreateClickHouseClient(this.config);
+    const { sql: chSql, query_params } = namedToClickHouse(sql, params);
+    const finalQuery = inlineSqlParams(sql, params);
+
+    const resultSet = await client.query({
+      query: chSql,
+      format: 'JSONCompactEachRowWithNamesAndTypes',
+      query_params,
+      ...(timeoutMs ? { clickhouse_settings: { max_execution_time: Math.ceil(timeoutMs / 1000) } } : {}),
+    });
+
+    // Flatten the stream's batches into a single row iterator (each row is a value array).
+    const stream = resultSet.stream();
+    async function* flatten(): AsyncGenerator<unknown[]> {
+      for await (const batch of stream as AsyncIterable<Array<{ json: () => unknown }>>) {
+        for (const row of batch) yield row.json() as unknown[];
+      }
+    }
+    const it = flatten();
+    const names = (await it.next()).value as string[] | undefined;
+    const typesRow = (await it.next()).value as string[] | undefined;
+    const columns = names ?? [];
+    const types = typesRow ?? [];
+
+    async function* rows(): AsyncGenerator<Record<string, unknown>> {
+      for await (const arr of it) {
+        const obj: Record<string, unknown> = {};
+        for (let i = 0; i < columns.length; i++) obj[columns[i]] = arr[i];
+        yield obj;
+      }
+    }
+
+    return { columns, types, finalQuery, rows: rows() };
   }
 
   async getSchema(): Promise<SchemaEntry[]> {

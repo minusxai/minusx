@@ -1,7 +1,9 @@
 import 'server-only';
 
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, CopyObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import type { Readable } from 'stream';
 import {
   OBJECT_STORE_BUCKET,
   OBJECT_STORE_REGION,
@@ -62,7 +64,10 @@ export class S3Adapter implements ObjectStore {
       ContentType: contentType,
     });
 
-    const uploadUrl = await getSignedUrl(this.client, command, { expiresIn: 300 });
+    // Cast: installing @aws-sdk/lib-storage bumped @smithy/types, making S3Client
+    // and getSignedUrl's expected Client type skew. Harmless — same client.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const uploadUrl = await getSignedUrl(this.client as any, command, { expiresIn: 300 });
     const publicUrl = `${this.publicUrlBase}/${key}`;
 
     return { uploadUrl, publicUrl };
@@ -76,6 +81,28 @@ export class S3Adapter implements ObjectStore {
       ContentType: contentType,
     }));
     return `${this.publicUrlBase}/${key}`;
+  }
+
+  async putStream(key: string, body: Readable, contentType = 'application/octet-stream'): Promise<void> {
+    // Multipart streaming upload — never buffers the whole object in memory.
+    const upload = new Upload({
+      // Cast: @aws-sdk/lib-storage pins a slightly different @smithy client type
+      // than our @aws-sdk/client-s3 version (harmless version skew).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      client: this.client as any,
+      params: { Bucket: this.bucket, Key: key, Body: body, ContentType: contentType },
+    });
+    await upload.done();
+  }
+
+  async getStream(key: string): Promise<Readable | null> {
+    try {
+      const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      // In Node, Body is a Readable stream.
+      return (res.Body as Readable | undefined) ?? null;
+    } catch {
+      return null;
+    }
   }
 
   async delete(key: string): Promise<void> {

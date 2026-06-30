@@ -114,6 +114,11 @@ const { mockRunQuery } = vi.hoisted(() => ({
 
 vi.mock('@/lib/connections/run-query', () => ({
   runQuery: mockRunQuery,
+  // The streaming route uses runQueryStream — wrap the materialized mock as a one-shot stream.
+  runQueryStream: async (...a: unknown[]) => {
+    const r = await (mockRunQuery as unknown as (...x: unknown[]) => Promise<{ columns: string[]; types: string[]; rows: Record<string, unknown>[]; finalQuery: string }>)(...a);
+    return { columns: r.columns, types: r.types, finalQuery: r.finalQuery, rows: (async function* () { for (const x of r.rows) yield x; })() };
+  },
 }));
 
 describe('Phase 1: Unified File System API E2E', () => {
@@ -134,7 +139,13 @@ describe('Phase 1: Unified File System API E2E', () => {
             headers: { ...init?.headers, 'x-user-id': '1' }
           });
           const res = await queryPostHandler(req);
-          return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
+          // /api/query now streams a JSONL body — expose text()/headers so the
+          // client (which reads .text()) round-trips correctly.
+          const text = await res.text();
+          return {
+            ok: res.status >= 200 && res.status < 300, status: res.status, headers: res.headers,
+            text: async () => text, json: async () => JSON.parse(text),
+          } as unknown as Response;
         }
 
         if (urlStr.match(/\/api\/files(\?|$)/) && (!init?.method || init?.method === 'GET')) {
