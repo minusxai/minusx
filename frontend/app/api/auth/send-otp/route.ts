@@ -53,9 +53,17 @@ export async function POST(request: NextRequest) {
       });
 
       const agentName = config.branding.agentName;
-      // Emails need an absolute logo URL; only override when the configured wordmark is one.
+      // Emails need an absolute, RASTER logo URL — many clients (Gmail/Outlook) won't render
+      // SVG, so only override the default when the configured wordmark is a raster image,
+      // resolving a relative path against the request origin.
+      const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+      const proto = (request.headers.get('x-forwarded-proto') ?? 'https').split(',')[0].trim();
+      const origin = host ? `${proto}://${host}` : '';
       const logoExpanded = config.branding.logoExpanded;
-      const logoUrl = logoExpanded && /^https?:\/\//.test(logoExpanded) ? logoExpanded : undefined;
+      const isRaster = !!logoExpanded && /\.(png|jpe?g|gif|webp)(\?|$)/i.test(logoExpanded);
+      const logoUrl = isRaster
+        ? (/^https?:\/\//.test(logoExpanded!) ? logoExpanded : (origin ? `${origin}${logoExpanded}` : undefined))
+        : undefined;
       const emailHtml = buildOTPEmailHtml({ otp, agentName, logoUrl });
 
       const result = await sendEmailViaWebhook(
