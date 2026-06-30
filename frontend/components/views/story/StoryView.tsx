@@ -41,7 +41,7 @@ interface StoryViewProps {
 }
 
 /**
- * Story view: a single-page scrolling data story — one agent-authored HTML document on a fixed
+ * Story view: a single-page scrolling story — one agent-authored HTML document on a fixed
  * 1280px-wide canvas (any height), with live chart embeds. Editing is driven by the SHARED file
  * header's Edit/Save/Cancel (the file's `fileEditMode`), exactly like questions/dashboards — there is
  * no story-specific Edit button. While editing, inline edits stream into the file's dirty content via

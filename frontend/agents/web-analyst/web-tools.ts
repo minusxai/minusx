@@ -32,10 +32,10 @@ const MARKUP_FORMAT = `Every file projects to a single JSX document — that is 
 Rules (uniform for every file type):
 - object → nested \`<field>…</field>\`; array → \`<field>\` with repeated \`<item>\` children.
 - scalar → \`<field>value</field>\`. A string containing <, >, {, backtick, or a newline (e.g. SQL) rides in a RAW template-literal child: \`<query>{\`SELECT a WHERE x < 5\`}</query>\` — no escaping inside.
-- a \`jsx\` field (e.g. a data story's body) is emitted INLINE as real JSX elements (never an escaped string); its embeds/components (e.g. data stories' \`<Question>\`/\`<Number>\`/\`<Param>\`) are documented in that file type's skill.
+- a \`jsx\` field (e.g. a story's body) is emitted INLINE as real JSX elements (never an escaped string); its embeds/components (e.g. stories' \`<Question>\`/\`<Number>\`/\`<Param>\`) are documented in that file type's skill.
 - config types with no schema (connection/config/context/…) annotate non-string scalars so they round-trip: \`<port type="number">5432</port>\`, \`<enabled type="boolean">true</enabled>\`.
 
-The exact fields (and any embeds) for each file type are defined in that type's skill — questions, dashboards, reports, alerts, data_stories, notebooks — the single source of truth for its markup. Load/consult the relevant skill before authoring; never invent fields.`;
+The exact fields (and any embeds) for each file type are defined in that type's skill — questions, dashboards, reports, alerts, stories, notebooks — the single source of truth for its markup. Load/consult the relevant skill before authoring; never invent fields.`;
 
 // Keep this description in sync with the EditFile behavior in tool-handlers.ts —
 // the query/parameters warning in particular prevents broken queries.
@@ -176,7 +176,7 @@ const ScreenshotParams = Type.Object({
 export class Screenshot extends MXTool<typeof ScreenshotParams, RemoteAnalystContext> {
   static readonly schema: Tool<typeof ScreenshotParams> = {
     name: 'Screenshot',
-    description: 'See a rendered screenshot of the current file (question/dashboard/story/notebook/report) as an image. Use after authoring visual content — especially a data story, report, or notebook — to verify the layout, styling, and embeds render as intended before telling the user it is done.',
+    description: 'See a rendered screenshot of the current file (question/dashboard/story/notebook/report) as an image. Use after authoring visual content — especially a story, report, or notebook — to verify the layout, styling, and embeds render as intended before telling the user it is done.',
     parameters: ScreenshotParams,
   };
 

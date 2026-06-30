@@ -47,7 +47,7 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
 }
 
 /**
- * Public landing for a shared data story (host/l/<shareId>). The body renders client-only
+ * Public landing for a shared story (host/l/<shareId>). The body renders client-only
  * (ShareClientBoundary) so the server emits clean <head> metadata; access is enforced
  * server-side by the guest session.
  */

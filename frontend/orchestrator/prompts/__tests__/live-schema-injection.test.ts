@@ -11,7 +11,7 @@ import { contentSchemaText, ATLAS_SCHEMA_FILE_TYPES } from '@/lib/validation/atl
 const SKILL_BY_TYPE: Record<string, string> = {
   question: 'questions',
   dashboard: 'dashboards',
-  story: 'data_stories',
+  story: 'stories',
   notebook: 'notebooks',
   context: 'contexts',
 };
