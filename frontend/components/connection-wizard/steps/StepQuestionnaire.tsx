@@ -79,7 +79,7 @@ export default function StepQuestionnaire({ onComplete, greeting }: StepQuestion
       <Box>
         {greeting ? (
           <Heading
-            fontSize="2xl"
+            fontSize={{ base: 'xl', md: '2xl' }}
             fontFamily="mono"
             fontWeight="400"
             mb={1}
@@ -213,7 +213,7 @@ export default function StepQuestionnaire({ onComplete, greeting }: StepQuestion
                         transition="background 0.15s"
                       >
                         <Icon as={LuSparkles} boxSize={3} />
-                        <Text fontSize="xs" fontFamily="mono" fontWeight="500" lineHeight="1">
+                        <Text fontSize={{ base: '2xs', md: 'xs' }} fontFamily="mono" fontWeight="500" lineHeight="1">
                           let agent figure it out
                         </Text>
                       </HStack>

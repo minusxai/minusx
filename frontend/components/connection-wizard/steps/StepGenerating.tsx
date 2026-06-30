@@ -48,7 +48,12 @@ interface StepGeneratingProps {
   connectionName: string;
   contextFileId: number;
   greeting?: string;
+  /** Advance to the NEXT wizard step (e.g. Slack). */
   onComplete?: () => Promise<void>;
+  /** Mark onboarding fully complete (skip remaining steps) — used by "Go to dashboard". */
+  onFinish?: () => Promise<void> | void;
+  /** Whether a Slack step follows — controls the secondary "Connect Slack" action. */
+  showSlackStep?: boolean;
   /** For static connections: only build dashboard for these schemas. */
   staticSchemas?: string[] | null;
   /** Pre-filled dashboard preference from questionnaire — auto-starts generation if set. */
@@ -57,7 +62,7 @@ interface StepGeneratingProps {
   questionnaireAnswers?: QuestionnaireAnswers | null;
 }
 
-export default function StepGenerating({ connectionName, contextFileId, greeting, onComplete, staticSchemas, initialPreference, questionnaireAnswers }: StepGeneratingProps) {
+export default function StepGenerating({ connectionName, contextFileId, greeting, onComplete, onFinish, showSlackStep, staticSchemas, initialPreference, questionnaireAnswers }: StepGeneratingProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { config } = useConfigs();
@@ -208,17 +213,20 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     handleGenerate();
   }, [initialPreference, virtualDashboardId, hasStarted, handleGenerate, databases.length]);
 
-  // Publish all dirty files, open dashboard in new tab, and advance to next wizard step
+  // Publish all dirty files, mark onboarding complete, and navigate (this tab) to the dashboard.
+  // Marking complete is required — app/layout.tsx redirects users with incomplete onboarding back to
+  // /hello-world, so we must finish the wizard before leaving for /f/<id>. (Previously this opened a
+  // new tab AND advanced to the Slack step, so the button didn't do what its label said.)
   const handleGoToDashboard = useCallback(async () => {
     if (!virtualDashboardId) return;
     try {
       await publishAll();
-      window.open(preserveModeParam(`/f/${virtualDashboardId}`), '_blank');
-      onComplete?.();
+      if (onFinish) await onFinish();
+      router.push(preserveModeParam(`/f/${virtualDashboardId}`));
     } catch (err) {
       console.error('[StepGenerating] Publish failed:', err);
     }
-  }, [virtualDashboardId, onComplete]);
+  }, [virtualDashboardId, onFinish, router]);
 
   /** Discard draft files created during this step — note: orphan cleanup is a future task */
   const discardDraftFiles = useCallback(() => {
@@ -262,7 +270,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       <VStack gap={3} align="start" py={6}>
         {greeting ? (
           <Heading
-            fontSize="2xl"
+            fontSize={{ base: 'xl', md: '2xl' }}
             fontFamily="mono"
             fontWeight="400"
             letterSpacing="-0.02em"
@@ -333,17 +341,30 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
             </VStack>
           )}
           {isDone && (
-            <Button
-              bg="accent.teal"
-              color="white"
-              _hover={{ opacity: 0.9 }}
-              size="sm"
-              fontFamily="mono"
-              onClick={handleGoToDashboard}
-            >
-              <LuLayoutDashboard size={14} />
-              Go to dashboard
-            </Button>
+            <HStack gap={3} flexWrap="wrap" justify="center">
+              <Button
+                bg="accent.teal"
+                color="white"
+                _hover={{ opacity: 0.9 }}
+                size="sm"
+                fontFamily="mono"
+                onClick={handleGoToDashboard}
+              >
+                <LuLayoutDashboard size={14} />
+                Go to dashboard
+              </Button>
+              {showSlackStep && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  fontFamily="mono"
+                  color="fg.muted"
+                  onClick={() => onComplete?.()}
+                >
+                  Connect Slack &rarr;
+                </Button>
+              )}
+            </HStack>
           )}
         </HStack>
 

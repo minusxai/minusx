@@ -57,10 +57,10 @@ export default function StepConnection({ onComplete, onStaticSelect, greeting }:
   }
 
   return (
-    <Box p={6} overflowY="auto">
+    <Box p={{ base: 2, md: 6 }} overflowY="auto">
       <VStack align="stretch" gap={8} pb={4}>
         <VStack align="start" gap={2}>
-          <Text fontSize="2xl" fontWeight="900" letterSpacing="-0.02em" fontFamily="mono">
+          <Text fontSize={{ base: 'xl', md: '2xl' }} fontWeight="900" letterSpacing="-0.02em" fontFamily="mono">
             {greeting || 'Add Dataset'}
           </Text>
           {!greeting && (

@@ -430,21 +430,23 @@ export function LoginOrRegisterForm({
                       type="text"
                       placeholder="Workspace Name"
                       value={workspaceName}
-                      onChange={(e) => setWorkspaceName(e.target.value)}
+                      onChange={(e) => { const v = e.target.value; setWorkspaceName(v); if (workspaceNameError) { const r = validateWorkspaceName(v); setWorkspaceNameError(r.valid ? null : r.error!); } }}
                       onBlur={() => { const r = validateWorkspaceName(workspaceName); setWorkspaceNameError(r.valid ? null : r.error!); }}
                       required
                       autoFocus
                       size="lg"
                       borderColor={workspaceNameError ? 'accent.danger' : undefined}
                     />
-                    {workspaceNameError && <Text fontSize="xs" color="accent.danger" mt={1}>{workspaceNameError}</Text>}
+                    {workspaceNameError
+                      ? <Text fontSize="xs" color="accent.danger" mt={1}>{workspaceNameError}</Text>
+                      : <Text fontSize="xs" color="fg.muted" mt={1}>Letters, numbers, hyphens, and underscores — no spaces.</Text>}
                   </Box>
                   <Box w="full">
                     <Input
                       type="text"
                       placeholder="Your Name"
                       value={adminName}
-                      onChange={(e) => setAdminName(e.target.value)}
+                      onChange={(e) => { const v = e.target.value; setAdminName(v); if (adminNameError) { const r = validateFullName(v); setAdminNameError(r.valid ? null : r.error!); } }}
                       onBlur={() => { const r = validateFullName(adminName); setAdminNameError(r.valid ? null : r.error!); }}
                       required
                       size="lg"
@@ -457,7 +459,7 @@ export function LoginOrRegisterForm({
                       type="email"
                       placeholder="Email"
                       value={adminEmail}
-                      onChange={(e) => setAdminEmail(e.target.value)}
+                      onChange={(e) => { const v = e.target.value; setAdminEmail(v); if (adminEmailError) { const r = validateEmail(v); setAdminEmailError(r.valid ? null : r.error!); } }}
                       onBlur={() => { const r = validateEmail(adminEmail); setAdminEmailError(r.valid ? null : r.error!); }}
                       required
                       size="lg"
@@ -470,7 +472,7 @@ export function LoginOrRegisterForm({
                       type="password"
                       placeholder="Password"
                       value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
+                      onChange={(e) => { const v = e.target.value; setAdminPassword(v); if (adminPasswordError) { const r = validatePassword(v); setAdminPasswordError(r.valid ? null : r.error!); } }}
                       onBlur={() => { const r = validatePassword(adminPassword); setAdminPasswordError(r.valid ? null : r.error!); }}
                       required
                       size="lg"
@@ -574,8 +576,11 @@ export function LoginOrRegisterForm({
               ) : (
                 <form onSubmit={handleLogin} style={{ width: '100%' }}>
                   <VStack gap={4}>
-                    <Input type="email" fontFamily="mono" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus size="lg" />
-                    <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required size="lg" disabled={showOTPInput} />
+                    {/* Focus the password when the email is already filled (e.g. right after creating a
+                        workspace, where we land on login with the email prefilled). Autofocusing the
+                        email there re-grabbed focus and dropped the user's first password keystrokes. */}
+                    <Input type="email" fontFamily="mono" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus={!email} size="lg" />
+                    <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus={!!email} size="lg" disabled={showOTPInput} />
 
                     {showOTPInput && (
                       <VStack gap={4} w="full" mt={4}>

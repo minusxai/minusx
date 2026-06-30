@@ -179,9 +179,9 @@ export function HelloWorldContent() {
       )}
 
       {/* Floating orbs */}
-      <Box ref={orb1Ref} className="hw-orb hw-orb-1" position="absolute" w="400px" h="400px" borderRadius="full" bg="accent.teal" opacity={0.12} filter="blur(80px)" zIndex={0} pointerEvents="none" />
-      <Box ref={orb2Ref} className="hw-orb hw-orb-2" position="absolute" w="300px" h="300px" borderRadius="full" bg="accent.teal" opacity={0.14} filter="blur(60px)" zIndex={0} pointerEvents="none" />
-      <Box ref={orb3Ref} className="hw-orb hw-orb-3" position="absolute" w="250px" h="250px" borderRadius="full" bg="accent.teal" opacity={0.18} filter="blur(70px)" zIndex={0} pointerEvents="none" />
+      <Box ref={orb1Ref} className="hw-orb hw-orb-1" position="absolute" w={{ base: '200px', md: '400px' }} h={{ base: '200px', md: '400px' }} borderRadius="full" bg="accent.teal" opacity={0.12} filter="blur(80px)" zIndex={0} pointerEvents="none" />
+      <Box ref={orb2Ref} className="hw-orb hw-orb-2" position="absolute" w={{ base: '160px', md: '300px' }} h={{ base: '160px', md: '300px' }} borderRadius="full" bg="accent.teal" opacity={0.14} filter="blur(60px)" zIndex={0} pointerEvents="none" />
+      <Box ref={orb3Ref} className="hw-orb hw-orb-3" position="absolute" w={{ base: '140px', md: '250px' }} h={{ base: '140px', md: '250px' }} borderRadius="full" bg="accent.teal" opacity={0.18} filter="blur(70px)" zIndex={0} pointerEvents="none" />
 
       {/* Skip Setup Button */}
       {!isComplete && (
@@ -270,7 +270,7 @@ export function HelloWorldContent() {
                     px={10}
                     py={8}
                     w={{ base: 'full', md: '300px' }}
-                    minW="280px"
+                    minW={{ base: 'auto', md: '280px' }}
                     textAlign="center"
                     position="relative"
                     zIndex={1}
@@ -306,7 +306,7 @@ export function HelloWorldContent() {
                     px={10}
                     py={8}
                     w={{ base: 'full', md: '300px' }}
-                    minW="280px"
+                    minW={{ base: 'auto', md: '280px' }}
                     textAlign="center"
                     position="relative"
                     zIndex={1}
@@ -336,7 +336,7 @@ export function HelloWorldContent() {
             border="1px solid"
             borderColor="border.default"
             borderRadius="xl"
-            p={{ base: 6, md: 10 }}
+            p={{ base: 4, md: 10 }}
             css={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
           >
             <StepComplete />

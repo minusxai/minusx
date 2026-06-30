@@ -131,8 +131,8 @@ export default function ConnectionTypePicker({ onSelect, disabled = false }: Con
                       <Box w="36px" h="36px" position="relative" flexShrink={0}>
                         <Image src={connType.logo} alt={connType.name} fill style={{ objectFit: 'contain' }} />
                       </Box>
-                      <VStack align="start" gap={0.5} minW={0}>
-                        <Text fontWeight="700" fontSize="sm" fontFamily="mono" color="fg.default" lineHeight="1.2">
+                      <VStack align="start" gap={0.5} minW={0} maxW="full">
+                        <Text fontWeight="700" fontSize="sm" fontFamily="mono" color="fg.default" lineHeight="1.2" truncate maxW="full">
                           {connType.name}
                         </Text>
                         {connType.note && (
