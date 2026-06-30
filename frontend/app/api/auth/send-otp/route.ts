@@ -53,7 +53,10 @@ export async function POST(request: NextRequest) {
       });
 
       const agentName = config.branding.agentName;
-      const emailHtml = buildOTPEmailHtml({ otp, agentName });
+      // Emails need an absolute logo URL; only override when the configured wordmark is one.
+      const logoExpanded = config.branding.logoExpanded;
+      const logoUrl = logoExpanded && /^https?:\/\//.test(logoExpanded) ? logoExpanded : undefined;
+      const emailHtml = buildOTPEmailHtml({ otp, agentName, logoUrl });
 
       const result = await sendEmailViaWebhook(
         webhook,

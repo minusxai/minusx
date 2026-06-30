@@ -7,6 +7,8 @@
 interface OTPEmailParams {
   otp: string;
   agentName: string;
+  /** Absolute logo URL for the email header. Defaults to the product wordmark. */
+  logoUrl?: string;
 }
 
 function escapeHtml(str: string): string {
@@ -18,11 +20,12 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#x27;');
 }
 
-const LOGO_IMG = `<img src="https://minusx.app/logo_full.png" width="180" height="40" alt="MinusX" style="display:block" />`;
+const DEFAULT_LOGO_URL = 'https://minusx.app/logo_full.png';
 
 export function buildOTPEmailHtml(params: OTPEmailParams): string {
-  const { otp, agentName } = params;
+  const { otp, agentName, logoUrl } = params;
   const safeAgent = escapeHtml(agentName);
+  const LOGO_IMG = `<img src="${escapeHtml(logoUrl || DEFAULT_LOGO_URL)}" width="180" height="40" alt="${safeAgent}" style="display:block" />`;
 
   // Build individual digit cells for a clean grid look
   const digitCells = otp.split('').map(d =>

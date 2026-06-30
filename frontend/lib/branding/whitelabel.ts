@@ -51,6 +51,7 @@ export interface OrgLinks {
   docsUrl: string;
   supportUrl: string;
   githubIssuesUrl: string;
+  termsUrl: string;
 }
 
 /**
@@ -94,7 +95,8 @@ export const DEFAULT_CONFIG: OrgConfig = {
   links: {
     docsUrl: 'https://docs.minusx.ai',
     supportUrl: 'https://minusx.ai/support',
-    githubIssuesUrl: 'https://github.com/minusxai/minusx/issues'
+    githubIssuesUrl: 'https://github.com/minusxai/minusx/issues',
+    termsUrl: 'https://minusx.ai/terms'
   },
   messaging: {
     webhooks: [

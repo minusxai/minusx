@@ -486,7 +486,7 @@ export function LoginOrRegisterForm({
                       />
                       <Text fontSize="sm" color="fg.muted">
                         I agree to the{' '}
-                        <a href="https://minusx.ai/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--chakra-colors-accent-teal)', textDecoration: 'underline' }}>
+                        <a href={config.links.termsUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--chakra-colors-accent-teal)', textDecoration: 'underline' }}>
                           Terms of Service
                         </a>
                       </Text>

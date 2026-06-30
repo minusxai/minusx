@@ -86,7 +86,7 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
     if (typeof config.links !== 'object' || config.links === null) return false;
 
     const links = config.links;
-    const validFields = ['docsUrl', 'supportUrl', 'githubIssuesUrl'];
+    const validFields = ['docsUrl', 'supportUrl', 'githubIssuesUrl', 'termsUrl'];
 
     for (const field of validFields) {
       if (links[field] !== undefined) {
