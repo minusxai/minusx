@@ -1,5 +1,5 @@
 /**
- * StoryView — a single-page scrolling data story: one agent-authored HTML
+ * StoryView — a single-page scrolling story: one agent-authored HTML
  * document on a fixed 1280px-wide canvas (any height), rendered into a
  * SHADOW ROOT on the story host. Scripts/handlers are stripped, but <style>
  * blocks, classes and web fonts are ALLOWED — the shadow tree scopes them

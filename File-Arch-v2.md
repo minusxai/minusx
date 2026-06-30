@@ -80,7 +80,7 @@ It is **data, not code** — parsed and rendered via our component map, **never 
 
 ## Motivation
 
-The Jun-21 EditFile debug found a ~42% tool-call failure rate, rooted in **one thing**: the agent hand-authoring exact-match edits over **escaped, minified JSON-inside-JSON**. Three modes, same cause — `changes` sent as a stringified array (A), `oldMatch` not found in the minified-JSON target (B), edit yields invalid JSON (C). Worst case, a data story stored as HTML escaped into a JSON string (`<` for `<`, `\n` for newlines): HTML → JSON-string-escaped → JSON-arg-escaped, **three layers**.
+The Jun-21 EditFile debug found a ~42% tool-call failure rate, rooted in **one thing**: the agent hand-authoring exact-match edits over **escaped, minified JSON-inside-JSON**. Three modes, same cause — `changes` sent as a stringified array (A), `oldMatch` not found in the minified-JSON target (B), edit yields invalid JSON (C). Worst case, a story stored as HTML escaped into a JSON string (`<` for `<`, `\n` for newlines): HTML → JSON-string-escaped → JSON-arg-escaped, **three layers**.
 
 Static JSX collapses this: the agent edits **raw text**, and structured config is a **JSON literal in `{}`** — no escaping, because JSX props aren't strings. It's also the format agents author most fluently.
 
@@ -185,9 +185,9 @@ Parallel-run / strangler migration: build V2 alongside V1, prove it on stories f
 - The isomorphic **parse → static-validate → AST→render** package (`acorn` + `acorn-jsx` → validator → renderer), the **sanitizer**, and the `name → component` registry seeded with `Question`.
 - **Tests:** parser/validator units, security (XSS strip: `<script>`/`on*`/`javascript:`), render fidelity. *No product surface changes yet.*
 
-### M1 — `QuestionV2` file type, embedded in data stories
+### M1 — `QuestionV2` file type, embedded in stories
 - New `QuestionV2` type whose `jsx` is `<Question connection=… viz={…}>SELECT …</Question>`. **Existing `question` code untouched** (isolation + backward compat).
-- Existing data stories can embed a referenced `QuestionV2` file (alongside old questions) — wired into the current story render path.
+- Existing stories can embed a referenced `QuestionV2` file (alongside old questions) — wired into the current story render path.
 - Agent tools **`SetJsx` / `EditJsx` / `EditProps`** over the `jsx` field.
 - **Success gate (the whole point):** replay the failing EditFile convs (2027 / 2016 / 2041, Strait-of-Hormuz) against QuestionV2 and show A/B/C gone; QA/e2e — agent creates a story with a QuestionV2, edits its SQL, renders live, saves.
 
@@ -263,7 +263,7 @@ Implemented on `feature/improved-edits-v1` (PR #489), TDD, additive & backward-c
 ## How to test (new company)
 A new company auto-runs the schema (so the `jsx` column exists). Then:
 
-1. **Create a data story** (or open one) and open its side chat.
+1. **Create a story** (or open one) and open its side chat.
 2. **Ask the agent explicitly**, e.g. *"Create a **QuestionV2** (use the jsx body) that shows
    <metric> from <table>, then embed it in this story."* The agent should call
    `CreateFile(file_type:"questionv2", jsx:"<Question connection=… viz={{…}}>{\`SELECT …\`}</Question>")`

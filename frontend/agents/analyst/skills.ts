@@ -24,7 +24,7 @@ export const PAGE_SKILL_MAP: Record<string, string[]> = {
   explore: ['explore'],
   folder: ['explore'],
   slack: ['explore'],
-  story: ['data_stories', 'questions', 'visualizations'],
+  story: ['stories', 'questions', 'visualizations'],
   notebook: ['notebooks', 'questions', 'visualizations'],
 };
 

@@ -29,7 +29,7 @@ export const POST = withAuth(async (
     }
 
     const { data: file } = await loadFile(id, user); // access-checked
-    if (file.type !== 'story') return ApiErrors.validationError('Only data stories have share previews');
+    if (file.type !== 'story') return ApiErrors.validationError('Only stories have share previews');
     const tone = (file.content as StoryContent | null)?.colorMode === 'dark' ? 'light' : 'dark';
 
     const card = await composeStoryCard(screenshot, truncate(file.name, 90), tone);

@@ -133,7 +133,7 @@ export function StoryCoverCard(props: { coverUrl: string; title: string; tone: C
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 700, letterSpacing: 3, color: COVER_ACCENT, marginBottom: 16 }}>
             <div style={{ display: 'flex', width: 26, height: 2, backgroundColor: COVER_ACCENT, marginRight: 12 }} />
-            DATA STORY
+            STORY
           </div>
           <div style={{ display: 'flex', fontSize: 50, fontWeight: 700, color: '#ffffff', lineHeight: 1.08 }}>{props.title}</div>
         </div>

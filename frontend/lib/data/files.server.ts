@@ -1011,7 +1011,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       throw new AccessPermissionError('You do not have permission to access this file');
     }
     if (file.type !== 'story') {
-      throw new UserFacingError('Only data stories can be shared publicly');
+      throw new UserFacingError('Only stories can be shared publicly');
     }
     return file;
   }
@@ -1087,7 +1087,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (!canAccessFile(file, user, overrides)) {
       throw new AccessPermissionError('You do not have permission to access this file');
     }
-    if (file.type !== 'story') throw new UserFacingError('Only data stories have preview images');
+    if (file.type !== 'story') throw new UserFacingError('Only stories have preview images');
     await DocumentDB.updateMeta(fileId, { ...(file.meta ?? {}), preview: { key, version: file.updated_at } });
   }
 }
