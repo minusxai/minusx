@@ -357,7 +357,7 @@ export function StoryEmptyState() {
     <EmptyFileHero
       ariaLabel="No story"
       accent="accent.sun"
-      eyebrow="Data Story"
+      eyebrow="Story"
       title={<>Let&rsquo;s tell a great story</>}
       description={<>Ask {agentName} to spin one up. It weaves your narrative, charts, and headline numbers into a single scrolling page.</>}
       illustration={<StoryTile />}

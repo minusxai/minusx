@@ -53,6 +53,7 @@ import {
 import { CsvFileInfo, JobSchedule } from '@/lib/types';
 import { uploadCsvFilesS3, FileWithSchema } from '@/lib/backend/csv-upload';
 import { importGoogleSheets, reimportGoogleSheets } from '@/lib/backend/google-sheets';
+import { mergeReimportedSheetFiles } from '@/lib/data/helpers/sheet-reimport';
 import { sanitizeTableName, validateIdentifier } from '@/lib/csv-utils';
 import { BaseConfigProps } from './types';
 import { SheetsAutoSyncSection } from './SheetsAutoSyncSection';
@@ -602,16 +603,9 @@ export default function StaticConnectionConfig({
 
       if (!result.success) { onError(result.message ?? 'Re-import failed'); return; }
 
-      // Replace files from this spreadsheet with freshly imported ones, keeping at same position
-      const unchanged = existingFiles.filter((f) => f.spreadsheet_id !== spreadsheetId);
-      // Find where the old group was in the list to re-insert at the same spot
-      const firstIdx = existingFiles.findIndex((f) => f.spreadsheet_id === spreadsheetId);
-      const newFiles = result.files ?? [];
-      const updated =
-        firstIdx === -1
-          ? [...newFiles, ...unchanged]
-          : [...unchanged.slice(0, firstIdx), ...newFiles, ...unchanged.slice(firstIdx)];
-      onChange({ files: updated });
+      // Refresh the tabs the user STILL has from the re-import; never resurrect deleted tabs and
+      // never auto-add brand-new ones (see mergeReimportedSheetFiles). Keeps positions in place.
+      onChange({ files: mergeReimportedSheetFiles(existingFiles, spreadsheetId, result.files ?? []) });
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Re-import failed');
     } finally {
