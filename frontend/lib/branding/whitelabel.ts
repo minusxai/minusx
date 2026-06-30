@@ -5,6 +5,7 @@
 
 import type { FileType } from '@/lib/ui/file-metadata';
 import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient, ConfigBot, VisualizationType } from '@/lib/types';
+import { MINUSX_TAGLINE } from '@/lib/og/og-helpers';
 
 export interface SetupWizard {
   status: 'pending' | 'complete';
@@ -43,12 +44,14 @@ export interface OrgBranding {
   logoDark?: string;    // Dark mode logo (icon) URL
   logoExpanded?: string;     // Light mode full wordmark URL (e.g. social cards)
   logoExpandedDark?: string; // Dark mode full wordmark URL
+  tagline?: string;          // Short product tagline for social/OG cards + meta description
 }
 
 export interface OrgLinks {
   docsUrl: string;
   supportUrl: string;
   githubIssuesUrl: string;
+  termsUrl: string;
 }
 
 /**
@@ -87,11 +90,13 @@ export const DEFAULT_CONFIG: OrgConfig = {
     logoDark: '/logox.svg',
     logoExpanded: '/logo_full_dark.png',
     logoExpandedDark: '/logo_full.png',
+    tagline: MINUSX_TAGLINE,
   },
   links: {
     docsUrl: 'https://docs.minusx.ai',
     supportUrl: 'https://minusx.ai/support',
-    githubIssuesUrl: 'https://github.com/minusxai/minusx/issues'
+    githubIssuesUrl: 'https://github.com/minusxai/minusx/issues',
+    termsUrl: 'https://minusx.ai/terms'
   },
   messaging: {
     webhooks: [
@@ -184,4 +189,9 @@ export function getBrandLogoExpandedUrl(
     return branding?.logoExpandedDark || branding?.logoExpanded || DEFAULT_CONFIG.branding.logoExpandedDark || '/logo_full.png';
   }
   return branding?.logoExpanded || branding?.logoExpandedDark || DEFAULT_CONFIG.branding.logoExpanded || '/logo_full_dark.png';
+}
+
+/** Product tagline for social/OG cards + meta description; falls back to the product default. */
+export function getBrandTagline(branding: Partial<OrgBranding> | undefined): string {
+  return branding?.tagline || DEFAULT_CONFIG.branding.tagline || MINUSX_TAGLINE;
 }

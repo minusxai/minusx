@@ -199,7 +199,7 @@ function SlackSetupGuide({ isOAuthConfigured }: { isOAuthConfigured: boolean }) 
                   size="sm"
                   colorPalette="teal"
                   alignSelf="flex-start"
-                  aria-label="Add MinusX to Slack via OAuth"
+                  aria-label={`Add ${config.branding.agentName} to Slack via OAuth`}
                   onClick={() => { window.location.href = '/api/integrations/slack/oauth-start'; }}
                 >
                   <LuExternalLink size={12} />

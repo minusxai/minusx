@@ -19,7 +19,7 @@ const bob: User   = { id: 2, name: 'Bob',   email: 'bob@example.com',   role: 'v
 function config(overrides: Partial<OrgConfig> = {}): OrgConfig {
   return {
     branding: { displayName: 'Test', agentName: 'Agent', favicon: '/favicon.ico' },
-    links: { docsUrl: '', supportUrl: '', githubIssuesUrl: '' },
+    links: { docsUrl: '', supportUrl: '', githubIssuesUrl: '', termsUrl: '' },
     ...overrides,
   };
 }

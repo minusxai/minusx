@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Box, VStack, HStack, Text, Heading, Button, Textarea, Icon } from '@chakra-ui/react';
 import { LuSparkles, LuX } from 'react-icons/lu';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 
 const TYPEWRITER_SPEED = 35;
@@ -18,23 +19,25 @@ const QUESTIONS = [
     key: 'datasetDescription' as const,
     label: 'What is this dataset about?',
     placeholder: 'orders, customers, products…',
-    autoLabel: 'MinusX will infer this from your schema',
+    autoLabel: (agent: string) => `${agent} will infer this from your schema`,
   },
   {
     key: 'keyMetrics' as const,
     label: 'Key metrics or KPIs you track',
     placeholder: 'revenue, conversion, AOV…',
-    autoLabel: 'MinusX will derive these from your tables',
+    autoLabel: (agent: string) => `${agent} will derive these from your tables`,
   },
   {
     key: 'dashboardPreference' as const,
     label: 'What to show in the dashboard',
     placeholder: 'trends, top products, segments…',
-    autoLabel: 'MinusX will design this for you',
+    autoLabel: (agent: string) => `${agent} will design this for you`,
   },
 ];
 
 export default function StepQuestionnaire({ onComplete, greeting }: StepQuestionnaireProps) {
+  const { config } = useConfigs();
+  const agentName = config.branding.agentName;
   const [answers, setAnswers] = useState<QuestionnaireAnswers>({
     datasetDescription: '',
     keyMetrics: '',
@@ -102,7 +105,7 @@ export default function StepQuestionnaire({ onComplete, greeting }: StepQuestion
           </Heading>
         )}
         <Text color="fg.muted" fontSize="sm">
-          Answer what you know. MinusX fills in the rest.
+          Answer what you know. {agentName} fills in the rest.
         </Text>
       </Box>
 
@@ -154,7 +157,7 @@ export default function StepQuestionnaire({ onComplete, greeting }: StepQuestion
                     <HStack gap={2} minW={0}>
                       <Icon as={LuSparkles} boxSize={3.5} color="accent.teal" />
                       <Text fontSize="xs" fontFamily="mono" color="accent.teal" truncate>
-                        {autoLabel}
+                        {autoLabel(agentName)}
                       </Text>
                     </HStack>
                     <Box

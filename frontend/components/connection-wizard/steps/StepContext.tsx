@@ -21,6 +21,7 @@ import ContextDocsEditor from '@/components/context/ContextDocsEditor';
 import ChatInterface from '@/components/explore/ChatInterface';
 import type { ContextContent, Whitelist, WhitelistNode, DocEntry } from '@/lib/types';
 import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 
 const TYPEWRITER_SPEED = 35;
@@ -48,6 +49,8 @@ interface StepContextProps {
 
 /** Collapsible agent trace — auto-opens when first rendered */
 function AgentFeedCollapsible({ connectionName, contextPath, isRunning }: { connectionName: string; contextPath: string; isRunning: boolean }) {
+  const { config } = useConfigs();
+  const agentName = config.branding.agentName;
   const [isOpen, setIsOpen] = useState(true);
   const wasRunningRef = useRef(isRunning);
   useEffect(() => {
@@ -74,7 +77,7 @@ function AgentFeedCollapsible({ connectionName, contextPath, isRunning }: { conn
           <HStack>
           <Icon as={LuSparkles} boxSize={3.5} color="accent.teal" />
           <Text fontSize="sm" fontFamily="mono" fontWeight="500" color="accent.teal">
-            {isOpen ? 'Hide MinusX agent trace' : 'See MinusX agent in action'}
+            {isOpen ? `Hide ${agentName} agent trace` : `See ${agentName} agent in action`}
           </Text>
           </HStack>
           <HStack>

@@ -54,7 +54,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
   const hasLoadableDocs = contextDocs.docs.some((d) => !d.alwaysInclude);
 
   const baseInstructions = [
-    'MinusX is a an agentic BI tool with questions (SQL queries + visualizations) and dashboards (collections of questions).',
+    'This is an agentic BI tool with questions (SQL queries + visualizations) and dashboards (collections of questions).',
     '',
     'URL patterns:',
     '- Files (questions, dashboards, etc.): /f/{id}  (e.g. /f/189)',

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Box, HStack, Text, VStack, Badge } from '@chakra-ui/react';
 import { LuPlug, LuCopy, LuCheck, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -131,6 +132,7 @@ function McpSetupGuide() {
 
 export function McpIntegration() {
   const [expanded, setExpanded] = useState(false);
+  const { config } = useConfigs();
 
   return (
     <Box borderWidth="1px" borderColor="border" borderRadius="md" overflow="hidden">
@@ -147,7 +149,7 @@ export function McpIntegration() {
           <Box>
             <Text fontWeight="semibold" fontFamily="mono" fontSize="sm">MCP</Text>
             <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-              Expose MinusX as an MCP tool server
+              Expose {config.branding.agentName} as an MCP tool server
             </Text>
           </Box>
         </HStack>

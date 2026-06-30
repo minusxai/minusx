@@ -27,7 +27,7 @@ import { getTimestamp, buildCompactYLabel } from '@/lib/chart/chart-utils'
 import { getVizConstraintError } from '@/lib/chart/viz-constraints'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
-import type { OrgBranding } from '@/lib/branding/whitelabel'
+import { getBrandLogoUrl, type OrgBranding } from '@/lib/branding/whitelabel'
 import type { ChartAnnotation } from '@/lib/types'
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client'
 import { useAppSelector } from '@/store/hooks'
@@ -340,7 +340,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     }
     const rendered = await clientChartImageRenderer.renderCharts(
       [{ queryResult, vizSettings }],
-      { width: window.innerWidth, colorMode, addWatermark: true, padding: true },
+      { width: window.innerWidth, colorMode, addWatermark: true, padding: true, logoSrc: getBrandLogoUrl(config.branding, colorMode) },
     )
     if (rendered.length === 0) return
     const link = document.createElement('a')

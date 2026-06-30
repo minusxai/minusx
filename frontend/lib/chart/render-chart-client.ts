@@ -28,10 +28,11 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  *
  * @param source       Raw image — data URL string or Blob (e.g. PNG from ECharts getDataURL)
  * @param maxWidth     Scale output down to at most this width; never upscales
- * @param addWatermark Include the MinusX logo
+ * @param addWatermark Include the brand logo watermark
  * @param colorMode    Controls background fill colour and logo variant (dark/light)
  * @param padding      When true, logo is placed in a dedicated bottom strip rather than
  *                     overlapping chart content. Strip height = logoH + pad (bottom-right corner).
+ * @param logoSrc      Watermark logo URL (already resolved for colorMode); defaults to the brand mark.
  * @returns            Object URL pointing to the encoded JPEG blob
  */
 export async function toJpegObjectUrl(
@@ -40,6 +41,7 @@ export async function toJpegObjectUrl(
   addWatermark: boolean,
   colorMode: 'light' | 'dark',
   padding?: boolean,
+  logoSrc?: string,
 ): Promise<string> {
   const isBlobSrc = source instanceof Blob;
   const srcUrl = isBlobSrc ? URL.createObjectURL(source) : source;
@@ -69,8 +71,8 @@ export async function toJpegObjectUrl(
 
     if (addWatermark) {
       try {
-        const logoSrc = colorMode === 'dark' ? '/logox.svg' : '/logox_dark.svg';
-        const logo = await loadImage(logoSrc);
+        const resolvedLogoSrc = logoSrc ?? (colorMode === 'dark' ? '/logox.svg' : '/logox_dark.svg');
+        const logo = await loadImage(resolvedLogoSrc);
         const aspect = logo.naturalWidth / (logo.naturalHeight || 1);
         ctx.globalAlpha = 0.65;
         if (padding) {
