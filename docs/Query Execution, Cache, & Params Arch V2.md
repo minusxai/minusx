@@ -130,13 +130,17 @@ POST /api/query  { fileId, params }   (guest session)
 
 The connector contract is streaming-first: `NodeConnector.queryStream()` is the primary method (`query()` drains it via `drainQueryStream`), and `runQueryStream` is the server seam the cache-write/response path consumes — so the server pipes rows `connector → JSONL → gzip → object store` write-through, **never materializing** (peak RAM = one chunk/batch). `runQuery()` (materialized) just drains the stream, so the agent (which needs the full set for text/chart) still works.
 
-**Streams natively** (driver cursor, true zero-buffer):
+**Streams natively** (driver cursor/stream, true zero-buffer) — **8 of 9 connectors**:
 - **DuckDB / SQLite / CSV(parquet)** — `conn.stream()` + `fetchChunk()` + `convertRows(JSDuckDBValueConverter)` (shared `lib/connections/duckdb-stream.ts`); connection held open across iteration, closed in the generator's `finally`. Per-chunk conversion is byte-identical to materialized `getRowObjectsJS()`.
 - **Postgres** — `pg-cursor` batched server-side cursor; columns/types from the first read; client released in `finally`.
+- **Mongo** — aggregation cursor iteration; columns sampled from the first batch (schemaless); cursor closed in `finally`.
+- **BigQuery** — pages `job.getQueryResults` (autoPaginate off); schema from the first response.
+- **ClickHouse** — `JSONCompactEachRowWithNamesAndTypes` stream (names+types as the first two rows; typed metadata preserved).
+- **Athena** — `GetQueryResults` `NextToken` pagination; header row on the first page only.
 
-**Stream via the materialized default wrapper** (correct, but buffers the capped result — convert per-driver as needed): **BigQuery** (`createQueryStream`), **Athena** (pagination), **Mongo** (cursor), **ClickHouse**, **internal_db**.
+**Materialized default wrapper** (correct, buffers the row-capped result): **internal_db** only — it runs through the `getModules().db.exec` abstraction (no cursor), is internals-mode-only, and serves small admin queries.
 
-Tests: real un-mocked DuckDB streaming (multi-chunk, exact-match, lazy, no leak), mocked-cursor Postgres streaming, contract tests. Verified live in the browser: miss→hit through the streaming CSV connector.
+Tests: real un-mocked DuckDB streaming (multi-chunk, exact-match, lazy, no leak); mock-based control-flow tests for Postgres/Mongo/BigQuery/ClickHouse/Athena; contract tests. Verified live in the browser: miss→hit through the streaming CSV connector.
 
 ## Phase 2 (deferred)
 
