@@ -1,10 +1,11 @@
 import 'server-only';
 import * as fs from 'fs';
-import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
+import { NodeConnector, SchemaEntry, QueryResult, QueryStream, TestConnectionResult } from './base';
 import { resolveDuckDbFilePath } from './duckdb-connector';
-import { withSqliteViaDuckdbConnection } from './sqlite-via-duckdb-registry';
+import { withSqliteViaDuckdbConnection, getOrCreateSqliteViaDuckdbInstance } from './sqlite-via-duckdb-registry';
 import { collectDuckDbIndexes } from './duckdb-indexes';
 import { runDuckDbWithTimeout } from './duckdb-query';
+import { duckDbStreamFromConn } from './duckdb-stream';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 import { namedToPositional } from './named-to-positional';
@@ -83,6 +84,24 @@ export class SqliteConnector extends NodeConnector {
       const rawRows = await result.getRowObjectsJS() as Record<string, unknown>[];
       const rows = makeJsonSafe(rawRows);
       return { columns, types, rows, finalQuery };
+    });
+  }
+
+  /** Streaming variant — chunk-by-chunk via the shared DuckDB streaming helper. */
+  override async queryStream(
+    sql: string,
+    params?: Record<string, string | number>,
+    timeoutMs?: number,
+  ): Promise<QueryStream> {
+    const inst = await getOrCreateSqliteViaDuckdbInstance(this.absPath);
+    const conn = await inst.connect();
+    // USE is per-connection state (see withSqliteViaDuckdbConnection) — set it so
+    // unqualified table names resolve to db.main.*.
+    await conn.run('USE db');
+    const { sql: positionalSql, values } = namedToPositional(sql, params);
+    return duckDbStreamFromConn({
+      conn, positionalSql, values, finalQuery: inlineSqlParams(sql, params), timeoutMs,
+      onClose: () => conn.closeSync(),
     });
   }
 

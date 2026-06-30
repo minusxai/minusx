@@ -9,7 +9,8 @@ import {
   OBJECT_STORE_ENDPOINT,
   LOCAL_UPLOAD_PATH,
 } from '@/lib/config';
-import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
+import { NodeConnector, SchemaEntry, QueryResult, QueryStream, TestConnectionResult } from './base';
+import { duckDbStreamFromConn } from './duckdb-stream';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 
 // ---------------------------------------------------------------------------
@@ -207,6 +208,22 @@ export class CsvConnector extends NodeConnector {
       const rawRows = (await result.getRowObjectsJS()) as Record<string, unknown>[];
       const rows = makeJsonSafe(rawRows);
       return { columns, types, rows, finalQuery };
+    });
+  }
+
+  /** Streaming variant — chunk-by-chunk via the shared DuckDB streaming helper. */
+  override async queryStream(sql: string, params?: Record<string, string | number>): Promise<QueryStream> {
+    const instance = await getOrCreateInstance(this.cacheKey, this.files);
+    const conn = await instance.connect();
+    // Same :name → $N substitution as query() above.
+    const values: unknown[] = [];
+    const positionalSql = sql.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
+      values.push(params?.[key] ?? null);
+      return `$${values.length}`;
+    });
+    return duckDbStreamFromConn({
+      conn, positionalSql, values, finalQuery: inlineSqlParams(sql, params),
+      onClose: () => conn.closeSync(),
     });
   }
 
