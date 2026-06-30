@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { headers } from 'next/headers';
+// === SHARE IMAGE DISABLED === re-enable with the requestOrigin() helper below.
+// import { headers } from 'next/headers';
 import { resolveShare } from '@/lib/data/files.server';
 import { getConfigsForMode } from '@/lib/data/configs.server';
 import { getBrandTagline } from '@/lib/branding/whitelabel';
@@ -7,18 +8,19 @@ import type { StoryContent } from '@/lib/types';
 import { truncate } from '@/lib/og/og-helpers';
 import ShareClientBoundary from './ShareClientBoundary';
 
+// === SHARE IMAGE DISABLED === re-enable this helper (and the `headers` import) along with the og:image block.
 /** Absolute origin from the request host — correct behind ngrok/proxy/prod (Next's
  *  file-convention og:image only resolves to the dev localhost, so we set images by hand). */
-async function requestOrigin(): Promise<string> {
-  try {
-    const hdrs = await headers();
-    const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host') ?? '';
-    const proto = (hdrs.get('x-forwarded-proto') ?? 'http').split(',')[0].trim();
-    return host ? `${proto}://${host}` : '';
-  } catch {
-    return '';
-  }
-}
+// async function requestOrigin(): Promise<string> {
+//   try {
+//     const hdrs = await headers();
+//     const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host') ?? '';
+//     const proto = (hdrs.get('x-forwarded-proto') ?? 'http').split(',')[0].trim();
+//     return host ? `${proto}://${host}` : '';
+//   } catch {
+//     return '';
+//   }
+// }
 
 interface SharePageProps {
   params: Promise<{ shareId: string }>;
@@ -36,16 +38,18 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
   const title = resolved.file.name;
   const tagline = getBrandTagline((await getConfigsForMode().catch(() => null))?.config.branding);
   const description = truncate((resolved.file.content as StoryContent | null)?.description?.trim() || tagline, 200);
+  // === SHARE IMAGE DISABLED === re-enable by uncommenting the block below + restoring `images` in the return.
   // Absolute og:image to the public per-share route (?v= busts caches on edit). Set
   // explicitly (with dimensions) rather than via the file convention, which would only
   // emit the dev localhost host.
-  const image = `${await requestOrigin()}/l/${shareId}/og?v=${resolved.file.version}`;
-  const images = [{ url: image, width: 1200, height: 630, type: 'image/png' }];
+  // const image = `${await requestOrigin()}/l/${shareId}/og?v=${resolved.file.version}`;
+  // const images = [{ url: image, width: 1200, height: 630, type: 'image/png' }];
   return {
     title,
     description,
-    openGraph: { title, description, type: 'article', images },
-    twitter: { card: 'summary_large_image', title, description, images },
+    // === SHARE IMAGE DISABLED === restore `, images` on the two lines below to re-enable.
+    openGraph: { title, description, type: 'article' /*, images */ },
+    twitter: { card: 'summary', title, description /*, images */ },
   };
 }
 
