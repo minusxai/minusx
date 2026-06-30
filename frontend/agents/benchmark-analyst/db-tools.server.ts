@@ -11,6 +11,8 @@ import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { runQuery } from '@/lib/connections/run-query';
+import { getCachedResult } from '@/lib/query-cache/execute.server';
+import { resolveCachePolicy } from '@/lib/query-cache/policy.server';
 import { loadConnectionSchema } from '@/lib/connections/load-schema';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { QueryResult, SchemaEntry } from '@/lib/connections/base';
@@ -64,7 +66,18 @@ export class ExecuteQuery extends BaseExecuteQuery {
         'ExecuteQuery: missing effectiveUser on agent context — cannot resolve connection. This is a server bug; please report.',
       );
     }
-    return runQuery(connectionId, query, params, user);
+    // Route through the SHARED durable cache (arch doc §5): an agent query and a
+    // UI query of the same SQL+params in the same mode hit one blob + SWR. The
+    // cache is best-effort, so a DB/blob hiccup degrades to direct execution.
+    const { result } = await getCachedResult({
+      mode: user.mode,
+      connectionName: connectionId,
+      query,
+      params: params as Record<string, string | number | null>,
+      policy: resolveCachePolicy(null),
+      execute: () => runQuery(connectionId, query, params, user),
+    });
+    return result;
   }
 
   /** Server-side ECharts-SSR → JPEG render of the result viz (used when rawData is off). */
