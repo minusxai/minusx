@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { validatePublicParams, ParamValidationError } from '../param-validation';
-import type { PublishedParamSpec } from '../types';
+import type { QueryParamSpec } from '../types';
 
-const SPEC: PublishedParamSpec[] = [
+const SPEC: QueryParamSpec[] = [
   { name: 'country', type: 'text', rules: { maxLength: 20 } },
   { name: 'status', type: 'text', rules: { enum: ['open', 'closed'] } },
   { name: 'limit', type: 'number', rules: { min: 1, max: 100 } },
@@ -50,7 +50,7 @@ describe('validatePublicParams', () => {
   });
 
   it('rejects a text value not matching an anchored pattern', () => {
-    const spec: PublishedParamSpec[] = [{ name: 'code', type: 'text', rules: { pattern: '[A-Z]{3}' } }];
+    const spec: QueryParamSpec[] = [{ name: 'code', type: 'text', rules: { pattern: '[A-Z]{3}' } }];
     expect(() => validatePublicParams(spec, { code: 'USD' }, { code: 'us' })).toThrow(ParamValidationError);
     expect(validatePublicParams(spec, { code: 'USD' }, { code: 'EUR' }).code).toBe('EUR');
   });

@@ -96,7 +96,13 @@ export interface JsonlHeader {
   rowCount: number;
 }
 
-/** A validation rule attached to a published-query param (strict public allowlist). */
+/**
+ * Optional validation rule on a query param. Type-validation alone is the
+ * security floor (declared params only, bound not concatenated); these are
+ * defense-in-depth. There is no published_queries table — a public (guest)
+ * request derives its spec from the file's declared `parameters` (name+type),
+ * so `rules` are absent unless the question schema later carries them.
+ */
 export interface ParamRule {
   /** Max string length (text params). */
   maxLength?: number;
@@ -109,30 +115,9 @@ export interface ParamRule {
   pattern?: string;
 }
 
-/** One param the public caller may override, with its validation contract. */
-export interface PublishedParamSpec {
+/** One param a caller may override, with its validation contract (derived from the file's params). */
+export interface QueryParamSpec {
   name: string;
   type: 'text' | 'number' | 'date';
   rules?: ParamRule;
-}
-
-/**
- * A `published_queries` row — the frozen, revocable public contract minted when
- * a story is made public. The public caller sends `{queryId, params}`; only
- * params named in `paramSpec` may be overridden, each validated by type+rules.
- */
-export interface PublishedQuery {
-  queryId: string;
-  fileId: number;
-  fileVersion: number;
-  mode: string;
-  /** Frozen server-side — never sent to or accepted from the public caller. */
-  query: string;
-  connectionName: string;
-  paramSpec: PublishedParamSpec[];
-  defaultParams: Record<string, string | number | null>;
-  cachePolicy: CachePolicy;
-  createdBy: number;
-  revoked: boolean;
-  createdAt: number;
 }

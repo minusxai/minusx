@@ -1,15 +1,16 @@
 /**
- * Strict public-param validation for the `queryId` path.
+ * Strict param validation for the public (guest) file-execution path.
  *
- * A public caller may override ONLY params named in the published spec, and each
- * override is validated against its declared type + rules. Unknown keys are
- * rejected outright. The output is a clean `Record<name, value|null>` that the
- * caller binds as query parameters — never string-concatenated into SQL.
+ * A guest sends `{fileId, params}`; the spec is derived from the file's declared
+ * `parameters` (name+type). A caller may override ONLY params named in that
+ * spec, each validated against its declared type (+ optional rules). Unknown
+ * keys are rejected outright. The output is a clean `Record<name, value|null>`
+ * the caller BINDS as query parameters — never string-concatenated into SQL.
  *
- * This is the security boundary for anonymous query access: it guarantees the
- * frozen query runs with only allowlisted, type/rule-checked param values.
+ * This is the security boundary for anonymous query access: the file's frozen
+ * query runs with only allowlisted, type-checked, bound param values.
  */
-import type { PublishedParamSpec, ParamRule } from './types';
+import type { QueryParamSpec, ParamRule } from './types';
 
 export class ParamValidationError extends Error {
   constructor(message: string) {
@@ -29,7 +30,7 @@ type ParamValue = string | number | null;
  * @returns         `{ name: value|null }` for every spec param.
  */
 export function validatePublicParams(
-  spec: PublishedParamSpec[],
+  spec: QueryParamSpec[],
   defaults: Record<string, ParamValue>,
   overrides: Record<string, unknown>,
 ): Record<string, ParamValue> {
@@ -54,7 +55,7 @@ export function validatePublicParams(
   return out;
 }
 
-function coerceAndValidate(spec: PublishedParamSpec, raw: unknown): ParamValue {
+function coerceAndValidate(spec: QueryParamSpec, raw: unknown): ParamValue {
   // Explicit None — allowed for any type; the SQL layer removes/NULLs the filter.
   if (raw === null) return null;
 

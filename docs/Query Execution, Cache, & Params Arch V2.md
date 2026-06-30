@@ -6,7 +6,7 @@ Status: **design** (not yet implemented). Supersedes the in-process `queryCache`
 
 1. **No full result in server RAM.** The server is a *pipe*: connector rows stream through to the client and to the cache. No in-process result map — not even an LRU.
 2. **Durable, cross-instance cache** on a stale-while-revalidate (SWR) basis, with **per-file** revalidate/expiry windows.
-3. **Bounded public access.** A public story exposes a **`queryId`** (frozen query + connection + param contract), never raw SQL. Anonymous callers send `{queryId, params}`; params are validated by type+rules and bound, never concatenated.
+3. **Bounded public access.** A guest of a public story may execute **only by file id** — `{fileId, params}`, never raw SQL. The server uses the file's frozen query; params are validated by their declared type and **bound**, never concatenated. No second table — the contract is the published file (§6).
 
 ## Non-goals (deferred)
 
@@ -54,7 +54,7 @@ interface QueryCacheBlobStore {
 
 | column | purpose |
 |---|---|
-| `cache_key` PK | `${scope}:${queryHash}` — scope = `userKey` (authenticated) or `pub:{queryId}` (public) |
+| `cache_key` PK | `${mode}:${queryHash}` — `queryHash = getQueryHash(query, params, conn)` (the same id stored as `queryResultId`). Mode-scoped, shared by authenticated + guest runs. |
 | `query`, `connection_name`, `params` JSONB | what produced it |
 | `final_query`, `row_count`, `col_count`, `byte_size` | metadata (kept here, not in the blob) |
 | `blob_ref` | object-store key |
@@ -64,21 +64,9 @@ interface QueryCacheBlobStore {
 
 Sweeper deletes rows past `expire_at` + their blobs. Index on `expire_at`.
 
-### `published_queries` (public contract — separate lifecycle)
+### No second table — the public contract is the published file
 
-Durable, admin-managed, **revocable**. Minted when a story is made public.
-
-| column | purpose |
-|---|---|
-| `query_id` PK | opaque public handle (nanoid) |
-| `file_id`, `file_version`, `mode` | provenance |
-| `query`, `connection_name` | **frozen** server-side |
-| `param_spec` JSONB | `[{name, type, rules}]` — allowlist the caller may override |
-| `default_params` JSONB | defaults |
-| `cache_policy` JSONB | `{revalidateMs, expiryMs}` (authoritative; copied from the file at publish) |
-| `created_by`, `revoked` | admin/audit |
-
-Two tables, two lifecycles: `published_queries` is the *definition*; `query_cache` is *ephemeral materialization*. The public path resolves the former into a concrete `(query, params)`, then uses the latter like any other query.
+There is intentionally **one** new table. The public "contract" is not stored separately; it is **derived from the published file at request time** (see §6). This reuses the existing share/guest system (`meta.shares[]` + nonce + `resolveShare` + the guest JWT pinned to the story folder) as the revocable access boundary, and the question file's own `query` / `connection_name` / `parameters` / `cachePolicy` as the frozen contract. The cost: no opaque query handle (access keys off `fileId`, gated by `canAccessFile`), no public-only param *rules* unless the question schema carries them, and edits reflect live (no version-freeze) — all acceptable, and mostly desirable, for a BI tool where the publisher is the editor.
 
 ---
 
@@ -90,7 +78,7 @@ After resolving the `query_cache` row by `cache_key`:
 - **Stale-valid** (`revalidate_at ≤ now < expire_at`) → stream the stale blob **now** + fire-and-forget a background **revalidation** (an execution → takes the lease). On success, write new blob, bump `revalidate_at`/`expire_at`.
 - **Expired / miss** (`now ≥ expire_at` or no row) → **execute** (lease) and stream the fresh result.
 
-**Per-file windows:** `QuestionContent.cachePolicy?: { revalidateMs?, expiryMs? }` (add to `atlas-schemas.ts`). Defaults via env-overridable constants in `lib/config.ts`: `QUERY_CACHE_REVALIDATE_MS = 20*60_000`, `QUERY_CACHE_EXPIRY_MS = 60*60_000`. Clamped server-side. For the public path, the policy comes from `published_queries.cache_policy` (a viewer can't set it).
+**Per-file windows:** `QuestionContent.cachePolicy?: { revalidateMs?, expiryMs? }` (add to `atlas-schemas.ts`). Defaults via env-overridable constants in `lib/config.ts`: `QUERY_CACHE_REVALIDATE_MS = 20*60_000`, `QUERY_CACHE_EXPIRY_MS = 60*60_000`. Clamped server-side. For the guest path, the policy is read from the file's `cachePolicy` server-side (a guest can't set it).
 
 ---
 
@@ -119,19 +107,21 @@ Concurrent identical **misses/revalidations** must not all hit the warehouse. Co
 
 ---
 
-## 6. Public `queryId` path (closes the anon-SQL hole)
+## 6. Public (guest) path — derive from file (closes the anon-SQL hole)
+
+A guest may **only** execute by file id; raw-SQL execution is rejected for guests.
 
 ```
-POST /api/q/{queryId}  { params }
-  → load published_queries[queryId]            (404 if missing/revoked)
-  → validate params against param_spec         (type + rules; reject unknown keys)
-  → build concrete (query, params) from FROZEN query
-  → SWR via query_cache, key = `pub:{queryId}:{hash(normalizedParams)}`
+POST /api/query  { fileId, params }   (guest session)
+  → load file via FilesAPI            (canAccessFile gates it to the guest's shared folder)
+  → use the file's FROZEN query + connection_name (body.query is ignored for guests)
+  → spec = file.parameters (name+type) → validatePublicParams(spec, file defaults, params)
+  → SWR via query_cache, key = `${mode}:${getQueryHash(query, resolvedParams, conn)}`
   → stream JSONL (result only; raw SQL never leaves the server)
 ```
 
-- The guest/share path **stops calling `/api/query` with raw SQL**; public stories execute via `queryId`.
-- Public cache entries are scoped by `queryId` (+ normalized params), **shared across all anonymous viewers** — the cache doubles as load-shedding + access control.
+- The guest/share path **never sends raw SQL** — it sends `{fileId, params}`, and the server uses the file's stored query. Authenticated users keep sending raw SQL on `/api/query` (Explore / in-progress edits); guests are blocked from that mode.
+- Cache stays **mode-scoped** (`${mode}:${queryHash}`), so a guest run and an authenticated run of the same question share one blob — load-shedding + cross-viewer sharing for free. A guest can only ever reach keys derivable from files they're authorized for.
 - Params are **bound, not string-concatenated** (security-critical invariant — verify per connector).
 
 ---
@@ -144,7 +134,7 @@ For DuckDB cross-connection joins, a *separate* uncapped layer: full tables stre
 
 ## Build order (TDD)
 
-1. **Contracts:** `QueryCacheBlobStore`, `query_cache` + `published_queries` schema (+ migration, `update-workspace-template`), `cachePolicy` on `QuestionContent`, JSONL stream codec.
+1. **Contracts:** `QueryCacheBlobStore`, `query_cache` schema, `cachePolicy` on `QuestionContent`, JSONL stream codec.
 2. **Tests (red):** SWR transitions, lease win/lose + stuck-lease steal, JSONL round-trip, param validation/rejection, public path returns no SQL.
-3. **Impl (green):** streaming `/api/query`, blob store (S3 + local), lease, SWR, agent re-route, `/api/q/{queryId}`.
+3. **Impl (green):** streaming `/api/query`, blob store (S3 + local), lease, SWR, agent re-route, guest file-execution path (`{fileId, params}` + raw-SQL block for guests).
 4. Full suite, push, browser-verify.
