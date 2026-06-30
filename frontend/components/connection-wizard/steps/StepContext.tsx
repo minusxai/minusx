@@ -551,7 +551,7 @@ export default function StepContext({
         <Box>
           {greeting ? (
             <Heading
-              fontSize="2xl"
+              fontSize={{ base: 'xl', md: '2xl' }}
               fontFamily="mono"
               fontWeight="400"
               mb={1}

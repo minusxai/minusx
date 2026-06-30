@@ -270,7 +270,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       <VStack gap={3} align="start" py={6}>
         {greeting ? (
           <Heading
-            fontSize="2xl"
+            fontSize={{ base: 'xl', md: '2xl' }}
             fontFamily="mono"
             fontWeight="400"
             letterSpacing="-0.02em"
@@ -341,7 +341,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
             </VStack>
           )}
           {isDone && (
-            <HStack gap={3}>
+            <HStack gap={3} flexWrap="wrap" justify="center">
               <Button
                 bg="accent.teal"
                 color="white"
