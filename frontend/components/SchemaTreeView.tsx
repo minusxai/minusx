@@ -204,14 +204,29 @@ export default function SchemaTreeView({
     );
   };
 
+  // Normalize incoming data: `columns` is typed as required but data
+  // can arrive with it undefined. Default to [] so every
+  // downstream access (search .some(), .length, getFilteredColumns) is safe.
+  const normalizedSchemas = useMemo(
+    () =>
+      schemas.map((schemaItem) => ({
+        ...schemaItem,
+        tables: schemaItem.tables.map((table) => ({
+          ...table,
+          columns: table.columns ?? [],
+        })),
+      })),
+    [schemas]
+  );
+
   // Filter and sort schemas/tables based on search query and selection
   const filteredSchemas = useMemo(() => {
-    let result = schemas;
+    let result = normalizedSchemas;
 
     // Apply search filter if query exists
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      result = schemas
+      result = normalizedSchemas
         .map((schemaItem) => {
           // Filter tables within this schema
           const filteredTables = schemaItem.tables.filter((table) => {
@@ -278,7 +293,7 @@ export default function SchemaTreeView({
     }
 
     return result;
-  }, [schemas, searchQuery, showColumns, selectable, whitelistForSort]);
+  }, [normalizedSchemas, searchQuery, showColumns, selectable, whitelistForSort]);
 
   // Get filtered columns for a table
   const getFilteredColumns = (schemaName: string, table: { table: string; columns: Array<{ name: string; type: string }> }) => {
