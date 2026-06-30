@@ -53,6 +53,16 @@ export const CONTEXT_BUDGETS = {
    * on demand via LoadContext). Applied by `formatContextDocsSection`.
    */
   inlineAllDocsThreshold: 1,
+
+  /**
+   * Max characters of a context's COMPUTED schema fields (`fullSchema` /
+   * `parentSchema`) kept in the document at LOAD time before the columnar bulk is
+   * dropped — the production-OOM guard. Applied by `lib/context/schema-bounding.ts`
+   * in the context loader: under budget → keep tables WITH columns; over →
+   * names-only (`fullSchema` keeps every table for child inheritance; `parentSchema`
+   * additionally caps the table list + adds a "use SearchDBSchema" note).
+   */
+  contextParentSchemaChars: 20000,
 } as const;
 
 /** Convert a token budget to its approximate character budget (rounded). */

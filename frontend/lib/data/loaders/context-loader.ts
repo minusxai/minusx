@@ -9,6 +9,7 @@ import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getPublishedVersionForUser as getPublishedVersionForUserId, resolveVersionWhitelist } from '@/lib/context/context-utils';
 import { CustomLoader } from './types';
 import { computeSchemaFromWhitelist } from './context-loader-utils';
+import { boundSchema, boundFullSchema } from '@/lib/context/schema-bounding';
 
 /**
  * Context Loader - Computes fullSchema and fullDocs based on published version
@@ -27,12 +28,29 @@ import { computeSchemaFromWhitelist } from './context-loader-utils';
  *   - fullSchema = parent's schema filtered by parent's whitelist
  *   - fullDocs = parent's docs
  */
+// Concurrent-load de-duplication. The context loader recomputes the full schema (loading ALL
+// connections) on every call; under production concurrency, N simultaneous loads of the same context
+// each allocate the multi-MB schema independently — a primary OOM driver. Like the connection loader's
+// inflightRefreshes, share one in-flight computation across concurrent callers. Keyed by file + user +
+// mode (the published version + whitelist resolution depend on the user). The entry is removed when
+// the promise settles, so it only ever coalesces TRULY concurrent loads — never serves a stale result.
+// eslint-disable-next-line no-restricted-syntax -- server-side per-process request coalescing; entries are short-lived (deleted on settle)
+const inflightContextLoads = new Map<string, Promise<DbFile>>();
+
 export const contextLoader: CustomLoader = async (file: DbFile, user: EffectiveUser, _options?) => {
   // Skip if metadata-only
   if (file.content === null) {
     return file;
   }
+  const key = `${file.id}:${user.userId}:${user.mode}`;
+  const existing = inflightContextLoads.get(key);
+  if (existing) return existing;
+  const loading = computeContextSchema(file, user).finally(() => inflightContextLoads.delete(key));
+  inflightContextLoads.set(key, loading);
+  return loading;
+};
 
+async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<DbFile> {
   const content = file.content as ContextContent;
 
   // After migration, all contexts should have versions
@@ -49,11 +67,22 @@ export const contextLoader: CustomLoader = async (file: DbFile, user: EffectiveU
   }
 
   // Compute fullSchema, parentSchema, fullDocs, fullMetrics and fullSkills based on the published version
-  const { fullSchema, parentSchema, fullDocs, fullMetrics, fullAnnotations, fullSkills } = await computeSchemaFromVersion(
+  const computed = await computeSchemaFromVersion(
     { ...publishedVersion, whitelist: resolveVersionWhitelist(publishedVersion) },
     file.path,
     user
   );
+
+  // Bound the columnar schema before it's stored/serialized/shipped: keep columns when small, drop the
+  // columnar bulk when huge. This is what keeps a 1963-table connection from putting ~8 MB into every
+  // context load, API response, Redux store, and chat payload — the production OOM.
+  //
+  // fullSchema vs parentSchema differ in ONE way: fullSchema is the RESOLVED own schema that CHILD
+  // contexts inherit from, so it must never lose a table (boundFullSchema = names-only, no table cap).
+  // parentSchema is only the editor's available-to-whitelist menu, so it may also cap the table list.
+  const fullSchema = boundFullSchema(computed.fullSchema) as ContextContent['fullSchema'];
+  const parentSchema = boundSchema(computed.parentSchema) as ContextContent['parentSchema'];
+  const { fullDocs, fullMetrics, fullAnnotations, fullSkills } = computed;
 
   if (user.role === 'admin') {
     // Admins see all versions + metadata
@@ -86,7 +115,7 @@ export const contextLoader: CustomLoader = async (file: DbFile, user: EffectiveU
       }
     };
   }
-};
+}
 
 
 /**
