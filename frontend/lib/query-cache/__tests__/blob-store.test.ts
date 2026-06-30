@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Readable } from 'stream';
 import { createQueryCacheBlobStore } from '../blob-store';
-import { resultToJsonlStream } from '../jsonl';
+import { resultToJsonlStream } from '../jsonl-stream.server';
 import type { ObjectStore } from '@/lib/object-store';
 import type { QueryResult } from '@/lib/connections/base';
 

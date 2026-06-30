@@ -15,7 +15,8 @@ import { createGzip } from 'zlib';
 import { pipeline } from 'stream/promises';
 import { createObjectStore, type ObjectStore } from '@/lib/object-store';
 import type { QueryCacheBlobStore } from './types';
-import { decodeJsonl, gunzipToString } from './jsonl';
+import { decodeJsonl } from './jsonl';
+import { gunzipToString } from './jsonl-stream.server';
 import type { QueryResult } from '@/lib/connections/base';
 
 const CONTENT_TYPE = 'application/gzip';

@@ -1,23 +1,17 @@
 /**
- * JSONL codec for query results — the single wire + at-rest format.
+ * JSONL codec for query results — the single wire + at-rest format (PURE).
  *
  * Layout: one JSON object per line. The FIRST line is a {@link JsonlHeader}
  * (columns/types/finalQuery/rowCount); every subsequent line is one row object.
- * This is trivially streamable (no trailing footer like Parquet/Arrow) and
- * DuckDB-readable (`read_ndjson`). At rest the whole thing is gzipped.
+ * Trivially streamable (no trailing footer like Parquet/Arrow) and DuckDB-readable
+ * (`read_ndjson`).
  *
- * Peak memory for the streaming helpers is one row at a time. The buffered
- * helpers (encode/decode/bounded) operate on the row-capped result and are used
- * for cache writes and the agent's bounded-slice reads.
+ * This module is CLIENT-SAFE — pure string ops, no Node builtins — so the browser
+ * can decode `/api/query`'s JSONL body. Stream + gzip helpers (Node-only) live in
+ * `jsonl-stream.server.ts`.
  */
-import { Readable } from 'stream';
-import { gzip, gunzip } from 'zlib';
-import { promisify } from 'util';
 import type { QueryResult } from '@/lib/connections/base';
 import type { JsonlHeader } from './types';
-
-const gzipAsync = promisify(gzip);
-const gunzipAsync = promisify(gunzip);
 
 /** Serialize a result to a JSONL string (header line + one line per row). */
 export function encodeResultToJsonl(result: QueryResult): string {
@@ -39,6 +33,12 @@ export function decodeJsonl(text: string): QueryResult {
   const header = JSON.parse(lines[0]) as JsonlHeader;
   const rows = lines.slice(1).map((l) => JSON.parse(l) as Record<string, unknown>);
   return { columns: header.columns, types: header.types, finalQuery: header.finalQuery, rows };
+}
+
+/** Just the header line of a JSONL string (columns/types/finalQuery/rowCount). */
+export function decodeJsonlHeader(text: string): JsonlHeader {
+  const nl = text.indexOf('\n');
+  return JSON.parse(nl === -1 ? text : text.slice(0, nl)) as JsonlHeader;
 }
 
 export interface BoundedDecode {
@@ -71,36 +71,6 @@ export function decodeJsonlBounded(text: string, maxRows: number): BoundedDecode
     totalRows: header.rowCount,
     truncated: header.rowCount > rows.length,
   };
-}
-
-/** A Readable that emits the result as JSONL, one line per `read`, header first. */
-export function resultToJsonlStream(result: QueryResult): Readable {
-  function* gen(): Generator<string> {
-    const header: JsonlHeader = {
-      columns: result.columns,
-      types: result.types,
-      finalQuery: result.finalQuery,
-      rowCount: result.rows.length,
-    };
-    yield JSON.stringify(header) + '\n';
-    for (const row of result.rows) yield JSON.stringify(row) + '\n';
-  }
-  return Readable.from(gen());
-}
-
-/** Consume a JSONL Readable fully into a QueryResult. */
-export async function jsonlStreamToResult(stream: Readable): Promise<QueryResult> {
-  const chunks: Buffer[] = [];
-  for await (const c of stream) chunks.push(Buffer.from(c));
-  return decodeJsonl(Buffer.concat(chunks).toString('utf8'));
-}
-
-export async function gzipString(text: string): Promise<Buffer> {
-  return gzipAsync(Buffer.from(text, 'utf8'));
-}
-
-export async function gunzipToString(buf: Buffer): Promise<string> {
-  return (await gunzipAsync(buf)).toString('utf8');
 }
 
 function splitLines(text: string): string[] {

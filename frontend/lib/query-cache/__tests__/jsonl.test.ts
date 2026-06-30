@@ -3,12 +3,14 @@ import { Readable } from 'stream';
 import {
   encodeResultToJsonl,
   decodeJsonl,
+  decodeJsonlBounded,
+} from '../jsonl';
+import {
   resultToJsonlStream,
   jsonlStreamToResult,
-  decodeJsonlBounded,
   gzipString,
   gunzipToString,
-} from '../jsonl';
+} from '../jsonl-stream.server';
 import type { QueryResult } from '@/lib/connections/base';
 
 const RESULT: QueryResult = {
