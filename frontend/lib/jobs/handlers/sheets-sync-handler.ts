@@ -1,6 +1,7 @@
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { deleteS3File, importGoogleSheetToS3, processFilesFromS3 } from '@/lib/csv-processor';
+import { mergeReimportedSheetFiles } from '@/lib/data/helpers/sheet-reimport';
 import type { JobHandler } from '../job-registry';
 import type { ConnectionContent, CsvFileInfo, JobHandlerResult, JobRunnerInput } from '@/lib/types';
 
@@ -47,34 +48,30 @@ export const sheetsSyncJobHandler: JobHandler = {
           spreadsheetUrl, connFile.name, user.mode, schemaName,
         );
         const registered = await processFilesFromS3(user.mode, connFile.name, incoming);
+        const reimported: CsvFileInfo[] = registered.map((f) => ({
+          ...f,
+          source_type: 'google_sheets' as const,
+          spreadsheet_url: spreadsheetUrl,
+          spreadsheet_id: parsedId,
+        }));
 
-        const newFiles: CsvFileInfo[] = registered.map((f) => {
-          // Same tab as before → keep the user's table/schema renames
-          const previous = groupFiles.find((old) => old.filename === f.filename);
-          return {
-            ...f,
-            table_name: previous?.table_name ?? f.table_name,
-            schema_name: previous?.schema_name ?? f.schema_name,
-            source_type: 'google_sheets' as const,
-            spreadsheet_url: spreadsheetUrl,
-            spreadsheet_id: parsedId,
-          };
-        });
+        // Refresh the tabs the user still has — preserving deletions AND renames — instead of
+        // blindly replacing the group with every live tab (which resurrected deleted tabs; the same
+        // bug fixed for the manual Re-import button). Shared with the UI via mergeReimportedSheetFiles.
+        updatedFiles = mergeReimportedSheetFiles(updatedFiles, spreadsheetId, reimported);
 
-        const firstIdx = updatedFiles.findIndex((f) => f.spreadsheet_id === spreadsheetId);
-        const unchanged = updatedFiles.filter((f) => f.spreadsheet_id !== spreadsheetId);
-        updatedFiles = firstIdx === -1
-          ? [...newFiles, ...unchanged]
-          : [...unchanged.slice(0, firstIdx), ...newFiles, ...unchanged.slice(firstIdx)];
-
-        // Best-effort cleanup, only after new data is confirmed
-        await Promise.allSettled(oldS3Keys.map((key) => deleteS3File(key)));
+        // Best-effort S3 cleanup, only after new data is confirmed: delete every old key that was
+        // replaced AND every freshly-uploaded key we did NOT keep (importGoogleSheetToS3 uploads ALL
+        // live tabs, including deleted/new ones we drop). Keep only the keys still referenced.
+        const referenced = new Set(updatedFiles.filter((f) => f.spreadsheet_id === spreadsheetId).map((f) => f.s3_key));
+        const garbage = [...oldS3Keys, ...reimported.map((f) => f.s3_key)].filter((k) => !referenced.has(k));
+        await Promise.allSettled(garbage.map((key) => deleteS3File(key)));
 
         results.push({
           spreadsheet_id: parsedId,
           spreadsheet_url: spreadsheetUrl,
           status: 'success',
-          tables: newFiles.map((f) => `${f.schema_name}.${f.table_name}`),
+          tables: updatedFiles.filter((f) => f.spreadsheet_id === spreadsheetId).map((f) => `${f.schema_name}.${f.table_name}`),
         });
       } catch (err) {
         results.push({
