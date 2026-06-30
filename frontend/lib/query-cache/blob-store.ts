@@ -61,6 +61,16 @@ export function blobRefForKey(cacheKey: string): string {
   return `query-cache/${safe}.jsonl.gz`;
 }
 
-export function createQueryCacheBlobStore(store: ObjectStore = createObjectStore()): QueryCacheBlobStore {
+// Overridable object-store factory for the blob plane. Defaults to the shared object
+// store; a deployment can inject a wrapper that applies a request-scoped key namespace
+// (e.g. namespacing blobs by an ambient request context).
+let objectStoreFactory: () => ObjectStore = createObjectStore;
+
+/** Override the object store backing the query-cache blob plane. */
+export function setQueryCacheObjectStoreFactory(factory: () => ObjectStore): void {
+  objectStoreFactory = factory;
+}
+
+export function createQueryCacheBlobStore(store: ObjectStore = objectStoreFactory()): QueryCacheBlobStore {
   return new ObjectStoreBlobStore(store);
 }
