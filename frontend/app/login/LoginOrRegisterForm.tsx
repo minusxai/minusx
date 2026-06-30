@@ -576,8 +576,11 @@ export function LoginOrRegisterForm({
               ) : (
                 <form onSubmit={handleLogin} style={{ width: '100%' }}>
                   <VStack gap={4}>
-                    <Input type="email" fontFamily="mono" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus size="lg" />
-                    <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required size="lg" disabled={showOTPInput} />
+                    {/* Focus the password when the email is already filled (e.g. right after creating a
+                        workspace, where we land on login with the email prefilled). Autofocusing the
+                        email there re-grabbed focus and dropped the user's first password keystrokes. */}
+                    <Input type="email" fontFamily="mono" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus={!email} size="lg" />
+                    <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus={!!email} size="lg" disabled={showOTPInput} />
 
                     {showOTPInput && (
                       <VStack gap={4} w="full" mt={4}>
