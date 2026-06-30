@@ -9,11 +9,10 @@ import { Inter, JetBrains_Mono } from 'next/font/google';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { E2E_HEADER } from '@/lib/auth/e2e-runtime';
 import { getConfigs, getConfigsForMode, getOrgStyles, getStylesForMode } from '@/lib/data/configs.server';
-import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES } from '@/lib/branding/whitelabel';
+import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, getBrandTagline } from '@/lib/branding/whitelabel';
 import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES } from '@/lib/config';
 import { parseAnalyticsConfig } from '@/lib/constants';
 import type { AnalyticsConfig } from '@/lib/analytics/types';
-import { MINUSX_TAGLINE } from '@/lib/og/og-helpers';
 import { GlobalErrorHandler } from '@/components/ErrorHandler';
 import { Toaster } from '@/components/ui/toaster';
 import ImageLightbox from '@/components/ImageLightbox';
@@ -48,6 +47,7 @@ export async function generateMetadata(): Promise<Metadata> {
     } catch {}
   }
   const title = config.branding.agentName;
+  const description = getBrandTagline(config.branding);
   // Absolute og:image to the generic card route, built from the real request host (Next's
   // file-convention image only emits the dev localhost host, unusable behind ngrok/prod).
   const hdrs = await headers();
@@ -57,10 +57,10 @@ export async function generateMetadata(): Promise<Metadata> {
   const images = [{ url: `${origin}/opengraph-image`, width: 1200, height: 630, type: 'image/png' }];
   return {
     title,
-    description: MINUSX_TAGLINE,
+    description,
     icons: { icon: config.branding.favicon },
-    openGraph: { title, description: MINUSX_TAGLINE, siteName: config.branding.displayName, type: 'website', images },
-    twitter: { card: 'summary_large_image', title, description: MINUSX_TAGLINE, images },
+    openGraph: { title, description, siteName: config.branding.displayName, type: 'website', images },
+    twitter: { card: 'summary_large_image', title, description, images },
   };
 }
 

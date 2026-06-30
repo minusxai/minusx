@@ -72,7 +72,7 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
     if (typeof config.branding !== 'object' || config.branding === null) return false;
 
     const branding = config.branding;
-    const validFields = ['displayName', 'agentName', 'favicon', 'logoLight', 'logoDark'];
+    const validFields = ['displayName', 'agentName', 'favicon', 'logoLight', 'logoDark', 'tagline'];
 
     for (const field of validFields) {
       if (branding[field] !== undefined) {

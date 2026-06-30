@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { resolveShare } from '@/lib/data/files.server';
+import { getConfigsForMode } from '@/lib/data/configs.server';
+import { getBrandTagline } from '@/lib/branding/whitelabel';
 import type { StoryContent } from '@/lib/types';
-import { MINUSX_TAGLINE, truncate } from '@/lib/og/og-helpers';
+import { truncate } from '@/lib/og/og-helpers';
 import ShareClientBoundary from './ShareClientBoundary';
 
 /** Absolute origin from the request host — correct behind ngrok/proxy/prod (Next's
@@ -32,7 +34,8 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
   const resolved = await resolveShare(shareId).catch(() => null);
   if (!resolved) return {};
   const title = resolved.file.name;
-  const description = truncate((resolved.file.content as StoryContent | null)?.description?.trim() || MINUSX_TAGLINE, 200);
+  const tagline = getBrandTagline((await getConfigsForMode().catch(() => null))?.config.branding);
+  const description = truncate((resolved.file.content as StoryContent | null)?.description?.trim() || tagline, 200);
   // Absolute og:image to the public per-share route (?v= busts caches on edit). Set
   // explicitly (with dimensions) rather than via the file convention, which would only
   // emit the dev localhost host.

@@ -9,8 +9,7 @@ import path from 'path';
 import sharp from 'sharp';
 import { ImageResponse } from 'next/og';
 import { getConfigsForMode } from '@/lib/data/configs.server';
-import { getBrandLogoExpandedUrl, DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
-import { MINUSX_TAGLINE } from '@/lib/og/og-helpers';
+import { getBrandLogoExpandedUrl, getBrandTagline, DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
 
 export const OG_SIZE = { width: 1200, height: 630 } as const;
 export type CoverTone = 'light' | 'dark';
@@ -29,6 +28,8 @@ export interface CardAssets {
   logo: string;
   /** White wordmark — for dark backgrounds. */
   logoLight: string;
+  /** Product tagline shown under the wordmark on the generic card. */
+  tagline: string;
 }
 
 // JetBrains Mono ships in public/fonts (also used by chart rendering).
@@ -93,7 +94,7 @@ export async function loadCardAssets(): Promise<CardAssets> {
     resolveLogo(getBrandLogoExpandedUrl(branding, 'light')),
     resolveLogo(getBrandLogoExpandedUrl(branding, 'dark')),
   ]);
-  return { bg: loadBg(), logo, logoLight };
+  return { bg: loadBg(), logo, logoLight, tagline: getBrandTagline(branding) };
 }
 
 function heroBg(bg: string): React.ReactElement {
@@ -109,7 +110,7 @@ function madeWith(logo: string, color: string, w = 132): React.ReactElement {
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
       <span style={{ display: 'flex', fontSize: 14, letterSpacing: 1, color, marginBottom: 8 }}>made with</span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={logo} width={w} height={h} alt="MinusX" />
+      <img src={logo} width={w} height={h} alt="" />
     </div>
   );
 }
@@ -152,8 +153,8 @@ export function GenericCard(props: { assets: CardAssets }): React.ReactElement {
       {heroFade()}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={props.assets.logo} width={logoW} height={logoH} alt="MinusX" />
-        <div style={{ display: 'flex', fontSize: 22, color: INK_MUTED, marginTop: 18 }}>{MINUSX_TAGLINE.toLowerCase()}</div>
+        <img src={props.assets.logo} width={logoW} height={logoH} alt="" />
+        <div style={{ display: 'flex', fontSize: 22, color: INK_MUTED, marginTop: 18 }}>{props.assets.tagline.toLowerCase()}</div>
       </div>
     </div>
   );
@@ -187,6 +188,6 @@ export async function renderDefaultGenericCardBuffer(): Promise<Buffer> {
     resolveLogo(getBrandLogoExpandedUrl(DEFAULT_CONFIG.branding, 'light')),
     resolveLogo(getBrandLogoExpandedUrl(DEFAULT_CONFIG.branding, 'dark')),
   ]);
-  const assets: CardAssets = { bg: loadBg(), logo, logoLight };
+  const assets: CardAssets = { bg: loadBg(), logo, logoLight, tagline: getBrandTagline(DEFAULT_CONFIG.branding) };
   return Buffer.from(await imageResponse(<GenericCard assets={assets} />).arrayBuffer());
 }
