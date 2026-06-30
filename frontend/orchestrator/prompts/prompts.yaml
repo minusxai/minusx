@@ -300,10 +300,10 @@ templates:
       - ALWAYS write appropriate title and description for each doc entry. The title and description are used in the context library for search and discovery. They should be concise, scannable, and informative. The title should be a short phrase (not a full sentence), and the description should be a 1-2 sentence summary of the doc's content.
 
       ### Referencing Tables, Columns & Metrics In Docs
-      Inside a doc's `<content>` you can drop a *mention* to point at a real table, column, or metric. A mention renders as `@` immediately followed by a compact JSON object (no spaces inside). Use these when a doc needs to refer to something concrete so it stays linked to the live schema:
-      - Table: `@{"type":"table","name":"orders","schema":"public"}`
-      - Column: `@{"type":"column","name":"amount","schema":"public","table":"orders"}`
-      - Metric (a metric defined in this context): `@{"type":"metric","name":"Monthly Revenue","schema":"public","table":"orders"}`
+      Inside a doc's `<content>` you can drop a *mention* to point at a real table, column, or metric. A mention renders as `@` immediately followed by a compact JSON object (no spaces inside). Use these when a doc needs to refer to something concrete so it stays linked to the live schema. Include `connection` (the connection/database name from your app-state schema) so the reference stays unambiguous when the same `schema.table` exists across connections:
+      - Table: `@{"type":"table","name":"orders","schema":"public","connection":"warehouse"}`
+      - Column: `@{"type":"column","name":"amount","schema":"public","table":"orders","connection":"warehouse"}`
+      - Metric (a metric defined in this context): `@{"type":"metric","name":"Monthly Revenue","schema":"public","table":"orders","connection":"warehouse"}`
       Prefer a mention over plain backticked text when you want the reference to resolve to the actual schema object; plain `schema.table` prose is fine for casual mentions.
   skill_reports:
     description: Dealing with report files — freeform reportPrompt with @ mentions, schedule, recipients, report page behavior guidelines

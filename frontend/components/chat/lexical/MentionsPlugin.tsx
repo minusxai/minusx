@@ -251,6 +251,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
     if (isSlashCommand(mention)) return; // Commands are executed, not inserted
     const mentionData: MentionData = { type: mention.type, name: mention.name };
     if ('schema' in mention && mention.schema) mentionData.schema = mention.schema;
+    if ('connection' in mention && mention.connection) mentionData.connection = mention.connection;
     if (mention.type === 'skill') mentionData.source = mention.source;
     if (mention.id != null) mentionData.id = mention.id;
     insertMentionData(mentionData, triggerLength);
@@ -260,6 +261,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
   const insertColumn = useCallback((column: ColumnInfo, table: MentionItem, triggerLength: number) => {
     const mentionData: MentionData = { type: 'column', name: column.name, table: table.name };
     if (table.schema) mentionData.schema = table.schema;
+    if (table.connection) mentionData.connection = table.connection;
     insertMentionData(mentionData, triggerLength);
   }, [insertMentionData]);
 
@@ -267,6 +269,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
   const insertMetric = useCallback((metric: MetricDef, table: MentionItem, triggerLength: number) => {
     const mentionData: MentionData = { type: 'metric', name: metric.name, table: table.name };
     if (table.schema) mentionData.schema = table.schema;
+    if (table.connection) mentionData.connection = table.connection;
     insertMentionData(mentionData, triggerLength);
   }, [insertMentionData]);
 
