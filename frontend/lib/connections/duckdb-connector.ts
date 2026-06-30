@@ -1,27 +1,35 @@
 import 'server-only';
 import * as path from 'path';
 import * as fs from 'fs';
+import { JSDuckDBValueConverter } from '@duckdb/node-api';
 import { BASE_DUCKDB_DATA_PATH } from '@/lib/config';
-import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
-import { withDuckDbConnection } from './duckdb-registry';
+import { NodeConnector, SchemaEntry, QueryResult, QueryStream, TestConnectionResult } from './base';
+import { withDuckDbConnection, getOrCreateDuckDbInstance } from './duckdb-registry';
 import { collectDuckDbIndexes } from './duckdb-indexes';
-import { runDuckDbWithTimeout } from './duckdb-query';
+import { runDuckDbWithTimeout, normalizeDuckDbTimeout } from './duckdb-query';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 import { namedToPositional } from './named-to-positional';
 
 const SKIP_SCHEMAS = immutableSet(['system', 'temp']);
 
-// Make rows JSON-safe: JSON.stringify handles Date→ISO string natively;
-// BigInt needs an explicit replacer since it throws otherwise.
+// JSON-safe replacer: JSON.stringify handles Date→ISO natively; BigInt needs
+// explicit handling (it throws otherwise).
+function jsonSafeReplacer(_: string, v: unknown): unknown {
+  if (typeof v === 'bigint') {
+    return v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER)
+      ? Number(v) : v.toString();
+  }
+  return v;
+}
+
 function makeJsonSafe(rows: Record<string, unknown>[]): Record<string, unknown>[] {
-  return JSON.parse(JSON.stringify(rows, (_, v) => {
-    if (typeof v === 'bigint') {
-      return v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER)
-        ? Number(v) : v.toString();
-    }
-    return v;
-  }));
+  return JSON.parse(JSON.stringify(rows, jsonSafeReplacer));
+}
+
+/** Per-row JSON-safe normalization (streaming path) — same semantics as makeJsonSafe. */
+function jsonSafeRow(row: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(row, jsonSafeReplacer));
 }
 
 /**
@@ -100,6 +108,79 @@ export class DuckDbConnector extends NodeConnector {
       const rows = makeJsonSafe(rawRows);
       return { columns, types, rows, finalQuery };
     });
+  }
+
+  /**
+   * Streaming variant — reads the result chunk-by-chunk via `conn.stream()` and
+   * yields rows as DuckDB produces them, so the server never holds the whole
+   * result. The connection is held open across the (lazy) iteration and closed
+   * in the generator's `finally`. Per-chunk `convertRows(JSDuckDBValueConverter)`
+   * gives the SAME JS values as the materialized `getRowObjectsJS()`.
+   */
+  override async queryStream(
+    sql: string,
+    params?: Record<string, string | number>,
+    timeoutMs?: number,
+  ): Promise<QueryStream> {
+    const instance = await getOrCreateDuckDbInstance(this.absPath, 'READ_ONLY');
+    const conn = await instance.connect();
+    let closed = false;
+    const close = () => { if (!closed) { closed = true; try { conn.closeSync(); } catch { /* ignore */ } } };
+
+    try {
+      const { sql: positionalSql, values } = namedToPositional(sql, params);
+      const finalQuery = inlineSqlParams(sql, params);
+
+      // Best-effort interrupt-based timeout (DuckDB has no statement_timeout GUC).
+      let settled = false;
+      const timer = timeoutMs && timeoutMs > 0
+        ? setTimeout(() => { if (!settled) conn.interrupt(); }, timeoutMs)
+        : undefined;
+
+      let result: Awaited<ReturnType<typeof conn.stream>>;
+      try {
+        result = values !== undefined
+          ? await conn.stream(positionalSql, values as never)
+          : await conn.stream(positionalSql);
+      } catch (err) {
+        settled = true; if (timer) clearTimeout(timer);
+        close();
+        throw normalizeDuckDbTimeout(err, timeoutMs);
+      }
+
+      const colCount = result.columnCount;
+      const columns: string[] = [];
+      const types: string[] = [];
+      for (let i = 0; i < colCount; i++) {
+        columns.push(result.columnName(i));
+        types.push(result.columnType(i).toString());
+      }
+
+      async function* rows(): AsyncGenerator<Record<string, unknown>> {
+        try {
+          let chunk = await result.fetchChunk();
+          while (chunk && chunk.rowCount > 0) {
+            const converted = chunk.convertRows(JSDuckDBValueConverter) as unknown[][];
+            for (const arr of converted) {
+              const row: Record<string, unknown> = {};
+              for (let i = 0; i < columns.length; i++) row[columns[i]] = arr[i];
+              yield jsonSafeRow(row);
+            }
+            chunk = await result.fetchChunk();
+          }
+        } catch (err) {
+          throw normalizeDuckDbTimeout(err, timeoutMs);
+        } finally {
+          settled = true; if (timer) clearTimeout(timer);
+          close();
+        }
+      }
+
+      return { columns, types, finalQuery, rows: rows() };
+    } catch (err) {
+      close();
+      throw err;
+    }
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
