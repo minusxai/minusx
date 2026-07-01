@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { loadConversation, selectConversation } from '@/store/chatSlice';
+import { loadConversation, selectConversation, setUserInputResult } from '@/store/chatSlice';
 import { parsePiConversation } from '@/lib/conversations-utils';
 import { ConversationsAPI } from '@/lib/data/conversations';
 import { derivePendingToolCalls, isAwaitingUserInput } from '@/lib/data/conversation-log';
+import { clearStaleClarifyAnswers, seedPendingClarifyInputs } from '@/lib/chat/clarify-answer-stash';
 import type { ConversationLog } from '@/orchestrator/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
@@ -70,6 +71,19 @@ export function useConversation(conversationId?: number) {
         const paused = v3detail.conversation.runStatus === 'paused';
         const pending = paused ? derivePendingToolCalls(piLog) : [];
         const resumable = paused && isAwaitingUserInput(pending);
+        const pendingList = resumable ? pending : [];
+
+        // Drop stale Clarify stashes (committed / expired) for this conversation before reading them.
+        clearStaleClarifyAnswers(conversationId, new Set(pendingList.map((p) => p.id)));
+
+        // A cold-loaded pending tool has no `userInputs`, so a reopened Clarify would render a DEAD
+        // "Waiting for response…" card (unanswerable). seedPendingClarifyInputs seeds a userInputs
+        // entry from the tool args so the prompt is answerable again, and — if the user had already
+        // answered before the reload (stashed client-side) — carries that answer + queues it for replay
+        // so the run auto-resumes instead of re-asking. ClarifyFrontend only: replaying Navigate/
+        // PublishAll would fire side effects (router.push / publish modal) on reopen.
+        const { pendingToolCalls, replays } = seedPendingClarifyInputs(conversationId, pendingList, () => crypto.randomUUID());
+
         dispatch(loadConversation({
           conversation: {
             _id: crypto.randomUUID(),
@@ -77,10 +91,7 @@ export function useConversation(conversationId?: number) {
             log_index: piLog.length,
             messages,
             executionState: resumable ? 'EXECUTING' : 'FINISHED',
-            pending_tool_calls: (resumable ? pending : []).map((p) => ({
-              toolCall: { id: p.id, type: 'function' as const, function: { name: p.name, arguments: p.arguments } },
-              result: undefined,
-            })),
+            pending_tool_calls: pendingToolCalls as never,
             streamedCompletedToolCalls: [],
             streamedThinking: '',
             agent,
@@ -94,6 +105,13 @@ export function useConversation(conversationId?: number) {
           },
           setAsActive: false,
         }));
+
+        // Kick the auto-exec listener for any replayed answers: setUserInputResult fires the listener
+        // (loadConversation does not), which re-runs ClarifyFrontend with the seeded result → resumes
+        // the turn → server commits the toolResult. clearStaleClarifyAnswers drops the stash next load.
+        for (const r of replays) {
+          dispatch(setUserInputResult({ conversationID: conversationId, tool_call_id: r.toolCallId, userInputId: r.userInputId, result: r.result }));
+        }
       } catch (err: any) {
         console.error('Failed to load conversation:', err);
         const loadError = createLoadErrorFromException(err);

@@ -8,6 +8,7 @@ import {
 import { LuBadgeInfo } from 'react-icons/lu';
 import { UserInput } from '@/lib/api/user-input-exception';
 import { setUserInputResult } from '@/store/chatSlice';
+import { stashClarifyAnswer } from '@/lib/chat/clarify-answer-stash';
 import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import PublishModal from '@/components/PublishModal';
 
@@ -73,6 +74,12 @@ export default function UserInputComponent({
   const [showDeclineReason, setShowDeclineReason] = useState(false);
 
   const handleSubmit = (result: any) => {
+    // Persist Clarify answers client-side so a reload before the resume turn commits doesn't lose
+    // them (→ the conversation re-asks). ClarifyFrontend only — replaying Navigate/PublishAll on
+    // reopen would fire side effects. Best-effort; useConversation reads + replays this on cold load.
+    if (toolName === 'ClarifyFrontend') {
+      stashClarifyAnswer(conversationID, tool_call_id, result);
+    }
     dispatch(setUserInputResult({
       conversationID,
       tool_call_id,
