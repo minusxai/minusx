@@ -2,6 +2,7 @@
 
 import { Box } from '@chakra-ui/react';
 import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
+import { getAssetLayoutKey, getLayoutableAssets } from './dashboard-assets';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
 import ParameterRow from '../ParameterRow';
@@ -71,19 +72,6 @@ const compactMobileLayout = (layout: Layout[], toCols: number): Layout[] => {
     return result;
   });
 };
-
-/** Get the grid layout key for an asset (string for both question IDs and inline asset UUIDs). */
-const getAssetLayoutKey = (asset: AssetReference): string => {
-  if (asset.type === 'question') return (asset as { id: number }).id.toString();
-  return (asset as InlineAsset).id || '';
-};
-
-/** Assets that participate in the grid layout (questions and text blocks). */
-const getLayoutableAssets = (assets: AssetReference[]): AssetReference[] =>
-  assets?.filter(asset =>
-    (asset.type === 'question' && 'id' in asset && asset.id) ||
-    (asset.type === 'text' && 'id' in asset && asset.id)
-  ) || [];
 
 // Generate default layout for all layoutable assets
 const generateDefaultLayout = (assets: AssetReference[]): Layout[] => {
