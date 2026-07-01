@@ -66,23 +66,37 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
       ? { editorKind: 'richtext', fileName: storyFile?.name ?? 'Story', filePath: storyPath, fileId: numericId }
       : undefined;
 
-  // Freeze the html the iframe renders for the duration of an edit session: inline edits stream to
-  // the dirty content via onChange, but feeding that back as `html` would rebuild the iframe and lose
-  // the cursor. A session counter forces ONE clean remount when edit mode exits (Save → persisted
-  // content; Cancel → reverted content), so the post-edit DOM always reflects the final content.
+  // Freeze the html the iframe renders for the duration of an edit session: the user's INLINE edits
+  // stream to the dirty content via onChange, and feeding that back as `html` would rebuild the iframe
+  // and lose the cursor. But the freeze must only guard against the iframe's OWN echoes — an EXTERNAL
+  // change to content.story while in edit mode (the agent authoring/editing via EditFile, or a JSON-tab
+  // edit) must still render, otherwise a freshly-created draft — which opens in edit mode EMPTY and is
+  // then populated by the agent — stays blank until Save. We tell the two apart with lastEmittedRef:
+  // the last html the iframe serialized out via onChange. A session counter forces ONE clean remount
+  // when edit mode exits (Save → persisted content; Cancel → reverted content).
   // Managed via the "adjust state during render" pattern (React re-renders synchronously) — no effects.
   const liveStory = content.story ?? '';
-  const [session, setSession] = useState({ editing: false, snapshot: liveStory, key: 0 });
+  const [session, setSession] = useState({ editing: false, snapshot: liveStory, lastEmitted: null as string | null, key: 0 });
   if (editing !== session.editing) {
     setSession(s => ({
+      ...s,
       editing,
       snapshot: editing ? liveStory : s.snapshot, // freeze on enter
       key: editing ? s.key : s.key + 1,           // bump on exit → one clean remount
     }));
+  } else if (editing && liveStory !== session.snapshot && liveStory !== session.lastEmitted) {
+    // External change while editing (agent EditFile, JSON-tab edit) — NOT the iframe's own onChange
+    // echo (tracked in lastEmitted). Adopt it so the new content renders, and bump the key so the
+    // iframe cleanly rebuilds. This is what lets a freshly-created draft — which opens in edit mode
+    // EMPTY and is then populated by the agent — actually show its content instead of staying blank.
+    setSession(s => ({ ...s, snapshot: liveStory, key: s.key + 1 }));
   }
   const htmlForRender = session.editing ? session.snapshot : liveStory;
 
   const onStoryChange = useCallback((story: string) => {
+    // Record our own serialized echo so the render-phase logic above doesn't mistake it for an
+    // external edit and needlessly rebuild the iframe mid-typing (which would drop the cursor).
+    setSession(s => ({ ...s, lastEmitted: story }));
     if (numericId !== undefined) applyStoryHtmlEdit({ fileId: numericId, story });
   }, [numericId]);
 

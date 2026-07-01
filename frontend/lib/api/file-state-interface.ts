@@ -59,6 +59,11 @@ export interface GetQueryResultOptions {
   ttl?: number;        // Time-to-live in ms (default: CACHE_TTL.QUERY)
   skip?: boolean;      // Skip execution
   forceLoad?: boolean; // Bypass TTL cache and re-execute even if fresh
+  /**
+   * External abort signal (e.g. the conversation's Stop controller). Composed with
+   * the built-in wall-clock timeout — whichever fires first aborts the /api/query fetch.
+   */
+  signal?: AbortSignal;
 }
 
 export interface IFileStateRead {

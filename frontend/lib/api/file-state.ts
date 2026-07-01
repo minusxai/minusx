@@ -24,7 +24,7 @@ import { ConflictError } from '@/lib/data/files';
 import { captureError } from '@/lib/messaging/capture-error';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { runOrDefer } from '@/lib/navigation/nav-progress';
-import { selectMaxConcurrentQueries } from '@/store/configsSlice';
+import { selectMaxConcurrentQueries, selectQueryTimeoutMs } from '@/store/configsSlice';
 import { Semaphore } from '@/lib/utils/semaphore';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { FilesAPI, getFiles } from '@/lib/data/files';
@@ -1621,6 +1621,19 @@ const querySemaphore = new Semaphore(() => {
   }
 });
 
+// Wall-clock cap (ms) for a single /api/query fetch, from the runtime QUERY_TIMEOUT_MS
+// env (hydrated into configsSlice). Bounds hung queries so a stuck embed can't freeze
+// the chat run — or hold a querySemaphore slot — forever. 0 disables the cap.
+const DEFAULT_QUERY_TIMEOUT_MS = 120_000;
+function getQueryTimeoutMs(): number {
+  try {
+    const v = selectQueryTimeoutMs(getStore().getState());
+    return typeof v === 'number' ? v : DEFAULT_QUERY_TIMEOUT_MS;
+  } catch {
+    return DEFAULT_QUERY_TIMEOUT_MS;
+  }
+}
+
 /**
  * getQueryResult - Execute query with TTL caching and promise deduplication
  *
@@ -1690,6 +1703,21 @@ export async function getQueryResult(
     return querySemaphore.run(async () => {
     // undefined if fetch() itself rejected (network failure); set otherwise.
     let responseStatus: number | undefined;
+    // Bound the fetch: an internal timeout controller plus the caller's optional signal
+    // (e.g. the conversation's Stop). Whichever aborts first cancels the request — so a
+    // stuck query surfaces as an error and frees its semaphore slot instead of hanging.
+    const controller = new AbortController();
+    const timeoutMs = getQueryTimeoutMs();
+    let timedOut = false;
+    const timer = timeoutMs > 0
+      ? setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs)
+      : undefined;
+    const external = options.signal;
+    const onExternalAbort = () => controller.abort();
+    if (external) {
+      if (external.aborted) controller.abort();
+      else external.addEventListener('abort', onExternalAbort, { once: true });
+    }
     try {
       const response = await fetch('/api/query', {
         method: 'POST',
@@ -1707,7 +1735,8 @@ export async function getQueryResult(
           ...(fileVersion !== undefined && { fileVersion }),
           // "Run query" / retry (forceLoad) forces a fresh server execution + cache refresh.
           ...(forceLoad && { forceRefresh: true })
-        })
+        }),
+        signal: controller.signal,
       });
       responseStatus = response.status;
 
@@ -1742,10 +1771,16 @@ export async function getQueryResult(
 
       return result;
     } catch (error) {
-      console.error('[getQueryResult] Query execution failed:', error);
+      // An aborted fetch throws a generic AbortError — translate it into a meaningful
+      // message so the UI/agent see "timed out" vs "cancelled", not a cryptic DOMException.
+      const aborted = controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
+      const normalized = aborted
+        ? new Error(timedOut ? `Query timed out after ${Math.round(timeoutMs / 1000)}s` : 'Query cancelled')
+        : error;
+      console.error('[getQueryResult] Query execution failed:', normalized);
 
       // Store error in Redux (deferred during navigation — see setQueryResult above)
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = normalized instanceof Error ? normalized.message : 'Unknown error';
       runOrDefer(() => getStore().dispatch(setQueryError({
         query,
         params: queryParams,
@@ -1753,17 +1788,22 @@ export async function getQueryResult(
         error: errorMessage
       })));
 
-      // Report network/5xx failures (invisible server-side); skip 4xx SQL errors.
-      if (responseStatus === undefined || responseStatus >= 500) {
-        void captureError('query:network', error, {
+      // Report network/5xx failures + timeouts (invisible server-side); skip 4xx SQL errors
+      // and user cancellations (not real failures).
+      if (!(aborted && !timedOut) && (responseStatus === undefined || responseStatus >= 500)) {
+        void captureError('query:network', normalized, {
           connection: database,
           status: responseStatus,
+          ...(timedOut ? { timedOut: true } : {}),
           ...(fileId !== undefined && { fileId }),
           ...(filePath && { filePath }),
         });
       }
 
-      throw error;
+      throw normalized;
+    } finally {
+      if (timer) clearTimeout(timer);
+      external?.removeEventListener('abort', onExternalAbort);
     }
     });
   });
