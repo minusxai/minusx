@@ -82,6 +82,8 @@ export const TrendPlot = ({ series, xAxisData, columnFormats, yAxisColumns, xAxi
           const cfg = colName ? columnFormats?.[colName] : undefined
           const dp = cfg?.decimalPoints ?? undefined
           const fmtVal = (v: number) => applyPrefixSuffix(formatNumber(v, dp), cfg?.prefix, cfg?.suffix)
+          // Prefer the column alias for the label; fall back to the (date-formatted) series name
+          const label = cfg?.alias || fmtLabel(s.name)
 
           const trend = computeTrendComparison(s.data, xAxisData, compareMode)
           const currentValue = trend.currentValue
@@ -101,6 +103,7 @@ export const TrendPlot = ({ series, xAxisData, columnFormats, yAxisColumns, xAxi
             >
               {/* Label */}
               <Text
+                aria-label={`trend label ${s.name}`}
                 fontSize={isSmall ? '2xs' : 'xs'}
                 fontWeight="700"
                 color="fg.muted"
@@ -109,7 +112,7 @@ export const TrendPlot = ({ series, xAxisData, columnFormats, yAxisColumns, xAxi
                 fontFamily="mono"
                 truncate
               >
-                {fmtLabel(s.name)}
+                {label}
               </Text>
 
               {/* Current Value */}
