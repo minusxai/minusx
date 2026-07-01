@@ -80,6 +80,7 @@ export default function StoryEmbeds({
                 showTitle={true}
                 index={i}
                 readOnly={readOnly}
+                showActionsMenu={editable}
                 enableDrilldown={false}
                 externalParameters={extParams}
                 externalParamValues={extValues}
