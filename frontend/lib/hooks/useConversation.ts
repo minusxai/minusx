@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { loadConversation, selectConversation, setUserInputResult } from '@/store/chatSlice';
 import { parsePiConversation } from '@/lib/conversations-utils';
 import { ConversationsAPI } from '@/lib/data/conversations';
-import { derivePendingToolCalls, isAwaitingUserInput } from '@/lib/data/conversation-log';
+import { derivePendingToolCalls, isColdReopenResumable } from '@/lib/data/conversation-log';
 import { clearStaleClarifyAnswers, seedPendingClarifyInputs } from '@/lib/chat/clarify-answer-stash';
 import type { ConversationLog } from '@/orchestrator/types';
 import type { LoadError } from '@/lib/types/errors';
@@ -64,13 +64,14 @@ export function useConversation(conversationId?: number) {
         }));
         const { messages, agent, agent_args } = parsePiConversation(piLog, errors as never);
         // A `paused` run handed its pending tools to a browser tab. On cold load that tab is gone, so
-        // only present the run as live EXECUTING when it's awaiting USER INPUT (Clarify/Navigate/…),
-        // which the UI renders as a resumable prompt. A run paused on AUTO-EXECUTING tools (or with no
-        // pending) is orphaned — nothing will drive it here — so load it as FINISHED instead of a
-        // forever-spinning "executing" with a Stop button that reappears on every refresh.
+        // only present the run as live EXECUTING when it's paused on a Clarify (a pure question we can
+        // re-surface as an answerable prompt). Everything else — auto-executing tools (nothing will
+        // drive them) AND side-effectful confirmations like Navigate/PublishAll (a stale "Allow?"/
+        // "Publish?" must not re-appear on an old chat) — loads as FINISHED, so there's no phantom Stop
+        // button spinning forever on a reopened chat. See isColdReopenResumable.
         const paused = v3detail.conversation.runStatus === 'paused';
         const pending = paused ? derivePendingToolCalls(piLog) : [];
-        const resumable = paused && isAwaitingUserInput(pending);
+        const resumable = paused && isColdReopenResumable(pending);
         const pendingList = resumable ? pending : [];
 
         // Drop stale Clarify stashes (committed / expired) for this conversation before reading them.
