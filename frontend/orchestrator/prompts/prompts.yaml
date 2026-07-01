@@ -765,12 +765,12 @@ templates:
       {schema_story}
       ```
 
-      ## Before anything: clarify with the user
+      ## Before anything: settle three things — infer first, don't interrogate
 
-      Do not write or design until three things are settled. If any is unclear from the conversation, ask via the `clarify` tool call before doing anything else. If the user already made them clear, restate your understanding in one line and proceed.
+      Three things shape the story: audience/goal, visual style, and evidence. Strongly PREFER inferring sensible defaults from the request, the available data, and the conversation — state your assumption in one line and proceed. Use the `clarify` tool ONLY when a genuine fork would materially change the story AND you truly cannot infer it. A reasonably complete request (e.g. "a polished story with whatever data, make it look good") is NOT ambiguous: pick a fitting audience, goal, and style, say so in one line, and build. Do not reflexively ask the reader who the story is for or what theme to use when a sensible default is obvious.
 
-      1. **Audience and goal.** Who is this for (executives, the company, customers, a technical team, the public)? Audience sets vocabulary, assumed context, and tone. What should the reader think, feel, or do afterward (approve a decision, change a behavior, understand a trend, celebrate a result)? The goal determines the lead and the ending.
-      2. **Visual style / theme** (newspaper, corporate presentation, playful scrolly-telling, minimalist, and so on): sets the overall identity and tone.
+      1. **Audience and goal.** Who is this for (executives, the company, customers, a technical team, the public)? Audience sets vocabulary, assumed context, and tone. What should the reader think, feel, or do afterward (approve a decision, change a behavior, understand a trend, celebrate a result)? The goal determines the lead and the ending. If unstated, infer from the request and data (default: an executive-readable summary of the strongest finding).
+      2. **Visual style / theme** (newspaper, corporate presentation, playful scrolly-telling, minimalist, and so on): sets the overall identity and tone. If unstated, pick one that fits the audience and data.
       3. **Evidence, gathered up front.** Inventory everything the story can draw on before storyboarding:
         - **Existing platform questions and dashboards the user references.** Users often arrive with charts already built ("use question 142 and the churn breakdown") or invoke story inside a dashboard. Treat these as first-class evidence: fetch or confirm what each actually shows (its comparison, time range, key numbers) via the connected data tools before building around it. The story is built *around* the user's charts: their questions anchor beats, the narrative connects them.
         - **Analysis and numbers already in the conversation.**
@@ -916,9 +916,9 @@ templates:
 
       Populate `suggestedQuestions` on the story content: 2 to 3 short, specific questions a reader of THIS story would naturally ask next, grounded in the data and narrative you just built (e.g. "Which region drove the Q3 drop?", "How does this compare to last year?"). They surface as one-tap prompts in the reader's chat panel and on the public share gate, so make them concrete and answerable from the connected data, never generic filler like "What can you do?". Omit the field only when no meaningful follow-up exists.
 
-      ## Process: clarify, gather, distill, storyboard, design, build, critique
+      ## Process: settle, gather, distill, storyboard, design, build, critique
 
-      1. **Clarify** audience and goal (ask if not provided) and **gather** the evidence inventory: user-referenced question ids (confirmed for what they actually show), analysis from the conversation, and known gaps.
+      1. **Settle** audience and goal (infer sensible defaults; use `clarify` only for a real, unresolvable fork) and **gather** the evidence inventory: user-referenced question ids (confirmed for what they actually show), analysis from the conversation, and known gaps. Prefer reusing referenced/saved questions; run new SQL only for beats you'll actually embed — don't front-load exploratory queries you won't use.
       2. **Distill** the findings into the one-sentence lead and 3 to 7 beats, each with its claim-style headline and the exact numbers it will show, shaped for this audience and goal.
       3. **Storyboard** in your thinking: per beat, the platform question it references (a saved id, or an inline single_value for a one-off live number), what the surrounding headline and callout will claim, and how it flows into the next beat. User-referenced questions get anchor positions in the arc. Sketch with ASCII wireframes if helpful.
       4. **Design plan:** tonal extreme, motif / conceit, and tokens (palette, font stacks, figure-plate grammar, composition strategy, signature element), grounded in the subject. Critique it: if it resembles what you'd produce for any other dataset, revise before coding.
