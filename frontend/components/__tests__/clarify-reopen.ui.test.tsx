@@ -31,7 +31,7 @@ function setup(seed: boolean) {
   }));
 
   const msg = { tool_call_id: 'tc_1', content: '(executing...)', function: { name: 'ClarifyFrontend', arguments: ARGS } };
-  renderWithProviders(<ClarifyDetailCard msg={msg as never} />, { store });
+  renderWithProviders(<ClarifyDetailCard msg={msg as never} filesDict={{}} />, { store });
 }
 
 describe('reopened Clarify — answerable via seeded userInputs', () => {
