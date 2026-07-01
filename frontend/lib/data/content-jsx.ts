@@ -310,15 +310,30 @@ export function jsxToContent(jsx: string, schema: JsonSchema, ctx: SchemaCtx): J
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const s = unwrap(schema, ctx);
   const obj: Record<string, unknown> = {};
+  const dropped: string[] = [];
   try {
     for (const root of parsed.nodes) {
       if (root.type !== 'element') continue;
-      if (s && s.properties && !(root.tag in s.properties)) continue;
+      if (s && s.properties && !(root.tag in s.properties)) { dropped.push(root.tag); continue; }
       obj[root.tag] = elementToValue(root, s && s.properties ? s.properties[root.tag] : undefined, ctx);
     }
   } catch (e) {
     if (e instanceof JsxFieldError) return { ok: false, error: e.message };
     throw e;
+  }
+  // Guard the silent-drop trap: top-level tags that aren't schema fields are skipped, so markup made
+  // entirely of unrecognized top-level elements parses to `{}` and every downstream consumer reports a
+  // hollow success (e.g. EditFile: "1 FILE EDIT" but no content change → blank story). If we dropped
+  // element(s) AND recognized nothing, that's not an empty document — it's un-fielded markup; fail
+  // loudly so the agent gets a truthful signal instead of a no-op success.
+  if (dropped.length > 0 && Object.keys(obj).length === 0) {
+    const fields = s && s.properties ? Object.keys(s.properties) : [];
+    return {
+      ok: false,
+      error: `No recognized top-level field element${dropped.length > 1 ? 's' : ''}: found <${dropped.join('>, <')}>. `
+        + `Content fields must be top-level elements named one of: ${fields.length ? fields.map((f) => `<${f}>`).join(', ') : '(none)'}. `
+        + `Wrap the body in the matching field element (e.g. a story body goes inside <story>…</story>).`,
+    };
   }
   return { ok: true, value: obj };
 }

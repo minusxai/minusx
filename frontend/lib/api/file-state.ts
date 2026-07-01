@@ -618,6 +618,19 @@ export async function editFileStr(
 
   const contentChanged = JSON.stringify(newContent) !== JSON.stringify(mergedContent);
 
+  // Truthful no-op guard: the find/replace altered the markup STRING but the parsed CONTENT is
+  // unchanged. This is the trap behind "1 FILE EDIT" showing on a blank story — the string diff is
+  // non-empty (so the UI renders an edit) yet nothing is staged, and the agent reads success and moves
+  // on. Report failure so it retries against the real markup instead of hallucinating a saved change.
+  if (!contentChanged && editedStr !== fullFileStr) {
+    return {
+      success: false,
+      error: 'Edit replaced text but produced NO change to the file content — the new markup was not '
+        + 'recognized as this file\'s fields (loose top-level tags are ignored; a story body must be '
+        + `wrapped in <story>…</story>). Re-read the file's current markup and edit that exact structure.`,
+    };
+  }
+
   // Permissive edit: ALWAYS stage the change, and return validation as non-blocking feedback
   // (schema + story param lint). The agent iterates freely; Publish is the validation gate.
   let validation: string[] = [];
