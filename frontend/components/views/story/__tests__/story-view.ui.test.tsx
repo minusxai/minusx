@@ -16,6 +16,8 @@
 import React from 'react';
 import { screen, within, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
+import { makeStore } from '@/store/store';
+import { setFileEditMode } from '@/store/uiSlice';
 import type { StoryContent } from '@/lib/types';
 
 vi.mock('@/components/containers/SmartEmbeddedQuestionContainer', () => ({
@@ -167,6 +169,24 @@ describe('StoryView', () => {
     const next: StoryContent = { ...content, story: STORY.replace('The year demand went vertical', 'A brand-new headline') };
     expect(() => rerender(<StoryView content={next} fileId={1} />)).not.toThrow();
     await waitFor(() => expect(storyRoot().textContent).toContain('A brand-new headline'));
+  });
+
+  it('renders agent content that arrives WHILE in edit mode (new draft opens in edit mode empty)', async () => {
+    // Repro of the "agent-created story shows blank" bug: a NEW story draft opens in edit mode
+    // with empty content, so StoryView freezes its render snapshot at edit-entry (empty). The agent
+    // then streams content.story in via EditFile. The frozen edit-session snapshot must NOT swallow
+    // that content — the story has to render, not stay blank until Save+refresh.
+    const store = makeStore();
+    store.dispatch(setFileEditMode({ fileId: 7, editMode: true }));
+    const { rerender } = renderWithProviders(<StoryView content={emptyContent} fileId={7} />, { store });
+    // Fresh empty draft in edit mode → empty state (no story yet).
+    expect(screen.getByLabelText('No story')).toBeInTheDocument();
+    // Agent's EditFile lands: content.story is now populated (still in edit mode).
+    rerender(<StoryView content={content} fileId={7} />);
+    await waitFor(() => {
+      expect(storyRoot().textContent).toContain('The year demand went vertical');
+      expect(storyRoot().textContent).toContain('Narrative paragraph.');
+    });
   });
 
   it('sanitizes hostile HTML', async () => {
