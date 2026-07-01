@@ -15,8 +15,21 @@
 // FIXED-HEIGHT FLEX COLUMN parent (QuestionVisualization is flex:1 / minH:0
 // all the way down). The Chakra tile Box already declares this; the class
 // guarantees it even before emotion's lazily-injected styles are mirrored in.
+//
+// Grid/flex track blow-out guard: an embedded question's table sets a
+// min-width of ~150px/column (e.g. 1200px for 8 cols) so it scrolls in a
+// narrow tile. But a grid/flex ITEM defaults to `min-width: auto` (= its
+// content's min-content), so that 1200px floor propagates up and forces a
+// `1fr` track (or flex item) wider than its share — the table overflows the
+// column instead of scrolling inside it. `min-width: 0` only breaks that
+// propagation when set on the ITEM itself, and the author-authored wrapper
+// (`.plate`, cell, ...) is content we don't own. So target whatever element
+// directly wraps an embed placeholder and zero its min-width; the table's own
+// `overflow-x: auto` then absorbs the width. `:where` keeps specificity 0 so
+// an author can still override intentionally.
 const APP_STYLES_BASE_CSS =
-  `.mx-chart-fill { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }`;
+  `.mx-chart-fill { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }\n` +
+  `:where(:has(> [data-question-id], > [data-question-inline])) { min-width: 0; }`;
 
 /**
  * Rewrite RELATIVE `url(...)` refs in a rule's cssText to ABSOLUTE, resolved against `base` (the
