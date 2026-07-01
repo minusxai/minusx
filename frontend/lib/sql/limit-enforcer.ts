@@ -84,16 +84,22 @@ function handleSelectLimit(
   originalSql: string,
 ): string {
   if (selectNode.limit) {
-    // LIMIT exists — check if over max
+    // LIMIT exists — cap it only if over max, then regenerate.
     const currentLimit = extractLimitValue(selectNode.limit);
     if (currentLimit !== null && currentLimit > maxLimit) {
       selectNode.limit = { this: { literal: { literal_type: 'number', value: String(maxLimit) } } };
+      return regenerateSql(ast, dialect) ?? originalSql;
     }
-  } else {
-    // No LIMIT — add default
-    selectNode.limit = { this: { literal: { literal_type: 'number', value: String(defaultLimit) } } };
+    // LIMIT already within bounds — return the query UNCHANGED. Regenerating valid SQL through the
+    // parser is a needless round-trip that has caused real corruption (JSON `$`-keys rewritten to
+    // `:param`, date/param literals mangled — see limit-enforcer-json-path tests). Only rewrite the
+    // SQL when we must actually add or cap a LIMIT. Most agent queries already include a LIMIT, so
+    // this also removes the transform from the common path.
+    return originalSql;
   }
 
+  // No LIMIT — add the default (requires regeneration).
+  selectNode.limit = { this: { literal: { literal_type: 'number', value: String(defaultLimit) } } };
   return regenerateSql(ast, dialect) ?? originalSql;
 }
 

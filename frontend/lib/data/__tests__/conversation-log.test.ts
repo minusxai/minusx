@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   entryKind, entryPiId, entryParentPiId, entriesToInserts, rowsToLog, derivePendingToolCalls,
+  isAwaitingUserInput,
 } from '../conversation-log';
 import type { ConversationLog } from '@/orchestrator/types';
 
@@ -72,5 +73,32 @@ describe('derivePendingToolCalls', () => {
       { role: 'toolResult', parent_id: 'root', toolCallId: 'a', toolName: 'ReadFiles', content: [], isError: false },
     ] as unknown as ConversationLog;
     expect(derivePendingToolCalls(log)).toEqual([]);
+  });
+});
+
+describe('isAwaitingUserInput — cold-load resumable vs orphaned', () => {
+  const p = (name: string) => ({ id: 't', name, arguments: {} });
+
+  it('true when a pending tool awaits user input (Clarify)', () => {
+    expect(isAwaitingUserInput([p('ClarifyFrontend')])).toBe(true);
+  });
+
+  it('true for Navigate / PublishAll (also user-input pauses)', () => {
+    expect(isAwaitingUserInput([p('Navigate')])).toBe(true);
+    expect(isAwaitingUserInput([p('PublishAll')])).toBe(true);
+  });
+
+  it('false for auto-executing tools (orphaned run — must not show as live executing)', () => {
+    expect(isAwaitingUserInput([p('EditFile')])).toBe(false);
+    expect(isAwaitingUserInput([p('ReadFiles')])).toBe(false);
+    expect(isAwaitingUserInput([p('CreateFile')])).toBe(false);
+  });
+
+  it('false for no pending tools', () => {
+    expect(isAwaitingUserInput([])).toBe(false);
+  });
+
+  it('true when any pending tool awaits input (mixed)', () => {
+    expect(isAwaitingUserInput([p('EditFile'), p('ClarifyFrontend')])).toBe(true);
   });
 });

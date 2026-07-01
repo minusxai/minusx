@@ -133,8 +133,15 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       const shim = doc.createElement('style');
       shim.setAttribute('data-mx-fluid-shim', '');
       shim.textContent =
-        '[data-question-id]{max-width:100%!important;width:100%!important;min-width:0!important}' +
-        'img,svg,video,table,pre{max-width:100%!important}img,video{height:auto!important}';
+        // Block chart embeds — saved (data-question-id) AND inline (data-question-inline). The inline
+        // selector was missing, so an inline chart authored wider than the viewport (e.g. width:1100px)
+        // overflowed the canvas and got cut off with the chat panel open; cap it like the saved kind.
+        '[data-question-id],[data-question-inline]{max-width:100%!important;width:100%!important;min-width:0!important}' +
+        // Inline numbers live in prose — clamp their max-width without forcing block width.
+        '[data-number-inline]{max-width:100%!important}' +
+        // Belt-and-braces: never let the authored document force horizontal scroll/cutoff of the page.
+        'img,svg,video,table,pre{max-width:100%!important}img,video{height:auto!important}' +
+        'html,body{max-width:100%!important;overflow-x:hidden!important}';
       doc.body.appendChild(shim);
     }
 

@@ -106,4 +106,18 @@ describe('enforceQueryLimit — JSON path string literals with $-prefixed keys',
     expect(out).toContain(':min_id');
     expect(out).not.toContain('":amount"');
   });
+
+  it('returns an in-bounds query BYTE-IDENTICAL — no parser round-trip on valid agent SQL', async () => {
+    // The strongest guard: when a LIMIT is already present and within bounds, the query must come back
+    // exactly as written (GA4 UNNEST + wildcard suffix + SAFE date parse), never re-generated — so no
+    // regeneration bug can corrupt correct agent SQL.
+    const sql =
+      "SELECT event_name, COUNT(*) AS n\n" +
+      "FROM `proj`.`ga4`.`events_*`\n" +
+      "WHERE _TABLE_SUFFIX BETWEEN '20250401' AND '20250403'\n" +
+      "  AND (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location') LIKE '%/pricing%'\n" +
+      "GROUP BY 1 ORDER BY n DESC LIMIT 100";
+    const out = await enforceQueryLimit(sql, { maxLimit: 10000, dialect: 'bigquery' });
+    expect(out).toBe(sql);
+  });
 });

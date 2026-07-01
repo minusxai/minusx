@@ -189,6 +189,20 @@ describe('StoryView', () => {
     });
   });
 
+  it('fluid shim caps INLINE embeds too (data-question-inline / data-number-inline), not just saved embeds', async () => {
+    // Regression: the fluid shim only capped [data-question-id], so an inline chart embed authored
+    // wider than the viewport (e.g. width:1100px) overflowed the canvas and got cut off (measured live).
+    renderWithProviders(<StoryView content={content} />);
+    await waitFor(() => {
+      const shim = storyRoot().querySelector('[data-mx-fluid-shim]');
+      expect(shim).toBeTruthy();
+      const css = shim!.textContent || '';
+      expect(css).toContain('[data-question-inline]'); // inline charts now capped like saved ones
+      expect(css).toContain('[data-number-inline]');    // inline numbers clamped in prose
+      expect(css).toContain('overflow-x:hidden');        // page can't be forced into horizontal cutoff
+    });
+  });
+
   it('sanitizes hostile HTML', async () => {
     renderWithProviders(
       <StoryView content={{ ...emptyContent, story: '<script>window.__pwned = true;</script><div onclick="alert(1)">Safe</div>' }} />

@@ -67,6 +67,29 @@ function tsFromTimestamp(ts: number | undefined): string {
   return new Date(ts).toISOString();
 }
 
+/**
+ * Invocation (`toolCall`) pi entries — the user turn and sub-agent tasks — carry no timestamp of
+ * their own; only assistant/toolResult entries do. A turn's chronological position is that of its
+ * first response, so derive the invocation's timestamp by looking ahead to the next timestamped
+ * entry (falling back to the previous one for a trailing, not-yet-answered turn).
+ *
+ * Without this, every user message was stamped epoch-0. `parseLogToMessages` re-sorts by `created_at`
+ * to interleave the errors[] rows, and epoch-0 floated ALL user messages to the very top — so a
+ * reopened conversation rendered every user bubble stacked above every agent reply. Deriving a real
+ * timestamp keeps the sort chronological (turns stay interleaved).
+ */
+function invocationTimestamp(piLog: ConversationLog, from: number): number | undefined {
+  for (let j = from + 1; j < piLog.length; j++) {
+    const t = (piLog[j] as { timestamp?: unknown }).timestamp;
+    if (typeof t === 'number' && Number.isFinite(t)) return t;
+  }
+  for (let j = from - 1; j >= 0; j--) {
+    const t = (piLog[j] as { timestamp?: unknown }).timestamp;
+    if (typeof t === 'number' && Number.isFinite(t)) return t;
+  }
+  return undefined;
+}
+
 function deriveRunId(seed: string): string {
   // Stable per-invocation run id. The frontend doesn't depend on the actual
   // value; the legacy task-log just requires it to exist.
@@ -124,7 +147,7 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
           agent: 'AnalystAgent',
           args: { user_message: userMessageStr, ...rest },
           unique_id: entry.id,
-          created_at: tsFromTimestamp(undefined),
+          created_at: tsFromTimestamp(invocationTimestamp(piLog, i)),
         };
         taskById.set(entry.id, out.length);
         out.push(task);
@@ -139,7 +162,7 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
         agent: entry.name,
         args: entry.arguments ?? {},
         unique_id: entry.id,
-        created_at: tsFromTimestamp(undefined),
+        created_at: tsFromTimestamp(invocationTimestamp(piLog, i)),
       };
       taskById.set(entry.id, out.length);
       out.push(subTask);

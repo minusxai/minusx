@@ -70,6 +70,25 @@ export interface DerivedPendingToolCall {
  * client must run (then POST back as completedToolCalls to resume). Pure — works off rows alone, so
  * the stream can deliver "pending" on reconnect without any live orchestrator state.
  */
+/**
+ * Frontend tools that pause a run to await USER INPUT (they throw UserInputException) rather than
+ * auto-executing in the browser. Keep in sync with the handlers in `lib/api/tool-handlers.ts` that
+ * throw UserInputException.
+ */
+export const USER_INPUT_TOOLS: ReadonlySet<string> = new Set(['ClarifyFrontend', 'Navigate', 'PublishAll']);
+
+/**
+ * On COLD LOAD, a `paused` conversation has no live turn/tab driving it. If its unanswered pending
+ * tools await USER INPUT (Clarify/Navigate/PublishAll), it's legitimately resumable — the UI renders
+ * the prompt. If they're AUTO-EXECUTING tools (EditFile, ReadFiles, …) the original tab was meant to
+ * run them and resume, but it's gone — nothing will, so presenting the run as live "executing" (with a
+ * Stop button) leaves an old chat spinning forever. This tells the two apart so an orphaned run loads
+ * as interrupted instead of live.
+ */
+export function isAwaitingUserInput(pending: ReadonlyArray<DerivedPendingToolCall>): boolean {
+  return pending.some((p) => USER_INPUT_TOOLS.has(p.name));
+}
+
 export function derivePendingToolCalls(log: ConversationLog): DerivedPendingToolCall[] {
   const answered = new Set<string>();
   for (const entry of log) {

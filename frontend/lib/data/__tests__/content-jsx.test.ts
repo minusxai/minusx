@@ -168,3 +168,34 @@ describe('content ⇄ jsx — real QuestionContent (raw SQL leaf, nested viz)', 
     }
   });
 });
+
+describe('jsxToContent — unrecognized top-level tags (the empty-story / hollow-success trap)', () => {
+  // The single source of the "1 FILE EDIT but blank story" bug: a body emitted as loose top-level
+  // markup (not wrapped in its field element) was silently dropped, parsing to {} while reporting
+  // success. jsxToContent must now fail loudly when it recognizes NOTHING.
+  const schema = {
+    type: 'object',
+    properties: { story: { type: 'string', format: 'jsx' }, description: { type: 'string' } },
+  };
+
+  it('fails when every top-level element is unrecognized (agent emitted a loose <div> body)', () => {
+    const res = jsxToContent('<div class="story"><h1>Hi</h1><p>Body</p></div>', schema, ctx);
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/story/);      // points the agent at the right field
+      expect(res.error).toMatch(/div/);         // names what was dropped
+    }
+  });
+
+  it('still parses recognized fields and only ignores loose siblings (partial markup)', () => {
+    const res = jsxToContent('<story><h1>Hi</h1></story><div>loose</div>', schema, ctx);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect((res.value as { story?: string }).story).toContain('Hi');
+  });
+
+  it('treats an empty document (no elements) as an empty object, not an error', () => {
+    const res = jsxToContent('', schema, ctx);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value).toEqual({});
+  });
+});
