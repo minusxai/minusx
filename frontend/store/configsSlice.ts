@@ -12,6 +12,9 @@ export interface ConfigsState {
   // Server-side runtime env (MAX_CONCURRENT_QUERIES), hydrated from SSR
   // preloadedState. Caps in-flight /api/query calls from the browser.
   maxConcurrentQueries: number;
+  // Server-side runtime env (QUERY_TIMEOUT_MS), hydrated from SSR preloadedState.
+  // Wall-clock cap (ms) for a single /api/query call; bounds hung queries. 0 = off.
+  queryTimeoutMs: number;
 }
 
 const initialState: ConfigsState = {
@@ -19,6 +22,7 @@ const initialState: ConfigsState = {
   loadedAt: null,
   disableAppStateImages: false,
   maxConcurrentQueries: 10,
+  queryTimeoutMs: 120_000,
 };
 
 const configsSlice = createSlice({
@@ -45,3 +49,4 @@ export const selectBranding = (state: RootState) => state.configs.config.brandin
 export const selectConfigsLoaded = (state: RootState) => state.configs.loadedAt !== null;
 export const selectDisableAppStateImages = (state: RootState) => state.configs.disableAppStateImages;
 export const selectMaxConcurrentQueries = (state: RootState) => state.configs.maxConcurrentQueries;
+export const selectQueryTimeoutMs = (state: RootState) => state.configs.queryTimeoutMs;

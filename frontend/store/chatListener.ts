@@ -458,10 +458,19 @@ chatListenerMiddleware.startListening({
 
         const state = listenerApi.getState() as RootState;
 
+        // Reuse (or register) the conversation's abort controller — same map interruptChat/Stop
+        // aborts — so a long-running tool query (e.g. a story embed) can be cancelled immediately
+        // instead of running to its timeout. Mirrors the completeToolCall resume listener.
+        let toolAbort = abortControllers.get(realConversation._id);
+        if (!toolAbort) {
+          toolAbort = new AbortController();
+          abortControllers.set(realConversation._id, toolAbort);
+        }
+
         const result = await executeToolCall(
           pendingTool.toolCall,
           listenerApi.dispatch as AppDispatch,
-          undefined,
+          toolAbort.signal,
           state,
           pendingTool.userInputs
         );

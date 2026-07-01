@@ -607,7 +607,7 @@ function vizWarningForQuestion(fileId: number): string | null {
   return getVizSettingsWarning(mc.vizSettings, data?.columns, data?.types);
 }
 
-registerFrontendTool('EditFile', async (args, _context) => {
+registerFrontendTool('EditFile', async (args, context) => {
   const { fileId, changes = [], rawData = false } = args;
   // Optional rename: a file's TITLE is its `name` metadata, never part of the markup, so this is
   // the only way the agent can title a file.
@@ -794,14 +794,19 @@ registerFrontendTool('EditFile', async (args, _context) => {
     const html = (selectMergedContent(state, fileId) as { story?: string | null } | undefined)?.story;
     const inheritedParams = getRootParams(state, fileState);
     // storyEmbedRuns is the SAME extraction the client + server augmentation use, so the params
-    // (and therefore query hashes) match the cache the response reads from.
-    for (const r of storyEmbedRuns(html, inheritedParams)) {
-      try {
-        await getQueryResult({ query: r.query, params: r.params, database: r.connection, filePath: fileState?.path });
-      } catch (execErr) {
+    // (and therefore query hashes) match the cache the response reads from. Run the embeds in
+    // PARALLEL (bounded by the shared querySemaphore) rather than serially — a story has many
+    // embeds, and N × latency serialized was a big contributor to slow/"hung" story edits. Each
+    // getQueryResult is bounded by QUERY_TIMEOUT_MS and honors the conversation's Stop signal.
+    // Best-effort: a failed/timed-out run never fails the staged edit.
+    await Promise.all(storyEmbedRuns(html, inheritedParams).map(r =>
+      getQueryResult(
+        { query: r.query, params: r.params, database: r.connection, filePath: fileState?.path },
+        { signal: context.signal },
+      ).catch(execErr => {
         console.warn('[EditFile] Story embed auto-execute failed (edit still staged):', execErr);
-      }
-    }
+      }),
+    ));
   }
 
   // Validate parameter source changes (best-effort — never blocks the edit)

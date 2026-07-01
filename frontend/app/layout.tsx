@@ -10,7 +10,7 @@ import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { E2E_HEADER } from '@/lib/auth/e2e-runtime';
 import { getConfigs, getConfigsForMode, getOrgStyles, getStylesForMode } from '@/lib/data/configs.server';
 import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, getBrandTagline } from '@/lib/branding/whitelabel';
-import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES } from '@/lib/config';
+import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES, QUERY_TIMEOUT_MS } from '@/lib/config';
 import { parseAnalyticsConfig } from '@/lib/constants';
 import type { AnalyticsConfig } from '@/lib/analytics/types';
 import { GlobalErrorHandler } from '@/components/ErrorHandler';
@@ -72,6 +72,7 @@ async function loadInitialState(): Promise<{
   analyticsConfig: AnalyticsConfig;
   disableAppStateImages: boolean;
   maxConcurrentQueries: number;
+  queryTimeoutMs: number;
   e2eEnabled: boolean;
 }> {
   const user = await getEffectiveUserCached();
@@ -95,6 +96,7 @@ async function loadInitialState(): Promise<{
     analyticsConfig: parseAnalyticsConfig(ANALYTICS_CONFIG),
     disableAppStateImages: DISABLE_APP_STATE_IMAGES,
     maxConcurrentQueries: MAX_CONCURRENT_QUERIES,
+    queryTimeoutMs: QUERY_TIMEOUT_MS,
     // QA runtime E2E opt-in: middleware stamps this header when `?e2e=<secret>`
     // (or its persisted cookie) matches. Exposes the store on the client.
     e2eEnabled: (await headers()).get(E2E_HEADER) === '1',
