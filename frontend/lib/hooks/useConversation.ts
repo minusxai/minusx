@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { loadConversation, selectConversation } from '@/store/chatSlice';
 import { parsePiConversation } from '@/lib/conversations-utils';
 import { ConversationsAPI } from '@/lib/data/conversations';
-import { derivePendingToolCalls } from '@/lib/data/conversation-log';
+import { derivePendingToolCalls, isAwaitingUserInput } from '@/lib/data/conversation-log';
 import type { ConversationLog } from '@/orchestrator/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
@@ -62,16 +62,22 @@ export function useConversation(conversationId?: number) {
           ...(e.parentPiId ? { parent_id: e.parentPiId } : {}),
         }));
         const { messages, agent, agent_args } = parsePiConversation(piLog, errors as never);
+        // A `paused` run handed its pending tools to a browser tab. On cold load that tab is gone, so
+        // only present the run as live EXECUTING when it's awaiting USER INPUT (Clarify/Navigate/…),
+        // which the UI renders as a resumable prompt. A run paused on AUTO-EXECUTING tools (or with no
+        // pending) is orphaned — nothing will drive it here — so load it as FINISHED instead of a
+        // forever-spinning "executing" with a Stop button that reappears on every refresh.
         const paused = v3detail.conversation.runStatus === 'paused';
         const pending = paused ? derivePendingToolCalls(piLog) : [];
+        const resumable = paused && isAwaitingUserInput(pending);
         dispatch(loadConversation({
           conversation: {
             _id: crypto.randomUUID(),
             conversationID: conversationId,
             log_index: piLog.length,
             messages,
-            executionState: paused ? 'EXECUTING' : 'FINISHED',
-            pending_tool_calls: pending.map((p) => ({
+            executionState: resumable ? 'EXECUTING' : 'FINISHED',
+            pending_tool_calls: (resumable ? pending : []).map((p) => ({
               toolCall: { id: p.id, type: 'function' as const, function: { name: p.name, arguments: p.arguments } },
               result: undefined,
             })),
