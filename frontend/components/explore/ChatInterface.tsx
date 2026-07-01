@@ -504,8 +504,13 @@ export default function ChatInterface({
     return null;
   }, [conversation?.executionState, conversation?.messages, conversation?.agent]);
 
-  // Check if conversation has exceeded the token limit
-  const TOKEN_LIMIT = 150_000;
+  // Check if conversation has exceeded the token limit. The whole conversation (system + skills +
+  // the full append-only log + app state) is re-sent on every LLM call, so `total_tokens` is the size
+  // of the entire conversation at that point. 150k was far too conservative for the 1M-context model —
+  // a single rich turn (e.g. building a data story: schema search + several queries + edits) legitimately
+  // lands near 150k, which tripped the lock-out after ONE story. Gate only genuinely runaway
+  // conversations where starting fresh actually helps.
+  const TOKEN_LIMIT = 500_000;
   const tokenLimitExceeded = useMemo(() => {
     if (!conversation?.messages) return false;
     // Gate only makes sense once there's accumulated history to shed by starting
@@ -1493,7 +1498,7 @@ export default function ChatInterface({
 
 {tokenLimitExceeded && !isAgentRunning && !isStreaming ? (
             <HStack aria-label="conversation too long warning" justify="center" py={2} px={4} gap={3} borderTop="1px solid" borderColor="border.muted" fontFamily="mono">
-              <Text fontSize="xs"><Text as="span" fontWeight="semibold">Conversation too long.</Text>{' '}<Text as="span" color="fg.muted">Long conversations degrade agent performance. Please start a new chat.</Text></Text>
+              <Text fontSize="xs"><Text as="span" fontWeight="semibold">This chat is getting long.</Text>{' '}<Text as="span" color="fg.muted">A fresh chat keeps responses fast and focused.</Text></Text>
               <Button size="xs" bg="accent.teal" color="white" fontFamily="mono" _hover={{ bg: 'accent.teal', opacity: 0.9 }} onClick={handleNewChat} flexShrink={0}><Icon as={LuPlus} boxSize={4} mr={1} />New Chat</Button>
             </HStack>
           ) : (

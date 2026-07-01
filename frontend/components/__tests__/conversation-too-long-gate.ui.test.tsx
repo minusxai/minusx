@@ -50,25 +50,25 @@ function userMsg(content: string): UserMessage {
   return { role: 'user', content, created_at: TS };
 }
 
-function overLimitDebug(): DebugMessage {
+function debugWithTokens(total_tokens: number): DebugMessage {
   return {
     role: 'debug',
     task_unique_id: 'task-1',
     duration: 1,
     created_at: TS,
     llmDebug: [{
-      model: 'claude', duration: 1, total_tokens: 300_000,
-      prompt_tokens: 299_000, completion_tokens: 1_000, cost: 0,
+      model: 'claude', duration: 1, total_tokens,
+      prompt_tokens: total_tokens - 1_000, completion_tokens: 1_000, cost: 0,
     }],
   };
 }
 
-function makeConversation(userMessages: number): Conversation {
+function makeConversation(userMessages: number, tokens = 700_000): Conversation {
   const messages: Conversation['messages'] = [];
   for (let i = 0; i < userMessages; i++) {
     messages.push(userMsg(`question ${i + 1}`));
   }
-  messages.push(overLimitDebug());
+  messages.push(debugWithTokens(tokens));
   return {
     _id: `conv-${userMessages}`,
     conversationID: 1,
@@ -108,10 +108,10 @@ describe('Conversation too long gate', () => {
     expect(queryByLabelText('conversation too long warning')).toBeNull();
   });
 
-  it('shows the gate when over-limit with 2+ user messages', async () => {
+  it('shows the gate when genuinely runaway (over 500k) with 2+ user messages', async () => {
     const store = storeModule.makeStore();
     vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
-    store.dispatch(loadConversation({ conversation: makeConversation(2), setAsActive: true }));
+    store.dispatch(loadConversation({ conversation: makeConversation(2, 700_000), setAsActive: true }));
 
     const { findByLabelText, queryByLabelText } = renderWithProviders(
       <ChatInterface contextPath="/org/context" container="page" appState={null} />,
@@ -121,5 +121,21 @@ describe('Conversation too long gate', () => {
     // Banner replaces the input.
     expect(await findByLabelText('conversation too long warning')).toBeTruthy();
     expect(queryByLabelText('chat input')).toBeNull();
+  });
+
+  it('does NOT gate a large-but-normal turn (~300k, e.g. one data story) even with 2+ messages', async () => {
+    // Regression for the naggy lock-out after a single story: 300k is a rich single turn on a
+    // 1M-context model, not a runaway conversation — the input must stay usable.
+    const store = storeModule.makeStore();
+    vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
+    store.dispatch(loadConversation({ conversation: makeConversation(2, 300_000), setAsActive: true }));
+
+    const { findByLabelText, queryByLabelText } = renderWithProviders(
+      <ChatInterface contextPath="/org/context" container="page" appState={null} />,
+      { store },
+    );
+
+    expect(await findByLabelText('chat input')).toBeTruthy();
+    expect(queryByLabelText('conversation too long warning')).toBeNull();
   });
 });
