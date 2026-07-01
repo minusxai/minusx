@@ -11,7 +11,7 @@ vi.mock('@/lib/database/db-config', () => ({
 import {
   createConversation, getConversation, listConversations, deleteConversation,
   appendMessages, loadLog, loadMessages, getMaxSeq, appendError, loadErrors,
-  ConcurrentAppendError, setRunStatus,
+  ConcurrentAppendError, setRunStatus, acquireRunLease, interruptRun,
   truncateMessagesFrom, bumpAutoRetries, resetAutoRetries,
 } from '@/lib/data/conversations.server';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
@@ -58,6 +58,35 @@ describe('v3 conversation store', () => {
     expect(rows[0].piId).toBe('root1');
     expect(await getMaxSeq(c.id)).toBe(1);
     expect(await loadLog(c.id)).toEqual(log);
+  });
+
+  describe('interruptRun — durable Stop for orphaned runs', () => {
+    it('clears a stuck paused run to idle (so reopen/refresh no longer shows EXECUTING)', async () => {
+      const c = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+      await setRunStatus(c.id, 'paused');
+      expect(await interruptRun(c.id)).toBe(true);
+      expect((await getConversation(c.id))?.runStatus).toBe('idle');
+    });
+
+    it('clears an orphaned running run (stale/absent heartbeat) to idle', async () => {
+      const c = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+      await setRunStatus(c.id, 'running'); // running with NO heartbeat → orphaned
+      expect(await interruptRun(c.id)).toBe(true);
+      expect((await getConversation(c.id))?.runStatus).toBe('idle');
+    });
+
+    it('leaves a LIVE running turn (fresh lease) alone — its own cancel path releases it', async () => {
+      const c = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+      await acquireRunLease(c.id, 'owner-1', 0); // running + fresh heartbeat NOW
+      expect(await interruptRun(c.id)).toBe(false);
+      expect((await getConversation(c.id))?.runStatus).toBe('running');
+    });
+
+    it('is a no-op for an idle conversation', async () => {
+      const c = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+      expect(await interruptRun(c.id)).toBe(false);
+      expect((await getConversation(c.id))?.runStatus).toBe('idle');
+    });
   });
 
   it('appends incrementally across turns', async () => {

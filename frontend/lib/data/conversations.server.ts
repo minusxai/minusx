@@ -262,6 +262,28 @@ export function isRunLeaseStale(conv: { runStatus: RunStatus; runHeartbeatAt: st
 }
 
 /**
+ * Durably stop a run when there's no live turn to receive the interrupt NOTIFY — i.e. the "Stop"
+ * button on a conversation that was left mid-run. A `paused` run handed its work to a browser that
+ * may be gone; an orphaned `running` lease means the owning server died. In both cases we release
+ * the lease to a terminal `idle` so a reopen/refresh no longer rehydrates it as EXECUTING (which
+ * previously reappeared on every refresh because Stop never touched run_status).
+ *
+ * A LIVE `running` turn with a fresh lease is left untouched — notifyInterrupt wakes it and its own
+ * cancel/finally path releases the lease, so we must not race it here.
+ *
+ * @returns true if it transitioned run_status to a terminal state.
+ */
+export async function interruptRun(id: number): Promise<boolean> {
+  const conv = await getConversation(id);
+  if (!conv) return false;
+  if (conv.runStatus === 'paused' || isRunLeaseStale(conv)) {
+    await releaseRunLease(id, 'idle');
+    return true;
+  }
+  return false;
+}
+
+/**
  * Max times a single turn is silently auto-retried after a server-restart interruption. Enforced
  * server-side via `meta.autoRetries` (NOT just client memory) so a reload / second tab can't bypass
  * the cap and re-crash the box that died — a turn that crashed the server gets at most this many
