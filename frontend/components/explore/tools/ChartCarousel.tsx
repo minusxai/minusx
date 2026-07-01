@@ -402,9 +402,13 @@ export default function ChartCarousel({
             {successful.map((item, idx) => (
               <Box
                 key={idx}
-                as="button"
+                // role=button (not <button>): the thumbnail embeds QuestionVisualization, which renders
+                // its own <button>s — a real <button> here nests buttons (invalid DOM → hydration error).
+                role="button"
+                tabIndex={0}
                 aria-label={`Switch to chart ${idx + 1}: ${item.name}`}
                 onClick={() => setActiveIndex(idx)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveIndex(idx); } }}
                 flexShrink={0}
                 w="120px" h="80px"
                 borderRadius="md"
