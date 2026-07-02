@@ -131,9 +131,13 @@ function hasUnsavedEdits(f: FileState | undefined): boolean {
  *   - incoming version ADVANCED past our base (save/publish/external edit) → take the server file,
  *     dropping the now-stale local edits (their base moved on).
  *   - incoming version SAME as (or behind) our base → a redundant refetch: keep the local edits.
+ *
+ * `overwriteEdits` forces the server file to win regardless of version — used by the explicit
+ * discard/force-reload path (`reloadFile`), whose documented contract is to overwrite local changes.
  */
-function fileStateFromServer(prev: FileState | undefined, incoming: DbFile): FileState {
+function fileStateFromServer(prev: FileState | undefined, incoming: DbFile, overwriteEdits = false): FileState {
   const next = dbFileToFileState(incoming);
+  if (overwriteEdits) return next;
   if (!hasUnsavedEdits(prev)) return next;
   if ((incoming.version ?? 0) > (prev!.version ?? 0)) return next;
   return {
@@ -158,15 +162,16 @@ const filesSlice = createSlice({
       references?: DbFile[];
       analytics?: FileAnalyticsSummary | null;
       conversationAnalytics?: ConversationAnalyticsSummary | null;
+      overwriteEdits?: boolean;  // discard/force-reload: server wins over unsaved edits
     }>) {
-      const { file, references = [] } = action.payload;
+      const { file, references = [], overwriteEdits = false } = action.payload;
 
       const existing = state.files[file.id];
 
       // Store the main file — preserve existing analytics when not explicitly provided, and any
       // unsaved local edits when this is a same-version refetch (see fileStateFromServer).
       state.files[file.id] = {
-        ...fileStateFromServer(existing, file),
+        ...fileStateFromServer(existing, file, overwriteEdits),
         analytics: 'analytics' in action.payload
           ? action.payload.analytics
           : existing?.analytics,
@@ -202,7 +207,7 @@ const filesSlice = createSlice({
 
       // Store all referenced files
       references.forEach(ref => {
-        state.files[ref.id] = fileStateFromServer(state.files[ref.id], ref);
+        state.files[ref.id] = fileStateFromServer(state.files[ref.id], ref, overwriteEdits);
 
         // Update path index for references
         state.pathIndex[ref.path] = ref.id;
@@ -217,12 +222,13 @@ const filesSlice = createSlice({
       files: DbFile[];
       references?: DbFile[];
       analyticsMap?: Record<number, FileAnalyticsSummary>;
+      overwriteEdits?: boolean;  // discard/force-reload: server wins over unsaved edits
     }>) {
-      const { files, references = [], analyticsMap } = action.payload;
+      const { files, references = [], analyticsMap, overwriteEdits = false } = action.payload;
 
       // Store all main files
       files.forEach(file => {
-        const fileState = fileStateFromServer(state.files[file.id], file);
+        const fileState = fileStateFromServer(state.files[file.id], file, overwriteEdits);
         // Folders: preserve children already set by setFolderInfo instead of re-extracting
         if (file.type === 'folder') {
           fileState.references = state.files[file.id]?.references ?? [];
@@ -239,7 +245,7 @@ const filesSlice = createSlice({
 
       // Store all referenced files
       references.forEach(ref => {
-        state.files[ref.id] = fileStateFromServer(state.files[ref.id], ref);
+        state.files[ref.id] = fileStateFromServer(state.files[ref.id], ref, overwriteEdits);
         // Update path index for references
         state.pathIndex[ref.path] = ref.id;
       });
