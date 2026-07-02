@@ -25,6 +25,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 > A green test that was never red is not a test — it's decoration. When asked "did you do TDD / browser-test?", answer honestly.
 
+### Pull Requests
+
+**Raise every PR with NO description body.** Do not write a summary, a "what/why", a test plan, or any descriptive comment on the PR — open it with an empty body (`gh pr create --body ""`). The title alone stands.
+
 ---
 
 ## V2 chat: `frontend/orchestrator/` and `frontend/agents/`

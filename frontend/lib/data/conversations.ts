@@ -41,7 +41,14 @@ export const ConversationsAPI = {
 
   async get(id: number): Promise<ConversationDetail> {
     const res = await fetch(`/api/conversations/${id}`);
-    return unwrap(res);
+    const detail = await unwrap<ConversationDetail>(res);
+    // A 2xx with a malformed/empty body (proxy page, truncated/interrupted response) would otherwise
+    // pass through as `{}` and crash callers at `detail.messages.map(...)` with a cryptic
+    // `reading 'map'` TypeError (Sentry MINUSX-BI-2V). Fail loudly + retryably instead.
+    if (!detail || !Array.isArray(detail.messages) || !Array.isArray(detail.errors)) {
+      throw new Error(`Malformed conversation ${id} response (missing messages/errors) — the request may have been interrupted; please retry.`);
+    }
+    return detail;
   },
 
   /** Cheap single-row fetch of the AI-generated title (null if not generated yet). */
