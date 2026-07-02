@@ -64,6 +64,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   const store = useAppStore();
   const [override, setOverride] = useState<RubricReport | null>(null); // manual refresh or judge result
   const [judging, setJudging] = useState(false);
+  const [judgeError, setJudgeError] = useState<string | null>(null);
   const { captureFileView, blobToDataURL } = useScreenshot();
 
   const deterministic = useMemo<RubricReport | null>(() => {
@@ -76,7 +77,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   }, [fileType, savedContent]);
 
   // A new save (or file load) invalidates any manual-refresh / judge override.
-  useEffect(() => { setOverride(null); }, [savedContent]);
+  useEffect(() => { setOverride(null); setJudgeError(null); }, [savedContent]);
 
   const report = override ?? deterministic;
   if (!report) return null;
@@ -95,6 +96,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
 
   const runJudge = async () => {
     setJudging(true);
+    setJudgeError(null);
     try {
       const blob = await captureFileView(fileId, { fullHeight: true });
       const screenshot = await blobToDataURL(blob);
@@ -104,9 +106,17 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
         body: JSON.stringify({ screenshot }),
       });
       const json = await res.json().catch(() => null);
-      if (json?.data?.report) setOverride(json.data.report as RubricReport);
-    } catch {
-      // best-effort — leave the deterministic report in place
+      const nextReport = json?.data?.report as RubricReport | undefined;
+      if (!res.ok || !nextReport) {
+        const msg = json?.error?.message ?? json?.message ?? `Visual review failed (HTTP ${res.status}).`;
+        console.error('[rubric] visual review failed', res.status, json);
+        setJudgeError(String(msg));
+        return;
+      }
+      setOverride(nextReport);
+    } catch (e) {
+      console.error('[rubric] visual review error', e);
+      setJudgeError(e instanceof Error ? e.message : 'Visual review failed.');
     } finally {
       setJudging(false);
     }
@@ -205,6 +215,10 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                   {judging ? <Spinner size="xs" /> : <Icon as={LuSparkles} />}
                   <Text>{report.source === 'deterministic' ? 'Run visual review' : 'Re-run visual review'}</Text>
                 </Button>
+
+                {judgeError && (
+                  <Text fontSize="2xs" color="accent.danger">Visual review failed: {judgeError}</Text>
+                )}
 
                 <Table.Root size="sm" css={{ '& td, & th': { borderColor: 'border.muted' } }}>
                   <Table.Header>
