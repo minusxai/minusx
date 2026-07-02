@@ -169,20 +169,39 @@ optional `images` field (`MicroAgent.buildUserContent` appends them).
 > the leaf `lib/chat/headless-llm-tracking.server.ts` so the judge → micro chain doesn't import
 > the V2 registrables hub (which imports the tools that import the judge).
 
-**Same findings shape as the deterministic scorers.** The judge returns a *flat* `findings[]`
-JSON (`{"findings":[{category, severity, title, detail, fix}]}`, `[]` if good). Those flow
-through the same `buildReport`, so both flavors score identically and merge. Judge findings get
-a generated `ruleId: judge.<category>.<index>`; `parseFindings` tolerantly extracts the JSON and
-drops anything malformed (worst case: an empty 5/5 report).
+**A CLOSED checklist, not an open-ended review.** The judge does NOT free-associate problems.
+It's handed a fixed, per-file-type checklist (`LLM_CHECKS` in `lib/rubric/checks.ts`) — each a
+specific pass/fail question grounded in data-viz research — and must return, for every check,
+`{ id, applicable, pass, reason }`. `score-llm.server.ts` maps each FAILED, applicable check to
+a finding via the catalog (category / severity / label / fix); the `reason` becomes the finding
+detail. Findings get `ruleId: llm.<check-id>`. This makes the LLM output bounded, calibratable,
+and directly comparable to the deterministic checks (passed LLM checks even show as green
+"passed" rows once the LLM has run — see `passedChecks`).
+
+```
+// the judge's reply
+{"checks":[{"id":"chart-type-fit","applicable":true,"pass":false,"reason":"a pie is used for a time trend"}, …]}
+```
+
+The check catalog (`LLM_CHECKS`) is the single source to tune — add/remove/reword a check
+there and both the prompt (`formatChecklist`) and the parsing update automatically.
+
+**LLM check catalog (research-grounded):**
+- **question** — `chart-type-fit` (err), `honest-scale` (err), `axes-labeled`, `labels-legible`,
+  `not-overplotted`, `takeaway-obvious`, `clean-encoding`.
+- **dashboard** — `coherent-narrative`, `clear-hierarchy`, `tiles-readable`,
+  `consistent-formatting`, `uncluttered-layout`.
+- **story** — `single-lead` (err), `evidence-supports-claims` (err), `headlines-are-findings`,
+  `frame-carries-insight`, `deliberate-palette`, `typographic-craft`.
 
 - **Input** = `fileToMarkup(fileType, content)` as text + (when available) the rendered
   screenshot as an image block (https or `data:` URL → `imageBlock`). **The judge is most
   valuable WITH the visual** — the screenshot is what lets it grade aesthetics + visual clarity.
-  With no screenshot it falls back to markup-only.
+  With no screenshot it judges from markup and marks visual-only checks `applicable:false`.
 - **Model** = the micro model (`getMicroModelOrTestFallback`), same as other micro-tasks.
-- **Prompts** = `micro.rubric_llm` (shared preamble + JSON format) with the per-type
-  `{criteria}` from `llm/prompts.ts` (`llmCriteria`), distilled from the `skill_*` prompts.
-- `combineReports(deterministic, judge)` flattens both reports' findings and rebuilds one with
+- **Prompts** = `micro.rubric_llm` (reviewer preamble + JSON contract) with the per-type
+  `{checklist}` rendered from `LLM_CHECKS` by `formatChecklist`.
+- `combineReports(deterministic, llm)` flattens both reports' findings and rebuilds one with
   `source: 'combined'`.
 
 ## Consumption — the 3-piece architecture
@@ -214,13 +233,14 @@ frontend/lib/rubric/
   types.ts            report contracts
   scoring.ts          pure: findings[] → category scores → weighted overall + grade
   registry.ts         FileType → deterministic scorer + per-type category weights
+  checks.ts           DETERMINISTIC_CHECKS + LLM_CHECKS catalogs, formatChecklist, passedChecks
+  score-file.server.ts scoreFile — deterministic + llm, combined (piece 3)
   deterministic/
     shared.ts         :param extraction, token estimate, hex/palette scan, story walk
     question.ts       QuestionContent → RubricFinding[]
     dashboard.ts      DashboardContent → RubricFinding[]
     story.ts          StoryContent   → RubricFinding[]
   llm/
-    score-llm.server.ts (content + screenshot) → RubricReport
-    prompts.ts        per-type judge prompts
-  __tests__/          deterministic + scoring unit tests (node project)
+    score-llm.server.ts closed-checklist judge: (content + screenshot) → RubricReport
+  __tests__/          deterministic + scoring + checks + llm unit tests (node project)
 ```

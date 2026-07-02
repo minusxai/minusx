@@ -13,41 +13,51 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 const mockRun = vi.mocked(runMicroTask);
 const USER = { userId: 1, email: 'u@example.com', name: 'U', role: 'admin', home_folder: '/org', mode: 'org' } as EffectiveUser;
-const reply = (findings: unknown[]) => JSON.stringify({ findings });
+const reply = (checks: unknown[]) => JSON.stringify({ checks });
 
 beforeEach(() => mockRun.mockReset());
 
 describe('scoreFileLLM', () => {
-  it('runs the rubric_llm micro-task with markup + screenshot and scores its findings', async () => {
+  it('runs the rubric_llm micro-task with the checklist + screenshot and turns FAILS into findings', async () => {
     mockRun.mockResolvedValue(reply([
-      { category: 'aesthetics', severity: 'warn', title: 'Generic palette', detail: 'purple gradient', fix: 'Pick an accent.' },
+      { id: 'chart-type-fit', pass: false, reason: 'a pie chart is used for a time trend' },
+      { id: 'axes-labeled', pass: true, reason: 'axes titled with units' },
     ]));
     const report = await scoreFileLLM({ fileType: 'question', content: makeQuestion(), screenshotUrl: 'data:image/jpeg;base64,AAAA' }, USER);
 
-    // routed through the shared runner, not a bespoke LLM call
+    // routed through the shared runner with the checklist var + image
     const [taskKey, vars, user, images] = mockRun.mock.calls[0];
     expect(taskKey).toBe('rubric_llm');
+    expect(vars.checklist).toContain('chart-type-fit');
     expect(vars.markup).toContain('SELECT');
     expect(user).toBe(USER);
     expect(images?.[0]).toEqual({ type: 'image', data: 'AAAA', mimeType: 'image/jpeg' });
 
+    // the failed check → a finding using the catalog's category/severity/label/fix
     expect(report.source).toBe('llm');
-    expect(report.categories.find((c) => c.category === 'aesthetics')?.findings[0]?.title).toBe('Generic palette');
-    expect(report.categories.find((c) => c.category === 'aesthetics')?.score).toBe(4); // one warn: 5-1
+    const f = report.categories.flatMap((c) => c.findings).find((x) => x.ruleId === 'llm.chart-type-fit');
+    expect(f?.severity).toBe('error');
+    expect(f?.category).toBe('correctness');
+    expect(f?.title).toBe('Right chart for the data');
+    expect(f?.detail).toContain('pie');
+    expect(report.overall).toBeLessThan(5);
   });
 
-  it('scores a clean judgment at 5', async () => {
-    mockRun.mockResolvedValue(reply([]));
-    expect((await scoreFileLLM({ fileType: 'story', content: { description: 'x', story: '<div/>' } }, USER)).overall).toBe(5);
+  it('scores an all-pass checklist at 5', async () => {
+    mockRun.mockResolvedValue(reply([{ id: 'chart-type-fit', pass: true, reason: 'ok' }]));
+    expect((await scoreFileLLM({ fileType: 'question', content: makeQuestion() }, USER)).overall).toBe(5);
+  });
+
+  it('ignores unknown ids and applicable:false checks', async () => {
+    mockRun.mockResolvedValue(reply([
+      { id: 'not-a-real-check', pass: false, reason: 'x' },
+      { id: 'honest-scale', applicable: false, pass: false, reason: 'no numeric axis' },
+    ]));
+    expect((await scoreFileLLM({ fileType: 'question', content: makeQuestion() }, USER)).overall).toBe(5);
   });
 
   it('returns an empty report when the reply is not valid JSON', async () => {
     mockRun.mockResolvedValue('I could not review this.');
-    expect((await scoreFileLLM({ fileType: 'question', content: makeQuestion() }, USER)).overall).toBe(5);
-  });
-
-  it('drops malformed findings (bad category)', async () => {
-    mockRun.mockResolvedValue(reply([{ severity: 'error', title: 'x' }, { category: 'nope', severity: 'error', title: 'y' }]));
     expect((await scoreFileLLM({ fileType: 'question', content: makeQuestion() }, USER)).overall).toBe(5);
   });
 });
@@ -56,7 +66,7 @@ describe('rubric_llm prompt', () => {
   // The prompt embeds a literal JSON example; its braces must be escaped ({{ }}) so pyFormat
   // doesn't read them as {variables}. This test guards that regression.
   it('renders without missing-variable errors (literal JSON braces escaped)', () => {
-    expect(() => renderPrompt('micro.rubric_llm.system', { criteria: 'focus on X' })).not.toThrow();
+    expect(() => renderPrompt('micro.rubric_llm.system', { file_type: 'question', checklist: '- chart-type-fit [correctness]: ...' })).not.toThrow();
     // markup value itself contains braces (story JSX) — inserted verbatim, must not re-parse
     expect(() => renderPrompt('micro.rubric_llm.user', {
       file_type: 'question', markup: '<query>{`SELECT {a}`}</query>', screenshot_note: 'none',
@@ -64,8 +74,8 @@ describe('rubric_llm prompt', () => {
   });
 
   it('keeps the JSON shape literal in the rendered system prompt', () => {
-    const out = renderPrompt('micro.rubric_llm.system', { criteria: '' });
-    expect(out).toContain('{"findings":[{"category"');
+    const out = renderPrompt('micro.rubric_llm.system', { file_type: 'question', checklist: '' });
+    expect(out).toContain('{"checks":[{"id"');
   });
 });
 
