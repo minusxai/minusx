@@ -4,7 +4,7 @@
  * deterministic scorers, so `buildReport` scores both identically and they can be merged.
  *
  * Runs on the shared micro-task infra (`runMicroTask` → `MicroAgent` → orchestrator), NOT a
- * bespoke LLM call: prompts live in `micro.rubric_judge` (prompts.yaml), model + usage tracking
+ * bespoke LLM call: prompts live in `micro.rubric_llm` (prompts.yaml), model + usage tracking
  * come for free. The screenshot rides along as an image content block on the micro context.
  *
  * See `frontend/docs/rubrik.md`.
@@ -16,7 +16,7 @@ import type { ImageContent } from '@/orchestrator/llm';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { RubricCategory, RubricFinding, RubricFileType, RubricReport, RubricSeverity } from '../types';
 import { buildReport } from '../scoring';
-import { judgeCriteria } from './prompts';
+import { llmCriteria } from './prompts';
 
 const CATEGORIES: readonly RubricCategory[] = ['correctness', 'clarity', 'aesthetics'];
 const SEVERITIES: readonly RubricSeverity[] = ['error', 'warn', 'info'];
@@ -35,12 +35,12 @@ function imageBlock(src: string): ImageContent {
   return m ? { type: 'image', data: m[2], mimeType: m[1] } : { type: 'image', url: src };
 }
 
-/** Run the LLM judge for a file and build its report (`source: 'llm-judge'`). */
-export async function judgeFile(params: JudgeParams, user: EffectiveUser): Promise<RubricReport> {
+/** Score a file with the LLM judge and build its report (`source: 'llm'`). */
+export async function scoreFileLLM(params: JudgeParams, user: EffectiveUser): Promise<RubricReport> {
   const { fileType, content, screenshotUrl } = params;
   const vars: Record<string, string> = {
     file_type: fileType,
-    criteria: judgeCriteria(fileType),
+    criteria: llmCriteria(fileType),
     markup: fileToMarkup(fileType, content),
     screenshot_note: screenshotUrl
       ? 'A screenshot of how it renders is attached below.'
@@ -50,11 +50,11 @@ export async function judgeFile(params: JudgeParams, user: EffectiveUser): Promi
 
   let findings: RubricFinding[] = [];
   try {
-    findings = parseFindings(await runMicroTask('rubric_judge', vars, user, images));
+    findings = parseFindings(await runMicroTask('rubric_llm', vars, user, images));
   } catch {
     // best-effort — a failed/garbled judge yields an empty (5/5) report rather than throwing.
   }
-  return buildReport(fileType, 'llm-judge', findings);
+  return buildReport(fileType, 'llm', findings);
 }
 
 /** Parse the judge's JSON reply into validated findings. Tolerant of surrounding prose. */

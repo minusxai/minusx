@@ -21,6 +21,6 @@ accent — and NOT an AI-default look (cream+serif+terracotta, acid-green-on-bla
 hairline-rule broadsheet)? Does the frame around each chart carry the insight? Is it honest about the data?`,
 };
 
-export function judgeCriteria(fileType: RubricFileType): string {
+export function llmCriteria(fileType: RubricFileType): string {
   return PER_TYPE[fileType];
 }

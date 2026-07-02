@@ -33,7 +33,7 @@ export const MICRO_TASKS: Record<string, MicroTaskConfig> = {
   title: task('title'),
   description: task('description'),
   feed_summary: task('feed_summary'),
-  rubric_judge: task('rubric_judge'),
+  rubric_llm: task('rubric_llm'),
 };
 
 export function getMicroTask(key: string): MicroTaskConfig {

@@ -4,7 +4,7 @@
  * A rubric scores the health of a BI file (question / dashboard / story) and returns
  * actionable findings the agent can act on. Two flavors produce the SAME shape:
  *  - deterministic: pure `content → RubricReport` (see `deterministic/*`, `scoring.ts`)
- *  - llm-judge:     `(content + screenshot) → RubricReport` (see `judge/*`)
+ *  - llm:           `(content + screenshot) → RubricReport` (see `llm/*`)
  *
  * See `frontend/docs/rubrik.md` for the rule catalog and research backing.
  */
@@ -50,7 +50,7 @@ export interface RubricCategoryScore {
 }
 
 export type RubricGrade = 'good' | 'fair' | 'poor';
-export type RubricSource = 'deterministic' | 'llm-judge' | 'combined';
+export type RubricSource = 'deterministic' | 'llm' | 'combined';
 
 export interface RubricReport {
   fileType: FileType;

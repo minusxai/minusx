@@ -4,7 +4,7 @@ import { withAuth } from '@/lib/api/with-auth';
 import { loadFile } from '@/lib/data/files.server';
 import { validateFileId } from '@/lib/data/helpers/validation';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
-import { scoreFileFull } from '@/lib/rubric/score-file.server';
+import { scoreFile } from '@/lib/rubric/score-file.server';
 
 // File health rubric (see docs/rubrik.md).
 //   GET  → deterministic report (score + findings), computed from content.
@@ -48,7 +48,7 @@ export const POST = withAuth(async (
       return ApiErrors.validationError(`Health rubric is only available for question, dashboard, and story files (got ${file.type})`);
     }
 
-    return successResponse({ report: await scoreFileFull(file.type, file.content, user, screenshotUrl) });
+    return successResponse({ report: await scoreFile(file.type, file.content, user, screenshotUrl) });
   } catch (error) {
     return handleApiError(error);
   }

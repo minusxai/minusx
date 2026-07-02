@@ -3,7 +3,7 @@ import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
-import { scoreFileFull } from '@/lib/rubric/score-file.server';
+import { scoreFile } from '@/lib/rubric/score-file.server';
 import type { RubricReport } from '@/lib/rubric/types';
 import type { AnalystAgentContext } from './types';
 
@@ -65,10 +65,10 @@ export class CheckFileHealth extends MXTool<typeof CheckFileHealthParams, Analys
         return fail(fileId, `Health rubric is only available for question, dashboard, and story files (got ${file.type}).`);
       }
 
-      // With llmJudge, run BOTH (piece 3, scoreFileFull) reusing the current file's already-
-      // captured screenshot when the caller didn't pass one; otherwise deterministic only.
+      // With llmJudge, run BOTH (scoreFile) reusing the current file's already-captured
+      // screenshot when the caller didn't pass one; otherwise deterministic only.
       const report = llmJudge
-        ? await scoreFileFull(file.type, file.content, user,
+        ? await scoreFile(file.type, file.content, user,
             this.parameters.screenshotUrl ?? screenshotUrlFor(this.context.appState, fileId))
         : scoreFileDeterministic(file.type, file.content);
 

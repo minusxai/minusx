@@ -60,7 +60,7 @@ interface RubricCategoryScore {
 }
 interface RubricReport {
   fileType: FileType;
-  source: 'deterministic' | 'llm-judge' | 'combined';
+  source: 'deterministic' | 'llm' | 'combined';
   overall: number;                    // 1–5 weighted
   grade: 'good' | 'fair' | 'poor';    // >=4 / >=2.5 / else
   categories: RubricCategoryScore[];
@@ -153,15 +153,15 @@ text/image/divider assets are ignored for counting.
 
 ## LLM judge
 
-`lib/rubric/judge/judge.server.ts` — `judgeFile({ fileType, content, screenshotUrl }, user)
+`lib/rubric/llm/score-llm.server.ts` — `scoreFileLLM({ fileType, content, screenshotUrl }, user)
 → Promise<RubricReport>`. Grades the subjective / visual dimensions the deterministic pass
 can't (right-chart-for-the-data, does the frame carry the insight, does the story look
-crafted vs AI-default). Emits `source: 'llm-judge'`.
+crafted vs AI-default). Emits `source: 'llm'`.
 
-**Runs on the shared micro-task infra — no bespoke LLM call.** `judgeFile` calls
-`runMicroTask('rubric_judge', vars, user, images)` (`lib/chat/run-micro-task.server.ts`), which
+**Runs on the shared micro-task infra — no bespoke LLM call.** `scoreFileLLM` calls
+`runMicroTask('rubric_llm', vars, user, images)` (`lib/chat/run-micro-task.server.ts`), which
 runs the no-tools `MicroAgent` through the orchestrator. So the prompt lives in
-`micro.rubric_judge` (`prompts.yaml`), and model resolution + out-of-band usage tracking come
+`micro.rubric_llm` (`prompts.yaml`), and model resolution + out-of-band usage tracking come
 for free. The screenshot rides along as an image content block via the micro context's new
 optional `images` field (`MicroAgent.buildUserContent` appends them).
 
@@ -180,8 +180,8 @@ drops anything malformed (worst case: an empty 5/5 report).
   valuable WITH the visual** — the screenshot is what lets it grade aesthetics + visual clarity.
   With no screenshot it falls back to markup-only.
 - **Model** = the micro model (`getMicroModelOrTestFallback`), same as other micro-tasks.
-- **Prompts** = `micro.rubric_judge` (shared preamble + JSON format) with the per-type
-  `{criteria}` from `judge/prompts.ts` (`judgeCriteria`), distilled from the `skill_*` prompts.
+- **Prompts** = `micro.rubric_llm` (shared preamble + JSON format) with the per-type
+  `{criteria}` from `llm/prompts.ts` (`llmCriteria`), distilled from the `skill_*` prompts.
 - `combineReports(deterministic, judge)` flattens both reports' findings and rebuilds one with
   `source: 'combined'`.
 
@@ -190,12 +190,12 @@ drops anything malformed (worst case: an empty 5/5 report).
 1. **Deterministic fn (piece 1)** — `scoreFileDeterministic`, auto-injected into the file the
    agent sees at `compressFileState` (`lib/api/compress-augmented.ts`), covering every
    read / edit / create. Cheap + pure, safe every time.
-2. **LLM fn (piece 2)** — `judgeFile`, same contract. Attached to the **Screenshot tool**: after
+2. **LLM fn (piece 2)** — `scoreFileLLM`, same contract. Attached to the **Screenshot tool**: after
    the `Screenshot` frontend handler (`lib/api/tool-handlers.ts`) captures + uploads the shot, it
    POSTs the URL to the rubric route and appends the **combined** report to the tool result — so
    every screenshot carries the file's full health (best-effort; a rubric failure never blocks
    the shot).
-3. **Run-both fn (piece 3)** — `scoreFileFull(fileType, content, user, screenshotUrl?)`
+3. **Run-both fn (piece 3)** — `scoreFile(fileType, content, user, screenshotUrl?)`
    (`lib/rubric/score-file.server.ts`) = deterministic + judge, combined. Two thin doors call it:
    - **UI** — `FileHealthBadge` (`components/FileHealthPanel.tsx`) in the `FileHeader` badge row.
      Shows the **deterministic** report instantly (client-side `selectMergedContent`, no fetch);
@@ -203,9 +203,9 @@ drops anything malformed (worst case: an empty 5/5 report).
      `AUTO_RUN_VISUAL_REVIEW` flag in that file opts into auto-running the combined on open.
    - **Agent** — `CheckFileHealth(fileId, { llmJudge?, screenshotUrl? })`
      (`agents/analyst/health-tools.ts`), a manual re-check tool (e.g. after an edit); with
-     `llmJudge` it calls `scoreFileFull`. Registered on `WebAnalystAgent` + `V2_REGISTRABLES`.
+     `llmJudge` it calls `scoreFile`. Registered on `WebAnalystAgent` + `V2_REGISTRABLES`.
    - **API** — `GET /api/files/[id]/rubric` (deterministic) / `POST { screenshot | screenshotUrl }`
-     (→ `scoreFileFull`), modeled on `app/api/files/[id]/preview/route.ts`.
+     (→ `scoreFile`), modeled on `app/api/files/[id]/preview/route.ts`.
 
 ## Layout
 
@@ -219,8 +219,8 @@ frontend/lib/rubric/
     question.ts       QuestionContent → RubricFinding[]
     dashboard.ts      DashboardContent → RubricFinding[]
     story.ts          StoryContent   → RubricFinding[]
-  judge/
-    judge.server.ts   (content + screenshot) → RubricReport
+  llm/
+    score-llm.server.ts (content + screenshot) → RubricReport
     prompts.ts        per-type judge prompts
   __tests__/          deterministic + scoring unit tests (node project)
 ```

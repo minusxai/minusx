@@ -9,19 +9,19 @@ import 'server-only';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { RubricFileType, RubricReport } from './types';
 import { scoreFileDeterministic } from './registry';
-import { judgeFile, combineReports } from './judge/judge.server';
+import { scoreFileLLM, combineReports } from './llm/score-llm.server';
 
 /**
  * Deterministic + LLM judge, combined. `screenshotUrl` (https or `data:`) lets the judge grade
  * the rendered visual; without it the judge falls back to markup-only.
  */
-export async function scoreFileFull(
+export async function scoreFile(
   fileType: RubricFileType,
   content: unknown,
   user: EffectiveUser,
   screenshotUrl?: string,
 ): Promise<RubricReport> {
   const deterministic = scoreFileDeterministic(fileType, content);
-  const judge = await judgeFile({ fileType, content, screenshotUrl }, user);
-  return combineReports(deterministic, judge);
+  const llm = await scoreFileLLM({ fileType, content, screenshotUrl }, user);
+  return combineReports(deterministic, llm);
 }
