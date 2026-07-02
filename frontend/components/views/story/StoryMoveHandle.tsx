@@ -2,9 +2,10 @@
 
 /**
  * StoryMoveHandle — a drag grip on a story embed placeholder in edit mode. Dragging it reorders the
- * widget among its flow siblings (stories are a flow document — "move" is reorder, not free x/y). While
- * dragging, a live insertion line shows where the widget will land; on release the widget is spliced
- * into that slot and the story is marked dirty.
+ * widget's whole CARD to any flow position across the story (stories are a flow document — "move" is
+ * reorder, not free x/y). While dragging, a live insertion line shows where the card will land; on
+ * release it's spliced into that gap and the story is marked dirty. Drops are refused inside packed
+ * grid/flex/table containers (which would re-break the widget's px-resize contract).
  *
  * Rendered by StoryEmbeds as a direct child of the placeholder `target` (a sibling of the resize
  * handles). All imperative DOM writes live in story-reorder.ts helpers so this component never mutates
@@ -12,11 +13,13 @@
  */
 import { useRef } from 'react';
 import {
-  computeDropIndex,
-  reorderBlock,
-  movableSiblings,
+  movableUnit,
+  collectDropSlots,
+  chooseDropSlot,
+  applyDrop,
   positionDropIndicator,
   removeDropIndicator,
+  type DropSlot,
 } from '@/lib/html/story-reorder';
 
 const GRIP = 22;
@@ -29,35 +32,34 @@ interface Props {
 }
 
 export default function StoryMoveHandle({ target, onCommit }: Props) {
-  // The sibling blocks EXCLUDING the dragged widget, captured at drag start — index maps to a drop slot.
-  const others = useRef<HTMLElement[] | null>(null);
+  // The card to move (target or a wrapping plate) + the story canvas, captured at drag start.
+  const drag = useRef<{ unit: HTMLElement; canvas: HTMLElement } | null>(null);
 
-  const slotFor = (clientY: number): number => {
-    const rects = (others.current ?? []).map(el => {
-      const r = el.getBoundingClientRect();
-      return { top: r.top, bottom: r.bottom };
-    });
-    return computeDropIndex(rects, clientY);
+  const slotFor = (clientY: number): DropSlot | null => {
+    if (!drag.current) return null;
+    return chooseDropSlot(collectDropSlots(drag.current.canvas, drag.current.unit), clientY);
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    others.current = movableSiblings(target).filter(el => el !== target);
+    const canvas = target.ownerDocument.body;
+    drag.current = { unit: movableUnit(target, canvas), canvas };
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!others.current) return;
-    positionDropIndicator(target, others.current, slotFor(e.clientY));
+    if (!drag.current) return;
+    const slot = slotFor(e.clientY);
+    if (slot) positionDropIndicator(drag.current.canvas, slot);
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
-    if (!others.current) return;
+    if (!drag.current) return;
     const slot = slotFor(e.clientY);
-    removeDropIndicator(target);
-    reorderBlock(target, others.current, slot);
-    others.current = null;
+    removeDropIndicator(target.ownerDocument);
+    if (slot) applyDrop(drag.current.unit, slot);
+    drag.current = null;
     onCommit();
   };
 

@@ -24,6 +24,15 @@ const PACKED_DISPLAYS = immutableSet([
   'table', 'inline-table', 'table-row', 'table-cell',
 ]);
 
+/**
+ * True when `display` lays children out via a track/cell (grid/flex/table) rather than normal flow — so
+ * a child's own `width` is subordinate and free px resize silently no-ops. The move logic reuses this to
+ * refuse drop targets inside a packed container (which would re-break the widget's resize contract).
+ */
+export function isPackedDisplay(display: string): boolean {
+  return PACKED_DISPLAYS.has(display);
+}
+
 const isPx = (v: string): boolean => /^-?\d*\.?\d+px$/.test(v.trim());
 /** A valid flow-block width: an explicit px value, or `100%` (responsive full-width default). Both
  *  render predictably and stay freely user-resizable (the handle reads offsetWidth → px). */
@@ -48,7 +57,7 @@ export function findWidgetLayoutViolations(
   // 1) No grid/flex/table ancestor between the widget and the canvas.
   for (let node = widget.parentElement; node && node !== canvas; node = node.parentElement) {
     const display = getStyle(node).display;
-    if (PACKED_DISPLAYS.has(display)) {
+    if (isPackedDisplay(display)) {
       violations.push({ kind: 'packed-ancestor', display, tag: node.tagName.toLowerCase() });
     }
   }
