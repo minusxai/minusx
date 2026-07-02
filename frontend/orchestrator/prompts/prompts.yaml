@@ -149,13 +149,18 @@ templates:
       queryResultId?: string;    // links a question to its query result below
     }};
 
-    type ProjectedQueryResult = {{
-      queryResultId: string;
-      finalQuery?: string; error?: string;
-      summary: {{ columns: string[]; types: string[]; totalRows: number }} | {{ unchanged: true }};
-      data?: {{ state: 'present' | 'unchanged' }};   // the actual rows (a GFM table) — see <query_data> below
-      image?: {{ state: 'present' | 'unchanged' }};   // an image of the result visualization
-    }};
+    type ProjectedQueryResult =
+      // EVERY facet is identical to an earlier turn — the whole result collapses to this. Reuse what
+      // you already saw for this queryResultId.
+      | {{ queryResultId: string; unchanged: true }}
+      | {{
+          queryResultId: string;
+          finalQuery?: string;   // the executed SQL. If very long it is truncated to head + "… [N chars truncated] …" + tail.
+          error?: string;
+          summary: {{ columns: string[]; types: string[]; totalRows: number }} | {{ unchanged: true }};
+          data?: {{ state: 'present' | 'unchanged' }};   // the actual rows (a GFM table) — see <query_data> below
+          image?: {{ state: 'present' | 'unchanged' }};   // an image of the result visualization
+        }};
     ```
 
     How to read it:

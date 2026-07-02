@@ -24,6 +24,7 @@ import type {
   AugmentedFileEntry,
   AugmentedFiles,
   BlockFacetSignal,
+  ChangedQueryResultJson,
   ProjectedFileJson,
   ProjectedFilesJson,
   ProjectedFilesOutput,
@@ -34,6 +35,22 @@ import type { ImageContent } from '@/orchestrator/llm';
 
 const PRESENT: BlockFacetSignal = { state: 'present' };
 const UNCHANGED: BlockFacetSignal = { state: 'unchanged' };
+
+/**
+ * Cap the executed SQL echoed into a projected query result. A pathological `finalQuery` (giant
+ * generated `IN (...)` lists, wide `UNION ALL` scaffolding) can run to many KB and is re-diffed
+ * every turn. The agent already has the AUTHORED query in the file's `<file_markup>`; app state only
+ * needs a recognizable echo of what actually ran. Over the limit we keep the head (the SELECT / shape)
+ * and the tail (ORDER BY / LIMIT) and elide the middle, with an explicit marker of how much was cut.
+ */
+export const FINAL_QUERY_MAX = 1000;
+export const FINAL_QUERY_HEAD = 500;
+export const FINAL_QUERY_TAIL = 500;
+export function truncateFinalQuery(sql: string): string {
+  if (sql.length <= FINAL_QUERY_MAX) return sql;
+  const elided = sql.length - FINAL_QUERY_HEAD - FINAL_QUERY_TAIL;
+  return `${sql.slice(0, FINAL_QUERY_HEAD)} … [${elided} chars truncated] … ${sql.slice(-FINAL_QUERY_TAIL)}`;
+}
 
 /**
  * Drop the row `data` facet from a file entry's query results, keeping the `summary`. Shared by the
@@ -108,33 +125,57 @@ function projectEntry(memo: FacetMemo, entry: AugmentedFileEntry, opts: EntryOpt
   if (entry.queryResults?.length) {
     json.queryResults = entry.queryResults.map((qr): ProjectedQueryResultJson => {
       const qid = qr.queryResultId;
-      // finalQuery (the executed SQL) is diffed like summary — an unchanged result re-sends only
-      // `{unchanged:true}` instead of the full SQL string every turn.
-      const finalQuery = memo.diff(`qr:${qid}:finalQuery`, qr.finalQuery);
-      const pj: ProjectedQueryResultJson = {
-        queryResultId: qid,
-        ...(finalQuery !== undefined ? { finalQuery } : {}),
-        ...(qr.error !== undefined ? { error: qr.error } : {}),
-        summary: memo.diff(`qr:${qid}:summary`, qr.summary)!,
-      };
+      // finalQuery (the executed SQL, truncated when huge) is diffed like summary — an unchanged
+      // result re-sends only `{unchanged:true}` instead of the full SQL string every turn.
+      const finalQuery = qr.finalQuery !== undefined
+        ? memo.diff(`qr:${qid}:finalQuery`, truncateFinalQuery(qr.finalQuery))
+        : undefined;
+      const summary = memo.diff(`qr:${qid}:summary`, qr.summary)!;
+
+      // data / image are heavy → out-of-JSON blocks (present) or a signal (unchanged). Compute
+      // their diffs first (advancing the memo + emitting any changed blocks), THEN decide whether the
+      // whole entry collapses.
+      let dataSignal: BlockFacetSignal | undefined;
       if (qr.data) {
         const d = memo.diff(`qr:${qid}:data`, qr.data);
         if (isUnchanged(d)) {
-          pj.data = UNCHANGED;
+          dataSignal = UNCHANGED;
         } else {
-          pj.data = PRESENT;
+          dataSignal = PRESENT;
           textBlocks.push({ kind: 'querydata', queryResultId: qid, text: qr.data.markdown });
         }
       }
+      let imageSignal: BlockFacetSignal | undefined;
       if (qr.image) {
         const d = memo.diff(`qr:${qid}:image`, { key: qr.image.key });
         if (isUnchanged(d)) {
-          pj.image = UNCHANGED;
+          imageSignal = UNCHANGED;
         } else {
-          pj.image = PRESENT;
+          imageSignal = PRESENT;
           images.push(qr.image.image);
         }
       }
+
+      // Collapse the whole entry to `{queryResultId, unchanged:true}` when NOTHING moved: summary
+      // unchanged, finalQuery unchanged-or-absent, data/image unchanged-or-absent, and no error to
+      // surface. This is what saves a many-question dashboard from re-emitting a per-facet object for
+      // every reference every turn. (No blocks were pushed above in this case — data/image were
+      // unchanged — so there is nothing to correlate; the memo is already advanced.)
+      const finalQueryUnchanged = finalQuery === undefined || isUnchanged(finalQuery);
+      const dataUnchanged = dataSignal === undefined || dataSignal === UNCHANGED;
+      const imageUnchanged = imageSignal === undefined || imageSignal === UNCHANGED;
+      if (qr.error === undefined && isUnchanged(summary) && finalQueryUnchanged && dataUnchanged && imageUnchanged) {
+        return { queryResultId: qid, unchanged: true };
+      }
+
+      const pj: ChangedQueryResultJson = {
+        queryResultId: qid,
+        ...(finalQuery !== undefined ? { finalQuery } : {}),
+        ...(qr.error !== undefined ? { error: qr.error } : {}),
+        summary,
+      };
+      if (dataSignal) pj.data = dataSignal;
+      if (imageSignal) pj.image = imageSignal;
       return pj;
     });
   }
