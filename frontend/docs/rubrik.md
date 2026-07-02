@@ -45,7 +45,7 @@ decoration.
 
 ```ts
 type RubricSeverity = 'error' | 'warn' | 'info';
-type RubricCategory = 'clarity' | 'correctness' | 'craft' | 'aesthetics';
+type RubricCategory = 'correctness' | 'clarity' | 'aesthetics';
 
 interface RubricFinding {
   ruleId: string;            // stable, e.g. 'question.query-too-long'
@@ -67,11 +67,20 @@ interface RubricReport {
 }
 ```
 
-### The four categories
-- **clarity** — understandable at a glance (descriptions, headlines, query size)
-- **correctness** — structurally sound & honest (params in sync, viz configured, layout integrity, no fabricated numbers)
-- **craft** — readability / right-chart-for-the-task / composition
-- **aesthetics** — visual beauty & polish (deliberate palette, typography, delight vs AI-default). Mostly LLM-judge territory — beauty can't be measured statically.
+### The three categories — a priority waterfall
+
+Only three, and orthogonal. A rule belongs to the **first** category whose test it fails, in
+this order — so there's always exactly one home for a new rule:
+
+1. **correctness** — *"If ignored, is it wrong, broken, or dishonest?"* (params in sync, viz
+   configured, layout integrity, fabricated/typed numbers, a chart that physically can't
+   represent the data like pie-with-2-measures).
+2. **clarity** — *"It's correct, but is it hard to understand at a glance?"* (missing
+   description/headline/labels, query too long to reason about, too many series, tile too small,
+   too many/few tiles).
+3. **aesthetics** — *"It works and reads fine, but does it look unpolished/generic?"* (palette,
+   typography, design tokens, composition, AI-default look). Mostly LLM-judge territory — beauty
+   can't be measured statically.
 
 ## Scoring math
 
@@ -79,13 +88,14 @@ A deliberately **coarse 1–5 scale** (avoids false precision / variance). Each 
 at **5**; deduct per finding — **error −2, warn −1, info −0.5** — then round to the nearest 0.5
 and clamp to [1, 5]. Overall = weighted mean of category scores (same 1–5 scale). Weights and
 deductions are constants in one place (`scoring.ts`) so they calibrate against a human gold set
-later.
+later. Note the baseline is always 5 regardless of how many rules a category has — a category is
+only penalized for *actual* findings, so adding more granular checks never harshens a clean file.
 
-| type | clarity | correctness | craft | aesthetics |
-|---|---|---|---|---|
-| question  | 0.25 | 0.45 | 0.2  | 0.1 |
-| dashboard | 0.2  | 0.4  | 0.25 | 0.15 |
-| story     | 0.25 | 0.25 | 0.2  | 0.3 |
+| type | correctness | clarity | aesthetics |
+|---|---|---|---|
+| question  | 0.5  | 0.35 | 0.15 |
+| dashboard | 0.45 | 0.35 | 0.2 |
+| story     | 0.3  | 0.3  | 0.4 |
 
 Grade bands: `overall >= 4 → good`, `>= 2.5 → fair`, else `poor`.
 
@@ -98,8 +108,8 @@ Grade bands: `overall >= 4 → good`, `>= 2.5 → fair`, else `poor`.
 | `undeclared-param` | correctness | error | a `:token` in `query` is not declared in `parameters` | Declare `:{name}` in parameters (text/number/date) or remove the token. |
 | `unused-param` | correctness | info | a declared parameter is never referenced in `query` | Remove the unused `{name}` parameter or reference `:{name}` in the SQL. |
 | `viz-config-incomplete` | correctness | error | `type` is `pivot` and `pivotConfig` is missing or has no `values` (and no `rows`/`columns`) | Configure the pivot (rows, columns, at least one value measure) or switch to `table`. |
-| `pie-multi-measure` | craft | warn | `type` ∈ {pie, funnel} and `yCols.length > 1` | Pie/funnel show a single measure. Keep one `yCols`, or use a bar chart. |
-| `too-many-series` | craft | warn | `type` ∈ {line, bar, area} and `yCols.length > 5` | More than 5 series is hard to read (≤7 rule). Split into small multiples or drop series. |
+| `pie-multi-measure` | correctness | warn | `type` ∈ {pie, funnel} and `yCols.length > 1` | Pie/funnel show a single measure. Keep one `yCols`, or use a bar chart. |
+| `too-many-series` | clarity | warn | `type` ∈ {line, bar, area} and `yCols.length > 5` | More than 5 series is hard to read (≤7 rule). Split into small multiples or drop series. |
 | `low-trust-sql` | correctness | info | `[[trust:low]]` appears in `query` or `description` | Verify this novel SQL against the schema/context; reuse a trusted saved question if one exists. |
 
 > Only `pivot` genuinely requires its config object — `trendConfig` / `singleValueConfig` /
@@ -118,9 +128,9 @@ text/image/divider assets are ignored for counting.
 | `asset-not-in-layout` | correctness | error | a question asset id has no entry in `layout.items` | Add a layout item (≥3×3) for question {id}, or remove it from assets. |
 | `layout-orphan` | correctness | error | a `layout.items` id has no matching asset | Remove layout item {id}, or add the matching question to assets. |
 | `tile-overlap` | correctness | warn | two layout rects overlap on the 12-col grid | Reposition tiles so their grid rectangles don't overlap. |
-| `tile-too-small` | craft | warn | a question tile has `w < 3` or `h < 3` | Question tiles need ≥3×3 to be legible; enlarge tile {id}. |
-| `visual-count` | craft | error / warn | question count `< 1` (error, empty) / `> 9` (warn) | Keep 5–9 visuals per dashboard; split into multiple dashboards or drop low-value charts. |
-| `duplicate-question` | craft | info | the same question id is referenced more than once | Reference question {id} once; parameterize instead of duplicating. |
+| `tile-too-small` | clarity | warn | a question tile has `w < 3` or `h < 3` | Question tiles need ≥3×3 to be legible; enlarge tile {id}. |
+| `visual-count` | clarity | error / warn | question count `< 1` (error, empty) / `> 9` (warn) | Keep 5–9 visuals per dashboard; split into multiple dashboards or drop low-value charts. |
+| `duplicate-question` | correctness | info | the same question id is referenced more than once | Reference question {id} once; parameterize instead of duplicating. |
 | `no-description` | clarity | info | `description` blank | Add a description stating the dashboard's decision purpose. |
 
 > `asset-not-in-layout` / `layout-orphan` only fire when a `layout` with `items` exists — a
@@ -165,14 +175,14 @@ read the `toolCall` args straight off the assistant message.
 
 ```ts
 // SubmitRubric params
-{ findings: Array<{ category: 'clarity'|'correctness'|'craft'|'aesthetics';
+{ findings: Array<{ category: 'correctness'|'clarity'|'aesthetics';
                     severity: 'error'|'warn'|'info';
                     title: string; detail: string; fix: string }> }  // [] if genuinely good
 ```
 
 - **Input** = `fileToMarkup(fileType, content)` as text + (when available) the rendered
   full-file screenshot as an `{ type:'image', url }` content block. **The judge is most
-  valuable WITH the visual** — the screenshot is what lets it grade aesthetics/craft. The URL is
+  valuable WITH the visual** — the screenshot is what lets it grade aesthetics + visual clarity. The URL is
   the one the app already captures + uploads on the send path
   (`lib/screenshot/app-state-screenshot.ts`, the same image the `Screenshot` tool surfaces),
   carried on `fileState.image.url`. The `CheckFileHealth` tool pulls it from the current

@@ -26,23 +26,23 @@ export function scoreDashboard(content: DashboardContent): RubricFinding[] {
       "Add a description stating the dashboard's decision purpose."));
   }
 
-  // visual-count (craft)
+  // visual-count (clarity — too few/many hurts comprehension, not correctness)
   if (questionIds.length < 1) {
-    out.push(finding('dashboard.visual-count', 'craft', 'error', 'Empty dashboard',
+    out.push(finding('dashboard.visual-count', 'clarity', 'error', 'Empty dashboard',
       'The dashboard has no question visuals.',
       "Add 5–9 question tiles that answer the dashboard's decision."));
   } else if (questionIds.length > MAX_VISUALS) {
-    out.push(finding('dashboard.visual-count', 'craft', 'warn', 'Too many visuals',
+    out.push(finding('dashboard.visual-count', 'clarity', 'warn', 'Too many visuals',
       `The dashboard has ${questionIds.length} visuals (more than ${MAX_VISUALS}).`,
       'Keep 5–9 visuals per dashboard; split into multiple dashboards or drop low-value charts.'));
   }
 
-  // duplicate-question (craft)
+  // duplicate-question (correctness — an inconsistent/redundant reference)
   const seen = new Set<number>();
   const dupes = new Set<number>();
   for (const id of questionIds) (seen.has(id) ? dupes : seen).add(id);
   for (const id of dupes) {
-    out.push(finding('dashboard.duplicate-question', 'craft', 'info', 'Duplicated question',
+    out.push(finding('dashboard.duplicate-question', 'correctness', 'info', 'Duplicated question',
       `Question ${id} is referenced more than once.`,
       `Reference question ${id} once; parameterize instead of duplicating.`));
   }
@@ -67,10 +67,10 @@ export function scoreDashboard(content: DashboardContent): RubricFinding[] {
           `Remove layout item ${id}, or add the matching question to assets.`));
       }
     }
-    // tile-too-small (craft)
+    // tile-too-small (clarity — too small to read)
     for (const it of items) {
       if (typeof it.id === 'number' && (it.w < MIN_TILE || it.h < MIN_TILE)) {
-        out.push(finding('dashboard.tile-too-small', 'craft', 'warn', 'Tile too small',
+        out.push(finding('dashboard.tile-too-small', 'clarity', 'warn', 'Tile too small',
           `Tile ${it.id} is ${it.w}×${it.h} (min 3×3).`,
           `Question tiles need ≥3×3 to be legible; enlarge tile ${it.id}.`));
       }

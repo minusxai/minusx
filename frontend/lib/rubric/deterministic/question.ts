@@ -63,16 +63,16 @@ export function scoreQuestion(content: QuestionContent): RubricFinding[] {
     }
   }
 
-  // pie-multi-measure (craft)
+  // pie-multi-measure (correctness — a pie/funnel physically can't represent >1 measure)
   if ((viz?.type === 'pie' || viz?.type === 'funnel') && (viz.yCols?.length ?? 0) > 1) {
-    out.push(finding('question.pie-multi-measure', 'craft', 'warn', 'Pie/funnel with multiple measures',
+    out.push(finding('question.pie-multi-measure', 'correctness', 'warn', 'Pie/funnel with multiple measures',
       `A ${viz.type} chart has ${viz.yCols!.length} measures; it can only show one.`,
       'Keep a single yCols value, or use a bar chart to compare multiple measures.'));
   }
 
-  // too-many-series (craft)
+  // too-many-series (clarity — technically shows the data, just cluttered)
   if ((viz?.type === 'line' || viz?.type === 'bar' || viz?.type === 'area') && (viz.yCols?.length ?? 0) > MAX_SERIES) {
-    out.push(finding('question.too-many-series', 'craft', 'warn', 'Too many series',
+    out.push(finding('question.too-many-series', 'clarity', 'warn', 'Too many series',
       `The chart has ${viz.yCols!.length} series (more than ${MAX_SERIES}).`,
       'More than 5 series is hard to read (the ≤7 rule). Split into small multiples or drop series.'));
   }

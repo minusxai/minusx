@@ -22,18 +22,18 @@ describe('scoring (1–5 scale)', () => {
   });
 
   it('weights category scores into the overall (question weights)', () => {
-    // clarity 5*.25 + correctness 2*.45 + craft 5*.2 + aesthetics 5*.1 = 3.65 → 3.5
+    // correctness 2*.5 + clarity 5*.35 + aesthetics 5*.15 = 3.5
     const report = buildReport('question', 'deterministic', [f('error'), f('warn')]);
     expect(report.categories.find((c) => c.category === 'correctness')?.score).toBe(2);
     expect(report.overall).toBe(3.5);
     expect(report.grade).toBe('fair');
   });
 
-  it('scores a clean file at 5 / good with all four categories present', () => {
+  it('scores a clean file at 5 / good with all three categories present (priority order)', () => {
     const report = buildReport('story', 'deterministic', []);
     expect(report.overall).toBe(5);
     expect(report.grade).toBe('good');
-    expect(report.categories.map((c) => c.category)).toEqual(['clarity', 'correctness', 'craft', 'aesthetics']);
+    expect(report.categories.map((c) => c.category)).toEqual(['correctness', 'clarity', 'aesthetics']);
   });
 
   it('applies grade bands at the boundaries', () => {

@@ -28,14 +28,14 @@ export const SEVERITY_DEDUCTION: Record<RubricSeverity, number> = {
   info: 0.5,
 };
 
-/** Fixed category order — every report emits all four, even with no findings. */
-export const CATEGORIES: readonly RubricCategory[] = ['clarity', 'correctness', 'craft', 'aesthetics'];
+/** Fixed category order (priority waterfall) — every report emits all three. */
+export const CATEGORIES: readonly RubricCategory[] = ['correctness', 'clarity', 'aesthetics'];
 
 /** Per-type category weights (each row sums to 1). */
 export const CATEGORY_WEIGHTS: Record<RubricFileType, Record<RubricCategory, number>> = {
-  question:  { clarity: 0.25, correctness: 0.45, craft: 0.2,  aesthetics: 0.1 },
-  dashboard: { clarity: 0.2,  correctness: 0.4,  craft: 0.25, aesthetics: 0.15 },
-  story:     { clarity: 0.25, correctness: 0.25, craft: 0.2,  aesthetics: 0.3 },
+  question:  { correctness: 0.5,  clarity: 0.35, aesthetics: 0.15 },
+  dashboard: { correctness: 0.45, clarity: 0.35, aesthetics: 0.2 },
+  story:     { correctness: 0.3,  clarity: 0.3,  aesthetics: 0.4 },
 };
 
 export const GRADE_GOOD_MIN = 4;

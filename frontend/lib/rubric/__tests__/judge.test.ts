@@ -18,12 +18,12 @@ function withFindings(findings: unknown[]): AssistantMessage {
 describe('judgeFile', () => {
   it('maps SubmitRubric findings into a scored llm-judge report', async () => {
     const msg = withFindings([
-      { category: 'craft', severity: 'warn', title: 'Generic palette', detail: 'purple gradient', fix: 'Pick a protagonist accent.' },
+      { category: 'aesthetics', severity: 'warn', title: 'Generic palette', detail: 'purple gradient', fix: 'Pick a protagonist accent.' },
     ]);
     const report = await judgeFile({ fileType: 'question', content: makeQuestion() }, async () => msg);
     expect(report.source).toBe('llm-judge');
-    expect(report.categories.find((c) => c.category === 'craft')?.findings[0]?.title).toBe('Generic palette');
-    expect(report.categories.find((c) => c.category === 'craft')?.score).toBe(4); // one warn: 5-1
+    expect(report.categories.find((c) => c.category === 'aesthetics')?.findings[0]?.title).toBe('Generic palette');
+    expect(report.categories.find((c) => c.category === 'aesthetics')?.score).toBe(4); // one warn: 5-1
   });
 
   it('scores a clean judgment at 100', async () => {
@@ -49,21 +49,20 @@ describe('combineReports', () => {
     const judge = buildJudgeReport();
     const combined = combineReports(deterministic, judge);
     expect(combined.source).toBe('combined');
-    // clarity carries the deterministic info (5-0.5=4.5), craft carries the judge warn (5-1=4)
+    // clarity carries the deterministic info (5-0.5=4.5), aesthetics carries the judge warn (5-1=4)
     expect(combined.categories.find((c) => c.category === 'clarity')?.score).toBe(4.5);
-    expect(combined.categories.find((c) => c.category === 'craft')?.score).toBe(4);
+    expect(combined.categories.find((c) => c.category === 'aesthetics')?.score).toBe(4);
   });
 });
 
 function buildJudgeReport() {
-  // craft warn → craft 4
+  // aesthetics warn → aesthetics 4
   return {
     fileType: 'question' as const, source: 'llm-judge' as const, overall: 5, grade: 'good' as const,
     categories: [
-      { category: 'clarity' as const, weight: 0.25, score: 5, findings: [] },
-      { category: 'correctness' as const, weight: 0.45, score: 5, findings: [] },
-      { category: 'craft' as const, weight: 0.2, score: 4, findings: [{ ruleId: 'judge.craft.0', category: 'craft' as const, severity: 'warn' as const, title: 't', detail: 'd', fix: 'f' }] },
-      { category: 'aesthetics' as const, weight: 0.1, score: 5, findings: [] },
+      { category: 'correctness' as const, weight: 0.5, score: 5, findings: [] },
+      { category: 'clarity' as const, weight: 0.35, score: 5, findings: [] },
+      { category: 'aesthetics' as const, weight: 0.15, score: 4, findings: [{ ruleId: 'judge.aesthetics.0', category: 'aesthetics' as const, severity: 'warn' as const, title: 't', detail: 'd', fix: 'f' }] },
     ],
   };
 }

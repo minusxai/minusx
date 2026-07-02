@@ -25,7 +25,7 @@ const SEVERITY: Record<RubricSeverity, { color: string; icon: IconType }> = {
   info: { color: 'fg.muted', icon: LuInfo },
 };
 const CATEGORY_LABEL: Record<RubricCategory, string> = {
-  clarity: 'Clarity', correctness: 'Correctness', craft: 'Craft', aesthetics: 'Aesthetics',
+  correctness: 'Correctness', clarity: 'Clarity', aesthetics: 'Aesthetics',
 };
 const SEVERITY_ORDER: Record<RubricSeverity, number> = { error: 0, warn: 1, info: 2 };
 

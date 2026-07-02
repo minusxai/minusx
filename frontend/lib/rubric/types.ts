@@ -13,13 +13,16 @@ import type { FileType } from '@/lib/types';
 export type RubricSeverity = 'error' | 'warn' | 'info';
 
 /**
- * Analytic-rubric dimensions. Every finding belongs to exactly one.
- * - clarity: understandable at a glance (descriptions, headlines, query size)
- * - correctness: structurally sound & honest (params in sync, viz configured, layout integrity)
- * - craft: readability / right-chart-for-the-task / composition
- * - aesthetics: visual beauty & polish (palette, design tokens, does it look delightful)
+ * Analytic-rubric dimensions. Three orthogonal buckets, assigned by a PRIORITY WATERFALL —
+ * a rule belongs to the FIRST category whose test it fails, in this order:
+ * - correctness: "If ignored, is it wrong, broken, or dishonest?" (params, viz config, layout
+ *   integrity, fabricated numbers, a chart that physically can't represent the data)
+ * - clarity: "It's correct, but is it hard to understand at a glance?" (labels, descriptions,
+ *   headlines, query bloat, too many series, tile too small, overload)
+ * - aesthetics: "It works and reads fine, but does it look unpolished/generic?" (palette,
+ *   typography, design tokens, composition, AI-default look)
  */
-export type RubricCategory = 'clarity' | 'correctness' | 'craft' | 'aesthetics';
+export type RubricCategory = 'correctness' | 'clarity' | 'aesthetics';
 
 /** File types the rubric currently scores. */
 export type RubricFileType = 'question' | 'dashboard' | 'story';

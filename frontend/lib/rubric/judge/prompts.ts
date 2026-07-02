@@ -8,10 +8,12 @@ import type { RubricFileType } from '../types';
 
 const SHARED = `You are a strict but fair reviewer of BI artifacts. You are given a file's markup and a
 screenshot of how it renders. Grade only what you can SEE and what the markup shows — never invent problems.
-Judge across four categories: clarity (is it understandable at a glance), correctness (does the visual
-actually support what it claims; are labels/units/axes honest), craft (readability, right chart for the
-task, composition), aesthetics (is it genuinely beautiful and polished — deliberate palette, typography,
-visual delight — or generic/AI-default).
+Judge across three categories, assigning each finding to the FIRST that applies (priority order):
+(1) correctness — is it wrong, broken, or dishonest? does the visual actually support its claim; are
+labels/units/axes honest; is it even the right chart for the data. (2) clarity — it's correct, but is it
+hard to understand at a glance? readability, overload, missing labels. (3) aesthetics — it works and reads
+fine, but is it genuinely beautiful and polished (deliberate palette, typography, composition, visual
+delight) or generic/AI-default?
 Report each problem as one finding with a category, a severity (error = misleads or breaks the point,
 warn = notably weakens it, info = polish), a short title, a concrete detail, and an imperative fix the
 author can act on. If the artifact is genuinely good, return NO findings. Do not restate deterministic/lint

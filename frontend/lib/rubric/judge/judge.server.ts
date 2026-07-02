@@ -28,7 +28,7 @@ export function setJudgeModel(m: Model<Api>): Model<Api> {
   return prev;
 }
 
-const CATEGORY = Type.Union([Type.Literal('clarity'), Type.Literal('correctness'), Type.Literal('craft'), Type.Literal('aesthetics')]);
+const CATEGORY = Type.Union([Type.Literal('correctness'), Type.Literal('clarity'), Type.Literal('aesthetics')]);
 const SEVERITY = Type.Union([Type.Literal('error'), Type.Literal('warn'), Type.Literal('info')]);
 
 const SubmitRubricParams = Type.Object({
