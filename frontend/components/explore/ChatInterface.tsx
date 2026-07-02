@@ -504,13 +504,15 @@ export default function ChatInterface({
     return null;
   }, [conversation?.executionState, conversation?.messages, conversation?.agent]);
 
-  // Check if conversation has exceeded the token limit. The whole conversation (system + skills +
-  // the full append-only log + app state) is re-sent on every LLM call, so `total_tokens` is the size
-  // of the entire conversation at that point. 150k was far too conservative for the 1M-context model —
-  // a single rich turn (e.g. building a data story: schema search + several queries + edits) legitimately
-  // lands near 150k, which tripped the lock-out after ONE story. Gate only genuinely runaway
-  // conversations where starting fresh actually helps.
-  const TOKEN_LIMIT = 500_000;
+  // Warn near the model's context window. The whole conversation (system + skills + the full
+  // append-only log + app state) is re-sent on every LLM call, so `total_tokens` is the size of the
+  // entire conversation at that point. The chat models in use are ~200k–400k window
+  // (claude-sonnet-4-6 / gpt-5.4), so the threshold must sit BELOW that — 150k gives headroom to warn
+  // before the hard "exceeds the context window" API error. (It must NOT be raised above the window,
+  // or the warning never fires and users just hit the hard error.) The real fix for a single story/
+  // dashboard tripping this is reducing per-turn context bloat — see the background-CreateFile image
+  // suppression in tool-handlers — not moving this gate.
+  const TOKEN_LIMIT = 150_000;
   const tokenLimitExceeded = useMemo(() => {
     if (!conversation?.messages) return false;
     // Gate only makes sense once there's accumulated history to shed by starting
