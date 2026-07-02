@@ -12,8 +12,14 @@ import type { FileType } from '@/lib/types';
 
 export type RubricSeverity = 'error' | 'warn' | 'info';
 
-/** Analytic-rubric dimensions. Every finding belongs to exactly one. */
-export type RubricCategory = 'clarity' | 'correctness' | 'craft';
+/**
+ * Analytic-rubric dimensions. Every finding belongs to exactly one.
+ * - clarity: understandable at a glance (descriptions, headlines, query size)
+ * - correctness: structurally sound & honest (params in sync, viz configured, layout integrity)
+ * - craft: readability / right-chart-for-the-task / composition
+ * - aesthetics: visual beauty & polish (palette, design tokens, does it look delightful)
+ */
+export type RubricCategory = 'clarity' | 'correctness' | 'craft' | 'aesthetics';
 
 /** File types the rubric currently scores. */
 export type RubricFileType = 'question' | 'dashboard' | 'story';

@@ -45,7 +45,7 @@ decoration.
 
 ```ts
 type RubricSeverity = 'error' | 'warn' | 'info';
-type RubricCategory = 'clarity' | 'correctness' | 'craft';
+type RubricCategory = 'clarity' | 'correctness' | 'craft' | 'aesthetics';
 
 interface RubricFinding {
   ruleId: string;            // stable, e.g. 'question.query-too-long'
@@ -61,25 +61,33 @@ interface RubricCategoryScore {
 interface RubricReport {
   fileType: FileType;
   source: 'deterministic' | 'llm-judge' | 'combined';
-  overall: number;                    // 0–100 weighted
-  grade: 'good' | 'fair' | 'poor';    // >=80 / >=50 / else
+  overall: number;                    // 1–5 weighted
+  grade: 'good' | 'fair' | 'poor';    // >=4 / >=2.5 / else
   categories: RubricCategoryScore[];
 }
 ```
 
+### The four categories
+- **clarity** — understandable at a glance (descriptions, headlines, query size)
+- **correctness** — structurally sound & honest (params in sync, viz configured, layout integrity, no fabricated numbers)
+- **craft** — readability / right-chart-for-the-task / composition
+- **aesthetics** — visual beauty & polish (deliberate palette, typography, delight vs AI-default). Mostly LLM-judge territory — beauty can't be measured statically.
+
 ## Scoring math
 
-Each category starts at 100; deduct per finding — **error −25, warn −10, info −3** — floored
-at 0. Overall = weighted mean of category scores. Weights and deductions are constants in one
-place (`scoring.ts`) so they calibrate against a human gold set later.
+A deliberately **coarse 1–5 scale** (avoids false precision / variance). Each category starts
+at **5**; deduct per finding — **error −2, warn −1, info −0.5** — then round to the nearest 0.5
+and clamp to [1, 5]. Overall = weighted mean of category scores (same 1–5 scale). Weights and
+deductions are constants in one place (`scoring.ts`) so they calibrate against a human gold set
+later.
 
-| type | clarity | correctness | craft |
-|---|---|---|---|
-| question  | 0.3 | 0.5 | 0.2 |
-| dashboard | 0.2 | 0.5 | 0.3 |
-| story     | 0.3 | 0.3 | 0.4 |
+| type | clarity | correctness | craft | aesthetics |
+|---|---|---|---|---|
+| question  | 0.25 | 0.45 | 0.2  | 0.1 |
+| dashboard | 0.2  | 0.4  | 0.25 | 0.15 |
+| story     | 0.25 | 0.25 | 0.2  | 0.3 |
 
-Grade bands: `overall >= 80 → good`, `>= 50 → fair`, else `poor`.
+Grade bands: `overall >= 4 → good`, `>= 2.5 → fair`, else `poor`.
 
 ## Rule catalog — Question (`QuestionContent`)
 
@@ -126,8 +134,8 @@ text/image/divider assets are ignored for counting.
 | `no-headline` | clarity | warn | body has no `<h1>` / `<h2>` heading | Add a headline that states the finding (a claim with a number), not a topic. |
 | `typed-number` | correctness | warn | a factual figure (`$`/`%`/thousands-separator or ≥4 digits) sits in prose text, not inside a `<Number>` / `single_value` embed | Replace the typed figure "{x}" with a live `<Number>` embed so it can't go stale or be wrong. |
 | `no-lead` | clarity | info | `description` blank | State the single lead finding (with its number) in the description. |
-| `no-design-tokens` | craft | info | the `<style>` block has < 2 distinct hex colors, or no `font-family` | Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling. |
-| `too-many-colors` | craft | info | the `<style>` block has > 10 distinct hex colors | Reduce to a disciplined 4–6 color palette with one protagonist accent. |
+| `no-design-tokens` | aesthetics | info | the `<style>` block has < 2 distinct hex colors, or no `font-family` | Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling. |
+| `too-many-colors` | aesthetics | info | the `<style>` block has > 10 distinct hex colors | Reduce to a disciplined 4–6 color palette with one protagonist accent. |
 
 > Fuzzy craft judgments — forbidden default palettes (cream+serif+terracotta,
 > acid-green-on-black, purple gradients), "does the headline actually make a claim", "does the
@@ -157,22 +165,26 @@ read the `toolCall` args straight off the assistant message.
 
 ```ts
 // SubmitRubric params
-{ findings: Array<{ category: 'clarity'|'correctness'|'craft';
+{ findings: Array<{ category: 'clarity'|'correctness'|'craft'|'aesthetics';
                     severity: 'error'|'warn'|'info';
                     title: string; detail: string; fix: string }> }  // [] if genuinely good
 ```
 
 - **Input** = `fileToMarkup(fileType, content)` as text + (when available) the rendered
-  full-file screenshot as an `{ type:'image', url }` content block. The URL is the one the app
-  already captures + uploads on the send path (`lib/screenshot/app-state-screenshot.ts`) — the
-  judge reuses it, it never renders anything itself. With no screenshot it judges from markup.
+  full-file screenshot as an `{ type:'image', url }` content block. **The judge is most
+  valuable WITH the visual** — the screenshot is what lets it grade aesthetics/craft. The URL is
+  the one the app already captures + uploads on the send path
+  (`lib/screenshot/app-state-screenshot.ts`, the same image the `Screenshot` tool surfaces),
+  carried on `fileState.image.url`. The `CheckFileHealth` tool pulls it from the current
+  app-state file; the API route takes a client-captured screenshot in the POST body. It never
+  renders anything itself; with no screenshot it falls back to markup-only.
 - **Model** = dedicated **Opus 4.8** (`getModel('anthropic', 'claude-opus-4-8')`), independent
   of any chat model, with a `setJudgeModel` test seam.
 - **Prompts** (`judge/prompts.ts`) — a shared reviewer preamble + per-type criteria distilled
   from `skill_questions` / `skill_dashboards` / `skill_stories`. The judge is told to skip
   lint-style issues the deterministic pass already covers.
 - **Robustness** — if the model doesn't call `SubmitRubric`, or a finding is malformed
-  (missing category/severity/title), it's dropped; worst case is an empty (100) judge report.
+  (missing category/severity/title), it's dropped; worst case is an empty (5/5) judge report.
 - `combineReports(deterministic, judge)` flattens both reports' findings and rebuilds one with
   `source: 'combined'`.
 
@@ -187,8 +199,9 @@ output idea from `agents/eval/submit-tools.ts`.
    projection. Cheap + pure, safe every time. The LLM judge is never auto-run (too expensive).
 2. **Agent tool.** `CheckFileHealth(fileId, { llmJudge? })` in
    `agents/analyst/health-tools.ts`, loads content via `FilesAPI.loadFile`, runs the
-   deterministic scorer + optional judge. Registered in `analyst-agent.ts` and
-   `V2_REGISTRABLES`.
+   deterministic scorer + (when `llmJudge`) the judge, reusing the current file's app-state
+   screenshot (`fileState.image.url`) so the judge grades the visual. Registered in
+   `analyst-agent.ts`, `web-analyst.ts`, and `V2_REGISTRABLES`.
 3. **UI + API.** `GET /api/files/[id]/rubric` (deterministic) / `POST { screenshot }`
    (judge), modeled on `app/api/files/[id]/preview/route.ts`; a Lighthouse-style panel on the
    file page (Chakra, theme colors).

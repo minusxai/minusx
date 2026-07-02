@@ -27,7 +27,7 @@ describe('auto-injected rubric on compressed file state', () => {
     });
     const { fileState } = dbFileToCompressedAugmented(file);
     expect(fileState.rubric?.grade).toBe('good');
-    expect(fileState.rubric?.overall).toBe(100);
+    expect(fileState.rubric?.overall).toBe(5);
   });
 
   it('does not attach a rubric to non-scored file types', () => {

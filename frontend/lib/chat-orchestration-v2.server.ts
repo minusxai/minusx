@@ -26,6 +26,7 @@ import {
   LoadContext,
 } from '@/agents/web-analyst/web-analyst';
 import { SearchFiles, ReadFiles as ServerReadFiles } from '@/agents/analyst/file-tools';
+import { CheckFileHealth } from '@/agents/analyst/health-tools';
 import { SlackAgent } from '@/agents/slack/slack-agent';
 import { OnboardingContextAgent, OnboardingDashboardAgent } from '@/agents/onboarding/onboarding-agents';
 import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
@@ -102,6 +103,7 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   FuzzyMatch,
   ReadFiles,
   SearchFiles,
+  CheckFileHealth,
   EditFile,
   CreateFile,
   Navigate,

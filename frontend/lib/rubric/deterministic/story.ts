@@ -69,15 +69,15 @@ export function scoreStory(content: StoryContent): RubricFinding[] {
       `Replace the typed figure "${first}" with a live <Number> embed so it can't go stale or be wrong.`));
   }
 
-  // design tokens (craft)
+  // design tokens (aesthetics)
   const colors = distinctHexColors(acc.css);
   const fonts = hasFontFamily(acc.css);
   if (colors.length < MIN_COLORS || !fonts) {
-    out.push(finding('story.no-design-tokens', 'craft', 'info', 'Thin design tokens',
+    out.push(finding('story.no-design-tokens', 'aesthetics', 'info', 'Thin design tokens',
       `The style block defines ${colors.length} color(s)${fonts ? '' : ' and no font-family'}.`,
       'Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling.'));
   } else if (colors.length > MAX_COLORS) {
-    out.push(finding('story.too-many-colors', 'craft', 'info', 'Too many colors',
+    out.push(finding('story.too-many-colors', 'aesthetics', 'info', 'Too many colors',
       `The style block defines ${colors.length} distinct colors.`,
       'Reduce to a disciplined 4–6 color palette with one protagonist accent.'));
   }

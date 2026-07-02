@@ -23,23 +23,23 @@ describe('judgeFile', () => {
     const report = await judgeFile({ fileType: 'question', content: makeQuestion() }, async () => msg);
     expect(report.source).toBe('llm-judge');
     expect(report.categories.find((c) => c.category === 'craft')?.findings[0]?.title).toBe('Generic palette');
-    expect(report.categories.find((c) => c.category === 'craft')?.score).toBe(90); // one warn
+    expect(report.categories.find((c) => c.category === 'craft')?.score).toBe(4); // one warn: 5-1
   });
 
   it('scores a clean judgment at 100', async () => {
     const report = await judgeFile({ fileType: 'story', content: { description: 'x', story: '<div/>' } }, async () => withFindings([]));
-    expect(report.overall).toBe(100);
+    expect(report.overall).toBe(5);
   });
 
   it('returns an empty report when the model does not call SubmitRubric', async () => {
     const textOnly = { ...withFindings([]), content: [{ type: 'text', text: 'hi' }] } as AssistantMessage;
     const report = await judgeFile({ fileType: 'question', content: makeQuestion() }, async () => textOnly);
-    expect(report.overall).toBe(100);
+    expect(report.overall).toBe(5);
   });
 
   it('drops malformed findings (missing category)', async () => {
     const report = await judgeFile({ fileType: 'question', content: makeQuestion() }, async () => withFindings([{ severity: 'error', title: 'x' }]));
-    expect(report.overall).toBe(100);
+    expect(report.overall).toBe(5);
   });
 });
 
@@ -49,20 +49,21 @@ describe('combineReports', () => {
     const judge = buildJudgeReport();
     const combined = combineReports(deterministic, judge);
     expect(combined.source).toBe('combined');
-    // clarity carries the deterministic info (-3), craft carries the judge warn (-10)
-    expect(combined.categories.find((c) => c.category === 'clarity')?.score).toBe(97);
-    expect(combined.categories.find((c) => c.category === 'craft')?.score).toBe(90);
+    // clarity carries the deterministic info (5-0.5=4.5), craft carries the judge warn (5-1=4)
+    expect(combined.categories.find((c) => c.category === 'clarity')?.score).toBe(4.5);
+    expect(combined.categories.find((c) => c.category === 'craft')?.score).toBe(4);
   });
 });
 
 function buildJudgeReport() {
-  // craft warn → craft 90
+  // craft warn → craft 4
   return {
-    fileType: 'question' as const, source: 'llm-judge' as const, overall: 98, grade: 'good' as const,
+    fileType: 'question' as const, source: 'llm-judge' as const, overall: 5, grade: 'good' as const,
     categories: [
-      { category: 'clarity' as const, weight: 0.3, score: 100, findings: [] },
-      { category: 'correctness' as const, weight: 0.5, score: 100, findings: [] },
-      { category: 'craft' as const, weight: 0.2, score: 90, findings: [{ ruleId: 'judge.craft.0', category: 'craft' as const, severity: 'warn' as const, title: 't', detail: 'd', fix: 'f' }] },
+      { category: 'clarity' as const, weight: 0.25, score: 5, findings: [] },
+      { category: 'correctness' as const, weight: 0.45, score: 5, findings: [] },
+      { category: 'craft' as const, weight: 0.2, score: 4, findings: [{ ruleId: 'judge.craft.0', category: 'craft' as const, severity: 'warn' as const, title: 't', detail: 'd', fix: 'f' }] },
+      { category: 'aesthetics' as const, weight: 0.1, score: 5, findings: [] },
     ],
   };
 }

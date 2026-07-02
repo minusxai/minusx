@@ -1,6 +1,7 @@
 /**
  * Rubric scoring math — pure. Turns a flat findings list into per-category scores and a
- * weighted overall + grade. All tunable constants (deductions, per-type category weights,
+ * weighted overall + grade on a coarse **1–5 scale** (deliberately low-resolution to avoid
+ * false precision / variance). All tunable constants (deductions, per-type category weights,
  * grade bands) live here so they can be calibrated against a human gold set later.
  *
  * See `frontend/docs/rubrik.md`.
@@ -16,25 +17,35 @@ import type {
   RubricSource,
 } from './types';
 
-/** Points deducted from a category's 100 baseline per finding, by severity. */
+/** Every score starts here (perfect) and findings deduct from it. */
+export const MAX_SCORE = 5;
+export const MIN_SCORE = 1;
+
+/** Points deducted from the 5 baseline per finding, by severity. */
 export const SEVERITY_DEDUCTION: Record<RubricSeverity, number> = {
-  error: 25,
-  warn: 10,
-  info: 3,
+  error: 2,
+  warn: 1,
+  info: 0.5,
 };
 
-/** Fixed category order — every report emits all three, even with no findings. */
-export const CATEGORIES: readonly RubricCategory[] = ['clarity', 'correctness', 'craft'];
+/** Fixed category order — every report emits all four, even with no findings. */
+export const CATEGORIES: readonly RubricCategory[] = ['clarity', 'correctness', 'craft', 'aesthetics'];
 
 /** Per-type category weights (each row sums to 1). */
 export const CATEGORY_WEIGHTS: Record<RubricFileType, Record<RubricCategory, number>> = {
-  question: { clarity: 0.3, correctness: 0.5, craft: 0.2 },
-  dashboard: { clarity: 0.2, correctness: 0.5, craft: 0.3 },
-  story: { clarity: 0.3, correctness: 0.3, craft: 0.4 },
+  question:  { clarity: 0.25, correctness: 0.45, craft: 0.2,  aesthetics: 0.1 },
+  dashboard: { clarity: 0.2,  correctness: 0.4,  craft: 0.25, aesthetics: 0.15 },
+  story:     { clarity: 0.25, correctness: 0.25, craft: 0.2,  aesthetics: 0.3 },
 };
 
-export const GRADE_GOOD_MIN = 80;
-export const GRADE_FAIR_MIN = 50;
+export const GRADE_GOOD_MIN = 4;
+export const GRADE_FAIR_MIN = 2.5;
+
+/** Round to the nearest 0.5 and clamp into [1, 5]. */
+function toScore(raw: number): number {
+  const half = Math.round(raw * 2) / 2;
+  return Math.max(MIN_SCORE, Math.min(MAX_SCORE, half));
+}
 
 export function gradeFor(overall: number): RubricGrade {
   if (overall >= GRADE_GOOD_MIN) return 'good';
@@ -42,20 +53,20 @@ export function gradeFor(overall: number): RubricGrade {
   return 'poor';
 }
 
-/** Deduct severity points from 100 for one category's findings, floored at 0. */
+/** Deduct severity points from 5 for one category's findings, rounded/clamped to [1,5]. */
 export function scoreCategory(
   category: RubricCategory,
   weight: number,
   findings: RubricFinding[],
 ): RubricCategoryScore {
   const deduction = findings.reduce((sum, f) => sum + SEVERITY_DEDUCTION[f.severity], 0);
-  return { category, weight, findings, score: Math.max(0, 100 - deduction) };
+  return { category, weight, findings, score: toScore(MAX_SCORE - deduction) };
 }
 
 /**
  * Assemble a full report from a flat findings list. Findings are grouped by their own
- * `category`; every category is always present (missing → score 100). Overall is the
- * weight-weighted mean of category scores, rounded to an integer.
+ * `category`; every category is always present (missing → score 5). Overall is the
+ * weight-weighted mean of category scores, on the same 1–5 scale.
  */
 export function buildReport(
   fileType: RubricFileType,
@@ -66,8 +77,6 @@ export function buildReport(
   const categories = CATEGORIES.map((category) =>
     scoreCategory(category, weights[category], findings.filter((f) => f.category === category)),
   );
-  const overall = Math.round(
-    categories.reduce((sum, c) => sum + c.score * c.weight, 0),
-  );
+  const overall = toScore(categories.reduce((sum, c) => sum + c.score * c.weight, 0));
   return { fileType, source, overall, grade: gradeFor(overall), categories };
 }

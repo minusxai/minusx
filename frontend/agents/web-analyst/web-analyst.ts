@@ -4,6 +4,7 @@ import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { SearchDBSchema, ExecuteQuery, FuzzyMatch } from '@/agents/benchmark-analyst/db-tools.server';
 import { SearchFiles } from '@/agents/analyst/file-tools';
+import { CheckFileHealth } from '@/agents/analyst/health-tools';
 import { getAgentModelOrTestFallback, getAnalystModelConfig, getAnalystModelOptions } from '@/agents/analyst/model-config';
 import {
   EditFile,
@@ -54,6 +55,7 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     FuzzyMatch.schema,
     ReadFiles.schema,
     SearchFiles.schema,
+    CheckFileHealth.schema,
     EditFile.schema,
     CreateFile.schema,
     Navigate.schema,
