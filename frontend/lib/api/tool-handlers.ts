@@ -656,8 +656,23 @@ registerFrontendTool('EditFile', async (args, context) => {
       // Mirror editFileStr's \n normalization
       const normalizedOld = oldMatch.includes('\\n') ? oldMatch.replace(/\\n/g, '\n') : oldMatch;
       const normalizedNew = newMatch.includes('\\n') ? newMatch.replace(/\\n/g, '\n') : newMatch;
-      const effectiveOld = workingStr.includes(oldMatch) ? oldMatch : normalizedOld;
+      let effectiveOld = workingStr.includes(oldMatch) ? oldMatch : normalizedOld;
       const effectiveNew = oldMatch === effectiveOld ? newMatch : normalizedNew;
+      // Auto-fix: when oldMatch is just a bare opening tag "<tagname>" and newMatch includes the
+      // matching closing tag "</tagname>", the replacement would leave the original closing tag
+      // dangling (double-close corruption → JSX parse failure). Expand effectiveOld to include
+      // the current element content up to (and including) the first matching closing tag.
+      const bareOpenTagM = effectiveOld.match(/^<([a-zA-Z][\w-]*)>$/);
+      if (bareOpenTagM) {
+        const closingTag = `</${bareOpenTagM[1]}>`;
+        if ((effectiveNew.includes(closingTag) || normalizedNew.includes(closingTag)) && workingStr.includes(effectiveOld)) {
+          const openIdx = workingStr.indexOf(effectiveOld);
+          const closeIdx = openIdx !== -1 ? workingStr.indexOf(closingTag, openIdx) : -1;
+          if (closeIdx !== -1) {
+            effectiveOld = workingStr.slice(openIdx, closeIdx + closingTag.length);
+          }
+        }
+      }
       if (!workingStr.includes(effectiveOld)) {
         const err = `String "${oldMatch}" not found in file`;
         const failureContent = {
