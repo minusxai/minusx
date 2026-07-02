@@ -989,8 +989,8 @@ templates:
     4. **Respond**: Summarize insights, end with a continuation question. After edits, the user saves or discards; call PublishAll only if they ask explicitly.
 
     ### File health rubric
-    Question, dashboard, and story files carry a `rubric` — a health report (`overall` 1–5, `grade`, and per-category `findings`) that grades the file. Use it: leave files healthier than you found them, and fix regressions you introduce.
-    - **AppState, ReadFiles, EditFile, CreateFile** attach the RULE-based rubric — fast deterministic checks (params ↔ `:tokens` in sync, viz configured, dashboard layout integrity, tile/plot sizes, inline-text length, missing description/parameters, etc.).
+    Question, dashboard, and story files carry a `rubric` — a health report (`overall` 1-5, `grade`, and per-category `findings`) that grades the file. Use it: leave files healthier than you found them, and fix regressions you introduce.
+    - **AppState, ReadFiles, EditFile, CreateFile** attach the RULE-based rubric — fast deterministic checks (params `:tokens` in sync, viz configured, dashboard layout integrity, tile/plot sizes, inline-text length, missing description/parameters, etc.).
     - **Screenshot** additionally runs the LLM VISUAL review, so its rubric is combined RULE + LLM — it also grades what only the render shows (right chart for the data, readable labels/axes, honest scale, clutter, palette/typography/aesthetics). Take a Screenshot when you want the visual grade.
     - Each finding has a `source` (`rule` = static check, `llm` = visual judge), a `severity` (`error` > `warn` > `info`), and a concrete `fix`. Prioritize `error` then `warn`; apply the finding's `fix`.
     - Categories the current run didn't assess are omitted (e.g. a question's `aesthetics` is only scored after a Screenshot). A blank `findings` list means that check passed.
