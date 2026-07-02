@@ -58,7 +58,7 @@ function scoreColor(score: number): string {
 
 // Which scorer produced a row — deterministic (static rule ids) vs the LLM checklist (llm.*).
 const SOURCE: Record<'static' | 'llm', { label: string; color: string }> = {
-  static: { label: 'Static', color: 'fg.muted' },
+  static: { label: 'Rules', color: 'fg.muted' },
   llm: { label: 'LLM', color: 'accent.secondary' },
 };
 const sourceOf = (ruleId: string): 'static' | 'llm' => (ruleId.startsWith('llm.') ? 'llm' : 'static');
