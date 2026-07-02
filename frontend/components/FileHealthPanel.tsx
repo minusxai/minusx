@@ -90,7 +90,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   const [judging, setJudging] = useState(false);
   const [judgeError, setJudgeError] = useState<string | null>(null);
   const [shot, setShot] = useState<string | null>(null); // the screenshot sent to the judge
-  const { captureFileView, blobToDataURL } = useScreenshot();
+  const { captureFileView, blobToDataURL } = useScreenshot({ maxWidth: 640 });
 
   const deterministic = useMemo<RubricReport | null>(() => {
     if (!isRubricFileType(fileType) || !savedContent) return null;
