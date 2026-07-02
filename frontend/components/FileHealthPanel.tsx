@@ -227,14 +227,29 @@ function FindingRow({ finding }: { finding: RubricFinding }) {
   const sev = SEVERITY[finding.severity];
   return (
     <Box borderWidth="1px" borderColor="border.default" borderRadius="md" p={2} bg="bg.subtle">
-      <HStack gap={2} align="start">
-        <Icon as={sev.icon} color={sev.color} mt="2px" flexShrink={0} />
-        <VStack align="stretch" gap={0.5}>
+      <VStack align="stretch" gap={0.5}>
+        <HStack gap={1.5} align="center">
+          <Icon as={sev.icon} color={sev.color} flexShrink={0} />
+          <Text
+            as="span"
+            px={1}
+            borderRadius="sm"
+            bg={`${sev.color}/15`}
+            color={sev.color}
+            fontSize="2xs"
+            fontWeight="700"
+            fontFamily="mono"
+            textTransform="uppercase"
+            letterSpacing="0.05em"
+            flexShrink={0}
+          >
+            {finding.severity}
+          </Text>
           <Text fontSize="xs" fontWeight="600" color="fg.default">{finding.title}</Text>
-          <Text fontSize="xs" color="fg.muted">{finding.detail}</Text>
-          <Text fontSize="xs" color="fg.subtle"><Text as="span" fontWeight="600">Fix: </Text>{finding.fix}</Text>
-        </VStack>
-      </HStack>
+        </HStack>
+        <Text fontSize="xs" color="fg.muted">{finding.detail}</Text>
+        <Text fontSize="xs" color="fg.subtle"><Text as="span" fontWeight="600">Fix: </Text>{finding.fix}</Text>
+      </VStack>
     </Box>
   );
 }
