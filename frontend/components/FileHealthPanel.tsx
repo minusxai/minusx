@@ -10,13 +10,14 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Box, HStack, VStack, Text, Icon, Popover, Portal, Button, Spinner } from '@chakra-ui/react';
-import { LuHeartPulse, LuCircleAlert, LuTriangleAlert, LuInfo, LuSparkles, LuRefreshCw } from 'react-icons/lu';
+import { LuHeartPulse, LuCircleAlert, LuTriangleAlert, LuInfo, LuSparkles, LuRefreshCw, LuCircleCheck } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import { useAppSelector, useAppStore } from '@/store/hooks';
 import { selectFile, selectMergedContent } from '@/store/filesSlice';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
-import type { RubricCategory, RubricFinding, RubricReport, RubricSeverity } from '@/lib/rubric/types';
+import { passedChecks } from '@/lib/rubric/checks';
+import type { RubricCategory, RubricFileType, RubricFinding, RubricReport, RubricSeverity } from '@/lib/rubric/types';
 
 /**
  * Door for piece 3: when true, opening the panel auto-runs the combined visual review (a
@@ -102,6 +103,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   const findings = report.categories
     .flatMap((c) => c.findings)
     .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+  const passed = passedChecks(fileType as RubricFileType, report);
   const gradeColor = GRADE_COLOR[report.grade];
 
   return (
@@ -177,14 +179,6 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                   ))}
                 </VStack>
 
-                {findings.length === 0 ? (
-                  <Text fontSize="xs" color="fg.muted">No issues found — this file looks healthy.</Text>
-                ) : (
-                  <VStack align="stretch" gap={2}>
-                    {findings.map((f, i) => <FindingRow key={`${f.ruleId}-${i}`} finding={f} />)}
-                  </VStack>
-                )}
-
                 <Button
                   aria-label="Run visual review with the LLM judge"
                   size="xs"
@@ -195,6 +189,25 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                   {judging ? <Spinner size="xs" /> : <Icon as={LuSparkles} />}
                   <Text>{report.source === 'deterministic' ? 'Run visual review' : 'Re-run visual review'}</Text>
                 </Button>
+
+                {findings.length === 0 ? (
+                  <Text fontSize="xs" color="fg.muted">No issues found — this file looks healthy.</Text>
+                ) : (
+                  <VStack align="stretch" gap={2}>
+                    {findings.map((f, i) => <FindingRow key={`${f.ruleId}-${i}`} finding={f} />)}
+                  </VStack>
+                )}
+
+                {passed.length > 0 && (
+                  <VStack align="stretch" gap={0.5} pt={0.5}>
+                    {passed.map((chk) => (
+                      <HStack key={chk.ruleId} gap={1.5} fontSize="2xs" color="fg.subtle">
+                        <Icon as={LuCircleCheck} color="accent.success" boxSize={2.5} flexShrink={0} />
+                        <Text>{chk.label}</Text>
+                      </HStack>
+                    ))}
+                  </VStack>
+                )}
               </VStack>
             </Popover.Body>
           </Popover.Content>
