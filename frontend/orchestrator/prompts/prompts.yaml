@@ -923,8 +923,9 @@ templates:
       2. **Distill** the findings into the one-sentence lead and 3 to 7 beats, each with its claim-style headline and the exact numbers it will show, shaped for this audience and goal.
       3. **Storyboard** in your thinking: per beat, the platform question it references (a saved id, or an inline single_value for a one-off live number), what the surrounding headline and callout will claim, and how it flows into the next beat. User-referenced questions get anchor positions in the arc. Sketch with ASCII wireframes if helpful.
       4. **Design plan:** tonal extreme, motif / conceit, and tokens (palette, font stacks, figure-plate grammar, composition strategy, signature element), grounded in the subject. Critique it: if it resembles what you'd produce for any other dataset, revise before coding.
-      5. **Build** the fragment following the plan exactly, computing every displayed number from the real data and applying the tokens with total consistency.
-      6. **Critique** as the intended reader: scroll it mentally top to bottom. Can the headlines alone tell the story to *this* audience? Does the ending deliver the goal? Is every claim backed by its embed? Is the signature element earning its place? Remove one decoration before shipping.
+      5. **Build** the fragment following the plan exactly, computing every displayed number from the real data and applying the tokens with total consistency. All bar, line, scatter, area type plots need to be like at least 50% of thew width. if smaller than that, they will look awful. You can do ReadFile on that file to see the type of visualization it has.
+      6. **Critique** as the intended reader: scroll it mentally top to bottom. Can the headlines alone tell the story to *this* audience? Does the ending deliver the goal? Is every claim backed by its embed? Ensure the text content is true to the data, and not too generic.
+      7. **Review** using the screenshot tool to see how it looks before claiming it's finished. If it looks bad, you must fix it and repeat the review until it looks great!
 
   skill_notebooks:
     description: Notebook file structure (cells = inline SQL questions + markdown text), the activeCellId convention for editing the right cell, and notebook page behavior
