@@ -75,6 +75,18 @@ describe('scoreDashboard', () => {
     expect(findings.find((x) => x.ruleId === 'dashboard.no-parameters')?.severity).toBe('info');
   });
 
+  it('flags a cartesian plot smaller than 3x3 (needs referenced viz types)', () => {
+    const board = makeDashboard({ assets: [q(1)], layout: { items: [{ id: 1, x: 0, y: 0, w: 2, h: 4 }] } });
+    // a line chart in a 2-wide tile → too small
+    const flagged = scoreDashboard(board, { vizTypeByQuestionId: { 1: 'line' } });
+    expect(flagged.find((x) => x.ruleId === 'dashboard.plot-too-small')?.severity).toBe('warn');
+    // a single_value in the same tile → fine (no cartesian axes)
+    const ok = scoreDashboard(board, { vizTypeByQuestionId: { 1: 'single_value' } });
+    expect(ids(ok)).not.toContain('dashboard.plot-too-small');
+    // no viz context → check can't run
+    expect(ids(scoreDashboard(board))).not.toContain('dashboard.plot-too-small');
+  });
+
   it('returns no findings for a healthy dashboard', () => {
     expect(scoreDashboard(makeDashboard())).toEqual([]);
   });

@@ -1,5 +1,5 @@
 import type { DashboardContent, DashboardLayoutItem } from '@/lib/types';
-import type { RubricFinding } from '../types';
+import type { DeterministicContext, RubricFinding } from '../types';
 import { estimateTokens, finding, isBlank } from './shared';
 
 const MIN_TILE = 3;
@@ -7,13 +7,17 @@ export const MIN_TILE_W = 2;
 export const MIN_TILE_H = 2;
 export const MAX_VISUALS = 15;
 export const MAX_TEXT_TOKENS = 400;
+// Cartesian plots need real 2-D room to read; a sliver tile is unreadable.
+export const MIN_PLOT_TILE = 3;
+export const PLOT_VIZ_TYPES = new Set(['line', 'area', 'bar', 'scatter']);
 
 function overlaps(a: DashboardLayoutItem, b: DashboardLayoutItem): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
-/** Deterministic health findings for a dashboard. Pure function of content. */
-export function scoreDashboard(content: DashboardContent): RubricFinding[] {
+/** Deterministic health findings for a dashboard. `ctx.vizTypeByQuestionId` (from the resolved
+ *  references) enables tile-type-aware rules like cartesian-plots-need-3x3. */
+export function scoreDashboard(content: DashboardContent, ctx?: DeterministicContext): RubricFinding[] {
   const out: RubricFinding[] = [];
   const assets = content.assets ?? [];
   const questionIds = assets.filter((a) => a.type === 'question').map((a) => a.id as number);
@@ -93,6 +97,20 @@ export function scoreDashboard(content: DashboardContent): RubricFinding[] {
           `Question tiles need ≥${MIN_TILE_W}×${MIN_TILE_H} to be legible; enlarge tile ${it.id}.`));
       }
     }
+    // plot-too-small (clarity — cartesian plots need ≥3×3 to read; needs the tile's chart type)
+    const vizById = ctx?.vizTypeByQuestionId;
+    if (vizById) {
+      for (const it of items) {
+        if (typeof it.id !== 'number') continue;
+        const vt = vizById[it.id];
+        if (vt && PLOT_VIZ_TYPES.has(vt) && (it.w < MIN_PLOT_TILE || it.h < MIN_PLOT_TILE)) {
+          out.push(finding('dashboard.plot-too-small', 'clarity', 'warn', 'Plot tile too small',
+            `Tile ${it.id} is a ${vt} chart at ${it.w}×${it.h}; cartesian plots need ≥${MIN_PLOT_TILE}×${MIN_PLOT_TILE} to read.`,
+            `Resize tile ${it.id} to at least ${MIN_PLOT_TILE}×${MIN_PLOT_TILE}, or use a compact viz (single_value / table).`));
+        }
+      }
+    }
+
     // tile-overlap (correctness)
     let flaggedOverlap = false;
     for (let i = 0; i < items.length && !flaggedOverlap; i++) {

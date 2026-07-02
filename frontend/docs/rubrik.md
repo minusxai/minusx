@@ -115,7 +115,10 @@ Grade bands: `overall >= 4 → good`, `>= 2.5 → fair`, else `poor`.
 > `geoConfig` are optional decoration with sensible defaults, so they are **not** flagged
 > deterministically (the judge covers softer "is this the right chart" calls). Column-fit
 > checks that need actual query results (e.g. >7 real categories) are also judge territory —
-> the deterministic pass is strictly content-only.
+> the deterministic pass is content-only, with ONE light exception: dashboard tile rules may
+> read each referenced question's chart *type* via `DeterministicContext.vizTypeByQuestionId`
+> (threaded in from the resolved references by `compress-augmented` / the panel), since a tile's
+> viz type lives on the question, not the dashboard.
 
 ## Rule catalog — Dashboard (`DashboardContent`)
 
@@ -127,7 +130,8 @@ text/image/divider assets are ignored for counting.
 | `asset-not-in-layout` | correctness | error | a question asset id has no entry in `layout.items` | Add a layout item (≥3×3) for question {id}, or remove it from assets. |
 | `layout-orphan` | correctness | error | a `layout.items` id has no matching asset | Remove layout item {id}, or add the matching question to assets. |
 | `tile-overlap` | correctness | warn | two layout rects overlap on the 12-col grid | Reposition tiles so their grid rectangles don't overlap. |
-| `tile-too-small` | clarity | warn | a question tile has `w < 3` or `h < 3` | Question tiles need ≥3×3 to be legible; enlarge tile {id}. |
+| `tile-too-small` | clarity | warn | a question tile has `w < 2` or `h < 2` | Question tiles need room to be legible; enlarge tile {id}. |
+| `plot-too-small` | clarity | warn | a tile whose question is a line/area/bar/scatter chart is `< 3×3` (needs the referenced viz type) | Resize the plot tile to ≥3×3, or use a compact viz (single_value / table). |
 | `visual-count` | clarity | error / warn | question count `< 1` (error, empty) / `> 9` (warn) | Keep 5–9 visuals per dashboard; split into multiple dashboards or drop low-value charts. |
 | `duplicate-question` | correctness | info | the same question id is referenced more than once | Reference question {id} once; parameterize instead of duplicating. |
 | `too-much-text` | clarity | warn | total inline-text asset tokens > ~400 | Trim inline text to short annotations; move long prose into a story. |

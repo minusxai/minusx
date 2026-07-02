@@ -2,7 +2,7 @@
  * Deterministic rubric entrypoint: maps a file type to its pure scorer and assembles the
  * report. This is what auto-inject, the CheckFileHealth tool, and the API route all call.
  */
-import type { DeterministicScorer, RubricCategory, RubricFileType, RubricReport } from './types';
+import type { DeterministicContext, DeterministicScorer, RubricCategory, RubricFileType, RubricReport } from './types';
 import { buildReport } from './scoring';
 import { scoreQuestion } from './deterministic/question';
 import { scoreDashboard } from './deterministic/dashboard';
@@ -31,8 +31,9 @@ export function isRubricFileType(type: string): type is RubricFileType {
   return (RUBRIC_FILE_TYPES as string[]).includes(type);
 }
 
-/** Run the deterministic scorer for a supported file type and build its report. */
-export function scoreFileDeterministic(fileType: RubricFileType, content: unknown): RubricReport {
-  const findings = SCORERS[fileType](content);
+/** Run the deterministic scorer for a supported file type and build its report. `ctx` carries
+ *  optional cross-file info (e.g. referenced-question viz types for dashboard tile rules). */
+export function scoreFileDeterministic(fileType: RubricFileType, content: unknown, ctx?: DeterministicContext): RubricReport {
+  const findings = SCORERS[fileType](content, ctx);
   return buildReport(fileType, 'deterministic', findings, DETERMINISTIC_COVERAGE[fileType]);
 }

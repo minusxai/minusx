@@ -13,10 +13,12 @@ import { Box, HStack, VStack, Text, Icon, Image, Popover, Portal, Button, Spinne
 import { LuHeartPulse, LuScanEye, LuRefreshCw } from 'react-icons/lu';
 import { useAppSelector, useAppStore } from '@/store/hooks';
 import { selectFile, selectMergedContent } from '@/store/filesSlice';
+import type { RootState } from '@/store/store';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
 import { passedChecks } from '@/lib/rubric/checks';
-import type { RubricCategory, RubricFileType, RubricReport, RubricSeverity } from '@/lib/rubric/types';
+import type { DeterministicContext, RubricCategory, RubricFileType, RubricReport, RubricSeverity } from '@/lib/rubric/types';
+import type { DashboardContent, QuestionContent } from '@/lib/types';
 
 type Level = RubricSeverity | 'pass';
 
@@ -63,6 +65,21 @@ const SOURCE: Record<'static' | 'llm', { label: string; color: string }> = {
 };
 const sourceOf = (ruleId: string): 'static' | 'llm' => (ruleId.startsWith('llm.') ? 'llm' : 'static');
 
+// Deterministic context for a dashboard — each referenced question's chart type (needed for
+// tile-type-aware rules like cartesian-plots-need-3x3). Read from Redux, not the dashboard content.
+function dashboardVizCtx(fileType: string, content: unknown, state: RootState): DeterministicContext | undefined {
+  if (fileType !== 'dashboard') return undefined;
+  const assets = (content as DashboardContent | null)?.assets ?? [];
+  const vizTypeByQuestionId: Record<number, string> = {};
+  for (const a of assets) {
+    if (a.type === 'question') {
+      const vt = (selectFile(state, a.id)?.content as QuestionContent | undefined)?.vizSettings?.type;
+      if (vt) vizTypeByQuestionId[a.id] = vt;
+    }
+  }
+  return { vizTypeByQuestionId };
+}
+
 export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType: string }) {
   // Score the SAVED content, not live edits — so this recomputes on save/load, NOT on every
   // keypress (which re-parsed stories on each stroke and froze the header). The refresh button
@@ -78,11 +95,11 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   const deterministic = useMemo<RubricReport | null>(() => {
     if (!isRubricFileType(fileType) || !savedContent) return null;
     try {
-      return scoreFileDeterministic(fileType, savedContent);
+      return scoreFileDeterministic(fileType, savedContent, dashboardVizCtx(fileType, savedContent, store.getState()));
     } catch {
       return null;
     }
-  }, [fileType, savedContent]);
+  }, [fileType, savedContent, store]);
 
   // A new save (or file load) invalidates any manual-refresh / judge override.
   useEffect(() => { setOverride(null); setJudgeError(null); setShot(null); }, [savedContent]);
@@ -96,7 +113,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
     const merged = selectMergedContent(store.getState(), fileId);
     if (!merged) return;
     try {
-      setOverride(scoreFileDeterministic(fileType, merged));
+      setOverride(scoreFileDeterministic(fileType, merged, dashboardVizCtx(fileType, merged, store.getState())));
     } catch {
       // ignore — keep the current report
     }

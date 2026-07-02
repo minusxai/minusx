@@ -60,5 +60,15 @@ export interface RubricReport {
   categories: RubricCategoryScore[];
 }
 
-/** A deterministic scorer is a pure function from a file's content to a flat findings list. */
-export type DeterministicScorer<TContent = unknown> = (content: TContent) => RubricFinding[];
+/**
+ * Optional cross-file context for deterministic scorers. Content-only rules ignore it; a few
+ * rules need light info from referenced files (e.g. a dashboard tile's chart TYPE lives on the
+ * referenced question, not in the dashboard content).
+ */
+export interface DeterministicContext {
+  /** viz `type` per referenced question id (for dashboard tile rules). */
+  vizTypeByQuestionId?: Record<number, string>;
+}
+
+/** A deterministic scorer is a (mostly) pure function from a file's content to findings. */
+export type DeterministicScorer<TContent = unknown> = (content: TContent, ctx?: DeterministicContext) => RubricFinding[];

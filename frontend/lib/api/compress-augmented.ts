@@ -11,7 +11,7 @@ import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup } from '@/lib/data/file-markup';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
-import type { RubricReport } from '@/lib/rubric/types';
+import type { DeterministicContext, RubricReport } from '@/lib/rubric/types';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import type {
@@ -117,7 +117,7 @@ export function compressQueryResult(qr: QueryResult & { error?: string }, maxCha
   return { columns, types, data: md, totalRows, shownRows, truncated, id: qr.id, finalQuery: qr.finalQuery };
 }
 
-function compressFileState(fs: FileState): CompressedFileState {
+function compressFileState(fs: FileState, refs?: FileState[]): CompressedFileState {
   const mergedContent = { ...(fs.content || {}), ...(fs.persistableChanges || {}) } as FileState['content'];
   const isDirty = !!(
     (fs.persistableChanges && Object.keys(fs.persistableChanges).length > 0) ||
@@ -147,7 +147,7 @@ function compressFileState(fs: FileState): CompressedFileState {
   // multi-MB schema cache off the wire when this AppState is sent to chat (it's a no-op for other
   // types, whose `content` stays full).
   const agentContent = fs.type === 'context' ? shapeContextForAgent(mergedContent) : mergedContent;
-  const rubric = computeRubric(fs.type as FileType, agentContent);
+  const rubric = computeRubric(fs.type as FileType, agentContent, refs);
   return {
     id: fs.id,
     name: fs.metadataChanges?.name ?? fs.name,
@@ -167,10 +167,21 @@ function compressFileState(fs: FileState): CompressedFileState {
  * health on every read/app-state. Pure + cheap; only question/dashboard/story are scored.
  * Never throws (a scoring bug must not break file serialization).
  */
-function computeRubric(type: FileType, content: unknown): RubricReport | undefined {
+function computeRubric(type: FileType, content: unknown, refs?: FileState[]): RubricReport | undefined {
   if (!isRubricFileType(type) || !content) return undefined;
+  // A dashboard's tile rules need each referenced question's chart type (not in dashboard content).
+  let ctx: DeterministicContext | undefined;
+  if (type === 'dashboard' && refs?.length) {
+    const vizTypeByQuestionId: Record<number, string> = {};
+    for (const r of refs) {
+      if (r.type !== 'question') continue;
+      const vt = (r.content as QuestionContent | null)?.vizSettings?.type;
+      if (vt) vizTypeByQuestionId[r.id] = vt;
+    }
+    ctx = { vizTypeByQuestionId };
+  }
   try {
-    return scoreFileDeterministic(type, content);
+    return scoreFileDeterministic(type, content, ctx);
   } catch {
     return undefined;
   }
@@ -244,8 +255,9 @@ export function boundContextAppState(appState: unknown): void {
  */
 export function compressAugmentedFile(augmented: AugmentedFile, maxChars = LIMIT_CHARS): CompressedAugmentedFile {
   return {
-    fileState: compressFileState(augmented.fileState),
-    references: augmented.references.map(compressFileState),
+    // Pass the references so dashboard tile rules can see each question's chart type.
+    fileState: compressFileState(augmented.fileState, augmented.references),
+    references: augmented.references.map((r) => compressFileState(r)),
     queryResults: augmented.queryResults.map(qr => compressQueryResult(qr, maxChars)),
   };
 }
