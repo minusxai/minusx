@@ -1256,8 +1256,8 @@ prompts:
         {criteria}
 
         Return ONLY a JSON object, no prose, of this exact shape:
-        {"findings":[{"category":"correctness|clarity|aesthetics","severity":"error|warn|info","title":"short label","detail":"what is wrong, referencing what you see","fix":"imperative, actionable fix"}]}
-        Return {"findings":[]} if there is nothing to flag.
+        {{"findings":[{{"category":"correctness|clarity|aesthetics","severity":"error|warn|info","title":"short label","detail":"what is wrong, referencing what you see","fix":"imperative, actionable fix"}}]}}
+        Return {{"findings":[]}} if there is nothing to flag.
       user: |
         Review this {file_type}. Its markup:
 

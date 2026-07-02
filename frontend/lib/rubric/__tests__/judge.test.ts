@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@/lib/chat/run-micro-task.server', () => ({ runMicroTask: vi.fn() }));
 
 import { runMicroTask } from '@/lib/chat/run-micro-task.server';
+import { renderPrompt } from '@/orchestrator/prompts';
 import { judgeFile, combineReports } from '../judge/judge.server';
 import { scoreFileDeterministic } from '../registry';
 import { makeQuestion } from './fixtures';
@@ -48,6 +49,23 @@ describe('judgeFile', () => {
   it('drops malformed findings (bad category)', async () => {
     mockRun.mockResolvedValue(reply([{ severity: 'error', title: 'x' }, { category: 'nope', severity: 'error', title: 'y' }]));
     expect((await judgeFile({ fileType: 'question', content: makeQuestion() }, USER)).overall).toBe(5);
+  });
+});
+
+describe('rubric_judge prompt', () => {
+  // The prompt embeds a literal JSON example; its braces must be escaped ({{ }}) so pyFormat
+  // doesn't read them as {variables}. This test guards that regression.
+  it('renders without missing-variable errors (literal JSON braces escaped)', () => {
+    expect(() => renderPrompt('micro.rubric_judge.system', { criteria: 'focus on X' })).not.toThrow();
+    // markup value itself contains braces (story JSX) — inserted verbatim, must not re-parse
+    expect(() => renderPrompt('micro.rubric_judge.user', {
+      file_type: 'question', markup: '<query>{`SELECT {a}`}</query>', screenshot_note: 'none',
+    })).not.toThrow();
+  });
+
+  it('keeps the JSON shape literal in the rendered system prompt', () => {
+    const out = renderPrompt('micro.rubric_judge.system', { criteria: '' });
+    expect(out).toContain('{"findings":[{"category"');
   });
 });
 
