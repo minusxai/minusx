@@ -24,6 +24,7 @@ import { system } from '@/lib/ui/theme';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
 import EmbeddedQuestionContainer from '@/components/containers/EmbeddedQuestionContainer';
 import StoryParamControl from '@/components/views/story/StoryParamControl';
+import StoryResizeHandles from '@/components/views/story/StoryResizeHandles';
 import InlineNumber from '@/components/views/story/InlineNumber';
 import { storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story-params';
 import type { InlineNumberEmbed } from '@/lib/data/story-number';
@@ -74,18 +75,28 @@ export default function StoryEmbeds({
             flows through every createPortal below. */}
         <EnvironmentProvider value={() => doc}>
           {targets.map((t, i) => createPortal(
-            <Box className="mx-chart-fill" bg="bg.subtle" borderWidth="1px" borderColor="border.default" borderRadius="md" overflow="hidden" display="flex" flexDirection="column">
-              <SmartEmbeddedQuestionContainer
-                questionId={t.questionId}
-                showTitle={true}
-                index={i}
-                readOnly={readOnly}
-                showActionsMenu={editable}
-                enableDrilldown={false}
-                externalParameters={extParams}
-                externalParamValues={extValues}
-              />
-            </Box>,
+            // Fragment (not a wrapper) so the resize handles are direct children of the placeholder
+            // `t.el` — the chart Box clips (overflow:hidden), which would eat the edge-hugging handles.
+            <>
+              <Box className="mx-chart-fill" bg="bg.subtle" borderWidth="1px" borderColor="border.default" borderRadius="md" overflow="hidden" display="flex" flexDirection="column">
+                <SmartEmbeddedQuestionContainer
+                  questionId={t.questionId}
+                  showTitle={true}
+                  index={i}
+                  readOnly={readOnly}
+                  showActionsMenu={editable}
+                  enableDrilldown={false}
+                  externalParameters={extParams}
+                  externalParamValues={extValues}
+                />
+              </Box>
+              {editable && (
+                <StoryResizeHandles
+                  target={t.el}
+                  onCommit={() => t.el.dispatchEvent(new Event('input', { bubbles: true }))}
+                />
+              )}
+            </>,
             t.el,
             `${i}-${t.questionId}`,
           ))}
