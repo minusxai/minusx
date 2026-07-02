@@ -835,9 +835,9 @@ templates:
 
       - **Respond to the story's width, not the viewport.** Put `container-type:inline-size; container-name:story` on the root `<div>` and `box-sizing:border-box` on everything, then branch layout with `@container story (max-width:…)`, NOT `@media`. The document's width is decoupled from the viewport (capped and centered on desktop), so viewport media queries misfire; container queries read the real width.
       - **Fluid type and spacing.** Size every headline, big number, and major padding with `clamp(min, N cqi, max)` (`cqi` is 1% of the story's own width). Fixed px on hero or section type will not scale down, and is the thing that makes phones unreadable.
-      - **Collapse every multi-column band on narrow widths.** Hero splits, KPI / stat rows, card tickers, timelines, side-by-side columns, and chart pairs must all stack to a single column on a phone via `@container`. Wrap any wide table in `overflow-x:auto`. Never let a fixed-px width exceed the container.
+      - **Collapse every multi-column band on narrow widths.** Hero splits, typed stat rows, card tickers, timelines, side-by-side columns, and `<Number>` callout bands must all stack to a single column on a phone via `@container`. Wrap any wide table in `overflow-x:auto`. Never let a fixed-px width exceed the container. (Framed `<Question>` chart CARDS already stack full-width — see the flow-block layout contract below — so they never form a multi-column band.)
       - **One beat is about one viewport tall**, so scrolling and stopping to read is natural.
-      - **Charts fill their cell** at `width:100%`; a fixed px width can overflow a phone.
+      - **Framed chart cards are full-width flow blocks** (`width:100%`, or an explicit px width you set — `max-width:100%` keeps it phone-safe). They are NOT placed in grid cells; see the flow-block layout contract below.
       - **Contrast survives the palette.** Every heading and body line must contrast strongly with its surface, never light text on a light page or dark on dark. Set the story's `colorMode` field ("light" / "dark") to match your design so platform charts theme to match.
 
       Gut-check the design at ~400px wide before shipping: if any band still sits side-by-side, any number is clipped, or any text is low-contrast, add the `@container` rule or fix the token. That is part of "done," not a nice-to-have.
@@ -883,9 +883,22 @@ templates:
       A `$`-prefixed 6rem accent-colored figure is a STYLED single_value embed, not hand-typed text. This guarantees the story is always correct and live; a hand-typed number silently goes stale and is the #1 way a story lies. If you catch yourself about to type a metric into a `<p>` or a stat card, stop and embed a single_value.
 
       Rules for every embed:
-      - Give an explicit px `height` (`height="430px"`) so the layout holds before and after hydration. A missing height defaults to 430px, percentages do not resolve, and the platform clamps anything below 340px UP. Width is 100% (the embed fills its responsive cell; a fixed px width can overflow a phone). Vary height with the beat: compact single_value cards (~180 to 260px), tall main-evidence charts (400 to 460px).
+      - Give an explicit px `height` (`height="430px"`) so the layout holds before and after hydration. A missing height defaults to 430px, percentages do not resolve, and the platform clamps anything below 340px UP. Width is `100%` by default (fills the column) or an explicit px value (`width="720px"`); `max-width:100%` keeps a px width phone-safe. The card is always a full-width flow block, never inside a grid/flex cell — see the flow-block layout contract. Vary height with the beat: compact single_value cards (~180 to 260px), tall main-evidence charts (400 to 460px).
       - Style the *container* around the embed (card framing, borders, offset shadows, full-bleed), never a chart's internals; for a single_value, `singleValueConfig` IS how you style the number.
       - A saved embed hydrates with a slim title bar carrying the question name (budget ~40px, do not repeat the name in your caption). An inline embed has no title bar, so caption it yourself if the beat needs a label.
+
+      ## Layout contract for chart cards: flow blocks, freely resizable and movable
+
+      Every framed `<Question>` chart card is a live **widget** the reader can resize on both axes and drag to reorder in edit mode. That interactivity depends on ONE hard rule:
+
+      **A chart card must be a plain flow block — a direct child of the story root or of a plain (non grid / flex / table) container. NEVER wrap a `<Question>` chart card in a CSS grid, flexbox, or `display:table`.** In a grid/flex the card's width is governed by its column/track, so an authored or dragged px width silently no-ops (horizontal resize breaks). Only in normal block flow is the card's own width honored.
+
+      Consequences, design around them:
+      - **Chart cards STACK full-width; you cannot place two chart cards side by side.** The at-a-glance prologue, KPI stat rows, and side-by-side "chart pairs" from the devices above must become a VERTICAL stack of full-width chart cards — OR be expressed with inline `<Number>` callouts (see below) instead of framed cards.
+      - Give each card an explicit px `height` and a width of EITHER `100%` (responsive — fills the column, the sensible default) OR an explicit px value you choose (`<Question id={142} width="720px" height="430px" />`). Both stay freely resizable; `max-width:100%` keeps a px width phone-safe (it clamps down on narrow screens). Center a sub-full-width card with `margin:0 auto`.
+      - **Grids and flexbox remain fully available for everything that is NOT a framed chart card**: prose columns, headline/label layout, decorative numerals and ornaments, stat ribbons and tickers built from TYPED labels, and inline `<Number>` figures. An inline `<Number>` renders a `<span>` that flows inside text (not a resizable card), so a KPI-style row of live numbers can still be a grid of `<Number>` callouts — that is the flow-block-friendly way to get a compact multi-number band. Reserve framed `<Question>` cards for the beats that deserve a full-width chart.
+
+      So: put your live numbers side-by-side as inline `<Number>` callouts in a grid; let every framed chart CARD be a full-width flow block. This keeps the page responsive and content-driven while making each chart individually resizable and reorderable.
 
       **The ONLY hand-built numeric is pure ornament**: an oversized ghost numeral behind a section, an outlined ratio used as graphic texture, carrying no data meaning. A single-fact proportion drawn as a styled bar (a 5.5% progress bar whose width is computed from real numbers) remains a legitimate rhetorical device. Everything that states a fact is a live embed.
 
