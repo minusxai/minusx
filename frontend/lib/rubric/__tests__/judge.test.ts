@@ -1,62 +1,68 @@
-import { describe, it, expect } from 'vitest';
-import { judgeFile, combineReports, SubmitRubric } from '../judge/judge.server';
-import { scoreFileDeterministic } from '../registry';
-import type { AssistantMessage } from '@/orchestrator/llm';
-import { makeQuestion } from './fixtures';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-/** Minimal AssistantMessage carrying a single SubmitRubric tool call. */
-function withFindings(findings: unknown[]): AssistantMessage {
-  return {
-    role: 'assistant',
-    content: [{ type: 'toolCall', id: 't1', name: SubmitRubric.name, arguments: { findings } }],
-    api: 'anthropic' as never, provider: 'x', model: 'x',
-    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
-    stopReason: 'toolUse', timestamp: 0,
-  };
-}
+// judgeFile routes through the shared micro-task runner; mock it to unit-test the judge's
+// var-building + JSON parsing (runMicroTask itself is covered in micro-task.test.ts).
+vi.mock('@/lib/chat/run-micro-task.server', () => ({ runMicroTask: vi.fn() }));
+
+import { runMicroTask } from '@/lib/chat/run-micro-task.server';
+import { judgeFile, combineReports } from '../judge/judge.server';
+import { scoreFileDeterministic } from '../registry';
+import { makeQuestion } from './fixtures';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+
+const mockRun = vi.mocked(runMicroTask);
+const USER = { userId: 1, email: 'u@example.com', name: 'U', role: 'admin', home_folder: '/org', mode: 'org' } as EffectiveUser;
+const reply = (findings: unknown[]) => JSON.stringify({ findings });
+
+beforeEach(() => mockRun.mockReset());
 
 describe('judgeFile', () => {
-  it('maps SubmitRubric findings into a scored llm-judge report', async () => {
-    const msg = withFindings([
-      { category: 'aesthetics', severity: 'warn', title: 'Generic palette', detail: 'purple gradient', fix: 'Pick a protagonist accent.' },
-    ]);
-    const report = await judgeFile({ fileType: 'question', content: makeQuestion() }, async () => msg);
+  it('runs the rubric_judge micro-task with markup + screenshot and scores its findings', async () => {
+    mockRun.mockResolvedValue(reply([
+      { category: 'aesthetics', severity: 'warn', title: 'Generic palette', detail: 'purple gradient', fix: 'Pick an accent.' },
+    ]));
+    const report = await judgeFile({ fileType: 'question', content: makeQuestion(), screenshotUrl: 'data:image/jpeg;base64,AAAA' }, USER);
+
+    // routed through the shared runner, not a bespoke LLM call
+    const [taskKey, vars, user, images] = mockRun.mock.calls[0];
+    expect(taskKey).toBe('rubric_judge');
+    expect(vars.markup).toContain('SELECT');
+    expect(user).toBe(USER);
+    expect(images?.[0]).toEqual({ type: 'image', data: 'AAAA', mimeType: 'image/jpeg' });
+
     expect(report.source).toBe('llm-judge');
     expect(report.categories.find((c) => c.category === 'aesthetics')?.findings[0]?.title).toBe('Generic palette');
     expect(report.categories.find((c) => c.category === 'aesthetics')?.score).toBe(4); // one warn: 5-1
   });
 
-  it('scores a clean judgment at 100', async () => {
-    const report = await judgeFile({ fileType: 'story', content: { description: 'x', story: '<div/>' } }, async () => withFindings([]));
-    expect(report.overall).toBe(5);
+  it('scores a clean judgment at 5', async () => {
+    mockRun.mockResolvedValue(reply([]));
+    expect((await judgeFile({ fileType: 'story', content: { description: 'x', story: '<div/>' } }, USER)).overall).toBe(5);
   });
 
-  it('returns an empty report when the model does not call SubmitRubric', async () => {
-    const textOnly = { ...withFindings([]), content: [{ type: 'text', text: 'hi' }] } as AssistantMessage;
-    const report = await judgeFile({ fileType: 'question', content: makeQuestion() }, async () => textOnly);
-    expect(report.overall).toBe(5);
+  it('returns an empty report when the reply is not valid JSON', async () => {
+    mockRun.mockResolvedValue('I could not review this.');
+    expect((await judgeFile({ fileType: 'question', content: makeQuestion() }, USER)).overall).toBe(5);
   });
 
-  it('drops malformed findings (missing category)', async () => {
-    const report = await judgeFile({ fileType: 'question', content: makeQuestion() }, async () => withFindings([{ severity: 'error', title: 'x' }]));
-    expect(report.overall).toBe(5);
+  it('drops malformed findings (bad category)', async () => {
+    mockRun.mockResolvedValue(reply([{ severity: 'error', title: 'x' }, { category: 'nope', severity: 'error', title: 'y' }]));
+    expect((await judgeFile({ fileType: 'question', content: makeQuestion() }, USER)).overall).toBe(5);
   });
 });
 
 describe('combineReports', () => {
   it('merges deterministic and judge findings into one combined report', () => {
-    const deterministic = scoreFileDeterministic('question', makeQuestion({ description: '' })); // 1 info (no-description)
+    const deterministic = scoreFileDeterministic('question', makeQuestion({ description: '' })); // clarity info (no-description)
     const judge = buildJudgeReport();
     const combined = combineReports(deterministic, judge);
     expect(combined.source).toBe('combined');
-    // clarity carries the deterministic info (5-0.5=4.5), aesthetics carries the judge warn (5-1=4)
-    expect(combined.categories.find((c) => c.category === 'clarity')?.score).toBe(4.5);
-    expect(combined.categories.find((c) => c.category === 'aesthetics')?.score).toBe(4);
+    expect(combined.categories.find((c) => c.category === 'clarity')?.score).toBe(4.5); // 5 - 0.5 info
+    expect(combined.categories.find((c) => c.category === 'aesthetics')?.score).toBe(4); // 5 - 1 warn
   });
 });
 
 function buildJudgeReport() {
-  // aesthetics warn → aesthetics 4
   return {
     fileType: 'question' as const, source: 'llm-judge' as const, overall: 5, grade: 'good' as const,
     categories: [

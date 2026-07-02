@@ -49,7 +49,7 @@ export class MicroAgent extends RemoteAnalystAgent {
   protected override buildUserContent(): (TextContent | ImageContent)[] {
     const cfg = getMicroTask(this.microContext.taskKey);
     const text = renderPrompt(cfg.userPromptKey, this.microContext.vars);
-    return [{ type: 'text', text }];
+    return [{ type: 'text', text }, ...(this.microContext.images ?? [])];
   }
 
   // Honor the task's optional per-task model override; otherwise the class default.

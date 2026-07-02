@@ -9,11 +9,11 @@
  */
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
-import type { AssistantMessage, TextContent } from '@/orchestrator/llm';
+import type { AssistantMessage, TextContent, ImageContent } from '@/orchestrator/llm';
 import { MicroAgent } from '@/agents/micro/micro-agent';
 import { getMicroTask } from '@/agents/micro/micro-tasks';
 import type { MicroAgentContext } from '@/agents/micro/types';
-import { recordHeadlessLlmCalls } from '@/lib/chat-orchestration-v2.server';
+import { recordHeadlessLlmCalls } from '@/lib/chat/headless-llm-tracking.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 /**
@@ -27,6 +27,7 @@ export async function runMicroTask(
   taskKey: string,
   vars: Record<string, string>,
   user: EffectiveUser,
+  images?: ImageContent[],
 ): Promise<string> {
   // Validate the task up-front so an unknown key throws before any LLM call.
   getMicroTask(taskKey);
@@ -38,6 +39,7 @@ export async function runMicroTask(
     effectiveUser: user,
     taskKey,
     vars,
+    ...(images && images.length ? { images } : {}),
   };
   const agent = new MicroAgent(orch, { userMessage: `Run micro-task: ${taskKey}` }, ctx);
 

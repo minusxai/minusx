@@ -49,7 +49,7 @@ export const POST = withAuth(async (
     }
 
     const deterministic = scoreFileDeterministic(file.type, file.content);
-    const judge = await judgeFile({ fileType: file.type, content: file.content, screenshotUrl });
+    const judge = await judgeFile({ fileType: file.type, content: file.content, screenshotUrl }, user);
     return successResponse({ report: combineReports(deterministic, judge) });
   } catch (error) {
     return handleApiError(error);

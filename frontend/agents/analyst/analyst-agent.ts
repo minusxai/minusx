@@ -10,7 +10,6 @@ import {
 } from './skills';
 import { getAgentModelOrTestFallback } from './model-config';
 import { ReadFiles, SearchFiles } from './file-tools';
-import { CheckFileHealth } from './health-tools';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
 import {
@@ -26,7 +25,6 @@ import { projectMessages, type WithAppState } from '@/lib/projection/messages';
 
 // Re-exports kept for backward compatibility with downstream test/agent imports.
 export { ReadFiles, SearchFiles } from './file-tools';
-export { CheckFileHealth } from './health-tools';
 export { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
 export {
   SearchDBSchema,
@@ -63,7 +61,6 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     ExecuteQuery.schema,
     ReadFiles.schema,
     SearchFiles.schema,
-    CheckFileHealth.schema,
     LoadContext.schema,
   ];
   static model = getAgentModelOrTestFallback(FAUX_MODEL);

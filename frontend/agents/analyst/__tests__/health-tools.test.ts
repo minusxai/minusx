@@ -11,7 +11,7 @@ vi.mock('@/lib/database/db-config', () => ({
 
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { AnalystAgentContext } from '../types';
-import { CheckFileHealth } from '../analyst-agent';
+import { CheckFileHealth } from '../health-tools';
 import { FilesAPI } from '@/lib/data/files.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { QuestionContent, FolderContent } from '@/lib/types';

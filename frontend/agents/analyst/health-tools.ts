@@ -67,7 +67,7 @@ export class CheckFileHealth extends MXTool<typeof CheckFileHealthParams, Analys
         // Reuse the current file's already-captured screenshot when available (visual judgment
         // is far stronger than markup-only); otherwise the judge falls back to markup.
         const screenshotUrl = screenshotUrlFor(this.context.appState, fileId);
-        const judge = await judgeFile({ fileType: file.type, content: file.content, screenshotUrl });
+        const judge = await judgeFile({ fileType: file.type, content: file.content, screenshotUrl }, user);
         report = combineReports(report, judge);
       }
 

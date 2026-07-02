@@ -1,60 +1,32 @@
 /**
- * LLM judge — the second rubric flavor. Grades the subjective/visual dimensions a static
- * check can't, from the file markup + a rendered screenshot. Emits the SAME findings shape as
- * the deterministic scorers, so `buildReport` scores both identically and they can be merged.
+ * LLM judge — the second rubric flavor. Grades the subjective/visual dimensions a static check
+ * can't, from the file markup + a rendered screenshot. Emits the SAME findings shape as the
+ * deterministic scorers, so `buildReport` scores both identically and they can be merged.
  *
- * Standalone server function (not an orchestrator tool run): builds a one-shot Context and
- * calls `streamSimple`, forcing structured output via the `SubmitRubric` tool. The LLM call is
- * dependency-injected so it can be tested without a provider.
+ * Runs on the shared micro-task infra (`runMicroTask` → `MicroAgent` → orchestrator), NOT a
+ * bespoke LLM call: prompts live in `micro.rubric_judge` (prompts.yaml), model + usage tracking
+ * come for free. The screenshot rides along as an image content block on the micro context.
  *
  * See `frontend/docs/rubrik.md`.
  */
 import 'server-only';
-import { Type } from 'typebox';
-import { getModel, streamSimple } from '@/orchestrator/llm';
-import type { AssistantMessage, Context, Model, Api, Tool, ImageContent } from '@/orchestrator/llm';
+import { runMicroTask } from '@/lib/chat/run-micro-task.server';
 import { fileToMarkup } from '@/lib/data/file-markup';
+import type { ImageContent } from '@/orchestrator/llm';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { RubricCategory, RubricFinding, RubricFileType, RubricReport, RubricSeverity } from '../types';
 import { buildReport } from '../scoring';
-import { judgeSystemPrompt } from './prompts';
+import { judgeCriteria } from './prompts';
 
-/** Dedicated judge model — always Opus, independent of any chat model config. */
-let judgeModel: Model<Api> = getModel('anthropic', 'claude-opus-4-8');
-
-/** Override the judge model (for tests). Returns the previous model. */
-export function setJudgeModel(m: Model<Api>): Model<Api> {
-  const prev = judgeModel;
-  judgeModel = m;
-  return prev;
-}
-
-const CATEGORY = Type.Union([Type.Literal('correctness'), Type.Literal('clarity'), Type.Literal('aesthetics')]);
-const SEVERITY = Type.Union([Type.Literal('error'), Type.Literal('warn'), Type.Literal('info')]);
-
-const SubmitRubricParams = Type.Object({
-  findings: Type.Array(Type.Object({
-    category: CATEGORY,
-    severity: SEVERITY,
-    title: Type.String({ description: 'short human label' }),
-    detail: Type.String({ description: 'what is wrong, referencing what you see' }),
-    fix: Type.String({ description: 'imperative, actionable instruction to fix it' }),
-  }), { description: 'All problems found. Empty array if the artifact is genuinely good.' }),
-});
-
-/** The judge's structured-output tool. Exported so callers/tests can reference its name. */
-export const SubmitRubric: Tool<typeof SubmitRubricParams> = {
-  name: 'SubmitRubric',
-  description: 'Submit the health review as a list of findings. Call exactly once.',
-  parameters: SubmitRubricParams,
-};
+const CATEGORIES: readonly RubricCategory[] = ['correctness', 'clarity', 'aesthetics'];
+const SEVERITIES: readonly RubricSeverity[] = ['error', 'warn', 'info'];
 
 export interface JudgeParams {
   fileType: RubricFileType;
   content: unknown;
   /** Rendered full-file screenshot — an https URL (app screenshot pipeline) or a `data:` URL
-   *  (client-captured). Either is turned into an image content block for the judge. */
+   *  (client-captured). Either becomes an image content block for the judge. */
   screenshotUrl?: string;
-  model?: Model<Api>;
 }
 
 /** Build an image content block from an https URL or a base64 `data:` URL. */
@@ -63,44 +35,48 @@ function imageBlock(src: string): ImageContent {
   return m ? { type: 'image', data: m[2], mimeType: m[1] } : { type: 'image', url: src };
 }
 
-/** Injectable LLM call — defaults to a one-shot `streamSimple`. */
-export type CallModel = (model: Model<Api>, ctx: Context) => Promise<AssistantMessage | undefined>;
-const defaultCallModel: CallModel = (model, ctx) => streamSimple(model, ctx).result();
-
 /** Run the LLM judge for a file and build its report (`source: 'llm-judge'`). */
-export async function judgeFile(params: JudgeParams, callModel: CallModel = defaultCallModel): Promise<RubricReport> {
+export async function judgeFile(params: JudgeParams, user: EffectiveUser): Promise<RubricReport> {
   const { fileType, content, screenshotUrl } = params;
-  const markup = fileToMarkup(fileType, content);
-
-  const userText = `Review this ${fileType}. Its markup:\n\n${markup}\n\n`
-    + (screenshotUrl ? 'A screenshot of how it renders is attached.' : '(No screenshot available — judge from the markup.)');
-
-  const ctx: Context = {
-    systemPrompt: judgeSystemPrompt(fileType),
-    messages: [{
-      role: 'user',
-      timestamp: Date.now(),
-      content: screenshotUrl
-        ? [{ type: 'text', text: userText }, imageBlock(screenshotUrl)]
-        : userText,
-    }],
-    tools: [SubmitRubric as Tool],
+  const vars: Record<string, string> = {
+    file_type: fileType,
+    criteria: judgeCriteria(fileType),
+    markup: fileToMarkup(fileType, content),
+    screenshot_note: screenshotUrl
+      ? 'A screenshot of how it renders is attached below.'
+      : '(No screenshot available — judge from the markup.)',
   };
+  const images = screenshotUrl ? [imageBlock(screenshotUrl)] : undefined;
 
-  const msg = await callModel(params.model ?? judgeModel, ctx);
-  const findings = extractFindings(msg);
+  let findings: RubricFinding[] = [];
+  try {
+    findings = parseFindings(await runMicroTask('rubric_judge', vars, user, images));
+  } catch {
+    // best-effort — a failed/garbled judge yields an empty (5/5) report rather than throwing.
+  }
   return buildReport(fileType, 'llm-judge', findings);
 }
 
-/** Pull the SubmitRubric tool-call args out of the assistant message → findings. */
-function extractFindings(msg: AssistantMessage | undefined): RubricFinding[] {
-  const call = msg?.content.find((c) => c.type === 'toolCall' && c.name === SubmitRubric.name);
-  if (!call || call.type !== 'toolCall') return [];
-  const raw = (call.arguments?.findings as unknown[]) ?? [];
+/** Parse the judge's JSON reply into validated findings. Tolerant of surrounding prose. */
+function parseFindings(text: string): RubricFinding[] {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end <= start) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return [];
+  }
+  const raw = (parsed as { findings?: unknown })?.findings;
+  if (!Array.isArray(raw)) return [];
+
   const out: RubricFinding[] = [];
   raw.forEach((r, i) => {
     const f = r as Partial<RubricFinding>;
-    if (!f.category || !f.severity || !f.title) return;
+    if (!CATEGORIES.includes(f.category as RubricCategory)) return;
+    if (!SEVERITIES.includes(f.severity as RubricSeverity)) return;
+    if (!f.title) return;
     out.push({
       ruleId: `judge.${f.category}.${i}`,
       category: f.category as RubricCategory,
