@@ -105,9 +105,9 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
           flexShrink={0}
           _hover={{ bg: 'bg.muted' }}
         >
-          <HStack gap={1} fontFamily="mono" fontSize="2xs" fontWeight="600">
-            <Box w={2} h={2} borderRadius="full" bg={gradeColor} />
-            <Text color="fg.default">{report.overall}</Text>
+          <HStack gap={0} fontFamily="mono" fontSize="2xs" fontWeight="600">
+            <Icon as={LuHeartPulse} color={gradeColor} boxSize={3.5} mr={1.5} />
+            <Text color="fg.default">File Health: {report.overall}</Text>
             <Text color="fg.muted">/5</Text>
           </HStack>
         </Button>
@@ -132,12 +132,16 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                   {report.categories.map((c) => (
                     <HStack key={c.category} justify="space-between" fontSize="xs">
                       <Text color="fg.muted">{CATEGORY_LABEL[c.category]}</Text>
-                      <HStack gap={2}>
-                        <Box w="90px" h="5px" bg="bg.muted" borderRadius="full" overflow="hidden">
-                          <Box h="full" w={`${(c.score / 5) * 100}%`} bg={scoreColor(c.score)} />
-                        </Box>
-                        <Text fontFamily="mono" color="fg.default" minW="26px" textAlign="right">{c.score}</Text>
-                      </HStack>
+                      {c.assessed && c.score !== null ? (
+                        <HStack gap={2}>
+                          <Box w="90px" h="5px" bg="bg.muted" borderRadius="full" overflow="hidden">
+                            <Box h="full" w={`${(c.score / 5) * 100}%`} bg={scoreColor(c.score)} />
+                          </Box>
+                          <Text fontFamily="mono" color="fg.default" minW="26px" textAlign="right">{c.score}</Text>
+                        </HStack>
+                      ) : (
+                        <Text color="fg.subtle" fontStyle="italic">not scored · run visual review</Text>
+                      )}
                     </HStack>
                   ))}
                 </VStack>

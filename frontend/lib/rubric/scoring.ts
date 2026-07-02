@@ -23,7 +23,7 @@ export const MIN_SCORE = 1;
 
 /** Points deducted from the 5 baseline per finding, by severity. */
 export const SEVERITY_DEDUCTION: Record<RubricSeverity, number> = {
-  error: 2,
+  error: 3,
   warn: 1,
   info: 0.5,
 };
@@ -33,8 +33,8 @@ export const CATEGORIES: readonly RubricCategory[] = ['correctness', 'clarity', 
 
 /** Per-type category weights (each row sums to 1). */
 export const CATEGORY_WEIGHTS: Record<RubricFileType, Record<RubricCategory, number>> = {
-  question:  { correctness: 0.5,  clarity: 0.35, aesthetics: 0.15 },
-  dashboard: { correctness: 0.45, clarity: 0.35, aesthetics: 0.2 },
+  question:  { correctness: 0.3,  clarity: 0.3, aesthetics: 0.4 },
+  dashboard: { correctness: 0.3, clarity: 0.3, aesthetics: 0.4 },
   story:     { correctness: 0.3,  clarity: 0.3,  aesthetics: 0.4 },
 };
 
@@ -53,30 +53,40 @@ export function gradeFor(overall: number): RubricGrade {
   return 'poor';
 }
 
-/** Deduct severity points from 5 for one category's findings, rounded/clamped to [1,5]. */
+/**
+ * Score one category. When `assessed` is false the source didn't evaluate this category (e.g.
+ * deterministic aesthetics on a question) — score is `null` and it's excluded from the overall.
+ */
 export function scoreCategory(
   category: RubricCategory,
   weight: number,
   findings: RubricFinding[],
+  assessed = true,
 ): RubricCategoryScore {
+  if (!assessed) return { category, weight, findings, score: null, assessed: false };
   const deduction = findings.reduce((sum, f) => sum + SEVERITY_DEDUCTION[f.severity], 0);
-  return { category, weight, findings, score: toScore(MAX_SCORE - deduction) };
+  return { category, weight, findings, score: toScore(MAX_SCORE - deduction), assessed: true };
 }
 
 /**
- * Assemble a full report from a flat findings list. Findings are grouped by their own
- * `category`; every category is always present (missing → score 5). Overall is the
- * weight-weighted mean of category scores, on the same 1–5 scale.
+ * Assemble a full report from a flat findings list. All categories are emitted; those NOT in
+ * `assessed` are marked `assessed: false` / `score: null` (the source didn't check them). The
+ * overall is the weighted mean over ONLY the assessed categories, their weights renormalized to
+ * sum to 1 — so an unchecked category never pads (or drags) the total.
  */
 export function buildReport(
   fileType: RubricFileType,
   source: RubricSource,
   findings: RubricFinding[],
+  assessed: readonly RubricCategory[] = CATEGORIES,
 ): RubricReport {
   const weights = CATEGORY_WEIGHTS[fileType];
+  const assessedSet = new Set(assessed);
   const categories = CATEGORIES.map((category) =>
-    scoreCategory(category, weights[category], findings.filter((f) => f.category === category)),
+    scoreCategory(category, weights[category], findings.filter((f) => f.category === category), assessedSet.has(category)),
   );
-  const overall = toScore(categories.reduce((sum, c) => sum + c.score * c.weight, 0));
+  const scored = categories.filter((c): c is RubricCategoryScore & { score: number } => c.assessed && c.score !== null);
+  const totalWeight = scored.reduce((sum, c) => sum + c.weight, 0) || 1;
+  const overall = toScore(scored.reduce((sum, c) => sum + c.score * c.weight, 0) / totalWeight);
   return { fileType, source, overall, grade: gradeFor(overall), categories };
 }

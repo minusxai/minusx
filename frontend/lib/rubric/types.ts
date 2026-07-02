@@ -42,8 +42,10 @@ export interface RubricFinding {
 
 export interface RubricCategoryScore {
   category: RubricCategory;
-  score: number;             // 0–100
+  score: number | null;      // 1–5, or null when this source didn't assess the category
   weight: number;            // per-type category weight (sums to 1 across categories)
+  assessed: boolean;         // did this source actually evaluate this category? (e.g. deterministic
+                             // never assesses aesthetics for question/dashboard — judge-only there)
   findings: RubricFinding[];
 }
 

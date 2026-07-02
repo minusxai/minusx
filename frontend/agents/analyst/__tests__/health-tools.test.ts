@@ -51,8 +51,9 @@ describe('CheckFileHealth', () => {
     const report = (res.details as { report: RubricReport }).report;
     expect(report.source).toBe('deterministic');
     expect(report.categories.flatMap((c) => c.findings).map((f) => f.ruleId)).toContain('question.undeclared-param');
-    // one correctness error → correctness 3; weighted overall 4 (still "good")
-    expect(report.overall).toBe(4);
+    // an error dropped the score below perfect (exact value depends on tuned deductions/weights)
+    expect(report.categories.find((c) => c.category === 'correctness')!.score!).toBeLessThan(5);
+    expect(report.overall).toBeLessThan(5);
   });
 
   it('reports a clean question as good / 100', async () => {

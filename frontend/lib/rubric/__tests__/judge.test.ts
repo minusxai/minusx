@@ -66,9 +66,9 @@ function buildJudgeReport() {
   return {
     fileType: 'question' as const, source: 'llm-judge' as const, overall: 5, grade: 'good' as const,
     categories: [
-      { category: 'correctness' as const, weight: 0.5, score: 5, findings: [] },
-      { category: 'clarity' as const, weight: 0.35, score: 5, findings: [] },
-      { category: 'aesthetics' as const, weight: 0.15, score: 4, findings: [{ ruleId: 'judge.aesthetics.0', category: 'aesthetics' as const, severity: 'warn' as const, title: 't', detail: 'd', fix: 'f' }] },
+      { category: 'correctness' as const, weight: 0.5, score: 5, assessed: true, findings: [] },
+      { category: 'clarity' as const, weight: 0.35, score: 5, assessed: true, findings: [] },
+      { category: 'aesthetics' as const, weight: 0.15, score: 4, assessed: true, findings: [{ ruleId: 'judge.aesthetics.0', category: 'aesthetics' as const, severity: 'warn' as const, title: 't', detail: 'd', fix: 'f' }] },
     ],
   };
 }

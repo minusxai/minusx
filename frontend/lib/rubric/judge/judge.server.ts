@@ -89,8 +89,11 @@ function parseFindings(text: string): RubricFinding[] {
   return out;
 }
 
-/** Merge a deterministic and a judge report into one combined report. */
+/** Merge a deterministic and a judge report into one combined report. A category is assessed in
+ *  the combined report if EITHER source assessed it (the judge covers all three). */
 export function combineReports(deterministic: RubricReport, judge: RubricReport): RubricReport {
   const findings = [...deterministic.categories, ...judge.categories].flatMap((c) => c.findings);
-  return buildReport(deterministic.fileType as RubricFileType, 'combined', findings);
+  const assessed = CATEGORIES.filter((cat) =>
+    [deterministic, judge].some((r) => r.categories.find((c) => c.category === cat)?.assessed));
+  return buildReport(deterministic.fileType as RubricFileType, 'combined', findings, assessed);
 }
