@@ -136,15 +136,49 @@ text/image/divider assets are ignored for counting.
 
 ## LLM judge
 
-`lib/rubric/judge/judge.server.ts`: a dedicated **Opus** judge
-(`getModel('anthropic', 'claude-opus-4-8')`, with a `setJudgeModel` test seam) called via
-`orchestrator.callLLM`, with structured output forced through a typed `SubmitRubric` TypeBox
-tool (the same idiom as `agents/eval/submit-tools.ts`). Input = the file markup
-(`fileToMarkup`) plus the already-uploaded full-file screenshot as an image content block.
-Per-type prompts derive their rubric from the `skill_questions` / `skill_dashboards` /
-`skill_stories` blocks. Emits a `RubricReport` with `source: 'llm-judge'`; the combined report
-merges its categories with the deterministic ones. Pattern cloned from
-`agents/benchmark-analyst/double-check-benchmark.ts`.
+`lib/rubric/judge/judge.server.ts` — `judgeFile({ fileType, content, screenshotUrl, model? })
+→ Promise<RubricReport>`. Grades the subjective / visual dimensions the deterministic pass
+can't (right-chart-for-the-data, does the frame carry the insight, does the story look
+crafted vs AI-default). Emits `source: 'llm-judge'`.
+
+**Standalone, not an orchestrator tool run.** It builds a one-shot `Context` and calls
+`streamSimple` directly, so it can be invoked from a tool handler *or* an API route without
+spinning up an `Orchestrator`. The LLM call is **dependency-injected** (`callModel` param,
+defaults to `streamSimple(...).result()`) so tests drive it with a fake message — no provider,
+no faux registration.
+
+**Same findings shape as the deterministic scorers.** The judge's structured-output tool
+`SubmitRubric` returns a *flat* `findings[]` (category, severity, title, detail, fix) — NOT a
+pre-scored nested report. Those findings flow through the same `buildReport`, so both flavors
+are scored identically and merge cleanly. Judge findings get a generated
+`ruleId: judge.<category>.<index>`. Structured output is forced via the TypeBox `SubmitRubric`
+tool (the `agents/eval/submit-tools.ts` idiom); the tool is defined but **not executed** — we
+read the `toolCall` args straight off the assistant message.
+
+```ts
+// SubmitRubric params
+{ findings: Array<{ category: 'clarity'|'correctness'|'craft';
+                    severity: 'error'|'warn'|'info';
+                    title: string; detail: string; fix: string }> }  // [] if genuinely good
+```
+
+- **Input** = `fileToMarkup(fileType, content)` as text + (when available) the rendered
+  full-file screenshot as an `{ type:'image', url }` content block. The URL is the one the app
+  already captures + uploads on the send path (`lib/screenshot/app-state-screenshot.ts`) — the
+  judge reuses it, it never renders anything itself. With no screenshot it judges from markup.
+- **Model** = dedicated **Opus 4.8** (`getModel('anthropic', 'claude-opus-4-8')`), independent
+  of any chat model, with a `setJudgeModel` test seam.
+- **Prompts** (`judge/prompts.ts`) — a shared reviewer preamble + per-type criteria distilled
+  from `skill_questions` / `skill_dashboards` / `skill_stories`. The judge is told to skip
+  lint-style issues the deterministic pass already covers.
+- **Robustness** — if the model doesn't call `SubmitRubric`, or a finding is malformed
+  (missing category/severity/title), it's dropped; worst case is an empty (100) judge report.
+- `combineReports(deterministic, judge)` flattens both reports' findings and rebuilds one with
+  `source: 'combined'`.
+
+Pattern lineage: the dedicated-Opus-judge idea is from
+`agents/benchmark-analyst/double-check-benchmark.ts`; the typed-Submit-tool-for-structured-
+output idea from `agents/eval/submit-tools.ts`.
 
 ## Consumption
 
