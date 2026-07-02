@@ -23,10 +23,11 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
 import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setSidebarPendingSlashCommand } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
-import { captureFileViewBlob } from '@/lib/screenshot/capture';
-import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
-import { uploadBlobOrEmbed } from '@/lib/object-store/client';
-import { facetHash } from '@/lib/projection/facets';
+import {
+  appStateWithFileScreenshot,
+  warmFileScreenshot,
+  appStateShotKey,
+} from '@/lib/screenshot/app-state-screenshot';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
@@ -49,39 +50,6 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 // circular dependency workaround.
 // eslint-disable-next-line no-restricted-syntax
 const ChatInput = dynamic(() => import('./ChatInput'), { ssr: false });
-
-// Cross-turn capture cache: skip re-shooting when nothing visible changed (key matches).
-let lastFileShot: { key: string; url: string } | null = null;
-
-/**
- * Attach a SINGLE screenshot of the current file to the app-state image facet (replacing the old
- * per-chart image series). The projection pass dedups it across turns via the stable `key` (file id
- * + a hash of what's rendered), so an unchanged view is never re-sent. Best-effort: on any failure
- * (or non-file page / opt-out) the app state is returned unchanged.
- */
-async function appStateWithFileScreenshot(
-  appState: AppState | null | undefined,
-  colorMode: 'light' | 'dark',
-  disabled: boolean,
-): Promise<AppState | null | undefined> {
-  if (disabled || typeof document === 'undefined') return appState;
-  if (!appState || appState.type !== 'file' || !appState.state?.fileState?.id) return appState;
-  const fs = appState.state.fileState;
-  const key = `file:${fs.id}:${facetHash({ markup: fs.markup, qr: appState.state.queryResults, colorMode })}`;
-  try {
-    let url: string;
-    if (lastFileShot?.key === key) {
-      url = lastFileShot.url;
-    } else {
-      const blob = await captureFileViewBlob(fs.id, { colorMode, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg' });
-      url = await uploadBlobOrEmbed(blob, 'file.jpg', 'image/jpeg');
-      lastFileShot = { key, url };
-    }
-    return { ...appState, state: { ...appState.state, fileState: { ...fs, image: { key, url } } } };
-  } catch {
-    return appState;
-  }
-}
 
 interface ChatInterfaceProps {
   conversationId?: number;  // Optional file ID: if provided, load existing conversation
@@ -269,6 +237,20 @@ export default function ChatInterface({
   // instead of subscribing — otherwise this parent re-renders every time any
   // unrelated query result lands or the user toggles colorMode.
   const store = useAppStore();
+
+  // Proactively warm the app-state screenshot cache OFF the send path (debounced, on browser idle),
+  // so the ~1s snapdom rasterize of the current view is already done by the time the user presses
+  // Enter — the send path then attaches the cached image without blocking. colorMode changes rarely,
+  // so subscribing here is cheap; `shotKey` encodes the rendered facet (markup / results / theme) so
+  // we only re-warm when the view actually changes, not on every unrelated re-render.
+  const warmColorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
+  const warmDisableImages = useAppSelector(selectDisableAppStateImages);
+  const shotKey = useMemo(() => appStateShotKey(appState, warmColorMode)?.key ?? null, [appState, warmColorMode]);
+  useEffect(() => {
+    if (!shotKey) return;
+    warmFileScreenshot(appState, warmColorMode, warmDisableImages);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shotKey, warmDisableImages]);
 
   const chatSkills = contextInfo.availableSkills;
 
@@ -898,6 +880,10 @@ export default function ChatInterface({
       const sendState = store.getState();
       const colorMode = sendState.ui.colorMode as 'light' | 'dark';
       const disableAppStateImages = selectDisableAppStateImages(sendState);
+      // ALWAYS attach the screenshot — the agent needs to see the view. The warmer (keyed to the
+      // rendered view, not to keystrokes) has almost always pre-captured it by now, so this is an
+      // instant cache hit. On a cold cache (send right after a view change) it awaits the ~1s
+      // snapdom capture behind this same "preparing" indicator rather than dropping the image.
       appStateForSend = await appStateWithFileScreenshot(appState, colorMode, disableAppStateImages);
 
       // Resolve conversation — normally pre-created on mount, but fall back to inline creation

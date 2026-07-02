@@ -1,0 +1,158 @@
+/**
+ * The image must ALWAYS ride along with the send — a message that needs an app-state screenshot is
+ * never sent without it. The freeze fix is about WHERE the ~1s snapdom capture happens, not whether
+ * it happens: it's pre-captured OFF the send path by the warmer, so by send time it's a cache hit.
+ *
+ * Contract pinned here:
+ *  - appStateWithFileScreenshot (SEND) ALWAYS attaches the image. Warm → instant (no capture). Cold →
+ *    it awaits the capture and attaches it (never returns an image-less app state on the happy path).
+ *  - The warmer (warmFileScreenshot) pre-captures on idle so the common send is a cache hit; the
+ *    blocking wait only happens on a genuinely cold cache (send right after a view change).
+ *  - A changed view (different markup / query result / colorMode) invalidates the cache → re-capture.
+ *  - warmFileScreenshot captures + uploads exactly once per facet, deduped across concurrent calls.
+ *  - disabled / non-file app states are pass-through (no capture, no image).
+ *  - A capture that THROWS is the only case that sends without an image (best-effort: a broken
+ *    snapdom must not wedge the send) — it returns the app state unchanged.
+ */
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  appStateWithFileScreenshot,
+  warmFileScreenshot,
+  appStateShotKey,
+  _internal,
+} from '@/lib/screenshot/app-state-screenshot';
+import type { AppState } from '@/lib/appState';
+
+// A minimal file app state; `markup` + `queryResults` drive the cache key.
+function fileAppState(id: number, markup: string, qr: unknown = {}): AppState {
+  return {
+    type: 'file',
+    state: { fileState: { id, markup }, queryResults: qr } as any,
+  } as AppState;
+}
+
+let captureCalls = 0;
+let uploadCalls = 0;
+let deferred: Array<() => void> = [];
+
+beforeEach(() => {
+  _internal.reset();
+  captureCalls = 0;
+  uploadCalls = 0;
+  deferred = [];
+  // Capture is the ~1s blocker in production — here it's a fake we can count.
+  _internal.capture = vi.fn(async () => {
+    captureCalls++;
+    return new Blob(['x'], { type: 'image/jpeg' });
+  });
+  _internal.upload = vi.fn(async () => {
+    uploadCalls++;
+    return `https://cdn/${captureCalls}.jpg`;
+  });
+  // Run deferred warms manually so the test controls timing (no real timers/idle).
+  _internal.defer = (fn: () => void) => { deferred.push(fn); };
+});
+
+const runDeferred = async () => {
+  const fns = deferred;
+  deferred = [];
+  for (const fn of fns) fn();
+  // let the async capture/upload chain settle
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+};
+
+const imageOf = (a: AppState | null | undefined): { key: string; url: string } | undefined =>
+  (a as any)?.state?.fileState?.image;
+
+describe('appStateShotKey', () => {
+  it('is stable for the same view and changes when the view changes', () => {
+    const k1 = appStateShotKey(fileAppState(7, 'M', { a: 1 }), 'light');
+    const k2 = appStateShotKey(fileAppState(7, 'M', { a: 1 }), 'light');
+    expect(k1?.key).toBe(k2?.key);
+    expect(k1?.id).toBe(7);
+    expect(appStateShotKey(fileAppState(7, 'M2', { a: 1 }), 'light')?.key).not.toBe(k1?.key);
+    expect(appStateShotKey(fileAppState(7, 'M', { a: 2 }), 'light')?.key).not.toBe(k1?.key);
+    expect(appStateShotKey(fileAppState(7, 'M', { a: 1 }), 'dark')?.key).not.toBe(k1?.key);
+  });
+
+  it('returns null for non-file / empty app states', () => {
+    expect(appStateShotKey({ type: 'explore', state: null } as AppState, 'light')).toBeNull();
+    expect(appStateShotKey(null, 'light')).toBeNull();
+  });
+});
+
+describe('appStateWithFileScreenshot (send path — always attaches the image)', () => {
+  it('awaits the capture and ATTACHES the image on a cold cache (never sends without it)', async () => {
+    const app = fileAppState(1, 'dash');
+    const out = await appStateWithFileScreenshot(app, 'light', false);
+    expect(captureCalls).toBe(1);                       // cold → it DID capture
+    expect(imageOf(out)?.url).toBe('https://cdn/1.jpg'); // …and attached the image
+  });
+
+  it('is instant on a warm cache (warmer already ran) — attaches without capturing again', async () => {
+    const app = fileAppState(1, 'dash');
+    warmFileScreenshot(app, 'light', false); // warmer schedules
+    await runDeferred();                      // warm runs (1 capture + 1 upload) off the send path
+    expect(captureCalls).toBe(1);
+
+    const out = await appStateWithFileScreenshot(app, 'light', false); // now warm
+    expect(imageOf(out)?.url).toBe('https://cdn/1.jpg');
+    expect(captureCalls).toBe(1); // no re-capture for the unchanged view — the send was a cache hit
+  });
+
+  it('re-captures and swaps the image when the view changes', async () => {
+    const a = fileAppState(1, 'v1');
+    expect(imageOf(await appStateWithFileScreenshot(a, 'light', false))?.url).toBe('https://cdn/1.jpg');
+
+    const b = fileAppState(1, 'v2'); // changed view → cache invalid
+    const out = await appStateWithFileScreenshot(b, 'light', false);
+    expect(captureCalls).toBe(2);
+    expect(imageOf(out)?.url).toBe('https://cdn/2.jpg');
+  });
+
+  it('is a pass-through when disabled or on a non-file page (no capture, no image)', async () => {
+    const disabled = await appStateWithFileScreenshot(fileAppState(1, 'd'), 'light', true);
+    expect(imageOf(disabled)).toBeUndefined();
+    const nonFile = await appStateWithFileScreenshot({ type: 'explore', state: null } as AppState, 'light', false);
+    expect(imageOf(nonFile)).toBeUndefined();
+    expect(captureCalls).toBe(0);
+  });
+
+  it('sends WITHOUT an image only if capture throws (a broken snapdom must not wedge the send)', async () => {
+    _internal.capture = vi.fn(async () => { throw new Error('snapdom failed'); });
+    const app = fileAppState(3, 'q');
+    const out = await appStateWithFileScreenshot(app, 'light', false);
+    expect(imageOf(out)).toBeUndefined();
+    expect(out).toBeTruthy();
+  });
+});
+
+describe('warmFileScreenshot dedup', () => {
+  it('captures once per facet even if scheduled many times before it runs', async () => {
+    const app = fileAppState(9, 'same');
+    warmFileScreenshot(app, 'light', false);
+    warmFileScreenshot(app, 'light', false);
+    warmFileScreenshot(app, 'light', false);
+    await runDeferred();
+    expect(captureCalls).toBe(1);
+    expect(uploadCalls).toBe(1);
+  });
+
+  it('does nothing when disabled', async () => {
+    warmFileScreenshot(fileAppState(9, 'same'), 'light', true);
+    await runDeferred();
+    expect(captureCalls).toBe(0);
+  });
+
+  it('makes a subsequent send an instant cache hit (no double capture warm + send)', async () => {
+    const app = fileAppState(5, 'warm-then-send');
+    warmFileScreenshot(app, 'light', false);
+    await runDeferred();
+    expect(captureCalls).toBe(1);
+    const out = await appStateWithFileScreenshot(app, 'light', false);
+    expect(captureCalls).toBe(1); // send reused the warm capture
+    expect(imageOf(out)?.url).toBe('https://cdn/1.jpg');
+  });
+});
