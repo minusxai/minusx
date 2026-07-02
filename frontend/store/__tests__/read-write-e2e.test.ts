@@ -1455,7 +1455,10 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
 
     beforeEach(async () => {
-      // Reload from DB and reset Redux state (clears edits and ephemeral state)
+      // Reset Redux to a pristine copy from the DB. A plain setFiles at the same version now
+      // PRESERVES unsaved edits (refetch-preserves-edits fix), so drop the file first to guarantee
+      // each test starts with no staged edits from a prior test.
+      (store.dispatch as any)({ type: 'files/clearFiles' });
       const qFile = await DocumentDB.getById(paramQuestionId);
       (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [qFile] } });
     });

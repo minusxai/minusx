@@ -1126,12 +1126,14 @@ export async function reloadFile(options: ReloadFileOptions): Promise<void> {
     // Force fetch from API (with undefined user parameter)
     const result = await FilesAPI.loadFile(fileId, undefined, { refresh: true });
 
-    // Update Redux with fresh data
+    // Update Redux with fresh data. reloadFile is the explicit discard/force-reload path — its
+    // documented contract is to OVERWRITE local changes, so opt out of edit preservation.
     getStore().dispatch(setFile({
       file: result.data,
       references: result.metadata.references || [],
       analytics: result.metadata.analytics,
       conversationAnalytics: result.metadata.conversationAnalytics,
+      overwriteEdits: true,
     }));
   } finally {
     // Clear loading state
