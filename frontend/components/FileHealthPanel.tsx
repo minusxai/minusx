@@ -9,8 +9,8 @@
  * question/dashboard/story files; renders nothing for other types.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Box, HStack, VStack, Text, Icon, Popover, Portal, Button, Spinner, Table } from '@chakra-ui/react';
-import { LuHeartPulse, LuSparkles, LuRefreshCw } from 'react-icons/lu';
+import { Box, HStack, VStack, Text, Icon, Image, Popover, Portal, Button, Spinner, Table } from '@chakra-ui/react';
+import { LuHeartPulse, LuScanEye, LuRefreshCw } from 'react-icons/lu';
 import { useAppSelector, useAppStore } from '@/store/hooks';
 import { selectFile, selectMergedContent } from '@/store/filesSlice';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
@@ -65,6 +65,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   const [override, setOverride] = useState<RubricReport | null>(null); // manual refresh or judge result
   const [judging, setJudging] = useState(false);
   const [judgeError, setJudgeError] = useState<string | null>(null);
+  const [shot, setShot] = useState<string | null>(null); // the screenshot sent to the judge
   const { captureFileView, blobToDataURL } = useScreenshot();
 
   const deterministic = useMemo<RubricReport | null>(() => {
@@ -77,7 +78,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   }, [fileType, savedContent]);
 
   // A new save (or file load) invalidates any manual-refresh / judge override.
-  useEffect(() => { setOverride(null); setJudgeError(null); }, [savedContent]);
+  useEffect(() => { setOverride(null); setJudgeError(null); setShot(null); }, [savedContent]);
 
   const report = override ?? deterministic;
   if (!report) return null;
@@ -100,6 +101,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
     try {
       const blob = await captureFileView(fileId, { fullHeight: true });
       const screenshot = await blobToDataURL(blob);
+      setShot(screenshot); // show what we're actually sending to the judge
       const res = await fetch(`/api/files/${fileId}/rubric`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,9 +214,16 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                   onClick={runJudge}
                   disabled={judging}
                 >
-                  {judging ? <Spinner size="xs" /> : <Icon as={LuSparkles} />}
+                  {judging ? <Spinner size="xs" /> : <Icon as={LuScanEye} />}
                   <Text>{report.source === 'deterministic' ? 'Run visual review' : 'Re-run visual review'}</Text>
                 </Button>
+
+                {shot && (
+                  <Box borderWidth="1px" borderColor="border.default" borderRadius="md" overflow="hidden" bg="bg.subtle">
+                    <Text fontSize="2xs" color="fg.subtle" px={2} py={1}>Reviewed image</Text>
+                    <Image src={shot} alt="Rendered file reviewed by the judge" w="100%" maxH="200px" objectFit="contain" objectPosition="top" />
+                  </Box>
+                )}
 
                 {judgeError && (
                   <Text fontSize="2xs" color="accent.danger">Visual review failed: {judgeError}</Text>
