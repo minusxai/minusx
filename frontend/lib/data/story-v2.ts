@@ -46,6 +46,11 @@ export function parseStoryJsx(jsx: string): ParseStoryResult {
   return { ok: true, value: { html, assets: [...new Set(assets)] } };
 }
 
+/** A CSS dimension attr (width/height) from parsed jsx attrs → a plain string, or `def` if absent. */
+function dimAttr(v: unknown, def: string): string {
+  return typeof v === 'string' || typeof v === 'number' ? String(v).replace(/["']/g, '') : def;
+}
+
 function nodeToHtml(node: JsxNode, assets: number[]): string {
   if (node.type === 'text') return node.value;
   if (node.type === 'expression') return node.value.static && typeof node.value.json === 'string' ? node.value.json : '';
@@ -59,10 +64,11 @@ function nodeToHtml(node: JsxNode, assets: number[]): string {
     if (typeof attrsMap.id === 'number') {
       const id = attrsMap.id;
       assets.push(id);
-      const h = typeof attrsMap.height === 'string' || typeof attrsMap.height === 'number'
-        ? String(attrsMap.height).replace(/["']/g, '')
-        : '430px';
-      return `<div data-question-id="${id}" style="width:100%;height:${h}"></div>`;
+      // Flow-block contract: width defaults to 100% (responsive full-width), but the agent may
+      // author an explicit px width; both are freely user-resizable. Height is an explicit px value.
+      const w = dimAttr(attrsMap.width, '100%');
+      const h = dimAttr(attrsMap.height, '430px');
+      return `<div data-question-id="${id}" style="width:${w};height:${h}"></div>`;
     }
     // Inline story-local question (query/connection/viz/params live in the body).
     const inline = inlineQuestionFromJsxAttrs(attrsMap);
@@ -117,8 +123,17 @@ export function buildStoryJsx(content: StoryContent): string {
   let html = content.story ?? '';
   // <style>…</style> → <style>{`…`}</style> so CSS `{ }` don't break jsx
   html = html.replace(/<style>([\s\S]*?)<\/style>/g, (_m, css: string) => `<style>{\`${css.replace(/\\/g, '\\\\').replace(/`/g, '\\`')}\`}</style>`);
-  // <div data-question-id="N" …></div> → <Question id={N} />
-  html = html.replace(/<div\s+data-question-id=["'](\d+)["'][^>]*>\s*<\/div>/g, (_m, id: string) => `<Question id={${id}} />`);
+  // <div data-question-id="N" style="width:…;height:…"></div> → <Question id={N} width=… height=… />
+  // Surface the authored size back to the agent (and round-trip it losslessly).
+  html = html.replace(/<div\s+data-question-id=["'](\d+)["']([^>]*)>\s*<\/div>/g, (_m, id: string, rest: string) => {
+    const style = /style=["']([^"']*)["']/.exec(rest)?.[1] ?? '';
+    const w = /(?:^|;)\s*width:\s*([^;]+)/.exec(style)?.[1]?.trim();
+    const h = /(?:^|;)\s*height:\s*([^;]+)/.exec(style)?.[1]?.trim();
+    const attrs = [`id={${id}}`];
+    if (w) attrs.push(`width="${w}"`);
+    if (h) attrs.push(`height="${h}"`);
+    return `<Question ${attrs.join(' ')} />`;
+  });
   // <div data-question-inline="…" …></div> → <Question query={`…`} connection=… viz=… params=… />
   html = placeholdersToInlineQuestionJsx(html);
   // <span data-number-inline="…"></span> → <Number id={N}|query={`…`} … />

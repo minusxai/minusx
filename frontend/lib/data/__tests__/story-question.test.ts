@@ -77,6 +77,30 @@ describe('story-question — placeholder → <Question/> jsx (agent view)', () =
   });
 });
 
+describe('story-question — width authoring (flow-block contract)', () => {
+  const sized: InlineQuestionEmbed = { query: 'SELECT 1', connection: 'duckdb', width: '720px', height: '300px' };
+
+  it('reads a width attr into the embed', () => {
+    const e = inlineQuestionFromJsxAttrs({ query: 'SELECT 1', connection: 'duckdb', width: '720px', height: '300px' });
+    expect(e).toEqual(sized);
+  });
+
+  it('places px width onto the placeholder style and round-trips through extract', () => {
+    const html = inlineQuestionToPlaceholder(sized);
+    expect(html).toContain('style="width:720px;height:300px"');
+    expect(extractInlineQuestions(html)).toEqual([sized]);
+  });
+
+  it('defaults to width:100% when width is omitted', () => {
+    const html = inlineQuestionToPlaceholder({ query: 'SELECT 1', connection: 'duckdb', height: '300px' });
+    expect(html).toContain('style="width:100%;height:300px"');
+  });
+
+  it('emits width in the <Question/> jsx (agent view)', () => {
+    expect(inlineQuestionToJsx(sized)).toContain('width="720px"');
+  });
+});
+
 describe('story-question — embed → QuestionContent projection (for rendering)', () => {
   it('maps connection→connection_name, viz→vizSettings, params→parameters; fills defaults', () => {
     const c = inlineEmbedToQuestionContent(embed);

@@ -22,6 +22,8 @@ export interface InlineQuestionEmbed {
   /** partial viz settings; defaults (table) are filled when projected to a QuestionContent. */
   vizSettings?: Partial<VizSettings>;
   parameters?: QuestionParameter[];
+  /** render width for the embed div (e.g. '720px'); defaults to '100%'. Presentational only. */
+  width?: string;
   /** render height for the embed div (e.g. '200px'); presentational only. */
   height?: string;
 }
@@ -47,6 +49,7 @@ export function inlineQuestionFromJsxAttrs(attrs: Record<string, unknown>): Inli
   const e: InlineQuestionEmbed = { query, connection: typeof attrs.connection === 'string' ? attrs.connection : '' };
   if (attrs.viz && typeof attrs.viz === 'object' && !Array.isArray(attrs.viz)) e.vizSettings = attrs.viz as Partial<VizSettings>;
   if (Array.isArray(attrs.params)) e.parameters = attrs.params as QuestionParameter[];
+  if (typeof attrs.width === 'string' || typeof attrs.width === 'number') e.width = String(attrs.width);
   if (typeof attrs.height === 'string' || typeof attrs.height === 'number') e.height = String(attrs.height);
   return e;
 }
@@ -56,9 +59,12 @@ export function inlineQuestionToPlaceholder(e: InlineQuestionEmbed): string {
   const payload: Record<string, unknown> = { query: e.query, connection_name: e.connection };
   if (e.vizSettings) payload.vizSettings = e.vizSettings;
   if (e.parameters) payload.parameters = e.parameters;
+  if (e.width) payload.width = e.width;
   if (e.height) payload.height = e.height;
+  // Flow-block contract: width defaults to 100% (responsive), height is explicit px.
+  const w = (e.width ? String(e.width) : '100%').replace(/["']/g, '');
   const h = (e.height ? String(e.height) : '430px').replace(/["']/g, '');
-  return `<div data-question-inline="${serializeJsonAttr(payload)}" style="width:100%;height:${h}"></div>`;
+  return `<div data-question-inline="${serializeJsonAttr(payload)}" style="width:${w};height:${h}"></div>`;
 }
 
 const INLINE_Q_DIV_RE = /<div\s+([^>]*?data-question-inline="[^"]*"[^>]*?)>\s*<\/div>/g;
@@ -73,6 +79,7 @@ function payloadToEmbed(payload: Record<string, unknown> | null | undefined): In
   };
   if (payload.vizSettings) e.vizSettings = payload.vizSettings as Partial<VizSettings>;
   if (payload.parameters) e.parameters = payload.parameters as QuestionParameter[];
+  if (typeof payload.width === 'string') e.width = payload.width;
   if (typeof payload.height === 'string') e.height = payload.height;
   return e;
 }
@@ -123,6 +130,7 @@ export function inlineQuestionToJsx(e: InlineQuestionEmbed): string {
   const a: string[] = [`query={\`${escTemplate(e.query)}\`}`, `connection="${e.connection}"`];
   if (e.vizSettings) a.push(`viz={${JSON.stringify(e.vizSettings)}}`);
   if (e.parameters) a.push(`params={${JSON.stringify(e.parameters)}}`);
+  if (e.width) a.push(`width="${e.width}"`);
   if (e.height) a.push(`height="${e.height}"`);
   return `<Question ${a.join(' ')} />`;
 }

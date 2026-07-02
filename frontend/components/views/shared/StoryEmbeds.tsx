@@ -25,6 +25,7 @@ import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbedde
 import EmbeddedQuestionContainer from '@/components/containers/EmbeddedQuestionContainer';
 import StoryParamControl from '@/components/views/story/StoryParamControl';
 import StoryResizeHandles from '@/components/views/story/StoryResizeHandles';
+import StoryMoveHandle from '@/components/views/story/StoryMoveHandle';
 import InlineNumber from '@/components/views/story/InlineNumber';
 import { storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story-params';
 import type { InlineNumberEmbed } from '@/lib/data/story-number';
@@ -91,10 +92,16 @@ export default function StoryEmbeds({
                 />
               </Box>
               {editable && (
-                <StoryResizeHandles
-                  target={t.el}
-                  onCommit={() => t.el.dispatchEvent(new Event('input', { bubbles: true }))}
-                />
+                <>
+                  <StoryResizeHandles
+                    target={t.el}
+                    onCommit={() => t.el.dispatchEvent(new Event('input', { bubbles: true }))}
+                  />
+                  <StoryMoveHandle
+                    target={t.el}
+                    onCommit={() => t.el.dispatchEvent(new Event('input', { bubbles: true }))}
+                  />
+                </>
               )}
             </>,
             t.el,

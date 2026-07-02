@@ -44,6 +44,33 @@ describe('parseStoryJsx', () => {
   });
 });
 
+describe('parseStoryJsx — saved <Question> width/height', () => {
+  it('authors an explicit px width + height onto the saved-question placeholder', () => {
+    const r = parseStoryJsx('<div class="story"><Question id={42} width="880px" height="600px" /></div>');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.html).toContain('data-question-id="42" style="width:880px;height:600px"');
+  });
+
+  it('defaults width to 100% (responsive flow-block) when omitted', () => {
+    const r = parseStoryJsx('<div class="story"><Question id={42} height="600px" /></div>');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.html).toContain('style="width:100%;height:600px"');
+  });
+
+  it('round-trips an authored px width through buildStoryJsx (jsx → html → jsx → same html)', () => {
+    const jsx = '<div class="story"><Question id={42} width="880px" height="600px" /></div>';
+    const parsed = parseStoryJsx(jsx);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const rebuilt = buildStoryJsx({ story: parsed.value.html, assets: [{ id: 42, type: 'question' }] } as never);
+    expect(validateJsxSource(rebuilt, ['Question'])).toEqual([]);
+    expect(rebuilt).toContain('width="880px"');
+    expect(rebuilt).toContain('height="600px"');
+    const reparsed = parseStoryJsx(rebuilt);
+    expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html);
+  });
+});
+
 describe('parseStoryJsx — inline <Question>', () => {
   it('maps an inline <Question query=… connection=… viz=…/> to a data-question-inline embed (no asset id)', () => {
     const jsx = '<div class="story"><Question query={`SELECT SUM(mrr) AS mrr FROM t WHERE m = :month`} connection="duckdb" viz={{type:"single_value",yCols:["mrr"]}} height="200px" /></div>';
