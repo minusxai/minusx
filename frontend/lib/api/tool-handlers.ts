@@ -639,6 +639,7 @@ registerFrontendTool('EditFile', async (args, context) => {
   // All markup changes validated + applied as a single atomic replace. Skipped entirely for a
   // rename-only edit (no `changes`), so it doesn't dirty the markup or re-run queries needlessly.
   const diffs: string[] = [];
+  const autoCorrections: string[] = [];
   let editValidation: string[] | undefined;
   if (changes.length > 0) {
     // Validate all changes in memory first (atomic: no Redux writes until all pass)
@@ -661,7 +662,8 @@ registerFrontendTool('EditFile', async (args, context) => {
       // Auto-fix: when oldMatch is just a bare opening tag "<tagname>" and newMatch includes the
       // matching closing tag "</tagname>", the replacement would leave the original closing tag
       // dangling (double-close corruption → JSX parse failure). Expand effectiveOld to include
-      // the current element content up to (and including) the first matching closing tag.
+      // the current element content up to (and including) the first matching closing tag, and
+      // report the correction so the model learns the correct full-element pattern.
       const bareOpenTagM = effectiveOld.match(/^<([a-zA-Z][\w-]*)>$/);
       if (bareOpenTagM) {
         const closingTag = `</${bareOpenTagM[1]}>`;
@@ -669,7 +671,12 @@ registerFrontendTool('EditFile', async (args, context) => {
           const openIdx = workingStr.indexOf(effectiveOld);
           const closeIdx = openIdx !== -1 ? workingStr.indexOf(closingTag, openIdx) : -1;
           if (closeIdx !== -1) {
-            effectiveOld = workingStr.slice(openIdx, closeIdx + closingTag.length);
+            const expanded = workingStr.slice(openIdx, closeIdx + closingTag.length);
+            autoCorrections.push(
+              `Change ${i + 1}: oldMatch "${oldMatch}" is a bare opening tag — auto-expanded to "${expanded}" ` +
+              `(use the full element as oldMatch to avoid duplicate closing tags)`
+            );
+            effectiveOld = expanded;
           }
         }
       }
@@ -886,6 +893,7 @@ registerFrontendTool('EditFile', async (args, context) => {
     ...(vizWarning ? { vizWarning } : {}),
     ...(titleWarning ? { titleWarning } : {}),
     ...(editValidation?.length ? { validation: editValidation } : {}),
+    ...(autoCorrections.length > 0 ? { autoCorrections } : {}),
   };
   const augmentedDetails: AugmentedToolDetails = {
     __augmented: [{ file: entry, references: [] }],

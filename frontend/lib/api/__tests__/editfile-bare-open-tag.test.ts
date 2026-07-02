@@ -79,6 +79,10 @@ describe('EditFile — bare opening-tag oldMatch auto-expand', () => {
 
     const parsed = parse(res);
     expect(parsed.success).toBe(true);
+    // Model is informed of the correction so it can learn the correct pattern
+    expect(parsed.autoCorrections).toHaveLength(1);
+    expect(parsed.autoCorrections[0]).toContain('<description>');
+    expect(parsed.autoCorrections[0]).toContain('auto-expanded');
 
     const content = selectMergedContent(testStore.getState(), dashId) as any;
     expect(content.description).toBe('My dashboard description');
