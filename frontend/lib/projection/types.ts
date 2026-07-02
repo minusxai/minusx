@@ -132,15 +132,34 @@ export interface ProjectedFileJson {
   queryResults?: ProjectedQueryResultJson[];
 }
 
-/** A query result in the LLM-facing JSON: summary diffed inline; `data`/`image` signaled as blocks. */
-export interface ProjectedQueryResultJson {
+/**
+ * A fully-unchanged query result — EVERY facet (summary, finalQuery, data, image) is identical to a
+ * prior in-window turn and there is no error to surface. The whole entry collapses to this compact
+ * signal instead of an object whose every field is separately marked unchanged, so a dashboard with
+ * dozens of referenced questions doesn't re-emit dozens of all-`unchanged` objects each turn. Reuse
+ * what you already saw earlier for this `queryResultId`.
+ */
+export interface UnchangedQueryResultJson {
   queryResultId: string;
-  finalQuery?: string;
+  unchanged: true;
+}
+
+/**
+ * A query result with at least one moved facet: summary diffed inline; `data`/`image` signaled as
+ * blocks; `finalQuery` diffed inline (and truncated when very long — see `truncateFinalQuery`).
+ */
+export interface ChangedQueryResultJson {
+  queryResultId: string;
+  finalQuery?: Diffed<string>;
   error?: string;
   summary: Diffed<QueryResultSummary>;
   data?: BlockFacetSignal;
   image?: BlockFacetSignal;
 }
+
+/** A query result in the LLM-facing JSON — either the full {@link ChangedQueryResultJson} or, when
+ *  nothing moved, the collapsed {@link UnchangedQueryResultJson}. */
+export type ProjectedQueryResultJson = UnchangedQueryResultJson | ChangedQueryResultJson;
 
 export interface ProjectedFilesJson {
   file: ProjectedFileJson;
