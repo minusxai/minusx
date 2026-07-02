@@ -30,7 +30,7 @@ export const CONTEXT_BUDGETS = {
    * Keeps one verbose doc from dominating the prompt. Applied by
    * `renderResolvedDocInline` (converted to chars via `tokensToChars`).
    */
-  perDocTokens: 1000,
+  perDocTokens: 100000,
 
   /**
    * Max characters of the schema table-of-contents (schema → table names, no
