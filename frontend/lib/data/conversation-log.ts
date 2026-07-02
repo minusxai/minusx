@@ -71,22 +71,25 @@ export interface DerivedPendingToolCall {
  * the stream can deliver "pending" on reconnect without any live orchestrator state.
  */
 /**
- * Frontend tools that pause a run to await USER INPUT (they throw UserInputException) rather than
- * auto-executing in the browser. Keep in sync with the handlers in `lib/api/tool-handlers.ts` that
- * throw UserInputException.
+ * Frontend tools that, when a `paused` conversation is REOPENED (cold load), should keep it presented
+ * as live/resumable rather than interrupted. This is deliberately ONLY `ClarifyFrontend`:
+ *
+ * - ClarifyFrontend is a pure question with no side effects, and cold load can reconstruct an
+ *   answerable prompt for it (see seedPendingClarifyInputs), so re-surfacing it is safe and useful.
+ * - Navigate / PublishAll also pause for user input, but they carry SIDE EFFECTS (router.push,
+ *   opening the publish modal) and their confirmation is STALE on an old chat — re-surfacing "Allow
+ *   navigation?"/"Publish?" hours later is wrong, and since nothing makes them answerable on cold
+ *   load they'd just show a dead "Stop" spinner. So they are NOT resumable-on-reopen.
+ * - Auto-executing tools (EditFile, ReadFiles, …) were meant to be driven by the original browser tab,
+ *   which is gone on reopen, so nothing will complete them.
+ *
+ * Everything except a pending Clarify therefore loads as interrupted (FINISHED) — no phantom Stop
+ * button on old chats — instead of a run that spins forever.
  */
-export const USER_INPUT_TOOLS: ReadonlySet<string> = new Set(['ClarifyFrontend', 'Navigate', 'PublishAll']);
+export const COLD_REOPEN_RESUMABLE_TOOLS: ReadonlySet<string> = new Set(['ClarifyFrontend']);
 
-/**
- * On COLD LOAD, a `paused` conversation has no live turn/tab driving it. If its unanswered pending
- * tools await USER INPUT (Clarify/Navigate/PublishAll), it's legitimately resumable — the UI renders
- * the prompt. If they're AUTO-EXECUTING tools (EditFile, ReadFiles, …) the original tab was meant to
- * run them and resume, but it's gone — nothing will, so presenting the run as live "executing" (with a
- * Stop button) leaves an old chat spinning forever. This tells the two apart so an orphaned run loads
- * as interrupted instead of live.
- */
-export function isAwaitingUserInput(pending: ReadonlyArray<DerivedPendingToolCall>): boolean {
-  return pending.some((p) => USER_INPUT_TOOLS.has(p.name));
+export function isColdReopenResumable(pending: ReadonlyArray<DerivedPendingToolCall>): boolean {
+  return pending.some((p) => COLD_REOPEN_RESUMABLE_TOOLS.has(p.name));
 }
 
 export function derivePendingToolCalls(log: ConversationLog): DerivedPendingToolCall[] {

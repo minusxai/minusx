@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   entryKind, entryPiId, entryParentPiId, entriesToInserts, rowsToLog, derivePendingToolCalls,
-  isAwaitingUserInput,
+  isColdReopenResumable,
 } from '../conversation-log';
 import type { ConversationLog } from '@/orchestrator/types';
 
@@ -76,29 +76,29 @@ describe('derivePendingToolCalls', () => {
   });
 });
 
-describe('isAwaitingUserInput — cold-load resumable vs orphaned', () => {
+describe('isColdReopenResumable — only a pending Clarify keeps a reopened chat live', () => {
   const p = (name: string) => ({ id: 't', name, arguments: {} });
 
-  it('true when a pending tool awaits user input (Clarify)', () => {
-    expect(isAwaitingUserInput([p('ClarifyFrontend')])).toBe(true);
+  it('true for a pending Clarify (safe, answerable question we can re-surface)', () => {
+    expect(isColdReopenResumable([p('ClarifyFrontend')])).toBe(true);
   });
 
-  it('true for Navigate / PublishAll (also user-input pauses)', () => {
-    expect(isAwaitingUserInput([p('Navigate')])).toBe(true);
-    expect(isAwaitingUserInput([p('PublishAll')])).toBe(true);
+  it('false for Navigate / PublishAll — side-effectful, stale confirmations must NOT show a live Stop', () => {
+    expect(isColdReopenResumable([p('Navigate')])).toBe(false);
+    expect(isColdReopenResumable([p('PublishAll')])).toBe(false);
   });
 
   it('false for auto-executing tools (orphaned run — must not show as live executing)', () => {
-    expect(isAwaitingUserInput([p('EditFile')])).toBe(false);
-    expect(isAwaitingUserInput([p('ReadFiles')])).toBe(false);
-    expect(isAwaitingUserInput([p('CreateFile')])).toBe(false);
+    expect(isColdReopenResumable([p('EditFile')])).toBe(false);
+    expect(isColdReopenResumable([p('ReadFiles')])).toBe(false);
+    expect(isColdReopenResumable([p('CreateFile')])).toBe(false);
   });
 
   it('false for no pending tools', () => {
-    expect(isAwaitingUserInput([])).toBe(false);
+    expect(isColdReopenResumable([])).toBe(false);
   });
 
-  it('true when any pending tool awaits input (mixed)', () => {
-    expect(isAwaitingUserInput([p('EditFile'), p('ClarifyFrontend')])).toBe(true);
+  it('true when any pending tool is a Clarify (mixed)', () => {
+    expect(isColdReopenResumable([p('EditFile'), p('ClarifyFrontend')])).toBe(true);
   });
 });

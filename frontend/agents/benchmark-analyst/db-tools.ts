@@ -11,7 +11,7 @@ import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { isImageViz, shouldDropRows } from '@/lib/chart/query-presentation';
 import { type BenchmarkAnalystContext, type ConnectionInfo, publicConnectionMetadata } from './types';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
-import { searchDatabaseSchema } from '@/lib/search/schema-search';
+import { searchDatabaseSchema, capSchemaResult } from '@/lib/search/schema-search';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getOrCreateBenchmarkConnector } from './shared-duckdb';
 import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
@@ -179,7 +179,12 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
         })).filter((s) => s.tables.length > 0)
       : schemas;
 
-    const payload = await searchDatabaseSchema(filteredSchemas, query || undefined) as SearchDBSchemaDetails;
+    const rawPayload = await searchDatabaseSchema(filteredSchemas, query || undefined) as SearchDBSchemaDetails;
+    // Bound the size handed to the LLM: an unbounded schema (e.g. GA4's hundreds of identical
+    // events_YYYYMMDD tables ≈ millions of chars) is re-sent every turn and single-handedly exhausts
+    // the context window during a dashboard/story build. The full schema is still available to the
+    // agent by narrowing the search (keyword / JSONPath).
+    const payload = capSchemaResult(rawPayload) as SearchDBSchemaDetails;
     return {
       content: [{ type: 'text', text: JSON.stringify(payload) }],
       isError: false,

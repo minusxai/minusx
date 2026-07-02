@@ -106,6 +106,58 @@ async function searchSchemas(
 }
 
 /**
+ * Max serialized size of a SearchDBSchema result handed to the LLM. The schema of a large
+ * partitioned warehouse (e.g. a GA4 export with hundreds of identical `events_YYYYMMDD` tables) can
+ * be millions of characters; since the whole conversation is re-sent every turn, one unbounded schema
+ * result alone exhausts the model's context window during a multi-step build (dashboards, stories).
+ * Cap it and tell the agent to narrow its search.
+ */
+export const SCHEMA_RESULT_MAX_CHARS = 60_000;
+
+/**
+ * Bound a SearchDBSchema payload's serialized size by keeping whole tables (in order) until the budget
+ * runs out, then annotating the truncation. Non-mutating — clones the trimmed `tables` arrays so the
+ * cached schema objects are untouched. Handles both result shapes: `schema: [{tables}]` (no/JSONPath
+ * query) and `results: [{schema:{tables}}]` (keyword query).
+ */
+export function capSchemaResult<T extends { schema?: any; results?: any[] }>(
+  payload: T,
+  maxChars = SCHEMA_RESULT_MAX_CHARS,
+): T {
+  const full = JSON.stringify(payload);
+  if (full.length <= maxChars) return payload;
+
+  const budget = { left: maxChars - 400 }; // headroom for the truncation note
+  let shown = 0;
+  let total = 0;
+  const capTables = (owner: any): any => {
+    if (!owner || !Array.isArray(owner.tables)) return owner;
+    total += owner.tables.length;
+    const kept: any[] = [];
+    for (const t of owner.tables) {
+      const len = JSON.stringify(t).length + 1;
+      if (budget.left - len < 0) break; // preserve order; stop once the budget is spent
+      budget.left -= len;
+      kept.push(t);
+      shown++;
+    }
+    return { ...owner, tables: kept };
+  };
+
+  let capped: T;
+  if (Array.isArray(payload.schema)) {
+    capped = { ...payload, schema: payload.schema.map(capTables) };
+  } else if (Array.isArray(payload.results)) {
+    capped = { ...payload, results: payload.results.map((r: any) => ({ ...r, schema: capTables(r.schema) })) };
+  } else {
+    return { ...payload, truncated: true, note: `Schema result too large (${full.length} chars). Narrow your SearchDBSchema query.` } as T;
+  }
+  (capped as any).truncated = true;
+  (capped as any).note = `Schema too large — showing ${shown} of ${total} tables. Narrow your SearchDBSchema query (a keyword to match specific table/column names, or a JSONPath) to see the tables you need.`;
+  return capped;
+}
+
+/**
  * Core search logic for database schemas.
  * Auto-detects: queries starting with '$' use JSONPath, others use weighted string search.
  */

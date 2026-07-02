@@ -639,6 +639,7 @@ registerFrontendTool('EditFile', async (args, context) => {
   // All markup changes validated + applied as a single atomic replace. Skipped entirely for a
   // rename-only edit (no `changes`), so it doesn't dirty the markup or re-run queries needlessly.
   const diffs: string[] = [];
+  const autoCorrections: string[] = [];
   let editValidation: string[] | undefined;
   if (changes.length > 0) {
     // Validate all changes in memory first (atomic: no Redux writes until all pass)
@@ -656,8 +657,29 @@ registerFrontendTool('EditFile', async (args, context) => {
       // Mirror editFileStr's \n normalization
       const normalizedOld = oldMatch.includes('\\n') ? oldMatch.replace(/\\n/g, '\n') : oldMatch;
       const normalizedNew = newMatch.includes('\\n') ? newMatch.replace(/\\n/g, '\n') : newMatch;
-      const effectiveOld = workingStr.includes(oldMatch) ? oldMatch : normalizedOld;
+      let effectiveOld = workingStr.includes(oldMatch) ? oldMatch : normalizedOld;
       const effectiveNew = oldMatch === effectiveOld ? newMatch : normalizedNew;
+      // Auto-fix: when oldMatch is just a bare opening tag "<tagname>" and newMatch includes the
+      // matching closing tag "</tagname>", the replacement would leave the original closing tag
+      // dangling (double-close corruption → JSX parse failure). Expand effectiveOld to include
+      // the current element content up to (and including) the first matching closing tag, and
+      // report the correction so the model learns the correct full-element pattern.
+      const bareOpenTagM = effectiveOld.match(/^<([a-zA-Z][\w-]*)>$/);
+      if (bareOpenTagM) {
+        const closingTag = `</${bareOpenTagM[1]}>`;
+        if ((effectiveNew.includes(closingTag) || normalizedNew.includes(closingTag)) && workingStr.includes(effectiveOld)) {
+          const openIdx = workingStr.indexOf(effectiveOld);
+          const closeIdx = openIdx !== -1 ? workingStr.indexOf(closingTag, openIdx) : -1;
+          if (closeIdx !== -1) {
+            const expanded = workingStr.slice(openIdx, closeIdx + closingTag.length);
+            autoCorrections.push(
+              `Change ${i + 1}: oldMatch "${oldMatch}" is a bare opening tag — auto-expanded to "${expanded}" ` +
+              `(use the full element as oldMatch to avoid duplicate closing tags)`
+            );
+            effectiveOld = expanded;
+          }
+        }
+      }
       if (!workingStr.includes(effectiveOld)) {
         const err = `String "${oldMatch}" not found in file`;
         const failureContent = {
@@ -871,6 +893,7 @@ registerFrontendTool('EditFile', async (args, context) => {
     ...(vizWarning ? { vizWarning } : {}),
     ...(titleWarning ? { titleWarning } : {}),
     ...(editValidation?.length ? { validation: editValidation } : {}),
+    ...(autoCorrections.length > 0 ? { autoCorrections } : {}),
   };
   const augmentedDetails: AugmentedToolDetails = {
     __augmented: [{ file: entry, references: [] }],
@@ -1074,7 +1097,11 @@ registerFrontendTool('CreateFile', async (args, context) => {
   const result: Record<string, any> = { success: true, state: stateNoMarkup };
   if (vizWarning) result.vizWarning = vizWarning;
   if (createValidation.length) result.validation = createValidation; // non-blocking feedback
-  const imageBlocks = await renderFileChartImageBlocks([augmented]);
+  // NO chart image for CreateFile: a created file is always a background draft (this tool never
+  // navigates), so the agent isn't looking at it — the rows + viz settings in `state` already convey
+  // the result. Attaching a rendered chart image per create was a major context-bloat source when
+  // building many widgets (e.g. a 20-widget dashboard blew past the model's context window before it
+  // could be assembled). If the agent later needs the visual, ReadFiles still renders one on demand.
   // Rich payload for the projection pass (see ReadFiles/EditFile); content kept for the chat UI.
   const augmentedDetails: AugmentedToolDetails = {
     __augmented: [compressedToAugmentedFiles(compressAugmentedFile(augmented))],
@@ -1086,7 +1113,7 @@ registerFrontendTool('CreateFile', async (args, context) => {
     },
   };
   return {
-    content: [{ type: 'text', text: JSON.stringify(result) }, ...markupTextBlocks(createBlocks), ...imageBlocks],
+    content: [{ type: 'text', text: JSON.stringify(result) }, ...markupTextBlocks(createBlocks)],
     details: { success: true, ...augmentedDetails },
   };
 });

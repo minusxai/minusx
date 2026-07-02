@@ -63,7 +63,7 @@ function debugWithTokens(total_tokens: number): DebugMessage {
   };
 }
 
-function makeConversation(userMessages: number, tokens = 700_000): Conversation {
+function makeConversation(userMessages: number, tokens = 300_000): Conversation {
   const messages: Conversation['messages'] = [];
   for (let i = 0; i < userMessages; i++) {
     messages.push(userMsg(`question ${i + 1}`));
@@ -108,10 +108,10 @@ describe('Conversation too long gate', () => {
     expect(queryByLabelText('conversation too long warning')).toBeNull();
   });
 
-  it('shows the gate when genuinely runaway (over 500k) with 2+ user messages', async () => {
+  it('shows the gate when over the limit (150k) with 2+ user messages', async () => {
     const store = storeModule.makeStore();
     vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
-    store.dispatch(loadConversation({ conversation: makeConversation(2, 700_000), setAsActive: true }));
+    store.dispatch(loadConversation({ conversation: makeConversation(2, 300_000), setAsActive: true }));
 
     const { findByLabelText, queryByLabelText } = renderWithProviders(
       <ChatInterface contextPath="/org/context" container="page" appState={null} />,
@@ -123,12 +123,12 @@ describe('Conversation too long gate', () => {
     expect(queryByLabelText('chat input')).toBeNull();
   });
 
-  it('does NOT gate a large-but-normal turn (~300k, e.g. one data story) even with 2+ messages', async () => {
-    // Regression for the naggy lock-out after a single story: 300k is a rich single turn on a
-    // 1M-context model, not a runaway conversation — the input must stay usable.
+  it('does NOT gate a normal turn under the limit (~100k), even with 2+ messages', async () => {
+    // The threshold must sit below the model window (~200k-400k) so it warns before the hard error,
+    // but a normal turn well under it stays usable — no naggy lock-out.
     const store = storeModule.makeStore();
     vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
-    store.dispatch(loadConversation({ conversation: makeConversation(2, 300_000), setAsActive: true }));
+    store.dispatch(loadConversation({ conversation: makeConversation(2, 100_000), setAsActive: true }));
 
     const { findByLabelText, queryByLabelText } = renderWithProviders(
       <ChatInterface contextPath="/org/context" container="page" appState={null} />,

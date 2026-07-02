@@ -232,10 +232,16 @@ async function runV3TurnInListener(
     status = result.status === 'running' ? 'idle' : result.status;
     runError = result.error;
   }
-  if (status === 'error') throw new Error(runError || 'chat error');
-
-  // Reload the durable log for the final render (one source of truth).
+  // Reload the durable log for the final render (one source of truth). Also carries errors[] — the
+  // v3 stream only signals a bare terminal `status:'error'` and never puts the message on the wire,
+  // so `runError` is undefined; the real cause was persisted to errors[]. Fetch it BEFORE surfacing
+  // the error so the user sees the actual message instead of a generic "chat error".
   const detail = await ConversationsAPI.get(conversationID);
+  if (status === 'error') {
+    const lastErr = detail.errors[detail.errors.length - 1];
+    throw new Error(runError || lastErr?.message || 'chat error');
+  }
+
   const piLog = detail.messages.map((m) => m.content) as unknown as ConversationLog;
   const errors = detail.errors.map((e) => ({
     source: e.source, message: e.message,
