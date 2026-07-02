@@ -28,6 +28,7 @@ import { anyDocMetaIncomplete } from '@/lib/context/doc-validation';
 import { Checkbox } from '@/components/ui/checkbox';
 import Editor from '@monaco-editor/react';
 import DocumentHeader from '../DocumentHeader';
+import { FileHealthBadge } from '../FileHealthPanel';
 import CodeView from '../views/CodeView';
 import { useAppSelector } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
@@ -652,6 +653,7 @@ export default function ContextEditorV2({
           onSave={handleSave}
           viewMode={activeTab === 'picker' ? 'visual' : 'json'}
           onViewModeChange={(mode) => handleTabChange(mode === 'visual' ? 'picker' : 'yaml')}
+          additionalBadges={file ? <FileHealthBadge fileId={file.id} fileType="context" /> : undefined}
         />
       </Box>
 
