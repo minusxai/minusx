@@ -8,12 +8,12 @@
  * See `frontend/docs/rubrik.md`. Rendered in the shared FileHeader badge row for
  * question/dashboard/story files; renders nothing for other types.
  */
-import { useMemo, useState } from 'react';
-import { Box, HStack, VStack, Text, Icon, Popover, Portal, Button, Spinner } from '@chakra-ui/react';
-import { LuHeartPulse, LuCircleAlert, LuTriangleAlert, LuInfo, LuSparkles } from 'react-icons/lu';
+import { useEffect, useMemo, useState } from 'react';
+import { Box, HStack, VStack, Text, Icon, IconButton, Popover, Portal, Button, Spinner } from '@chakra-ui/react';
+import { LuHeartPulse, LuCircleAlert, LuTriangleAlert, LuInfo, LuSparkles, LuRefreshCw } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
-import { useAppSelector } from '@/store/hooks';
-import { selectMergedContent } from '@/store/filesSlice';
+import { useAppSelector, useAppStore } from '@/store/hooks';
+import { selectFile, selectMergedContent } from '@/store/filesSlice';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
 import type { RubricCategory, RubricFinding, RubricReport, RubricSeverity } from '@/lib/rubric/types';
@@ -44,22 +44,41 @@ function scoreColor(score: number): string {
 }
 
 export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType: string }) {
-  const content = useAppSelector((s) => selectMergedContent(s, fileId));
-  const [judgeReport, setJudgeReport] = useState<RubricReport | null>(null);
+  // Score the SAVED content, not live edits — so this recomputes on save/load, NOT on every
+  // keypress (which re-parsed stories on each stroke and froze the header). The refresh button
+  // re-runs against the current unsaved edits on demand.
+  const savedContent = useAppSelector((s) => selectFile(s, fileId)?.content);
+  const store = useAppStore();
+  const [override, setOverride] = useState<RubricReport | null>(null); // manual refresh or judge result
   const [judging, setJudging] = useState(false);
   const { captureFileView, blobToDataURL } = useScreenshot();
 
   const deterministic = useMemo<RubricReport | null>(() => {
-    if (!isRubricFileType(fileType) || !content) return null;
+    if (!isRubricFileType(fileType) || !savedContent) return null;
     try {
-      return scoreFileDeterministic(fileType, content);
+      return scoreFileDeterministic(fileType, savedContent);
     } catch {
       return null;
     }
-  }, [fileType, content]);
+  }, [fileType, savedContent]);
 
-  const report = judgeReport ?? deterministic;
+  // A new save (or file load) invalidates any manual-refresh / judge override.
+  useEffect(() => { setOverride(null); }, [savedContent]);
+
+  const report = override ?? deterministic;
   if (!report) return null;
+
+  // Re-run the deterministic scorer against the CURRENT (unsaved) merged content, on demand.
+  const refresh = () => {
+    if (!isRubricFileType(fileType)) return;
+    const merged = selectMergedContent(store.getState(), fileId);
+    if (!merged) return;
+    try {
+      setOverride(scoreFileDeterministic(fileType, merged));
+    } catch {
+      // ignore — keep the current report
+    }
+  };
 
   const runJudge = async () => {
     setJudging(true);
@@ -72,7 +91,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
         body: JSON.stringify({ screenshot }),
       });
       const json = await res.json().catch(() => null);
-      if (json?.data?.report) setJudgeReport(json.data.report as RubricReport);
+      if (json?.data?.report) setOverride(json.data.report as RubricReport);
     } catch {
       // best-effort — leave the deterministic report in place
     } finally {
@@ -86,9 +105,11 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   const gradeColor = GRADE_COLOR[report.grade];
 
   return (
-    <Popover.Root
+    <HStack gap={0.5} flexShrink={0}>
+      <style>{'@keyframes mxHealthPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.6); } }'}</style>
+      <Popover.Root
       positioning={{ placement: 'bottom-start' }}
-      onOpenChange={(e) => { if (e.open && AUTO_RUN_VISUAL_REVIEW && !judgeReport && !judging) void runJudge(); }}
+      onOpenChange={(e) => { if (e.open && AUTO_RUN_VISUAL_REVIEW && !override && !judging) void runJudge(); }}
     >
       <Popover.Trigger asChild>
         <Button
@@ -106,7 +127,14 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
           _hover={{ bg: 'bg.muted' }}
         >
           <HStack gap={0} fontFamily="mono" fontSize="2xs" fontWeight="600">
-            <Icon as={LuHeartPulse} color={gradeColor} boxSize={3.5} mr={1.5} />
+            <Box
+              w={2}
+              h={2}
+              mr={2}
+              borderRadius="full"
+              bg={gradeColor}
+              style={{ animation: 'mxHealthPulse 1.6s ease-in-out infinite' }}
+            />
             <Text color="fg.default">File Health: {report.overall}</Text>
             <Text color="fg.muted">/5</Text>
           </HStack>
@@ -169,7 +197,20 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
           </Popover.Content>
         </Popover.Positioner>
       </Portal>
-    </Popover.Root>
+      </Popover.Root>
+      <IconButton
+        aria-label="Refresh file health"
+        size="xs"
+        variant="ghost"
+        h="auto"
+        minW="auto"
+        px={1}
+        py={0.5}
+        onClick={refresh}
+      >
+        <Icon as={LuRefreshCw} boxSize={3} />
+      </IconButton>
+    </HStack>
   );
 }
 
