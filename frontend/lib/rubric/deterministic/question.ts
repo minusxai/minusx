@@ -77,12 +77,5 @@ export function scoreQuestion(content: QuestionContent): RubricFinding[] {
       'More than 5 series is hard to read (the ≤7 rule). Split into small multiples or drop series.'));
   }
 
-  // low-trust-sql (correctness)
-  if (`${query}\n${content.description ?? ''}`.includes('[[trust:low]]')) {
-    out.push(finding('question.low-trust-sql', 'correctness', 'info', 'Low-trust SQL',
-      'This SQL is flagged [[trust:low]].',
-      'Verify this novel SQL against the schema/context; reuse a trusted saved question if one exists.'));
-  }
-
   return out;
 }

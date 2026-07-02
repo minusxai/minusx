@@ -69,11 +69,6 @@ describe('scoreQuestion', () => {
     expect(findings.find((x) => x.ruleId === 'question.too-many-series')?.severity).toBe('warn');
   });
 
-  it('flags [[trust:low]] SQL', () => {
-    const findings = scoreQuestion(makeQuestion({ description: 'novel [[trust:low]] query' }));
-    expect(findings.find((x) => x.ruleId === 'question.low-trust-sql')?.severity).toBe('info');
-  });
-
   it('returns no findings for a healthy question', () => {
     expect(scoreQuestion(makeQuestion())).toEqual([]);
   });

@@ -110,7 +110,6 @@ Grade bands: `overall >= 4 → good`, `>= 2.5 → fair`, else `poor`.
 | `viz-config-incomplete` | correctness | error | `type` is `pivot` and `pivotConfig` is missing or has no `values` (and no `rows`/`columns`) | Configure the pivot (rows, columns, at least one value measure) or switch to `table`. |
 | `pie-multi-measure` | correctness | warn | `type` ∈ {pie, funnel} and `yCols.length > 1` | Pie/funnel show a single measure. Keep one `yCols`, or use a bar chart. |
 | `too-many-series` | clarity | warn | `type` ∈ {line, bar, area} and `yCols.length > 5` | More than 5 series is hard to read (≤7 rule). Split into small multiples or drop series. |
-| `low-trust-sql` | correctness | info | `[[trust:low]]` appears in `query` or `description` | Verify this novel SQL against the schema/context; reuse a trusted saved question if one exists. |
 
 > Only `pivot` genuinely requires its config object — `trendConfig` / `singleValueConfig` /
 > `geoConfig` are optional decoration with sensible defaults, so they are **not** flagged
