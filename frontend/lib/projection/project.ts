@@ -108,9 +108,12 @@ function projectEntry(memo: FacetMemo, entry: AugmentedFileEntry, opts: EntryOpt
   if (entry.queryResults?.length) {
     json.queryResults = entry.queryResults.map((qr): ProjectedQueryResultJson => {
       const qid = qr.queryResultId;
+      // finalQuery (the executed SQL) is diffed like summary — an unchanged result re-sends only
+      // `{unchanged:true}` instead of the full SQL string every turn.
+      const finalQuery = memo.diff(`qr:${qid}:finalQuery`, qr.finalQuery);
       const pj: ProjectedQueryResultJson = {
         queryResultId: qid,
-        ...(qr.finalQuery !== undefined ? { finalQuery: qr.finalQuery } : {}),
+        ...(finalQuery !== undefined ? { finalQuery } : {}),
         ...(qr.error !== undefined ? { error: qr.error } : {}),
         summary: memo.diff(`qr:${qid}:summary`, qr.summary)!,
       };

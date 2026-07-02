@@ -128,6 +128,39 @@ describe('projectFiles — query data (rows)', () => {
   });
 });
 
+describe('projectFiles — finalQuery (executed SQL) diffing', () => {
+  const withSql = (sql: string) => question(1, {
+    content: undefined, image: undefined,
+    queryResults: [{
+      queryResultId: 'h1',
+      finalQuery: sql,
+      summary: { columns: ['a'], types: ['number'], totalRows: 1 },
+    }],
+  });
+
+  it('emits finalQuery in full on the first turn, then collapses to unchanged on an identical repeat', () => {
+    const memo = new FacetMemo();
+    const t1 = projectFiles(memo, files(withSql('SELECT 1')));
+    expect(t1.json.file.queryResults![0].finalQuery).toBe('SELECT 1');
+
+    const t2 = projectFiles(memo, files(withSql('SELECT 1')));
+    expect(isUnchanged(t2.json.file.queryResults![0].finalQuery)).toBe(true);
+  });
+
+  it('re-emits finalQuery when the SQL changes', () => {
+    const memo = new FacetMemo();
+    projectFiles(memo, files(withSql('SELECT 1')));
+    const t2 = projectFiles(memo, files(withSql('SELECT 2')));
+    expect(t2.json.file.queryResults![0].finalQuery).toBe('SELECT 2');
+  });
+
+  it('omits finalQuery entirely when the result has none', () => {
+    const memo = new FacetMemo();
+    const out = projectFiles(memo, files(question(1))); // question() has no finalQuery
+    expect(out.json.file.queryResults![0].finalQuery).toBeUndefined();
+  });
+});
+
 describe('projectFiles — references (policy: metadata-only)', () => {
   it('projects a reference with no content/image as data-only, no blocks', () => {
     const ref: AugmentedFileEntry = {

@@ -135,7 +135,7 @@ export interface ProjectedFileJson {
 /** A query result in the LLM-facing JSON: summary diffed inline; `data`/`image` signaled as blocks. */
 export interface ProjectedQueryResultJson {
   queryResultId: string;
-  finalQuery?: string;
+  finalQuery?: Diffed<string>;
   error?: string;
   summary: Diffed<QueryResultSummary>;
   data?: BlockFacetSignal;
