@@ -372,7 +372,12 @@ chatListenerMiddleware.startListening({
         body: JSON.stringify({ atSeq: conversation.log_index }),
       });
       if (!forkRes.ok) throw new Error(`fork failed: HTTP ${forkRes.status}`);
-      const { id: newId } = await forkRes.json();
+      // The fork route replies with a successResponse envelope: `{ success, data: { id, ... } }`.
+      // Unwrap `data` before reading `id` (mirrors ConversationsAPI's `unwrap`) — reading the
+      // top-level `id` yields undefined, which silently skips the fork + never starts the agent.
+      const forkBody = await forkRes.json() as { id?: number; data?: { id?: number } };
+      const newId = forkBody.data?.id ?? forkBody.id;
+      if (!newId) throw new Error('fork failed: missing conversation id in response');
       dispatch(updateConversation({ conversationID, newConversationID: newId, log_index: conversation.log_index, completed_tool_calls: [], pending_tool_calls: [], debug: [] }));
       const forked = selectConversation(listenerApi.getState() as RootState, newId);
       await runV3TurnInListener(newId, forked,
