@@ -27,9 +27,24 @@
 // directly wraps an embed placeholder and zero its min-width; the table's own
 // `overflow-x: auto` then absorbs the width. `:where` keeps specificity 0 so
 // an author can still override intentionally.
+// Marquee/ticker utility: a story author writes a "board read" / ticker strip as
+// `overflow:hidden; white-space:nowrap`, which just CLIPS the overflowing text
+// (no motion — a common agent mistake). This provides the scroll for free: wrap
+// the strip in `.mx-marquee` with an inner `.mx-marquee-track` and the track
+// scrolls right-to-left on a loop. Duration is overridable via inline
+// `animation-duration` on the track for longer/shorter copy. Pauses on hover and
+// falls back to a static, horizontally-scrollable strip under reduced-motion.
+const MARQUEE_CSS =
+  `.mx-marquee { overflow: hidden; }\n` +
+  `.mx-marquee-track { display: inline-block; white-space: nowrap; padding-left: 100%; animation: mx-marquee-scroll 22s linear infinite; will-change: transform; }\n` +
+  `.mx-marquee:hover .mx-marquee-track { animation-play-state: paused; }\n` +
+  `@keyframes mx-marquee-scroll { from { transform: translateX(0); } to { transform: translateX(-100%); } }\n` +
+  `@media (prefers-reduced-motion: reduce) { .mx-marquee { overflow-x: auto; } .mx-marquee-track { animation: none; padding-left: 0; } }`;
+
 const APP_STYLES_BASE_CSS =
   `.mx-chart-fill { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }\n` +
-  `:where(:has(> [data-question-id], > [data-question-inline])) { min-width: 0; }`;
+  `:where(:has(> [data-question-id], > [data-question-inline])) { min-width: 0; }\n` +
+  MARQUEE_CSS;
 
 /**
  * Rewrite RELATIVE `url(...)` refs in a rule's cssText to ABSOLUTE, resolved against `base` (the
