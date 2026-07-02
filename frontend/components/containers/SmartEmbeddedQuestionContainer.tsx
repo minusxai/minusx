@@ -24,6 +24,7 @@ interface SmartEmbeddedQuestionContainerProps {
   dashboardId?: number;  // Source dashboard ID (appended as ?dashboard= to question links)
   readOnly?: boolean;  // Public read-only view (e.g. shared story): no actions menu, plain title (no auth-gated link)
   enableDrilldown?: boolean;  // Click-to-drill-down on data points (off for story embeds, on for dashboards)
+  showActionsMenu?: boolean;  // Show the "..." (Explain/Edit/Remove) header menu. Default true (dashboards); stories pass their edit-mode flag so the menu only appears while editing.
 }
 
 function SmartEmbeddedQuestionContainerInner({
@@ -38,6 +39,7 @@ function SmartEmbeddedQuestionContainerInner({
   dashboardId,
   readOnly = false,
   enableDrilldown = true,
+  showActionsMenu = true,
 }: SmartEmbeddedQuestionContainerProps) {
   const { explainQuestion } = useExplainQuestion();
 
@@ -152,7 +154,7 @@ function SmartEmbeddedQuestionContainerInner({
               </Link>
             )}
           </Box>
-          {!editMode && !readOnly && (
+          {!editMode && !readOnly && showActionsMenu && (
             <Box onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
               <Menu.Root>
                 <Menu.Trigger asChild>
@@ -313,6 +315,7 @@ const SmartEmbeddedQuestionContainer = React.memo(SmartEmbeddedQuestionContainer
   prev.index === next.index &&
   prev.dashboardId === next.dashboardId &&
   prev.readOnly === next.readOnly &&
-  prev.enableDrilldown === next.enableDrilldown
+  prev.enableDrilldown === next.enableDrilldown &&
+  prev.showActionsMenu === next.showActionsMenu
 );
 export default SmartEmbeddedQuestionContainer;

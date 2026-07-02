@@ -15,8 +15,36 @@
 // FIXED-HEIGHT FLEX COLUMN parent (QuestionVisualization is flex:1 / minH:0
 // all the way down). The Chakra tile Box already declares this; the class
 // guarantees it even before emotion's lazily-injected styles are mirrored in.
+//
+// Grid/flex track blow-out guard: an embedded question's table sets a
+// min-width of ~150px/column (e.g. 1200px for 8 cols) so it scrolls in a
+// narrow tile. But a grid/flex ITEM defaults to `min-width: auto` (= its
+// content's min-content), so that 1200px floor propagates up and forces a
+// `1fr` track (or flex item) wider than its share — the table overflows the
+// column instead of scrolling inside it. `min-width: 0` only breaks that
+// propagation when set on the ITEM itself, and the author-authored wrapper
+// (`.plate`, cell, ...) is content we don't own. So target whatever element
+// directly wraps an embed placeholder and zero its min-width; the table's own
+// `overflow-x: auto` then absorbs the width. `:where` keeps specificity 0 so
+// an author can still override intentionally.
+// Marquee/ticker utility: a story author writes a "board read" / ticker strip as
+// `overflow:hidden; white-space:nowrap`, which just CLIPS the overflowing text
+// (no motion — a common agent mistake). This provides the scroll for free: wrap
+// the strip in `.mx-marquee` with an inner `.mx-marquee-track` and the track
+// scrolls right-to-left on a loop. Duration is overridable via inline
+// `animation-duration` on the track for longer/shorter copy. Pauses on hover and
+// falls back to a static, horizontally-scrollable strip under reduced-motion.
+const MARQUEE_CSS =
+  `.mx-marquee { overflow: hidden; }\n` +
+  `.mx-marquee-track { display: inline-block; white-space: nowrap; padding-left: 100%; animation: mx-marquee-scroll 22s linear infinite; will-change: transform; }\n` +
+  `.mx-marquee:hover .mx-marquee-track { animation-play-state: paused; }\n` +
+  `@keyframes mx-marquee-scroll { from { transform: translateX(0); } to { transform: translateX(-100%); } }\n` +
+  `@media (prefers-reduced-motion: reduce) { .mx-marquee { overflow-x: auto; } .mx-marquee-track { animation: none; padding-left: 0; } }`;
+
 const APP_STYLES_BASE_CSS =
-  `.mx-chart-fill { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }`;
+  `.mx-chart-fill { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }\n` +
+  `:where(:has(> [data-question-id], > [data-question-inline])) { min-width: 0; }\n` +
+  MARQUEE_CSS;
 
 /**
  * Rewrite RELATIVE `url(...)` refs in a rule's cssText to ABSOLUTE, resolved against `base` (the

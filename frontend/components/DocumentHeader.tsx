@@ -258,7 +258,9 @@ export default function DocumentHeader({
                 color={name.trim() ? titleColor : 'fg.muted'}
                 fontFamily="mono"
                 maxW="100%"
-                lineClamp={1}
+                // While presenting, show the full title (no one-line ellipsis) — the
+                // fullscreen surface has room and the header is the only chrome.
+                lineClamp={isPresenting ? undefined : 1}
                 aria-label={name.trim() || `Untitled ${metadata.label}`}
                 title={name.trim() || `Untitled ${metadata.label}`}
                 onDoubleClick={readOnlyName ? undefined : onEditModeToggle}
@@ -312,8 +314,9 @@ export default function DocumentHeader({
                     fontSize="sm"
                     lineHeight="1.5"
                     fontWeight="600"
-                    maxW="800px"
-                    lineClamp={1}
+                    maxW={isPresenting ? '100%' : '800px'}
+                    // While presenting, show the full description (no one-line ellipsis).
+                    lineClamp={isPresenting ? undefined : 1}
                     title={description}
                     onDoubleClick={onEditModeToggle}
                     cursor="text"
