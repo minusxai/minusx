@@ -32,6 +32,27 @@ const llmSemaphore = createSemaphore(
   parseConcurrencyLimit(process.env.MAX_LLM_CONCURRENCY),
 );
 
+/** pi cache-retention preference. Maps to the provider's prompt-cache lifetime: OpenAI (Responses)
+ *  `prompt_cache_retention` — 'long' → 24h; Anthropic — `cache_control` ttl, 'long' → 1h. */
+export type CacheRetention = 'none' | 'short' | 'long';
+
+/**
+ * Resolve the process-wide default cache retention from a raw env value. Defaults to `'long'` (keep
+ * the prompt prefix warm as long as the provider allows — our projection keeps earlier turns
+ * byte-stable precisely so this pays off) and falls back to `'long'` for any unrecognized value.
+ * Exported for unit testing.
+ */
+export function resolveDefaultCacheRetention(raw: string | undefined): CacheRetention {
+  return raw === 'short' || raw === 'none' || raw === 'long' ? raw : 'long';
+}
+
+/** Process-wide default, read once at module load. Overridable per-deployment via the
+ *  `DEFAULT_CACHE_RETENTION` env var and per-call via `callOptions.cacheRetention`. */
+const DEFAULT_CACHE_RETENTION: CacheRetention = resolveDefaultCacheRetention(
+  // eslint-disable-next-line no-restricted-syntax -- orchestrator is a standalone module; avoid coupling to lib/config for this one optional override
+  process.env.DEFAULT_CACHE_RETENTION,
+);
+
 export class Orchestrator {
   log: ConversationLog;
   /** Optional activity callback for observability. Fires on LLM, tool,
@@ -116,6 +137,10 @@ export class Orchestrator {
       // as an opaque blob (`SimpleStreamOptions`-shaped) so adding new stream
       // options (`thinkingBudgets`, `metadata`, …) never touches this code.
       const modelStream = streamSimple(model, context, {
+        // Default prompt-cache retention (overridable by an explicit `callOptions.cacheRetention`,
+        // which is spread AFTER this and wins). Applies to every agent — this is the one universal
+        // LLM call site.
+        cacheRetention: DEFAULT_CACHE_RETENTION,
         ...(callOptions ?? {}),
         headers: {
           ...((callOptions?.headers as Record<string, string> | undefined) ?? {}),
