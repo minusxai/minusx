@@ -25,7 +25,6 @@ import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMo
 import { selectAllowChatQueue } from '@/store/uiSlice';
 import {
   appStateWithFileScreenshot,
-  appStateWithFileScreenshotBlocking,
   warmFileScreenshot,
   appStateShotKey,
 } from '@/lib/screenshot/app-state-screenshot';
@@ -737,7 +736,7 @@ export default function ChatInterface({
       const colorMode = sizeState.ui.colorMode as 'light' | 'dark';
       const disableAppStateImages = selectDisableAppStateImages(sizeState);
       const agentArgs = buildAgentArgsForMessage(' ', chatAttachments);
-      agentArgs.app_state = await appStateWithFileScreenshotBlocking(appState, colorMode, disableAppStateImages);
+      agentArgs.app_state = await appStateWithFileScreenshot(appState, colorMode, disableAppStateImages);
 
       const res = await fetch('/api/chat/context-size', {
         method: 'POST',
@@ -881,10 +880,11 @@ export default function ChatInterface({
       const sendState = store.getState();
       const colorMode = sendState.ui.colorMode as 'light' | 'dark';
       const disableAppStateImages = selectDisableAppStateImages(sendState);
-      // NON-BLOCKING: attach the screenshot only if the cache is already warm; otherwise send now
-      // and warm in the background for the next turn. This is what keeps Enter from freezing the
-      // page for ~1s on the snapdom rasterize of a large dashboard.
-      appStateForSend = appStateWithFileScreenshot(appState, colorMode, disableAppStateImages);
+      // ALWAYS attach the screenshot — the agent needs to see the view. The warmer (keyed to the
+      // rendered view, not to keystrokes) has almost always pre-captured it by now, so this is an
+      // instant cache hit. On a cold cache (send right after a view change) it awaits the ~1s
+      // snapdom capture behind this same "preparing" indicator rather than dropping the image.
+      appStateForSend = await appStateWithFileScreenshot(appState, colorMode, disableAppStateImages);
 
       // Resolve conversation — normally pre-created on mount, but fall back to inline creation
       // if the user sends before the pre-creation fetch completes (rare race condition).

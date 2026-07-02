@@ -1,19 +1,22 @@
 /**
- * The send path must NOT block on the ~1s snapdom capture (that froze the page on Enter).
+ * The image must ALWAYS ride along with the send — a message that needs an app-state screenshot is
+ * never sent without it. The freeze fix is about WHERE the ~1s snapdom capture happens, not whether
+ * it happens: it's pre-captured OFF the send path by the warmer, so by send time it's a cache hit.
  *
  * Contract pinned here:
- *  - appStateWithFileScreenshot (SEND) is synchronous & non-blocking: on a COLD cache it returns the
- *    app state unchanged WITHOUT calling capture inline, and schedules a background warm.
- *  - Once warm, the same view attaches the cached image with NO further capture (cross-turn dedup).
- *  - A changed view (different markup / query result / colorMode) invalidates the cache.
+ *  - appStateWithFileScreenshot (SEND) ALWAYS attaches the image. Warm → instant (no capture). Cold →
+ *    it awaits the capture and attaches it (never returns an image-less app state on the happy path).
+ *  - The warmer (warmFileScreenshot) pre-captures on idle so the common send is a cache hit; the
+ *    blocking wait only happens on a genuinely cold cache (send right after a view change).
+ *  - A changed view (different markup / query result / colorMode) invalidates the cache → re-capture.
  *  - warmFileScreenshot captures + uploads exactly once per facet, deduped across concurrent calls.
- *  - appStateWithFileScreenshotBlocking awaits the capture (for the context-size estimate).
- *  - disabled / non-file app states are pass-through (no capture).
+ *  - disabled / non-file app states are pass-through (no capture, no image).
+ *  - A capture that THROWS is the only case that sends without an image (best-effort: a broken
+ *    snapdom must not wedge the send) — it returns the app state unchanged.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   appStateWithFileScreenshot,
-  appStateWithFileScreenshotBlocking,
   warmFileScreenshot,
   appStateShotKey,
   _internal,
@@ -80,45 +83,49 @@ describe('appStateShotKey', () => {
   });
 });
 
-describe('appStateWithFileScreenshot (send path, non-blocking)', () => {
-  it('does NOT capture inline on a cold cache and returns the app state unchanged', () => {
+describe('appStateWithFileScreenshot (send path — always attaches the image)', () => {
+  it('awaits the capture and ATTACHES the image on a cold cache (never sends without it)', async () => {
     const app = fileAppState(1, 'dash');
-    const out = appStateWithFileScreenshot(app, 'light', false);
-    expect(captureCalls).toBe(0);         // the freeze fix: no ~1s snapdom on Enter
-    expect(imageOf(out)).toBeUndefined(); // no image yet (cache cold)
-    expect(deferred.length).toBe(1);      // but a background warm was scheduled
+    const out = await appStateWithFileScreenshot(app, 'light', false);
+    expect(captureCalls).toBe(1);                       // cold → it DID capture
+    expect(imageOf(out)?.url).toBe('https://cdn/1.jpg'); // …and attached the image
   });
 
-  it('attaches the cached image once warm, without capturing again', async () => {
+  it('is instant on a warm cache (warmer already ran) — attaches without capturing again', async () => {
     const app = fileAppState(1, 'dash');
-    appStateWithFileScreenshot(app, 'light', false); // schedules warm
-    await runDeferred();                              // warm runs (1 capture + 1 upload)
+    warmFileScreenshot(app, 'light', false); // warmer schedules
+    await runDeferred();                      // warm runs (1 capture + 1 upload) off the send path
     expect(captureCalls).toBe(1);
 
-    const out = appStateWithFileScreenshot(app, 'light', false); // now warm
+    const out = await appStateWithFileScreenshot(app, 'light', false); // now warm
     expect(imageOf(out)?.url).toBe('https://cdn/1.jpg');
-    expect(captureCalls).toBe(1); // no re-capture for the unchanged view
+    expect(captureCalls).toBe(1); // no re-capture for the unchanged view — the send was a cache hit
   });
 
-  it('re-warms (and swaps the image) when the view changes', async () => {
+  it('re-captures and swaps the image when the view changes', async () => {
     const a = fileAppState(1, 'v1');
-    appStateWithFileScreenshot(a, 'light', false);
-    await runDeferred();
-    expect(imageOf(appStateWithFileScreenshot(a, 'light', false))?.url).toBe('https://cdn/1.jpg');
+    expect(imageOf(await appStateWithFileScreenshot(a, 'light', false))?.url).toBe('https://cdn/1.jpg');
 
-    const b = fileAppState(1, 'v2'); // changed view
-    const coldB = appStateWithFileScreenshot(b, 'light', false);
-    expect(imageOf(coldB)).toBeUndefined(); // cold again for the new view
-    await runDeferred();
+    const b = fileAppState(1, 'v2'); // changed view → cache invalid
+    const out = await appStateWithFileScreenshot(b, 'light', false);
     expect(captureCalls).toBe(2);
-    expect(imageOf(appStateWithFileScreenshot(b, 'light', false))?.url).toBe('https://cdn/2.jpg');
+    expect(imageOf(out)?.url).toBe('https://cdn/2.jpg');
   });
 
-  it('is a pass-through when disabled or on a non-file page (no capture, no warm)', () => {
-    expect(appStateWithFileScreenshot(fileAppState(1, 'd'), 'light', true)).toBeTruthy();
-    appStateWithFileScreenshot({ type: 'explore', state: null } as AppState, 'light', false);
+  it('is a pass-through when disabled or on a non-file page (no capture, no image)', async () => {
+    const disabled = await appStateWithFileScreenshot(fileAppState(1, 'd'), 'light', true);
+    expect(imageOf(disabled)).toBeUndefined();
+    const nonFile = await appStateWithFileScreenshot({ type: 'explore', state: null } as AppState, 'light', false);
+    expect(imageOf(nonFile)).toBeUndefined();
     expect(captureCalls).toBe(0);
-    expect(deferred.length).toBe(0);
+  });
+
+  it('sends WITHOUT an image only if capture throws (a broken snapdom must not wedge the send)', async () => {
+    _internal.capture = vi.fn(async () => { throw new Error('snapdom failed'); });
+    const app = fileAppState(3, 'q');
+    const out = await appStateWithFileScreenshot(app, 'light', false);
+    expect(imageOf(out)).toBeUndefined();
+    expect(out).toBeTruthy();
   });
 });
 
@@ -138,28 +145,14 @@ describe('warmFileScreenshot dedup', () => {
     await runDeferred();
     expect(captureCalls).toBe(0);
   });
-});
 
-describe('appStateWithFileScreenshotBlocking (context-size path)', () => {
-  it('awaits the capture and attaches the image on a cold cache', async () => {
-    const out = await appStateWithFileScreenshotBlocking(fileAppState(3, 'q'), 'light', false);
+  it('makes a subsequent send an instant cache hit (no double capture warm + send)', async () => {
+    const app = fileAppState(5, 'warm-then-send');
+    warmFileScreenshot(app, 'light', false);
+    await runDeferred();
     expect(captureCalls).toBe(1);
+    const out = await appStateWithFileScreenshot(app, 'light', false);
+    expect(captureCalls).toBe(1); // send reused the warm capture
     expect(imageOf(out)?.url).toBe('https://cdn/1.jpg');
-  });
-
-  it('reuses the warm cache with no extra capture', async () => {
-    const app = fileAppState(3, 'q');
-    await appStateWithFileScreenshotBlocking(app, 'light', false);
-    const out = await appStateWithFileScreenshotBlocking(app, 'light', false);
-    expect(captureCalls).toBe(1);
-    expect(imageOf(out)?.url).toBe('https://cdn/1.jpg');
-  });
-
-  it('returns the app state unchanged if capture throws', async () => {
-    _internal.capture = vi.fn(async () => { throw new Error('snapdom failed'); });
-    const app = fileAppState(3, 'q');
-    const out = await appStateWithFileScreenshotBlocking(app, 'light', false);
-    expect(imageOf(out)).toBeUndefined();
-    expect(out).toBeTruthy();
   });
 });

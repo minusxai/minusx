@@ -3,18 +3,19 @@
  * image the agent can "see", with a cross-turn cache keyed by what's rendered.
  *
  * WHY THIS EXISTS (the freeze fix): `snapdom.toBlob()` rasterizes the whole file view synchronously
- * on the main thread — measured at ~1s for a 25-widget dashboard. The old code `await`ed that
- * capture INSIDE the send handler, before the user message was even dispatched, so pressing Enter
- * froze the page for ~1s and the message didn't appear until capture + S3 upload finished.
+ * on the main thread — measured at ~1s for a 25-widget dashboard. The problem was never that we
+ * capture; the image MUST ride along with the send (the agent needs to see the view). The problem
+ * was WHERE the ~1s cost was paid: it used to be paid *on every keystroke's worth of* send handling,
+ * making typing + Enter stutter.
  *
- * The fix decouples capture from the send critical path:
- *  - {@link appStateWithFileScreenshot} (SEND path) is NON-BLOCKING: it attaches the screenshot only
- *    if the cache is already warm for the current view; otherwise it returns the app state unchanged
- *    immediately and schedules a background warm for the next turn. Enter never blocks on snapdom.
- *  - {@link warmFileScreenshot} captures + uploads OFF the critical path (debounced, on idle), so by
- *    the time the user sends, the cache is usually already warm and the image IS attached.
- *  - {@link appStateWithFileScreenshotBlocking} keeps the old awaited behavior for the context-size
- *    estimate, where a brief wait for an accurate token count is fine (and usually a cache hit).
+ * The fix moves the cost OFF the critical path without ever dropping the image:
+ *  - {@link warmFileScreenshot} captures + uploads on idle (debounced), keyed to the rendered view.
+ *    Typing in chat does not change the rendered view, so the warmer never re-fires on keystrokes —
+ *    that's what keeps text entry smooth. By send time the cache is almost always already warm.
+ *  - {@link appStateWithFileScreenshot} (SEND path) ALWAYS attaches the image. Warm cache → instant.
+ *    Cold cache (send right after a view change, before the warmer finished) → it awaits the capture
+ *    so the image is still attached; the UI shows the existing "preparing" indicator during that
+ *    brief, rare wait. The message is never sent without the image on the happy path.
  *
  * The cache is a single module-level slot keyed by `file id + facetHash(markup, queryResults,
  * colorMode)` — an unchanged view is never re-captured, and a changed view invalidates it.
@@ -128,28 +129,13 @@ export function warmFileScreenshot(
 }
 
 /**
- * SEND path — synchronous and NON-BLOCKING. Attaches the screenshot only if the cache is already
- * warm for the current view; otherwise returns the app state unchanged and schedules a background
- * warm for the next turn. Pressing Enter never waits on the ~1s snapdom rasterize.
+ * SEND path — ALWAYS attaches the image. A warm cache (the common case, thanks to the warmer) makes
+ * this instant. A cold cache (send right after a view change) awaits the capture so the image is
+ * still attached rather than dropped — the caller shows the "preparing" indicator during that brief
+ * wait. The only path that returns image-less is a capture that throws: a broken snapdom must not
+ * wedge the send forever, so we fall back to sending without the image.
  */
-export function appStateWithFileScreenshot(
-  appState: AppState | null | undefined,
-  colorMode: ColorMode,
-  disabled: boolean,
-): AppState | null | undefined {
-  if (disabled) return appState;
-  const info = appStateShotKey(appState, colorMode);
-  if (!info) return appState;
-  if (lastShot?.key === info.key) return attachImage(appState as AppState, info.key, lastShot.url);
-  warmFileScreenshot(appState, colorMode, disabled);
-  return appState;
-}
-
-/**
- * Blocking variant for the context-size estimate: awaits the capture so the token count reflects the
- * image. Shares the same cache, so it's instant when the send path (or the warmer) already ran.
- */
-export async function appStateWithFileScreenshotBlocking(
+export async function appStateWithFileScreenshot(
   appState: AppState | null | undefined,
   colorMode: ColorMode,
   disabled: boolean,
