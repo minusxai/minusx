@@ -926,8 +926,6 @@ templates:
       5. **Build** the fragment following the plan exactly, computing every displayed number from the real data and applying the tokens with total consistency.
       6. **Critique** as the intended reader: scroll it mentally top to bottom. Can the headlines alone tell the story to *this* audience? Does the ending deliver the goal? Is every claim backed by its embed? Is the signature element earning its place? Remove one decoration before shipping.
 
-      Do the planning in your thinking; show the user the finished story, not the scaffolding.
-
   skill_notebooks:
     description: Notebook file structure (cells = inline SQL questions + markdown text), the activeCellId convention for editing the right cell, and notebook page behavior
     content: |-
