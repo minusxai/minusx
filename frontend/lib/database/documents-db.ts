@@ -6,6 +6,7 @@ import { DbFile, BaseFileContent } from '../types';
 import { getModules } from '../modules/registry';
 import { DEFAULT_CONVERSATION_NAME } from '../constants';
 import { UserFacingError } from '../errors';
+import { stripNulChars } from './sanitize-jsonb';
 
 /**
  * Path uniqueness applies to PUBLISHED files only (partial index
@@ -104,7 +105,7 @@ export class DocumentDB {
       SELECT next_id, $1, $2, $3, $4, $5, 1, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       FROM next_id_gen, lock
       RETURNING id
-    `, [name, path, type, content, references, editId ?? null, draft, meta ?? null]));
+    `, [name, path, type, stripNulChars(content), references, editId ?? null, draft, stripNulChars(meta ?? null)]));
 
     return result.rows[0].id;
   }
@@ -272,7 +273,7 @@ export class DocumentDB {
     // the partial unique index rejects it — surface a clear "rename" message, not a raw 23505.
     await withPathConflictTranslation(() => db.exec(
       'UPDATE files SET name = $1, path = $2, content = $3, file_references = $4, version = $5, last_edit_id = $6, draft = false, updated_at = CURRENT_TIMESTAMP WHERE id = $7',
-      [name, path, content, references, (currentRow.version ?? 1) + 1, editId ?? null, id]
+      [name, path, stripNulChars(content), references, (currentRow.version ?? 1) + 1, editId ?? null, id]
     ));
 
     const updated = await db.exec<DbRow>('SELECT * FROM files WHERE id = $1', [id]);
@@ -352,7 +353,7 @@ export class DocumentDB {
   static async updateMeta(id: number, meta: Record<string, unknown> | null): Promise<boolean> {
     const result = await getModules().db.exec(
       'UPDATE files SET meta = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [meta ?? null, id]
+      [stripNulChars(meta ?? null), id]
     );
     return result.rowCount > 0;
   }
@@ -432,7 +433,7 @@ export class DocumentDB {
     const pgArrayPath  = `{${arrayPath.replace(/\./g, ',')}}`;
     const arrayNavSQL  = arrayPath.split('.').map(k => `-> '${k}'`).join(' ');
 
-    const params: any[] = [id, JSON.stringify(entries), new Date().toISOString()];
+    const params: any[] = [id, JSON.stringify(stripNulChars(entries)), new Date().toISOString()];
     const lengthCondition = expectedLength !== undefined
       ? `AND jsonb_array_length(content ${arrayNavSQL}) = $${params.push(expectedLength)}`
       : '';
