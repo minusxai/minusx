@@ -12,7 +12,7 @@
 import 'server-only';
 import { Type } from 'typebox';
 import { getModel, streamSimple } from '@/orchestrator/llm';
-import type { AssistantMessage, Context, Model, Api, Tool } from '@/orchestrator/llm';
+import type { AssistantMessage, Context, Model, Api, Tool, ImageContent } from '@/orchestrator/llm';
 import { fileToMarkup } from '@/lib/data/file-markup';
 import type { RubricCategory, RubricFinding, RubricFileType, RubricReport, RubricSeverity } from '../types';
 import { buildReport } from '../scoring';
@@ -51,9 +51,16 @@ export const SubmitRubric: Tool<typeof SubmitRubricParams> = {
 export interface JudgeParams {
   fileType: RubricFileType;
   content: unknown;
-  /** Public URL of the rendered full-file screenshot (from the app screenshot pipeline). */
+  /** Rendered full-file screenshot — an https URL (app screenshot pipeline) or a `data:` URL
+   *  (client-captured). Either is turned into an image content block for the judge. */
   screenshotUrl?: string;
   model?: Model<Api>;
+}
+
+/** Build an image content block from an https URL or a base64 `data:` URL. */
+function imageBlock(src: string): ImageContent {
+  const m = /^data:([^;]+);base64,([\s\S]*)$/.exec(src);
+  return m ? { type: 'image', data: m[2], mimeType: m[1] } : { type: 'image', url: src };
 }
 
 /** Injectable LLM call — defaults to a one-shot `streamSimple`. */
@@ -74,7 +81,7 @@ export async function judgeFile(params: JudgeParams, callModel: CallModel = defa
       role: 'user',
       timestamp: Date.now(),
       content: screenshotUrl
-        ? [{ type: 'text', text: userText }, { type: 'image', url: screenshotUrl }]
+        ? [{ type: 'text', text: userText }, imageBlock(screenshotUrl)]
         : userText,
     }],
     tools: [SubmitRubric as Tool],

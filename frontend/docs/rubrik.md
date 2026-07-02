@@ -202,9 +202,13 @@ output idea from `agents/eval/submit-tools.ts`.
    deterministic scorer + (when `llmJudge`) the judge, reusing the current file's app-state
    screenshot (`fileState.image.url`) so the judge grades the visual. Registered in
    `analyst-agent.ts`, `web-analyst.ts`, and `V2_REGISTRABLES`.
-3. **UI + API.** `GET /api/files/[id]/rubric` (deterministic) / `POST { screenshot }`
-   (judge), modeled on `app/api/files/[id]/preview/route.ts`; a Lighthouse-style panel on the
-   file page (Chakra, theme colors).
+3. **UI + API.** `FileHealthBadge` (`components/FileHealthPanel.tsx`) in the shared
+   `FileHeader` badge row (question/dashboard/story only) — a Lighthouse-style score pill that
+   opens a panel of per-category scores + findings + fixes. It computes the **deterministic**
+   report client-side from Redux `selectMergedContent` (instant, live-edit aware, no fetch),
+   and a "Run visual review" button captures the file screenshot (`useScreenshot`) and POSTs it
+   to run the judge. API: `GET /api/files/[id]/rubric` (deterministic) / `POST { screenshot }`
+   (deterministic + judge, combined), modeled on `app/api/files/[id]/preview/route.ts`.
 
 ## Layout
 
