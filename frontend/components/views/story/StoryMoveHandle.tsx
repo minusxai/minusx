@@ -13,6 +13,7 @@
  */
 import { useRef } from 'react';
 import {
+  storyCanvas,
   movableUnit,
   collectDropSlots,
   chooseDropSlot,
@@ -44,7 +45,7 @@ export default function StoryMoveHandle({ target, onCommit }: Props) {
     e.preventDefault();
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    const canvas = target.ownerDocument.body;
+    const canvas = storyCanvas(target);
     drag.current = { unit: movableUnit(target, canvas), canvas };
   };
 

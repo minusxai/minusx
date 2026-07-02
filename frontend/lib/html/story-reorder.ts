@@ -42,6 +42,19 @@ function isFlow(el: Element, getStyle: StyleReader): boolean {
   return !isPackedDisplay(getStyle(el).display);
 }
 
+/**
+ * The story's own root — the reorder canvas. AgentHtml writes the whole story into a single element under
+ * the iframe `<body>`, but `<body>` ALSO holds portaled popovers, the embed root, and shim styles; walking
+ * from `<body>` would offer drop slots next to that scaffolding. So the canvas is the topmost ancestor of
+ * `el` that is still a direct child of `<body>` (the story root), never `<body>` itself.
+ */
+export function storyCanvas(el: HTMLElement): HTMLElement {
+  const body = el.ownerDocument.body;
+  let node = el;
+  while (node.parentElement && node.parentElement !== body) node = node.parentElement;
+  return node;
+}
+
 /** A drop position: splice `unit` into `container` before `before` (null → append). `y` is the gap's
  *  viewport Y; `depth` is the container's nesting under the canvas (for the nearest-gap tie-break). */
 export interface DropSlot {

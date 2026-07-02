@@ -12,6 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  storyCanvas,
   movableUnit,
   collectDropSlots,
   chooseDropSlot,
@@ -38,6 +39,33 @@ function el(tag: string, attrs: Record<string, string> = {}, ...kids: HTMLElemen
   return n;
 }
 const embed = (id: string) => el('div', { 'data-question-id': id, style: 'width:100%;height:400px' });
+
+describe('storyCanvas — the story root, not the iframe body', () => {
+  it('climbs from the embed to the single wrapper that is a direct child of <body>', () => {
+    const chart = embed('1');
+    const plate = el('div', { class: 'plate' }, chart);
+    const section = el('section', {}, plate);
+    const wrapper = el('div', {}, section); // the one story-root div AgentHtml writes under <body>
+    document.body.appendChild(wrapper);
+    // <body> also holds portaled popovers + scaffolding that must NOT become the canvas.
+    document.body.appendChild(el('div', { class: 'chakra-popover__positioner' }));
+    try {
+      expect(storyCanvas(chart)).toBe(wrapper);
+    } finally {
+      document.body.replaceChildren();
+    }
+  });
+
+  it('returns the element itself when it is already a direct child of <body>', () => {
+    const root = embed('1');
+    document.body.appendChild(root);
+    try {
+      expect(storyCanvas(root)).toBe(root);
+    } finally {
+      document.body.replaceChildren();
+    }
+  });
+});
 
 describe('movableUnit — climbs from the embed to the whole card', () => {
   it('climbs to the tight wrapper (caption + chart), stopping below a prose section', () => {
