@@ -25,7 +25,7 @@ export type RubricSeverity = 'error' | 'warn' | 'info';
 export type RubricCategory = 'correctness' | 'clarity' | 'aesthetics';
 
 /** File types the rubric currently scores. */
-export type RubricFileType = 'question' | 'dashboard' | 'story';
+export type RubricFileType = 'question' | 'dashboard' | 'story' | 'context';
 
 /** Which scorer produced a finding — a deterministic rule, or the LLM checklist. */
 export type FindingSource = 'rule' | 'llm';

@@ -40,6 +40,10 @@ function imageBlock(src: string): ImageContent {
  */
 export async function scoreFileLLM(params: JudgeParams, user: EffectiveUser): Promise<RubricReport> {
   const { fileType, content, screenshotUrl } = params;
+  // The categories the LLM covers for this type (e.g. context has none → no LLM call at all).
+  const assessed = [...new Set(LLM_CHECKS[fileType].map((c) => c.category))];
+  if (LLM_CHECKS[fileType].length === 0) return buildReport(fileType, [], assessed);
+
   const vars: Record<string, string> = {
     file_type: fileType,
     checklist: formatChecklist(fileType),
@@ -56,7 +60,7 @@ export async function scoreFileLLM(params: JudgeParams, user: EffectiveUser): Pr
   } catch {
     // best-effort — a failed/garbled judge yields an empty (5/5) report rather than throwing.
   }
-  return buildReport(fileType, findings);
+  return buildReport(fileType, findings, assessed);
 }
 
 /**

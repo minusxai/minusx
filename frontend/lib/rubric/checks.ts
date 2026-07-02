@@ -46,6 +46,11 @@ export const DETERMINISTIC_CHECKS: Record<RubricFileType, RubricCheck[]> = {
     { ruleId: 'story.no-design-tokens', label: 'Design tokens defined', category: 'aesthetics' },
     { ruleId: 'story.too-many-colors', label: 'Palette disciplined', category: 'aesthetics' },
   ],
+  context: [
+    { ruleId: 'context.metric-no-sql', label: 'Metrics have SQL', category: 'correctness' },
+    { ruleId: 'context.empty', label: 'Not empty', category: 'clarity' },
+    { ruleId: 'context.doc-too-long', label: 'Docs are concise', category: 'clarity' },
+  ],
 };
 
 // ─── LLM checks (closed set the judge evaluates pass/fail) ───────────────────────────────────
@@ -126,6 +131,7 @@ export const LLM_CHECKS: Record<RubricFileType, LlmCheck[]> = {
       question: 'Typography and spacing feel intentional — clear hierarchy, comfortable measure, good contrast and rhythm. PASS if the type feels crafted.',
       fix: 'Establish a type scale, generous spacing, and strong heading/body contrast.' },
   ],
+  context: [], // a context is a non-visual knowledge file — deterministic checks only, no LLM judge
 };
 
 /** Render the LLM checklist for a file type into the prompt (`{checklist}` var). */

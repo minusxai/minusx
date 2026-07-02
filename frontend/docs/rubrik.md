@@ -100,6 +100,7 @@ only penalized for *actual* findings, so adding more granular checks never harsh
 | question  | 0.5  | 0.35 | 0.15 |
 | dashboard | 0.45 | 0.35 | 0.2 |
 | story     | 0.3  | 0.3  | 0.4 |
+| context   | 0.5  | 0.5  | 0   |
 
 Grade bands: `overall >= 4 → good`, `>= 2.5 → fair`, else `poor`.
 
@@ -160,6 +161,18 @@ text/image/divider assets are ignored for counting.
 > acid-green-on-black, purple gradients), "does the headline actually make a claim", "does the
 > frame carry the insight" — need the rendered page and are **LLM-judge** criteria, not
 > deterministic.
+
+## Rule catalog — Context (`ContextAgentContent` — the agent-flattened knowledge shape)
+
+A context is a **non-visual knowledge file** — scored on `correctness` + `clarity` only (no
+aesthetics), and **deterministic-only** (no LLM checks, no "run visual review" button). Scored
+on the agent-flattened shape (`shapeContextForAgent`): docs / metrics / annotations.
+
+| ruleId | category | severity | trigger | fix |
+|---|---|---|---|---|
+| `doc-too-long` | clarity | error | a doc's content is > ~1000 tokens | Split into smaller focused docs, or move detail into metrics/annotations. |
+| `empty` | clarity | warn | no docs, metrics, or annotations | Document the domain: add docs, metrics (SQL-backed), and annotations. |
+| `metric-no-sql` | correctness | warn | a metric has no `sql` | Define the metric's SQL so it computes a real value. |
 
 ## LLM judge
 
@@ -252,6 +265,7 @@ frontend/lib/rubric/
     question.ts       QuestionContent → RubricFinding[]
     dashboard.ts      DashboardContent → RubricFinding[]
     story.ts          StoryContent   → RubricFinding[]
+    context.ts        ContextAgentContent → RubricFinding[] (deterministic-only)
   llm/
     score-llm.server.ts closed-checklist judge: (content + screenshot) → RubricReport
   __tests__/          deterministic + scoring + checks + llm unit tests (node project)

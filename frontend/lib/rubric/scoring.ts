@@ -36,6 +36,7 @@ export const CATEGORY_WEIGHTS: Record<RubricFileType, Record<RubricCategory, num
   question:  { correctness: 0.3,  clarity: 0.3, aesthetics: 0.4 },
   dashboard: { correctness: 0.3, clarity: 0.3, aesthetics: 0.4 },
   story:     { correctness: 0.3,  clarity: 0.3,  aesthetics: 0.4 },
+  context:   { correctness: 0.5,  clarity: 0.5,  aesthetics: 0 }, // a knowledge file — no aesthetics
 };
 
 export const GRADE_GOOD_MIN = 4;

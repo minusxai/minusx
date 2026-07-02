@@ -17,6 +17,7 @@ import type { RootState } from '@/store/store';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
 import { passedChecks } from '@/lib/rubric/checks';
+import { shapeContextForAgent } from '@/lib/context/context-agent-view';
 import type { DeterministicContext, FindingSource, RubricCategory, RubricFileType, RubricReport, RubricSeverity } from '@/lib/rubric/types';
 import type { DashboardContent, QuestionContent } from '@/lib/types';
 
@@ -65,6 +66,13 @@ const SOURCE: Record<FindingSource, { label: string; color: string }> = {
 };
 const sourceOf = (ruleId: string): FindingSource => (ruleId.startsWith('llm.') ? 'llm' : 'rule');
 
+const HAS_LLM = (fileType: string) => fileType !== 'context'; // context is deterministic-only
+
+// The content the deterministic scorer expects. Context is scored on its agent-flattened shape.
+function scorableContent(fileType: string, content: unknown): unknown {
+  return fileType === 'context' ? shapeContextForAgent(content ?? {}) : content;
+}
+
 // Deterministic context for a dashboard — each referenced question's chart type (needed for
 // tile-type-aware rules like cartesian-plots-need-3x3). Read from Redux, not the dashboard content.
 function dashboardVizCtx(fileType: string, content: unknown, state: RootState): DeterministicContext | undefined {
@@ -96,7 +104,8 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   const deterministic = useMemo<RubricReport | null>(() => {
     if (!isRubricFileType(fileType) || !savedContent) return null;
     try {
-      return scoreFileDeterministic(fileType, savedContent, dashboardVizCtx(fileType, savedContent, store.getState()));
+      const c = scorableContent(fileType, savedContent);
+      return scoreFileDeterministic(fileType, c, dashboardVizCtx(fileType, c, store.getState()));
     } catch {
       return null;
     }
@@ -114,7 +123,8 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
     const merged = selectMergedContent(store.getState(), fileId);
     if (!merged) return;
     try {
-      setOverride(scoreFileDeterministic(fileType, merged, dashboardVizCtx(fileType, merged, store.getState())));
+      const c = scorableContent(fileType, merged);
+      setOverride(scoreFileDeterministic(fileType, c, dashboardVizCtx(fileType, c, store.getState())));
       setLlmRan(false); // a plain refresh is rules-only
     } catch {
       // ignore — keep the current report
@@ -152,8 +162,8 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   };
 
   const rows: { key: string; level: Level; source: FindingSource; category: RubricCategory; title: string; detail?: string; fix?: string }[] = [
-    ...report.categories.flatMap((c) => c.findings).map((f) => ({
-      key: f.ruleId, level: f.severity as Level, source: f.source, category: f.category, title: f.title, detail: f.detail, fix: f.fix,
+    ...report.categories.flatMap((c) => c.findings).map((f, i) => ({
+      key: `${f.ruleId}-${i}`, level: f.severity as Level, source: f.source, category: f.category, title: f.title, detail: f.detail, fix: f.fix,
     })),
     ...passedChecks(fileType as RubricFileType, report, llmRan).map((c) => ({
       key: c.ruleId, level: 'pass' as Level, source: sourceOf(c.ruleId), category: c.category, title: c.label,
@@ -217,7 +227,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                 </HStack>
 
                 <VStack align="stretch" gap={1.5}>
-                  {report.categories.map((c) => (
+                  {report.categories.filter((c) => c.assessed || c.weight > 0).map((c) => (
                     <HStack key={c.category} justify="space-between" fontSize="xs">
                       <Text color="fg.muted">{CATEGORY_LABEL[c.category]}</Text>
                       {c.assessed && c.score !== null ? (
@@ -234,16 +244,18 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                   ))}
                 </VStack>
 
-                <Button
-                  aria-label="Run visual review with the LLM judge"
-                  size="xs"
-                  variant="subtle"
-                  onClick={runJudge}
-                  disabled={judging}
-                >
-                  {judging ? <Spinner size="xs" /> : <Icon as={LuScanEye} />}
-                  <Text>{llmRan ? 'Re-run visual review' : 'Run visual review'}</Text>
-                </Button>
+                {HAS_LLM(fileType) && (
+                  <Button
+                    aria-label="Run visual review with the LLM judge"
+                    size="xs"
+                    variant="subtle"
+                    onClick={runJudge}
+                    disabled={judging}
+                  >
+                    {judging ? <Spinner size="xs" /> : <Icon as={LuScanEye} />}
+                    <Text>{llmRan ? 'Re-run visual review' : 'Run visual review'}</Text>
+                  </Button>
+                )}
 
                 {shot && (
                   <Box borderWidth="1px" borderColor="border.default" borderRadius="md" overflow="hidden" bg="bg.subtle">

@@ -7,11 +7,13 @@ import { buildReport } from './scoring';
 import { scoreQuestion } from './deterministic/question';
 import { scoreDashboard } from './deterministic/dashboard';
 import { scoreStory } from './deterministic/story';
+import { scoreContext } from './deterministic/context';
 
 const SCORERS: Record<RubricFileType, DeterministicScorer> = {
   question: scoreQuestion as DeterministicScorer,
   dashboard: scoreDashboard as DeterministicScorer,
   story: scoreStory as DeterministicScorer,
+  context: scoreContext as DeterministicScorer,
 };
 
 /**
@@ -23,6 +25,7 @@ const DETERMINISTIC_COVERAGE: Record<RubricFileType, RubricCategory[]> = {
   question: ['correctness', 'clarity'],
   dashboard: ['correctness', 'clarity'],
   story: ['correctness', 'clarity', 'aesthetics'],
+  context: ['correctness', 'clarity'], // knowledge file — no aesthetics, no LLM checks
 };
 
 const RUBRIC_FILE_TYPES = Object.keys(SCORERS) as RubricFileType[];

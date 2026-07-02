@@ -1,5 +1,17 @@
 /** Minimal content builders for rubric tests. Defaults describe a HEALTHY file. */
 import type { DashboardContent, QuestionContent, StoryContent, VizSettings } from '@/lib/types';
+import type { ContextAgentContent } from '@/lib/validation/atlas-schemas';
+
+export function makeContext(overrides: Partial<ContextAgentContent> = {}): ContextAgentContent {
+  return {
+    docs: [{ content: 'Revenue is recognized monthly.', title: 'Revenue', description: 'How revenue works', childPaths: null, draft: null, alwaysInclude: null }],
+    metrics: [{ name: 'mrr', description: 'Monthly recurring revenue', sql: 'SELECT SUM(mrr) FROM m', connection: null, schema: null, table: null }],
+    annotations: null,
+    skills: null,
+    evals: null,
+    ...overrides,
+  };
+}
 
 export function makeViz(overrides: Partial<VizSettings> = {}): VizSettings {
   return { type: 'table', ...overrides };
