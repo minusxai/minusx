@@ -56,6 +56,13 @@ function scoreColor(score: number): string {
   return 'accent.danger';
 }
 
+// Which scorer produced a row — deterministic (static rule ids) vs the LLM checklist (llm.*).
+const SOURCE: Record<'static' | 'llm', { label: string; color: string }> = {
+  static: { label: 'Static', color: 'fg.muted' },
+  llm: { label: 'LLM', color: 'accent.secondary' },
+};
+const sourceOf = (ruleId: string): 'static' | 'llm' => (ruleId.startsWith('llm.') ? 'llm' : 'static');
+
 export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType: string }) {
   // Score the SAVED content, not live edits — so this recomputes on save/load, NOT on every
   // keypress (which re-parsed stories on each stroke and froze the header). The refresh button
@@ -124,12 +131,12 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
     }
   };
 
-  const rows: { key: string; level: Level; category: RubricCategory; title: string; detail?: string; fix?: string }[] = [
+  const rows: { key: string; level: Level; source: 'static' | 'llm'; category: RubricCategory; title: string; detail?: string; fix?: string }[] = [
     ...report.categories.flatMap((c) => c.findings).map((f) => ({
-      key: f.ruleId, level: f.severity as Level, category: f.category, title: f.title, detail: f.detail, fix: f.fix,
+      key: f.ruleId, level: f.severity as Level, source: sourceOf(f.ruleId), category: f.category, title: f.title, detail: f.detail, fix: f.fix,
     })),
     ...passedChecks(fileType as RubricFileType, report).map((c) => ({
-      key: c.ruleId, level: 'pass' as Level, category: c.category, title: c.label,
+      key: c.ruleId, level: 'pass' as Level, source: sourceOf(c.ruleId), category: c.category, title: c.label,
     })),
   ].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]);
   const gradeColor = GRADE_COLOR[report.grade];
@@ -234,6 +241,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                     <Table.Row bg="transparent">
                       <Table.ColumnHeader px={0} py={1} fontSize="2xs" color="fg.subtle" fontWeight="600">Level</Table.ColumnHeader>
                       <Table.ColumnHeader px={2} py={1} fontSize="2xs" color="fg.subtle" fontWeight="600">Category</Table.ColumnHeader>
+                      <Table.ColumnHeader px={2} py={1} fontSize="2xs" color="fg.subtle" fontWeight="600">By</Table.ColumnHeader>
                       <Table.ColumnHeader px={0} py={1} fontSize="2xs" color="fg.subtle" fontWeight="600">Check</Table.ColumnHeader>
                     </Table.Row>
                   </Table.Header>
@@ -243,6 +251,9 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                         <Table.Cell px={0} py={1.5} verticalAlign="top"><LevelTag level={row.level} /></Table.Cell>
                         <Table.Cell px={2} py={1.5} verticalAlign="top">
                           <Text fontSize="2xs" color="fg.muted" whiteSpace="nowrap">{CATEGORY_LABEL[row.category]}</Text>
+                        </Table.Cell>
+                        <Table.Cell px={2} py={1.5} verticalAlign="top">
+                          <Text fontSize="2xs" fontWeight="600" color={SOURCE[row.source].color} whiteSpace="nowrap">{SOURCE[row.source].label}</Text>
                         </Table.Cell>
                         <Table.Cell px={0} py={1.5}>
                           <Text fontSize="xs" fontWeight="600" color={row.level === 'pass' ? 'fg.muted' : 'fg.default'}>{row.title}</Text>
