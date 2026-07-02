@@ -10,6 +10,8 @@ import { getQueryHash } from '@/lib/utils/query-hash';
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup } from '@/lib/data/file-markup';
+import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
+import type { RubricReport } from '@/lib/rubric/types';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import type {
@@ -145,6 +147,7 @@ function compressFileState(fs: FileState): CompressedFileState {
   // multi-MB schema cache off the wire when this AppState is sent to chat (it's a no-op for other
   // types, whose `content` stays full).
   const agentContent = fs.type === 'context' ? shapeContextForAgent(mergedContent) : mergedContent;
+  const rubric = computeRubric(fs.type as FileType, agentContent);
   return {
     id: fs.id,
     name: fs.metadataChanges?.name ?? fs.name,
@@ -155,7 +158,22 @@ function compressFileState(fs: FileState): CompressedFileState {
     ...(queryResultId ? { queryResultId } : {}),
     // File Architecture v2: the markup the agent reads + edits (matches buildCurrentFileStr).
     markup: fileToMarkup(fs.type as FileType, agentContent),
+    ...(rubric ? { rubric } : {}),
   };
+}
+
+/**
+ * Deterministic health rubric for a file's content — auto-injected so the agent sees current
+ * health on every read/app-state. Pure + cheap; only question/dashboard/story are scored.
+ * Never throws (a scoring bug must not break file serialization).
+ */
+function computeRubric(type: FileType, content: unknown): RubricReport | undefined {
+  if (!isRubricFileType(type) || !content) return undefined;
+  try {
+    return scoreFileDeterministic(type, content);
+  } catch {
+    return undefined;
+  }
 }
 
 /**

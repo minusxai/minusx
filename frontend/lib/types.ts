@@ -1,5 +1,6 @@
 import { AnalyticsFileType, FileType } from './ui/file-metadata';
 import type { FileState } from '@/store/filesSlice';
+import type { RubricReport } from '@/lib/rubric/types';
 // Atlas file content types — single source of truth is the TypeBox schemas in
 // lib/validation/atlas-schemas.ts.
 import type {
@@ -1277,6 +1278,10 @@ export interface CompressedFileState {
    *  stable identity for cross-turn dedup by the projection pass. Replaces the old per-chart
    *  image series. */
   image?: { key: string; url?: string; data?: string; mimeType?: string };
+  /** Deterministic health rubric for question/dashboard/story files — auto-computed from
+   *  content so the agent sees current health (score + actionable findings) on every read.
+   *  See `lib/rubric` / `docs/rubrik.md`. Absent for other file types. */
+  rubric?: RubricReport;
 }
 
 export interface CompressedAugmentedFile {
