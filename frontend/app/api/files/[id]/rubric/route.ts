@@ -4,11 +4,11 @@ import { withAuth } from '@/lib/api/with-auth';
 import { loadFile } from '@/lib/data/files.server';
 import { validateFileId } from '@/lib/data/helpers/validation';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
-import { judgeFile, combineReports } from '@/lib/rubric/judge/judge.server';
+import { scoreFileFull } from '@/lib/rubric/score-file.server';
 
 // File health rubric (see docs/rubrik.md).
 //   GET  → deterministic report (score + findings), computed from content.
-//   POST → deterministic + LLM judge, combined. Body: { screenshot?: <data URL>, llmJudge?: true }.
+//   POST → deterministic + LLM judge, combined. Body: { screenshot?: <data URL>, screenshotUrl?: <https URL> }.
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -39,18 +39,16 @@ export const POST = withAuth(async (
   try {
     const id = validateFileId((await params).id);
     const body = await request.json().catch(() => ({}));
-    const screenshotUrl = typeof body?.screenshot === 'string' && body.screenshot.startsWith('data:')
-      ? body.screenshot as string
-      : undefined;
+    // Accept a client-captured `data:` URL or an already-uploaded https URL (screenshot tool).
+    const screenshotUrl = typeof body?.screenshotUrl === 'string' ? body.screenshotUrl as string
+      : (typeof body?.screenshot === 'string' && body.screenshot.startsWith('data:') ? body.screenshot as string : undefined);
 
     const { data: file } = await loadFile(id, user); // access-checked
     if (!isRubricFileType(file.type)) {
       return ApiErrors.validationError(`Health rubric is only available for question, dashboard, and story files (got ${file.type})`);
     }
 
-    const deterministic = scoreFileDeterministic(file.type, file.content);
-    const judge = await judgeFile({ fileType: file.type, content: file.content, screenshotUrl }, user);
-    return successResponse({ report: combineReports(deterministic, judge) });
+    return successResponse({ report: await scoreFileFull(file.type, file.content, user, screenshotUrl) });
   } catch (error) {
     return handleApiError(error);
   }

@@ -18,6 +18,14 @@ import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
 import type { RubricCategory, RubricFinding, RubricReport, RubricSeverity } from '@/lib/rubric/types';
 
+/**
+ * Door for piece 3: when true, opening the panel auto-runs the combined visual review (a
+ * screenshot capture + judge LLM call) instead of waiting for the "Run visual review" click.
+ * Off by default — each open would otherwise cost an LLM call. Flip to true to always show the
+ * combined total on open.
+ */
+const AUTO_RUN_VISUAL_REVIEW = false;
+
 const GRADE_COLOR: Record<string, string> = { good: 'accent.success', fair: 'accent.warning', poor: 'accent.danger' };
 const SEVERITY: Record<RubricSeverity, { color: string; icon: IconType }> = {
   error: { color: 'accent.danger', icon: LuCircleAlert },
@@ -78,7 +86,10 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   const gradeColor = GRADE_COLOR[report.grade];
 
   return (
-    <Popover.Root positioning={{ placement: 'bottom-start' }}>
+    <Popover.Root
+      positioning={{ placement: 'bottom-start' }}
+      onOpenChange={(e) => { if (e.open && AUTO_RUN_VISUAL_REVIEW && !judgeReport && !judging) void runJudge(); }}
+    >
       <Popover.Trigger asChild>
         <Button
           aria-label={`File health: ${report.overall} of 5 (${report.grade})`}

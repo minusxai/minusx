@@ -153,71 +153,59 @@ text/image/divider assets are ignored for counting.
 
 ## LLM judge
 
-`lib/rubric/judge/judge.server.ts` — `judgeFile({ fileType, content, screenshotUrl, model? })
+`lib/rubric/judge/judge.server.ts` — `judgeFile({ fileType, content, screenshotUrl }, user)
 → Promise<RubricReport>`. Grades the subjective / visual dimensions the deterministic pass
 can't (right-chart-for-the-data, does the frame carry the insight, does the story look
 crafted vs AI-default). Emits `source: 'llm-judge'`.
 
-**Standalone, not an orchestrator tool run.** It builds a one-shot `Context` and calls
-`streamSimple` directly, so it can be invoked from a tool handler *or* an API route without
-spinning up an `Orchestrator`. The LLM call is **dependency-injected** (`callModel` param,
-defaults to `streamSimple(...).result()`) so tests drive it with a fake message — no provider,
-no faux registration.
+**Runs on the shared micro-task infra — no bespoke LLM call.** `judgeFile` calls
+`runMicroTask('rubric_judge', vars, user, images)` (`lib/chat/run-micro-task.server.ts`), which
+runs the no-tools `MicroAgent` through the orchestrator. So the prompt lives in
+`micro.rubric_judge` (`prompts.yaml`), and model resolution + out-of-band usage tracking come
+for free. The screenshot rides along as an image content block via the micro context's new
+optional `images` field (`MicroAgent.buildUserContent` appends them).
 
-**Same findings shape as the deterministic scorers.** The judge's structured-output tool
-`SubmitRubric` returns a *flat* `findings[]` (category, severity, title, detail, fix) — NOT a
-pre-scored nested report. Those findings flow through the same `buildReport`, so both flavors
-are scored identically and merge cleanly. Judge findings get a generated
-`ruleId: judge.<category>.<index>`. Structured output is forced via the TypeBox `SubmitRubric`
-tool (the `agents/eval/submit-tools.ts` idiom); the tool is defined but **not executed** — we
-read the `toolCall` args straight off the assistant message.
+> Cycle note: `runMicroTask` records usage via `recordHeadlessLlmCalls`, which was extracted to
+> the leaf `lib/chat/headless-llm-tracking.server.ts` so the judge → micro chain doesn't import
+> the V2 registrables hub (which imports the tools that import the judge).
 
-```ts
-// SubmitRubric params
-{ findings: Array<{ category: 'correctness'|'clarity'|'aesthetics';
-                    severity: 'error'|'warn'|'info';
-                    title: string; detail: string; fix: string }> }  // [] if genuinely good
-```
+**Same findings shape as the deterministic scorers.** The judge returns a *flat* `findings[]`
+JSON (`{"findings":[{category, severity, title, detail, fix}]}`, `[]` if good). Those flow
+through the same `buildReport`, so both flavors score identically and merge. Judge findings get
+a generated `ruleId: judge.<category>.<index>`; `parseFindings` tolerantly extracts the JSON and
+drops anything malformed (worst case: an empty 5/5 report).
 
 - **Input** = `fileToMarkup(fileType, content)` as text + (when available) the rendered
-  full-file screenshot as an `{ type:'image', url }` content block. **The judge is most
-  valuable WITH the visual** — the screenshot is what lets it grade aesthetics + visual clarity. The URL is
-  the one the app already captures + uploads on the send path
-  (`lib/screenshot/app-state-screenshot.ts`, the same image the `Screenshot` tool surfaces),
-  carried on `fileState.image.url`. The `CheckFileHealth` tool pulls it from the current
-  app-state file; the API route takes a client-captured screenshot in the POST body. It never
-  renders anything itself; with no screenshot it falls back to markup-only.
-- **Model** = dedicated **Opus 4.8** (`getModel('anthropic', 'claude-opus-4-8')`), independent
-  of any chat model, with a `setJudgeModel` test seam.
-- **Prompts** (`judge/prompts.ts`) — a shared reviewer preamble + per-type criteria distilled
-  from `skill_questions` / `skill_dashboards` / `skill_stories`. The judge is told to skip
-  lint-style issues the deterministic pass already covers.
-- **Robustness** — if the model doesn't call `SubmitRubric`, or a finding is malformed
-  (missing category/severity/title), it's dropped; worst case is an empty (5/5) judge report.
+  screenshot as an image block (https or `data:` URL → `imageBlock`). **The judge is most
+  valuable WITH the visual** — the screenshot is what lets it grade aesthetics + visual clarity.
+  With no screenshot it falls back to markup-only.
+- **Model** = the micro model (`getMicroModelOrTestFallback`), same as other micro-tasks.
+- **Prompts** = `micro.rubric_judge` (shared preamble + JSON format) with the per-type
+  `{criteria}` from `judge/prompts.ts` (`judgeCriteria`), distilled from the `skill_*` prompts.
 - `combineReports(deterministic, judge)` flattens both reports' findings and rebuilds one with
   `source: 'combined'`.
 
-Pattern lineage: the dedicated-Opus-judge idea is from
-`agents/benchmark-analyst/double-check-benchmark.ts`; the typed-Submit-tool-for-structured-
-output idea from `agents/eval/submit-tools.ts`.
+## Consumption — the 3-piece architecture
 
-## Consumption
-
-1. **Auto-inject (deterministic).** Attached to the augmented file shape the agent sees, at
-   `readFilesServer` (`lib/api/file-state.server.ts`) plus the create/edit tool-result
-   projection. Cheap + pure, safe every time. The LLM judge is never auto-run (too expensive).
-2. **Agent tool.** `CheckFileHealth(fileId, { llmJudge? })` in
-   `agents/analyst/health-tools.ts`, loads content via `FilesAPI.loadFile`, runs the
-   deterministic scorer + (when `llmJudge`) the judge, reusing the current file's app-state
-   screenshot (`fileState.image.url`) so the judge grades the visual. Registered in
-   `analyst-agent.ts`, `web-analyst.ts`, and `V2_REGISTRABLES`.
-3. **UI + API.** `FileHealthBadge` (`components/FileHealthPanel.tsx`) in the shared
-   `FileHeader` badge row (question/dashboard/story only) — a Lighthouse-style score pill that
-   opens a panel of per-category scores + findings + fixes. It computes the **deterministic**
-   report client-side from Redux `selectMergedContent` (instant, live-edit aware, no fetch),
-   and a "Run visual review" button captures the file screenshot (`useScreenshot`) and POSTs it
-   to run the judge. API: `GET /api/files/[id]/rubric` (deterministic) / `POST { screenshot }`
-   (deterministic + judge, combined), modeled on `app/api/files/[id]/preview/route.ts`.
+1. **Deterministic fn (piece 1)** — `scoreFileDeterministic`, auto-injected into the file the
+   agent sees at `compressFileState` (`lib/api/compress-augmented.ts`), covering every
+   read / edit / create. Cheap + pure, safe every time.
+2. **LLM fn (piece 2)** — `judgeFile`, same contract. Attached to the **Screenshot tool**: after
+   the `Screenshot` frontend handler (`lib/api/tool-handlers.ts`) captures + uploads the shot, it
+   POSTs the URL to the rubric route and appends the **combined** report to the tool result — so
+   every screenshot carries the file's full health (best-effort; a rubric failure never blocks
+   the shot).
+3. **Run-both fn (piece 3)** — `scoreFileFull(fileType, content, user, screenshotUrl?)`
+   (`lib/rubric/score-file.server.ts`) = deterministic + judge, combined. Two thin doors call it:
+   - **UI** — `FileHealthBadge` (`components/FileHealthPanel.tsx`) in the `FileHeader` badge row.
+     Shows the **deterministic** report instantly (client-side `selectMergedContent`, no fetch);
+     "Run visual review" captures a screenshot (`useScreenshot`) and POSTs for the combined. A
+     `AUTO_RUN_VISUAL_REVIEW` flag in that file opts into auto-running the combined on open.
+   - **Agent** — `CheckFileHealth(fileId, { llmJudge?, screenshotUrl? })`
+     (`agents/analyst/health-tools.ts`), a manual re-check tool (e.g. after an edit); with
+     `llmJudge` it calls `scoreFileFull`. Registered on `WebAnalystAgent` + `V2_REGISTRABLES`.
+   - **API** — `GET /api/files/[id]/rubric` (deterministic) / `POST { screenshot | screenshotUrl }`
+     (→ `scoreFileFull`), modeled on `app/api/files/[id]/preview/route.ts`.
 
 ## Layout
 

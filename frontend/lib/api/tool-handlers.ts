@@ -507,6 +507,26 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
   };
 });
 
+/**
+ * Fetch the COMBINED health rubric (deterministic + LLM visual judge) for a freshly-captured
+ * screenshot and format it as a compact text block appended to the Screenshot result. Best-effort:
+ * a non-rubric file type or any failure yields '' (the screenshot still returns normally).
+ */
+async function fetchScreenshotRubric(fileId: number, screenshotUrl: string): Promise<string> {
+  try {
+    const res = await fetch(`/api/files/${fileId}/rubric`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ screenshotUrl }),
+    });
+    if (!res.ok) return '';
+    const report = (await res.json())?.data?.report;
+    return report ? `\n\nHealth rubric (deterministic + visual judge):\n${JSON.stringify(report)}` : '';
+  } catch {
+    return '';
+  }
+}
+
 // Screenshot — capture the LIVE rendered DOM of the current file as an image the agent can
 // see. Frontend-only (needs the browser DOM). Reuses the shared capture core + the SAME upload
 // path (S3 / base64 / local FS, per config) as the auto chart-image attachments.
@@ -520,9 +540,12 @@ registerFrontendTool('Screenshot', async (args, context) => {
     await new Promise((r) => setTimeout(r, 0));
     const blob = await captureFileViewBlob(fileId, { colorMode, fullHeight, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg' });
     const url = await uploadBlobOrEmbed(blob, 'screenshot.jpg', 'image/jpeg');
+    // Piece 2: every screenshot also carries the file's COMBINED health rubric (deterministic +
+    // LLM visual judge on THIS screenshot). Best-effort — a rubric failure never blocks the shot.
+    const rubricText = await fetchScreenshotRubric(fileId, url);
     return {
       content: [
-        { type: 'text', text: `Screenshot of file ${fileId} (rendered view).` },
+        { type: 'text', text: `Screenshot of file ${fileId} (rendered view).${rubricText}` },
         { type: 'image_url', image_url: { url } },
       ],
       // screenshotUrl rides in `details` (UI-only, survives the turn) so the chat image

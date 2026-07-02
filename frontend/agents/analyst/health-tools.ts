@@ -3,7 +3,7 @@ import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
-import { judgeFile, combineReports } from '@/lib/rubric/judge/judge.server';
+import { scoreFileFull } from '@/lib/rubric/score-file.server';
 import type { RubricReport } from '@/lib/rubric/types';
 import type { AnalystAgentContext } from './types';
 
@@ -15,7 +15,10 @@ import type { AnalystAgentContext } from './types';
 const CheckFileHealthParams = Type.Object({
   fileId: Type.Number({ description: 'ID of the file to health-check (question, dashboard, or story).' }),
   llmJudge: Type.Optional(Type.Boolean({
-    description: 'When true, also run the LLM judge for subjective/visual quality (slower, judges from markup). Default false.',
+    description: 'When true, also run the LLM judge for subjective/visual quality (slower). Default false.',
+  })),
+  screenshotUrl: Type.Optional(Type.String({
+    description: 'Optional rendered-file screenshot URL for the judge to grade (https or data: URL). Defaults to the current file\'s app-state screenshot.',
   })),
 });
 
@@ -62,14 +65,12 @@ export class CheckFileHealth extends MXTool<typeof CheckFileHealthParams, Analys
         return fail(fileId, `Health rubric is only available for question, dashboard, and story files (got ${file.type}).`);
       }
 
-      let report = scoreFileDeterministic(file.type, file.content);
-      if (llmJudge) {
-        // Reuse the current file's already-captured screenshot when available (visual judgment
-        // is far stronger than markup-only); otherwise the judge falls back to markup.
-        const screenshotUrl = screenshotUrlFor(this.context.appState, fileId);
-        const judge = await judgeFile({ fileType: file.type, content: file.content, screenshotUrl }, user);
-        report = combineReports(report, judge);
-      }
+      // With llmJudge, run BOTH (piece 3, scoreFileFull) reusing the current file's already-
+      // captured screenshot when the caller didn't pass one; otherwise deterministic only.
+      const report = llmJudge
+        ? await scoreFileFull(file.type, file.content, user,
+            this.parameters.screenshotUrl ?? screenshotUrlFor(this.context.appState, fileId))
+        : scoreFileDeterministic(file.type, file.content);
 
       const details: CheckFileHealthDetails = { success: true, fileId, report };
       return { content: [{ type: 'text', text: JSON.stringify({ success: true, report }) }], isError: false, details };
