@@ -103,6 +103,31 @@ describe('movableUnit — climbs from the embed to the whole card', () => {
     const canvas = el('div', {}, grid);
     expect(movableUnit(chart, canvas, getStyle)).toBe(chart);
   });
+
+  it('stops below a narrative beat authored in <div>s (real stories tag prose as divs, not <p>)', () => {
+    const chart = embed('1');
+    const caption = el('div', { class: 'caption' });
+    caption.textContent = 'New vs Returning Users';
+    const plate = el('div', { class: 'plate' }, caption, chart);
+    const kicker = el('div', { class: 'kicker' });
+    kicker.textContent = 'Beat 3 · habits';
+    const narrative = el('div', { class: 'prose' });
+    narrative.textContent =
+      'This is a returning audience, not a one-touch crowd; volume rises and falls but the base keeps coming back.';
+    const section = el('section', {}, kicker, narrative, plate);
+    const canvas = el('div', {}, section);
+    // Only the chart card moves — the beat's heading + narrative stay put.
+    expect(movableUnit(chart, canvas, getStyle)).toBe(plate);
+  });
+
+  it('keeps a short <div> caption with the card (a title label is chrome, not narrative)', () => {
+    const chart = embed('1');
+    const caption = el('div', { class: 'caption' });
+    caption.textContent = 'Signups by week';
+    const plate = el('div', { class: 'plate' }, caption, chart);
+    const canvas = el('div', {}, plate);
+    expect(movableUnit(chart, canvas, getStyle)).toBe(plate);
+  });
 });
 
 /** A canvas: section[ p, plate[caption, chart1] ], kpis(grid)[num, num], section2[ plate2[chart2] ]. */

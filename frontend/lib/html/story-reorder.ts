@@ -4,8 +4,10 @@
  * only lets a chart shuffle past its own caption). Instead:
  *
  *  - `movableUnit` finds the whole CARD to move: it climbs from the embed placeholder to the outermost
- *    tight wrapper that groups ONLY this chart with its caption/label chrome (no prose, no second embed),
- *    so a drag carries the card rather than orphaning the caption.
+ *    tight wrapper that groups ONLY this chart with its caption/label chrome, stopping before it would
+ *    absorb a beat's heading/narrative — so a drag carries the card (chart + caption) and leaves the
+ *    surrounding prose in place. Prose is detected structurally (semantic tags OR sentence-length `<div>`s,
+ *    since real stories author narrative as styled divs), not just by tag name.
  *  - `collectDropSlots` enumerates every flow gap across the WHOLE document, recursing through nested
  *    flow containers — but never into a packed grid/flex/table (dropping a widget there would give it a
  *    packed ancestor and silently re-break px resize) and never into the dragged unit, another embed, or
@@ -19,8 +21,12 @@ import { isPackedDisplay } from './story-widget-layout';
 
 /** Elements that are NOT reorder targets: AgentHtml scaffolding + our own drag chrome. */
 const NON_MOVABLE = 'style, [data-mx-embed-root], [data-mx-drop-indicator]';
-/** Narrative prose — its presence marks a wrapper as a section (not a tight single-chart card). */
+/** Semantic prose tags — always narrative, regardless of length. */
 const PROSE = 'p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote';
+/** Trimmed text length at/above which a non-semantic block (a `<div>`) counts as narrative rather than a
+ *  short caption/title label. Real stories author prose in styled `<div>`s, so tag-matching alone misses
+ *  it; a caption ("New vs Returning Users") stays well under this, a sentence runs well over. */
+const PROSE_MIN_CHARS = 60;
 /** Chart embeds (for the single-card test in `movableUnit`). */
 const CHART_EMBED = '[data-question-id], [data-question-inline]';
 /** Any embed/callout we must never recurse INTO when hunting for drop gaps. */
@@ -40,6 +46,22 @@ const defaultRectReader: RectReader = (el) => {
 /** A widget lays its children out in normal flow (their own `width` governs) — a valid drop container. */
 function isFlow(el: Element, getStyle: StyleReader): boolean {
   return !isPackedDisplay(getStyle(el).display);
+}
+
+/** A narrative prose block: a semantic prose tag, or a `<div>` carrying sentence-length text (not a short
+ *  caption/title). Embeds/callouts are never prose. */
+function isProseBlock(el: Element): boolean {
+  if (el.matches(LEAF_EMBED)) return false;
+  if (el.matches(PROSE)) return true;
+  return (el.textContent ?? '').trim().length >= PROSE_MIN_CHARS;
+}
+
+/** True when `parent` holds narrative prose OUTSIDE the `card` branch — i.e. climbing into it would drag a
+ *  whole beat's heading/narrative along, not just the chart card. */
+function addsNarrativeBeyond(parent: HTMLElement, card: HTMLElement): boolean {
+  return (Array.from(parent.children) as HTMLElement[]).some(
+    child => child !== card && !child.contains(card) && isProseBlock(child),
+  );
 }
 
 /**
@@ -66,14 +88,15 @@ export interface DropSlot {
 
 /**
  * The whole card to move for `embed`: climb to the outermost tight wrapper that groups only this one
- * chart with its caption/label (no prose, no second embed), staying in flow and below the canvas. Returns
- * the bare embed when it has no such wrapper (a chart sitting directly in a flow container).
+ * chart with its caption/label — stopping before a wrapper that also holds a beat's heading/narrative
+ * (or a second embed) — staying in flow and below the canvas. Returns the bare embed when it has no such
+ * wrapper (a chart sitting directly in a flow container).
  */
 export function movableUnit(embed: HTMLElement, canvas: HTMLElement, getStyle: StyleReader = defaultStyleReader): HTMLElement {
   let unit = embed;
   for (let p = embed.parentElement; p && p !== canvas && isFlow(p, getStyle); p = p.parentElement) {
     if (p.querySelectorAll(CHART_EMBED).length !== 1) break; // wraps another chart too → not one card
-    if (p.querySelector(PROSE)) break;                       // holds narrative prose → a section, not a card
+    if (addsNarrativeBeyond(p, unit)) break;                 // adds a beat's heading/narrative → a section, not a card
     unit = p;
   }
   return unit;
