@@ -9,15 +9,16 @@
  * question/dashboard/story files; renders nothing for other types.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Box, HStack, VStack, Text, Icon, Popover, Portal, Button, Spinner } from '@chakra-ui/react';
-import { LuHeartPulse, LuCircleAlert, LuTriangleAlert, LuInfo, LuSparkles, LuRefreshCw, LuCircleCheck } from 'react-icons/lu';
-import type { IconType } from 'react-icons';
+import { Box, HStack, VStack, Text, Icon, Popover, Portal, Button, Spinner, Table } from '@chakra-ui/react';
+import { LuHeartPulse, LuSparkles, LuRefreshCw } from 'react-icons/lu';
 import { useAppSelector, useAppStore } from '@/store/hooks';
 import { selectFile, selectMergedContent } from '@/store/filesSlice';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
 import { passedChecks } from '@/lib/rubric/checks';
-import type { RubricCategory, RubricFileType, RubricFinding, RubricReport, RubricSeverity } from '@/lib/rubric/types';
+import type { RubricCategory, RubricFileType, RubricReport, RubricSeverity } from '@/lib/rubric/types';
+
+type Level = RubricSeverity | 'pass';
 
 /**
  * Door for piece 3: when true, opening the panel auto-runs the combined visual review (a
@@ -28,15 +29,26 @@ import type { RubricCategory, RubricFileType, RubricFinding, RubricReport, Rubri
 const AUTO_RUN_VISUAL_REVIEW = false;
 
 const GRADE_COLOR: Record<string, string> = { good: 'accent.success', fair: 'accent.warning', poor: 'accent.danger' };
-const SEVERITY: Record<RubricSeverity, { color: string; icon: IconType }> = {
-  error: { color: 'accent.danger', icon: LuCircleAlert },
-  warn: { color: 'accent.warning', icon: LuTriangleAlert },
-  info: { color: 'fg.muted', icon: LuInfo },
+const LEVEL: Record<Level, { color: string; label: string }> = {
+  error: { color: 'accent.danger', label: 'ERROR' },
+  warn: { color: 'accent.warning', label: 'WARN' },
+  info: { color: 'fg.muted', label: 'INFO' },
+  pass: { color: 'accent.success', label: 'PASS' },
 };
 const CATEGORY_LABEL: Record<RubricCategory, string> = {
   correctness: 'Correctness', clarity: 'Clarity', aesthetics: 'Aesthetics',
 };
-const SEVERITY_ORDER: Record<RubricSeverity, number> = { error: 0, warn: 1, info: 2 };
+const LEVEL_ORDER: Record<Level, number> = { error: 0, warn: 1, info: 2, pass: 3 };
+
+function LevelTag({ level }: { level: Level }) {
+  const t = LEVEL[level];
+  return (
+    <Text as="span" px={1} borderRadius="sm" bg={`${t.color}/15`} color={t.color}
+      fontSize="2xs" fontWeight="700" fontFamily="mono" letterSpacing="0.05em" whiteSpace="nowrap">
+      {t.label}
+    </Text>
+  );
+}
 
 function scoreColor(score: number): string {
   if (score >= 4) return 'accent.success';
@@ -100,10 +112,14 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
     }
   };
 
-  const findings = report.categories
-    .flatMap((c) => c.findings)
-    .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
-  const passed = passedChecks(fileType as RubricFileType, report);
+  const rows: { key: string; level: Level; category: RubricCategory; title: string; detail?: string; fix?: string }[] = [
+    ...report.categories.flatMap((c) => c.findings).map((f) => ({
+      key: f.ruleId, level: f.severity as Level, category: f.category, title: f.title, detail: f.detail, fix: f.fix,
+    })),
+    ...passedChecks(fileType as RubricFileType, report).map((c) => ({
+      key: c.ruleId, level: 'pass' as Level, category: c.category, title: c.label,
+    })),
+  ].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]);
   const gradeColor = GRADE_COLOR[report.grade];
 
   return (
@@ -147,7 +163,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
       </Popover.Trigger>
       <Portal>
         <Popover.Positioner>
-          <Popover.Content width="360px" maxH="72vh" overflowY="auto">
+          <Popover.Content width="420px" maxH="72vh" overflowY="auto">
             <Popover.Body>
               <VStack align="stretch" gap={3}>
                 <HStack justify="space-between">
@@ -190,24 +206,30 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                   <Text>{report.source === 'deterministic' ? 'Run visual review' : 'Re-run visual review'}</Text>
                 </Button>
 
-                {findings.length === 0 ? (
-                  <Text fontSize="xs" color="fg.muted">No issues found — this file looks healthy.</Text>
-                ) : (
-                  <VStack align="stretch" gap={2}>
-                    {findings.map((f, i) => <FindingRow key={`${f.ruleId}-${i}`} finding={f} />)}
-                  </VStack>
-                )}
-
-                {passed.length > 0 && (
-                  <VStack align="stretch" gap={0.5} pt={0.5}>
-                    {passed.map((chk) => (
-                      <HStack key={chk.ruleId} gap={1.5} fontSize="2xs" color="fg.subtle">
-                        <Icon as={LuCircleCheck} color="accent.success" boxSize={2.5} flexShrink={0} />
-                        <Text>{chk.label}</Text>
-                      </HStack>
+                <Table.Root size="sm" css={{ '& td, & th': { borderColor: 'border.muted' } }}>
+                  <Table.Header>
+                    <Table.Row bg="transparent">
+                      <Table.ColumnHeader px={0} py={1} fontSize="2xs" color="fg.subtle" fontWeight="600">Level</Table.ColumnHeader>
+                      <Table.ColumnHeader px={2} py={1} fontSize="2xs" color="fg.subtle" fontWeight="600">Category</Table.ColumnHeader>
+                      <Table.ColumnHeader px={0} py={1} fontSize="2xs" color="fg.subtle" fontWeight="600">Check</Table.ColumnHeader>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {rows.map((row) => (
+                      <Table.Row key={row.key} bg="transparent">
+                        <Table.Cell px={0} py={1.5} verticalAlign="top"><LevelTag level={row.level} /></Table.Cell>
+                        <Table.Cell px={2} py={1.5} verticalAlign="top">
+                          <Text fontSize="2xs" color="fg.muted" whiteSpace="nowrap">{CATEGORY_LABEL[row.category]}</Text>
+                        </Table.Cell>
+                        <Table.Cell px={0} py={1.5}>
+                          <Text fontSize="xs" fontWeight="600" color={row.level === 'pass' ? 'fg.muted' : 'fg.default'}>{row.title}</Text>
+                          {row.detail && <Text fontSize="2xs" color="fg.muted" mt={0.5}>{row.detail}</Text>}
+                          {row.fix && <Text fontSize="2xs" color="fg.subtle" mt={0.5}><Text as="span" fontWeight="700">Fix: </Text>{row.fix}</Text>}
+                        </Table.Cell>
+                      </Table.Row>
                     ))}
-                  </VStack>
-                )}
+                  </Table.Body>
+                </Table.Root>
               </VStack>
             </Popover.Body>
           </Popover.Content>
@@ -233,36 +255,5 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
       </Box>
       </HStack>
     </>
-  );
-}
-
-function FindingRow({ finding }: { finding: RubricFinding }) {
-  const sev = SEVERITY[finding.severity];
-  return (
-    <Box borderWidth="1px" borderColor="border.default" borderRadius="md" p={2} bg="bg.subtle">
-      <VStack align="stretch" gap={0.5}>
-        <HStack gap={1.5} align="center">
-          <Icon as={sev.icon} color={sev.color} flexShrink={0} />
-          <Text
-            as="span"
-            px={1}
-            borderRadius="sm"
-            bg={`${sev.color}/15`}
-            color={sev.color}
-            fontSize="2xs"
-            fontWeight="700"
-            fontFamily="mono"
-            textTransform="uppercase"
-            letterSpacing="0.05em"
-            flexShrink={0}
-          >
-            {finding.severity}
-          </Text>
-          <Text fontSize="xs" fontWeight="600" color="fg.default">{finding.title}</Text>
-        </HStack>
-        <Text fontSize="xs" color="fg.muted">{finding.detail}</Text>
-        <Text fontSize="xs" color="fg.subtle"><Text as="span" fontWeight="600">Fix: </Text>{finding.fix}</Text>
-      </VStack>
-    </Box>
   );
 }
