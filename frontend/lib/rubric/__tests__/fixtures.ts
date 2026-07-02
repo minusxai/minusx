@@ -28,7 +28,7 @@ export function makeDashboard(overrides: Partial<DashboardContent> = {}): Dashbo
     layout: {
       items: ids.map((id, i) => ({ id, x: (i % 2) * 6, y: Math.floor(i / 2) * 4, w: 6, h: 4 })),
     },
-    parameterValues: null,
+    parameterValues: { region: '' }, // healthy dashboard has a filter
     ...overrides,
   };
 }

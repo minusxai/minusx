@@ -33,6 +33,8 @@ export const DETERMINISTIC_CHECKS: Record<RubricFileType, RubricCheck[]> = {
     { ruleId: 'dashboard.duplicate-question', label: 'No duplicate questions', category: 'correctness' },
     { ruleId: 'dashboard.tile-too-small', label: 'Tiles large enough', category: 'clarity' },
     { ruleId: 'dashboard.visual-count', label: 'Visual count OK', category: 'clarity' },
+    { ruleId: 'dashboard.too-much-text', label: 'Text is concise', category: 'clarity' },
+    { ruleId: 'dashboard.no-parameters', label: 'Has parameters', category: 'clarity' },
     { ruleId: 'dashboard.no-description', label: 'Has a description', category: 'clarity' },
   ],
   story: [
@@ -96,6 +98,9 @@ export const LLM_CHECKS: Record<RubricFileType, LlmCheck[]> = {
     { id: 'uncluttered-layout', category: 'aesthetics', severity: 'warn', label: 'Uncluttered layout',
       question: 'The layout is balanced with adequate whitespace — not cramped, lopsided, or overflowing. PASS if well-composed.',
       fix: 'Add spacing, align tiles to the grid, and balance the composition.' },
+    { id: 'clean-text-styling', category: 'aesthetics', severity: 'warn', label: 'Clean text styling',
+      question: 'Text elements (titles, labels, and text tiles) have appropriate, even padding/spacing and look clean — no cramped, oversized, or unnatural/weird padding. PASS if text is cleanly and consistently spaced.',
+      fix: 'Give text consistent, comfortable padding aligned to the grid; remove cramped or oddly large/uneven spacing.' },
   ],
   story: [
     { id: 'single-lead', category: 'correctness', severity: 'error', label: 'One clear lead',

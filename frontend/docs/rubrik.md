@@ -130,6 +130,8 @@ text/image/divider assets are ignored for counting.
 | `tile-too-small` | clarity | warn | a question tile has `w < 3` or `h < 3` | Question tiles need ≥3×3 to be legible; enlarge tile {id}. |
 | `visual-count` | clarity | error / warn | question count `< 1` (error, empty) / `> 9` (warn) | Keep 5–9 visuals per dashboard; split into multiple dashboards or drop low-value charts. |
 | `duplicate-question` | correctness | info | the same question id is referenced more than once | Reference question {id} once; parameterize instead of duplicating. |
+| `too-much-text` | clarity | warn | total inline-text asset tokens > ~400 | Trim inline text to short annotations; move long prose into a story. |
+| `no-parameters` | clarity | info | `parameterValues` has no keys (no filters) | Add shared parameters (date range, region) — dashboards are far more useful when filterable. |
 | `no-description` | clarity | info | `description` blank | Add a description stating the dashboard's decision purpose. |
 
 > `asset-not-in-layout` / `layout-orphan` only fire when a `layout` with `items` exists — a
@@ -190,7 +192,7 @@ there and both the prompt (`formatChecklist`) and the parsing update automatical
 - **question** — `chart-type-fit` (err), `honest-scale` (err), `axes-labeled`, `labels-legible`,
   `not-overplotted`, `takeaway-obvious`, `clean-encoding`.
 - **dashboard** — `coherent-narrative`, `clear-hierarchy`, `tiles-readable`,
-  `consistent-formatting`, `uncluttered-layout`.
+  `consistent-formatting`, `uncluttered-layout`, `clean-text-styling`.
 - **story** — `single-lead` (err), `evidence-supports-claims` (err), `headlines-are-findings`,
   `frame-carries-insight`, `deliberate-palette`, `typographic-craft`.
 

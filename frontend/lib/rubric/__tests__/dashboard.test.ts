@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scoreDashboard } from '../deterministic/dashboard';
+import { scoreDashboard, MIN_TILE_W, MAX_VISUALS, MAX_TEXT_TOKENS } from '../deterministic/dashboard';
 import type { AssetReference } from '@/lib/types';
 import { makeDashboard } from './fixtures';
 
@@ -39,13 +39,13 @@ describe('scoreDashboard', () => {
   it('flags a tile smaller than 3x3', () => {
     const findings = scoreDashboard(makeDashboard({
       assets: [q(1)],
-      layout: { items: [{ id: 1, x: 0, y: 0, w: 2, h: 4 }] },
+      layout: { items: [{ id: 1, x: 0, y: 0, w: MIN_TILE_W - 1, h: 4 }] },
     }));
     expect(findings.find((x) => x.ruleId === 'dashboard.tile-too-small')?.severity).toBe('warn');
   });
 
-  it('flags too many visuals (warn > 9) and an empty dashboard (error < 1)', () => {
-    const many = Array.from({ length: 11 }, (_, i) => q(i + 1));
+  it('flags too many visuals (warn) and an empty dashboard (error < 1)', () => {
+    const many = Array.from({ length: MAX_VISUALS + 1 }, (_, i) => q(i + 1));
     const tooMany = scoreDashboard(makeDashboard({
       assets: many,
       layout: { items: many.map((_, i) => ({ id: i + 1, x: 0, y: i * 4, w: 6, h: 4 })) },
@@ -62,6 +62,17 @@ describe('scoreDashboard', () => {
       layout: { items: [{ id: 1, x: 0, y: 0, w: 6, h: 4 }] },
     }));
     expect(findings.find((x) => x.ruleId === 'dashboard.duplicate-question')?.severity).toBe('info');
+  });
+
+  it('flags a dashboard with too much inline text', () => {
+    const bigText: AssetReference = { type: 'text', id: 'inline-0', content: 'x'.repeat((MAX_TEXT_TOKENS + 50) * 4) };
+    const findings = scoreDashboard(makeDashboard({ assets: [q(1), bigText], layout: { items: [{ id: 1, x: 0, y: 0, w: 6, h: 4 }] } }));
+    expect(findings.find((x) => x.ruleId === 'dashboard.too-much-text')?.severity).toBe('warn');
+  });
+
+  it('flags a dashboard with no parameters (info)', () => {
+    const findings = scoreDashboard(makeDashboard({ parameterValues: null }));
+    expect(findings.find((x) => x.ruleId === 'dashboard.no-parameters')?.severity).toBe('info');
   });
 
   it('returns no findings for a healthy dashboard', () => {

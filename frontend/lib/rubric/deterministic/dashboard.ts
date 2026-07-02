@@ -1,9 +1,12 @@
 import type { DashboardContent, DashboardLayoutItem } from '@/lib/types';
 import type { RubricFinding } from '../types';
-import { finding, isBlank } from './shared';
+import { estimateTokens, finding, isBlank } from './shared';
 
 const MIN_TILE = 3;
-const MAX_VISUALS = 9;
+export const MIN_TILE_W = 2;
+export const MIN_TILE_H = 2;
+export const MAX_VISUALS = 15;
+export const MAX_TEXT_TOKENS = 400;
 
 function overlaps(a: DashboardLayoutItem, b: DashboardLayoutItem): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -26,15 +29,30 @@ export function scoreDashboard(content: DashboardContent): RubricFinding[] {
       "Add a description stating the dashboard's decision purpose."));
   }
 
+  // no-parameters (clarity, info — dashboards are far more useful when filterable)
+  if (Object.keys(content.parameterValues ?? {}).length === 0) {
+    out.push(finding('dashboard.no-parameters', 'clarity', 'info', 'No parameters',
+      'The dashboard has no parameters/filters.',
+      'Add shared parameters (e.g. a date range or region filter) so viewers can slice the data — dashboards are far more useful when interactive.'));
+  }
+
   // visual-count (clarity — too few/many hurts comprehension, not correctness)
   if (questionIds.length < 1) {
     out.push(finding('dashboard.visual-count', 'clarity', 'error', 'Empty dashboard',
       'The dashboard has no question visuals.',
-      "Add 5–9 question tiles that answer the dashboard's decision."));
+      `Add ${MIN_TILE}–${MAX_VISUALS} question tiles that answer the dashboard's decision.`));
   } else if (questionIds.length > MAX_VISUALS) {
     out.push(finding('dashboard.visual-count', 'clarity', 'warn', 'Too many visuals',
       `The dashboard has ${questionIds.length} visuals (more than ${MAX_VISUALS}).`,
-      'Keep 5–9 visuals per dashboard; split into multiple dashboards or drop low-value charts.'));
+      `Keep ${MIN_TILE}–${MAX_VISUALS} visuals per dashboard; split into multiple dashboards or drop low-value charts.`));
+  }
+
+  // too-much-text (clarity — a dashboard should be mostly visuals, not walls of prose)
+  const textTokens = estimateTokens(assets.map((a) => (a.type === 'text' ? a.content ?? '' : '')).join('\n'));
+  if (textTokens > MAX_TEXT_TOKENS) {
+    out.push(finding('dashboard.too-much-text', 'clarity', 'warn', 'Too much text',
+      `The dashboard's inline text is ~${textTokens} tokens (over ${MAX_TEXT_TOKENS}).`,
+      'Trim inline text to short annotations — a dashboard should be mostly visuals; move long prose into a story.'));
   }
 
   // duplicate-question (correctness — an inconsistent/redundant reference)
@@ -56,7 +74,7 @@ export function scoreDashboard(content: DashboardContent): RubricFinding[] {
       if (!layoutIdSet.has(id)) {
         out.push(finding('dashboard.asset-not-in-layout', 'correctness', 'error', 'Asset missing from layout',
           `Question ${id} is in assets but has no layout tile.`,
-          `Add a layout item (≥3×3) for question ${id}, or remove it from assets.`));
+          `Add a layout item for question ${id}, or remove it from assets.`));
       }
     }
     // layout-orphan (correctness)
@@ -69,10 +87,10 @@ export function scoreDashboard(content: DashboardContent): RubricFinding[] {
     }
     // tile-too-small (clarity — too small to read)
     for (const it of items) {
-      if (typeof it.id === 'number' && (it.w < MIN_TILE || it.h < MIN_TILE)) {
+      if (typeof it.id === 'number' && (it.w < MIN_TILE_W || it.h < MIN_TILE_H)) {
         out.push(finding('dashboard.tile-too-small', 'clarity', 'warn', 'Tile too small',
-          `Tile ${it.id} is ${it.w}×${it.h} (min 3×3).`,
-          `Question tiles need ≥3×3 to be legible; enlarge tile ${it.id}.`));
+          `Tile ${it.id} is ${it.w}×${it.h} (min ${MIN_TILE_W}×${MIN_TILE_H}).`,
+          `Question tiles need ≥${MIN_TILE_W}×${MIN_TILE_H} to be legible; enlarge tile ${it.id}.`));
       }
     }
     // tile-overlap (correctness)
