@@ -4,6 +4,7 @@ import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
 import { scoreFile } from '@/lib/rubric/score-file.server';
+import { toAgentRubric } from '@/lib/rubric/scoring';
 import type { RubricReport } from '@/lib/rubric/types';
 import type { AnalystAgentContext } from './types';
 
@@ -72,8 +73,10 @@ export class CheckFileHealth extends MXTool<typeof CheckFileHealthParams, Analys
             this.parameters.screenshotUrl ?? screenshotUrlFor(this.context.appState, fileId))
         : scoreFileDeterministic(file.type, file.content);
 
+      // The agent reads `content` — give it the lean rubric (no weight/assessed; findings tagged
+      // rule/llm). `details` keeps the full report for the UI.
       const details: CheckFileHealthDetails = { success: true, fileId, report };
-      return { content: [{ type: 'text', text: JSON.stringify({ success: true, report }) }], isError: false, details };
+      return { content: [{ type: 'text', text: JSON.stringify({ success: true, report: toAgentRubric(report) }) }], isError: false, details };
     } catch (err) {
       return fail(fileId, err instanceof Error ? err.message : String(err), true);
     }

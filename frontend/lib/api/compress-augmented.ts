@@ -11,7 +11,8 @@ import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup } from '@/lib/data/file-markup';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
-import type { DeterministicContext, RubricReport } from '@/lib/rubric/types';
+import { toAgentRubric } from '@/lib/rubric/scoring';
+import type { AgentRubric, DeterministicContext } from '@/lib/rubric/types';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import type {
@@ -167,7 +168,7 @@ function compressFileState(fs: FileState, refs?: FileState[]): CompressedFileSta
  * health on every read/app-state. Pure + cheap; only question/dashboard/story are scored.
  * Never throws (a scoring bug must not break file serialization).
  */
-function computeRubric(type: FileType, content: unknown, refs?: FileState[]): RubricReport | undefined {
+function computeRubric(type: FileType, content: unknown, refs?: FileState[]): AgentRubric | undefined {
   if (!isRubricFileType(type) || !content) return undefined;
   // A dashboard's tile rules need each referenced question's chart type (not in dashboard content).
   let ctx: DeterministicContext | undefined;
@@ -181,7 +182,7 @@ function computeRubric(type: FileType, content: unknown, refs?: FileState[]): Ru
     ctx = { vizTypeByQuestionId };
   }
   try {
-    return scoreFileDeterministic(type, content, ctx);
+    return toAgentRubric(scoreFileDeterministic(type, content, ctx));
   } catch {
     return undefined;
   }

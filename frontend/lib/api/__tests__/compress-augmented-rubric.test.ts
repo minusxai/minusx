@@ -15,9 +15,10 @@ describe('auto-injected rubric on compressed file state', () => {
       parameters: null, parameterValues: null, connection_name: 'w', references: null, cachePolicy: null,
     });
     const { fileState } = dbFileToCompressedAugmented(file);
-    expect(fileState.rubric?.source).toBe('deterministic');
     const findings = fileState.rubric!.categories.flatMap((c) => c.findings);
-    expect(findings.map((f) => f.ruleId)).toContain('question.undeclared-param');
+    const undeclared = findings.find((f) => f.ruleId === 'question.undeclared-param');
+    expect(undeclared).toBeDefined();
+    expect(undeclared?.source).toBe('rule'); // each finding is tagged rule|llm
   });
 
   it('attaches a good-grade rubric for a healthy question', () => {

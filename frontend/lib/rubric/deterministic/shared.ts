@@ -57,5 +57,5 @@ export function finding(
   detail: string,
   fix: string,
 ): RubricFinding {
-  return { ruleId, category, severity, title, detail, fix };
+  return { ruleId, category, severity, title, detail, fix, source: 'rule' };
 }

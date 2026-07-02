@@ -33,9 +33,9 @@ describe('scoreFileLLM', () => {
     expect(user).toBe(USER);
     expect(images?.[0]).toEqual({ type: 'image', data: 'AAAA', mimeType: 'image/jpeg' });
 
-    // the failed check → a finding using the catalog's category/severity/label/fix
-    expect(report.source).toBe('llm');
+    // the failed check → a finding using the catalog's category/severity/label/fix, tagged source llm
     const f = report.categories.flatMap((c) => c.findings).find((x) => x.ruleId === 'llm.chart-type-fit');
+    expect(f?.source).toBe('llm');
     expect(f?.severity).toBe('error');
     expect(f?.category).toBe('correctness');
     expect(f?.title).toBe('Right chart for the data');
@@ -84,7 +84,6 @@ describe('combineReports', () => {
     const deterministic = scoreFileDeterministic('question', makeQuestion({ description: '' })); // clarity info (no-description)
     const judge = buildJudgeReport();
     const combined = combineReports(deterministic, judge);
-    expect(combined.source).toBe('combined');
     expect(combined.categories.find((c) => c.category === 'clarity')?.score).toBe(4.5); // 5 - 0.5 info
     expect(combined.categories.find((c) => c.category === 'aesthetics')?.score).toBe(4); // 5 - 1 warn
   });
@@ -92,11 +91,11 @@ describe('combineReports', () => {
 
 function buildJudgeReport() {
   return {
-    fileType: 'question' as const, source: 'llm' as const, overall: 5, grade: 'good' as const,
+    fileType: 'question' as const, overall: 5, grade: 'good' as const,
     categories: [
       { category: 'correctness' as const, weight: 0.5, score: 5, assessed: true, findings: [] },
       { category: 'clarity' as const, weight: 0.35, score: 5, assessed: true, findings: [] },
-      { category: 'aesthetics' as const, weight: 0.15, score: 4, assessed: true, findings: [{ ruleId: 'judge.aesthetics.0', category: 'aesthetics' as const, severity: 'warn' as const, title: 't', detail: 'd', fix: 'f' }] },
+      { category: 'aesthetics' as const, weight: 0.15, score: 4, assessed: true, findings: [{ ruleId: 'llm.aesthetics-x', category: 'aesthetics' as const, severity: 'warn' as const, title: 't', detail: 'd', fix: 'f', source: 'llm' as const }] },
     ],
   };
 }

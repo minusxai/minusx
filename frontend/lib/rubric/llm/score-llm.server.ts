@@ -56,7 +56,7 @@ export async function scoreFileLLM(params: JudgeParams, user: EffectiveUser): Pr
   } catch {
     // best-effort — a failed/garbled judge yields an empty (5/5) report rather than throwing.
   }
-  return buildReport(fileType, 'llm', findings);
+  return buildReport(fileType, findings);
 }
 
 /**
@@ -89,16 +89,17 @@ function findingsFromChecks(fileType: RubricFileType, text: string): RubricFindi
       title: chk.label,
       detail: String(res.reason ?? ''),
       fix: chk.fix,
+      source: 'llm',
     });
   }
   return out;
 }
 
-/** Merge a deterministic and a judge report into one combined report. A category is assessed in
- *  the combined report if EITHER source assessed it (the judge covers all three). */
-export function combineReports(deterministic: RubricReport, judge: RubricReport): RubricReport {
-  const findings = [...deterministic.categories, ...judge.categories].flatMap((c) => c.findings);
+/** Merge a deterministic and an LLM report into one. A category is assessed if EITHER scored it
+ *  (the LLM covers all three); each finding already carries its own `source`. */
+export function combineReports(deterministic: RubricReport, llm: RubricReport): RubricReport {
+  const findings = [...deterministic.categories, ...llm.categories].flatMap((c) => c.findings);
   const assessed = CATEGORIES.filter((cat) =>
-    [deterministic, judge].some((r) => r.categories.find((c) => c.category === cat)?.assessed));
-  return buildReport(deterministic.fileType as RubricFileType, 'combined', findings, assessed);
+    [deterministic, llm].some((r) => r.categories.find((c) => c.category === cat)?.assessed));
+  return buildReport(deterministic.fileType as RubricFileType, findings, assessed);
 }

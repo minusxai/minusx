@@ -7,6 +7,7 @@
  * See `frontend/docs/rubrik.md`.
  */
 import type {
+  AgentRubric,
   RubricCategory,
   RubricCategoryScore,
   RubricFileType,
@@ -14,7 +15,6 @@ import type {
   RubricGrade,
   RubricReport,
   RubricSeverity,
-  RubricSource,
 } from './types';
 
 /** Every score starts here (perfect) and findings deduct from it. */
@@ -76,7 +76,6 @@ export function scoreCategory(
  */
 export function buildReport(
   fileType: RubricFileType,
-  source: RubricSource,
   findings: RubricFinding[],
   assessed: readonly RubricCategory[] = CATEGORIES,
 ): RubricReport {
@@ -88,5 +87,21 @@ export function buildReport(
   const scored = categories.filter((c): c is RubricCategoryScore & { score: number } => c.assessed && c.score !== null);
   const totalWeight = scored.reduce((sum, c) => sum + c.weight, 0) || 1;
   const overall = toScore(scored.reduce((sum, c) => sum + c.score * c.weight, 0) / totalWeight);
-  return { fileType, source, overall, grade: gradeFor(overall), categories };
+  return { fileType, overall, grade: gradeFor(overall), categories };
+}
+
+/** Lean projection for the agent — overall/grade/source + each SCORED category's findings only.
+ *  Drops weight/assessed; tags each finding with its `source` (deterministic rule vs LLM check). */
+export function toAgentRubric(report: RubricReport): AgentRubric {
+  return {
+    overall: report.overall,
+    grade: report.grade,
+    categories: report.categories
+      .filter((c): c is RubricCategoryScore & { score: number } => c.assessed && c.score !== null)
+      .map((c) => ({
+        category: c.category,
+        score: c.score,
+        findings: c.findings.map((f) => ({ ...f, source: (f.ruleId.startsWith('llm.') ? 'llm' : 'rule') as 'rule' | 'llm' })),
+      })),
+  };
 }

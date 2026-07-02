@@ -5,7 +5,7 @@ import { makeQuestion } from './fixtures';
 import type { RubricCategory, RubricFileType, RubricFinding } from '../types';
 
 const f = (severity: RubricFinding['severity']): RubricFinding => ({
-  ruleId: 'x', category: 'correctness', severity, title: 't', detail: 'd', fix: 'f',
+  ruleId: 'x', category: 'correctness', severity, title: 't', detail: 'd', fix: 'f', source: 'rule',
 });
 
 const half = (x: number) => Math.max(MIN_SCORE, Math.min(MAX_SCORE, Math.round(x * 2) / 2));
@@ -39,7 +39,7 @@ describe('scoring (1–5 scale)', () => {
 
   it('weights category scores into the overall (all categories assessed)', () => {
     const cScore = catScore([f('error'), f('warn')]);
-    const report = buildReport('question', 'deterministic', [f('error'), f('warn')]);
+    const report = buildReport('question', [f('error'), f('warn')]);
     expect(report.categories.find((c) => c.category === 'correctness')?.score).toBe(cScore);
     const expected = expectedOverall('question', { correctness: cScore, clarity: 5, aesthetics: 5 });
     expect(report.overall).toBe(expected);
@@ -47,7 +47,7 @@ describe('scoring (1–5 scale)', () => {
   });
 
   it('scores a clean file at 5 / good with all three categories present (priority order)', () => {
-    const report = buildReport('story', 'deterministic', []);
+    const report = buildReport('story', []);
     expect(report.overall).toBe(5);
     expect(report.grade).toBe('good');
     expect(report.categories.map((c) => c.category)).toEqual(['correctness', 'clarity', 'aesthetics']);
@@ -62,7 +62,6 @@ describe('scoring (1–5 scale)', () => {
 
   it('registry builds a deterministic report for a supported type', () => {
     const report = scoreFileDeterministic('question', makeQuestion());
-    expect(report.source).toBe('deterministic');
     expect(report.fileType).toBe('question');
     expect(report.overall).toBe(5);
   });
@@ -80,7 +79,7 @@ describe('scoring (1–5 scale)', () => {
 
   it('renormalizes the overall over only the assessed categories', () => {
     // question: correctness error → 3, clarity 5, aesthetics unassessed → excluded from overall.
-    const report = buildReport('question', 'deterministic', [f('error')], ['correctness', 'clarity']);
+    const report = buildReport('question', [f('error')], ['correctness', 'clarity']);
     expect(report.categories.find((c) => c.category === 'aesthetics')?.score).toBeNull();
     expect(report.overall).toBe(expectedOverall('question', { correctness: catScore([f('error')]), clarity: 5 }));
   });

@@ -49,8 +49,8 @@ describe('CheckFileHealth', () => {
     const res = await run(q.data.id);
     expect(res.isError).toBe(false);
     const report = (res.details as { report: RubricReport }).report;
-    expect(report.source).toBe('deterministic');
-    expect(report.categories.flatMap((c) => c.findings).map((f) => f.ruleId)).toContain('question.undeclared-param');
+    const undeclared = report.categories.flatMap((c) => c.findings).find((f) => f.ruleId === 'question.undeclared-param');
+    expect(undeclared?.source).toBe('rule');
     // an error dropped the score below perfect (exact value depends on tuned deductions/weights)
     expect(report.categories.find((c) => c.category === 'correctness')!.score!).toBeLessThan(5);
     expect(report.overall).toBeLessThan(5);

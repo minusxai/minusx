@@ -35,5 +35,5 @@ export function isRubricFileType(type: string): type is RubricFileType {
  *  optional cross-file info (e.g. referenced-question viz types for dashboard tile rules). */
 export function scoreFileDeterministic(fileType: RubricFileType, content: unknown, ctx?: DeterministicContext): RubricReport {
   const findings = SCORERS[fileType](content, ctx);
-  return buildReport(fileType, 'deterministic', findings, DETERMINISTIC_COVERAGE[fileType]);
+  return buildReport(fileType, findings, DETERMINISTIC_COVERAGE[fileType]);
 }

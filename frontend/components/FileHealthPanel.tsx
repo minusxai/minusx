@@ -17,7 +17,7 @@ import type { RootState } from '@/store/store';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
 import { passedChecks } from '@/lib/rubric/checks';
-import type { DeterministicContext, RubricCategory, RubricFileType, RubricReport, RubricSeverity } from '@/lib/rubric/types';
+import type { DeterministicContext, FindingSource, RubricCategory, RubricFileType, RubricReport, RubricSeverity } from '@/lib/rubric/types';
 import type { DashboardContent, QuestionContent } from '@/lib/types';
 
 type Level = RubricSeverity | 'pass';
@@ -58,12 +58,12 @@ function scoreColor(score: number): string {
   return 'accent.danger';
 }
 
-// Which scorer produced a row — deterministic (static rule ids) vs the LLM checklist (llm.*).
-const SOURCE: Record<'static' | 'llm', { label: string; color: string }> = {
-  static: { label: 'Rules', color: 'fg.muted' },
+// Which scorer produced a row — deterministic rule vs the LLM checklist (llm.*).
+const SOURCE: Record<FindingSource, { label: string; color: string }> = {
+  rule: { label: 'Rules', color: 'fg.muted' },
   llm: { label: 'LLM', color: 'accent.secondary' },
 };
-const sourceOf = (ruleId: string): 'static' | 'llm' => (ruleId.startsWith('llm.') ? 'llm' : 'static');
+const sourceOf = (ruleId: string): FindingSource => (ruleId.startsWith('llm.') ? 'llm' : 'rule');
 
 // Deterministic context for a dashboard — each referenced question's chart type (needed for
 // tile-type-aware rules like cartesian-plots-need-3x3). Read from Redux, not the dashboard content.
@@ -87,6 +87,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   const savedContent = useAppSelector((s) => selectFile(s, fileId)?.content);
   const store = useAppStore();
   const [override, setOverride] = useState<RubricReport | null>(null); // manual refresh or judge result
+  const [llmRan, setLlmRan] = useState(false); // did the LLM visual review run for the shown report?
   const [judging, setJudging] = useState(false);
   const [judgeError, setJudgeError] = useState<string | null>(null);
   const [shot, setShot] = useState<string | null>(null); // the screenshot sent to the judge
@@ -102,7 +103,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   }, [fileType, savedContent, store]);
 
   // A new save (or file load) invalidates any manual-refresh / judge override.
-  useEffect(() => { setOverride(null); setJudgeError(null); setShot(null); }, [savedContent]);
+  useEffect(() => { setOverride(null); setJudgeError(null); setShot(null); setLlmRan(false); }, [savedContent]);
 
   const report = override ?? deterministic;
   if (!report) return null;
@@ -114,6 +115,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
     if (!merged) return;
     try {
       setOverride(scoreFileDeterministic(fileType, merged, dashboardVizCtx(fileType, merged, store.getState())));
+      setLlmRan(false); // a plain refresh is rules-only
     } catch {
       // ignore — keep the current report
     }
@@ -140,6 +142,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
         return;
       }
       setOverride(nextReport);
+      setLlmRan(true); // the combined report now includes the LLM checklist
     } catch (e) {
       console.error('[rubric] visual review error', e);
       setJudgeError(e instanceof Error ? e.message : 'Visual review failed.');
@@ -148,11 +151,11 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
     }
   };
 
-  const rows: { key: string; level: Level; source: 'static' | 'llm'; category: RubricCategory; title: string; detail?: string; fix?: string }[] = [
+  const rows: { key: string; level: Level; source: FindingSource; category: RubricCategory; title: string; detail?: string; fix?: string }[] = [
     ...report.categories.flatMap((c) => c.findings).map((f) => ({
-      key: f.ruleId, level: f.severity as Level, source: sourceOf(f.ruleId), category: f.category, title: f.title, detail: f.detail, fix: f.fix,
+      key: f.ruleId, level: f.severity as Level, source: f.source, category: f.category, title: f.title, detail: f.detail, fix: f.fix,
     })),
-    ...passedChecks(fileType as RubricFileType, report).map((c) => ({
+    ...passedChecks(fileType as RubricFileType, report, llmRan).map((c) => ({
       key: c.ruleId, level: 'pass' as Level, source: sourceOf(c.ruleId), category: c.category, title: c.label,
     })),
   ].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]);
@@ -239,7 +242,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                   disabled={judging}
                 >
                   {judging ? <Spinner size="xs" /> : <Icon as={LuScanEye} />}
-                  <Text>{report.source === 'deterministic' ? 'Run visual review' : 'Re-run visual review'}</Text>
+                  <Text>{llmRan ? 'Re-run visual review' : 'Run visual review'}</Text>
                 </Button>
 
                 {shot && (

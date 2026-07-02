@@ -48,23 +48,27 @@ type RubricSeverity = 'error' | 'warn' | 'info';
 type RubricCategory = 'correctness' | 'clarity' | 'aesthetics';
 
 interface RubricFinding {
-  ruleId: string;            // stable, e.g. 'question.query-too-long'
+  ruleId: string;            // stable, e.g. 'question.query-too-long' / 'llm.chart-type-fit'
   category: RubricCategory;
   severity: RubricSeverity;
   title: string;             // short human label
   detail: string;            // what's wrong, includes the offending value
   fix: string;               // imperative, agent-actionable
+  source: 'rule' | 'llm';    // which scorer produced it (there is NO report-level source)
 }
 interface RubricCategoryScore {
-  category: RubricCategory; score: number; weight: number; findings: RubricFinding[];
+  category: RubricCategory; score: number | null; weight: number; assessed: boolean; findings: RubricFinding[];
 }
 interface RubricReport {
   fileType: FileType;
-  source: 'deterministic' | 'llm' | 'combined';
-  overall: number;                    // 1–5 weighted
+  overall: number;                    // 1–5 weighted mean of assessed categories
   grade: 'good' | 'fair' | 'poor';    // >=4 / >=2.5 / else
   categories: RubricCategoryScore[];
 }
+
+// Lean, agent-facing projection (auto-injected + returned by the tools): drops weight/assessed
+// and unassessed categories; each finding carries its own `source`.
+interface AgentRubric { overall: number; grade: RubricGrade; categories: { category, score, findings: RubricFinding[] }[]; }
 ```
 
 ### The three categories — a priority waterfall
@@ -162,7 +166,7 @@ text/image/divider assets are ignored for counting.
 `lib/rubric/llm/score-llm.server.ts` — `scoreFileLLM({ fileType, content, screenshotUrl }, user)
 → Promise<RubricReport>`. Grades the subjective / visual dimensions the deterministic pass
 can't (right-chart-for-the-data, does the frame carry the insight, does the story look
-crafted vs AI-default). Emits `source: 'llm'`.
+crafted vs AI-default). Its findings are tagged `source: 'llm'`.
 
 **Runs on the shared micro-task infra — no bespoke LLM call.** `scoreFileLLM` calls
 `runMicroTask('rubric_llm', vars, user, images)` (`lib/chat/run-micro-task.server.ts`), which
@@ -207,8 +211,10 @@ there and both the prompt (`formatChecklist`) and the parsing update automatical
 - **Model** = the micro model (`getMicroModelOrTestFallback`), same as other micro-tasks.
 - **Prompts** = `micro.rubric_llm` (reviewer preamble + JSON contract) with the per-type
   `{checklist}` rendered from `LLM_CHECKS` by `formatChecklist`.
-- `combineReports(deterministic, llm)` flattens both reports' findings and rebuilds one with
-  `source: 'combined'`.
+- `combineReports(deterministic, llm)` flattens both reports' findings into one report. There is
+  **no report-level `source`** — each finding already carries its own `source: rule | llm`, so a
+  merged report is just findings from both scorers together. ("Did the LLM run?" is UI-local
+  state, not stored on the report.)
 
 ## Consumption — the 3-piece architecture
 

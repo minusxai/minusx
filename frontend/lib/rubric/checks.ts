@@ -138,15 +138,14 @@ const llmToRubricCheck = (c: LlmCheck): RubricCheck => ({ ruleId: `llm.${c.id}`,
 /**
  * Checks that PASSED for a report: not fired and in an assessed category. Deterministic checks
  * always count (they run whenever their category is assessed); LLM checks count only when the
- * LLM actually ran (source llm/combined).
+ * LLM actually ran (`llmRan`).
  */
-export function passedChecks(fileType: RubricFileType, report: RubricReport): RubricCheck[] {
+export function passedChecks(fileType: RubricFileType, report: RubricReport, llmRan: boolean): RubricCheck[] {
   const fired = new Set(report.categories.flatMap((c) => c.findings).map((f) => f.ruleId));
   const assessed = new Set(report.categories.filter((c) => c.assessed).map((c) => c.category));
   const keep = (chk: RubricCheck) => !fired.has(chk.ruleId) && assessed.has(chk.category);
 
   const det = (DETERMINISTIC_CHECKS[fileType] ?? []).filter(keep);
-  const llmRan = report.source === 'llm' || report.source === 'combined';
   const llm = llmRan ? (LLM_CHECKS[fileType] ?? []).map(llmToRubricCheck).filter(keep) : [];
   return [...det, ...llm];
 }

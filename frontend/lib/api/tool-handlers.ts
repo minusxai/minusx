@@ -29,6 +29,8 @@ import type { AugmentedToolDetails } from '@/lib/projection/messages';
 import { isImageViz, shouldDropRows } from '@/lib/chart/query-presentation';
 import { takeFilesMarkup, takeAugmentedMarkup, markupTextBlocks } from '@/lib/api/markup-blocks';
 import { captureFileViewBlob } from '@/lib/screenshot/capture';
+import { toAgentRubric } from '@/lib/rubric/scoring';
+import type { RubricReport } from '@/lib/rubric/types';
 import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { validateFileState } from '@/lib/validation/content-validators';
@@ -520,8 +522,8 @@ async function fetchScreenshotRubric(fileId: number, screenshotUrl: string): Pro
       body: JSON.stringify({ screenshotUrl }),
     });
     if (!res.ok) return '';
-    const report = (await res.json())?.data?.report;
-    return report ? `\n\nHealth rubric (deterministic + visual judge):\n${JSON.stringify(report)}` : '';
+    const report = (await res.json())?.data?.report as RubricReport | undefined;
+    return report ? `\n\nHealth rubric (deterministic + visual judge):\n${JSON.stringify(toAgentRubric(report))}` : '';
   } catch {
     return '';
   }

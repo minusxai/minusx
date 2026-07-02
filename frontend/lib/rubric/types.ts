@@ -27,6 +27,9 @@ export type RubricCategory = 'correctness' | 'clarity' | 'aesthetics';
 /** File types the rubric currently scores. */
 export type RubricFileType = 'question' | 'dashboard' | 'story';
 
+/** Which scorer produced a finding — a deterministic rule, or the LLM checklist. */
+export type FindingSource = 'rule' | 'llm';
+
 /**
  * One actionable problem found on a file. `detail` says what's wrong (with the offending
  * value); `fix` is an imperative instruction the agent can act on directly.
@@ -38,6 +41,7 @@ export interface RubricFinding {
   title: string;             // short human label
   detail: string;            // what's wrong
   fix: string;               // imperative, agent-actionable
+  source: FindingSource;     // 'rule' (deterministic) or 'llm'
 }
 
 export interface RubricCategoryScore {
@@ -50,13 +54,11 @@ export interface RubricCategoryScore {
 }
 
 export type RubricGrade = 'good' | 'fair' | 'poor';
-export type RubricSource = 'deterministic' | 'llm' | 'combined';
 
 export interface RubricReport {
   fileType: FileType;
-  source: RubricSource;
-  overall: number;           // 0–100 weighted mean of category scores
-  grade: RubricGrade;        // >=80 good / >=50 fair / else poor
+  overall: number;           // 1–5 weighted mean of assessed category scores
+  grade: RubricGrade;        // >=4 good / >=2.5 fair / else poor
   categories: RubricCategoryScore[];
 }
 
@@ -72,3 +74,19 @@ export interface DeterministicContext {
 
 /** A deterministic scorer is a (mostly) pure function from a file's content to findings. */
 export type DeterministicScorer<TContent = unknown> = (content: TContent, ctx?: DeterministicContext) => RubricFinding[];
+
+/**
+ * Lean, agent-facing projection of a report (auto-injected into what the LLM reads). Drops the
+ * internal `weight` / `assessed` bookkeeping and omits categories the source didn't score —
+ * just the overall, grade, and each scored category's findings.
+ */
+export interface AgentRubricCategory {
+  category: RubricCategory;
+  score: number;
+  findings: RubricFinding[];
+}
+export interface AgentRubric {
+  overall: number;
+  grade: RubricGrade;
+  categories: AgentRubricCategory[];
+}
