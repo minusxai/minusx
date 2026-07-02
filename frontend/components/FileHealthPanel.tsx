@@ -9,7 +9,7 @@
  * question/dashboard/story files; renders nothing for other types.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Box, HStack, VStack, Text, Icon, IconButton, Popover, Portal, Button, Spinner } from '@chakra-ui/react';
+import { Box, HStack, VStack, Text, Icon, Popover, Portal, Button, Spinner } from '@chakra-ui/react';
 import { LuHeartPulse, LuCircleAlert, LuTriangleAlert, LuInfo, LuSparkles, LuRefreshCw } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import { useAppSelector, useAppStore } from '@/store/hooks';
@@ -105,40 +105,43 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   const gradeColor = GRADE_COLOR[report.grade];
 
   return (
-    <HStack gap={0.5} flexShrink={0}>
-      <style>{'@keyframes mxHealthPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.6); } }'}</style>
+    <>
+      <style>{'@keyframes mxHealthPing { 0% { opacity: 0.5; transform: scale(1); } 75%, 100% { opacity: 0; transform: scale(2.6); } }'}</style>
+      <HStack
+        gap={0}
+        flexShrink={0}
+        bg="bg.elevated"
+        border="1px solid"
+        borderColor="border.default"
+        borderRadius="sm"
+        overflow="hidden"
+        fontFamily="mono"
+        fontSize="2xs"
+        fontWeight="600"
+      >
       <Popover.Root
-      positioning={{ placement: 'bottom-start' }}
-      onOpenChange={(e) => { if (e.open && AUTO_RUN_VISUAL_REVIEW && !override && !judging) void runJudge(); }}
-    >
+        positioning={{ placement: 'bottom-start' }}
+        onOpenChange={(e) => { if (e.open && AUTO_RUN_VISUAL_REVIEW && !override && !judging) void runJudge(); }}
+      >
       <Popover.Trigger asChild>
-        <Button
+        <Box
+          as="button"
           aria-label={`File health: ${report.overall} of 5 (${report.grade})`}
-          variant="plain"
-          size="xs"
-          h="auto"
+          display="inline-flex"
+          alignItems="center"
+          cursor="pointer"
           px={1.5}
           py={0.5}
-          bg="bg.elevated"
-          borderRadius="sm"
-          border="1px solid"
-          borderColor="border.default"
-          flexShrink={0}
+          bg="transparent"
           _hover={{ bg: 'bg.muted' }}
         >
-          <HStack gap={0} fontFamily="mono" fontSize="2xs" fontWeight="600">
-            <Box
-              w={2}
-              h={2}
-              mr={2}
-              borderRadius="full"
-              bg={gradeColor}
-              style={{ animation: 'mxHealthPulse 1.6s ease-in-out infinite' }}
-            />
-            <Text color="fg.default">File Health: {report.overall}</Text>
-            <Text color="fg.muted">/5</Text>
-          </HStack>
-        </Button>
+          <Box position="relative" w={2} h={2} mr={2}>
+            <Box position="absolute" inset={0} borderRadius="full" bg={gradeColor} style={{ animation: 'mxHealthPing 1.6s ease-out infinite' }} />
+            <Box position="absolute" inset={0} borderRadius="full" bg={gradeColor} />
+          </Box>
+          <Text color="fg.default">File Health: {report.overall}</Text>
+          <Text color="fg.muted" ml={0.5}>/5</Text>
+        </Box>
       </Popover.Trigger>
       <Portal>
         <Popover.Positioner>
@@ -198,19 +201,25 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
         </Popover.Positioner>
       </Portal>
       </Popover.Root>
-      <IconButton
+      <Box
+        as="button"
         aria-label="Refresh file health"
-        size="xs"
-        variant="ghost"
-        h="auto"
-        minW="auto"
+        display="inline-flex"
+        alignItems="center"
+        justifyContent="center"
+        cursor="pointer"
         px={1}
         py={0.5}
+        borderLeft="1px solid"
+        borderColor="border.default"
+        bg="transparent"
+        _hover={{ bg: 'bg.muted' }}
         onClick={refresh}
       >
-        <Icon as={LuRefreshCw} boxSize={3} />
-      </IconButton>
-    </HStack>
+        <Icon as={LuRefreshCw} boxSize={2.5} color="fg.muted" />
+      </Box>
+      </HStack>
+    </>
   );
 }
 
