@@ -111,11 +111,11 @@ export function buildPreloadedSkillsContent(opts: {
   const sections: string[] = [];
   for (const name of skillNames) {
     const content = loadSkillFromTree(tree, name);
-    if (content) sections.push(content);
+    if (content) sections.push(`**Skill: ${name}**\n${content}`);
   }
   for (const skill of selected) {
     if (skill.type !== 'user' || !skill.content) continue;
-    sections.push(`## Instructions: ${skill.name || 'user_skill'} (user-defined)\n${skill.content}`);
+    sections.push(`**Skill: ${skill.name || 'user_skill'} (user-defined)**\n${skill.content}`);
   }
   return sections.join('\n\n');
 }
