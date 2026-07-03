@@ -232,6 +232,25 @@ describe('jsxToContent — loose top-level body markup (agent omitted the <story
     if (!res.ok) expect(res.error.toLowerCase()).toContain('script');
   });
 
+  it('rescues HTML-isms in a story body via the lenient retry (comments, <br>, stray <)', () => {
+    const res = jsxToContent(
+      '<story><div class="s"><!-- hero --><h1>Churn < 5%</h1><p>a<br>b</p></div></story>',
+      schema, ctx
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const story = (res.value as { story?: string }).story ?? '';
+      expect(story).toContain('Churn');
+      expect(story).not.toContain('<!--');
+    }
+  });
+
+  it('rescues HTML-isms in an ADOPTED loose body too', () => {
+    const res = jsxToContent('<div class="s"><!-- hero --><h1>Hi</h1><p>a<br>b</p></div>', schema, ctx);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect((res.value as { story?: string }).story).toContain('Hi');
+  });
+
   it('still fails loudly for schemas WITHOUT a jsx field (question markup stays strict)', () => {
     const qSchema = { type: 'object', properties: { query: { type: 'string' }, description: { type: 'string' } } };
     const res = jsxToContent('<div class="story"><h1>Hi</h1></div>', qSchema, ctx);

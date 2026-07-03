@@ -95,6 +95,22 @@ describe('buildStoryJsx', () => {
     expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html);
   });
 
+  it('round-trips prose containing < and & (entity-escaped in the stored HTML, stable thereafter)', () => {
+    // acorn-jsx DECODES entities in text (`&lt;` → `<`), so the stored HTML and the rebuilt jsx
+    // must RE-escape them — otherwise a single "churn &lt; 5%" in prose corrupts the file's
+    // markup and every subsequent edit of the story fails the whole-document parse.
+    const jsx = '<div class="story"><h2>Churn &lt; 5% at last, R&amp;D approves</h2></div>';
+    const parsed = parseStoryJsx(jsx);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.html).toContain('&lt; 5%');   // stored HTML keeps the entity
+    expect(parsed.value.html).toContain('R&amp;D');
+    const rebuilt = buildStoryJsx({ story: parsed.value.html, assets: [] } as never);
+    expect(validateJsxSource(rebuilt, ['Question'])).toEqual([]); // rebuilt jsx must still PARSE
+    const reparsed = parseStoryJsx(rebuilt);
+    expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html); // stable round-trip
+  });
+
   it('round-trips a story with an INLINE question (multi-line SQL with <, >, : kept raw)', () => {
     const jsx = '<div class="story"><Question query={`SELECT *\nFROM t\nWHERE rev > 100 AND a < 5 AND m = :month`} connection="duckdb" viz={{type:"single_value",yCols:["rev"]}} params={[{name:"month",type:"date",label:null,source:null}]} height="180px" /></div>';
     const parsed = parseStoryJsx(jsx);

@@ -18,7 +18,7 @@
  *
  * Top level emits the content object's FIELDS as sibling elements (no wrapper).
  */
-import { parseJsx, serializeJsx, validateJsxSource } from '@/lib/jsx';
+import { parseJsx, serializeJsx, validateJsxSource, sanitizeLooseJsx } from '@/lib/jsx';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { JSX_COMPONENT_NAMES } from '@/lib/jsx/components';
 
@@ -306,8 +306,17 @@ export type JsxToContentResult = { ok: true; value: unknown } | { ok: false; err
 
 /** Parse a jsx document back to typed content (top-level elements = the object's fields). */
 export function jsxToContent(jsx: string, schema: JsonSchema, ctx: SchemaCtx): JsxToContentResult {
-  const parsed = parseJsx(jsx);
-  if (!parsed.ok) return { ok: false, error: parsed.error };
+  let parsed = parseJsx(jsx);
+  if (!parsed.ok) {
+    // Agents author HTML, not strict JSX: comments, unclosed void tags, and a stray `<` in prose
+    // are the common breakers, and one of them anywhere fails the WHOLE document (so a tiny,
+    // correct edit to a large story dies on an unrelated character). Retry once with those
+    // HTML-isms rewritten to JSX-safe forms; a document that already parses is never altered.
+    const cleaned = sanitizeLooseJsx(jsx);
+    const retried = cleaned !== jsx ? parseJsx(cleaned) : null;
+    if (!retried || !retried.ok) return { ok: false, error: parsed.error };
+    parsed = retried;
+  }
   const s = unwrap(schema, ctx);
   const obj: Record<string, unknown> = {};
   const dropped: string[] = [];

@@ -712,10 +712,17 @@ registerFrontendTool('EditFile', async (args, context) => {
       }
       if (!workingStr.includes(effectiveOld)) {
         const err = `String "${oldMatch}" not found in file`;
+        // The agent matches against its app-state markup, a TURN-START snapshot that goes stale
+        // after any earlier successful EditFile this turn. Return the file's CURRENT markup so the
+        // next attempt can rebuild oldMatch from truth instead of retrying blind (or burning a
+        // ReadFiles round-trip). Edits are atomic — nothing before failedIndex was applied — so
+        // the pre-edit markup IS the current file.
         const failureContent = {
           success: false,
-          error: `Change ${i + 1}/${changes.length} failed: ${err}`,
+          error: `Change ${i + 1}/${changes.length} failed: ${err}. No changes were applied (all changes in one EditFile call apply atomically). `
+            + 'Your view of the file may be stale — the CURRENT file markup is in `currentMarkup`; rebuild oldMatch from it and retry.',
           failedIndex: i,
+          currentMarkup: built.fullFileStr,
         };
         return { content: failureContent, details: { success: false, error: failureContent.error } };
       }

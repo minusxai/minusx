@@ -46,8 +46,18 @@ export function parseStoryJsx(jsx: string): ParseStoryResult {
   return { ok: true, value: { html, assets: [...new Set(assets)] } };
 }
 
+/**
+ * Escape a decoded JSXText value for the stored HTML. acorn-jsx decodes entities in text
+ * (`&lt;` → `<`), so emitting the value raw would plant a bare `<`/`&` in the stored HTML —
+ * which buildStoryJsx then re-emits into the agent's markup, making the whole file unparseable
+ * and every subsequent edit fail. Entities keep the render identical and the round-trip stable.
+ */
+function escapeHtmlText(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+}
+
 function nodeToHtml(node: JsxNode, assets: number[]): string {
-  if (node.type === 'text') return node.value;
+  if (node.type === 'text') return escapeHtmlText(node.value);
   if (node.type === 'expression') return node.value.static && typeof node.value.json === 'string' ? node.value.json : '';
 
   // <Question/> → the embed placeholder AgentHtml resolves to a live chart. Polymorphic:

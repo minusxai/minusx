@@ -24,8 +24,22 @@ function rawTemplate(s: string): string {
   return `{\`${s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${')}\`}`;
 }
 
+/**
+ * Text-node escaping — the inverse of the parser's entity decoding. acorn-jsx DECODES entities
+ * in JSXText (`&lt;` → `<`), so emitting the value raw produces unparseable jsx whenever the
+ * text contains `<`, `{`, or `}` (and `&` would silently re-decode a literal `&lt;`). Escaping
+ * these keeps parse(serialize(nodes)) stable for every text value.
+ */
+function escapeText(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/\{/g, '&#123;')
+    .replace(/\}/g, '&#125;');
+}
+
 function nodeToSource(node: JsxNode): string {
-  if (node.type === 'text') return node.value;
+  if (node.type === 'text') return escapeText(node.value);
   if (node.type === 'expression') {
     if (node.value.static) {
       return typeof node.value.json === 'string' ? rawTemplate(node.value.json) : `{${JSON.stringify(node.value.json)}}`;
