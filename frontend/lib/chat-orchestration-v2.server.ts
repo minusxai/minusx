@@ -497,6 +497,7 @@ export async function setupOrchestration(
       orchestrator: orch,
       rootAgent: agent,
       rawStream: options?.preview ? null : orch.run(agent),
+      pageType,
     };
   }
 
