@@ -68,4 +68,6 @@ export interface CreditScope {
 export interface CreditUsageResponse {
   individual: CreditScope;
   org: CreditScope | null;
+  /** Whether credit limits are enforced (gated) or only tracked/displayed. */
+  enforced: boolean;
 }

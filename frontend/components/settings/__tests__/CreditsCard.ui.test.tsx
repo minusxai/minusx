@@ -27,7 +27,7 @@ describe('CreditsUsageCards', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('renders only the individual card when org is null (non-admin)', async () => {
-    mockUsage({ individual, org: null });
+    mockUsage({ individual, org: null, enforced: false });
     renderWithProviders(<CreditsUsageCards />);
 
     await waitFor(() => expect(screen.getByLabelText('Your usage')).toBeInTheDocument());
@@ -37,6 +37,7 @@ describe('CreditsUsageCards', () => {
   it('renders both cards when org totals are present (admin)', async () => {
     mockUsage({
       individual,
+      enforced: false,
       org: {
         billing: { label: 'this month', used: 150, allowance: 100_000, resetsAt: '2026-08-01T00:00:00.000Z', rows: individual.billing.rows },
         reset: { label: 'today', used: 40, allowance: 10_000, resetsAt: '2026-07-04T00:00:00.000Z' },

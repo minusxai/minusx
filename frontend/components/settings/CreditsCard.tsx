@@ -69,16 +69,32 @@ function UsageBar({ window, label, color }: { window: CreditWindow; label: strin
   );
 }
 
-/** A scope (yours / org): billing + reset bars side by side (50% each), distinct accent colors. */
-function ScopeBars({ title, scope }: { title: string; scope: CreditScope }) {
+/**
+ * A scope (yours / org): the credit-window + billing-cycle bars. Side by side
+ * (50% each) by default; `stacked` lays them out vertically for narrow spaces
+ * like the sidebar menu.
+ */
+function ScopeBars({ title, scope, stacked = false }: { title: string; scope: CreditScope; stacked?: boolean }) {
+  const bars = (
+    <>
+      <UsageBar window={scope.reset} label="this credit window" color="accent.primary" />
+      <UsageBar window={scope.billing} label="this billing cycle" color="accent.teal" />
+    </>
+  );
   return (
     <VStack align="stretch" gap={2} aria-label={title}>
       <Text fontSize="xs" fontWeight="600" fontFamily="mono" color="fg.subtle">{title}</Text>
-      <HStack align="start" gap={4}>
-        <UsageBar window={scope.reset} label="this credit window" color="accent.primary" />
-        <UsageBar window={scope.billing} label="this billing cycle" color="accent.teal" />
-      </HStack>
+      {stacked ? <VStack align="stretch" gap={3}>{bars}</VStack> : <HStack align="start" gap={4}>{bars}</HStack>}
     </VStack>
+  );
+}
+
+/** Footer note shown when credit limits are tracked but not enforced. */
+function NotEnforcedNote() {
+  return (
+    <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
+      Credit limits are not enforced — usage is tracked but not blocked.
+    </Text>
   );
 }
 
@@ -171,6 +187,7 @@ export function CreditsUsageCards() {
                 )}
               </VStack>
             )}
+            {!data.enforced && <NotEnforcedNote />}
           </>
         )}
       </VStack>
@@ -187,8 +204,8 @@ export function CreditsUsageBars() {
   if (loading || !data) return null;
   return (
     <VStack align="stretch" gap={3} aria-label="Credits usage bars">
-      <ScopeBars title="Your usage" scope={data.individual} />
-      {data.org && <ScopeBars title="Organization usage" scope={data.org} />}
+      <ScopeBars title="Your usage" scope={data.individual} stacked />
+      {data.org && <ScopeBars title="Organization usage" scope={data.org} stacked />}
     </VStack>
   );
 }

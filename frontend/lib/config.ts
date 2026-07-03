@@ -289,6 +289,12 @@ export function resolveOrgResetAllowance(): number {
   return CREDIT_RESET_ALLOWANCES.org ?? CREDIT_BUDGETS.defaultOrgResetAllowance;
 }
 
+/**
+ * Whether credit limits are ENFORCED (block/gate over-limit usage) vs. only
+ * tracked + displayed. Off unless CREDIT limits are explicitly enabled.
+ */
+export const ENFORCE_CREDIT_LIMITS: boolean = process.env.ENFORCE_CREDIT_LIMITS === 'true';
+
 /** Rolling BILLING-cycle window (override via CREDIT_BILLING_CYCLE). */
 export const BILLING_CYCLE: BillingCycle = parseBillingCycle(process.env.CREDIT_BILLING_CYCLE, CREDIT_BUDGETS.defaultBillingCycle);
 /** Rolling RESET-cycle window (override via CREDIT_RESET_CYCLE). */

@@ -2,7 +2,7 @@ import 'server-only';
 import { getModules } from '@/lib/modules/registry';
 import { costToCredits } from './credits';
 import {
-  BILLING_CYCLE, RESET_CYCLE,
+  BILLING_CYCLE, RESET_CYCLE, ENFORCE_CREDIT_LIMITS,
   resolveIndividualAllowance, resolveOrgAllowance,
   resolveIndividualResetAllowance, resolveOrgResetAllowance,
 } from '@/lib/config';
@@ -110,5 +110,5 @@ export async function getCreditUsage(
   const nextResets = await loadNextResets();
   const individual = await loadScope(resolveIndividualAllowance(role), resolveIndividualResetAllowance(role), nextResets, userId);
   const org = includeOrg ? await loadScope(resolveOrgAllowance(), resolveOrgResetAllowance(), nextResets) : null;
-  return { individual, org };
+  return { individual, org, enforced: ENFORCE_CREDIT_LIMITS };
 }
