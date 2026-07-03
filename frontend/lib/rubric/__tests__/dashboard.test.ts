@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scoreDashboard, MIN_TILE_W, MAX_VISUALS, MAX_TEXT_TOKENS } from '../deterministic/dashboard';
+import { scoreDashboard, MIN_TILE_W, MAX_VISUALS, MAX_TEXT_TOKENS, MAX_TEXT_TOKENS_ERROR } from '../deterministic/dashboard';
 import type { AssetReference } from '@/lib/types';
 import { makeDashboard } from './fixtures';
 
@@ -68,6 +68,12 @@ describe('scoreDashboard', () => {
     const bigText: AssetReference = { type: 'text', id: 'inline-0', content: 'x'.repeat((MAX_TEXT_TOKENS + 50) * 4) };
     const findings = scoreDashboard(makeDashboard({ assets: [q(1), bigText], layout: { items: [{ id: 1, x: 0, y: 0, w: 6, h: 4 }] } }));
     expect(findings.find((x) => x.ruleId === 'dashboard.too-much-text')?.severity).toBe('warn');
+  });
+
+  it('escalates to error when inline text is very large', () => {
+    const hugeText: AssetReference = { type: 'text', id: 'inline-0', content: 'x'.repeat((MAX_TEXT_TOKENS_ERROR + 50) * 4) };
+    const findings = scoreDashboard(makeDashboard({ assets: [q(1), hugeText], layout: { items: [{ id: 1, x: 0, y: 0, w: 6, h: 4 }] } }));
+    expect(findings.find((x) => x.ruleId === 'dashboard.too-much-text')?.severity).toBe('error');
   });
 
   it('flags a dashboard with no parameters (info)', () => {
