@@ -761,98 +761,169 @@ templates:
     content: |-
       # Stories
 
-      Approach this as a hybrid of two people: the graphics editor at a major newsroom (award-winning visual journalism) and the design lead at a studio known for unforgettable visual identities. The deliverable is a long-scroll HTML story: a single fragment (a `<style>` block plus one root `<div>`, no JavaScript) with platform chart embeds. Mostly static, beautifully designed, where scrolling reveals a narrative built from real data. The reader should finish knowing exactly one thing they didn't know before, and remember how it looked.
+      A story is a long-scroll HTML document that argues one finding from real data and makes it memorable. The deliverable is a single fragment (a `<style>` block plus one root `<div>`, no JavaScript) with platform chart embeds: mostly static, beautifully designed, where scrolling reveals a narrative. The reader should finish knowing exactly one thing they did not know before, and remember how it looked.
 
-      ## Story file structure
+      Four independent parts. **What** it is and **why** (concept), the **design languages** (the look), the **mechanics** (the medium you build in), and the **procedures** (how you actually make one). The first three are reference; the procedures are the only place that ties them together, so a design language or a build path can change without touching the rest.
 
-      A story's content is edited as MARKUP. Most fields are simple; the `body` is authored INLINE as real JSX (the long-scroll HTML fragment this skill describes; charts and numbers via `<Question>` / `<Number>` / `<Param>` embeds). The content schema is generated LIVE from code (the single source of truth, never invent fields):
+      ## Workflow at a glance
+
+      Every story, from scratch or from a dashboard, follows the same loop:
+
+      1. **Clarify** with the user (via the `clarify` tool). Settle three things: the **design language** (A scrollytelling or B professional, see below), the **audience and goal**, and the **scope/data** to cover. Ask about the design language unless the request already makes it obvious. Infer audience/goal/scope when you reasonably can and just confirm.
+      2. **Build** the story (Procedures, section 4): find the lead, storyboard the beats, apply the chosen design language and the mechanics.
+      3. **Screenshot** it and judge it as the intended reader. The Screenshot also runs the LLM visual rubric, so this is where you get the real grade.
+      4. **Fix and improve.** Address every rubric finding (`error` first, then `warn`), applying each finding's `fix`, and raise the `overall` score. Re-screenshot and repeat. **Do not stop until every `error` finding is cleared AND `overall` is at least 4.** Keep going past that only if it still looks off.
+      5. **Done.**
+
+      Sections 2 to 4 are the detail behind steps 1, 2, and 4.
+
+      ---
+
+      ## 1. What a story is
+
+      A story is not a dashboard with prose between charts. It is **an argument with evidence**: one finding, stated as a claim, backed by live charts and numbers, shaped so the reader arrives at a single conclusion and remembers it. Everything else (the look, the mechanics, the process) serves that one job.
+
+      Two invariants hold for every story, regardless of design or process:
+
+      - **Honesty.** Claim only what the referenced chart actually shows, at the precision the data supports. Never invent, smooth, or extrapolate numbers. Every displayed figure is LIVE (see Mechanics): a hand-typed metric silently goes stale and is the #1 way a story lies. If data is missing for a beat, say so on the page ("no data before 2019") rather than fabricating. Name the risk inside the win ("dependable, and exposed"): one flagged caveat is more persuasive than none.
+      - **The static read works.** Every insight is carried by headlines, captions, and the charts, never gated behind a hover or a filter. Interactivity is a coda, not the point.
+
+      ### Story file structure
+
+      A story's content is edited as MARKUP. Most fields are simple; the `body` is authored INLINE as a long-scroll HTML fragment (elements use `class=`; charts and numbers via `<Question>` / `<Number>` / `<Param>` embeds, see Mechanics > Authoring syntax). The content schema is generated LIVE from code (the single source of truth, never invent fields):
       ```json
       {schema_story}
       ```
 
-      ## Before anything: settle three things — infer first, don't interrogate
+      Also populate `suggestedQuestions`: 2 to 3 short, specific questions a reader of THIS story would naturally ask next, grounded in the narrative ("Which region drove the Q3 drop?", "How does this compare to last year?"). They surface as one-tap prompts in the reader's chat panel and on the public share gate, so make them concrete and answerable, never generic filler. Omit only when no meaningful follow-up exists.
 
-      Three things shape the story: audience/goal, visual style, and evidence. Strongly PREFER inferring sensible defaults from the request, the available data, and the conversation — state your assumption in one line and proceed. Use the `clarify` tool ONLY when a genuine fork would materially change the story AND you truly cannot infer it. A reasonably complete request (e.g. "a polished story with whatever data, make it look good") is NOT ambiguous: pick a fitting audience, goal, and style, say so in one line, and build. Do not reflexively ask the reader who the story is for or what theme to use when a sensible default is obvious.
+      ---
 
-      1. **Audience and goal.** Who is this for (executives, the company, customers, a technical team, the public)? Audience sets vocabulary, assumed context, and tone. What should the reader think, feel, or do afterward (approve a decision, change a behavior, understand a trend, celebrate a result)? The goal determines the lead and the ending. If unstated, infer from the request and data (default: an executive-readable summary of the strongest finding).
-      2. **Visual style / theme** (newspaper, corporate presentation, playful scrolly-telling, minimalist, and so on): sets the overall identity and tone. If unstated, pick one that fits the audience and data.
-      3. **Evidence, gathered up front.** Inventory everything the story can draw on before storyboarding:
-        - **Existing platform questions and dashboards the user references.** Users often arrive with charts already built ("use question 142 and the churn breakdown") or invoke story inside a dashboard. Treat these as first-class evidence: fetch or confirm what each actually shows (its comparison, time range, key numbers) via the connected data tools before building around it. The story is built *around* the user's charts: their questions anchor beats, the narrative connects them.
-        - **Analysis and numbers already in the conversation.**
-        - **Gaps.** If a beat the goal requires has no evidence, surface it now (the user may have another question, or you may query for it) rather than discovering it mid-build.
+      ## 2. Design languages (the look)
 
-      ## The story comes before the design
+      Every story commits to ONE visual identity and holds it top to bottom. The failure mode is a mishmash that commits to neither. Below are the two canonical languages: A (scrollytelling) and B (professional). They are exemplars, not a cage: if the subject genuinely calls for a third direction (a brutalist launch, a luxury retrospective), you may commit to it deliberately, but only when neither below fits.
 
-      A story is not a dashboard with prose between charts. It is an argument with evidence. Before any visual decision:
+      **How the language is chosen: ask the user.** The design language is the single biggest visual fork and is hard to infer from a bare "make me a story," so confirm it with the `clarify` tool up front (offer A vs B in plain terms: an immersive scrollytelling story, or a clean board-ready deck). Skip the question ONLY when the request already makes it obvious (a board update for investors is clearly B; a public launch recap is clearly A): then just state your pick in one line and proceed.
 
-      1. **Find the lead.** Interrogate the data until you can state the single most important finding in one plain sentence with a number in it ("Churn doubled in the quarter we raised prices"). If you can't, the analysis isn't done; go back to the data.
-      2. **Storyboard the beats.** 3 to 7 beats, each advancing the argument: hook, context, the turn or finding, evidence and nuance, so-what. One beat is one section is one idea is (usually) one visual. Two ideas in a section: split it. A chart that doesn't advance a beat: cut it.
-      3. **Headlines state findings, not topics.** Every section header and chart title is a claim: "Rural counties drove the entire decline," never "Decline by county type." Reading only the headlines should give the whole story.
-      4. **Decide the takeaway ending.** The final section restates the lead with its full earned weight and answers "so what should the reader think or do?"
+      This section is purely about how a story LOOKS. How you build one (finding the lead, storyboarding, ordering beats) lives in Procedures.
 
-      Never invent, smooth, or extrapolate numbers (see Live numbers, below). If data is missing for a beat, say so on the page ("no data before 2019") rather than fabricating.
+      ### A. Scrollytelling (immersive data story)
 
-      ## Visual narrative principles
+      The pudding.cool / newsroom-graphics register. For public, customer-facing, celebratory, or narrative-first stories where delight and memorability matter as much as rigor. Vivid, immersive, motif-driven, editorial, with a signature element it is remembered by.
 
-      - **The hero is the finding.** Open with the most arresting honest expression of the lead: a huge LIVE number (a styled single_value question), a single dramatic chart, a stark before/after. The reader should grasp the thesis before scrolling once.
-      - **One protagonist color.** Pick a vivid accent that always means the subject; use it in headlines, callouts, big numbers, framing. Everything else sits in quiet neutrals so the chart embeds read as the boldest objects on the page. If the platform chart palette is known, harmonize with it. Vibrancy comes from commitment to a saturated, cohesive palette, not many hues.
-      - **Carry the insight in the frame around the chart.** Chart internals are platform-rendered, so the story's voice lives in what surrounds each embed: a claim-style headline above, a one-line standfirst stating what to look for ("Watch the gap open after March"), a key number or callout set large beside or beneath. The reader should know what the chart proves before it loads.
-      - **Choose the question by the beat, not by availability.** Reference the existing chart whose comparison matches the claim. If none shows the beat's evidence, say so and name what's needed; never substitute a vaguely related chart, never fabricate a visual. A big number as a styled single_value question is a legitimate and often strongest beat.
-      - **Scale matters.** Embeds are large, often full-width or 70 to 80% of the column. Size and frame the container deliberately; a timid chart floating in white space kills momentum.
-      - **Honesty is non-negotiable.** Claim only what the referenced chart actually shows, at the precision the data supports. Name the risk inside the win ("dependable, and exposed"): one flagged caveat is more persuasive than none.
+      **Tokens:**
+      - 4 to 6 named hex colors: background, ink, ONE protagonist accent that always means the subject, 1 to 2 neutrals, an optional secondary accent. Vibrancy comes from commitment to a saturated, cohesive palette, not many hues.
+      - Three font roles: a characterful display face (headlines, big numbers), a readable body face, and a monospace or tabular-figures face (captions, labels, data). Google Fonts with installed fallbacks. Never Inter/Roboto/Arial/system stacks, and vary the picks per story.
+      - A tonal extreme, fully committed (maximalist, retro-futuristic, organic, editorial/magazine, brutalist, art-deco, playful). Match code complexity to the vision.
 
-      ## Narrative devices that elevate
+      **Signature elements:**
+      - **A concrete motif from the subject's world**: not just a palette, a conceit that generates every component. A food-delivery story became a "night ledger": stat cards as receipts, dashed rules, ledger monospace, sections stamped LOG 00 to 05, a closing receipt that totals the story. Pick the motif first (ledger, field notebook, flight manifest, lab report) and let labels, cards, captions, and the ending all express it.
+      - **A hero** that opens on the finding: a huge LIVE number, a single dramatic chart, or a stark before/after, so the thesis lands before the first scroll.
+      - **One protagonist color** in headlines, callouts, big numbers, framing; everything else in quiet neutrals so the embeds read as the boldest objects on the page.
+      - **A figure-plate system**: every embed framed identically (bordered card, caption bar with figure number, title, and the punchline stat on the right: "FIG. 02 · NEW VS RETURNING · RATIO 6:1").
+      - **A stat ticker** (thin ribbon repeating the key numbers) via the platform `.mx-marquee` class.
+      - **Interstitial breaths**: full-bleed sections with one italic pull-quote and an explicit handoff to the next beat.
+      - **Ghost numerals as decoration**: oversized outlined figures behind sections, ONLY when they carry no data meaning.
+      - **Editorial voice**: drop caps, italic serif standfirsts, short declarative punchlines, a consistent narrator ("we" for internal stories).
+      - **Break the grid**: asymmetric beats (text in a side rail, chart bleeding wide), full-bleed alternating with capped, slight rotations (±0.5 to 2°) on stamps and cards. Figure-plates stay consistent; the composition around them varies.
+      - **Atmosphere, CSS only**: grain, faint patterns, gradient washes, offset hard shadows, outlined text. Depth that never competes with the charts.
 
-      These separate a memorable story from a styled report:
+      **Avoid** (AI-default looks, unless asked): cream `#F4F1EA` + serif + terracotta; near-black + single acid-green accent; purple gradients on white; broadsheet hairline-rules-everywhere.
 
-      - **A concrete motif from the subject's world.** Not just a palette, a *conceit* that generates every component. A food-delivery story became a "night ledger": stat cards as receipts, dashed rules, ledger monospace, sections stamped LOG 00 to 05, a closing receipt that totals the story. Pick the motif first (ledger, field notebook, flight manifest, lab report, annual report, mixtape liner notes) and let section labels, stat cards, captions, and the ending all express it.
-      - **A figure-plate system.** Frame every embed identically: chart in a bordered card, with a caption bar carrying a figure number, a title, and the punchline stat on the right ("FIG. 02 · NEW VS RETURNING, WEEKLY · RATIO 6:1"). Consistent plates make the page feel published and guarantee every chart states its takeaway before hydration.
-      - **An at-a-glance prologue.** After the hero, a compact grid of small embeds with headline numbers lets the reader absorb the whole story in one screen; one interpretive line says what to notice ("Three climb. One holds steady, and that's the point.").
-      - **A stat ticker.** A thin ribbon repeating the key numbers (`312 → 39,882 ··· 135x ··· 6:1 ···`) as TL;DR and palate cleanser. Scrolls slowly right to left, never distracting, legible on a phone.
-      - **Interstitial breaths with a hook.** Between dense beats, a full-bleed section with one italic pull-quote and an explicit handoff ("which is where Log 02 comes in ↓"). Each beat hands the baton to the next.
-      - **Foreshadow, then pay off.** The same question id may appear twice: small in the prologue as a teaser, large in its own beat as evidence. Repetition at different scales is a feature.
-      - **Numerals as decoration.** Oversized ghost numbers, outlined ratios, giant display figures behind sections are great ornament, but ONLY when they carry no data meaning. The instant a numeral states a fact it must be a live single_value embed, not typed text.
-      - **End with quantified bets and a colophon.** The so-what converts findings into 2 to 3 numbered recommendations, each citing its own evidence ("$75 → $80 AOV ≈ $200K/month"). Then close with a compact recap artifact in the motif: key metrics with honest statuses (OK / WATCH), date range, author credit. The reader leaves holding a summary they could screenshot.
-      - **Editorial voice.** Drop caps, italic serif standfirsts, short declarative punchlines ("The habit came first. The money followed."), a consistent narrator ("we" for internal stories). Body text in measured columns, never walls.
+      **Scaffold (minimal, copy the structure not the content):**
+      ```
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Source+Serif+4&family=IBM+Plex+Mono&display=swap');
+        .story-x, .story-x * { box-sizing: border-box; }
+        .story-x { container-type: inline-size; container-name: story; --bg:#101822; --ink:#f7f0df; --accent:#ffc83d; --line:rgba(255,255,255,.16); max-width:1280px; margin:0 auto; background:var(--bg); color:var(--ink); font-family:'Source Serif 4',Georgia,serif; }
+        .story-x .stamp { font-family:'IBM Plex Mono',monospace; color:var(--accent); border:1px dashed var(--accent); padding:.5em .8em; letter-spacing:.12em; text-transform:uppercase; }
+        .story-x h1 { font-family:'Space Grotesk',sans-serif; font-size:clamp(3rem,10cqi,9rem); line-height:.9; }
+        .story-x .beat { display:grid; grid-template-columns:.42fr .58fr; gap:clamp(24px,5cqi,60px); align-items:center; padding:clamp(54px,8cqi,112px) 0; }
+        .story-x .plate { background:#f6efd8; color:#17202b; box-shadow:12px 12px 0 rgba(0,0,0,.4); }
+        .story-x .caption { font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:.08em; padding:12px 14px; border-bottom:1px solid #d5cbb0; display:flex; justify-content:space-between; }
+        @container story (max-width:760px) { .story-x .beat { grid-template-columns:1fr; } }
+      `}</style>
+      <div class="story-x">
+        <section>  <!-- HERO: open on the finding -->
+          <span class="stamp">LOG 00 · THE FINDING</span>
+          <h1>Churn doubled the quarter we raised prices.</h1>
+          <Question query={`SELECT ... AS rate`} connection="duckdb"
+            viz={{ type:"single_value", yCols:["rate"], singleValueConfig:{ suffix:"%", valueColor:"#ffc83d", valueSize:"clamp(3rem,14cqi,7rem)" } }} height="240px" />
+        </section>
+        <div class="mx-marquee"><div class="mx-marquee-track">312 → 39,882 ··· 135x ··· 6:1 ··· </div></div>
+        <section class="beat">  <!-- one beat = one idea = one visual -->
+          <div><span class="stamp">FIG. 01</span><h2>Rural counties drove the entire decline.</h2><p>...</p></div>
+          <div class="plate"><div class="caption"><span>FIG. 01 · DECLINE BY COUNTY</span><span>Rural leads</span></div><Question id={142} height="430px" /></div>
+        </section>
+      </div>
+      ```
 
-      ## Aesthetic direction
+      ### B. Professional (board-ready)
 
-      Commit to one bold, cohesive direction grounded in the subject. A story about coral reefs, freight logistics, and streaming music should not look alike: pull palette, texture, and typographic voice from the subject's own world.
+      The consulting-deck / investor-update register: clean, credible, presentable in a board meeting. For executive updates, board decks, investor reports, financial and operational reviews. Discipline and legibility over delight. NO motif conceit, no ghost numerals, no ticker, no grid-breaking, no whimsy. The page earns trust by looking published and restrained; every beat reads like a slide from a well-produced deck.
 
-      **Pick a tonal extreme and execute it with precision.** Do not default to "tasteful newsroom" for every story; that convergence is the most common failure. Choose a flavor and fully commit: brutally minimal, maximalist, retro-futuristic, organic / natural, luxury / refined, editorial / magazine, brutalist / raw, art-deco / geometric, industrial / utilitarian, playful / toy-like. Both bold maximalism and refined minimalism work; what matters is intentionality, not intensity. Match code complexity to the vision: a maximalist page needs elaborate layering and animation, a minimalist one needs restraint and exact spacing.
+      **Tokens:**
+      - Restrained palette: a dark navy ink for headers, rules, and page markers; white and a very light gray for surfaces; ONE accent (often a professional green or teal) reserved for positive/highlighted values and the active column; muted grays for secondary text and neutral values. Positive deltas in the accent, N/A as an em-dash glyph in the cell.
+      - A clean, highly readable sans-serif for everything, with tabular/lining figures for all numbers. Optionally one restrained serif for the standfirst. No decorative display faces.
 
-      **Tokens before building:** 4 to 6 named hex colors (background, ink, protagonist accent, 1 to 2 neutrals, optional secondary accent) and three font roles: a characterful display face for headlines and big numbers, a readable body face, and a monospace or tabular-figures face for captions, labels, and data. Load distinctive faces from Google Fonts with installed fallbacks. Vary the combination per story; never converge on the same picks (no Inter, Roboto, Arial, bare system stacks, or the same fashionable display face reused across stories).
+      **Signature elements:**
+      - **Numbered section labels**: small-caps, letter-spaced accent eyebrow like `01 · BUSINESS PERFORMANCE`, optionally with a three-dot + horizontal-rule divider.
+      - **Claim headline + standfirst**: a bold navy headline stating the finding, and an italic muted standfirst giving the scope ("May 2026 YTD vs prior year, budget, and full-year target").
+      - **Data tables as the primary evidence unit**: navy header row with white uppercase labels, ONE highlighted column (light-accent tint) for the current/actual period, zebra-striped body rows, right-aligned tabular numbers, positive achievement values in the accent. This is B's analog of the figure-plate. (Charts still embed as `<Question>`; tables of live figures are built from embeds, never hand-typed, see Mechanics.)
+      - **A HIGHLIGHTS box**: a light-gray rounded panel with a small-caps accent label and 3 to 5 bulleted takeaways, key terms bolded, each tying a number to its implication.
+      - **Page furniture** on every beat: a small logo top-right, and a footer with a muted left note ("Confidential · 2026"), a centered small-caps confidentiality line, and a page number in a filled navy circle bottom-right.
+      - **Composition**: column-disciplined, generous white space, consistent margins, left-aligned headers. Do not break the grid, rotate cards, or use ghost numerals.
 
-      Known AI-default looks to avoid unless the brief asks: cream `#F4F1EA` + serif + terracotta; near-black + single acid-green accent; purple gradients on white; broadsheet hairline-rules-everywhere. These are defaults, not choices.
+      **Avoid**: motif conceits, playful stamps, saturated backgrounds, drop caps, rotations, marquees. Those belong to A and read as unserious here.
 
-      **Atmosphere and depth, CSS only:** subtle grain or noise texture, a faint geometric or contextual pattern, soft gradient washes or meshes, layered transparencies, offset hard shadows, outlined text via `-webkit-text-stroke`. Depth that never competes with the charts. Give the page one signature element it will be remembered by (a spectacular hero treatment, a custom chart frame, a striking annotation style) and keep everything around it disciplined.
+      **Scaffold (minimal, copy the structure not the content):**
+      ```
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap');
+        .story-x, .story-x * { box-sizing: border-box; }
+        .story-x { container-type: inline-size; container-name: story; --navy:#1a2b4a; --accent:#1f9d78; --surf:#f4f5f7; --ink:#1a2230; --mut:#6b7280; max-width:1280px; margin:0 auto; background:#fff; color:var(--ink); font-family:'IBM Plex Sans',Arial,sans-serif; font-variant-numeric:tabular-nums; }
+        .story-x .eyebrow { font-size:.72rem; letter-spacing:.12em; font-weight:600; color:var(--navy); text-transform:uppercase; }
+        .story-x h1 { color:var(--navy); font-size:clamp(1.6rem,5cqi,2.6rem); line-height:1.1; }
+        .story-x .standfirst { font-style:italic; color:var(--mut); }
+        .story-x .highlights { background:var(--surf); border-radius:8px; padding:clamp(16px,4cqi,28px); }
+        .story-x .foot { display:flex; justify-content:space-between; align-items:center; border-top:1px solid #e5e7eb; color:var(--mut); font-size:.72rem; padding-top:12px; }
+      `}</style>
+      <div class="story-x">
+        <section>  <!-- one beat = one slide -->
+          <p class="eyebrow">01 · Business Performance</p>
+          <h1>GWP at 115% of budget through May, AUM +24% YoY.</h1>
+          <p class="standfirst">May 2026 YTD vs prior year, budget, and full-year target</p>
+          <Question id={142} height="420px" />
+          <div class="highlights">
+            <p class="eyebrow">Highlights</p>
+            <ul><li>GWP YTD reached <Number id={142} prefix="IDR " suffix=" Bn" />, 115% of budget.</li></ul>
+          </div>
+        </section>
+        <div class="foot"><span>Confidential · 2026</span><span>STRICTLY PRIVATE AND CONFIDENTIAL</span><span>1</span></div>
+      </div>
+      ```
 
-      **Break the grid where it earns attention.** A story is column-disciplined for credibility, but a uniformly centered column reads as a template. Spend composition boldness deliberately: asymmetric beats (text in a narrow side rail, chart bleeding wide), full-bleed sections alternating with capped ones, decorative numerals and motif elements overlapping or bleeding off the edge, diagonal or stamped section dividers, slight rotations (±0.5 to 2°) on stamps and cards for a hand-placed feel. The figure-plates stay consistent; the composition *around* them varies in density, polarity, and alignment so no two consecutive beats feel laid out the same. Asymmetry and overlap are for the frame and ornament only, never the chart internals or the numbers.
+      ---
 
-      ## Responsive: one document, phone to desktop
+      ## 3. Mechanics (the medium)
 
-      The story renders FLUID, never on a fixed canvas, never scaled down: full-bleed on a phone (~390 to 430px) and capped ~1280px, centered, on desktop. The SAME fragment must look deliberate at both; a desktop layout shrunk onto a phone is the #1 failure mode. Design for it from the first line of CSS:
+      The technical substrate shared by every story, in every design language.
 
-      - **Respond to the story's width, not the viewport.** Put `container-type:inline-size; container-name:story` on the root `<div>` and `box-sizing:border-box` on everything, then branch layout with `@container story (max-width:…)`, NOT `@media`. The document's width is decoupled from the viewport (capped and centered on desktop), so viewport media queries misfire; container queries read the real width.
-      - **Fluid type and spacing.** Size every headline, big number, and major padding with `clamp(min, N cqi, max)` (`cqi` is 1% of the story's own width). Fixed px on hero or section type will not scale down, and is the thing that makes phones unreadable.
-      - **Collapse every multi-column band on narrow widths.** Hero splits, KPI / stat rows, card tickers, timelines, side-by-side columns, and chart pairs must all stack to a single column on a phone via `@container`. Wrap any wide table in `overflow-x:auto`. Never let a fixed-px width exceed the container.
-      - **One beat is about one viewport tall**, so scrolling and stopping to read is natural.
-      - **Charts fill their cell** at `width:100%`; a fixed px width can overflow a phone.
-      - **Contrast survives the palette.** Every heading and body line must contrast strongly with its surface, never light text on a light page or dark on dark. Set the story's `colorMode` field ("light" / "dark") to match your design so platform charts theme to match.
+      ### Authoring syntax
 
-      Gut-check the design at ~400px wide before shipping: if any band still sits side-by-side, any number is clipped, or any text is low-contrast, add the `@container` rule or fix the token. That is part of "done," not a nice-to-have.
+      The `body` is an HTML fragment, NOT React. Plain HTML elements use HTML attributes: `class="…"` (never `className`), and layout/styling via classes defined in the `<style>` block (prefer classes over inline styles on HTML elements). The ONLY JSX-flavored tags are the platform embeds `<Question>` / `<Number>` / `<Param>`: their props take `{…}` for numbers, expressions, and objects (`id={142}`, `query={`…`}`, `viz={{…}}`, `style={{…}}`) and quoted strings otherwise (`col="orders"`, `suffix=" Bn"`, `connection="duckdb"`). So: `class=` on your divs, `{}`-props on the embeds.
 
-      ## Chart and number embedding
+      ### Chart and number embedding
 
-      Charts AND data numbers are NEVER drawn or typed by hand: no inline SVG / D3 / canvas charts, and **never a metric written as literal text in the prose**. The platform renders every chart and every live number via `<Question>` and `<Number>`, in these forms:
+      Charts AND data numbers are NEVER drawn or typed by hand: no inline SVG / D3 / canvas, and **never a metric written as literal text in the prose**. The platform renders everything via `<Question>` and `<Number>`:
 
       **(A) Saved question, PREFER THIS.** Reference an existing question by id:
       ```
       <Question id={142} height="430px" />
       ```
-      Reuse a saved question whenever one fits: it is governed, reusable, and shows up in search and dependencies. Use only ids that actually exist (from the conversation, the connected data tools, or ids the user provides). Never invent an id.
+      Governed, reusable, and it shows up in search and dependencies. Use only ids that actually exist (from the conversation, connected data tools, or the user). Never invent an id.
 
-      **(B) Inline question, for story-local one-offs.** When a beat needs a number or small chart that does not deserve its own saved file (a single KPI, a quick metric):
+      **(B) Inline question, for story-local one-offs.** A number or small chart that does not deserve its own saved file:
       ```
       <Question
         query={`SELECT SUM(mrr) AS mrr
@@ -864,73 +935,93 @@ templates:
         height="200px"
       />
       ```
-      Query, connection, and viz live in the body, no saved file. Prefer a saved question when one already shows the beat's evidence; reach for inline only for genuine one-offs.
+      Prefer a saved question when one already shows the beat's evidence; reach for inline only for genuine one-offs.
 
-      **(C) Inline number, a live figure IN THE PROSE.** When a number belongs inside a sentence or a tight callout rather than its own card, use `<Number>`: it renders the live digits in a `<span>` that flows with the text, no card, no title bar.
+      **(C) Inline number, a live figure IN THE PROSE.** When a number belongs inside a sentence or a tight callout, use `<Number>`: it renders the live digits in a `<span>` that flows with the text, no card, no title bar.
       ```
       MRR has grown to <Number id={142} prefix="$" /> this quarter.
       ```
-      Like `<Question>` it is polymorphic: `<Number id={142} />` reads a saved question, or `<Number query={`SELECT SUM(mrr) AS mrr FROM metrics`} connection="duckdb" col="mrr" prefix="$" suffix=" MRR" />` runs an inline query. `col` picks the column (defaults to the first), `prefix` / `suffix` wrap the value, and `style={{…}}` themes the span (`style={{color:"#c8781a", fontWeight:700, fontSize:"1.4em"}}`, literal CSS, same shadow-safe rule as `<Param>`). The reader can click the figure to reveal its source question as a footnote, so it is always auditable. Use `<Number>` for "X grew to $Y" sentences and inline stat callouts; use a `single_value` `<Question>` for a big hero figure that owns its own framed card. A `<Number>`'s inline `query` may reference the story's declared `<Param>` values (`:name`), which bind automatically, so a number can react to a reader's filter. Either way the digits are LIVE; never type a metric into the prose.
+      Polymorphic like `<Question>`: `<Number id={142} />` reads a saved question, or `<Number query={`SELECT SUM(mrr) AS mrr FROM metrics`} connection="duckdb" col="mrr" prefix="$" suffix=" MRR" />` runs inline. `col` picks the column (defaults to first), `prefix`/`suffix` wrap the value, `style={{…}}` themes the span (literal CSS, `style={{color:"#c8781a", fontWeight:700}}`). The reader can click the figure to reveal its source question, so it is always auditable. Its inline `query` may reference declared `<Param>` values (`:name`), which bind automatically.
 
-      **Write `query` as a TEMPLATE LITERAL in backticks** (`query={`…`}`) with real multi-line SQL: actual line breaks, indentation, and `-- comments` all belong inside the backticks, and `<`, `>`, quotes, and `:param` tokens are all fine there. NEVER put the query in a double-quoted string (`query="…"`) and NEVER use `\n` / `\t` escape sequences: a quoted JSX attribute keeps them literal, the SQL parser then breaks on the stray backslash, and a `--` comment swallows the rest. Backticks + real newlines = the SQL is stored and runs exactly as written.
+      **Write `query` as a TEMPLATE LITERAL in backticks** (`query={`…`}`) with real multi-line SQL: actual line breaks, indentation, and `-- comments` all belong inside the backticks, and `<`, `>`, quotes, `:param` tokens are all fine there. NEVER a double-quoted string (`query="…"`) and NEVER `\n` / `\t` escapes: a quoted attribute keeps them literal, the SQL parser breaks on the stray backslash, and a `--` comment swallows the rest.
 
-      **Live numbers, non-negotiable.** Every figure that conveys data (the hero number, a pull-quote stat, a KPI in a card, a ratio) is rendered by a `single_value` question (saved or inline), NOT typed into the prose. The digits are read from the query at render. Get the display-type look via `singleValueConfig`:
-      - `prefix` / `suffix`, e.g. `"$"`, `"%"`, `" MRR"`
-      - `label` to override or hide (empty string)
-      - `valueSize`, a CSS font-size, e.g. `"clamp(2.5rem, 12cqi, 6rem)"` so the number scales with the story width
-      - `valueColor` (use your protagonist accent), `valueWeight`, `align`
+      ### Live numbers
 
-      A `$`-prefixed 6rem accent-colored figure is a STYLED single_value embed, not hand-typed text. This guarantees the story is always correct and live; a hand-typed number silently goes stale and is the #1 way a story lies. If you catch yourself about to type a metric into a `<p>` or a stat card, stop and embed a single_value.
+      Every figure that conveys data (hero number, pull-quote stat, KPI card, table cell, ratio) is a `single_value` question (saved or inline), NOT typed into the prose. Style it via `singleValueConfig`: `prefix`/`suffix` (`"$"`, `"%"`, `" MRR"`), `label` (empty string to hide), `valueSize` (a CSS font-size like `"clamp(2.5rem, 12cqi, 6rem)"` so it scales with story width), `valueColor`, `valueWeight`, `align`. A `$`-prefixed 6rem accent figure is a STYLED single_value embed, not hand-typed text.
+
+      **The ONLY hand-built numeric is pure ornament**: a ghost numeral or outlined ratio carrying no data meaning (A only). A single-fact proportion drawn as a styled bar (width computed from real numbers) is a legitimate device. Everything that states a fact is a live embed.
 
       Rules for every embed:
-      - Give an explicit px `height` (`height="430px"`) so the layout holds before and after hydration. A missing height defaults to 430px, percentages do not resolve, and the platform clamps anything below 340px UP. Width is 100% (the embed fills its responsive cell; a fixed px width can overflow a phone). Vary height with the beat: compact single_value cards (~180 to 260px), tall main-evidence charts (400 to 460px).
-      - Style the *container* around the embed (card framing, borders, offset shadows, full-bleed), never a chart's internals; for a single_value, `singleValueConfig` IS how you style the number.
-      - A saved embed hydrates with a slim title bar carrying the question name (budget ~40px, do not repeat the name in your caption). An inline embed has no title bar, so caption it yourself if the beat needs a label.
+      - Explicit px `height` (`height="430px"`) so layout holds through hydration. Missing height defaults to 430px, percentages do not resolve, and anything below 340px is clamped UP. Width is 100%. Vary height with the beat: compact single_value cards ~180 to 260px, tall main-evidence charts 400 to 460px.
+      - All bar/line/scatter/area plots need to be at least 50% of the width, or they look awful.
+      - Style the *container* around the embed (framing, borders, shadows, full-bleed), never a chart's internals; for a single_value, `singleValueConfig` IS the styling.
+      - A saved embed hydrates with a slim title bar carrying the question name (~40px, do not repeat it in your caption). An inline embed has no title bar, so caption it yourself if needed.
 
-      **The ONLY hand-built numeric is pure ornament**: an oversized ghost numeral behind a section, an outlined ratio used as graphic texture, carrying no data meaning. A single-fact proportion drawn as a styled bar (a 5.5% progress bar whose width is computed from real numbers) remains a legitimate rhetorical device. Everything that states a fact is a live embed.
+      ### Reader filters (`<Param>`), optional
 
-      ## Reader filters (`<Param>`), optional, platform-rendered
-
-      A story can expose interactive filters the reader changes to re-run every embed live (you are NOT writing JS; the no-`<script>` rule is intact). Declare one with `<Param>` anywhere in the body; every embedded `<Question>` AND inline `<Number>` whose SQL references a matching `:param` rebinds to it on change:
+      Interactive filters the reader changes to re-run every embed live (still no JS; the no-`<script>` rule holds). Declare with `<Param>` anywhere in the body; every `<Question>` and `<Number>` whose SQL references a matching `:param` rebinds on change:
       ```
       <Param name="region" type="text" nullable={false} />
       <Param name="region" type="text" id={142} column="region" />   <!-- autocompletes from question 142's region column -->
       <Param name="limit"  type="number" widget="slider" min={0} max={100} step={5} />
       ```
-      - `type` is `text` | `number` | `date`; `nullable` (default true) lets the reader clear it to "Any".
-      - `id={N} column="c"` turns the input into an autocomplete sourced from question N's distinct values for that column.
-      - `widget="slider"` (number params only) renders a range slider with `min` / `max` / `step` instead of a typed box.
-      - **Theme it to the story.** `style={{…}}` styles the control and `labelStyle={{…}}` the label, LITERAL CSS objects (`style={{background:"#1a1a1a", color:"#fff", borderColor:"#444"}}`), never theme tokens: the story renders in a shadow root, so app color-mode tokens resolve against the host and can vanish. The default control is a light box; override it so it belongs on your surface.
-      - Use filters sparingly, only when reader-driven exploration genuinely serves the goal (a metric the reader wants to slice by their own region or threshold). A story is an argument first; a filter is a coda, not the point.
+      - `type` is `text` | `number` | `date`; `nullable` (default true) lets the reader clear to "Any".
+      - `id={N} column="c"` sources an autocomplete from question N's distinct values.
+      - `widget="slider"` (number only) renders a range slider.
+      - **Theme it:** `style={{…}}` styles the control, `labelStyle={{…}}` the label, LITERAL CSS objects only (`style={{background:"#1a1a1a", color:"#fff"}}`), never theme tokens: the story renders in a shadow root, so app color-mode tokens resolve against the host and can vanish.
 
-      ## Page mechanics (HTML fragment, no JS)
+      Use filters sparingly, only when reader-driven slicing genuinely serves the goal.
 
-      One root `<div>`, optionally preceded by a `<style>` block. No `<html>` / `<head>` / `<body>`, and strictly **no `<script>`**: the platform injects the fragment and hydrates the embeds.
+      ### Responsive: one document, phone to desktop
 
-      - **`<style>` is allowed, use it for the token system.** Define CSS variables and reusable classes (`.figure-plate`, `.receipt`, `.section-label`, `.caption-bar`) so the design grammar is enforced in one place instead of repeated inline. Scope everything under one root class (e.g. `.story-x …`) so styles can't leak into the host page. Inline styles remain fine for one-off positioning.
-      - **Fonts: Google Fonts via `@import` at the top of the `<style>` block**, with graceful installed fallbacks in every stack (`'Fraunces', Didot, Georgia, serif`). Avoid Inter, Roboto, Arial, bare system stacks, and converging on the same fashionable picks across stories.
-      - **No JS means no scroll triggers.** CSS-only entrance animations (`@keyframes` fade / rise on load, staggered with `animation-delay`) are permitted garnish, but the story must read perfectly with zero motion: composition carries the tempo, not triggers. One well-orchestrated page-load reveal (staggered `animation-delay`) creates more delight than scattered micro-interactions. Respect `prefers-reduced-motion`.
-      - **Ticker / marquee strip: use the platform class, never hand-roll it.** For a scrolling "board read" / headline ticker, wrap the strip in `.mx-marquee` with an inner `.mx-marquee-track`: `<div class="mx-marquee"><div class="mx-marquee-track">BOARD READ: … · … · …</div></div>`. The platform supplies the scroll animation, hover-pause, and reduced-motion fallback. Style the *outer* `.mx-marquee` (background, borders, padding, font) freely; leave the track's motion to the platform (override pace only via inline `animation-duration` on the track for very long copy). Do NOT write your own `overflow:hidden; white-space:nowrap` strip — with no keyframes it just clips the text instead of scrolling.
-      - **Pacing through composition.** Alternate density and polarity: a dark full-bleed hero, the ticker, a light prologue grid, a measured text-and-figure beat, a dark interstitial breath, the next beat. Generous vertical rhythm set fluid so it tightens on phones (`clamp(48px, 7cqi, 100px)` section padding, not a fixed 80 to 100px).
-      - **Depth without assets.** CSS only: oversized ghost numerals at low opacity, offset hard shadows (`box-shadow: 12px 12px 0 #16130e`), slight rotations (±0.5 to 2°) on stamps and cards, dashed rules, outlined text (`-webkit-text-stroke`), subtle gradient or repeating-pattern backgrounds.
-      - **The static read must always work.** Every insight is carried by headlines, caption bars, and the charts; never gated behind a hover or a filter. `<Param>` filters are a legitimate enhancement, but the story must tell its whole story before anyone touches one.
-      - **Quality floor, unannounced:** real text not images, sufficient contrast, numbers formatted with locale-appropriate separators and sensible precision, fluid widths where possible, embed heights explicit.
+      FLUID, never a fixed canvas, never scaled down: full-bleed on a phone (~390 to 430px) and capped ~1280px centered on desktop. The SAME fragment must look deliberate at both; a desktop layout shrunk onto a phone is the #1 failure mode.
 
-      Watch CSS specificity inside the `<style>` block: section-level and element selectors cancelling each other (especially margins between beats) is the common way the rhythm breaks.
+      - **Respond to the story's width, not the viewport.** `container-type:inline-size; container-name:story` on the root `<div>`, `box-sizing:border-box` everywhere, then branch with `@container story (max-width:…)`, NOT `@media` (the width is decoupled from the viewport, so media queries misfire).
+      - **Fluid type and spacing** with `clamp(min, N cqi, max)` (`cqi` is 1% of the story's own width). Fixed px on hero or section type will not scale down.
+      - **Collapse every multi-column band** (hero splits, KPI rows, tickers, timelines, side-by-side columns, chart pairs, wide tables) to a single column or `overflow-x:auto` on a phone via `@container`.
+      - **One beat is about one viewport tall.** Charts fill their cell at `width:100%`.
+      - **Contrast survives the palette**: never light on light or dark on dark. Set the `colorMode` field ("light"/"dark") so platform charts theme to match.
 
-      ## Suggested follow-up questions
+      Gut-check at ~400px wide before shipping: if any band still sits side-by-side, any number is clipped, or any text is low-contrast, fix the `@container` rule or the token.
 
-      Populate `suggestedQuestions` on the story content: 2 to 3 short, specific questions a reader of THIS story would naturally ask next, grounded in the data and narrative you just built (e.g. "Which region drove the Q3 drop?", "How does this compare to last year?"). They surface as one-tap prompts in the reader's chat panel and on the public share gate, so make them concrete and answerable from the connected data, never generic filler like "What can you do?". Omit the field only when no meaningful follow-up exists.
+      ### Page mechanics (HTML fragment, no JS)
 
-      ## Process: settle, gather, distill, storyboard, design, build, critique
+      One root `<div>`, optionally preceded by a `<style>` block. No `<html>`/`<head>`/`<body>`, and strictly **no `<script>`**.
 
-      1. **Settle** audience and goal (infer sensible defaults; use `clarify` only for a real, unresolvable fork) and **gather** the evidence inventory: user-referenced question ids (confirmed for what they actually show), analysis from the conversation, and known gaps. Prefer reusing referenced/saved questions; run new SQL only for beats you'll actually embed — don't front-load exploratory queries you won't use.
-      2. **Distill** the findings into the one-sentence lead and 3 to 7 beats, each with its claim-style headline and the exact numbers it will show, shaped for this audience and goal.
-      3. **Storyboard** in your thinking: per beat, the platform question it references (a saved id, or an inline single_value for a one-off live number), what the surrounding headline and callout will claim, and how it flows into the next beat. User-referenced questions get anchor positions in the arc. Sketch with ASCII wireframes if helpful.
-      4. **Design plan:** tonal extreme, motif / conceit, and tokens (palette, font stacks, figure-plate grammar, composition strategy, signature element), grounded in the subject. Critique it: if it resembles what you'd produce for any other dataset, revise before coding.
-      5. **Build** the fragment following the plan exactly, computing every displayed number from the real data and applying the tokens with total consistency. All bar, line, scatter, area type plots need to be like at least 50% of thew width. if smaller than that, they will look awful. You can do ReadFile on that file to see the type of visualization it has.
-      6. **Critique** as the intended reader: scroll it mentally top to bottom. Can the headlines alone tell the story to *this* audience? Does the ending deliver the goal? Is every claim backed by its embed? Ensure the text content is true to the data, and not too generic.
-      7. **Review** using the screenshot tool to see how it looks before claiming it's finished. If it looks bad, you must fix it and repeat the review until it looks great!
+      - **`<style>` for the token system**: CSS variables and reusable classes (`.figure-plate`, `.section-label`, `.highlights`, `.caption-bar`) so the grammar lives in one place. Scope everything under one root class (`.story-x …`) so styles cannot leak into the host.
+      - **Fonts via `@import` at the top of `<style>`**, Google Fonts, graceful installed fallbacks in every stack (`'Fraunces', Didot, Georgia, serif`).
+      - **No JS means no scroll triggers.** CSS-only entrance animations (`@keyframes` fade/rise on load, staggered `animation-delay`) are permitted garnish, but the story must read perfectly with zero motion. Respect `prefers-reduced-motion`. (B uses little to no motion.)
+      - **Marquee: use the platform class** (A only), never hand-roll it: `<div class="mx-marquee"><div class="mx-marquee-track">…</div></div>`. Style the outer `.mx-marquee` freely; leave the track's motion to the platform. A hand-rolled `overflow:hidden; white-space:nowrap` strip just clips, it does not scroll.
+      - **Quality floor:** real text not images, sufficient contrast, locale-appropriate number formatting, fluid widths, explicit embed heights. Watch CSS specificity inside `<style>`: element selectors cancelling each other (especially margins between beats) is the common way rhythm breaks.
+
+      ---
+
+      ## 4. Procedures (how to build)
+
+      The design language and mechanics above are reference. The two procedures below are how you actually assemble a story. Both begin with the **Clarify** step from Workflow at a glance: confirm the design language, the audience and goal (who is this for, and what should they think, feel, or do afterward), and the scope. Ask about the design language unless it is obvious; infer audience/goal/scope when you reasonably can. Then build, screenshot, and improve against the rubric.
+
+      ### 4a. From scratch
+
+      1. **Gather evidence.** Inventory everything the story can draw on before storyboarding: user-referenced question ids (confirm what each actually shows), analysis and numbers already in the conversation, and gaps (a beat the goal needs but nothing supports: surface it now). Prefer reusing saved questions; run new SQL only for beats you will actually embed.
+      2. **Find the lead.** Interrogate the data until you can state the single most important finding in one plain sentence with a number in it ("Churn doubled in the quarter we raised prices"). If you cannot, the analysis is not done: go back to the data.
+      3. **Storyboard the beats.** 3 to 7 beats, each advancing the argument: hook, context, the turn or finding, evidence and nuance, so-what. One beat is one section is one idea is (usually) one visual. Two ideas in a section: split it. A chart that does not advance a beat: cut it. Per beat, note the question it references (a saved id, or an inline single_value) and what its headline and callout will claim.
+      4. **Headlines state findings, not topics.** Every section header and chart title is a claim: "Rural counties drove the entire decline," never "Decline by county type." Reading only the headlines should give the whole story.
+      5. **Decide the takeaway ending.** The final section restates the lead with its full earned weight and answers "so what should the reader think or do?" (In A, close with quantified bets and a colophon; in B, a HIGHLIGHTS box.)
+      6. **Lock the design language tokens.** The language (A or B) was settled in the Clarify step; now fix its palette, fonts, and grammar. Critique the plan: if it resembles what you would produce for any other dataset, revise before coding.
+      7. **Build** the fragment following the plan exactly, every displayed number a live embed (Mechanics), tokens applied with total consistency.
+      8. **Screenshot and grade.** Critique as the intended reader, top to bottom (can the headlines alone tell the story? does the ending deliver the goal? is every claim backed by its embed and true to the data?), and read the rubric the Screenshot returns.
+      9. **Fix and improve** against the rubric: resolve every finding (`error` first, then `warn`) with its `fix`, raise the `overall` score, re-screenshot, and repeat until every `error` is cleared AND `overall` is at least 4 (keep going past that only if it still looks off).
+
+      ### 4b. From a dashboard
+
+      Turning an existing dashboard into a story: the evidence already exists, so the work is editorial and visual, not analytical. **Do NOT explore the database: run no new SQL, do no data hunting.** Reusing the dashboard's existing questions and files is fine and expected; hunting the warehouse for new numbers is not.
+
+      1. **Read the dashboard.** Its question references (ids), their titles, layout order, and any text/markdown cells are your raw material. Read those referenced questions and files to understand what each shows (that is reading existing artifacts, not database exploration).
+      2. **Find the lead** from what the dashboard already shows, exactly as in 4a step 2, but sourced from the existing questions rather than fresh analysis.
+      3. **Curate and reorder.** You do not have to use every question. Drop the ones that do not advance an argument, keep the ones that do, and reorder them into a narrative arc rather than the grid order.
+      4. **Storyboard, headline, and end** as in 4a steps 3 to 5: group the kept questions into 3 to 7 beats, write a claim-style headline and standfirst for each (from the questions' titles and the numbers they already contain), and decide the takeaway. Reference each by its existing saved id (`<Question id={N} />`): reuse, do not rebuild.
+      5. **Lock the design language tokens.** The language was settled in the Clarify step (a board/financial dashboard leans B, a public/marketing one leans A); now fix its palette, fonts, and grammar.
+      6. **Build, screenshot, fix** as in 4a steps 7 to 9: the only difference from scratch is that the numbers and charts already exist, so you are giving them an argument and a design, then grading and improving against the rubric.
 
   skill_notebooks:
     description: Notebook file structure (cells = inline SQL questions + markdown text), the activeCellId convention for editing the right cell, and notebook page behavior
@@ -1258,14 +1349,22 @@ prompts:
         {input}
     rubric_llm:
       system: |
-        You are a strict, evidence-based reviewer of BI artifacts. You are given a {file_type}'s markup and, when available, a screenshot of how it renders. Evaluate ONLY the specific checks listed below — do NOT invent other issues. For EACH check, decide pass (true) or fail (false) based strictly on what you can SEE in the screenshot and what the markup shows, and give a one-line reason that cites the concrete evidence. If a check genuinely does not apply to this artifact, set "applicable": false (it will be ignored). Be conservative: only fail a check when there is clear evidence it fails.
+        You are a demanding, skeptical design critic reviewing a {file_type}. You are given its markup and, when available, a screenshot of how it renders. Your job is to CATCH problems, not to reassure. Evaluate ONLY the specific checks listed below — do NOT invent other issues.
+
+        Judge each check STRICTLY from what you can SEE in the screenshot (the markup is secondary context). Bias hard toward FAILING:
+        - A check PASSES only when the screenshot clearly shows it holds with NO visible violation.
+        - If you see even ONE instance of the problem — one chart squeezed too narrow or cramped, one card or embed with large empty/dead space, one number or label that is small/faint/low-contrast, one misaligned or lopsided or awkwardly-proportioned element, one chart whose final period craters or looks partial/broken — FAIL that check and cite the specific instance in the reason.
+        - Do NOT give the artifact the benefit of the doubt. "Looks roughly fine" / "acceptable" / "mostly OK" is a FAIL, not a pass. Only pass on clear positive evidence.
+        - Set "applicable": false ONLY when the check truly cannot apply (e.g. a visual check with no screenshot) — never as a way to avoid failing.
+
+        Before you answer, scan the screenshot specifically for these common failures: large empty/dead space inside cards or embeds (e.g. a single number stranded in a tall box); numbers or text that are small, faint, or low-contrast; charts squeezed too narrow, cramped, overplotted, or with overlapping/illegible labels; misaligned, lopsided, or awkwardly tall/narrow tiles; a chart whose last data point craters or the series looks partial. a chart where the text is similar color as background and is impossible to read. Every one of these you can see MUST fail its corresponding check.
 
         Checks (id [category]: PASS condition):
         {checklist}
 
         Return ONLY a JSON object, no prose, of this exact shape:
         {{"checks":[{{"id":"<check id>","applicable":true,"pass":true,"reason":"<one line citing what you see>"}}]}}
-        Include EVERY check id above exactly once.
+        Work through the checks IN ORDER and evaluate EVERY one — your reply MUST contain an entry for every check id above, exactly once, none omitted or skipped. A missing check is a failure of the review itself; the number of entries must equal the number of checks.
       user: |
         Review this {file_type}. Its markup:
 
