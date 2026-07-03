@@ -22,7 +22,7 @@ function expectedOverall(type: RubricFileType, scores: Partial<Record<RubricCate
   return half(keys.reduce((s, k) => s + (scores[k] as number) * w[k], 0) / totalWeight);
 }
 
-describe('scoring (1–5 scale)', () => {
+describe('scoring (0–5 scale)', () => {
   it('deducts by severity from 5 (error > warn > info)', () => {
     expect(scoreCategory('correctness', 0.45, [f('error'), f('warn')]).score).toBe(catScore([f('error'), f('warn')]));
     expect(SEVERITY_DEDUCTION.error).toBeGreaterThan(SEVERITY_DEDUCTION.warn);
