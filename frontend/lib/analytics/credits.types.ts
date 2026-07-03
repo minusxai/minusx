@@ -35,6 +35,8 @@ export interface CreditBreakdownRow {
   cachedTokens: number;
   /** completion_tokens. */
   outputTokens: number;
+  /** Number of LLM requests (calls) in this group. */
+  requests: number;
   /** Credits attributed to this group via `costToCredits`. */
   credits: number;
 }

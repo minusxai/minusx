@@ -1,7 +1,7 @@
 import 'server-only';
 import { join, resolve } from 'path';
 import { parseFrameAncestors } from '@/lib/auth/embed';
-import { CREDIT_BUDGETS, parseBillingCycle, type BillingCycle } from '@/lib/analytics/credit-budgets';
+import { CREDIT_BUDGETS, resolveCreditConfig, parseBillingCycle, type BillingCycle, type CreditConfig } from '@/lib/analytics/credit-budgets';
 
 /**
  * Server-only environment configuration.
@@ -246,6 +246,22 @@ export const EVENTS_FORWARD_RULES: EventForwardRule[] = parseEventForwardRules(c
 
 // --- Credits / billing allowances -----------------------------------------
 /**
+ * Effective credit config: the CREDIT_BUDGETS defaults deep-merged with the
+ * CREDIT_CONFIG env JSON (a partial with any of the CREDIT_BUDGETS fields —
+ * weights, cycles, default allowances, max). Invalid JSON logs + falls back.
+ */
+function parseCreditConfig(raw: string | undefined): CreditConfig {
+  if (!raw || !raw.trim()) return CREDIT_BUDGETS;
+  try {
+    return resolveCreditConfig(JSON.parse(raw));
+  } catch (e) {
+    console.error('[config] CREDIT_CONFIG is not valid JSON — using defaults:', e);
+    return CREDIT_BUDGETS;
+  }
+}
+export const CREDIT_CONFIG: CreditConfig = parseCreditConfig(process.env.CREDIT_CONFIG);
+
+/**
  * Parse a role-wise JSON of credit allowances, e.g.
  * { "admin": 10000, "editor": 10000, "viewer": 10000, "org": 100000 }.
  * The special key "org" sets the org-wide allowance. Invalid JSON is logged
@@ -274,19 +290,19 @@ export const CREDIT_RESET_ALLOWANCES: Record<string, number> = parseCreditAllowa
 
 /** Billing-cycle allowance for an individual user, keyed by role. */
 export function resolveIndividualAllowance(role: string): number {
-  return CREDIT_ALLOWANCES[role] ?? CREDIT_BUDGETS.defaultIndividualAllowance;
+  return CREDIT_ALLOWANCES[role] ?? CREDIT_CONFIG.defaultIndividualAllowance;
 }
 /** Billing-cycle allowance for the whole org. */
 export function resolveOrgAllowance(): number {
-  return CREDIT_ALLOWANCES.org ?? CREDIT_BUDGETS.defaultOrgAllowance;
+  return CREDIT_ALLOWANCES.org ?? CREDIT_CONFIG.defaultOrgAllowance;
 }
 /** Reset-cycle allowance for an individual user, keyed by role. */
 export function resolveIndividualResetAllowance(role: string): number {
-  return CREDIT_RESET_ALLOWANCES[role] ?? CREDIT_BUDGETS.defaultIndividualResetAllowance;
+  return CREDIT_RESET_ALLOWANCES[role] ?? CREDIT_CONFIG.defaultIndividualResetAllowance;
 }
 /** Reset-cycle allowance for the whole org. */
 export function resolveOrgResetAllowance(): number {
-  return CREDIT_RESET_ALLOWANCES.org ?? CREDIT_BUDGETS.defaultOrgResetAllowance;
+  return CREDIT_RESET_ALLOWANCES.org ?? CREDIT_CONFIG.defaultOrgResetAllowance;
 }
 
 /**
@@ -295,10 +311,10 @@ export function resolveOrgResetAllowance(): number {
  */
 export const ENFORCE_CREDIT_LIMITS: boolean = process.env.ENFORCE_CREDIT_LIMITS === 'true';
 
-/** Rolling BILLING-cycle window (override via CREDIT_BILLING_CYCLE). */
-export const BILLING_CYCLE: BillingCycle = parseBillingCycle(process.env.CREDIT_BILLING_CYCLE, CREDIT_BUDGETS.defaultBillingCycle);
-/** Rolling RESET-cycle window (override via CREDIT_RESET_CYCLE). */
-export const RESET_CYCLE: BillingCycle = parseBillingCycle(process.env.CREDIT_RESET_CYCLE, CREDIT_BUDGETS.defaultResetCycle);
+/** BILLING-cycle window: CREDIT_BILLING_CYCLE env > CREDIT_CONFIG.defaultBillingCycle > default. */
+export const BILLING_CYCLE: BillingCycle = parseBillingCycle(process.env.CREDIT_BILLING_CYCLE, CREDIT_CONFIG.defaultBillingCycle, CREDIT_CONFIG.maxBillingCycleDays);
+/** RESET-cycle window: CREDIT_RESET_CYCLE env > CREDIT_CONFIG.defaultResetCycle > default. */
+export const RESET_CYCLE: BillingCycle = parseBillingCycle(process.env.CREDIT_RESET_CYCLE, CREDIT_CONFIG.defaultResetCycle, CREDIT_CONFIG.maxBillingCycleDays);
 export const DB_TYPE = config.DB_TYPE;
 export const DATABASE_URL = config.DATABASE_URL;
 export const PGLITE_DATA_DIR_ENV = config.PGLITE_DATA_DIR;

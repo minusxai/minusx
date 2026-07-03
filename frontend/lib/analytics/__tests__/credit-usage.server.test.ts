@@ -73,6 +73,7 @@ describe('getCreditUsage', () => {
     expect(opus.nonCachedInputTokens).toBe(1200); // (1000-200) + (500-100)
     expect(opus.cachedTokens).toBe(300);
     expect(opus.outputTokens).toBe(700);
+    expect(opus.requests).toBe(2); // two this-month opus calls merged
     expect(opus.credits).toBeCloseTo(400, 6); // (0.3 + 0.1) * 1000
 
     // Billing used = 400 + 50 + 20 + 10. Every seeded row is at NOW(), so the

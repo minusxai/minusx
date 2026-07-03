@@ -17,7 +17,7 @@ const individual: CreditUsageResponse['individual'] = {
     used: 50,
     allowance: 10_000,
     resetsAt: '2026-08-01T00:00:00.000Z',
-    rows: [{ provider: 'anthropic', model: 'opus', trigger: 'explore', nonCachedInputTokens: 100, cachedTokens: 0, outputTokens: 50, credits: 50 }],
+    rows: [{ provider: 'anthropic', model: 'opus', trigger: 'explore', nonCachedInputTokens: 100, cachedTokens: 0, outputTokens: 50, requests: 3, credits: 50 }],
   },
   reset: { label: 'today', used: 20, allowance: 1_000, resetsAt: '2026-07-04T00:00:00.000Z' },
 };

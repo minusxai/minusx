@@ -5,6 +5,7 @@
  * client. The 4-arg signature intentionally exposes the token breakdown so the
  * formula can evolve (e.g. per-token-type rates) WITHOUT changing any caller.
  */
+import { CREDIT_BUDGETS, type CreditWeights } from './credit-budgets';
 import type { CreditScope, CreditWindow } from './credits.types';
 
 export interface CostToCreditsInput {
@@ -15,20 +16,25 @@ export interface CostToCreditsInput {
   cachedTokens: number;
   nonCachedTokens: number;
   outputTokens: number;
+  /** Number of LLM requests in this group (flat per-call charge). */
+  requests?: number;
   /** USD cost recorded per LLM call (from the LLM SDK usage object). */
   cost: number;
 }
 
-/** v0 conversion rate — WIP, will be refined. 1 credit = $0.001. */
-const CREDITS_PER_DOLLAR = 1000;
-
 /**
- * v0: credits = cost * CREDITS_PER_DOLLAR. Tokens are accepted but unused for
- * now — this formula is still being workshopped, hence it lives here next to the
- * function rather than in the stable CREDIT_BUDGETS knobs.
+ * Credits as a weighted sum of cost + token buckets + request count. The
+ * `weights` come from the effective credit config (env-overridable); callers
+ * that don't pass them use the CREDIT_BUDGETS defaults (v0: credits = cost × 1000).
  */
-export function costToCredits(input: CostToCreditsInput): number {
-  return input.cost * CREDITS_PER_DOLLAR;
+export function costToCredits(input: CostToCreditsInput, weights: CreditWeights = CREDIT_BUDGETS.weights): number {
+  return (
+    input.cost * weights.cost +
+    input.nonCachedTokens * weights.nonCachedTokens +
+    input.cachedTokens * weights.cachedTokens +
+    input.outputTokens * weights.outputTokens +
+    (input.requests ?? 0) * weights.requests
+  );
 }
 
 /** Credits left in one window (allowance − used, floored at 0). */

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { costToCredits, remainingCredits, remainingInWindow } from '@/lib/analytics/credits';
 import type { CreditScope } from '@/lib/analytics/credits.types';
-import { parseBillingCycle, cycleStartSql, cycleNextResetSql, CREDIT_BUDGETS, CYCLE_MODE } from '@/lib/analytics/credit-budgets';
+import { parseBillingCycle, cycleStartSql, cycleNextResetSql, resolveCreditConfig, CREDIT_BUDGETS, CYCLE_MODE } from '@/lib/analytics/credit-budgets';
 
 describe('costToCredits (v0: credits = cost * 1000)', () => {
   it('multiplies cost by 1000', () => {
@@ -16,11 +16,41 @@ describe('costToCredits (v0: credits = cost * 1000)', () => {
     expect(costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: 1.2345 })).toBeCloseTo(1234.5, 6);
   });
 
-  it('ignores token fields in v0 (only cost drives credits)', () => {
-    const a = costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: 2 });
-    const b = costToCredits({ cachedTokens: 999, nonCachedTokens: 888, outputTokens: 777, cost: 2 });
+  it('ignores token/request fields with default weights (only cost drives credits)', () => {
+    const a = costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, requests: 0, cost: 2 });
+    const b = costToCredits({ cachedTokens: 999, nonCachedTokens: 888, outputTokens: 777, requests: 5, cost: 2 });
     expect(a).toBe(b);
     expect(a).toBe(2000);
+  });
+
+  it('applies custom weights: cost + tokens + requests', () => {
+    const weights = { cost: 10, cachedTokens: 1, nonCachedTokens: 2, outputTokens: 3, requests: 100 };
+    // 0.5*10 + 20*2 + 10*1 + 5*3 + 2*100 = 5 + 40 + 10 + 15 + 200 = 270
+    expect(costToCredits({ cost: 0.5, cachedTokens: 10, nonCachedTokens: 20, outputTokens: 5, requests: 2 }, weights)).toBe(270);
+  });
+});
+
+describe('resolveCreditConfig', () => {
+  it('returns the defaults for empty/invalid override', () => {
+    expect(resolveCreditConfig(undefined)).toBe(CREDIT_BUDGETS);
+    expect(resolveCreditConfig(null)).toBe(CREDIT_BUDGETS);
+    expect(resolveCreditConfig('nope')).toBe(CREDIT_BUDGETS);
+  });
+
+  it('deep-merges weights and overrides scalar fields, leaving the rest as defaults', () => {
+    const cfg = resolveCreditConfig({ weights: { requests: 5, outputTokens: 2 }, defaultIndividualAllowance: 42, defaultBillingCycle: '1w' });
+    expect(cfg.weights.requests).toBe(5);
+    expect(cfg.weights.outputTokens).toBe(2);
+    expect(cfg.weights.cost).toBe(CREDIT_BUDGETS.weights.cost);           // untouched
+    expect(cfg.defaultIndividualAllowance).toBe(42);
+    expect(cfg.defaultBillingCycle).toBe('1w');
+    expect(cfg.defaultOrgAllowance).toBe(CREDIT_BUDGETS.defaultOrgAllowance); // untouched
+  });
+
+  it('ignores non-numeric junk (keeps defaults)', () => {
+    const cfg = resolveCreditConfig({ maxBillingCycleDays: 'nope', weights: { cost: 'bad' } });
+    expect(cfg.maxBillingCycleDays).toBe(CREDIT_BUDGETS.maxBillingCycleDays);
+    expect(cfg.weights.cost).toBe(CREDIT_BUDGETS.weights.cost);
   });
 });
 

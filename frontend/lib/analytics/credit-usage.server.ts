@@ -2,7 +2,7 @@ import 'server-only';
 import { getModules } from '@/lib/modules/registry';
 import { costToCredits } from './credits';
 import {
-  BILLING_CYCLE, RESET_CYCLE, ENFORCE_CREDIT_LIMITS,
+  BILLING_CYCLE, RESET_CYCLE, ENFORCE_CREDIT_LIMITS, CREDIT_CONFIG,
   resolveIndividualAllowance, resolveOrgAllowance,
   resolveIndividualResetAllowance, resolveOrgResetAllowance,
 } from '@/lib/config';
@@ -44,16 +44,22 @@ async function loadNextResets(): Promise<{ billingNext: string | null; resetNext
 // the internal 'internals' mode. Legacy null-mode rows default to 'org' so they
 // aren't dropped. (Kept as a JS comment, NOT an inline SQL `--` comment: an
 // apostrophe inside a SQL comment breaks PGLite's no-param query path.)
+const NONCACHED = `GREATEST(COALESCE(prompt_tokens, 0) - COALESCE(cached_tokens, 0), 0)`;
 const usageSql = (userFilter: string) => `
 SELECT
   COALESCE(provider, '')                                                     AS provider,
   model                                                                      AS model,
   COALESCE(NULLIF(trigger, ''), 'unknown')                                   AS trigger,
-  SUM(GREATEST(COALESCE(prompt_tokens, 0) - COALESCE(cached_tokens, 0), 0))  AS "nonCachedInputTokens",
+  SUM(${NONCACHED})                                                          AS "nonCachedInputTokens",
   SUM(COALESCE(cached_tokens, 0))                                            AS "cachedTokens",
   SUM(COALESCE(completion_tokens, 0))                                        AS "outputTokens",
   SUM(COALESCE(cost, 0))                                                     AS cost,
-  SUM(COALESCE(cost, 0)) FILTER (WHERE created_at >= ${RESET_START})         AS "resetCost"
+  COUNT(*)                                                                   AS requests,
+  SUM(${NONCACHED}) FILTER (WHERE created_at >= ${RESET_START})              AS "resetNonCachedInputTokens",
+  SUM(COALESCE(cached_tokens, 0)) FILTER (WHERE created_at >= ${RESET_START})     AS "resetCachedTokens",
+  SUM(COALESCE(completion_tokens, 0)) FILTER (WHERE created_at >= ${RESET_START}) AS "resetOutputTokens",
+  SUM(COALESCE(cost, 0)) FILTER (WHERE created_at >= ${RESET_START})         AS "resetCost",
+  COUNT(*) FILTER (WHERE created_at >= ${RESET_START})                       AS "resetRequests"
 FROM llm_call_events
 WHERE created_at >= ${BILLING_START}
   AND COALESCE(mode, 'org') IN ('org', 'tutorial')
@@ -83,10 +89,24 @@ async function loadScope(
     const cachedTokens = Number(row['cachedTokens'] ?? 0);
     const outputTokens = Number(row['outputTokens'] ?? 0);
     const cost = Number(row['cost'] ?? 0);
-    const resetCost = Number(row['resetCost'] ?? 0);
-    const credits = costToCredits({ provider, model, cachedTokens, nonCachedTokens: nonCachedInputTokens, outputTokens, cost });
+    const requests = Number(row['requests'] ?? 0);
+    const credits = costToCredits(
+      { provider, model, cachedTokens, nonCachedTokens: nonCachedInputTokens, outputTokens, cost, requests },
+      CREDIT_CONFIG.weights,
+    );
     billingUsed += credits;
-    resetUsed += costToCredits({ provider, model, cachedTokens, nonCachedTokens: nonCachedInputTokens, outputTokens, cost: resetCost });
+    // Reset window is a subset — weight its own filtered token/cost/request sums.
+    resetUsed += costToCredits(
+      {
+        provider, model,
+        cachedTokens: Number(row['resetCachedTokens'] ?? 0),
+        nonCachedTokens: Number(row['resetNonCachedInputTokens'] ?? 0),
+        outputTokens: Number(row['resetOutputTokens'] ?? 0),
+        cost: Number(row['resetCost'] ?? 0),
+        requests: Number(row['resetRequests'] ?? 0),
+      },
+      CREDIT_CONFIG.weights,
+    );
     return {
       provider,
       model,
@@ -94,6 +114,7 @@ async function loadScope(
       nonCachedInputTokens,
       cachedTokens,
       outputTokens,
+      requests,
       credits,
     };
   });
@@ -119,13 +140,21 @@ export async function getCreditUsage(
   return { individual, org, enforced: ENFORCE_CREDIT_LIMITS };
 }
 
-// Lightweight per-user usage for the gate: reset-window + billing-window credits
-// spent this cycle. No breakdown/rows — just the two SUMs. Mirrors usageSql's
-// window + mode filter. $1 = user_id.
+// Lightweight per-user usage for the gate: the same weighted inputs as usageSql
+// (token buckets + cost + request count), per window, so gate and card agree.
+// No GROUP BY — one aggregate row for the user. $1 = user_id.
 const GATE_SQL = `
 SELECT
-  SUM(COALESCE(cost, 0)) FILTER (WHERE created_at >= ${RESET_START}) AS reset_cost,
-  SUM(COALESCE(cost, 0))                                             AS billing_cost
+  SUM(${NONCACHED})                    AS b_noncached,
+  SUM(COALESCE(cached_tokens, 0))      AS b_cached,
+  SUM(COALESCE(completion_tokens, 0))  AS b_output,
+  SUM(COALESCE(cost, 0))               AS b_cost,
+  COUNT(*)                             AS b_requests,
+  SUM(${NONCACHED}) FILTER (WHERE created_at >= ${RESET_START})                   AS r_noncached,
+  SUM(COALESCE(cached_tokens, 0)) FILTER (WHERE created_at >= ${RESET_START})     AS r_cached,
+  SUM(COALESCE(completion_tokens, 0)) FILTER (WHERE created_at >= ${RESET_START}) AS r_output,
+  SUM(COALESCE(cost, 0)) FILTER (WHERE created_at >= ${RESET_START})              AS r_cost,
+  COUNT(*) FILTER (WHERE created_at >= ${RESET_START})                            AS r_requests
 FROM llm_call_events
 WHERE created_at >= ${BILLING_START}
   AND COALESCE(mode, 'org') IN ('org', 'tutorial')
@@ -151,10 +180,17 @@ const ALLOWED: CreditGate = { allowed: true, exceeded: null, message: null };
 export async function checkCreditGate(user: EffectiveUser): Promise<CreditGate> {
   if (!ENFORCE_CREDIT_LIMITS || typeof user.userId !== 'number') return ALLOWED;
 
-  const { rows } = await getModules().db.exec<{ reset_cost: unknown; billing_cost: unknown }>(GATE_SQL, [user.userId]);
-  const toCredits = (v: unknown) => costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: Number(v ?? 0) });
-  const resetUsed = toCredits(rows[0]?.reset_cost);
-  const billingUsed = toCredits(rows[0]?.billing_cost);
+  const { rows } = await getModules().db.exec<Record<string, unknown>>(GATE_SQL, [user.userId]);
+  const r = rows[0] ?? {};
+  const n = (k: string) => Number(r[k] ?? 0);
+  const billingUsed = costToCredits(
+    { nonCachedTokens: n('b_noncached'), cachedTokens: n('b_cached'), outputTokens: n('b_output'), cost: n('b_cost'), requests: n('b_requests') },
+    CREDIT_CONFIG.weights,
+  );
+  const resetUsed = costToCredits(
+    { nonCachedTokens: n('r_noncached'), cachedTokens: n('r_cached'), outputTokens: n('r_output'), cost: n('r_cost'), requests: n('r_requests') },
+    CREDIT_CONFIG.weights,
+  );
 
   const billingAllowance = resolveIndividualAllowance(user.role);
   if (billingUsed >= billingAllowance) {

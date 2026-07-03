@@ -19,8 +19,10 @@ vi.mock('@/lib/config', async (importOriginal) => {
 });
 
 import { runConversationTurn } from '@/lib/chat/conversation-turn.server';
+import { runMicroTask } from '@/lib/chat/run-micro-task.server';
 import { createConversation } from '@/lib/data/conversations.server';
 import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
+import { fauxRegistration as microFaux } from '@/agents/micro/micro-agent';
 import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { getModules } from '@/lib/modules/registry';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
@@ -65,5 +67,24 @@ describe('credit enforcement (deep beforeLlmCall hook)', () => {
     const result = await runConversationTurn(conv.id, user(2), turnBody('hi'));
     expect(result.runStatus).toBe('idle');
     expect(result.error).toBeUndefined();
+  });
+
+  it('also blocks MICRO-TASKS for an over-limit user (no exempt path)', async () => {
+    await seedUsage(3, 0.2); // 200 ≥ 100 cap → the ONLY row for user 3
+    microFaux.setResponses([fauxAssistantMessage('should NOT be used', { stopReason: 'stop' })]);
+    // The gate throws before the LLM call, so the micro-task produces no result and rejects.
+    await expect(
+      runMicroTask('title', { input: 'x', subject: 'a question', instructions: '' }, user(3)),
+    ).rejects.toThrow();
+    // Proof it was blocked at the gate (not a late failure): no LLM call was recorded.
+    const { rows } = await getModules().db.exec<{ c: number }>(
+      `SELECT COUNT(*) AS c FROM llm_call_events WHERE user_id = $1`, [3]);
+    expect(Number(rows[0].c)).toBe(1); // still just the seeded row
+  });
+
+  it('runs micro-tasks normally for an under-limit user', async () => {
+    microFaux.setResponses([fauxAssistantMessage('A short title', { stopReason: 'stop' })]);
+    const out = await runMicroTask('title', { input: 'x', subject: 'a question', instructions: '' }, user(4));
+    expect(out).toBe('A short title');
   });
 });

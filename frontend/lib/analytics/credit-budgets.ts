@@ -12,14 +12,49 @@
  * Client-safe (plain constants, no `server-only`) — imported by the server
  * aggregation, `config.ts`, `costToCredits`, and tests.
  */
-export const CREDIT_BUDGETS = {
+/**
+ * Weights for the `costToCredits` formula — credits are a weighted sum of the
+ * per-call cost + token buckets + request count:
+ *   credits = cost·cost + nonCachedTokens·nonCachedTokens + cachedTokens·cachedTokens
+ *           + outputTokens·outputTokens + requests·requests
+ * v0 default: credits = cost × 1000 (1 credit = $0.001), everything else 0.
+ */
+export interface CreditWeights {
+  /** Credits per $1 of USD cost. */
+  cost: number;
+  /** Credits per cached (read) input token. */
+  cachedTokens: number;
+  /** Credits per non-cached input token. */
+  nonCachedTokens: number;
+  /** Credits per output token. */
+  outputTokens: number;
+  /** Credits per LLM request (flat per-call charge). */
+  requests: number;
+}
+
+/** All the credit knobs. Defaults live in CREDIT_BUDGETS; override via the CREDIT_CONFIG env JSON. */
+export interface CreditConfig {
+  weights: CreditWeights;
+  defaultBillingCycle: string;
+  defaultIndividualAllowance: number;
+  defaultOrgAllowance: number;
+  defaultResetCycle: string;
+  defaultIndividualResetAllowance: number;
+  defaultOrgResetAllowance: number;
+  maxBillingCycleDays: number;
+}
+
+export const CREDIT_BUDGETS: CreditConfig = {
+  /** costToCredits weights (see CreditWeights). */
+  weights: { cost: 100, cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, requests: 1 },
+
   // ── Billing cycle (longer window) ──────────────────────────────────────────
   /** Default billing-cycle window `<N><unit>` (unit d|w|m). Override: CREDIT_BILLING_CYCLE. */
   defaultBillingCycle: '1m',
   /** Default per-user allowance for one billing cycle. Override per-role: CREDIT_ALLOWANCES. */
-  defaultIndividualAllowance: 10_000,
+  defaultIndividualAllowance: 5_000,
   /** Default org-wide allowance (all users) for one billing cycle. */
-  defaultOrgAllowance: 100_000,
+  defaultOrgAllowance: 5_000,
 
   // ── Reset cycle (shorter window) ───────────────────────────────────────────
   /** Default reset-cycle window `<N><unit>`. Override: CREDIT_RESET_CYCLE. */
@@ -27,11 +62,44 @@ export const CREDIT_BUDGETS = {
   /** Default per-user allowance per reset cycle. Override per-role: CREDIT_RESET_ALLOWANCES. */
   defaultIndividualResetAllowance: 1_000,
   /** Default org-wide allowance per reset cycle. */
-  defaultOrgResetAllowance: 10_000,
+  defaultOrgResetAllowance: 1_000,
 
   /** Upper bound on the ROLLING window IN DAYS — clamps the rolling day count. */
   maxBillingCycleDays: 366,
-} as const;
+};
+
+/**
+ * Deep-merge a partial override (parsed from the CREDIT_CONFIG env JSON) over the
+ * CREDIT_BUDGETS defaults. Only known keys are taken, numeric fields coerced;
+ * `weights` is merged field-by-field. Invalid input falls back to the defaults.
+ */
+export function resolveCreditConfig(override: unknown): CreditConfig {
+  if (!override || typeof override !== 'object') return CREDIT_BUDGETS;
+  const o = override as Record<string, unknown>;
+  const num = (v: unknown, fallback: number): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const str = (v: unknown, fallback: string): string => (typeof v === 'string' && v.trim() ? v : fallback);
+  const w = (o.weights && typeof o.weights === 'object' ? o.weights : {}) as Record<string, unknown>;
+  const d = CREDIT_BUDGETS;
+  return {
+    weights: {
+      cost: num(w.cost, d.weights.cost),
+      cachedTokens: num(w.cachedTokens, d.weights.cachedTokens),
+      nonCachedTokens: num(w.nonCachedTokens, d.weights.nonCachedTokens),
+      outputTokens: num(w.outputTokens, d.weights.outputTokens),
+      requests: num(w.requests, d.weights.requests),
+    },
+    defaultBillingCycle: str(o.defaultBillingCycle, d.defaultBillingCycle),
+    defaultIndividualAllowance: num(o.defaultIndividualAllowance, d.defaultIndividualAllowance),
+    defaultOrgAllowance: num(o.defaultOrgAllowance, d.defaultOrgAllowance),
+    defaultResetCycle: str(o.defaultResetCycle, d.defaultResetCycle),
+    defaultIndividualResetAllowance: num(o.defaultIndividualResetAllowance, d.defaultIndividualResetAllowance),
+    defaultOrgResetAllowance: num(o.defaultOrgResetAllowance, d.defaultOrgResetAllowance),
+    maxBillingCycleDays: num(o.maxBillingCycleDays, d.maxBillingCycleDays),
+  };
+}
 
 /**
  * How a cycle's window boundary is computed (flip this arg to change behavior):
@@ -71,14 +139,18 @@ function cycleLabel(n: number, unit: CycleUnit): string {
  * Bad/empty specs fall back to `fallback`; the rolling day length is clamped to
  * `maxBillingCycleDays`.
  */
-export function parseBillingCycle(raw?: string | null, fallback: string = CREDIT_BUDGETS.defaultBillingCycle): BillingCycle {
+export function parseBillingCycle(
+  raw?: string | null,
+  fallback: string = CREDIT_BUDGETS.defaultBillingCycle,
+  maxDays: number = CREDIT_BUDGETS.maxBillingCycleDays,
+): BillingCycle {
   const spec = (raw && raw.trim() ? raw : fallback).trim().toLowerCase();
   const valid = /^(\d+)([dwm])$/.test(spec) && parseInt(spec, 10) > 0;
   const usedRaw = valid ? spec : fallback.trim().toLowerCase();
   const m = /^(\d+)([dwm])$/.exec(usedRaw)!;
   const n = parseInt(m[1], 10);
   const unit = m[2] as CycleUnit;
-  const days = Math.min(n * UNIT_DAYS[unit], CREDIT_BUDGETS.maxBillingCycleDays);
+  const days = Math.min(n * UNIT_DAYS[unit], maxDays);
   return { raw: usedRaw, n, unit, days, label: cycleLabel(n, unit) };
 }
 
