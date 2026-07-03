@@ -12,11 +12,18 @@
  * Per repo convention these queries use aria-labels only.
  */
 
+// Counts how many times the (mocked) editor renders — a proxy for TextBlockCard
+// re-renders in edit mode. Used to prove the React.memo wrapper skips unaffected
+// blocks when the parent re-renders with the same props.
+const editorSpy = vi.hoisted(() => ({ renders: 0 }));
+
 vi.mock('@/components/lexical/LexicalTextEditor', () => {
   const React = require('react');
   return {
     __esModule: true,
+    SHARED_TEXT_PADDING: '24px 24px',
     default: ({ initialMarkdown, onChange, renderToolbar }: { initialMarkdown: string; onChange: (md: string) => void; renderToolbar?: (t: React.ReactNode) => React.ReactNode }) => {
+      editorSpy.renders++;
       const textarea = React.createElement('textarea', {
         'aria-label': 'Text block editor',
         defaultValue: initialMarkdown,
@@ -37,9 +44,14 @@ vi.mock('@/lib/hooks/useContext', () => ({
   useContext: () => ({ databases: [] }),
 }));
 
+import { useState } from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import TextBlockCard from '@/components/TextBlockCard';
+
+// Stable callbacks (module scope) so re-renders pass referentially-equal props.
+const STABLE_ON_CHANGE = () => {};
+const STABLE_ON_REMOVE = () => {};
 
 describe('TextBlockCard', () => {
   it('renders content through the Lexical viewer in view mode', async () => {
@@ -85,5 +97,29 @@ describe('TextBlockCard', () => {
     );
     fireEvent.click(await screen.findByLabelText('Remove text block'));
     expect(onRemove).toHaveBeenCalledWith('t1');
+  });
+
+  it('does not re-render when the parent re-renders with the same props (React.memo)', async () => {
+    function Harness() {
+      const [n, setN] = useState(0);
+      return (
+        <>
+          <button aria-label="force rerender" onClick={() => setN(n + 1)} />
+          <TextBlockCard id="t1" content="hi" editMode onContentChange={STABLE_ON_CHANGE} onRemove={STABLE_ON_REMOVE} />
+        </>
+      );
+    }
+
+    editorSpy.renders = 0;
+    renderWithProviders(<Harness />);
+    await screen.findByLabelText('Text block editor');
+    const rendersAfterMount = editorSpy.renders;
+
+    // Re-render the parent with unrelated state; TextBlockCard's props are unchanged.
+    fireEvent.click(screen.getByLabelText('force rerender'));
+    fireEvent.click(screen.getByLabelText('force rerender'));
+
+    // With React.memo + stable props, the memoized child must not re-render.
+    expect(editorSpy.renders).toBe(rendersAfterMount);
   });
 });

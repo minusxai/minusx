@@ -7,6 +7,7 @@ export const MIN_TILE_W = 2;
 export const MIN_TILE_H = 2;
 export const MAX_VISUALS = 15;
 export const MAX_TEXT_TOKENS = 400;
+export const MAX_TEXT_TOKENS_ERROR = 800;
 // Cartesian plots need real 2-D room to read; a sliver tile is unreadable.
 export const MIN_PLOT_TILE = 3;
 export const PLOT_VIZ_TYPES = new Set(['line', 'area', 'bar', 'scatter']);
@@ -53,7 +54,11 @@ export function scoreDashboard(content: DashboardContent, ctx?: DeterministicCon
 
   // too-much-text (clarity — a dashboard should be mostly visuals, not walls of prose)
   const textTokens = estimateTokens(assets.map((a) => (a.type === 'text' ? a.content ?? '' : '')).join('\n'));
-  if (textTokens > MAX_TEXT_TOKENS) {
+  if (textTokens > MAX_TEXT_TOKENS_ERROR) {
+    out.push(finding('dashboard.too-much-text', 'clarity', 'error', 'Too much text',
+      `The dashboard's inline text is ~${textTokens} tokens (over ${MAX_TEXT_TOKENS_ERROR}).`,
+      'Trim inline text to short annotations — a dashboard should be mostly visuals; move long prose into a story.'));
+  } else if (textTokens > MAX_TEXT_TOKENS) {
     out.push(finding('dashboard.too-much-text', 'clarity', 'warn', 'Too much text',
       `The dashboard's inline text is ~${textTokens} tokens (over ${MAX_TEXT_TOKENS}).`,
       'Trim inline text to short annotations — a dashboard should be mostly visuals; move long prose into a story.'));

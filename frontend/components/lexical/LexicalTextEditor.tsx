@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Box, HStack, IconButton, Icon, Text } from '@chakra-ui/react';
 import {
   LuBold,
@@ -49,6 +50,7 @@ import {
   $insertNodes,
   FORMAT_TEXT_COMMAND,
   EditorState,
+  type LexicalEditor,
 } from 'lexical';
 
 import {
@@ -219,6 +221,17 @@ export const LEXICAL_CONTENT_CSS = {
     textAlign: 'left',
     verticalAlign: 'top',
     lineHeight: 1.6,
+    // Let a column grow to fit its content up to a cap, then wrap on spaces.
+    // `wordBreak: normal` never splits inside a word; `overflowWrap: break-word`
+    // breaks a single over-long word only as a last resort (so it can't force a
+    // mid-word wrap like "BusinessNameCo / mpany" just because the column is
+    // slightly narrow). The table itself scrolls horizontally (overflow-x above)
+    // when the sum of columns exceeds the container.
+    minWidth: '72px',
+    maxWidth: '320px',
+    whiteSpace: 'normal',
+    wordBreak: 'normal',
+    overflowWrap: 'break-word',
     borderBottom: '1px solid var(--chakra-colors-border-emphasized)',
     borderRight: '1px solid var(--chakra-colors-border-emphasized)',
   },
@@ -243,6 +256,112 @@ export const LEXICAL_CONTENT_CSS = {
     margin: 0,
   },
 } as const;
+
+/**
+ * Shared, tight content padding for the editor + viewer. Both modes use this so
+ * a text block looks IDENTICAL whether it's being edited or rendered (true
+ * WYSIWYG) — there's no toolbar taking space, because formatting is a floating
+ * selection bubble (see FloatingSelectionToolbar). Kept small so single-height
+ * heading / section-description blocks look tight and clean.
+ */
+export const SHARED_TEXT_PADDING = '24px 24px';
+
+/** Hands the underlying editor instance to the parent (for imperative focus, etc.). */
+function EditorRefPlugin({ onReady }: { onReady?: (editor: LexicalEditor) => void }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    onReady?.(editor);
+  }, [editor, onReady]);
+  return null;
+}
+
+/**
+ * Notion/Medium-style floating formatting toolbar. Renders `children` (the
+ * button set) in a bubble above the current text selection, portaled to
+ * <body> so it's never clipped by the block/grid overflow. Shows only while a
+ * non-empty range is selected inside this editor — so the resting editor has NO
+ * chrome and looks pixel-identical to the read-only view.
+ */
+function FloatingSelectionToolbar({ children }: { children: React.ReactNode }) {
+  const [editor] = useLexicalComposerContext();
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    let raf = 0;
+
+    // Cheap: reads the NATIVE selection only (no Lexical editor-state read) and
+    // bails on the very first check for typing (collapsed selection). Runs at
+    // most once per animation frame.
+    const update = () => {
+      const native = typeof window !== 'undefined' ? window.getSelection() : null;
+      const root = editor.getRootElement();
+      if (!native || native.rangeCount === 0 || native.isCollapsed || !root) {
+        setPos(null);
+        return;
+      }
+      const range = native.getRangeAt(0);
+      if (!root.contains(range.commonAncestorContainer)) {
+        setPos(null);
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) {
+        setPos(null);
+        return;
+      }
+      const left = Math.min(Math.max(rect.left + rect.width / 2, 170), window.innerWidth - 170);
+      setPos({ top: rect.top, left });
+    };
+
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(update);
+    };
+
+    // Only the FOCUSED editor does any work — the other text blocks on the page
+    // bail here with a single `contains` check, so a keystroke doesn't fan out
+    // across every mounted editor.
+    const onSelectionChange = () => {
+      const root = editor.getRootElement();
+      const active = document.activeElement;
+      if (!root || !active || !root.contains(active)) return;
+      schedule();
+    };
+    // Reposition on scroll/resize; `update` bails instantly when there's no
+    // selection, so this is cheap even during fast scrolling.
+    document.addEventListener('selectionchange', onSelectionChange);
+    window.addEventListener('resize', schedule, true);
+    window.addEventListener('scroll', schedule, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('selectionchange', onSelectionChange);
+      window.removeEventListener('resize', schedule, true);
+      window.removeEventListener('scroll', schedule, true);
+    };
+  }, [editor]);
+
+  if (!pos) return null;
+
+  return createPortal(
+    <Box
+      position="fixed"
+      top={`${pos.top - 10}px`}
+      left={`${pos.left}px`}
+      transform="translate(-50%, -100%)"
+      zIndex={1500}
+      bg="bg.panel"
+      borderWidth="1px"
+      borderColor="border.emphasized"
+      borderRadius="lg"
+      boxShadow="lg"
+      // Keep the selection alive when clicking a button (don't steal focus).
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      {children}
+    </Box>,
+    document.body,
+  );
+}
 
 // --- Toolbar Plugin ---
 export function ToolbarPlugin({ onImageUpload, enableMetric }: { onImageUpload?: (file: File) => Promise<string>; enableMetric?: boolean }) {
@@ -382,9 +501,17 @@ interface LexicalTextEditorProps {
   insertMenu?: boolean;
   /** If provided, selecting text shows an "Interact with {agentName}" pill that sends the selection to chat. */
   editWithAgent?: EditWithAgentSource;
+  /** Hands back the editor instance so the parent can imperatively focus it (click-to-edit). */
+  onEditorReady?: (editor: LexicalEditor) => void;
+  /** CSS padding for the editable content (default {@link SHARED_TEXT_PADDING}). */
+  contentPadding?: string;
+  /** Render the toolbar as a floating bubble over the selection (no in-flow chrome). */
+  floatingToolbar?: boolean;
+  /** Vertically center short content in the available height (falls back to top-aligned on overflow). */
+  verticalCenter?: boolean;
 }
 
-export default function LexicalTextEditor({ initialMarkdown, onChange, renderToolbar, onImageUpload, mentions, insertMenu, editWithAgent }: LexicalTextEditorProps) {
+export default function LexicalTextEditor({ initialMarkdown, onChange, renderToolbar, onImageUpload, mentions, insertMenu, editWithAgent, onEditorReady, contentPadding = '32px 32px', floatingToolbar, verticalCenter }: LexicalTextEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
 
   // Debounce onChange to avoid dispatching on every keystroke
@@ -421,7 +548,11 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
       css={LEXICAL_CONTENT_CSS}
     >
       <LexicalComposer initialConfig={initialConfig}>
-        {renderToolbar ? (
+        {floatingToolbar ? (
+          <FloatingSelectionToolbar>
+            <ToolbarPlugin onImageUpload={onImageUpload} />
+          </FloatingSelectionToolbar>
+        ) : renderToolbar ? (
           renderToolbar(<ToolbarPlugin onImageUpload={onImageUpload} />)
         ) : (
           <Box
@@ -434,7 +565,11 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
           </Box>
         )}
 
-        {(insertMenu || mentions) && (
+        {/* The inline hint only renders for the DEFAULT inline toolbar (notebook/context
+            docs). When the caller supplies its own `renderToolbar` or uses the floating
+            selection toolbar (dashboard text blocks), it owns all chrome — a permanent
+            hint line would break WYSIWYG. */}
+        {!renderToolbar && !floatingToolbar && (insertMenu || mentions) && (
           <HStack
             gap={1.5}
             px={4}
@@ -454,14 +589,25 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
           </HStack>
         )}
 
-        <Box flex={1} minH={0} overflow="auto" position="relative">
+        <Box
+          flex={1}
+          minH={0}
+          overflow="auto"
+          position="relative"
+          display={verticalCenter ? 'flex' : undefined}
+          flexDirection={verticalCenter ? 'column' : undefined}
+          // `safe center` vertically centers short content (equal top/bottom
+          // space — great for one-line headings) but falls back to top-aligned
+          // when content overflows, so scrolling/read-more still work.
+          justifyContent={verticalCenter ? 'safe center' : undefined}
+        >
           <RichTextPlugin
             contentEditable={
               <ContentEditable
                 style={{
                   outline: 'none',
-                  padding: '32px 32px',
-                  minHeight: '100%',
+                  padding: contentPadding,
+                  minHeight: verticalCenter ? undefined : '100%',
                   fontSize: '14px',
                   lineHeight: 1.6,
                   fontFamily: 'var(--font-jetbrains-mono), monospace',
@@ -471,8 +617,8 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
             placeholder={
               <Box
                 position="absolute"
-                top="12px"
-                left="16px"
+                top="24px"
+                left="24px"
                 color="fg.muted"
                 fontSize="sm"
                 pointerEvents="none"
@@ -504,6 +650,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
         )}
         {insertMenu && <InsertMenuPlugin onImageUpload={onImageUpload} />}
         {editWithAgent && <EditSelectionPlugin source={editWithAgent} />}
+        {onEditorReady && <EditorRefPlugin onReady={onEditorReady} />}
       </LexicalComposer>
     </Box>
   );
@@ -516,9 +663,11 @@ interface LexicalTextViewerProps {
   padding?: string;
   /** Base font size (default 14px). */
   fontSize?: string;
+  /** Vertically center short content in the available height (falls back to top-aligned on overflow). */
+  verticalCenter?: boolean;
 }
 
-export function LexicalTextViewer({ markdown, padding = '40px 32px', fontSize = '14px' }: LexicalTextViewerProps) {
+export function LexicalTextViewer({ markdown, padding = '40px 32px', fontSize = '14px', verticalCenter }: LexicalTextViewerProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
 
   const initialConfig = {
@@ -535,6 +684,9 @@ export function LexicalTextViewer({ markdown, padding = '40px 32px', fontSize = 
       height="100%"
       className={colorMode === 'dark' ? 'lexical-dark' : 'lexical-light'}
       css={LEXICAL_CONTENT_CSS}
+      display={verticalCenter ? 'flex' : undefined}
+      flexDirection={verticalCenter ? 'column' : undefined}
+      justifyContent={verticalCenter ? 'safe center' : undefined}
     >
       <LexicalComposer initialConfig={initialConfig}>
         <RichTextPlugin
@@ -543,7 +695,7 @@ export function LexicalTextViewer({ markdown, padding = '40px 32px', fontSize = 
               style={{
                 outline: 'none',
                 padding,
-                minHeight: '100%',
+                minHeight: verticalCenter ? undefined : '100%',
                 fontSize,
                 lineHeight: 1.6,
                 fontFamily: 'var(--font-jetbrains-mono), monospace',
