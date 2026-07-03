@@ -80,21 +80,26 @@ export default function TextBlockCard({
           insertMenu
           editWithAgent={{ editorKind: 'richtext', fileName: filePath?.split('/').pop() ?? 'text block', filePath, blockId: id }}
           renderToolbar={(toolbar) => (
+            // The whole bar is a `.drag-handle` (cursor: move). Only the actual
+            // buttons stop propagation so they don't start a drag — the grip and
+            // every empty gap in the toolbar remain draggable.
             <HStack
               className="drag-handle"
               cursor="move"
               px={2}
               py={1}
+              gap={1}
               bg="bg.muted"
               borderBottomWidth="1px"
               borderColor="border.default"
-              justifyContent="space-between"
               flexShrink={0}
             >
-              <HStack gap={1} minW={0} flex={1} onMouseDown={(e) => e.stopPropagation()} cursor="default">
-                <LuGripVertical size={14} opacity={0.5} style={{ cursor: 'move' }} />
+              <LuGripVertical size={14} opacity={0.5} style={{ cursor: 'move' }} />
+              <HStack gap={1} minW={0} onMouseDown={(e) => e.stopPropagation()} cursor="default">
                 {toolbar}
               </HStack>
+              {/* draggable filler — grabs anywhere between the buttons and the X */}
+              <Box flex={1} alignSelf="stretch" minW={2} />
               <IconButton
                 onClick={() => onRemove(id)}
                 onMouseDown={(e) => e.stopPropagation()}
