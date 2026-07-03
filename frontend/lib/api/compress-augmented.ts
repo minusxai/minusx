@@ -10,6 +10,10 @@ import { getQueryHash } from '@/lib/utils/query-hash';
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup } from '@/lib/data/file-markup';
+import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
+import { buildVizTypeCtx } from '@/lib/rubric/refs';
+import { toAgentRubric } from '@/lib/rubric/scoring';
+import type { AgentRubric } from '@/lib/rubric/types';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import type {
@@ -115,7 +119,7 @@ export function compressQueryResult(qr: QueryResult & { error?: string }, maxCha
   return { columns, types, data: md, totalRows, shownRows, truncated, id: qr.id, finalQuery: qr.finalQuery };
 }
 
-function compressFileState(fs: FileState): CompressedFileState {
+function compressFileState(fs: FileState, refs?: FileState[]): CompressedFileState {
   const mergedContent = { ...(fs.content || {}), ...(fs.persistableChanges || {}) } as FileState['content'];
   const isDirty = !!(
     (fs.persistableChanges && Object.keys(fs.persistableChanges).length > 0) ||
@@ -145,6 +149,7 @@ function compressFileState(fs: FileState): CompressedFileState {
   // multi-MB schema cache off the wire when this AppState is sent to chat (it's a no-op for other
   // types, whose `content` stays full).
   const agentContent = fs.type === 'context' ? shapeContextForAgent(mergedContent) : mergedContent;
+  const rubric = computeRubric(fs.type as FileType, agentContent, refs);
   return {
     id: fs.id,
     name: fs.metadataChanges?.name ?? fs.name,
@@ -155,7 +160,29 @@ function compressFileState(fs: FileState): CompressedFileState {
     ...(queryResultId ? { queryResultId } : {}),
     // File Architecture v2: the markup the agent reads + edits (matches buildCurrentFileStr).
     markup: fileToMarkup(fs.type as FileType, agentContent),
+    ...(rubric ? { rubric } : {}),
   };
+}
+
+/**
+ * Deterministic health rubric for a file's content — auto-injected so the agent sees current
+ * health on every read/app-state. Pure + cheap; only question/dashboard/story are scored.
+ * Never throws (a scoring bug must not break file serialization).
+ */
+function computeRubric(type: FileType, content: unknown, refs?: FileState[]): AgentRubric | undefined {
+  if (!isRubricFileType(type) || !content) return undefined;
+  // Dashboard tile rules AND story width rules need each referenced question's chart type — a
+  // saved embed's viz type lives on the question, not in the dashboard/story content. Build the
+  // ctx through the shared assembler (id set = referencedQuestionIds) so this auto-inject path is
+  // IDENTICAL to the client badge / server scorers; here the lookup source is the resolved `refs`.
+  const vizByRefId = new Map((refs ?? []).filter((r) => r.type === 'question')
+    .map((r) => [r.id, (r.content as QuestionContent | null)?.vizSettings?.type] as const));
+  const ctx = buildVizTypeCtx(type, content, (id) => vizByRefId.get(id));
+  try {
+    return toAgentRubric(scoreFileDeterministic(type, content, ctx));
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -226,8 +253,9 @@ export function boundContextAppState(appState: unknown): void {
  */
 export function compressAugmentedFile(augmented: AugmentedFile, maxChars = LIMIT_CHARS): CompressedAugmentedFile {
   return {
-    fileState: compressFileState(augmented.fileState),
-    references: augmented.references.map(compressFileState),
+    // Pass the references so dashboard tile rules can see each question's chart type.
+    fileState: compressFileState(augmented.fileState, augmented.references),
+    references: augmented.references.map((r) => compressFileState(r)),
     queryResults: augmented.queryResults.map(qr => compressQueryResult(qr, maxChars)),
   };
 }

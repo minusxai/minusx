@@ -1,4 +1,5 @@
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
+import type { ImageContent } from '@/orchestrator/llm';
 
 /**
  * Context for a {@link MicroAgent} run. A micro-task is a single, no-tools LLM
@@ -13,4 +14,6 @@ import type { RemoteAnalystContext } from '@/agents/analyst/types';
 export interface MicroAgentContext extends RemoteAnalystContext {
   taskKey: string;
   vars: Record<string, string>;
+  /** Optional image content blocks appended to the user message (e.g. a screenshot to judge). */
+  images?: ImageContent[];
 }

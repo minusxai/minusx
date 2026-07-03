@@ -32,6 +32,7 @@ import { selectEffectiveUser } from '@/store/authSlice';
 import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { useSaveDecision } from '@/lib/hooks/file-state-hooks';
 import DocumentHeader from './DocumentHeader';
+import { FileHealthBadge } from './FileHealthPanel';
 import PublishModal from './PublishModal';
 import SaveFileModal from './SaveFileModal';
 import { useFileToolbar } from './file-toolbar/FileToolbarContext';
@@ -339,6 +340,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
                 <Text color="fg.muted">{questionCount !== 1 ? 'questions' : 'question'}</Text>
               </HStack>
             )}
+            <FileHealthBadge fileId={fileId} fileType={fileType} />
             {readOnlyBadge}
           </>
         )}

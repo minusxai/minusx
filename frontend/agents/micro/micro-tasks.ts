@@ -1,4 +1,10 @@
-import type { Api, Model } from '@/orchestrator/llm';
+/**
+ * Which existing model config a micro-task runs on. `micro` = the cheap default
+ * (`MICRO_AGENT_MODEL_CONFIG`) for low-stakes single-turn helpers; `analyst` = the heavier
+ * `ANALYST_AGENT_MODEL_CONFIG` for tasks that need a stronger model (e.g. the visual rubric judge).
+ * No new env var — a task just picks one of the two configs already wired for agents.
+ */
+export type MicroModelSource = 'micro' | 'analyst';
 
 /**
  * A named single-turn LLM use-case (title, description, summary, …). The
@@ -17,22 +23,24 @@ export interface MicroTaskConfig {
   systemPromptKey: string;
   /** Prompt id for the user prompt (e.g. `micro.title.user`). */
   userPromptKey: string;
-  /** Optional per-task model override; defaults to the analyst model. */
-  model?: Model<Api>;
+  /** Which model config to run on (`micro` default / `analyst`). */
+  modelSource: MicroModelSource;
 }
 
-function task(key: string): MicroTaskConfig {
-  return { key, systemPromptKey: `micro.${key}.system`, userPromptKey: `micro.${key}.user` };
+function task(key: string, modelSource: MicroModelSource = 'micro'): MicroTaskConfig {
+  return { key, systemPromptKey: `micro.${key}.system`, userPromptKey: `micro.${key}.user`, modelSource };
 }
 
 /**
  * Seed tasks. Add a new use-case here + its `micro.<key>.{system,user}` prompts
- * in `prompts.yaml`; no new agent class needed.
+ * in `prompts.yaml`; no new agent class needed. Pass `'analyst'` as the second arg to run a task
+ * on the stronger analyst model instead of the cheap micro default.
  */
 export const MICRO_TASKS: Record<string, MicroTaskConfig> = {
   title: task('title'),
   description: task('description'),
   feed_summary: task('feed_summary'),
+  rubric_llm: task('rubric_llm', 'analyst'),
 };
 
 export function getMicroTask(key: string): MicroTaskConfig {

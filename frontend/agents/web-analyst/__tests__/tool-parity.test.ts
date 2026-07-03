@@ -19,6 +19,7 @@ const EXPECTED_TOOLS = [
   'ClarifyFrontend',
   'SearchDBSchema',
   'SearchFiles',
+  'CheckFileHealth',
   'CreateFile',
   'LoadSkill',
   'LoadContext',

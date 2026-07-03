@@ -11,6 +11,7 @@ import type { Tool, TextContent, ImageContent, AssistantMessage } from '@/orches
 import { renderPrompt } from '@/orchestrator/prompts';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
+import { getAgentModelOrTestFallback, getAnalystModelOptions } from '@/agents/analyst/model-config';
 import { getMicroModelOrTestFallback, getMicroModelOptions } from './model-config';
 import { getMicroTask } from './micro-tasks';
 import type { MicroAgentContext } from './types';
@@ -49,13 +50,21 @@ export class MicroAgent extends RemoteAnalystAgent {
   protected override buildUserContent(): (TextContent | ImageContent)[] {
     const cfg = getMicroTask(this.microContext.taskKey);
     const text = renderPrompt(cfg.userPromptKey, this.microContext.vars);
-    return [{ type: 'text', text }];
+    return [{ type: 'text', text }, ...(this.microContext.images ?? [])];
   }
 
-  // Honor the task's optional per-task model override; otherwise the class default.
+  // A task runs on either the micro model (class default) or the analyst model — its `modelSource`
+  // picks which of the two already-wired configs to use, model AND options together.
   protected override async llm(): Promise<AssistantMessage> {
-    const cfg = getMicroTask(this.microContext.taskKey);
-    const model = cfg.model ?? (this.constructor as typeof MicroAgent).model;
+    const model = getMicroTask(this.microContext.taskKey).modelSource === 'analyst'
+      ? getAgentModelOrTestFallback(FAUX_MODEL)
+      : (this.constructor as typeof MicroAgent).model;
     return this.orchestrator.callLLM(model, this.buildLLMContext(), this.id, this.resolveCallOptions());
+  }
+
+  protected override resolveCallOptions(): Record<string, unknown> | undefined {
+    return getMicroTask(this.microContext.taskKey).modelSource === 'analyst'
+      ? getAnalystModelOptions()
+      : (this.constructor as typeof MicroAgent).callOptions;
   }
 }
