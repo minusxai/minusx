@@ -24,14 +24,15 @@ interface SeedRow {
   cost: number;
   /** SQL expression for created_at, e.g. `NOW()` or `NOW() - INTERVAL '40 days'`. */
   createdAtSql: string;
+  trigger?: string | null;
 }
 
 async function seed(row: SeedRow): Promise<void> {
   await getModules().db.exec(
     `INSERT INTO llm_call_events
-       (conversation_id, model, provider, prompt_tokens, cached_tokens, completion_tokens, cost, user_id, created_at)
-     VALUES (0, $1, $2, $3, $4, $5, $6, $7, ${row.createdAtSql})`,
-    [row.model, row.provider, row.promptTokens, row.cachedTokens, row.completionTokens, row.cost, row.userId],
+       (conversation_id, model, provider, prompt_tokens, cached_tokens, completion_tokens, cost, user_id, trigger, created_at)
+     VALUES (0, $1, $2, $3, $4, $5, $6, $7, $8, ${row.createdAtSql})`,
+    [row.model, row.provider, row.promptTokens, row.cachedTokens, row.completionTokens, row.cost, row.userId, row.trigger ?? null],
   );
 }
 
@@ -69,10 +70,10 @@ describe('getCreditUsage', () => {
     expect(opus.nonCachedInputTokens).toBe(1200); // (1000-200) + (500-100)
     expect(opus.cachedTokens).toBe(300);
     expect(opus.outputTokens).toBe(700);
-    expect(opus.credits).toBeCloseTo(40, 6); // (0.3 + 0.1) * 100
+    expect(opus.credits).toBeCloseTo(400, 6); // (0.3 + 0.1) * 1000
 
-    // Individual used = 40 + 5 + 2 + 1
-    expect(individual.used).toBeCloseTo(48, 6);
+    // Individual used = 400 + 50 + 20 + 10
+    expect(individual.used).toBeCloseTo(480, 6);
   });
 
   it('floors non-cached input at 0 when cached exceeds prompt', async () => {
@@ -86,7 +87,24 @@ describe('getCreditUsage', () => {
     const { individual } = await getCreditUsage(1, 'viewer', false);
     const nullRow = findRow(individual.rows, '', 'nulltest')!;
     expect(nullRow).toBeDefined();
-    expect(nullRow.credits).toBeCloseTo(1, 6);
+    expect(nullRow.credits).toBeCloseTo(10, 6);
+  });
+
+  it('splits the same provider+model into separate rows by trigger', async () => {
+    // Same (openai, gpt) but two surfaces → two distinct breakdown rows.
+    await seed({ userId: 1, provider: 'openai', model: 'gpt', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 0.02, createdAtSql: 'NOW()', trigger: 'explore' });
+    await seed({ userId: 1, provider: 'openai', model: 'gpt', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 0.03, createdAtSql: 'NOW()', trigger: 'slack' });
+
+    const { individual } = await getCreditUsage(1, 'viewer', false);
+    const gptRows = individual.rows.filter((r) => r.provider === 'openai' && r.model === 'gpt');
+    const byTrigger = Object.fromEntries(gptRows.map((r) => [r.trigger, r]));
+
+    // '' (the beforeEach openai/gpt row, no trigger), 'explore', and 'slack'
+    expect(byTrigger['explore']).toBeDefined();
+    expect(byTrigger['slack']).toBeDefined();
+    expect(byTrigger['']).toBeDefined();
+    expect(byTrigger['explore'].credits).toBeCloseTo(20, 6); // 0.02 * 1000
+    expect(byTrigger['slack'].credits).toBeCloseTo(30, 6); // 0.03 * 1000
   });
 
   it('returns org=null when includeOrg is false', async () => {
@@ -99,15 +117,15 @@ describe('getCreditUsage', () => {
     expect(org).not.toBeNull();
     expect(org!.allowance).toBe(100_000);
 
-    // org opus group = user1 (0.40) + user2 (1.00) = 1.40 → 140 credits
+    // org opus group = user1 (0.40) + user2 (1.00) = 1.40 → 1400 credits
     const opus = findRow(org!.rows, 'anthropic', 'opus')!;
-    expect(opus.credits).toBeCloseTo(140, 6);
+    expect(opus.credits).toBeCloseTo(1400, 6);
     expect(opus.outputTokens).toBe(700 + 1000);
 
-    // org used = individual (48) + user2 (100)
-    expect(org!.used).toBeCloseTo(148, 6);
+    // org used = individual (480) + user2 (1000)
+    expect(org!.used).toBeCloseTo(1480, 6);
 
     // user 2's usage is absent from the individual scope
-    expect(individual.used).toBeCloseTo(48, 6);
+    expect(individual.used).toBeCloseTo(480, 6);
   });
 });

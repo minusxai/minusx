@@ -25,6 +25,7 @@ const usageSql = (userFilter: string) => `
 SELECT
   COALESCE(provider, '')                                                     AS provider,
   model                                                                      AS model,
+  COALESCE(trigger, '')                                                      AS trigger,
   SUM(GREATEST(COALESCE(prompt_tokens, 0) - COALESCE(cached_tokens, 0), 0))  AS "nonCachedInputTokens",
   SUM(COALESCE(cached_tokens, 0))                                            AS "cachedTokens",
   SUM(COALESCE(completion_tokens, 0))                                        AS "outputTokens",
@@ -32,7 +33,7 @@ SELECT
 FROM llm_call_events
 WHERE created_at >= date_trunc('month', NOW())
   ${userFilter}
-GROUP BY COALESCE(provider, ''), model
+GROUP BY COALESCE(provider, ''), model, COALESCE(trigger, '')
 ORDER BY cost DESC
 `;
 
@@ -54,6 +55,7 @@ async function loadScope(allowance: number, userId?: number): Promise<CreditScop
     return {
       provider: String(row['provider'] ?? ''),
       model: String(row['model'] ?? ''),
+      trigger: String(row['trigger'] ?? ''),
       nonCachedInputTokens,
       cachedTokens,
       outputTokens,

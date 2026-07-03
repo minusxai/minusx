@@ -5,11 +5,13 @@
  * the settings card, and tests — so this module MUST stay free of `server-only`.
  */
 
-/** One (provider, model) usage group within the current calendar month. */
+/** One (provider, model, trigger) usage group within the current calendar month. */
 export interface CreditBreakdownRow {
   /** '' when the stored provider was NULL (render as '—'). */
   provider: string;
   model: string;
+  /** Surface/source: explore/question/dashboard/slack, a micro-task key, or '' when unset. */
+  trigger: string;
   /** prompt_tokens - cached_tokens, floored at 0. */
   nonCachedInputTokens: number;
   cachedTokens: number;

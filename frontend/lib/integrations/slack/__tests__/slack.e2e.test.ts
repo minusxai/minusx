@@ -677,12 +677,14 @@ describe('Slack Bot Integration', () => {
       // The Slack turn's LLM call(s) must be recorded against its conversation so
       // Slack usage shows up in the credits card — not dropped like it used to be.
       const { getModules } = await import('@/lib/modules/registry');
-      const { rows } = await getModules().db.exec<{ cnt: number }>(
-        `SELECT COUNT(*) AS cnt FROM llm_call_events
+      const { rows } = await getModules().db.exec<{ cnt: number; trigger: string | null }>(
+        `SELECT COUNT(*) AS cnt, MAX(trigger) AS trigger FROM llm_call_events
            WHERE conversation_id = (SELECT MAX(id) FROM conversations WHERE agent = 'SlackAgent')`,
         [],
       );
       expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(1);
+      // Recorded with the surface as trigger so Slack usage is attributable.
+      expect(rows[0].trigger).toBe('slack');
     }, 60000);
 
     it('unknown MinusX user receives a polite error reply', async () => {

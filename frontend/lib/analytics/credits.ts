@@ -19,5 +19,5 @@ export interface CostToCreditsInput {
  * Tokens are accepted but unused for now — the formula will be refined later.
  */
 export function costToCredits(input: CostToCreditsInput): number {
-  return input.cost * 100;
+  return input.cost * 1000;
 }

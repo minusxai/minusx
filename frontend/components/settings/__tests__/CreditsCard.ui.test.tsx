@@ -14,7 +14,7 @@ function mockUsage(data: CreditUsageResponse) {
 const individual: CreditUsageResponse['individual'] = {
   used: 50,
   allowance: 10_000,
-  rows: [{ provider: 'anthropic', model: 'opus', nonCachedInputTokens: 100, cachedTokens: 0, outputTokens: 50, credits: 50 }],
+  rows: [{ provider: 'anthropic', model: 'opus', trigger: 'explore', nonCachedInputTokens: 100, cachedTokens: 0, outputTokens: 50, credits: 50 }],
 };
 
 describe('CreditsUsageCards', () => {

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { costToCredits } from '@/lib/analytics/credits';
 
-describe('costToCredits (v0: 1 credit = $0.01)', () => {
-  it('multiplies cost by 100', () => {
-    expect(costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: 0.5 })).toBe(50);
+describe('costToCredits (v0: credits = cost * 1000)', () => {
+  it('multiplies cost by 1000', () => {
+    expect(costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: 0.5 })).toBe(500);
   });
 
   it('is 0 for zero cost', () => {
@@ -11,14 +11,14 @@ describe('costToCredits (v0: 1 credit = $0.01)', () => {
   });
 
   it('handles fractional cost', () => {
-    expect(costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: 1.2345 })).toBeCloseTo(123.45, 6);
+    expect(costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: 1.2345 })).toBeCloseTo(1234.5, 6);
   });
 
   it('ignores token fields in v0 (only cost drives credits)', () => {
     const a = costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: 2 });
     const b = costToCredits({ cachedTokens: 999, nonCachedTokens: 888, outputTokens: 777, cost: 2 });
     expect(a).toBe(b);
-    expect(a).toBe(200);
+    expect(a).toBe(2000);
   });
 });
 

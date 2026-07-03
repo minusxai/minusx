@@ -36,8 +36,8 @@ describe('GET /api/credits/usage', () => {
   setupTestDb(TEST_DB_PATH);
 
   beforeEach(async () => {
-    await seed(1, 0.5); // signed-in user → 50 credits
-    await seed(2, 1.0); // another user → 100 credits (org only)
+    await seed(1, 0.5); // signed-in user → 500 credits
+    await seed(2, 1.0); // another user → 1000 credits (org only)
   });
 
   it('returns individual + org totals for an admin', async () => {
@@ -47,10 +47,10 @@ describe('GET /api/credits/usage', () => {
     const body = await res.json();
     const data = body.data as CreditUsageResponse;
 
-    expect(data.individual.used).toBeCloseTo(50, 6);
+    expect(data.individual.used).toBeCloseTo(500, 6);
     expect(data.individual.allowance).toBe(10_000);
     expect(data.org).not.toBeNull();
-    expect(data.org!.used).toBeCloseTo(150, 6); // user1 (50) + user2 (100)
+    expect(data.org!.used).toBeCloseTo(1500, 6); // user1 (500) + user2 (1000)
     expect(data.org!.allowance).toBe(100_000);
   });
 
@@ -60,7 +60,7 @@ describe('GET /api/credits/usage', () => {
     expect(res.status).toBe(200);
     const data = (await res.json()).data as CreditUsageResponse;
 
-    expect(data.individual.used).toBeCloseTo(50, 6); // scoped to user 1 only
+    expect(data.individual.used).toBeCloseTo(500, 6); // scoped to user 1 only
     expect(data.org).toBeNull();
   });
 

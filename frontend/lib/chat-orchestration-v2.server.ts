@@ -227,6 +227,8 @@ export interface OrchestrationSetup {
   rawStream: ReturnType<Orchestrator['run']> | null;
   rootAgent?: MXAgent;
   fatalError?: string;
+  /** Surface the turn ran on (explore/question/dashboard/…) — recorded as the LLM-call `trigger`. */
+  pageType?: string | null;
 }
 
 /**
@@ -420,6 +422,7 @@ export async function setupOrchestration(
       expectedLogIndex,
       orchestrator: orch,
       rawStream: orch.resume(piResults),
+      pageType,
     };
   }
 
@@ -458,6 +461,7 @@ export async function setupOrchestration(
         orchestrator: orch,
         rootAgent: agent,
         rawStream: options?.preview ? null : orch.run(agent),
+        pageType,
       };
     }
     const ctx: RemoteAnalystContext = {
@@ -542,7 +546,7 @@ export async function estimateNextChatContextV2(
  * best-effort central stats forward. The call id + duration are the ones the
  * engine already stamps onto each message. Best-effort.
  */
-export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser): Promise<void> {
+export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser, source?: string | null): Promise<void> {
   try {
     const userId = typeof user.userId === 'number' ? user.userId : null;
     const llmCalls: Record<string, LLMCallDetail> = {};
@@ -570,6 +574,7 @@ export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: numbe
         durationS: detail.duration,
         stream: true,
         finishReason: detail.finish_reason,
+        trigger: source ?? null,
         userId,
       });
 

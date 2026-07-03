@@ -162,7 +162,8 @@ export async function runChatOrchestrationV2({
 
   // Record this turn's LLM usage (Slack and other clientless callers). Conversation-bound
   // like the browser chat path — without this, Slack usage never reaches llm_call_events.
-  await recordLlmCalls(piDiff, conversationId, user);
+  // The surface (e.g. 'slack') is recorded as the LLM-call `trigger`.
+  await recordLlmCalls(piDiff, conversationId, user, getPageType(agent_args.app_state));
 
   return {
     conversationId,
