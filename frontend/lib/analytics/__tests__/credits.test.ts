@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { costToCredits } from '@/lib/analytics/credits';
+import { costToCredits, remainingCredits, remainingInWindow } from '@/lib/analytics/credits';
+import type { CreditScope } from '@/lib/analytics/credits.types';
 import { parseBillingCycle, cycleStartSql, cycleNextResetSql, CREDIT_BUDGETS, CYCLE_MODE } from '@/lib/analytics/credit-budgets';
 
 describe('costToCredits (v0: credits = cost * 1000)', () => {
@@ -20,6 +21,26 @@ describe('costToCredits (v0: credits = cost * 1000)', () => {
     const b = costToCredits({ cachedTokens: 999, nonCachedTokens: 888, outputTokens: 777, cost: 2 });
     expect(a).toBe(b);
     expect(a).toBe(2000);
+  });
+});
+
+describe('remainingCredits', () => {
+  const scope = (resetUsed: number, resetAllow: number, billUsed: number, billAllow: number): CreditScope => ({
+    billing: { label: 'this month', used: billUsed, allowance: billAllow, resetsAt: null, rows: [] },
+    reset: { label: 'today', used: resetUsed, allowance: resetAllow, resetsAt: null },
+  });
+
+  it('returns remaining in both cycles', () => {
+    expect(remainingCredits(scope(200, 1_000, 3_000, 10_000))).toEqual({ reset: 800, billing: 7_000 });
+  });
+
+  it('floors an over-limit window at 0 (never negative)', () => {
+    expect(remainingCredits(scope(1_200, 1_000, 3_000, 10_000))).toEqual({ reset: 0, billing: 7_000 });
+  });
+
+  it('remainingInWindow computes allowance - used floored at 0', () => {
+    expect(remainingInWindow({ label: 't', used: 40, allowance: 100, resetsAt: null })).toBe(60);
+    expect(remainingInWindow({ label: 't', used: 150, allowance: 100, resetsAt: null })).toBe(0);
   });
 });
 

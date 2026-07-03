@@ -5,6 +5,7 @@
  * client. The 4-arg signature intentionally exposes the token breakdown so the
  * formula can evolve (e.g. per-token-type rates) WITHOUT changing any caller.
  */
+import type { CreditScope, CreditWindow } from './credits.types';
 
 export interface CostToCreditsInput {
   /** LLM provider (e.g. 'openai', 'anthropic', 'amazon-bedrock'). For future per-provider rates. */
@@ -28,4 +29,28 @@ const CREDITS_PER_DOLLAR = 1000;
  */
 export function costToCredits(input: CostToCreditsInput): number {
   return input.cost * CREDITS_PER_DOLLAR;
+}
+
+/** Credits left in one window (allowance − used, floored at 0). */
+export function remainingInWindow(window: CreditWindow): number {
+  return Math.max(0, window.allowance - window.used);
+}
+
+export interface RemainingCredits {
+  /** Credits remaining in the current credit (reset) cycle. */
+  reset: number;
+  /** Credits remaining in the current billing cycle. */
+  billing: number;
+}
+
+/**
+ * Remaining credits for a scope in both cycles. Each is floored at 0 (a window
+ * over its allowance reports 0 remaining, not a negative). The effective amount
+ * a user can still spend is `min(reset, billing)`.
+ */
+export function remainingCredits(scope: CreditScope): RemainingCredits {
+  return {
+    reset: remainingInWindow(scope.reset),
+    billing: remainingInWindow(scope.billing),
+  };
 }
