@@ -72,7 +72,7 @@ export const SeriesColorInput = ({ value, onCommit, label }: { value: string; on
       transition="all 0.15s"
       title="Custom color"
     >
-      <LuPipette size={11} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'white', mixBlendMode: 'difference' }} />
+      <LuPipette size={11} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'white', fill: 'white', filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.85))' }} />
       <input
         type="color"
         aria-label={`${label} input`}
@@ -308,18 +308,11 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
             On
           </ChoicePill>
           {styleConfig?.showDataLabels && (
-            <>
-              <SeriesColorInput
-                label="Data label color"
-                value={styleConfig?.dataLabelColor || '#000000'}
-                onCommit={(hex) => emitConfig({ ...(styleConfig ?? {}), dataLabelColor: hex })}
-              />
-              {styleConfig?.dataLabelColor && (
-                <ChoicePill selected={false} onClick={() => emitConfig({ ...(styleConfig ?? {}), dataLabelColor: null })}>
-                  auto
-                </ChoicePill>
-              )}
-            </>
+            <SeriesColorInput
+              label="Data label color"
+              value={styleConfig?.dataLabelColor || '#000000'}
+              onCommit={(hex) => emitConfig({ ...(styleConfig ?? {}), dataLabelColor: hex })}
+            />
           )}
         </HStack>
       </Box>

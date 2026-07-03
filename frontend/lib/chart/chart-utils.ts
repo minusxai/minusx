@@ -507,7 +507,7 @@ export const buildPieChartOption = ({
 }: SpecialChartOptionConfig): EChartsOption => {
   const { fmtName, fmtValue } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
   const borderColor = colorMode === 'dark' ? '#1a1a1a' : '#ffffff'
-  const labelColor = colorMode === 'dark' ? '#ffffff' : '#1a1a1a'
+  const labelColor = styleConfig?.dataLabelColor || (colorMode === 'dark' ? '#ffffff' : '#1a1a1a')
   const scaleOpacity = (base: number) => styleConfig?.opacity != null ? base * styleConfig.opacity : base
   const opacityStyle = styleConfig?.opacity != null ? { opacity: scaleOpacity(1) } : {}
 
@@ -719,7 +719,7 @@ export const buildFunnelChartOption = ({
     }
   })
 
-  const labelColor = '#ffffff'
+  const labelColor = styleConfig?.dataLabelColor || '#ffffff'
 
   const baseOption: EChartsOption = {
     ...buildChartTitleOption(chartTitle, showChartTitle ?? true, containerWidth),
