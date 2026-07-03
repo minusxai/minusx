@@ -39,14 +39,24 @@ export interface CreditBreakdownRow {
   credits: number;
 }
 
-/** A single billing scope (an individual user, or the whole org). */
-export interface CreditScope {
-  /** Total credits consumed this calendar month. */
+/** One usage window (a billing or reset cycle) for a scope: used vs. allowance. */
+export interface CreditWindow {
+  /** Human label for the window, e.g. 'last month', 'last day'. */
+  label: string;
+  /** Credits consumed within this rolling window. */
   used: number;
-  /** Monthly credit allowance for this scope. */
+  /** Credit allowance for this window. */
   allowance: number;
-  /** Per (provider, model) breakdown, sorted by credits desc. */
-  rows: CreditBreakdownRow[];
+}
+
+/**
+ * A billing scope (an individual user, or the whole org) with two DECOUPLED
+ * rolling windows: the longer `billing` cycle (which carries the per-(provider,
+ * model, trigger) breakdown) and a shorter `reset` cycle (e.g. a daily cap).
+ */
+export interface CreditScope {
+  billing: CreditWindow & { rows: CreditBreakdownRow[] };
+  reset: CreditWindow;
 }
 
 /**

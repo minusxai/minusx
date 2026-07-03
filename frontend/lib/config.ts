@@ -1,6 +1,7 @@
 import 'server-only';
 import { join, resolve } from 'path';
 import { parseFrameAncestors } from '@/lib/auth/embed';
+import { CREDIT_BUDGETS, parseBillingCycle, type BillingCycle } from '@/lib/analytics/credit-budgets';
 
 /**
  * Server-only environment configuration.
@@ -244,18 +245,13 @@ function parseEventForwardRules(raw: string | undefined): EventForwardRule[] {
 export const EVENTS_FORWARD_RULES: EventForwardRule[] = parseEventForwardRules(config.EVENTS_FORWARD_RULES);
 
 // --- Credits / billing allowances -----------------------------------------
-/** Default monthly credit allowance for a single user (any role). */
-export const DEFAULT_INDIVIDUAL_ALLOWANCE = 10_000;
-/** Default monthly credit allowance for the whole org (all users combined). */
-export const DEFAULT_ORG_ALLOWANCE = 100_000;
-
 /**
- * Parse CREDIT_ALLOWANCES — a role-wise JSON of monthly credit allowances,
- * e.g. { "admin": 10000, "editor": 10000, "viewer": 10000, "org": 100000 }.
+ * Parse a role-wise JSON of credit allowances, e.g.
+ * { "admin": 10000, "editor": 10000, "viewer": 10000, "org": 100000 }.
  * The special key "org" sets the org-wide allowance. Invalid JSON is logged
- * and ignored (falls back to the DEFAULT_* constants).
+ * and ignored (callers fall back to the CREDIT_BUDGETS defaults).
  */
-function parseCreditAllowances(raw: string | undefined): Record<string, number> {
+function parseCreditAllowances(raw: string | undefined, envName: string): Record<string, number> {
   if (!raw || !raw.trim()) return {};
   try {
     const obj = JSON.parse(raw);
@@ -266,21 +262,37 @@ function parseCreditAllowances(raw: string | undefined): Record<string, number> 
     }
     return out;
   } catch (e) {
-    console.error('[config] CREDIT_ALLOWANCES is not valid JSON ({ "<role>": <credits> }):', e);
+    console.error(`[config] ${envName} is not valid JSON ({ "<role>": <credits> }):`, e);
     return {};
   }
 }
-/** Role-wise monthly credit allowance overrides (empty when unset). */
-export const CREDIT_ALLOWANCES: Record<string, number> = parseCreditAllowances(process.env.CREDIT_ALLOWANCES);
 
-/** Monthly credit allowance for an individual user, keyed by role. */
+/** Role-wise BILLING-cycle allowance overrides (empty when unset). */
+export const CREDIT_ALLOWANCES: Record<string, number> = parseCreditAllowances(process.env.CREDIT_ALLOWANCES, 'CREDIT_ALLOWANCES');
+/** Role-wise RESET-cycle allowance overrides (empty when unset). */
+export const CREDIT_RESET_ALLOWANCES: Record<string, number> = parseCreditAllowances(process.env.CREDIT_RESET_ALLOWANCES, 'CREDIT_RESET_ALLOWANCES');
+
+/** Billing-cycle allowance for an individual user, keyed by role. */
 export function resolveIndividualAllowance(role: string): number {
-  return CREDIT_ALLOWANCES[role] ?? DEFAULT_INDIVIDUAL_ALLOWANCE;
+  return CREDIT_ALLOWANCES[role] ?? CREDIT_BUDGETS.defaultIndividualAllowance;
 }
-/** Monthly credit allowance for the whole org. */
+/** Billing-cycle allowance for the whole org. */
 export function resolveOrgAllowance(): number {
-  return CREDIT_ALLOWANCES.org ?? DEFAULT_ORG_ALLOWANCE;
+  return CREDIT_ALLOWANCES.org ?? CREDIT_BUDGETS.defaultOrgAllowance;
 }
+/** Reset-cycle allowance for an individual user, keyed by role. */
+export function resolveIndividualResetAllowance(role: string): number {
+  return CREDIT_RESET_ALLOWANCES[role] ?? CREDIT_BUDGETS.defaultIndividualResetAllowance;
+}
+/** Reset-cycle allowance for the whole org. */
+export function resolveOrgResetAllowance(): number {
+  return CREDIT_RESET_ALLOWANCES.org ?? CREDIT_BUDGETS.defaultOrgResetAllowance;
+}
+
+/** Rolling BILLING-cycle window (override via CREDIT_BILLING_CYCLE). */
+export const BILLING_CYCLE: BillingCycle = parseBillingCycle(process.env.CREDIT_BILLING_CYCLE, CREDIT_BUDGETS.defaultBillingCycle);
+/** Rolling RESET-cycle window (override via CREDIT_RESET_CYCLE). */
+export const RESET_CYCLE: BillingCycle = parseBillingCycle(process.env.CREDIT_RESET_CYCLE, CREDIT_BUDGETS.defaultResetCycle);
 export const DB_TYPE = config.DB_TYPE;
 export const DATABASE_URL = config.DATABASE_URL;
 export const PGLITE_DATA_DIR_ENV = config.PGLITE_DATA_DIR;

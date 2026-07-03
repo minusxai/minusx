@@ -47,11 +47,12 @@ describe('GET /api/credits/usage', () => {
     const body = await res.json();
     const data = body.data as CreditUsageResponse;
 
-    expect(data.individual.used).toBeCloseTo(500, 6);
-    expect(data.individual.allowance).toBe(10_000);
+    expect(data.individual.billing.used).toBeCloseTo(500, 6);
+    expect(data.individual.billing.allowance).toBe(10_000);
+    expect(data.individual.reset.allowance).toBe(1_000);
     expect(data.org).not.toBeNull();
-    expect(data.org!.used).toBeCloseTo(1500, 6); // user1 (500) + user2 (1000)
-    expect(data.org!.allowance).toBe(100_000);
+    expect(data.org!.billing.used).toBeCloseTo(1500, 6); // user1 (500) + user2 (1000)
+    expect(data.org!.billing.allowance).toBe(100_000);
   });
 
   it('returns only the individual scope for a non-admin', async () => {
@@ -60,7 +61,7 @@ describe('GET /api/credits/usage', () => {
     expect(res.status).toBe(200);
     const data = (await res.json()).data as CreditUsageResponse;
 
-    expect(data.individual.used).toBeCloseTo(500, 6); // scoped to user 1 only
+    expect(data.individual.billing.used).toBeCloseTo(500, 6); // scoped to user 1 only
     expect(data.org).toBeNull();
   });
 

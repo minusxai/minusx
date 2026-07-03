@@ -62,30 +62,44 @@ describe('getCreditUsage', () => {
     const { individual } = await getCreditUsage(1, 'viewer', false);
 
     // 4 groups: (anthropic,opus), (openai,gpt), (weird,m), ('',nulltest) — last-month row excluded.
-    expect(individual.rows).toHaveLength(4);
-    expect(individual.allowance).toBe(10_000);
+    expect(individual.billing.rows).toHaveLength(4);
+    expect(individual.billing.allowance).toBe(10_000);
+    expect(individual.reset.allowance).toBe(1_000);
 
     // opus group merges the two this-month user-1 rows (last-month row NOT included).
-    const opus = findRow(individual.rows, 'anthropic', 'opus')!;
+    const opus = findRow(individual.billing.rows, 'anthropic', 'opus')!;
     expect(opus.nonCachedInputTokens).toBe(1200); // (1000-200) + (500-100)
     expect(opus.cachedTokens).toBe(300);
     expect(opus.outputTokens).toBe(700);
     expect(opus.credits).toBeCloseTo(400, 6); // (0.3 + 0.1) * 1000
 
-    // Individual used = 400 + 50 + 20 + 10
-    expect(individual.used).toBeCloseTo(480, 6);
+    // Billing used = 400 + 50 + 20 + 10. Every seeded row is at NOW(), so the
+    // reset window (last day) captures the same total.
+    expect(individual.billing.used).toBeCloseTo(480, 6);
+    expect(individual.reset.used).toBeCloseTo(480, 6);
   });
 
   it('floors non-cached input at 0 when cached exceeds prompt', async () => {
     const { individual } = await getCreditUsage(1, 'viewer', false);
-    const weird = findRow(individual.rows, 'weird', 'm')!;
+    const weird = findRow(individual.billing.rows, 'weird', 'm')!;
     expect(weird.nonCachedInputTokens).toBe(0); // 100 - 300 floored to 0
     expect(weird.cachedTokens).toBe(300);
   });
 
+  it('excludes rows outside the reset window from reset usage but keeps them for billing', async () => {
+    // A row 10 days ago: inside the billing window (~30d) but outside the reset window (1d).
+    await seed({ userId: 5, provider: 'openai', model: 'r', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 1.0, createdAtSql: "NOW() - INTERVAL '10 days'" });
+    // A row now: inside both windows.
+    await seed({ userId: 5, provider: 'openai', model: 'r', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 0.5, createdAtSql: 'NOW()' });
+
+    const { individual } = await getCreditUsage(5, 'viewer', false);
+    expect(individual.billing.used).toBeCloseTo(1500, 6); // (1.0 + 0.5) * 1000
+    expect(individual.reset.used).toBeCloseTo(500, 6);     // only the NOW() row
+  });
+
   it('normalizes a NULL provider to an empty string', async () => {
     const { individual } = await getCreditUsage(1, 'viewer', false);
-    const nullRow = findRow(individual.rows, '', 'nulltest')!;
+    const nullRow = findRow(individual.billing.rows, '', 'nulltest')!;
     expect(nullRow).toBeDefined();
     expect(nullRow.credits).toBeCloseTo(10, 6);
   });
@@ -96,7 +110,7 @@ describe('getCreditUsage', () => {
     await seed({ userId: 1, provider: 'openai', model: 'gpt', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 0.03, createdAtSql: 'NOW()', trigger: 'slack' });
 
     const { individual } = await getCreditUsage(1, 'viewer', false);
-    const gptRows = individual.rows.filter((r) => r.provider === 'openai' && r.model === 'gpt');
+    const gptRows = individual.billing.rows.filter((r) => r.provider === 'openai' && r.model === 'gpt');
     const byTrigger = Object.fromEntries(gptRows.map((r) => [r.trigger, r]));
 
     // 'unknown' (the beforeEach openai/gpt row, no trigger → normalized), 'explore', and 'slack'
@@ -116,17 +130,18 @@ describe('getCreditUsage', () => {
   it('aggregates all users for the org scope when includeOrg is true', async () => {
     const { individual, org } = await getCreditUsage(1, 'admin', true);
     expect(org).not.toBeNull();
-    expect(org!.allowance).toBe(100_000);
+    expect(org!.billing.allowance).toBe(100_000);
+    expect(org!.reset.allowance).toBe(10_000);
 
     // org opus group = user1 (0.40) + user2 (1.00) = 1.40 → 1400 credits
-    const opus = findRow(org!.rows, 'anthropic', 'opus')!;
+    const opus = findRow(org!.billing.rows, 'anthropic', 'opus')!;
     expect(opus.credits).toBeCloseTo(1400, 6);
     expect(opus.outputTokens).toBe(700 + 1000);
 
     // org used = individual (480) + user2 (1000)
-    expect(org!.used).toBeCloseTo(1480, 6);
+    expect(org!.billing.used).toBeCloseTo(1480, 6);
 
     // user 2's usage is absent from the individual scope
-    expect(individual.used).toBeCloseTo(480, 6);
+    expect(individual.billing.used).toBeCloseTo(480, 6);
   });
 });

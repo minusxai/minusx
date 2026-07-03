@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { costToCredits } from '@/lib/analytics/credits';
+import { parseBillingCycle, CREDIT_BUDGETS } from '@/lib/analytics/credit-budgets';
 
 describe('costToCredits (v0: credits = cost * 1000)', () => {
   it('multiplies cost by 1000', () => {
@@ -22,15 +23,43 @@ describe('costToCredits (v0: credits = cost * 1000)', () => {
   });
 });
 
+describe('parseBillingCycle', () => {
+  it('parses days/weeks/months into a rolling day window', () => {
+    expect(parseBillingCycle('1d').days).toBe(1);
+    expect(parseBillingCycle('7d').days).toBe(7);
+    expect(parseBillingCycle('1w').days).toBe(7);
+    expect(parseBillingCycle('2w').days).toBe(14);
+    expect(parseBillingCycle('1m').days).toBe(30);
+    expect(parseBillingCycle('3m').days).toBe(90);
+  });
+
+  it('produces human labels', () => {
+    expect(parseBillingCycle('1m').label).toBe('last month');
+    expect(parseBillingCycle('1d').label).toBe('last day');
+    expect(parseBillingCycle('7d').label).toBe('last 7 days');
+    expect(parseBillingCycle('2w').label).toBe('last 2 weeks');
+  });
+
+  it('clamps to the max window and falls back on bad specs', () => {
+    expect(parseBillingCycle('24m').days).toBe(CREDIT_BUDGETS.maxBillingCycleDays); // 720 > 366
+    expect(parseBillingCycle('garbage').raw).toBe(CREDIT_BUDGETS.defaultBillingCycle);
+    expect(parseBillingCycle('').raw).toBe(CREDIT_BUDGETS.defaultBillingCycle);
+    expect(parseBillingCycle(undefined, '1w').raw).toBe('1w'); // custom fallback
+  });
+});
+
 describe('allowance resolvers', () => {
   const ORIGINAL = process.env.CREDIT_ALLOWANCES;
 
   beforeEach(() => {
     vi.resetModules();
   });
+  const ORIGINAL_RESET = process.env.CREDIT_RESET_ALLOWANCES;
   afterEach(() => {
     if (ORIGINAL === undefined) delete process.env.CREDIT_ALLOWANCES;
     else process.env.CREDIT_ALLOWANCES = ORIGINAL;
+    if (ORIGINAL_RESET === undefined) delete process.env.CREDIT_RESET_ALLOWANCES;
+    else process.env.CREDIT_RESET_ALLOWANCES = ORIGINAL_RESET;
     vi.resetModules();
   });
 
@@ -63,5 +92,20 @@ describe('allowance resolvers', () => {
     const { resolveIndividualAllowance, resolveOrgAllowance } = await import('@/lib/config');
     expect(resolveIndividualAllowance('admin')).toBe(10_000);
     expect(resolveOrgAllowance()).toBe(100_000);
+  });
+
+  it('resolves reset-cycle allowances independently (default 1,000 / 10,000)', async () => {
+    delete process.env.CREDIT_RESET_ALLOWANCES;
+    const cfg = await import('@/lib/config');
+    expect(cfg.resolveIndividualResetAllowance('viewer')).toBe(1_000);
+    expect(cfg.resolveOrgResetAllowance()).toBe(10_000);
+  });
+
+  it('applies role-wise CREDIT_RESET_ALLOWANCES overrides', async () => {
+    process.env.CREDIT_RESET_ALLOWANCES = JSON.stringify({ viewer: 200, org: 3000 });
+    const cfg = await import('@/lib/config');
+    expect(cfg.resolveIndividualResetAllowance('viewer')).toBe(200);
+    expect(cfg.resolveIndividualResetAllowance('admin')).toBe(1_000); // default fallback
+    expect(cfg.resolveOrgResetAllowance()).toBe(3000);
   });
 });

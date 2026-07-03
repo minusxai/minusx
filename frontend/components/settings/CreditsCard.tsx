@@ -4,11 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { Box, VStack, HStack, Text, Icon, IconButton, Progress, Table, Spinner } from '@chakra-ui/react';
 import { LuZap, LuRefreshCw } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
-import type { CreditScope, CreditUsageResponse } from '@/lib/analytics/credits.types';
+import type { CreditBreakdownRow, CreditScope, CreditUsageResponse, CreditWindow } from '@/lib/analytics/credits.types';
 
 const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
-/** Fetch the current user's (and, for admins, the org's) credit usage for this month. */
+/** Fetch the current user's (and, for admins, the org's) credit usage. */
 function useCreditUsage() {
   const [data, setData] = useState<CreditUsageResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,16 +34,16 @@ function useCreditUsage() {
   return { data, loading, error, refetch };
 }
 
-/** Labeled progress bar: used / allowance credits for one scope. */
-function UsageBar({ label, scope }: { label: string; scope: CreditScope }) {
-  const pct = scope.allowance > 0 ? Math.min(100, (scope.used / scope.allowance) * 100) : 0;
-  const overLimit = scope.used > scope.allowance;
+/** One rolling-window bar: used / allowance credits, labeled by the cycle. */
+function UsageBar({ window }: { window: CreditWindow }) {
+  const pct = window.allowance > 0 ? Math.min(100, (window.used / window.allowance) * 100) : 0;
+  const overLimit = window.used > window.allowance;
   return (
-    <VStack align="stretch" gap={1} aria-label={label}>
+    <VStack align="stretch" gap={1}>
       <HStack justify="space-between">
-        <Text fontSize="xs" color="fg.muted" fontFamily="mono">{label}</Text>
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono">{window.label}</Text>
         <Text fontSize="xs" fontFamily="mono" color={overLimit ? 'accent.danger' : 'fg.muted'}>
-          {nf.format(Math.round(scope.used))} / {nf.format(scope.allowance)} credits
+          {nf.format(Math.round(window.used))} / {nf.format(window.allowance)} credits
         </Text>
       </HStack>
       <Progress.Root size="sm" value={pct} colorPalette={overLimit ? 'red' : 'teal'}>
@@ -55,10 +55,21 @@ function UsageBar({ label, scope }: { label: string; scope: CreditScope }) {
   );
 }
 
+/** A scope (yours / org): a reset-cycle bar and a billing-cycle bar. */
+function ScopeBars({ title, scope }: { title: string; scope: CreditScope }) {
+  return (
+    <VStack align="stretch" gap={2} aria-label={title}>
+      <Text fontSize="xs" fontWeight="600" fontFamily="mono" color="fg.subtle">{title}</Text>
+      <UsageBar window={scope.reset} />
+      <UsageBar window={scope.billing} />
+    </VStack>
+  );
+}
+
 /** Per (provider, model, trigger) breakdown table — shown only in dev mode. */
-function BreakdownTable({ scope }: { scope: CreditScope }) {
-  if (scope.rows.length === 0) {
-    return <Text fontSize="xs" color="fg.muted" fontFamily="mono">No usage yet this month.</Text>;
+function BreakdownTable({ rows, total }: { rows: CreditBreakdownRow[]; total: number }) {
+  if (rows.length === 0) {
+    return <Text fontSize="xs" color="fg.muted" fontFamily="mono">No usage yet.</Text>;
   }
   return (
     <Table.Root size="sm">
@@ -74,7 +85,7 @@ function BreakdownTable({ scope }: { scope: CreditScope }) {
         </Table.Row>
       </Table.Header>
       <Table.Body>
-        {scope.rows.map((row) => (
+        {rows.map((row) => (
           <Table.Row key={`${row.provider}|${row.model}|${row.trigger}`} _hover={{ bg: 'bg.muted' }}>
             <Table.Cell fontFamily="mono" fontSize="xs">{row.provider || '—'}</Table.Cell>
             <Table.Cell fontFamily="mono" fontSize="xs">{row.model}</Table.Cell>
@@ -88,7 +99,7 @@ function BreakdownTable({ scope }: { scope: CreditScope }) {
         <Table.Row bg="bg.muted">
           <Table.Cell fontFamily="mono" fontSize="xs" fontWeight="600">Total</Table.Cell>
           <Table.Cell /><Table.Cell /><Table.Cell /><Table.Cell /><Table.Cell />
-          <Table.Cell fontFamily="mono" fontSize="xs" fontWeight="700" textAlign="right">{nf.format(Math.round(scope.used))}</Table.Cell>
+          <Table.Cell fontFamily="mono" fontSize="xs" fontWeight="700" textAlign="right">{nf.format(Math.round(total))}</Table.Cell>
         </Table.Row>
       </Table.Body>
     </Table.Root>
@@ -96,9 +107,9 @@ function BreakdownTable({ scope }: { scope: CreditScope }) {
 }
 
 /**
- * Settings → General credits card. One card with a bar per scope (yours + org
- * for admins). The full per-(provider, model, trigger) breakdown table is shown
- * only when dev mode is on.
+ * Settings → General credits card. One card with reset + billing bars per scope
+ * (yours + org for admins). The full per-(provider, model, trigger) breakdown
+ * table is shown only when dev mode is on.
  */
 export function CreditsUsageCards() {
   const { data, loading, error, refetch } = useCreditUsage();
@@ -112,18 +123,9 @@ export function CreditsUsageCards() {
             <Icon as={LuZap} boxSize={4} color="fg.muted" flexShrink={0} />
             <Text fontSize="sm" fontWeight="medium" fontFamily="mono">Credits</Text>
           </HStack>
-          <HStack gap={2}>
-            <Text fontSize="xs" color="fg.muted" fontFamily="mono">this month</Text>
-            <IconButton
-              aria-label="Refresh credit usage"
-              size="2xs"
-              variant="ghost"
-              onClick={() => void refetch()}
-              loading={loading}
-            >
-              <LuRefreshCw />
-            </IconButton>
-          </HStack>
+          <IconButton aria-label="Refresh credit usage" size="2xs" variant="ghost" onClick={() => void refetch()} loading={loading}>
+            <LuRefreshCw />
+          </IconButton>
         </HStack>
 
         {loading && (
@@ -135,20 +137,20 @@ export function CreditsUsageCards() {
 
         {data && (
           <>
-            <VStack align="stretch" gap={3}>
-              <UsageBar label="Your usage" scope={data.individual} />
-              {data.org && <UsageBar label="Organization usage" scope={data.org} />}
+            <VStack align="stretch" gap={4}>
+              <ScopeBars title="Your usage" scope={data.individual} />
+              {data.org && <ScopeBars title="Organization usage" scope={data.org} />}
             </VStack>
             {devMode && (
               <VStack align="stretch" gap={4}>
                 <Box>
                   <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textTransform="uppercase" letterSpacing="wider" mb={2}>Your breakdown</Text>
-                  <BreakdownTable scope={data.individual} />
+                  <BreakdownTable rows={data.individual.billing.rows} total={data.individual.billing.used} />
                 </Box>
                 {data.org && (
                   <Box>
                     <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textTransform="uppercase" letterSpacing="wider" mb={2}>Organization breakdown</Text>
-                    <BreakdownTable scope={data.org} />
+                    <BreakdownTable rows={data.org.billing.rows} total={data.org.billing.used} />
                   </Box>
                 )}
               </VStack>
@@ -168,9 +170,9 @@ export function CreditsUsageBars() {
   const { data, loading } = useCreditUsage();
   if (loading || !data) return null;
   return (
-    <VStack align="stretch" gap={2} aria-label="Credits usage bars">
-      <UsageBar label="Your usage" scope={data.individual} />
-      {data.org && <UsageBar label="Organization usage" scope={data.org} />}
+    <VStack align="stretch" gap={3} aria-label="Credits usage bars">
+      <ScopeBars title="Your usage" scope={data.individual} />
+      {data.org && <ScopeBars title="Organization usage" scope={data.org} />}
     </VStack>
   );
 }

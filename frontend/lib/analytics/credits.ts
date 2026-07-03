@@ -6,6 +6,8 @@
  * formula can evolve (e.g. per-token-type rates) WITHOUT changing any caller.
  */
 
+import { CREDIT_BUDGETS } from './credit-budgets';
+
 export interface CostToCreditsInput {
   cachedTokens: number;
   nonCachedTokens: number;
@@ -15,9 +17,9 @@ export interface CostToCreditsInput {
 }
 
 /**
- * v0: 1 credit = $0.01, so credits = cost * 100.
+ * v0: credits = cost * CREDIT_BUDGETS.creditsPerDollar (1 credit = $0.001).
  * Tokens are accepted but unused for now — the formula will be refined later.
  */
 export function costToCredits(input: CostToCreditsInput): number {
-  return input.cost * 1000;
+  return input.cost * CREDIT_BUDGETS.creditsPerDollar;
 }
