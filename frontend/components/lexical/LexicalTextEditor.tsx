@@ -608,7 +608,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
             placeholder={
               <Box
                 position="absolute"
-                top="20px"
+                top="24px"
                 left="24px"
                 color="fg.muted"
                 fontSize="sm"
