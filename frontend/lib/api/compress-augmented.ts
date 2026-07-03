@@ -170,9 +170,10 @@ function compressFileState(fs: FileState, refs?: FileState[]): CompressedFileSta
  */
 function computeRubric(type: FileType, content: unknown, refs?: FileState[]): AgentRubric | undefined {
   if (!isRubricFileType(type) || !content) return undefined;
-  // A dashboard's tile rules need each referenced question's chart type (not in dashboard content).
+  // Dashboard tile rules AND story width rules need each referenced question's chart type — a
+  // saved embed's viz type lives on the question, not in the dashboard/story content.
   let ctx: DeterministicContext | undefined;
-  if (type === 'dashboard' && refs?.length) {
+  if ((type === 'dashboard' || type === 'story') && refs?.length) {
     const vizTypeByQuestionId: Record<number, string> = {};
     for (const r of refs) {
       if (r.type !== 'question') continue;

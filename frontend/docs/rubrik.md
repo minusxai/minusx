@@ -148,19 +148,33 @@ text/image/divider assets are ignored for counting.
 
 ## Rule catalog — Story (`StoryContent`, body parsed from the `story` JSX field)
 
+> **Parsed on the AGENT JSX form, not raw content.** A story body is *stored* as placeholder-div
+> HTML (`<div data-question-id>`, raw `<style>`); the clean `<Question viz=… />` JSX only exists in
+> the agent markup. `scoreStory` normalizes the body to that agent form once (via `buildStoryJsx`,
+> guarded so already-JSX input passes through untouched) before running any rule — so the embed /
+> style / prose rules read what the agent reads, and the width rules get the inline `viz`/`style`.
+
 | ruleId | category | severity | trigger | fix |
 |---|---|---|---|---|
 | `no-evidence` | correctness | error | zero `<Question>` / `<Number>` embeds in the body | Back the narrative with at least one live chart (`<Question>`) or number (`<Number>`). |
-| `no-headline` | clarity | warn | body has no `<h1>` / `<h2>` heading | Add a headline that states the finding (a claim with a number), not a topic. |
+| `undeclared-param` | correctness | error | an inline embed / `<Number>` query references a `:token` declared by neither a `<Param name>`, the embed's own `params` prop, nor `parameterValues` | Declare the param via `<Param>`, the embed's `params`, or `parameterValues` — or remove the `:token`. |
 | `typed-number` | correctness | warn | a factual figure (`$`/`%`/thousands-separator or ≥4 digits) sits in prose text, not inside a `<Number>` / `single_value` embed | Replace the typed figure "{x}" with a live `<Number>` embed so it can't go stale or be wrong. |
+| `no-headline` | clarity | warn | body has no `<h1>` / `<h2>` heading | Add a headline that states the finding (a claim with a number), not a topic. |
+| `embed-too-narrow` | clarity | error | a cartesian chart (line/area/bar/scatter) resolves to `< 50%` of the story column, or a pie/funnel to `< ~34%` — from CSS grid-track division (inline `style` + class rules) or a fixed narrow px width (`< 480px` cartesian / `< 260px` round) | Drop packed multi-column grids to 1–2 columns, remove fixed narrow px widths, let each plot fill its cell. |
 | `no-lead` | clarity | info | `description` blank | State the single lead finding (with its number) in the description. |
 | `no-design-tokens` | aesthetics | info | the `<style>` block has < 2 distinct hex colors, or no `font-family` | Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling. |
 | `too-many-colors` | aesthetics | info | the `<style>` block has > 10 distinct hex colors | Reduce to a disciplined 4–6 color palette with one protagonist accent. |
 
-> Fuzzy craft judgments — forbidden default palettes (cream+serif+terracotta,
-> acid-green-on-black, purple gradients), "does the headline actually make a claim", "does the
-> frame carry the insight" — need the rendered page and are **LLM-judge** criteria, not
-> deterministic.
+> **Width is CSS-structural, not pixel-exact.** `embed-too-narrow` (impl in
+> `deterministic/story-layout.ts`) resolves each embed's *column-width share* by dividing by the
+> track count of any multi-column CSS grid ancestor (`grid-template-columns`, resolving both inline
+> `style={{…}}` and class rules from the `<style>` block; `@container`/`@media` overrides are
+> stripped so the desktop base layout governs) and multiplying by percentage widths, plus any fixed
+> px `width`/`max-width` cap. Saved (`id={N}`) embeds get their chart type from
+> `ctx.vizTypeByQuestionId` (threaded from the story's resolved refs, like dashboard tiles); inline
+> embeds carry their own `viz`. It catches the structural *cause* of a cramped chart; the true
+> rendered verdict (and forbidden default palettes, "does the headline make a claim", "does the
+> frame carry the insight") is **LLM-judge** territory, not deterministic.
 
 ## Rule catalog — Context (`ContextAgentContent` — the agent-flattened knowledge shape)
 
@@ -215,7 +229,13 @@ there and both the prompt (`formatChecklist`) and the parsing update automatical
 - **dashboard** — `coherent-narrative`, `clear-hierarchy`, `tiles-readable`,
   `consistent-formatting`, `uncluttered-layout`, `clean-text-styling`.
 - **story** — `single-lead` (err), `evidence-supports-claims` (err), `headlines-are-findings`,
-  `frame-carries-insight`, `deliberate-palette`, `typographic-craft`.
+  `frame-carries-insight`, `embeds-well-sized`, `charts-render-cleanly`, `deliberate-palette`,
+  `typographic-craft`. The two embed-rendering checks are the visual complement to deterministic
+  `embed-too-narrow`: `embeds-well-sized` catches dead space (a `single_value`/`<Number>` floating
+  in a big empty box) and charts squeezed too small — sizing the deterministic pass can't see,
+  since `buildStoryJsx` drops a saved embed's `height` in the markup; `charts-render-cleanly`
+  catches rendered artifacts with no signal in the content (a cratered/partial final period,
+  overlapping titles, an all-zero plot).
 
 - **Input** = `fileToMarkup(fileType, content)` as text + (when available) the rendered
   screenshot as an image block (https or `data:` URL → `imageBlock`). **The judge is most

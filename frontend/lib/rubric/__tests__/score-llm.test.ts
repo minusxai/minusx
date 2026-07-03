@@ -8,7 +8,7 @@ import { runMicroTask } from '@/lib/chat/run-micro-task.server';
 import { renderPrompt } from '@/orchestrator/prompts';
 import { scoreFileLLM, combineReports } from '../llm/score-llm.server';
 import { scoreFileDeterministic } from '../registry';
-import { makeQuestion } from './fixtures';
+import { makeQuestion, makeStory } from './fixtures';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 const mockRun = vi.mocked(runMicroTask);
@@ -59,6 +59,17 @@ describe('scoreFileLLM', () => {
   it('returns an empty report when the reply is not valid JSON', async () => {
     mockRun.mockResolvedValue('I could not review this.');
     expect((await scoreFileLLM({ fileType: 'question', content: makeQuestion() }, USER)).overall).toBe(5);
+  });
+
+  it('turns a failed story embed-rendering check into a finding', async () => {
+    mockRun.mockResolvedValue(reply([
+      { id: 'embeds-well-sized', pass: false, reason: 'the single_value floats in a large empty box' },
+      { id: 'charts-render-cleanly', pass: true, reason: 'ok' },
+    ]));
+    const report = await scoreFileLLM({ fileType: 'story', content: makeStory(), screenshotUrl: 'data:image/jpeg;base64,AAAA' }, USER);
+    const f = report.categories.flatMap((c) => c.findings).find((x) => x.ruleId === 'llm.embeds-well-sized');
+    expect(f?.source).toBe('llm');
+    expect(f?.detail).toContain('empty box');
   });
 });
 

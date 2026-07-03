@@ -18,8 +18,9 @@ import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
 import { passedChecks } from '@/lib/rubric/checks';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
+import { extractSavedQuestionIds } from '@/lib/data/story-question';
 import type { DeterministicContext, FindingSource, RubricCategory, RubricFileType, RubricReport, RubricSeverity } from '@/lib/rubric/types';
-import type { DashboardContent, QuestionContent } from '@/lib/types';
+import type { DashboardContent, QuestionContent, StoryContent } from '@/lib/types';
 
 type Level = RubricSeverity | 'pass';
 
@@ -73,17 +74,21 @@ function scorableContent(fileType: string, content: unknown): unknown {
   return fileType === 'context' ? shapeContextForAgent(content ?? {}) : content;
 }
 
-// Deterministic context for a dashboard — each referenced question's chart type (needed for
-// tile-type-aware rules like cartesian-plots-need-3x3). Read from Redux, not the dashboard content.
-function dashboardVizCtx(fileType: string, content: unknown, state: RootState): DeterministicContext | undefined {
-  if (fileType !== 'dashboard') return undefined;
-  const assets = (content as DashboardContent | null)?.assets ?? [];
+// Deterministic context — each referenced question's chart type, needed for tile/embed rules
+// (dashboard cartesian-plots-need-3x3, story embed-too-narrow). A saved embed's viz type lives on
+// the question file, not in the dashboard/story content, so resolve it from Redux. Dashboards list
+// their questions in `assets`; a story's saved embeds are `data-question-id` refs in its body.
+function vizTypeCtx(fileType: string, content: unknown, state: RootState): DeterministicContext | undefined {
+  const ids = fileType === 'dashboard'
+    ? ((content as DashboardContent | null)?.assets ?? []).filter((a) => a.type === 'question').map((a) => a.id)
+    : fileType === 'story'
+      ? extractSavedQuestionIds((content as StoryContent | null)?.story)
+      : [];
+  if (ids.length === 0) return undefined;
   const vizTypeByQuestionId: Record<number, string> = {};
-  for (const a of assets) {
-    if (a.type === 'question') {
-      const vt = (selectFile(state, a.id)?.content as QuestionContent | undefined)?.vizSettings?.type;
-      if (vt) vizTypeByQuestionId[a.id] = vt;
-    }
+  for (const id of ids) {
+    const vt = (selectFile(state, id)?.content as QuestionContent | undefined)?.vizSettings?.type;
+    if (vt) vizTypeByQuestionId[id] = vt;
   }
   return { vizTypeByQuestionId };
 }
@@ -105,7 +110,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
     if (!isRubricFileType(fileType) || !savedContent) return null;
     try {
       const c = scorableContent(fileType, savedContent);
-      return scoreFileDeterministic(fileType, c, dashboardVizCtx(fileType, c, store.getState()));
+      return scoreFileDeterministic(fileType, c, vizTypeCtx(fileType, c, store.getState()));
     } catch {
       return null;
     }
@@ -124,7 +129,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
     if (!merged) return;
     try {
       const c = scorableContent(fileType, merged);
-      setOverride(scoreFileDeterministic(fileType, c, dashboardVizCtx(fileType, c, store.getState())));
+      setOverride(scoreFileDeterministic(fileType, c, vizTypeCtx(fileType, c, store.getState())));
       setLlmRan(false); // a plain refresh is rules-only
     } catch {
       // ignore — keep the current report
