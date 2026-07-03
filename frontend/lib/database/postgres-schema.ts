@@ -308,10 +308,6 @@ export const POSTGRES_SCHEMA = `
   ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS cache_creation_tokens BIGINT NOT NULL DEFAULT 0;
   ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS reasoning_tokens      BIGINT NOT NULL DEFAULT 0;
   ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS stream                BOOLEAN NOT NULL DEFAULT false;
-  -- Headless runs (micro-tasks, feed-summary, eval) also record here now, so they
-  -- have no conversation: allow NULL conversation_id and tag the run via task.
-  ALTER TABLE llm_call_events ALTER COLUMN conversation_id DROP NOT NULL;
-  ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS task                  VARCHAR;
 
   -- Raw pi-format request/response per LLM call, for debugging. Stored LOCALLY
   -- only (never forwarded). Keyed by the same call id the conversation links to

@@ -34,20 +34,20 @@ function fauxAssistantMessage() {
 }
 
 describe('recordHeadlessLlmCalls', () => {
-  it('writes a headless call into llm_call_events with NULL conversation and a task tag', async () => {
+  it('writes a headless call into llm_call_events with the 0 sentinel and task tag in trigger', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await recordHeadlessLlmCalls([fauxAssistantMessage() as any], user, 'micro:test-task');
 
     const { rows } = await getModules().db.exec<Record<string, unknown>>(
-      `SELECT conversation_id, task, provider, model, prompt_tokens, cached_tokens,
+      `SELECT conversation_id, trigger, provider, model, prompt_tokens, cached_tokens,
               completion_tokens, cost, user_id, mode
        FROM llm_call_events WHERE llm_call_id = 'call_headless_1'`,
     );
 
     expect(rows).toHaveLength(1);
     const r = rows[0];
-    expect(r['conversation_id']).toBeNull();
-    expect(r['task']).toBe('micro:test-task');
+    expect(Number(r['conversation_id'])).toBe(0);
+    expect(r['trigger']).toBe('micro:test-task');
     expect(r['provider']).toBe('openai');
     expect(r['model']).toBe('gpt-4o-mini');
     expect(Number(r['prompt_tokens'])).toBe(100);

@@ -16,6 +16,13 @@ import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 /**
+ * Sentinel conversation_id for headless LLM calls (no real conversation). Keeps
+ * llm_call_events.conversation_id NOT NULL without a schema change; the run is
+ * identified by `trigger` (the task tag) instead.
+ */
+export const HEADLESS_CONVERSATION_ID = 0;
+
+/**
  * Recover the call id + `LLMCallDetail` for one log entry, or `null` if it isn't a recordable
  * assistant message. The engine stamps `_lllmCallId` / `_duration` onto the message (or its
  * first tool-call block); we mirror that lookup. Shared by the conversation-bound recorder
@@ -67,10 +74,11 @@ export async function recordHeadlessLlmCalls(piDiff: PiLogEntry[], user: Effecti
       llmCalls[callId] = detail;
 
       // Record per-call stats into llm_call_events (the complete usage ledger).
-      // Headless runs have no conversation — NULL conversation_id, tagged by `task`.
+      // Headless runs have no conversation — use the 0 sentinel and tag the run
+      // via `trigger` (which is otherwise unset), avoiding any schema change.
       await recordLlmCallEvent({
-        conversationId: null,
-        task,
+        conversationId: HEADLESS_CONVERSATION_ID,
+        trigger: task,
         llmCallId: callId,
         provider: detail.provider,
         model: detail.model,
