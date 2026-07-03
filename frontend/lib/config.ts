@@ -70,6 +70,9 @@ interface EnvironmentConfig {
   MAX_AGENTS_CONCURRENCY: string | undefined;
   MAX_CONCURRENT_QUERIES: number;
   QUERY_TIMEOUT_MS: number;
+  /** Server-side wall-clock bound on one query execution (runQuery) — the backstop for callers
+   *  the client 120s guard can't protect (server tools, headless ReadFiles). 0 disables. */
+  QUERY_SERVER_TIMEOUT_MS: number;
   QUERY_CACHE_TTL_MS: number;
   QUERY_CACHE_REVALIDATE_MS: number;
   QUERY_CACHE_EXPIRY_MS: number;
@@ -168,6 +171,7 @@ const config: EnvironmentConfig = {
   MAX_LLM_CONCURRENCY: process.env.MAX_LLM_CONCURRENCY,
   MAX_AGENTS_CONCURRENCY: process.env.MAX_AGENTS_CONCURRENCY,
   MAX_CONCURRENT_QUERIES: getOptionalNumber(process.env.MAX_CONCURRENT_QUERIES, 10),
+  QUERY_SERVER_TIMEOUT_MS: getOptionalNumber(process.env.QUERY_SERVER_TIMEOUT_MS, 180_000),
   // Client-side wall-clock cap for a single /api/query call (chat/tool-triggered
   // queries especially). Bounds hangs so a stuck embed query can't freeze the run
   // (and hold a querySemaphore slot) forever. 0 disables the cap.
@@ -262,6 +266,7 @@ export const USE_BASE64_UPLOADS = config.USE_BASE64_UPLOADS;
 export const DISABLE_APP_STATE_IMAGES = config.DISABLE_APP_STATE_IMAGES;
 export const SHARE_GUEST_CHAT_ENABLED = config.SHARE_GUEST_CHAT_ENABLED;
 export const MAX_CONCURRENT_QUERIES = config.MAX_CONCURRENT_QUERIES;
+export const QUERY_SERVER_TIMEOUT_MS = config.QUERY_SERVER_TIMEOUT_MS;
 export const QUERY_TIMEOUT_MS = config.QUERY_TIMEOUT_MS;
 export const QUERY_CACHE_TTL_MS = config.QUERY_CACHE_TTL_MS;
 export const QUERY_CACHE_REVALIDATE_MS = config.QUERY_CACHE_REVALIDATE_MS;

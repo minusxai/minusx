@@ -66,7 +66,12 @@ export async function uploadBlobOrEmbed(
 export async function uploadFile(
   file: File,
   onProgress?: (progress: number) => void,
-  options?: { keyType?: 'uploads' | 'charts' },
+  options?: {
+    keyType?: 'uploads' | 'charts';
+    /** The URL will be embedded in PERSISTENT file content (dashboard text block, context doc,
+     *  notebook cell) — never base64-embed it, even under USE_BASE64_UPLOADS. */
+    persistent?: boolean;
+  },
 ): Promise<UploadResult> {
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new Error(`File is too large (max 50 MB)`);
@@ -74,6 +79,7 @@ export async function uploadFile(
 
   const params = new URLSearchParams({ filename: file.name, contentType: file.type });
   if (options?.keyType) params.set('keyType', options.keyType);
+  if (options?.persistent) params.set('persistent', 'true');
   const res = await fetch(`/api/object-store/upload-url?${params}`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

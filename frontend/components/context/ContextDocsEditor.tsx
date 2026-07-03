@@ -190,7 +190,7 @@ export default function ContextDocsEditor({
   // Upload an image and return its public URL for the editor to embed inline.
   const handleImageUpload = useCallback(async (file: File): Promise<string> => {
     try {
-      const { publicUrl } = await uploadFile(file);
+      const { publicUrl } = await uploadFile(file, undefined, { persistent: true }); // embedded in file content — never base64
       return publicUrl;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to upload image';
