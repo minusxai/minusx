@@ -2,6 +2,7 @@
 // schema-driven conversion for every file type (no per-type dialect, no <props>/<jsx> split).
 import { describe, it, expect } from 'vitest';
 import { fileToMarkup, markupToContent } from '../file-markup';
+import { getTemplateDefaults } from '../template-defaults';
 
 describe('fileToMarkup / markupToContent — question (no wrapper, raw SQL)', () => {
   it('emits fields at top level and round-trips', () => {
@@ -46,6 +47,20 @@ describe('fileToMarkup / markupToContent — story (jsx field inline)', () => {
       expect(back.content.colorMode).toBe('dark');
       expect(back.content.story).toContain('data-question-id="1022"'); // parsed back to HTML
     }
+  });
+});
+
+describe('fileToMarkup — empty story from template default (editable scaffold)', () => {
+  it('emits <story></story> as an empty tag so the agent has a body to edit, no legacy <assets>', () => {
+    const content = getTemplateDefaults('story');
+    const markup = fileToMarkup('story', content);
+    expect(markup).toContain('<description></description>');
+    expect(markup).toContain('<story></story>'); // empty body surfaced as an editable tag
+    expect(markup).not.toContain('<assets'); // legacy field dropped from the default
+    // Round-trips: the empty body stays an empty string (not null → no null/"" flip-flop).
+    const back = markupToContent('story', markup);
+    expect(back.ok).toBe(true);
+    if (back.ok) expect(back.content.story).toBe('');
   });
 });
 

@@ -52,7 +52,7 @@ export const CONTEXT_BUDGETS = {
    * non-`alwaysInclude` docs move to the lazy "Context Library" catalog (fetched
    * on demand via LoadContext). Applied by `formatContextDocsSection`.
    */
-  inlineAllDocsThreshold: 1,
+  inlineAllDocsThreshold: 5,
 
   /**
    * Max characters of a context's COMPUTED schema fields (`fullSchema` /

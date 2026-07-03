@@ -25,7 +25,10 @@ export function getTemplateDefaults(type: FileType, options?: { query?: string }
     case 'dashboard':
       return { description: '', assets: [], layout: { columns: 12, items: [] } } as DocumentContent;
     case 'story':
-      return { description: '', assets: [], story: null } as StoryContent;
+      // Empty body is `''` (not null) so it surfaces as an editable `<story></story>` tag in the
+      // agent markup (consistent with `<description></description>`); `assets` is legacy (not in
+      // StoryContent — the body is the source of truth) so it's omitted.
+      return { description: '', story: '' } as StoryContent;
     case 'notebook':
       return { description: '', cells: [] } as NotebookContent;
     case 'connection':
