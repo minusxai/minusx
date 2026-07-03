@@ -136,6 +136,105 @@ describe('markdown-transformers', () => {
     expect(result).toContain('Name');
   });
 
+  it('parses inline bold inside a table cell into a bold text node (not literal **)', () => {
+    const md = '| Name | Note |\n|---|---|\n| A | **word** |';
+    const { editor } = parseMarkdown(md);
+
+    let boldFound = false;
+    let sawLiteralAsterisks = false;
+    editor.getEditorState().read(() => {
+      const walk = (node: any) => {
+        if (node.getType() === 'text') {
+          const text = node.getTextContent();
+          // IS_BOLD format flag = 1
+          if (text === 'word' && (node.getFormat() & 1)) boldFound = true;
+          if (text.includes('**') || text.includes('\\*')) sawLiteralAsterisks = true;
+        }
+        if (typeof node.getChildren === 'function') node.getChildren().forEach(walk);
+      };
+      $getRoot().getChildren().forEach(walk);
+    });
+
+    expect(boldFound).toBe(true);
+    expect(sawLiteralAsterisks).toBe(false);
+  });
+
+  it('round-trips a table cell with bold without escaping or growing (idempotent)', () => {
+    const md = '| Name | Note |\n|---|---|\n| A | **word** |';
+    const once = roundTrip(md);
+    const twice = roundTrip(once);
+
+    // Bold survives as real markdown, not escaped asterisks.
+    expect(once).toContain('**word**');
+    expect(once).not.toContain('\\*');
+    // Re-importing the exported markdown must be a fixed point (no backslash growth).
+    expect(twice).toBe(once);
+  });
+
+  it('round-trips a literal asterisk in a table cell without growing backslashes', () => {
+    const md = '| Expr | Val |\n|---|---|\n| 2 * 3 | 6 |';
+    const once = roundTrip(md);
+    const twice = roundTrip(once);
+    expect(twice).toBe(once);
+    // No runaway backslash escalation across round trips.
+    expect(twice).not.toContain('\\\\');
+  });
+
+  /** Assert a bold text node with the exact given text exists somewhere in the tree. */
+  function hasBold(editor: ReturnType<typeof parseMarkdown>['editor'], text: string): boolean {
+    let found = false;
+    editor.getEditorState().read(() => {
+      const walk = (node: any) => {
+        if (node.getType() === 'text' && node.getTextContent() === text && (node.getFormat() & 1)) found = true;
+        if (typeof node.getChildren === 'function') node.getChildren().forEach(walk);
+      };
+      $getRoot().getChildren().forEach(walk);
+    });
+    return found;
+  }
+
+  it('heals a table cell whose bold was escaped by the old bug (\\*\\* → bold)', () => {
+    const md = '| Name | Note |\n|---|---|\n| A | \\*\\*Staram\\*\\* |';
+    const { editor } = parseMarkdown(md);
+    expect(hasBold(editor, 'Staram')).toBe(true);
+
+    const once = roundTrip(md);
+    expect(once).toContain('**Staram**');
+    expect(once).not.toContain('\\*');
+    expect(roundTrip(once)).toBe(once);
+  });
+
+  it('heals a deeply (multi-backslash) escaped bold table cell', () => {
+    // 3 backslash layers before each asterisk — like a cell saved several times.
+    const star = '\\\\\\*';
+    const cell = `${star}${star}Starlife${star}${star}`;
+    const md = `| Name |\n|---|\n| ${cell} |`;
+    const { editor } = parseMarkdown(md);
+    expect(hasBold(editor, 'Starlife')).toBe(true);
+
+    const once = roundTrip(md);
+    expect(once).toContain('**Starlife**');
+    expect(once).not.toContain('\\*');
+    expect(roundTrip(once)).toBe(once);
+  });
+
+  it('heals escaped italic in a table cell (\\*word\\* → italic)', () => {
+    const md = '| Name |\n|---|\n| \\*word\\* |';
+    const once = roundTrip(md);
+    expect(once).toContain('*word*');
+    expect(once).not.toContain('\\*');
+    expect(roundTrip(once)).toBe(once);
+  });
+
+  it('still bolds a clean table cell and stays idempotent', () => {
+    const md = '| Name | Note |\n|---|---|\n| A | **word** |';
+    const { editor } = parseMarkdown(md);
+    expect(hasBold(editor, 'word')).toBe(true);
+    const once = roundTrip(md);
+    expect(once).toContain('**word**');
+    expect(roundTrip(once)).toBe(once);
+  });
+
   it('parses a markdown image into an image node', () => {
     const { allNodeTypes } = parseMarkdown('![a cat](https://example.com/cat.png)');
     expect(allNodeTypes).toContain('image');

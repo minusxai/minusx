@@ -28,6 +28,10 @@ const TEXT_BLOCK_DEFAULT_W = 6;
 const TEXT_BLOCK_DEFAULT_H = 3;
 const TEXT_BLOCK_MIN_W = 2;
 const TEXT_BLOCK_MIN_H = 1;
+// Must match the grid's rowHeight / margin props below. Used to translate a text
+// block's expanded pixel height into grid rows for "Read more".
+const GRID_ROW_HEIGHT = 80;
+const GRID_MARGIN = 6;
 
 /** Convert a react-grid-layout string key back to number (questions) or string (inline assets). */
 const parseLayoutItemId = (key: string): number | string =>
@@ -117,6 +121,24 @@ export default function DashboardView({
   // Track current columns for responsive grid background
   const [currentCols, setCurrentCols] = useState(12);
 
+  // Text blocks that a viewer has expanded via "Read more" → extra grid rows.
+  // View-only (not persisted); restored to null on collapse or entering edit mode.
+  const [textBlockRows, setTextBlockRows] = useState<Record<string, number>>({});
+  const handleTextBlockResize = useCallback((textBlockId: string, height: number | null) => {
+    setTextBlockRows(prev => {
+      if (height === null) {
+        if (!(textBlockId in prev)) return prev;
+        const next = { ...prev };
+        delete next[textBlockId];
+        return next;
+      }
+      // Cell pixel height = rows * ROW_HEIGHT + (rows-1) * MARGIN → invert for rows.
+      const rows = Math.ceil((height + GRID_MARGIN) / (GRID_ROW_HEIGHT + GRID_MARGIN));
+      if (prev[textBlockId] === rows) return prev;
+      return { ...prev, [textBlockId]: rows };
+    });
+  }, []);
+
   // Force react-grid-layout to remount when file reverts from dirty → clean (discard/save).
   // ResponsiveGridLayout maintains internal layout state that doesn't always sync
   // with the `layouts` prop, so we force a remount via key change.
@@ -187,6 +209,14 @@ export default function DashboardView({
       baseLayout = generateDefaultLayout(document.assets);
     }
 
+    // Apply "Read more" expansions (view-only, not persisted): grow the cell to
+    // fit the revealed content. Never shrinks below the saved height.
+    if (Object.keys(textBlockRows).length > 0) {
+      baseLayout = baseLayout.map(item =>
+        textBlockRows[item.i] ? { ...item, h: Math.max(item.h, textBlockRows[item.i]) } : item
+      );
+    }
+
     // Generate compacted layouts for mobile/tablet (6 cols) - stacks vertically
     const mobileLayout = compactMobileLayout(baseLayout, 6);
 
@@ -197,7 +227,7 @@ export default function DashboardView({
       xs: mobileLayout, // 6 cols - vertically stacked
       xxs: mobileLayout // 6 cols - vertically stacked
     };
-  }, [document?.layout, document?.assets]);
+  }, [document?.layout, document?.assets, textBlockRows]);
 
   // Extract question IDs from assets (SmartEmbeddedQuestionContainer will load content)
   // Simple filter/map - no useMemo needed for this cheap operation
@@ -522,11 +552,12 @@ export default function DashboardView({
               dispatch(updateTextBlockContent({ dashboardId: fileId, textBlockId: id, content }));
             }}
             onRemove={(id) => handleRemoveAsset(id)}
+            onResize={handleTextBlockResize}
           />
         </Box>
       );
     });
-  }, [layoutableAssets, editMode, handleRemoveAsset, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, dispatch, publishHighlights, folderPath]);
+  }, [layoutableAssets, editMode, handleRemoveAsset, handleTextBlockResize, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, dispatch, publishHighlights, folderPath]);
 
   const handleLayoutChange = (newLayout: Layout[]) => {
     if (!document) return;

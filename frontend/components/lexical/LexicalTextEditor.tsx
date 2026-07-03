@@ -49,6 +49,7 @@ import {
   $insertNodes,
   FORMAT_TEXT_COMMAND,
   EditorState,
+  type LexicalEditor,
 } from 'lexical';
 
 import {
@@ -219,6 +220,17 @@ export const LEXICAL_CONTENT_CSS = {
     textAlign: 'left',
     verticalAlign: 'top',
     lineHeight: 1.6,
+    // Let a column grow to fit its content up to a cap, then wrap on spaces.
+    // `wordBreak: normal` never splits inside a word; `overflowWrap: break-word`
+    // breaks a single over-long word only as a last resort (so it can't force a
+    // mid-word wrap like "BusinessNameCo / mpany" just because the column is
+    // slightly narrow). The table itself scrolls horizontally (overflow-x above)
+    // when the sum of columns exceeds the container.
+    minWidth: '72px',
+    maxWidth: '320px',
+    whiteSpace: 'normal',
+    wordBreak: 'normal',
+    overflowWrap: 'break-word',
     borderBottom: '1px solid var(--chakra-colors-border-emphasized)',
     borderRight: '1px solid var(--chakra-colors-border-emphasized)',
   },
@@ -243,6 +255,23 @@ export const LEXICAL_CONTENT_CSS = {
     margin: 0,
   },
 } as const;
+
+/**
+ * Shared content padding for the editor + viewer. Both modes use this so a text
+ * block looks IDENTICAL whether it's being edited or rendered (true WYSIWYG).
+ * The top value reserves a fixed band that the edit-mode toolbar floats within
+ * (overlaid, not in-flow) — so the toolbar's presence never shifts the text.
+ */
+export const SHARED_TEXT_PADDING = '44px 26px 26px';
+
+/** Hands the underlying editor instance to the parent (for imperative focus, etc.). */
+function EditorRefPlugin({ onReady }: { onReady?: (editor: LexicalEditor) => void }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    onReady?.(editor);
+  }, [editor, onReady]);
+  return null;
+}
 
 // --- Toolbar Plugin ---
 export function ToolbarPlugin({ onImageUpload, enableMetric }: { onImageUpload?: (file: File) => Promise<string>; enableMetric?: boolean }) {
@@ -382,9 +411,13 @@ interface LexicalTextEditorProps {
   insertMenu?: boolean;
   /** If provided, selecting text shows an "Interact with {agentName}" pill that sends the selection to chat. */
   editWithAgent?: EditWithAgentSource;
+  /** Hands back the editor instance so the parent can imperatively focus it (click-to-edit). */
+  onEditorReady?: (editor: LexicalEditor) => void;
+  /** CSS padding for the editable content (default {@link SHARED_TEXT_PADDING}). */
+  contentPadding?: string;
 }
 
-export default function LexicalTextEditor({ initialMarkdown, onChange, renderToolbar, onImageUpload, mentions, insertMenu, editWithAgent }: LexicalTextEditorProps) {
+export default function LexicalTextEditor({ initialMarkdown, onChange, renderToolbar, onImageUpload, mentions, insertMenu, editWithAgent, onEditorReady, contentPadding = '32px 32px' }: LexicalTextEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
 
   // Debounce onChange to avoid dispatching on every keystroke
@@ -434,7 +467,10 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
           </Box>
         )}
 
-        {(insertMenu || mentions) && (
+        {/* The inline hint only renders for the DEFAULT inline toolbar (notebook/context
+            docs). When the caller supplies its own `renderToolbar` (dashboard text
+            blocks), it owns all chrome — a permanent hint line would break WYSIWYG. */}
+        {!renderToolbar && (insertMenu || mentions) && (
           <HStack
             gap={1.5}
             px={4}
@@ -460,7 +496,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
               <ContentEditable
                 style={{
                   outline: 'none',
-                  padding: '32px 32px',
+                  padding: contentPadding,
                   minHeight: '100%',
                   fontSize: '14px',
                   lineHeight: 1.6,
@@ -471,8 +507,8 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
             placeholder={
               <Box
                 position="absolute"
-                top="12px"
-                left="16px"
+                top="44px"
+                left="26px"
                 color="fg.muted"
                 fontSize="sm"
                 pointerEvents="none"
@@ -504,6 +540,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
         )}
         {insertMenu && <InsertMenuPlugin onImageUpload={onImageUpload} />}
         {editWithAgent && <EditSelectionPlugin source={editWithAgent} />}
+        {onEditorReady && <EditorRefPlugin onReady={onEditorReady} />}
       </LexicalComposer>
     </Box>
   );
