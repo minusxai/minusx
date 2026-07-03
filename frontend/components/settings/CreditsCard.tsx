@@ -126,6 +126,7 @@ function BreakdownTable({ rows, total }: { rows: CreditBreakdownRow[]; total: nu
           <Table.ColumnHeader fontFamily="mono" fontWeight="600">Provider</Table.ColumnHeader>
           <Table.ColumnHeader fontFamily="mono" fontWeight="600">Model</Table.ColumnHeader>
           <Table.ColumnHeader fontFamily="mono" fontWeight="600">Trigger</Table.ColumnHeader>
+          <Table.ColumnHeader fontFamily="mono" fontWeight="600" textAlign="right">Requests</Table.ColumnHeader>
           <Table.ColumnHeader fontFamily="mono" fontWeight="600" textAlign="right">Input</Table.ColumnHeader>
           <Table.ColumnHeader fontFamily="mono" fontWeight="600" textAlign="right">Cached</Table.ColumnHeader>
           <Table.ColumnHeader fontFamily="mono" fontWeight="600" textAlign="right">Output</Table.ColumnHeader>
@@ -138,6 +139,7 @@ function BreakdownTable({ rows, total }: { rows: CreditBreakdownRow[]; total: nu
             <Table.Cell fontFamily="mono" fontSize="xs">{row.provider || '—'}</Table.Cell>
             <Table.Cell fontFamily="mono" fontSize="xs">{row.model}</Table.Cell>
             <Table.Cell fontFamily="mono" fontSize="xs">{row.trigger || '—'}</Table.Cell>
+            <Table.Cell fontFamily="mono" fontSize="xs" textAlign="right">{nf.format(row.requests)}</Table.Cell>
             <Table.Cell fontFamily="mono" fontSize="xs" textAlign="right">{nf.format(row.nonCachedInputTokens)}</Table.Cell>
             <Table.Cell fontFamily="mono" fontSize="xs" textAlign="right">{nf.format(row.cachedTokens)}</Table.Cell>
             <Table.Cell fontFamily="mono" fontSize="xs" textAlign="right">{nf.format(row.outputTokens)}</Table.Cell>
@@ -146,7 +148,9 @@ function BreakdownTable({ rows, total }: { rows: CreditBreakdownRow[]; total: nu
         ))}
         <Table.Row bg="bg.muted">
           <Table.Cell fontFamily="mono" fontSize="xs" fontWeight="600">Total</Table.Cell>
-          <Table.Cell /><Table.Cell /><Table.Cell /><Table.Cell /><Table.Cell />
+          <Table.Cell /><Table.Cell />
+          <Table.Cell fontFamily="mono" fontSize="xs" fontWeight="600" textAlign="right">{nf.format(rows.reduce((s, r) => s + r.requests, 0))}</Table.Cell>
+          <Table.Cell /><Table.Cell /><Table.Cell />
           <Table.Cell fontFamily="mono" fontSize="xs" fontWeight="700" textAlign="right">{nf.format(Math.round(total))}</Table.Cell>
         </Table.Row>
       </Table.Body>
