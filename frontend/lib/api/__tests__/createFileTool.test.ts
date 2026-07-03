@@ -255,6 +255,31 @@ describe('CreateFile tool — draft file path conflict validation', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Provisional path: a NAMELESS draft gets a random-token path (`/org/k3n8x2p1`)
+  // purely for DB uniqueness; it is rewritten to the name slug when the user saves.
+  // The agent must be told this or it treats the token as a real path/name.
+  // -------------------------------------------------------------------------
+
+  it('annotates a nameless create with a pathNote explaining the provisional token path', async () => {
+    const result = await executeToolCall(
+      createFileTool({ file_type: 'question', path: '/org' }),
+    );
+    const parsed = parseContent(result);
+    expect(parsed.success).toBe(true);
+    expect(parsed.pathNote).toMatch(/provisional/i);
+    expect(parsed.pathNote).toMatch(/\bid\b/);
+  });
+
+  it('does NOT add a pathNote when a name is given (path is the real slug already)', async () => {
+    const result = await executeToolCall(
+      createFileTool({ file_type: 'question', path: '/org', name: 'Named Question' }),
+    );
+    const parsed = parseContent(result);
+    expect(parsed.success).toBe(true);
+    expect(parsed.pathNote).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
   // Regression: `content` sent as a JSON STRING must be parsed, not spread
   // character-by-character ({ "0":"{", "1":"\n", ... } garbage with empty query).
   // -------------------------------------------------------------------------

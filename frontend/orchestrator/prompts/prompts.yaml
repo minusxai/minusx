@@ -143,7 +143,12 @@ templates:
     }};
 
     type FileMeta = {{
-      id: number; name: string; path: string;
+      id: number;                // the file's STABLE handle — never changes; always reference files by id
+      name: string;              // the title; empty ("") until the file is titled
+      path: string;              // display path. For an untitled draft the last segment is a RANDOM
+                                 // PLACEHOLDER TOKEN (e.g. /org/k3n8x2p1) that exists only to avoid
+                                 // collisions — it is rewritten to the title slug when the user saves.
+                                 // Never show a placeholder path to the user or treat it as a name.
       type: 'question' | 'dashboard' | 'report' | 'alert' | 'folder' | string;
       isDirty: boolean;          // true if there are unpublished edits (user publishes via Publish All)
       queryResultId?: string;    // links a question to its query result below
