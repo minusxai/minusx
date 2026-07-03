@@ -207,7 +207,6 @@ export const VizSettings = Type.Object({
   conditionalFormats: Nullable(Type.Array(ConditionalFormatRule, { description: "conditional background-color rules for table viz. Each rule paints a cell/row/column a color when a condition on a column holds. Only used when type is 'table'." })),
   styleConfig: NullableD(VisualizationStyleConfig, 'shared visual styling for the chart, such as colors, opacity, and marker size.'),
   annotations: Nullable(Type.Array(ChartAnnotation, { description: 'annotations for cartesian charts. Each annotation specifies x, series, and text.' })),
-  colors: Nullable(Type.Record(Type.String(), Type.String(), { description: 'deprecated legacy color overrides. Use styleConfig.colors instead.' })),
   axisConfig: NullableD(AxisConfig, 'axis configuration for scale type (linear or log). Only set when user explicitly requests log scale.'),
   trendConfig: NullableD(TrendConfig, "trend chart configuration (only used when type is 'trend')"),
   geoConfig: NullableD(GeoConfig, "geo map configuration (only used when type is 'geo')"),

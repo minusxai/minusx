@@ -739,10 +739,7 @@ export default function QuestionViewV2({
                         onGeoConfigChange={handleGeoConfigChange}
                         initialColumnFormats={content.vizSettings?.columnFormats ?? undefined}
                         onColumnFormatsChange={handleColumnFormatsChange}
-                        styleConfig={{
-                          ...(content.vizSettings?.styleConfig ?? {}),
-                          ...(content.vizSettings?.colors ? { colors: content.vizSettings.colors } : {}),
-                        }}
+                        styleConfig={content.vizSettings?.styleConfig ?? undefined}
                         onStyleConfigChange={handleStyleConfigChange}
                         axisConfig={content.vizSettings?.axisConfig ?? undefined}
                         onAxisConfigChange={handleAxisConfigChange}
