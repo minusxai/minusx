@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Box, HStack, IconButton, Icon, Text } from '@chakra-ui/react';
 import {
   LuBold,
@@ -257,12 +258,13 @@ export const LEXICAL_CONTENT_CSS = {
 } as const;
 
 /**
- * Shared content padding for the editor + viewer. Both modes use this so a text
- * block looks IDENTICAL whether it's being edited or rendered (true WYSIWYG).
- * The top value reserves a fixed band that the edit-mode toolbar floats within
- * (overlaid, not in-flow) — so the toolbar's presence never shifts the text.
+ * Shared, tight content padding for the editor + viewer. Both modes use this so
+ * a text block looks IDENTICAL whether it's being edited or rendered (true
+ * WYSIWYG) — there's no toolbar taking space, because formatting is a floating
+ * selection bubble (see FloatingSelectionToolbar). Kept small so single-height
+ * heading / section-description blocks look tight and clean.
  */
-export const SHARED_TEXT_PADDING = '44px 26px 26px';
+export const SHARED_TEXT_PADDING = '24px 24px';
 
 /** Hands the underlying editor instance to the parent (for imperative focus, etc.). */
 function EditorRefPlugin({ onReady }: { onReady?: (editor: LexicalEditor) => void }) {
@@ -271,6 +273,85 @@ function EditorRefPlugin({ onReady }: { onReady?: (editor: LexicalEditor) => voi
     onReady?.(editor);
   }, [editor, onReady]);
   return null;
+}
+
+/**
+ * Notion/Medium-style floating formatting toolbar. Renders `children` (the
+ * button set) in a bubble above the current text selection, portaled to
+ * <body> so it's never clipped by the block/grid overflow. Shows only while a
+ * non-empty range is selected inside this editor — so the resting editor has NO
+ * chrome and looks pixel-identical to the read-only view.
+ */
+function FloatingSelectionToolbar({ children }: { children: React.ReactNode }) {
+  const [editor] = useLexicalComposerContext();
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const update = useCallback(() => {
+    editor.getEditorState().read(() => {
+      const selection = $getSelection();
+      const native = typeof window !== 'undefined' ? window.getSelection() : null;
+      const root = editor.getRootElement();
+      if (
+        !$isRangeSelection(selection) ||
+        selection.isCollapsed() ||
+        !native ||
+        native.rangeCount === 0 ||
+        !root
+      ) {
+        setPos(null);
+        return;
+      }
+      const range = native.getRangeAt(0);
+      if (!root.contains(range.commonAncestorContainer)) {
+        setPos(null);
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) {
+        setPos(null);
+        return;
+      }
+      // Clamp horizontally so a bubble near the viewport edge stays on-screen.
+      const left = Math.min(Math.max(rect.left + rect.width / 2, 170), window.innerWidth - 170);
+      setPos({ top: rect.top, left });
+    });
+  }, [editor]);
+
+  useEffect(() => {
+    const unregister = editor.registerUpdateListener(() => update());
+    const handler = () => update();
+    document.addEventListener('selectionchange', handler);
+    window.addEventListener('resize', handler, true);
+    window.addEventListener('scroll', handler, true);
+    return () => {
+      unregister();
+      document.removeEventListener('selectionchange', handler);
+      window.removeEventListener('resize', handler, true);
+      window.removeEventListener('scroll', handler, true);
+    };
+  }, [editor, update]);
+
+  if (!pos) return null;
+
+  return createPortal(
+    <Box
+      position="fixed"
+      top={`${pos.top - 10}px`}
+      left={`${pos.left}px`}
+      transform="translate(-50%, -100%)"
+      zIndex={1500}
+      bg="bg.panel"
+      borderWidth="1px"
+      borderColor="border.emphasized"
+      borderRadius="lg"
+      boxShadow="lg"
+      // Keep the selection alive when clicking a button (don't steal focus).
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      {children}
+    </Box>,
+    document.body,
+  );
 }
 
 // --- Toolbar Plugin ---
@@ -415,9 +496,13 @@ interface LexicalTextEditorProps {
   onEditorReady?: (editor: LexicalEditor) => void;
   /** CSS padding for the editable content (default {@link SHARED_TEXT_PADDING}). */
   contentPadding?: string;
+  /** Render the toolbar as a floating bubble over the selection (no in-flow chrome). */
+  floatingToolbar?: boolean;
+  /** Vertically center short content in the available height (falls back to top-aligned on overflow). */
+  verticalCenter?: boolean;
 }
 
-export default function LexicalTextEditor({ initialMarkdown, onChange, renderToolbar, onImageUpload, mentions, insertMenu, editWithAgent, onEditorReady, contentPadding = '32px 32px' }: LexicalTextEditorProps) {
+export default function LexicalTextEditor({ initialMarkdown, onChange, renderToolbar, onImageUpload, mentions, insertMenu, editWithAgent, onEditorReady, contentPadding = '32px 32px', floatingToolbar, verticalCenter }: LexicalTextEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
 
   // Debounce onChange to avoid dispatching on every keystroke
@@ -454,7 +539,11 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
       css={LEXICAL_CONTENT_CSS}
     >
       <LexicalComposer initialConfig={initialConfig}>
-        {renderToolbar ? (
+        {floatingToolbar ? (
+          <FloatingSelectionToolbar>
+            <ToolbarPlugin onImageUpload={onImageUpload} />
+          </FloatingSelectionToolbar>
+        ) : renderToolbar ? (
           renderToolbar(<ToolbarPlugin onImageUpload={onImageUpload} />)
         ) : (
           <Box
@@ -468,9 +557,10 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
         )}
 
         {/* The inline hint only renders for the DEFAULT inline toolbar (notebook/context
-            docs). When the caller supplies its own `renderToolbar` (dashboard text
-            blocks), it owns all chrome — a permanent hint line would break WYSIWYG. */}
-        {!renderToolbar && (insertMenu || mentions) && (
+            docs). When the caller supplies its own `renderToolbar` or uses the floating
+            selection toolbar (dashboard text blocks), it owns all chrome — a permanent
+            hint line would break WYSIWYG. */}
+        {!renderToolbar && !floatingToolbar && (insertMenu || mentions) && (
           <HStack
             gap={1.5}
             px={4}
@@ -490,14 +580,25 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
           </HStack>
         )}
 
-        <Box flex={1} minH={0} overflow="auto" position="relative">
+        <Box
+          flex={1}
+          minH={0}
+          overflow="auto"
+          position="relative"
+          display={verticalCenter ? 'flex' : undefined}
+          flexDirection={verticalCenter ? 'column' : undefined}
+          // `safe center` vertically centers short content (equal top/bottom
+          // space — great for one-line headings) but falls back to top-aligned
+          // when content overflows, so scrolling/read-more still work.
+          justifyContent={verticalCenter ? 'safe center' : undefined}
+        >
           <RichTextPlugin
             contentEditable={
               <ContentEditable
                 style={{
                   outline: 'none',
                   padding: contentPadding,
-                  minHeight: '100%',
+                  minHeight: verticalCenter ? undefined : '100%',
                   fontSize: '14px',
                   lineHeight: 1.6,
                   fontFamily: 'var(--font-jetbrains-mono), monospace',
@@ -507,8 +608,8 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
             placeholder={
               <Box
                 position="absolute"
-                top="44px"
-                left="26px"
+                top="20px"
+                left="24px"
                 color="fg.muted"
                 fontSize="sm"
                 pointerEvents="none"
@@ -553,9 +654,11 @@ interface LexicalTextViewerProps {
   padding?: string;
   /** Base font size (default 14px). */
   fontSize?: string;
+  /** Vertically center short content in the available height (falls back to top-aligned on overflow). */
+  verticalCenter?: boolean;
 }
 
-export function LexicalTextViewer({ markdown, padding = '40px 32px', fontSize = '14px' }: LexicalTextViewerProps) {
+export function LexicalTextViewer({ markdown, padding = '40px 32px', fontSize = '14px', verticalCenter }: LexicalTextViewerProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
 
   const initialConfig = {
@@ -572,6 +675,9 @@ export function LexicalTextViewer({ markdown, padding = '40px 32px', fontSize = 
       height="100%"
       className={colorMode === 'dark' ? 'lexical-dark' : 'lexical-light'}
       css={LEXICAL_CONTENT_CSS}
+      display={verticalCenter ? 'flex' : undefined}
+      flexDirection={verticalCenter ? 'column' : undefined}
+      justifyContent={verticalCenter ? 'safe center' : undefined}
     >
       <LexicalComposer initialConfig={initialConfig}>
         <RichTextPlugin
@@ -580,7 +686,7 @@ export function LexicalTextViewer({ markdown, padding = '40px 32px', fontSize = 
               style={{
                 outline: 'none',
                 padding,
-                minHeight: '100%',
+                minHeight: verticalCenter ? undefined : '100%',
                 fontSize,
                 lineHeight: 1.6,
                 fontFamily: 'var(--font-jetbrains-mono), monospace',

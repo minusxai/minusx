@@ -6,13 +6,15 @@
  * stored as markdown). Image upload (type "+") and @ / @@ mentions (tables,
  * questions) are wired like the notebook text cell editor.
  *
- * Interaction model:
- *  - Edit mode: the body is always directly editable. A solid toolbar bar sits
- *    at the top; you drag the block by grabbing that bar (the grip or any empty
- *    space — the buttons stop propagation so they don't start a drag).
- *  - View mode: renders the read-only viewer. If the text overflows the cell, a
- *    gradient fade + "Read more" pill grows the grid cell (via `onResize`);
- *    "Show less" restores it.
+ * Interaction model (true WYSIWYG):
+ *  - The body is always directly editable and uses the SAME tight padding as the
+ *    read-only view, so editing looks pixel-identical to viewing — no toolbar
+ *    shifts anything. Formatting is a floating bubble that appears over the text
+ *    only while you have a selection (see FloatingSelectionToolbar).
+ *  - Drag + remove are small controls that fade in on hover (absolute, so they
+ *    never take layout space).
+ *  - View mode: if the text genuinely overflows the cell, a gradient fade +
+ *    "Read more" pill grows the grid cell (via `onResize`); "Show less" restores.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, HStack, IconButton, Button, Text } from '@chakra-ui/react';
@@ -21,6 +23,9 @@ import LexicalTextEditor, { LexicalTextViewer, SHARED_TEXT_PADDING, type Mention
 import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
+
+/** Only offer "Read more" once at least this many px of content is actually hidden. */
+const OVERFLOW_THRESHOLD_PX = 24;
 
 interface TextBlockCardProps {
   id: string;
@@ -94,11 +99,12 @@ export default function TextBlockCard({
     }
   }
 
-  // Detect whether content overflows its cell (view mode only).
+  // Detect whether content overflows its cell by a meaningful amount (view mode
+  // only). The threshold stops a one-line heading from getting a false "Read more".
   useEffect(() => {
     if (editMode || !contentRef.current) return;
     const el = contentRef.current;
-    const check = () => setIsOverflowing(el.scrollHeight > el.clientHeight + 4);
+    const check = () => setIsOverflowing(el.scrollHeight > el.clientHeight + OVERFLOW_THRESHOLD_PX);
     check();
     const observer = new ResizeObserver(check);
     observer.observe(el);
@@ -108,7 +114,7 @@ export default function TextBlockCard({
   const handleExpand = useCallback(() => {
     setExpanded(true);
     // Extra room for the "Show less" button + padding.
-    if (onResize && contentRef.current) onResize(id, contentRef.current.scrollHeight + 80);
+    if (onResize && contentRef.current) onResize(id, contentRef.current.scrollHeight + 48);
   }, [id, onResize]);
 
   const handleCollapse = useCallback(() => {
@@ -118,7 +124,13 @@ export default function TextBlockCard({
 
   if (editMode) {
     return (
-      <Box position="relative" height="100%" display="flex" flexDirection="column">
+      <Box
+        position="relative"
+        height="100%"
+        display="flex"
+        flexDirection="column"
+        _hover={{ '& .tb-controls': { opacity: 1 } }}
+      >
         <LexicalTextEditor
           key={syncKey}
           initialMarkdown={content}
@@ -126,55 +138,59 @@ export default function TextBlockCard({
           onImageUpload={handleImageUpload}
           mentions={mentions}
           insertMenu
-          // SAME padding as the viewer (view mode), so the text lands in the exact
-          // same spot whether editing or viewing. The toolbar floats within the
-          // reserved top band below — it never pushes the text.
+          floatingToolbar
+          verticalCenter
+          // Same tight padding as the viewer, so the text sits in the exact same
+          // place whether editing or viewing.
           contentPadding={SHARED_TEXT_PADDING}
           editWithAgent={{ editorKind: 'richtext', fileName: filePath?.split('/').pop() ?? 'text block', filePath, blockId: id }}
-          renderToolbar={(toolbar) => (
-            // Solid toolbar bar, overlaid in the reserved top padding band
-            // (absolute, not in-flow) so its presence never shifts the text.
-            // The whole bar is a `.drag-handle` (cursor: move) so the block drags
-            // from the grip or any empty space. Only the buttons stop propagation,
-            // so clicking them formats instead of starting a drag.
-            <HStack
-              className="drag-handle"
-              cursor="move"
-              position="absolute"
-              top={0}
-              left={0}
-              right={0}
-              zIndex={2}
-              gap={1}
-              px={2}
-              py={1}
-              bg="bg.muted"
-              borderTopRadius="md"
-              borderBottomWidth="1px"
-              borderColor="border.default"
-            >
-              <LuGripVertical size={14} opacity={0.5} style={{ cursor: 'move' }} />
-              <HStack gap={1} minW={0} overflowX="auto" onMouseDown={(e) => e.stopPropagation()} cursor="default">
-                {toolbar}
-              </HStack>
-              {/* draggable filler — grab anywhere between the buttons and the ✕ */}
-              <Box flex={1} alignSelf="stretch" minW={2} />
-              <IconButton
-                onClick={() => onRemove(id)}
-                onMouseDown={(e) => e.stopPropagation()}
-                aria-label="Remove text block"
-                size="2xs"
-                variant="ghost"
-                color="accent.danger"
-                cursor="pointer"
-                _hover={{ transform: 'scale(1.15)' }}
-                transition="transform 0.1s ease"
-              >
-                <LuX size={14} />
-              </IconButton>
-            </HStack>
-          )}
         />
+
+        {/* Hover controls: drag grip + remove. Absolute so they never affect the
+            text layout; fade in on hover of the block. */}
+        <HStack
+          className="tb-controls"
+          position="absolute"
+          top="4px"
+          right="4px"
+          gap={1}
+          opacity={0}
+          transition="opacity 0.12s"
+          zIndex={2}
+        >
+          <Box
+            className="drag-handle"
+            display="flex"
+            alignItems="center"
+            px={1}
+            py={1}
+            bg="bg.panel"
+            borderWidth="1px"
+            borderColor="border.muted"
+            borderRadius="md"
+            boxShadow="xs"
+            color="fg.muted"
+            cursor="grab"
+            _active={{ cursor: 'grabbing' }}
+            aria-label="Move text block"
+          >
+            <LuGripVertical size={14} />
+          </Box>
+          <IconButton
+            onClick={() => onRemove(id)}
+            aria-label="Remove text block"
+            size="2xs"
+            variant="subtle"
+            color="accent.danger"
+            bg="bg.panel"
+            boxShadow="xs"
+            cursor="pointer"
+            _hover={{ transform: 'scale(1.15)' }}
+            transition="transform 0.1s ease"
+          >
+            <LuX size={14} />
+          </IconButton>
+        </HStack>
       </Box>
     );
   }
@@ -191,7 +207,7 @@ export default function TextBlockCard({
         overflow={expanded ? 'visible' : 'hidden'}
       >
         {content ? (
-          <LexicalTextViewer markdown={content} padding={SHARED_TEXT_PADDING} />
+          <LexicalTextViewer markdown={content} padding={SHARED_TEXT_PADDING} verticalCenter={!expanded} />
         ) : (
           <Box p={4} aria-label="Empty text block" color="fg.muted" fontSize="sm" fontStyle="italic">Empty text block</Box>
         )}
@@ -204,7 +220,7 @@ export default function TextBlockCard({
           bottom={0}
           left={0}
           right={0}
-          height="96px"
+          height="80px"
           bgGradient="to-t"
           gradientFrom="bg.subtle"
           gradientVia="bg.subtle"
@@ -212,7 +228,7 @@ export default function TextBlockCard({
           display="flex"
           alignItems="flex-end"
           justifyContent="center"
-          pb={3}
+          pb={2}
           pointerEvents="none"
         >
           <Button
@@ -239,7 +255,7 @@ export default function TextBlockCard({
 
       {/* Show less — sits below the (now fully visible) content */}
       {expanded && (
-        <Box flexShrink={0} display="flex" justifyContent="center" py={3} borderTopWidth="1px" borderColor="border.muted">
+        <Box flexShrink={0} display="flex" justifyContent="center" py={2}>
           <Button
             size="xs"
             variant="outline"

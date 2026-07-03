@@ -16,7 +16,7 @@ vi.mock('@/components/lexical/LexicalTextEditor', () => {
   const React = require('react');
   return {
     __esModule: true,
-    SHARED_TEXT_PADDING: '44px 26px 26px',
+    SHARED_TEXT_PADDING: '24px 24px',
     default: ({ initialMarkdown, onChange, renderToolbar }: { initialMarkdown: string; onChange: (md: string) => void; renderToolbar?: (t: React.ReactNode) => React.ReactNode }) => {
       const textarea = React.createElement('textarea', {
         'aria-label': 'Text block editor',
