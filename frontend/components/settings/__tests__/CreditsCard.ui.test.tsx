@@ -13,12 +13,13 @@ function mockUsage(data: CreditUsageResponse) {
 
 const individual: CreditUsageResponse['individual'] = {
   billing: {
-    label: 'last month',
+    label: 'this month',
     used: 50,
     allowance: 10_000,
+    resetsAt: '2026-08-01T00:00:00.000Z',
     rows: [{ provider: 'anthropic', model: 'opus', trigger: 'explore', nonCachedInputTokens: 100, cachedTokens: 0, outputTokens: 50, credits: 50 }],
   },
-  reset: { label: 'last day', used: 20, allowance: 1_000 },
+  reset: { label: 'today', used: 20, allowance: 1_000, resetsAt: '2026-07-04T00:00:00.000Z' },
 };
 
 describe('CreditsUsageCards', () => {
@@ -37,8 +38,8 @@ describe('CreditsUsageCards', () => {
     mockUsage({
       individual,
       org: {
-        billing: { label: 'last month', used: 150, allowance: 100_000, rows: individual.billing.rows },
-        reset: { label: 'last day', used: 40, allowance: 10_000 },
+        billing: { label: 'this month', used: 150, allowance: 100_000, resetsAt: '2026-08-01T00:00:00.000Z', rows: individual.billing.rows },
+        reset: { label: 'today', used: 40, allowance: 10_000, resetsAt: '2026-07-04T00:00:00.000Z' },
       },
     });
     renderWithProviders(<CreditsUsageCards />);

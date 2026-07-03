@@ -34,34 +34,50 @@ function useCreditUsage() {
   return { data, loading, error, refetch };
 }
 
-/** One rolling-window bar: used / allowance credits, labeled by the cycle. */
-function UsageBar({ window }: { window: CreditWindow }) {
+/**
+ * Format an ISO reset timestamp as a short local date (day-granular). We show
+ * the date only — the boundary is computed at the DB day boundary (UTC), so
+ * rendering the exact instant in the browser's local time is off-by-tz-offset
+ * and reads confusingly (e.g. 1:00 AM). The date is unambiguous for day+ cycles.
+ */
+function formatResetsAt(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/** One window bar (half width): label + used/allowance + colored progress + optional caption. */
+function UsageBar({ window, label, color }: { window: CreditWindow; label: string; color: string }) {
   const pct = window.allowance > 0 ? Math.min(100, (window.used / window.allowance) * 100) : 0;
   const overLimit = window.used > window.allowance;
+  const barColor = overLimit ? 'accent.danger' : color;
   return (
-    <VStack align="stretch" gap={1}>
-      <HStack justify="space-between">
-        <Text fontSize="xs" color="fg.muted" fontFamily="mono">{window.label}</Text>
-        <Text fontSize="xs" fontFamily="mono" color={overLimit ? 'accent.danger' : 'fg.muted'}>
-          {nf.format(Math.round(window.used))} / {nf.format(window.allowance)} credits
+    <VStack align="stretch" gap={1} flex={1} minW={0}>
+      <HStack justify="space-between" gap={2}>
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono" truncate>{label}</Text>
+        <Text fontSize="xs" fontFamily="mono" whiteSpace="nowrap" color={overLimit ? 'accent.danger' : 'fg.muted'}>
+          {nf.format(Math.round(window.used))} / {nf.format(window.allowance)}
         </Text>
       </HStack>
-      <Progress.Root size="sm" value={pct} colorPalette={overLimit ? 'red' : 'teal'}>
-        <Progress.Track borderRadius="full" overflow="hidden">
-          <Progress.Range />
+      <Progress.Root size="sm" value={pct}>
+        <Progress.Track borderRadius="full" overflow="hidden" bg="bg.muted">
+          <Progress.Range bg={barColor} />
         </Progress.Track>
       </Progress.Root>
+      {window.resetsAt && (
+        <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">resets {formatResetsAt(window.resetsAt)}</Text>
+      )}
     </VStack>
   );
 }
 
-/** A scope (yours / org): a reset-cycle bar and a billing-cycle bar. */
+/** A scope (yours / org): billing + reset bars side by side (50% each), distinct accent colors. */
 function ScopeBars({ title, scope }: { title: string; scope: CreditScope }) {
   return (
     <VStack align="stretch" gap={2} aria-label={title}>
       <Text fontSize="xs" fontWeight="600" fontFamily="mono" color="fg.subtle">{title}</Text>
-      <UsageBar window={scope.reset} />
-      <UsageBar window={scope.billing} />
+      <HStack align="start" gap={4}>
+        <UsageBar window={scope.reset} label="this credit window" color="accent.primary" />
+        <UsageBar window={scope.billing} label="this billing cycle" color="accent.teal" />
+      </HStack>
     </VStack>
   );
 }

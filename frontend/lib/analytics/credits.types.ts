@@ -41,12 +41,14 @@ export interface CreditBreakdownRow {
 
 /** One usage window (a billing or reset cycle) for a scope: used vs. allowance. */
 export interface CreditWindow {
-  /** Human label for the window, e.g. 'last month', 'last day'. */
+  /** Human label for the window, e.g. 'this month', 'today'. */
   label: string;
-  /** Credits consumed within this rolling window. */
+  /** Credits consumed within this window. */
   used: number;
   /** Credit allowance for this window. */
   allowance: number;
+  /** ISO timestamp when this window next resets (calendar mode); null when rolling. */
+  resetsAt: string | null;
 }
 
 /**

@@ -93,3 +93,14 @@ export function cycleStartSql(cycle: BillingCycle): string {
   const base = `date_trunc('${word}', NOW())`;
   return cycle.n > 1 ? `${base} - INTERVAL '${cycle.n - 1} ${word}'` : base;
 }
+
+/**
+ * SQL expression for WHEN the current window next resets (the next calendar
+ * boundary). Returns `NULL` in rolling mode (a rolling window never resets — it
+ * slides continuously). Safe to interpolate (whitelisted unit word only).
+ */
+export function cycleNextResetSql(cycle: BillingCycle): string {
+  if (CYCLE_MODE === 'rolling') return 'NULL';
+  const word = UNIT_WORD[cycle.unit];
+  return `date_trunc('${word}', NOW()) + INTERVAL '1 ${word}'`;
+}

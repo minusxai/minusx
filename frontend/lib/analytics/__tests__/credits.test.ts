@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { costToCredits } from '@/lib/analytics/credits';
-import { parseBillingCycle, cycleStartSql, CREDIT_BUDGETS, CYCLE_MODE } from '@/lib/analytics/credit-budgets';
+import { parseBillingCycle, cycleStartSql, cycleNextResetSql, CREDIT_BUDGETS, CYCLE_MODE } from '@/lib/analytics/credit-budgets';
 
 describe('costToCredits (v0: credits = cost * 1000)', () => {
   it('multiplies cost by 1000', () => {
@@ -55,6 +55,12 @@ describe('parseBillingCycle', () => {
     expect(cycleStartSql(parseBillingCycle('1d'))).toBe("date_trunc('day', NOW())");
     expect(cycleStartSql(parseBillingCycle('1w'))).toBe("date_trunc('week', NOW())");
     expect(cycleStartSql(parseBillingCycle('3m'))).toBe("date_trunc('month', NOW()) - INTERVAL '2 month'");
+  });
+
+  it('cycleNextResetSql builds the next calendar boundary', () => {
+    expect(CYCLE_MODE).toBe('calendar');
+    expect(cycleNextResetSql(parseBillingCycle('1d'))).toBe("date_trunc('day', NOW()) + INTERVAL '1 day'");
+    expect(cycleNextResetSql(parseBillingCycle('1m'))).toBe("date_trunc('month', NOW()) + INTERVAL '1 month'");
   });
 });
 

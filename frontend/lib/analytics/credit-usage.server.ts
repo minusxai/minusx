@@ -6,7 +6,7 @@ import {
   resolveIndividualAllowance, resolveOrgAllowance,
   resolveIndividualResetAllowance, resolveOrgResetAllowance,
 } from '@/lib/config';
-import { cycleStartSql } from './credit-budgets';
+import { cycleStartSql, cycleNextResetSql } from './credit-budgets';
 import { UNKNOWN_TRIGGER, type CreditBreakdownRow, type CreditScope, type CreditUsageResponse } from './credits.types';
 
 /**
@@ -29,6 +29,15 @@ import { UNKNOWN_TRIGGER, type CreditBreakdownRow, type CreditScope, type Credit
 // come back as strings — always Number()-wrap.
 const BILLING_START = cycleStartSql(BILLING_CYCLE);
 const RESET_START = cycleStartSql(RESET_CYCLE);
+const NEXT_RESET_SQL = `SELECT ${cycleNextResetSql(BILLING_CYCLE)} AS billing_next, ${cycleNextResetSql(RESET_CYCLE)} AS reset_next`;
+
+/** When the billing/reset windows next reset, as ISO strings (null in rolling mode). */
+async function loadNextResets(): Promise<{ billingNext: string | null; resetNext: string | null }> {
+  const { rows } = await getModules().db.exec<{ billing_next: unknown; reset_next: unknown }>(NEXT_RESET_SQL);
+  const toIso = (v: unknown): string | null =>
+    v == null ? null : v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString();
+  return { billingNext: toIso(rows[0]?.billing_next), resetNext: toIso(rows[0]?.reset_next) };
+}
 
 const usageSql = (userFilter: string) => `
 SELECT
@@ -47,7 +56,12 @@ GROUP BY COALESCE(provider, ''), model, COALESCE(NULLIF(trigger, ''), 'unknown')
 ORDER BY cost DESC
 `;
 
-async function loadScope(billingAllowance: number, resetAllowance: number, userId?: number): Promise<CreditScope> {
+async function loadScope(
+  billingAllowance: number,
+  resetAllowance: number,
+  nextResets: { billingNext: string | null; resetNext: string | null },
+  userId?: number,
+): Promise<CreditScope> {
   const db = getModules().db;
   const sql = userId === undefined ? usageSql('') : usageSql('AND user_id = $1');
   const result = userId === undefined
@@ -77,8 +91,8 @@ async function loadScope(billingAllowance: number, resetAllowance: number, userI
   });
 
   return {
-    billing: { label: BILLING_CYCLE.label, used: billingUsed, allowance: billingAllowance, rows },
-    reset: { label: RESET_CYCLE.label, used: resetUsed, allowance: resetAllowance },
+    billing: { label: BILLING_CYCLE.label, used: billingUsed, allowance: billingAllowance, resetsAt: nextResets.billingNext, rows },
+    reset: { label: RESET_CYCLE.label, used: resetUsed, allowance: resetAllowance, resetsAt: nextResets.resetNext },
   };
 }
 
@@ -91,7 +105,8 @@ export async function getCreditUsage(
   role: string,
   includeOrg: boolean,
 ): Promise<CreditUsageResponse> {
-  const individual = await loadScope(resolveIndividualAllowance(role), resolveIndividualResetAllowance(role), userId);
-  const org = includeOrg ? await loadScope(resolveOrgAllowance(), resolveOrgResetAllowance()) : null;
+  const nextResets = await loadNextResets();
+  const individual = await loadScope(resolveIndividualAllowance(role), resolveIndividualResetAllowance(role), nextResets, userId);
+  const org = includeOrg ? await loadScope(resolveOrgAllowance(), resolveOrgResetAllowance(), nextResets) : null;
   return { individual, org };
 }

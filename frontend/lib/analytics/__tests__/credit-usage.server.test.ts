@@ -74,9 +74,14 @@ describe('getCreditUsage', () => {
     expect(opus.credits).toBeCloseTo(400, 6); // (0.3 + 0.1) * 1000
 
     // Billing used = 400 + 50 + 20 + 10. Every seeded row is at NOW(), so the
-    // reset window (last day) captures the same total.
+    // reset window (today) captures the same total.
     expect(individual.billing.used).toBeCloseTo(480, 6);
     expect(individual.reset.used).toBeCloseTo(480, 6);
+
+    // Calendar mode → each window reports when it next resets (a future instant).
+    expect(individual.reset.resetsAt).toBeTruthy();
+    expect(individual.billing.resetsAt).toBeTruthy();
+    expect(new Date(individual.reset.resetsAt!).getTime()).toBeGreaterThan(Date.now());
   });
 
   it('floors non-cached input at 0 when cached exceeds prompt', async () => {
