@@ -7,6 +7,10 @@
  */
 
 export interface CostToCreditsInput {
+  /** LLM provider (e.g. 'openai', 'anthropic', 'amazon-bedrock'). For future per-provider rates. */
+  provider?: string;
+  /** Model id. For future per-model rates. */
+  model?: string;
   cachedTokens: number;
   nonCachedTokens: number;
   outputTokens: number;

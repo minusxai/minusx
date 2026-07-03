@@ -71,17 +71,19 @@ async function loadScope(
   let billingUsed = 0;
   let resetUsed = 0;
   const rows: CreditBreakdownRow[] = result.rows.map((row) => {
+    const provider = String(row['provider'] ?? '');
+    const model = String(row['model'] ?? '');
     const nonCachedInputTokens = Number(row['nonCachedInputTokens'] ?? 0);
     const cachedTokens = Number(row['cachedTokens'] ?? 0);
     const outputTokens = Number(row['outputTokens'] ?? 0);
     const cost = Number(row['cost'] ?? 0);
     const resetCost = Number(row['resetCost'] ?? 0);
-    const credits = costToCredits({ cachedTokens, nonCachedTokens: nonCachedInputTokens, outputTokens, cost });
+    const credits = costToCredits({ provider, model, cachedTokens, nonCachedTokens: nonCachedInputTokens, outputTokens, cost });
     billingUsed += credits;
-    resetUsed += costToCredits({ cachedTokens, nonCachedTokens: nonCachedInputTokens, outputTokens, cost: resetCost });
+    resetUsed += costToCredits({ provider, model, cachedTokens, nonCachedTokens: nonCachedInputTokens, outputTokens, cost: resetCost });
     return {
-      provider: String(row['provider'] ?? ''),
-      model: String(row['model'] ?? ''),
+      provider,
+      model,
       trigger: String(row['trigger'] ?? UNKNOWN_TRIGGER),
       nonCachedInputTokens,
       cachedTokens,
