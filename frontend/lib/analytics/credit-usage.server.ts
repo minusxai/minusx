@@ -2,7 +2,7 @@ import 'server-only';
 import { getModules } from '@/lib/modules/registry';
 import { costToCredits } from './credits';
 import { resolveIndividualAllowance, resolveOrgAllowance } from '@/lib/config';
-import type { CreditBreakdownRow, CreditScope, CreditUsageResponse } from './credits.types';
+import { UNKNOWN_TRIGGER, type CreditBreakdownRow, type CreditScope, type CreditUsageResponse } from './credits.types';
 
 /**
  * Aggregate credit usage from `llm_call_events` for the CURRENT calendar month.
@@ -25,7 +25,7 @@ const usageSql = (userFilter: string) => `
 SELECT
   COALESCE(provider, '')                                                     AS provider,
   model                                                                      AS model,
-  COALESCE(trigger, '')                                                      AS trigger,
+  COALESCE(NULLIF(trigger, ''), 'unknown')                                   AS trigger,
   SUM(GREATEST(COALESCE(prompt_tokens, 0) - COALESCE(cached_tokens, 0), 0))  AS "nonCachedInputTokens",
   SUM(COALESCE(cached_tokens, 0))                                            AS "cachedTokens",
   SUM(COALESCE(completion_tokens, 0))                                        AS "outputTokens",
@@ -33,7 +33,7 @@ SELECT
 FROM llm_call_events
 WHERE created_at >= date_trunc('month', NOW())
   ${userFilter}
-GROUP BY COALESCE(provider, ''), model, COALESCE(trigger, '')
+GROUP BY COALESCE(provider, ''), model, COALESCE(NULLIF(trigger, ''), 'unknown')
 ORDER BY cost DESC
 `;
 
@@ -55,7 +55,7 @@ async function loadScope(allowance: number, userId?: number): Promise<CreditScop
     return {
       provider: String(row['provider'] ?? ''),
       model: String(row['model'] ?? ''),
-      trigger: String(row['trigger'] ?? ''),
+      trigger: String(row['trigger'] ?? UNKNOWN_TRIGGER),
       nonCachedInputTokens,
       cachedTokens,
       outputTokens,

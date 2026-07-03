@@ -99,10 +99,11 @@ describe('getCreditUsage', () => {
     const gptRows = individual.rows.filter((r) => r.provider === 'openai' && r.model === 'gpt');
     const byTrigger = Object.fromEntries(gptRows.map((r) => [r.trigger, r]));
 
-    // '' (the beforeEach openai/gpt row, no trigger), 'explore', and 'slack'
+    // 'unknown' (the beforeEach openai/gpt row, no trigger → normalized), 'explore', and 'slack'
     expect(byTrigger['explore']).toBeDefined();
     expect(byTrigger['slack']).toBeDefined();
-    expect(byTrigger['']).toBeDefined();
+    expect(byTrigger['unknown']).toBeDefined();
+    expect(byTrigger['']).toBeUndefined(); // never empty
     expect(byTrigger['explore'].credits).toBeCloseTo(20, 6); // 0.02 * 1000
     expect(byTrigger['slack'].credits).toBeCloseTo(30, 6); // 0.03 * 1000
   });

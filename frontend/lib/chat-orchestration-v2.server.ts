@@ -60,6 +60,7 @@ import {
 import { getConversation as getV3Conversation, loadLog as loadV3Log } from '@/lib/data/conversations.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { recordLlmRequest, recordLlmResponse, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
+import { UNKNOWN_TRIGGER } from '@/lib/analytics/credits.types';
 import { buildLlmCallDetail } from '@/lib/chat/headless-llm-tracking.server';
 import { setLlmCallRecorder } from '@/orchestrator/llm';
 import type { AssistantMessage } from '@/orchestrator/llm';
@@ -574,7 +575,8 @@ export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: numbe
         durationS: detail.duration,
         stream: true,
         finishReason: detail.finish_reason,
-        trigger: source ?? null,
+        // Never empty — a conversation surface (explore/question/…), else 'unknown'.
+        trigger: source && source.length > 0 ? source : UNKNOWN_TRIGGER,
         userId,
       });
 
