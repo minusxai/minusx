@@ -311,12 +311,19 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
 
   // While editing, sync inline edits out (debounced + flush on focus loss) so the caller can mark the
   // file dirty and the shared header's Save persists them — the iframe DOM is the source of truth.
+  //
+  // The flush is gated on a REAL user `input` event. Embedded React controls (charts, params)
+  // mounting/unmounting inside the iframe fire `focusout` programmatically; an ungated flush then
+  // serialized the body MID-HYDRATION (placeholders emptied, embeds half-mounted) and replaced the
+  // file's content with that partial echo — wiping an agent EditFile moments after it staged (the
+  // "story goes blank after the agent edits" bug). No user input → nothing to sync → no echo.
   useEffect(() => {
     const doc = docRef.current;
     if (!doc || !editable || !onChange) return;
     let t = 0;
-    const flush = () => { if (docRef.current) onChange(serializeEditedStory(docRef.current.body, [])); };
-    const schedule = () => { if (t) window.clearTimeout(t); t = window.setTimeout(() => { t = 0; flush(); }, 400); };
+    let userEdited = false;
+    const flush = () => { if (userEdited && docRef.current) onChange(serializeEditedStory(docRef.current.body, [])); };
+    const schedule = () => { userEdited = true; if (t) window.clearTimeout(t); t = window.setTimeout(() => { t = 0; flush(); }, 400); };
     doc.body.addEventListener('input', schedule);
     doc.body.addEventListener('focusout', flush);
     return () => {
