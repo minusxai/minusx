@@ -1,8 +1,8 @@
 'use client';
 
 import { Box } from '@chakra-ui/react';
-import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
-import { getAssetLayoutKey, getLayoutableAssets } from './dashboard-assets';
+import { DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
+import { getAssetLayoutKey, getLayoutableAssets, getLayoutSignature, computeDashboardLayouts } from './dashboard-assets';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
 import ParameterRow from '../ParameterRow';
@@ -20,14 +20,6 @@ import { QuestionBrowserPanel } from '../QuestionBrowserPanel';
 import { useDashboardPublishHighlights, type PublishHighlight } from '@/lib/context/dashboard-publish-highlights';
 
 const EMPTY_PARAMS: Record<string, any> = {};
-const DASHBOARD_MIN_W = 2;
-const DASHBOARD_MIN_H = 2;
-const DASHBOARD_DEFAULT_W = 6;
-const DASHBOARD_DEFAULT_H = 6;
-const TEXT_BLOCK_DEFAULT_W = 6;
-const TEXT_BLOCK_DEFAULT_H = 3;
-const TEXT_BLOCK_MIN_W = 2;
-const TEXT_BLOCK_MIN_H = 1;
 // Must match the grid's rowHeight / margin props below. Used to translate a text
 // block's expanded pixel height into grid rows for "Read more".
 const GRID_ROW_HEIGHT = 80;
@@ -53,51 +45,6 @@ interface DashboardViewProps {
   // If true, all editing is disabled (role-based permission)
   readOnly?: boolean;
 }
-
-// Compact layout for mobile by stacking cards vertically
-const compactMobileLayout = (layout: Layout[], toCols: number): Layout[] => {
-  // Sort by Y position first, then X position (top to bottom, left to right)
-  const sorted = [...layout].sort((a, b) => {
-    if (a.y !== b.y) return a.y - b.y;
-    return a.x - b.x;
-  });
-
-  // Stack cards vertically, all full-width for mobile
-  let currentY = 0;
-  return sorted.map(item => {
-    const result = {
-      ...item,
-      x: 0,           // Always start at left edge
-      y: currentY,    // Stack vertically
-      w: toCols,      // Full width on mobile (6 cols = 100%)
-      minW: toCols,   // Lock to full width
-    };
-    currentY += item.h; // Stack next item below this one
-    return result;
-  });
-};
-
-// Generate default layout for all layoutable assets
-const generateDefaultLayout = (assets: AssetReference[]): Layout[] => {
-  const layoutable = getLayoutableAssets(assets);
-  let currentY = 0;
-  return layoutable.map((asset) => {
-    const isText = asset.type === 'text';
-    const w = isText ? TEXT_BLOCK_DEFAULT_W : DASHBOARD_DEFAULT_W;
-    const h = isText ? TEXT_BLOCK_DEFAULT_H : DASHBOARD_DEFAULT_H;
-    const layout: Layout = {
-      i: getAssetLayoutKey(asset),
-      x: isText ? 0 : (currentY === 0 ? 0 : 0), // text blocks always full-width
-      y: currentY,
-      w,
-      h,
-      minW: isText ? TEXT_BLOCK_MIN_W : DASHBOARD_MIN_W,
-      minH: isText ? TEXT_BLOCK_MIN_H : DASHBOARD_MIN_H,
-    };
-    currentY += h;
-    return layout;
-  });
-};
 
 export default function DashboardView({
   document,
@@ -139,6 +86,11 @@ export default function DashboardView({
     });
   }, []);
 
+  // Stable across renders so React.memo(TextBlockCard) can skip unaffected blocks.
+  const handleTextBlockContentChange = useCallback((textBlockId: string, content: string) => {
+    dispatch(updateTextBlockContent({ dashboardId: fileId, textBlockId, content }));
+  }, [dispatch, fileId]);
+
   // Force react-grid-layout to remount when file reverts from dirty → clean (discard/save).
   // ResponsiveGridLayout maintains internal layout state that doesn't always sync
   // with the `layouts` prop, so we force a remount via key change.
@@ -175,59 +127,17 @@ export default function DashboardView({
 
   const questionCount = document?.assets?.filter(a => a.type === 'question').length || 0;
 
-  // Compute layouts for all breakpoints from document
-  // Desktop layout (12 cols) is the source of truth, mobile layouts are scaled
-  const layouts = useMemo(() => {
-    if (!document) return { lg: [], md: [], sm: [], xs: [], xxs: [] };
-
-    let baseLayout: Layout[];
-    if (document.layout?.items) {
-      const layoutMap = new Map<string, DashboardLayoutItem>(document.layout.items.map((item: DashboardLayoutItem) => [String(item.id), item]));
-      const layoutableAssets = getLayoutableAssets(document.assets);
-
-      // Find the bottom of the existing layout to place missing assets below
-      const maxY = document.layout.items.reduce((max: number, item: DashboardLayoutItem) => Math.max(max, item.y + item.h), 0);
-
-      let missingCount = 0;
-      baseLayout = layoutableAssets.map((asset) => {
-        const id = getAssetLayoutKey(asset);
-        const item = layoutMap.get(id);
-        const isText = asset.type === 'text';
-        const minW = isText ? TEXT_BLOCK_MIN_W : DASHBOARD_MIN_W;
-        const minH = isText ? TEXT_BLOCK_MIN_H : DASHBOARD_MIN_H;
-        if (item) {
-          return { i: id, x: item.x, y: item.y, w: item.w, h: item.h, minW, minH };
-        }
-        // Asset exists but has no layout entry — place below existing items with default size
-        const w = isText ? TEXT_BLOCK_DEFAULT_W : DASHBOARD_DEFAULT_W;
-        const h = isText ? TEXT_BLOCK_DEFAULT_H : DASHBOARD_DEFAULT_H;
-        const result = { i: id, x: isText ? 0 : (missingCount % 2) * DASHBOARD_DEFAULT_W, y: maxY + Math.floor(missingCount / 2) * h, w, h, minW, minH };
-        missingCount++;
-        return result;
-      });
-    } else {
-      baseLayout = generateDefaultLayout(document.assets);
-    }
-
-    // Apply "Read more" expansions (view-only, not persisted): grow the cell to
-    // fit the revealed content. Never shrinks below the saved height.
-    if (Object.keys(textBlockRows).length > 0) {
-      baseLayout = baseLayout.map(item =>
-        textBlockRows[item.i] ? { ...item, h: Math.max(item.h, textBlockRows[item.i]) } : item
-      );
-    }
-
-    // Generate compacted layouts for mobile/tablet (6 cols) - stacks vertically
-    const mobileLayout = compactMobileLayout(baseLayout, 6);
-
-    return {
-      lg: baseLayout,   // 12 cols
-      md: baseLayout,   // 12 cols
-      sm: mobileLayout, // 6 cols - vertically stacked
-      xs: mobileLayout, // 6 cols - vertically stacked
-      xxs: mobileLayout // 6 cols - vertically stacked
-    };
-  }, [document?.layout, document?.assets, textBlockRows]);
+  // The grid layout depends only on WHICH assets exist (id + type), their saved
+  // positions, and "Read more" overrides — NOT on any text block's content. Key
+  // the memo on a content-invariant signature so editing text doesn't recompute
+  // the layout (which would needlessly re-lay-out the grid and regenerate the
+  // grid background on every debounced keystroke).
+  const layoutSignature = useMemo(() => getLayoutSignature(document?.assets || []), [document?.assets]);
+  const layouts = useMemo(
+    () => computeDashboardLayouts(document?.assets || [], document?.layout?.items, textBlockRows),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on layoutSignature (content-invariant); `document.assets` is intentionally excluded so text edits don't churn the layout.
+    [layoutSignature, document?.layout, textBlockRows],
+  );
 
   // Extract question IDs from assets (SmartEmbeddedQuestionContainer will load content)
   // Simple filter/map - no useMemo needed for this cheap operation
@@ -543,21 +453,21 @@ export default function DashboardView({
           display="flex"
           flexDirection="column"
         >
+          {/* Stable callbacks (memoized) so React.memo(TextBlockCard) can skip
+              re-rendering the OTHER text blocks when one block's content changes. */}
           <TextBlockCard
             id={textAsset.id || ''}
             content={textAsset.content || ''}
             editMode={editMode}
             filePath={folderPath}
-            onContentChange={(id, content) => {
-              dispatch(updateTextBlockContent({ dashboardId: fileId, textBlockId: id, content }));
-            }}
-            onRemove={(id) => handleRemoveAsset(id)}
+            onContentChange={handleTextBlockContentChange}
+            onRemove={handleRemoveAsset}
             onResize={handleTextBlockResize}
           />
         </Box>
       );
     });
-  }, [layoutableAssets, editMode, handleRemoveAsset, handleTextBlockResize, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, dispatch, publishHighlights, folderPath]);
+  }, [layoutableAssets, editMode, handleRemoveAsset, handleTextBlockResize, handleTextBlockContentChange, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, dispatch, publishHighlights, folderPath]);
 
   const handleLayoutChange = (newLayout: Layout[]) => {
     if (!document) return;

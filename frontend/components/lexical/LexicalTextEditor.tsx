@@ -286,18 +286,16 @@ function FloatingSelectionToolbar({ children }: { children: React.ReactNode }) {
   const [editor] = useLexicalComposerContext();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
-  const update = useCallback(() => {
-    editor.getEditorState().read(() => {
-      const selection = $getSelection();
+  useEffect(() => {
+    let raf = 0;
+
+    // Cheap: reads the NATIVE selection only (no Lexical editor-state read) and
+    // bails on the very first check for typing (collapsed selection). Runs at
+    // most once per animation frame.
+    const update = () => {
       const native = typeof window !== 'undefined' ? window.getSelection() : null;
       const root = editor.getRootElement();
-      if (
-        !$isRangeSelection(selection) ||
-        selection.isCollapsed() ||
-        !native ||
-        native.rangeCount === 0 ||
-        !root
-      ) {
+      if (!native || native.rangeCount === 0 || native.isCollapsed || !root) {
         setPos(null);
         return;
       }
@@ -311,25 +309,36 @@ function FloatingSelectionToolbar({ children }: { children: React.ReactNode }) {
         setPos(null);
         return;
       }
-      // Clamp horizontally so a bubble near the viewport edge stays on-screen.
       const left = Math.min(Math.max(rect.left + rect.width / 2, 170), window.innerWidth - 170);
       setPos({ top: rect.top, left });
-    });
-  }, [editor]);
-
-  useEffect(() => {
-    const unregister = editor.registerUpdateListener(() => update());
-    const handler = () => update();
-    document.addEventListener('selectionchange', handler);
-    window.addEventListener('resize', handler, true);
-    window.addEventListener('scroll', handler, true);
-    return () => {
-      unregister();
-      document.removeEventListener('selectionchange', handler);
-      window.removeEventListener('resize', handler, true);
-      window.removeEventListener('scroll', handler, true);
     };
-  }, [editor, update]);
+
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(update);
+    };
+
+    // Only the FOCUSED editor does any work — the other text blocks on the page
+    // bail here with a single `contains` check, so a keystroke doesn't fan out
+    // across every mounted editor.
+    const onSelectionChange = () => {
+      const root = editor.getRootElement();
+      const active = document.activeElement;
+      if (!root || !active || !root.contains(active)) return;
+      schedule();
+    };
+    // Reposition on scroll/resize; `update` bails instantly when there's no
+    // selection, so this is cheap even during fast scrolling.
+    document.addEventListener('selectionchange', onSelectionChange);
+    window.addEventListener('resize', schedule, true);
+    window.addEventListener('scroll', schedule, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('selectionchange', onSelectionChange);
+      window.removeEventListener('resize', schedule, true);
+      window.removeEventListener('scroll', schedule, true);
+    };
+  }, [editor]);
 
   if (!pos) return null;
 

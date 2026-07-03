@@ -16,7 +16,7 @@
  *  - View mode: if the text genuinely overflows the cell, a gradient fade +
  *    "Read more" pill grows the grid cell (via `onResize`); "Show less" restores.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, HStack, IconButton, Button, Text } from '@chakra-ui/react';
 import { LuX, LuGripVertical, LuChevronDown, LuChevronUp } from 'react-icons/lu';
 import LexicalTextEditor, { LexicalTextViewer, SHARED_TEXT_PADDING, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
@@ -39,7 +39,7 @@ interface TextBlockCardProps {
   onResize?: (id: string, height: number | null) => void;
 }
 
-export default function TextBlockCard({
+function TextBlockCard({
   id,
   content,
   editMode,
@@ -278,3 +278,8 @@ export default function TextBlockCard({
     </Box>
   );
 }
+
+// Memoized so editing one text block doesn't re-render the others. The parent
+// (DashboardView) passes referentially-stable callbacks + per-asset content, so
+// only the block whose content actually changed re-renders.
+export default memo(TextBlockCard);
