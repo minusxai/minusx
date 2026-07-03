@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { costToCredits } from '@/lib/analytics/credits';
-import { parseBillingCycle, CREDIT_BUDGETS } from '@/lib/analytics/credit-budgets';
+import { parseBillingCycle, cycleStartSql, CREDIT_BUDGETS, CYCLE_MODE } from '@/lib/analytics/credit-budgets';
 
 describe('costToCredits (v0: credits = cost * 1000)', () => {
   it('multiplies cost by 1000', () => {
@@ -33,9 +33,11 @@ describe('parseBillingCycle', () => {
     expect(parseBillingCycle('3m').days).toBe(90);
   });
 
-  it('produces human labels', () => {
-    expect(parseBillingCycle('1m').label).toBe('last month');
-    expect(parseBillingCycle('1d').label).toBe('last day');
+  it('produces human labels (default calendar mode: "today" / "this month")', () => {
+    // Guard: these expected labels assume the default CYCLE_MODE.
+    expect(CYCLE_MODE).toBe('calendar');
+    expect(parseBillingCycle('1m').label).toBe('this month');
+    expect(parseBillingCycle('1d').label).toBe('today');
     expect(parseBillingCycle('7d').label).toBe('last 7 days');
     expect(parseBillingCycle('2w').label).toBe('last 2 weeks');
   });
@@ -45,6 +47,14 @@ describe('parseBillingCycle', () => {
     expect(parseBillingCycle('garbage').raw).toBe(CREDIT_BUDGETS.defaultBillingCycle);
     expect(parseBillingCycle('').raw).toBe(CREDIT_BUDGETS.defaultBillingCycle);
     expect(parseBillingCycle(undefined, '1w').raw).toBe('1w'); // custom fallback
+  });
+
+  it('cycleStartSql builds calendar-aligned window boundaries', () => {
+    expect(CYCLE_MODE).toBe('calendar');
+    expect(cycleStartSql(parseBillingCycle('1m'))).toBe("date_trunc('month', NOW())");
+    expect(cycleStartSql(parseBillingCycle('1d'))).toBe("date_trunc('day', NOW())");
+    expect(cycleStartSql(parseBillingCycle('1w'))).toBe("date_trunc('week', NOW())");
+    expect(cycleStartSql(parseBillingCycle('3m'))).toBe("date_trunc('month', NOW()) - INTERVAL '2 month'");
   });
 });
 

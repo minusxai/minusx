@@ -86,15 +86,17 @@ describe('getCreditUsage', () => {
     expect(weird.cachedTokens).toBe(300);
   });
 
-  it('excludes rows outside the reset window from reset usage but keeps them for billing', async () => {
-    // A row 10 days ago: inside the billing window (~30d) but outside the reset window (1d).
-    await seed({ userId: 5, provider: 'openai', model: 'r', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 1.0, createdAtSql: "NOW() - INTERVAL '10 days'" });
+  it('reset usage is a subset of billing usage (reset window ⊆ billing window)', async () => {
+    // An older row anchored to the start of the billing month: always inside the
+    // billing window, and (except on the 1st) outside the daily reset window.
+    await seed({ userId: 5, provider: 'openai', model: 'r', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 1.0, createdAtSql: "date_trunc('month', NOW()) + INTERVAL '1 second'" });
     // A row now: inside both windows.
     await seed({ userId: 5, provider: 'openai', model: 'r', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 0.5, createdAtSql: 'NOW()' });
 
     const { individual } = await getCreditUsage(5, 'viewer', false);
-    expect(individual.billing.used).toBeCloseTo(1500, 6); // (1.0 + 0.5) * 1000
-    expect(individual.reset.used).toBeCloseTo(500, 6);     // only the NOW() row
+    expect(individual.billing.used).toBeCloseTo(1500, 6);            // both rows (1.0 + 0.5) * 1000
+    expect(individual.reset.used).toBeLessThanOrEqual(individual.billing.used);
+    expect(individual.reset.used).toBeGreaterThanOrEqual(500 - 1e-6); // at least the NOW() row
   });
 
   it('normalizes a NULL provider to an empty string', async () => {

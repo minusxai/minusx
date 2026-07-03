@@ -6,6 +6,7 @@ import {
   resolveIndividualAllowance, resolveOrgAllowance,
   resolveIndividualResetAllowance, resolveOrgResetAllowance,
 } from '@/lib/config';
+import { cycleStartSql } from './credit-budgets';
 import { UNKNOWN_TRIGGER, type CreditBreakdownRow, type CreditScope, type CreditUsageResponse } from './credits.types';
 
 /**
@@ -21,9 +22,14 @@ import { UNKNOWN_TRIGGER, type CreditBreakdownRow, type CreditScope, type Credit
  * computes both — the reset total via a FILTER on the same rows.
  */
 
-// Non-cached input = prompt_tokens - cached_tokens, floored at 0 (GREATEST).
-// Numeric aggregates come back as strings — always Number()-wrap.
-// Params: $1 = reset-window days, $2 = billing-window days, ($3 = user_id when scoped).
+// Window boundaries are mode-aware SQL (calendar-aligned or rolling) built from
+// the configured cycles — safe to interpolate (strict-parsed ints + whitelisted
+// unit words, never raw input). Billing is the outer window; reset is a FILTER
+// subset. Non-cached input = prompt - cached, floored at 0. Numeric aggregates
+// come back as strings — always Number()-wrap.
+const BILLING_START = cycleStartSql(BILLING_CYCLE);
+const RESET_START = cycleStartSql(RESET_CYCLE);
+
 const usageSql = (userFilter: string) => `
 SELECT
   COALESCE(provider, '')                                                     AS provider,
@@ -33,9 +39,9 @@ SELECT
   SUM(COALESCE(cached_tokens, 0))                                            AS "cachedTokens",
   SUM(COALESCE(completion_tokens, 0))                                        AS "outputTokens",
   SUM(COALESCE(cost, 0))                                                     AS cost,
-  SUM(COALESCE(cost, 0)) FILTER (WHERE created_at >= NOW() - ($1 * INTERVAL '1 day')) AS "resetCost"
+  SUM(COALESCE(cost, 0)) FILTER (WHERE created_at >= ${RESET_START})         AS "resetCost"
 FROM llm_call_events
-WHERE created_at >= NOW() - ($2 * INTERVAL '1 day')
+WHERE created_at >= ${BILLING_START}
   ${userFilter}
 GROUP BY COALESCE(provider, ''), model, COALESCE(NULLIF(trigger, ''), 'unknown')
 ORDER BY cost DESC
@@ -43,10 +49,10 @@ ORDER BY cost DESC
 
 async function loadScope(billingAllowance: number, resetAllowance: number, userId?: number): Promise<CreditScope> {
   const db = getModules().db;
-  const params: number[] = [RESET_CYCLE.days, BILLING_CYCLE.days];
-  const sql = userId === undefined ? usageSql('') : usageSql('AND user_id = $3');
-  if (userId !== undefined) params.push(userId);
-  const result = await db.exec<Record<string, unknown>>(sql, params);
+  const sql = userId === undefined ? usageSql('') : usageSql('AND user_id = $1');
+  const result = userId === undefined
+    ? await db.exec<Record<string, unknown>>(sql)
+    : await db.exec<Record<string, unknown>>(sql, [userId]);
 
   let billingUsed = 0;
   let resetUsed = 0;
