@@ -15,7 +15,7 @@
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { ConversationLog, RegistrableClass } from '@/orchestrator/types';
-import { V2_HEADLESS_REGISTRABLES } from '@/lib/chat-orchestration-v2.server';
+import { V2_HEADLESS_REGISTRABLES, recordLlmCalls } from '@/lib/chat-orchestration-v2.server';
 import { piLogToLegacy } from '@/lib/chat-translator';
 import { loadLog, appendMessages } from '@/lib/data/conversations.server';
 import { getPageType } from '@/agents/analyst/skills';
@@ -159,6 +159,10 @@ export async function runChatOrchestrationV2({
   if (piDiff.length > 0) {
     await appendMessages(conversationId, piDiff, expectedLogIndex);
   }
+
+  // Record this turn's LLM usage (Slack and other clientless callers). Conversation-bound
+  // like the browser chat path — without this, Slack usage never reaches llm_call_events.
+  await recordLlmCalls(piDiff, conversationId, user);
 
   return {
     conversationId,
