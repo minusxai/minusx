@@ -1605,7 +1605,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       position: (type === 'bar' ? 'inside' : 'top') as 'inside' | 'top',
       fontSize: 10,
       fontFamily: getChartFontFamily(),
-      color: type === 'bar' ? '#000' : palette[index % palette.length],
+      color: styleConfig?.dataLabelColor || (type === 'bar' ? '#000' : palette[index % palette.length]),
       formatter: (params: any) => {
         const v = typeof params.value === 'number' ? params.value : Array.isArray(params.value) ? params.value[1] : null
         if (v == null || !isFinite(v)) return ''

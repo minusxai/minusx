@@ -164,6 +164,7 @@ export const VisualizationStyleConfig = Type.Object({
   markerSize: Nullable(Type.Integer({ description: 'point marker size for charts that render markers, such as scatter and line' })),
   stacked: Nullable(Type.Boolean({ description: 'whether bar and area series should be stacked. Defaults to true for those chart types.' })),
   showDataLabels: Nullable(Type.Boolean({ description: 'show numeric value labels on each data point. Defaults to false.' })),
+  dataLabelColor: Nullable(Type.String({ description: "color for the data value labels as a hex string, e.g. '#ffffff'. Defaults to black on bars and the series color otherwise. Only relevant when showDataLabels is true." })),
 }, { title: 'VisualizationStyleConfig' });
 export type VisualizationStyleConfig = Static<typeof VisualizationStyleConfig>;
 

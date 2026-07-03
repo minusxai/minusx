@@ -310,6 +310,30 @@ describe('buildChartOption cartesian x-axis type resolution', () => {
     expect(xAxis.axisLabel.formatter('2024-02-28')).toBe('28 Feb 2024')
   })
 
+  describe('data label color', () => {
+    const barWith = (styleConfig: any) => buildChartOption({
+      chartType: 'bar',
+      xAxisData: ['a', 'b', 'c'],
+      series: [{ name: 'revenue', data: [100, 200, 300] }],
+      xAxisLabel: 'zone',
+      yAxisLabel: 'revenue',
+      xAxisColumns: ['zone'],
+      colorPalette: ['#16a085'],
+      columnTypes: { zone: 'text' },
+      styleConfig,
+    })
+
+    it('defaults bar data labels to black', () => {
+      const series = (barWith({ showDataLabels: true }).series as any[])[0]
+      expect(series.label.color).toBe('#000')
+    })
+
+    it('uses styleConfig.dataLabelColor when set', () => {
+      const series = (barWith({ showDataLabels: true, dataLabelColor: '#ffffff' }).series as any[])[0]
+      expect(series.label.color).toBe('#ffffff')
+    })
+  })
+
   it('bar chart with number column uses category axis with number-formatted labels', () => {
     const option = buildChartOption({
       chartType: 'bar',

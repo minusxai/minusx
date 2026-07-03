@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, HStack, Text, VStack } from '@chakra-ui/react'
-import { LuPalette } from 'react-icons/lu'
-import { CHART_COLORS, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
+import { LuPalette, LuPipette } from 'react-icons/lu'
+import { CHART_COLORS, COLOR_PALETTE, resolveSeriesColor } from '@/lib/chart/echarts-theme'
 import { useConfigs } from '@/lib/hooks/useConfigs'
 import type { VisualizationStyleConfig, VisualizationType } from '@/lib/types'
 
@@ -42,6 +42,47 @@ const Circle = ({ color, size, selected, onClick, label }: { color: string; size
     onClick={onClick}
   />
 )
+
+// Native color input. Uncontrolled (defaultValue) so the picker owns its value while open.
+// onChange fires as the user picks; we debounce the commit by 200ms so a rapid drag coalesces
+// into one chart update instead of a per-pixel flood.
+export const SeriesColorInput = ({ value, onCommit, label }: { value: string; onCommit: (hex: string) => void; label: string }) => {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
+
+  const handleChange = (hex: string) => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => onCommit(hex), 200)
+  }
+
+  return (
+    <Box
+      as="label"
+      aria-label={label}
+      position="relative"
+      w="20px"
+      h="20px"
+      borderRadius="full"
+      bg={value}
+      border="2px solid"
+      borderColor="border.emphasized"
+      cursor="pointer"
+      flexShrink={0}
+      _hover={{ borderColor: 'fg.default' }}
+      transition="all 0.15s"
+      title="Custom color"
+    >
+      <LuPipette size={11} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'white', mixBlendMode: 'difference' }} />
+      <input
+        type="color"
+        aria-label={`${label} input`}
+        defaultValue={value}
+        onChange={(e) => handleChange(e.target.value)}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', padding: 0, border: 'none' }}
+      />
+    </Box>
+  )
+}
 
 const ChoicePill = ({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) => (
   <Box
@@ -133,18 +174,20 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
     if (next.markerSize != null) normalized.markerSize = next.markerSize
     if (next.stacked != null) normalized.stacked = next.stacked
     if (next.showDataLabels != null) normalized.showDataLabels = next.showDataLabels
+    if (next.dataLabelColor != null) normalized.dataLabelColor = next.dataLabelColor
     onChange(normalized)
   }
 
   const getSeriesColor = (index: number) => {
-    const key = styleConfig?.colors?.[String(index)]
-    return (key && CHART_COLORS[key as keyof typeof CHART_COLORS]) || palette[index % palette.length]
+    return resolveSeriesColor(styleConfig?.colors?.[String(index)]) || palette[index % palette.length]
   }
 
-  const handleColorChange = (index: number, hex?: string) => {
+  // Stores a color for a series. A palette swatch is stored as its named key (so it
+  // follows org-palette changes); a custom hex from the color input is stored raw.
+  const handleColorChange = (index: number, value?: string) => {
     const nextColors = { ...(styleConfig?.colors ?? {}) }
-    if (!hex) delete nextColors[String(index)]
-    else nextColors[String(index)] = HEX_TO_KEY[hex]
+    if (!value) delete nextColors[String(index)]
+    else nextColors[String(index)] = HEX_TO_KEY[value] ?? value
     emitConfig({ ...(styleConfig ?? {}), colors: nextColors })
   }
 
@@ -182,9 +225,17 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
           <VStack align="stretch" gap={1.5}>
             <HStack justify="space-between">
               <Text fontSize="xs" fontFamily="mono" color="fg.subtle">{`Series ${activeSeriesIndex + 1}`}</Text>
-              <ChoicePill selected={!styleConfig?.colors?.[String(activeSeriesIndex)]} onClick={() => handleColorChange(activeSeriesIndex, undefined)}>
-                auto
-              </ChoicePill>
+              <HStack gap={1.5}>
+                <SeriesColorInput
+                  key={`series-${activeSeriesIndex}`}
+                  label={`Series ${activeSeriesIndex + 1} custom color`}
+                  value={getSeriesColor(activeSeriesIndex)}
+                  onCommit={(hex) => handleColorChange(activeSeriesIndex, hex)}
+                />
+                <ChoicePill selected={!styleConfig?.colors?.[String(activeSeriesIndex)]} onClick={() => handleColorChange(activeSeriesIndex, undefined)}>
+                  auto
+                </ChoicePill>
+              </HStack>
             </HStack>
             <HStack gap={1.5} flexWrap="wrap">
               {palette.map(hex => (
@@ -256,6 +307,20 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
           <ChoicePill selected={!!styleConfig?.showDataLabels} onClick={() => emitConfig({ ...(styleConfig ?? {}), showDataLabels: true })}>
             On
           </ChoicePill>
+          {styleConfig?.showDataLabels && (
+            <>
+              <SeriesColorInput
+                label="Data label color"
+                value={styleConfig?.dataLabelColor || '#000000'}
+                onCommit={(hex) => emitConfig({ ...(styleConfig ?? {}), dataLabelColor: hex })}
+              />
+              {styleConfig?.dataLabelColor && (
+                <ChoicePill selected={false} onClick={() => emitConfig({ ...(styleConfig ?? {}), dataLabelColor: null })}>
+                  auto
+                </ChoicePill>
+              )}
+            </>
+          )}
         </HStack>
       </Box>
     </VStack>
