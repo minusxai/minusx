@@ -471,10 +471,7 @@ function QuestionVisualizationInner({
                       initialColumnFormats={currentState.vizSettings?.columnFormats ?? undefined}
                       onColumnFormatsChange={onColumnFormatsChange}
                       showChartTitle={showChartTitle}
-                      styleConfig={{
-                        ...(currentState.vizSettings?.styleConfig ?? {}),
-                        ...(currentState.vizSettings?.colors ? { colors: currentState.vizSettings.colors } : {}),
-                      }}
+                      styleConfig={currentState.vizSettings?.styleConfig ?? undefined}
                       onStyleConfigChange={onStyleConfigChange}
                       axisConfig={currentState.vizSettings?.axisConfig ?? undefined}
                       onAxisConfigChange={onAxisConfigChange}

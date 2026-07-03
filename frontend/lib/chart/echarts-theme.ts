@@ -80,15 +80,28 @@ export const COLOR_PALETTE = [
 // Ordered keys for UI display
 export const CHART_COLOR_KEYS = Object.keys(CHART_COLORS) as (keyof typeof CHART_COLORS)[]
 
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
+
+// Resolve a stored series-color value to a hex string. A value is either a known
+// CHART_COLORS key (e.g. "danger") or a raw hex string (e.g. "#7c3aed", from the
+// custom color picker). Returns undefined when the value can't be resolved.
+export function resolveSeriesColor(value?: string | null): string | undefined {
+  if (!value) return undefined
+  const known = CHART_COLORS[value as keyof typeof CHART_COLORS]
+  if (known) return known
+  if (HEX_COLOR_RE.test(value)) return value
+  return undefined
+}
+
 // Resolve color overrides into an effective palette.
-// colorOverrides maps series index (as string) to color key: {"0": "danger", "2": "warning"}
+// colorOverrides maps series index (as string) to a color key OR a raw hex: {"0": "danger", "2": "#7c3aed"}
 // basePalette optionally overrides the default COLOR_PALETTE (e.g. from org config)
 export function getEffectiveColorPalette(colorOverrides?: Record<string, string> | null, basePalette?: string[]): string[] {
   const base = basePalette && basePalette.length > 0 ? basePalette : COLOR_PALETTE
   if (!colorOverrides || Object.keys(colorOverrides).length === 0) return [...base]
   const palette = [...base]
-  for (const [idx, key] of Object.entries(colorOverrides)) {
-    const hex = CHART_COLORS[key as keyof typeof CHART_COLORS]
+  for (const [idx, value] of Object.entries(colorOverrides)) {
+    const hex = resolveSeriesColor(value)
     if (hex) palette[parseInt(idx, 10)] = hex
   }
   return palette

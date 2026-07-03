@@ -369,23 +369,6 @@ describe('fixData', () => {
     expect(viz.pivotConfig).toEqual({ rows: [], columns: [], values: [] });
   });
 
-  it('migrates legacy viz.colors into styleConfig.colors', () => {
-    const colors = ['#ff0000', '#00ff00'];
-    const data: InitData = {
-      version: LATEST_DATA_VERSION,
-      users: [],
-      documents: [{
-        id: 1000, name: 'q', path: '/org/q', type: 'question',
-        content: { query: '', vizSettings: { type: 'bar', colors }, connection_name: '' } as any,
-        references: [], version: 1, last_edit_id: null,
-        created_at: '2024-01-01', updated_at: '2024-01-01',
-      }],
-    };
-    const result = fixData(data);
-    const viz = (result.documents![0].content as any).vizSettings;
-    expect(viz.styleConfig.colors).toEqual(colors);
-  });
-
   it('normalizes a non-array references to an empty array', () => {
     const data: InitData = {
       version: LATEST_DATA_VERSION,

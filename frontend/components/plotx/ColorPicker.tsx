@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { Box, HStack, Text } from '@chakra-ui/react'
-import { CHART_COLORS, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
+import { CHART_COLORS, COLOR_PALETTE, resolveSeriesColor } from '@/lib/chart/echarts-theme'
 import { useConfigs } from '@/lib/hooks/useConfigs'
 
 interface ColorPickerProps {
@@ -41,8 +41,8 @@ export const ColorPicker = ({ colorOverrides, numSeries, onChange }: ColorPicker
   }, [activeIndex])
 
   const getColor = (i: number) => {
-    const key = colorOverrides[String(i)] || colorOverrides[i as unknown as string]
-    return (key && CHART_COLORS[key as keyof typeof CHART_COLORS]) || palette[i % palette.length]
+    const value = colorOverrides[String(i)] || colorOverrides[i as unknown as string]
+    return resolveSeriesColor(value) || palette[i % palette.length]
   }
 
   const handlePick = (hex: string) => {

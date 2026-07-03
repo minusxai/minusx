@@ -1,4 +1,4 @@
-import { buildChartOption, buildRadarChartOption, buildPieChartOption, formatDateValue, resolveXAxisTypes, resolveAnnotationY, findMatchingXIndex, resolveAnnotationX } from '@/lib/chart/chart-utils'
+import { buildChartOption, buildRadarChartOption, buildPieChartOption, buildFunnelChartOption, formatDateValue, resolveXAxisTypes, resolveAnnotationY, findMatchingXIndex, resolveAnnotationX } from '@/lib/chart/chart-utils'
 import { getColorScale, getHeatGradient, getRadiusScale, interpolateColor, COLOR_SCALES } from '@/lib/chart/geo-color-scale'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import type { GeoConfig } from '@/lib/types'
@@ -310,6 +310,30 @@ describe('buildChartOption cartesian x-axis type resolution', () => {
     expect(xAxis.axisLabel.formatter('2024-02-28')).toBe('28 Feb 2024')
   })
 
+  describe('data label color', () => {
+    const barWith = (styleConfig: any) => buildChartOption({
+      chartType: 'bar',
+      xAxisData: ['a', 'b', 'c'],
+      series: [{ name: 'revenue', data: [100, 200, 300] }],
+      xAxisLabel: 'zone',
+      yAxisLabel: 'revenue',
+      xAxisColumns: ['zone'],
+      colorPalette: ['#16a085'],
+      columnTypes: { zone: 'text' },
+      styleConfig,
+    })
+
+    it('defaults bar data labels to black', () => {
+      const series = (barWith({ showDataLabels: true }).series as any[])[0]
+      expect(series.label.color).toBe('#000')
+    })
+
+    it('uses styleConfig.dataLabelColor when set', () => {
+      const series = (barWith({ showDataLabels: true, dataLabelColor: '#ffffff' }).series as any[])[0]
+      expect(series.label.color).toBe('#ffffff')
+    })
+  })
+
   it('bar chart with number column uses category axis with number-formatted labels', () => {
     const option = buildChartOption({
       chartType: 'bar',
@@ -423,6 +447,18 @@ describe('buildRadarChartOption', () => {
   })
 })
 
+describe('buildFunnelChartOption', () => {
+  it('honors styleConfig.dataLabelColor on the funnel label', () => {
+    const option = buildFunnelChartOption({
+      xAxisData: ['Visit', 'Signup', 'Purchase'],
+      series: [{ name: 'Stage', data: [100, 60, 30] }],
+      colorPalette: ['#16a085', '#2980b9'],
+      styleConfig: { dataLabelColor: '#ff00ff' },
+    })
+    expect((option.series as any[])[0].label.color).toBe('#ff00ff')
+  })
+})
+
 describe('buildPieChartOption', () => {
   const COLOR_PALETTE = ['#16a085', '#2980b9', '#8e44ad', '#d35400', '#c0392b']
 
@@ -437,6 +473,16 @@ describe('buildPieChartOption', () => {
     expect(allSeries).toHaveLength(1)
     expect(allSeries[0].type).toBe('pie')
     expect(allSeries[0].data).toHaveLength(3)
+  })
+
+  it('honors styleConfig.dataLabelColor on the pie label', () => {
+    const option = buildPieChartOption({
+      xAxisData: ['Chrome', 'Firefox'],
+      series: [{ name: 'Users', data: [60, 40] }],
+      colorPalette: COLOR_PALETTE,
+      styleConfig: { dataLabelColor: '#ff00ff' },
+    })
+    expect((option.series as any[])[0].label.color).toBe('#ff00ff')
   })
 
   it('produces two pie series (inner + outer ring) for multi-series data', () => {
