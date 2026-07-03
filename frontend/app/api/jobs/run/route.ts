@@ -22,6 +22,8 @@ import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
 import { getConfigsForMode } from '@/lib/data/configs.server';
 import { sendEmailViaWebhook, sendPhoneAlertViaWebhook, sendSlackViaWebhook } from '@/lib/messaging/webhook-executor';
 import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
+import { postSlackMessage } from '@/lib/integrations/slack/api';
+import { findSlackInstallationByTeam } from '@/lib/integrations/slack/store';
 import type { MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -188,6 +190,20 @@ export const POST = withAuth(async (request: NextRequest, user) => {
                   msg.status = 'failed';
                   msg.deliveryError = result.error ?? `HTTP ${result.statusCode}`;
                 }
+              }
+            } else if (msg.type === 'slack_app_alert') {
+              const installation = await findSlackInstallationByTeam(msg.metadata.team_id);
+              if (!installation) {
+                msg.status = 'failed';
+                msg.deliveryError = `No Slack app installation found for team ${msg.metadata.team_id}`;
+              } else {
+                await postSlackMessage(installation.bot.bot_token, {
+                  channel: msg.metadata.channel,
+                  text: msg.content,
+                });
+                msg.logs = [...(msg.logs ?? []), { attemptedAt: new Date().toISOString(), success: true }];
+                msg.status = 'sent';
+                msg.sentAt = new Date().toISOString();
               }
             }
           } catch (err) {

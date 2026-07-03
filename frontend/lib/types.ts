@@ -421,6 +421,7 @@ export interface FolderContent extends BaseFileContent {
 
 export type ConfigChannel =
   | { type: 'slack'; name: string; webhook_url: string; properties?: Record<string, unknown> }
+  | { type: 'slack_app'; name: string; team_id: string; channel_id: string; team_name?: string; channel_name?: string; captured_at?: string }
   | { type: 'email'; name: string; address: string }
   | { type: 'phone'; name: string; address: string };
 
@@ -629,12 +630,12 @@ export type JobSchedule = {
 /** Recipient stored on an alert — references a user by ID or a named config channel. */
 export type AlertRecipient =
   | { userId: number;      channel: 'email' | 'phone' }
-  | { channelName: string; channel: 'email' | 'phone' | 'slack' };
+  | { channelName: string; channel: 'email' | 'phone' | 'slack' | 'slack_app' };
 
 /** Snapshot of a resolved recipient written to alert run output. */
 export interface DeliveredRecipient {
   name: string;
-  channel: 'email' | 'phone' | 'slack';
+  channel: 'email' | 'phone' | 'slack' | 'slack_app';
   address: string;
 }
 
@@ -699,7 +700,8 @@ export interface AlertOutput {
 export type RunMessage =
   | { type: 'email_alert';  content: string; metadata: { to: string; subject: string } }
   | { type: 'phone_alert';  content: string; metadata: { to: string; title?: string; desc?: string; link?: string; summary?: string } }
-  | { type: 'slack_alert';  content: string; metadata: { channel: string; webhook_url: string; properties?: Record<string, unknown> } };
+  | { type: 'slack_alert';  content: string; metadata: { channel: string; webhook_url: string; properties?: Record<string, unknown> } }
+  | { type: 'slack_app_alert'; content: string; metadata: { channel: string; team_id: string; channel_name?: string } };
 
 export interface MessageAttemptLog {
   attemptedAt: string;

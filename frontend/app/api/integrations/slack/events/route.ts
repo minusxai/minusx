@@ -5,7 +5,7 @@ import { getUserEffectiveUser } from '@/lib/auth/auth-helpers';
 import { runChatOrchestrationV2 } from '@/lib/chat/run-orchestration-v2.server';
 import { checkCreditGate } from '@/lib/analytics/credit-usage.server';
 import { SlackAgent } from '@/agents/slack/slack-agent';
-import { addReaction, getConversationHistory, getSlackUserEmail, postSlackMessage, publishHomeView, removeReaction, uploadSlackFile, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
+import { addReaction, getConversationHistory, getSlackConversationInfo, getSlackUserEmail, postSlackMessage, publishHomeView, removeReaction, uploadSlackFile, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
 import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
 import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
@@ -17,6 +17,7 @@ import {
   findSlackInstallationByTeam,
   getOrCreateSlackConversationId,
   markSlackEventDone,
+  rememberSlackAppChannel,
   reserveSlackEvent,
   type SlackInstallationMatch,
 } from '@/lib/integrations/slack/store';
@@ -122,6 +123,19 @@ export async function processSlackEvent(
 
     // React with :eyes: to acknowledge we're working on it
     await addReaction(installation.bot.bot_token, ev.channel, ev.ts, 'eyes');
+
+    if (ev.type === 'app_mention') {
+      const teamId = installation.bot.team_id ?? getTeamId(payload);
+      if (teamId) {
+        const channelInfo = await getSlackConversationInfo(installation.bot.bot_token, ev.channel);
+        await rememberSlackAppChannel(installation.mode, {
+          teamId,
+          teamName: installation.bot.team_name,
+          channelId: ev.channel,
+          channelName: channelInfo?.name,
+        });
+      }
+    }
 
     if (!ev.user) {
       await postErrorReply(

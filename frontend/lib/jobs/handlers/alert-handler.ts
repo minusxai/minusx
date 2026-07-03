@@ -116,6 +116,17 @@ export const alertJobHandler: JobHandler = {
                 properties: ch.properties,
               },
             });
+          } else if (recipient.channel === 'slack_app' && ch.type === 'slack_app') {
+            deliveredTo.push({ name: ch.name, channel: 'slack_app', address: ch.channel_id });
+            messages.push({
+              type: 'slack_app_alert',
+              content: `*${alertName}*\n${plainText}\n<${alertLink}|View>`,
+              metadata: {
+                channel: ch.channel_id,
+                team_id: ch.team_id,
+                channel_name: ch.channel_name,
+              },
+            });
           } else if (recipient.channel === 'email' && ch.type === 'email') {
             deliveredTo.push({ name: ch.name, channel: 'email', address: ch.address });
             messages.push({ type: 'email_alert', content: emailHtml, metadata: { to: ch.address, subject } });

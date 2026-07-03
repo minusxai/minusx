@@ -19,11 +19,23 @@ function recipientKey(r: AlertRecipient): string {
   return 'userId' in r ? `user:${r.userId}:${r.channel}` : `channel:${r.channelName}:${r.channel}`;
 }
 
+type DeliveryKind = AlertRecipient['channel'];
+
 function optionToRecipient(opt: DropdownOption): AlertRecipient {
   if (opt.via === 'user') {
     return { userId: opt.user.id!, channel: opt.kind };
   }
   return { channelName: opt.channel.name, channel: opt.kind };
+}
+
+function deliveryBadgeLabel(kind: DeliveryKind): string {
+  return kind === 'slack_app' ? 'slack app' : kind;
+}
+
+function deliveryBadgeColor(kind: DeliveryKind): string {
+  if (kind === 'email') return 'accent.danger';
+  if (kind === 'phone') return 'accent.primary';
+  return 'accent.warning';
 }
 
 function DropdownMenu({ containerRef, options, onSelect }: {
@@ -75,7 +87,9 @@ function DropdownMenu({ containerRef, options, onSelect }: {
         const subLabel =
           opt.via === 'user'
             ? (opt.kind === 'email' ? opt.user.email : opt.user.phone!)
-            : opt.kind === 'slack' ? undefined : opt.channel.address;
+            : opt.kind === 'slack' ? 'Webhook'
+              : opt.kind === 'slack_app' ? `${opt.channel.team_name ?? opt.channel.team_id} · ${opt.channel.channel_id}`
+                : opt.channel.address;
 
         return (
           <HStack
@@ -95,8 +109,8 @@ function DropdownMenu({ containerRef, options, onSelect }: {
               <Text fontSize="xs" fontWeight="500">{displayName}</Text>
               {subLabel && <Text fontSize="xs" color="fg.muted">{subLabel}</Text>}
             </Box>
-            <Badge size="xs" color={opt.kind === 'email' ? 'accent.danger' : opt.kind === 'phone' ? 'accent.primary' : 'accent.warning'} ml="auto">
-              {opt.kind}
+            <Badge size="xs" color={deliveryBadgeColor(opt.kind)} ml="auto">
+              {deliveryBadgeLabel(opt.kind)}
             </Badge>
           </HStack>
         );
@@ -161,7 +175,7 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
     return r.channelName;
   }
 
-  function recipientChannel(r: AlertRecipient): 'email' | 'phone' | 'slack' {
+  function recipientChannel(r: AlertRecipient): DeliveryKind {
     return r.channel;
   }
 
@@ -186,8 +200,8 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
             <Text fontSize="xs" lineHeight="short">
               {recipientLabel(r)}
             </Text>
-            <Badge size="xs" color={recipientChannel(r) === 'email' ? 'accent.danger' : recipientChannel(r) === 'phone' ? 'accent.primary' : 'accent.warning'}>
-              {recipientChannel(r)}
+            <Badge size="xs" color={deliveryBadgeColor(recipientChannel(r))}>
+              {deliveryBadgeLabel(recipientChannel(r))}
             </Badge>
             {!effectiveDisabled && (
               <button

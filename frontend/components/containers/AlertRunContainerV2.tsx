@@ -77,7 +77,7 @@ function MessageRow({ msg }: { msg: RunMessageRecord }) {
   const [open, setOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const isEmail = msg.type === 'email_alert';
-  const isSlack = msg.type === 'slack_alert';
+  const isSlack = msg.type === 'slack_alert' || msg.type === 'slack_app_alert';
   const address = isSlack ? msg.metadata.channel : (msg.metadata as { to: string }).to;
   return (
     <Box borderRadius="md" border="1px solid" borderColor="border.muted" overflow="hidden">

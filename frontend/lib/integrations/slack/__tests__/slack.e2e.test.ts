@@ -242,6 +242,14 @@ describe('Slack Bot Integration', () => {
             json: async () => ({ ok: true, user: { profile: { email } } }),
           } as Response;
         }
+        // Slack conversations.info
+        if (urlStr.includes('slack.com/api/conversations.info')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ ok: true, channel: { id: TEST_CHANNEL, name: 'sales-alerts' } }),
+          } as Response;
+        }
         // Slack chat.postMessage
         if (urlStr.includes('slack.com/api/chat.postMessage')) {
           const body = JSON.parse((init?.body as string | undefined) ?? '{}');
@@ -381,6 +389,15 @@ describe('Slack Bot Integration', () => {
       expect(postedMessages[0].channel).toBe(TEST_CHANNEL);
       expect(postedMessages[0].text).toBeTruthy();
       expect(postedMessages[0].thread_ts).toBe(ts);
+
+      const { getConfigsForMode } = await import('@/lib/data/configs.server');
+      const { config } = await getConfigsForMode('org');
+      expect(config.channels).toContainEqual(expect.objectContaining({
+        type: 'slack_app',
+        team_id: TEST_TEAM_ID,
+        channel_id: TEST_CHANNEL,
+        channel_name: 'sales-alerts',
+      }));
     }, 60000);
 
     it('follow-up in the same thread continues the same conversation', async () => {

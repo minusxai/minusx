@@ -19,9 +19,11 @@ import type { Mode } from '@/lib/mode/mode-types';
 import { JOB_DEFINITIONS } from '@/lib/jobs/job-definitions';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
 import { getConfigsForMode } from '@/lib/data/configs.server';
-import { sendEmailViaWebhook, sendPhoneAlertViaWebhook } from '@/lib/messaging/webhook-executor';
+import { sendEmailViaWebhook, sendPhoneAlertViaWebhook, sendSlackViaWebhook } from '@/lib/messaging/webhook-executor';
 import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
+import { postSlackMessage } from '@/lib/integrations/slack/api';
+import { findSlackInstallationByTeam } from '@/lib/integrations/slack/store';
 import type { AlertContent, ScheduledJobContent, MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
@@ -218,6 +220,8 @@ async function runForOrg(
         const emailWebhook = _emailRaw ? resolveWebhook(_emailRaw) : null;
         const _phoneRaw = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
         const phoneAlertWebhook = _phoneRaw ? resolveWebhook(_phoneRaw) : null;
+        const _slackRaw = config.messaging?.webhooks?.find(w => w.type === 'slack_alert');
+        const slackWebhook = _slackRaw ? resolveWebhook(_slackRaw) : null;
         for (const msg of messages) {
           try {
             if (msg.type === 'email_alert') {
@@ -243,6 +247,32 @@ async function runForOrg(
                 msg.status = r.success ? 'sent' : 'failed';
                 if (r.success) msg.sentAt = new Date().toISOString();
                 else msg.deliveryError = r.error ?? `HTTP ${r.statusCode}`;
+              }
+            } else if (msg.type === 'slack_alert') {
+              if (!slackWebhook) {
+                msg.status = 'failed';
+                msg.deliveryError = 'No slack_alert webhook configured';
+              } else {
+                const r = await sendSlackViaWebhook(slackWebhook, msg.content, { webhook_url: msg.metadata.webhook_url, properties: msg.metadata.properties });
+                const attemptLog: MessageAttemptLog = { attemptedAt: new Date().toISOString(), success: r.success, statusCode: r.statusCode, error: r.error, requestBody: r.requestBody, responseBody: r.responseBody };
+                msg.logs = [...(msg.logs ?? []), attemptLog];
+                msg.status = r.success ? 'sent' : 'failed';
+                if (r.success) msg.sentAt = new Date().toISOString();
+                else msg.deliveryError = r.error ?? `HTTP ${r.statusCode}`;
+              }
+            } else if (msg.type === 'slack_app_alert') {
+              const installation = await findSlackInstallationByTeam(msg.metadata.team_id);
+              if (!installation) {
+                msg.status = 'failed';
+                msg.deliveryError = `No Slack app installation found for team ${msg.metadata.team_id}`;
+              } else {
+                await postSlackMessage(installation.bot.bot_token, {
+                  channel: msg.metadata.channel,
+                  text: msg.content,
+                });
+                msg.logs = [...(msg.logs ?? []), { attemptedAt: new Date().toISOString(), success: true }];
+                msg.status = 'sent';
+                msg.sentAt = new Date().toISOString();
               }
             }
           } catch (err) {
