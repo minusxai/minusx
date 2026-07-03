@@ -605,6 +605,44 @@ export function RecentDashboards() {
   );
 }
 
+/** Recent stories list section */
+export function RecentStories() {
+  const { showRecentStories } = useAppSelector(selectHomePage);
+  const [data, setData] = useState<HomeAnalyticsData | null>(null);
+
+  useEffect(() => {
+    if (!showRecentStories) return;
+    fetch('/api/analytics/recent-files')
+      .then(res => res.json())
+      .then(json => {
+        if (json.success) setData(json.data);
+      })
+      .catch(() => {});
+  }, [showRecentStories]);
+
+  if (!showRecentStories) return null;
+
+  const recentStories = data?.recent.filter(f => f.fileType === 'story') ?? [];
+
+  // Data loaded but no stories — render nothing so folder view can take over
+  if (data && recentStories.length === 0) return null;
+
+  return (
+    <VStack gap={3} align="stretch">
+      <SectionHeader label="Recent stories" />
+      {recentStories.length > 0 ? (
+        <VStack gap={1.5} align="stretch">
+          {recentStories.map(file => (
+            <CompactFileLink key={file.fileId} file={file} meta={<RelativeTime iso={file.lastVisited} />} />
+          ))}
+        </VStack>
+      ) : (
+        <ListSkeleton count={2} />
+      )}
+    </VStack>
+  );
+}
+
 /** Recent conversations list section */
 export function RecentConversations() {
   const { showRecentConversations } = useAppSelector(selectHomePage);
@@ -780,6 +818,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
 
   const recentQuestions = data?.recent.filter(f => f.fileType === 'question') ?? [];
   const recentDashboards = data?.recent.filter(f => f.fileType === 'dashboard') ?? [];
+  const recentStories = data?.recent.filter(f => f.fileType === 'story') ?? [];
 
   return (
     <FeedWrapper enabled={wrapper}><VStack gap={4} align="stretch">
@@ -840,6 +879,18 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
           <SectionHeader label="Recent dashboards" />
           <VStack gap={1.5} align="stretch">
             {recentDashboards.map(file => (
+              <CompactFileLink key={file.fileId} file={file} meta={<RelativeTime iso={file.lastVisited} />} />
+            ))}
+          </VStack>
+        </>
+      )}
+
+      {/* Recent stories */}
+      {homePageConfig.showRecentStories && hasRecent && recentStories.length > 0 && (
+        <>
+          <SectionHeader label="Recent stories" />
+          <VStack gap={1.5} align="stretch">
+            {recentStories.map(file => (
               <CompactFileLink key={file.fileId} file={file} meta={<RelativeTime iso={file.lastVisited} />} />
             ))}
           </VStack>

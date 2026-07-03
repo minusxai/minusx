@@ -136,7 +136,7 @@ function HomePageSettings() {
   const [promptDraft, setPromptDraft] = useState(homePage.feedSummaryPrompt);
   const [idsDraft, setIdsDraft] = useState(homePage.feedSummaryQuestionIds.join(', '));
 
-  const toggle = (key: 'showFeedSummary' | 'showRecentQuestions' | 'showRecentDashboards' | 'showRecentConversations' | 'showSuggestedPrompts') =>
+  const toggle = (key: 'showFeedSummary' | 'showRecentQuestions' | 'showRecentDashboards' | 'showRecentStories' | 'showRecentConversations' | 'showSuggestedPrompts') =>
     (checked: boolean) => dispatch(setHomePageConfig({ [key]: checked }));
 
   const commitPrompt = () => {
@@ -162,6 +162,7 @@ function HomePageSettings() {
           <SettingRow section="Home Page" title="Feed Summary" description="AI-generated summary from recent questions" control={<SwitchControl checked={homePage.showFeedSummary} onChange={toggle('showFeedSummary')} />} />
           <SettingRow section="Home Page" title="Recent Questions" description="Carousel of recently viewed question charts" control={<SwitchControl checked={homePage.showRecentQuestions} onChange={toggle('showRecentQuestions')} />} />
           <SettingRow section="Home Page" title="Recent Dashboards" description="List of recently viewed dashboards" control={<SwitchControl checked={homePage.showRecentDashboards} onChange={toggle('showRecentDashboards')} />} />
+          <SettingRow section="Home Page" title="Recent Stories" description="List of recently viewed stories" control={<SwitchControl checked={homePage.showRecentStories} onChange={toggle('showRecentStories')} />} />
           <SettingRow section="Home Page" title="Recent Conversations" description="List of recent conversations" control={<SwitchControl checked={homePage.showRecentConversations} onChange={toggle('showRecentConversations')} />} />
           <SettingRow section="Home Page" title="Suggested Prompts" description="Clickable prompts to quickly start a conversation" control={<SwitchControl checked={homePage.showSuggestedPrompts} onChange={toggle('showSuggestedPrompts')} />} />
         </VStack>
