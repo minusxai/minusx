@@ -50,6 +50,41 @@ describe('fileToMarkup / markupToContent — story (jsx field inline)', () => {
   });
 });
 
+describe('markupToContent — story authored WITHOUT the <story> wrapper (CreateFile scaffold shape)', () => {
+  it('adopts loose <style> + <div> top-level markup as the story body, embeds included', () => {
+    // Exactly what an agent following the skill_stories scaffold emits: a top-level <style>
+    // block and one root <div>, with platform embeds — no <story> field wrapper.
+    const markup = [
+      '<style>{`',
+      "  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono&display=swap');",
+      '  .story-x { --bg:#101822; color:#f7f0df; background:var(--bg); }',
+      '`}</style>',
+      '<div class="story-x">',
+      '  <section><h1>Churn doubled.</h1><Question id={142} height="430px" /></section>',
+      '</div>',
+    ].join('\n');
+    const back = markupToContent('story', markup);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      const story = back.content.story as string;
+      expect(story).toContain('.story-x');                    // style preserved
+      expect(story).toContain('<h1>Churn doubled.</h1>');     // body preserved
+      expect(story).toContain('data-question-id="142"');      // embed parsed to placeholder HTML
+    }
+  });
+
+  it('adopts a loose body alongside recognized sibling fields', () => {
+    const markup = '<description>Q3 churn story</description>\n<colorMode>dark</colorMode>\n<div class="s"><h1>Hi</h1></div>';
+    const back = markupToContent('story', markup);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      expect(back.content.description).toBe('Q3 churn story');
+      expect(back.content.colorMode).toBe('dark');
+      expect(back.content.story).toContain('<h1>Hi</h1>');
+    }
+  });
+});
+
 describe('fileToMarkup — empty story from template default (editable scaffold)', () => {
   it('emits <story></story> as an empty tag so the agent has a body to edit, no legacy <assets>', () => {
     const content = getTemplateDefaults('story');

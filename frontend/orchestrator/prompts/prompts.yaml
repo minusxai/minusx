@@ -761,7 +761,7 @@ templates:
     content: |-
       # Stories
 
-      A story is a long-scroll HTML document that argues one finding from real data and makes it memorable. The deliverable is a single fragment (a `<style>` block plus one root `<div>`, no JavaScript) with platform chart embeds: mostly static, beautifully designed, where scrolling reveals a narrative. The reader should finish knowing exactly one thing they did not know before, and remember how it looked.
+      A story is a long-scroll HTML document that argues one finding from real data and makes it memorable. The deliverable is a single fragment (a `<style>` block plus one root `<div>`, no JavaScript) authored inside the `<story>…</story>` field element, with platform chart embeds: mostly static, beautifully designed, where scrolling reveals a narrative. The reader should finish knowing exactly one thing they did not know before, and remember how it looked.
 
       Four independent parts. **What** it is and **why** (concept), the **design languages** (the look), the **mechanics** (the medium you build in), and the **procedures** (how you actually make one). The first three are reference; the procedures are the only place that ties them together, so a design language or a build path can change without touching the rest.
 
@@ -790,7 +790,7 @@ templates:
 
       ### Story file structure
 
-      A story's content is edited as MARKUP. Most fields are simple; the `body` is authored INLINE as a long-scroll HTML fragment (elements use `class=`; charts and numbers via `<Question>` / `<Number>` / `<Param>` embeds, see Mechanics > Authoring syntax). The content schema is generated LIVE from code (the single source of truth, never invent fields):
+      A story's content is edited as MARKUP. Most fields are simple; the body lives in the `story` field, authored INLINE as a long-scroll HTML fragment **wrapped in the top-level `<story>…</story>` field element** (elements use `class=`; charts and numbers via `<Question>` / `<Number>` / `<Param>` embeds, see Mechanics > Authoring syntax). Everything you author — the `<style>` block and the root `<div>` — goes INSIDE `<story>…</story>`, as a sibling of the other field elements (`<description>`, `<colorMode>`, `<suggestedQuestions>`). The content schema is generated LIVE from code (the single source of truth, never invent fields):
       ```json
       {schema_story}
       ```
@@ -832,6 +832,7 @@ templates:
 
       **Scaffold (minimal, copy the structure not the content):**
       ```
+      <story>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Source+Serif+4&family=IBM+Plex+Mono&display=swap');
         .story-x, .story-x * { box-sizing: border-box; }
@@ -856,6 +857,7 @@ templates:
           <div class="plate"><div class="caption"><span>FIG. 01 · DECLINE BY COUNTY</span><span>Rural leads</span></div><Question id={142} height="430px" /></div>
         </section>
       </div>
+      </story>
       ```
 
       ### B. Professional (board-ready)
@@ -878,6 +880,7 @@ templates:
 
       **Scaffold (minimal, copy the structure not the content):**
       ```
+      <story>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap');
         .story-x, .story-x * { box-sizing: border-box; }
@@ -901,6 +904,7 @@ templates:
         </section>
         <div class="foot"><span>Confidential · 2026</span><span>STRICTLY PRIVATE AND CONFIDENTIAL</span><span>1</span></div>
       </div>
+      </story>
       ```
 
       ---
@@ -911,7 +915,7 @@ templates:
 
       ### Authoring syntax
 
-      The `body` is an HTML fragment, NOT React. Plain HTML elements use HTML attributes: `class="…"` (never `className`), and layout/styling via classes defined in the `<style>` block (prefer classes over inline styles on HTML elements). The ONLY JSX-flavored tags are the platform embeds `<Question>` / `<Number>` / `<Param>`: their props take `{…}` for numbers, expressions, and objects (`id={142}`, `query={`…`}`, `viz={{…}}`, `style={{…}}`) and quoted strings otherwise (`col="orders"`, `suffix=" Bn"`, `connection="duckdb"`). So: `class=` on your divs, `{}`-props on the embeds.
+      The `<story>` body is an HTML fragment, NOT React. Plain HTML elements use HTML attributes: `class="…"` (never `className`), and layout/styling via classes defined in the `<style>` block (prefer classes over inline styles on HTML elements). The ONLY JSX-flavored tags are the platform embeds `<Question>` / `<Number>` / `<Param>`: their props take `{…}` for numbers, expressions, and objects (`id={142}`, `query={`…`}`, `viz={{…}}`, `style={{…}}`) and quoted strings otherwise (`col="orders"`, `suffix=" Bn"`, `connection="duckdb"`). So: `class=` on your divs, `{}`-props on the embeds.
 
       ### Chart and number embedding
 
@@ -986,7 +990,7 @@ templates:
 
       ### Page mechanics (HTML fragment, no JS)
 
-      One root `<div>`, optionally preceded by a `<style>` block. No `<html>`/`<head>`/`<body>`, and strictly **no `<script>`**.
+      One root `<div>`, optionally preceded by a `<style>` block — both inside the `<story>…</story>` field element. No `<html>`/`<head>`/`<body>`, and strictly **no `<script>`**.
 
       - **`<style>` for the token system**: CSS variables and reusable classes (`.figure-plate`, `.section-label`, `.highlights`, `.caption-bar`) so the grammar lives in one place. Scope everything under one root class (`.story-x …`) so styles cannot leak into the host.
       - **Fonts via `@import` at the top of `<style>`**, Google Fonts, graceful installed fallbacks in every stack (`'Fraunces', Didot, Georgia, serif`).
