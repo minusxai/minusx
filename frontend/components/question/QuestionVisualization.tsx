@@ -407,6 +407,9 @@ function QuestionVisualizationInner({
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
+                // Screenshot readiness marker (lib/screenshot/readiness.ts): the capture waits
+                // until no data-mx-busy elements remain, so it never rasterizes this spinner.
+                data-mx-busy="true"
               >
                 <Spinner size="xl" color="accent.teal" />
                 <QueryLoadingIndicator estimatedDurationMs={queryEstimatedDurationMs} />

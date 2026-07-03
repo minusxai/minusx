@@ -29,6 +29,7 @@ import type { AugmentedToolDetails } from '@/lib/projection/messages';
 import { isImageViz, shouldDropRows } from '@/lib/chart/query-presentation';
 import { takeFilesMarkup, takeAugmentedMarkup, markupTextBlocks } from '@/lib/api/markup-blocks';
 import { captureFileViewBlob } from '@/lib/screenshot/capture';
+import { waitForFileViewReady } from '@/lib/screenshot/readiness';
 import { toAgentRubric } from '@/lib/rubric/scoring';
 import type { RubricReport } from '@/lib/rubric/types';
 import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
@@ -545,6 +546,11 @@ registerFrontendTool('Screenshot', async (args, context) => {
     // Yield once so the chat's "Capturing" tool state can paint before the capture runs —
     // the capture is synchronous main-thread work (DOM clone + rasterize) that briefly freezes the UI.
     await new Promise((r) => setTimeout(r, 0));
+    // Render→capture handshake: after an EditFile the view is often mid-rebuild (story iframe
+    // remounting, embed queries re-running). Capturing immediately rasterizes the OLD/half-built
+    // view — the agent then believes its edit didn't land. Wait for the view to settle (bounded;
+    // a stuck query degrades to a screenshot of its spinner rather than hanging the tool).
+    await waitForFileViewReady(fileId, { timeoutMs: 12000 });
     const blob = await captureFileViewBlob(fileId, { colorMode, fullHeight, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg' });
     const url = await uploadBlobOrEmbed(blob, 'screenshot.jpg', 'image/jpeg');
     // Piece 2: every screenshot also carries the file's COMBINED health rubric (deterministic +
