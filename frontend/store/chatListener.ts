@@ -34,6 +34,7 @@ import { runV3Turn, type V3TurnInput } from './conversation-stream-client';
 import { ConversationsAPI } from '@/lib/data/conversations';
 import { derivePendingToolCalls } from '@/lib/data/conversation-log';
 import { collectToolCallMeta, piToolResultToStreamedCall, type ToolCallMeta } from '@/lib/chat/streamed-tool-calls';
+import { withToolWatchdog } from '@/lib/utils/tool-watchdog';
 
 // ---------------------------------------------------------------------------
 // Synthetic skill-load events
@@ -444,6 +445,9 @@ chatListenerMiddleware.startListening({
 // eslint-disable-next-line no-restricted-syntax -- client-side Redux listener; per-tab ephemeral execution state, no data leakage
 const inFlightToolCalls = new Set<string>();
 
+/** Hard ceiling on one frontend tool execution (see withToolWatchdog) — 6 minutes. */
+const TOOL_WATCHDOG_MS = 6 * 60 * 1000;
+
 chatListenerMiddleware.startListening({
   matcher: isAnyOf(updateConversation, setUserInputResult),
   effect: async (action: any, listenerApi) => {
@@ -481,12 +485,20 @@ chatListenerMiddleware.startListening({
           abortControllers.set(realConversation._id, toolAbort);
         }
 
-        const result = await executeToolCall(
-          pendingTool.toolCall,
-          listenerApi.dispatch as AppDispatch,
-          toolAbort.signal,
-          state,
-          pendingTool.userInputs
+        // Watchdog: a handler that never settles (hung fetch with no timeout, stuck upload) would
+        // otherwise never dispatch completeToolCall and leave the conversation in "executing"
+        // forever. The deadline sits well above the worst LEGITIMATE tool run (two 120s query
+        // waves + uploads ≈ 4min); a UserInputException still propagates immediately.
+        const result = await withToolWatchdog(
+          executeToolCall(
+            pendingTool.toolCall,
+            listenerApi.dispatch as AppDispatch,
+            toolAbort.signal,
+            state,
+            pendingTool.userInputs
+          ),
+          pendingTool.toolCall.function?.name ?? 'tool',
+          TOOL_WATCHDOG_MS,
         );
 
         listenerApi.dispatch(completeToolCall({

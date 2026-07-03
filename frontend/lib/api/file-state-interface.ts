@@ -16,6 +16,9 @@ export interface ReadFilesOptions {
   ttl?: number;        // Time-to-live in ms (default: CACHE_TTL.FILE)
   skip?: boolean;      // Skip loading (return from Redux / cache only)
   runQueries?: boolean; // Execute queries for question files (root + references) that lack cached results
+  /** Cancels the auto-executed queries (e.g. the conversation's Stop). Without it a ReadFiles over
+   *  a wide dashboard blocks on every uncached query to its full timeout, uncancellable. */
+  signal?: AbortSignal;
 }
 
 export interface ReadFilesByCriteriaOptions {
