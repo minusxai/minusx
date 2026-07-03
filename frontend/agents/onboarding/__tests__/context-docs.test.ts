@@ -4,6 +4,7 @@
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import { OnboardingDashboardAgent } from '../onboarding-agents';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
+import { INLINE_ALL_DOCS_THRESHOLD } from '@/lib/sql/schema-filter';
 
 function dashboardAgent(overrides: Partial<RemoteAnalystContext> = {}) {
   const orch = new Orchestrator([OnboardingDashboardAgent]);
@@ -21,11 +22,17 @@ describe('OnboardingDashboardAgent context docs', () => {
 
   it('renders resolvedContextDocs: default doc inline, lazy doc advertised by key only', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // Need at least INLINE_ALL_DOCS_THRESHOLD docs so lazy docs stay in the
+    // catalog instead of being inlined wholesale (small-context optimization).
+    const filler = Array.from({ length: Math.max(0, INLINE_ALL_DOCS_THRESHOLD - 2) }, (_, i) => ({
+      key: `filler${i}`, title: `Filler ${i}`, description: 'x', content: `FILLER BODY ${i}`, alwaysInclude: false,
+    }));
     const sp: string = (dashboardAgent({
       resolvedContextDocs: {
         docs: [
           { key: '', title: 'Pinned', content: 'PINNED ONB BODY', alwaysInclude: true },
           { key: 'glossary', title: 'Glossary', description: 'terms', content: 'GLOSSARY ONB BODY', alwaysInclude: false },
+          ...filler,
         ],
       },
     }) as any).getSystemPrompt();

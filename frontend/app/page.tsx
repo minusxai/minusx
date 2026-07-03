@@ -12,7 +12,7 @@ import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useConfigs } from '@/lib/hooks/useConfigs';
-import { FeedSummary, RecentQuestions, RecentDashboards, RecentConversations, SuggestedQuestions, HomeFolderFiles } from '@/components/RecentFilesSection';
+import { FeedSummary, RecentQuestions, RecentDashboards, RecentStories, RecentConversations, SuggestedQuestions, HomeFolderFiles } from '@/components/RecentFilesSection';
 import Breadcrumb from '@/components/Breadcrumb';
 import FloatingChatWrapper from '@/components/FloatingChatWrapper';
 import RightSidebar from '@/components/RightSidebar';
@@ -243,7 +243,15 @@ export default function Home() {
               ) : (
                 <>
                   <SectionPanel><RecentQuestions /></SectionPanel>
-                  <SectionPanel><RecentDashboards /></SectionPanel>
+                  <Box
+                    display="grid"
+                    gap={2}
+                    gridTemplateColumns="1fr"
+                    css={{ '@container (min-width: 700px)': { gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' } }}
+                  >
+                    <SectionPanel><RecentDashboards /></SectionPanel>
+                    <SectionPanel><RecentStories /></SectionPanel>
+                  </Box>
                   {/* Folder view fallback — shown when analytics sections render nothing */}
                   <HomeFolderFiles />
                 </>

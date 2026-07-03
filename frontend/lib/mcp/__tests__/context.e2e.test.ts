@@ -39,6 +39,7 @@ import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__
 import { DocumentDB } from '@/lib/database/documents-db';
 import { FilesAPI } from '@/lib/data/files.server';
 import { createMcpServer } from '@/lib/mcp/server';
+import { INLINE_ALL_DOCS_THRESHOLD } from '@/lib/sql/schema-filter';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ContextContent } from '@/lib/types';
 
@@ -89,6 +90,11 @@ beforeAll(async () => {
       docs: [
         { title: 'Pinned Rules', description: 'always on', content: PINNED_MARKER, alwaysInclude: true, draft: false },
         { title: 'Revenue Glossary', description: 'how revenue maps to columns', content: GLOSSARY_MARKER, draft: false },
+        // Pad past INLINE_ALL_DOCS_THRESHOLD so lazy docs stay in the catalog
+        // instead of being inlined wholesale (small-context optimization).
+        ...Array.from({ length: Math.max(0, INLINE_ALL_DOCS_THRESHOLD - 2) }, (_, i) => ({
+          title: `Filler ${i}`, description: 'x', content: `FILLER_MARKER_${i}`, draft: false,
+        })),
       ],
       createdAt: new Date().toISOString(),
       createdBy: 1,

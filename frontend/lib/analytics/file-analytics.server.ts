@@ -318,7 +318,7 @@ WITH scored AS (
   FROM file_events fe
   JOIN files fi ON fi.id = fe.file_id
   JOIN users u ON u.id = fe.user_id
-  WHERE fi.type IN ('question', 'dashboard')
+  WHERE fi.type IN ('question', 'dashboard', 'story')
     AND fi.draft = false
     AND u.email = $2
     AND (fi.path = $4 OR fi.path LIKE $4 || '/%')

@@ -43,12 +43,17 @@ export const POST = withAuth(async (
     const screenshotUrl = typeof body?.screenshotUrl === 'string' ? body.screenshotUrl as string
       : (typeof body?.screenshot === 'string' && body.screenshot.startsWith('data:') ? body.screenshot as string : undefined);
 
-    const { data: file } = await loadFile(id, user); // access-checked
+    const { data: file } = await loadFile(id, user); // access-checked (type + ACL)
     if (!isRubricFileType(file.type)) {
       return ApiErrors.validationError(`Health rubric is only available for question, dashboard, and story files (got ${file.type})`);
     }
 
-    return successResponse({ report: await scoreFile(file.type, file.content, user, screenshotUrl) });
+    // The screenshot the judge grades is the caller's LIVE view = merged content (saved + unsaved
+    // edits). Score that same content when supplied, so the rubric doesn't judge stale saved markup
+    // against a fresh picture. Fall back to the saved DB snapshot when the caller sends none.
+    const content = body?.content && typeof body.content === 'object' ? body.content : file.content;
+
+    return successResponse({ report: await scoreFile(file.type, content, user, screenshotUrl) });
   } catch (error) {
     return handleApiError(error);
   }

@@ -2,20 +2,56 @@
  * FileHealthBadge UI test — the health badge computes the deterministic rubric client-side
  * from Redux content, and opens a panel with findings + a visual-review action.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { makeStore } from '@/store/store';
-import { setFile } from '@/store/filesSlice';
+import { setFile, setEdit } from '@/store/filesSlice';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { FileHealthBadge } from '@/components/FileHealthPanel';
 import type { DbFile } from '@/lib/types';
+
+// The visual-review capture needs a real DOM element + rasterizer, which jsdom lacks — stub the
+// screenshot hook so runJudge reaches the POST. We only assert what the panel SENDS to the route.
+vi.mock('@/lib/hooks/useScreenshot', () => ({
+  useScreenshot: () => ({
+    captureFileView: vi.fn().mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' })),
+    blobToDataURL: vi.fn().mockResolvedValue('data:image/jpeg;base64,AAA'),
+  }),
+}));
 
 function seedQuestion(store: ReturnType<typeof makeStore>, id: number, content: unknown) {
   store.dispatch(setFile({ file: { id, name: 'q', path: '/org/q', type: 'question', content } as unknown as DbFile }));
 }
 
 describe('FileHealthBadge', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // The screenshot the judge grades is the LIVE DOM (merged content), so the panel must POST the
+  // merged content too — otherwise the judge scores stale saved content against a fresh picture.
+  it('runJudge posts the merged (live-edited) content, not the saved DB content', async () => {
+    const store = makeStore();
+    seedQuestion(store, 40, { description: 'saved desc', query: 'SELECT 1', vizSettings: { type: 'table' }, parameters: [], connection_name: 'w' });
+    // Unsaved agent/user edit → merged content diverges from the saved snapshot.
+    store.dispatch(setEdit({ fileId: 40, edits: { description: 'LIVE EDIT' } }));
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { report: { overall: 3, grade: 'fair', categories: [] } } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWithProviders(<FileHealthBadge fileId={40} fileType="question" />, { store });
+    await userEvent.click(await screen.findByLabelText(/File health:/));
+    await userEvent.click(await screen.findByLabelText('Run visual review with the LLM judge'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.content).toMatchObject({ description: 'LIVE EDIT' });
+  });
+
+
   it('shows a health badge for a question with its overall score', async () => {
     const store = makeStore();
     seedQuestion(store, 1, { description: 'ok', query: 'SELECT 1', vizSettings: { type: 'table' }, parameters: [], connection_name: 'w' });
