@@ -1008,9 +1008,10 @@ templates:
       4. **Headlines state findings, not topics.** Every section header and chart title is a claim: "Rural counties drove the entire decline," never "Decline by county type." Reading only the headlines should give the whole story.
       5. **Decide the takeaway ending.** The final section restates the lead with its full earned weight and answers "so what should the reader think or do?" (In A, close with quantified bets and a colophon; in B, a HIGHLIGHTS box.)
       6. **Lock the design language tokens.** The language (A or B) was settled in the Clarify step; now fix its palette, fonts, and grammar. Critique the plan: if it resembles what you would produce for any other dataset, revise before coding.
-      7. **Build** the fragment following the plan exactly, every displayed number a live embed (Mechanics), tokens applied with total consistency.
-      8. **Screenshot and grade.** Critique as the intended reader, top to bottom (can the headlines alone tell the story? does the ending deliver the goal? is every claim backed by its embed and true to the data?), and read the rubric the Screenshot returns.
-      9. **Fix and improve** against the rubric: resolve every finding (`error` first, then `warn`) with its `fix`, raise the `overall` score, re-screenshot, and repeat until every `error` is cleared AND `overall` is at least 4 (keep going past that only if it still looks off).
+      7. **pre-Build** : Always first go to the new story page, then use EditFile to build. This makes sure the user can see and follow along.
+      8. **Build** the fragment following the plan exactly, every displayed number a live embed (Mechanics), tokens applied with total consistency.
+      9. **Screenshot and grade.** Critique as the intended reader, top to bottom (can the headlines alone tell the story? does the ending deliver the goal? is every claim backed by its embed and true to the data?), and read the rubric the Screenshot returns. You MUST include `<Question>` embeds for all prominent charts.
+      10. **Fix and improve** against the rubric: resolve every finding (`error` first, then `warn`) with its `fix`, raise the `overall` score, re-screenshot, and repeat until every `error` is cleared AND `overall` is at least 4 (keep going past that only if it still looks off).
 
       ### 4b. From a dashboard
 
@@ -1019,9 +1020,10 @@ templates:
       1. **Read the dashboard.** Its question references (ids), their titles, layout order, and any text/markdown cells are your raw material. Read those referenced questions and files to understand what each shows (that is reading existing artifacts, not database exploration).
       2. **Find the lead** from what the dashboard already shows, exactly as in 4a step 2, but sourced from the existing questions rather than fresh analysis.
       3. **Curate and reorder.** You do not have to use every question. Drop the ones that do not advance an argument, keep the ones that do, and reorder them into a narrative arc rather than the grid order.
-      4. **Storyboard, headline, and end** as in 4a steps 3 to 5: group the kept questions into 3 to 7 beats, write a claim-style headline and standfirst for each (from the questions' titles and the numbers they already contain), and decide the takeaway. Reference each by its existing saved id (`<Question id={N} />`): reuse, do not rebuild.
-      5. **Lock the design language tokens.** The language was settled in the Clarify step (a board/financial dashboard leans B, a public/marketing one leans A); now fix its palette, fonts, and grammar.
-      6. **Build, screenshot, fix** as in 4a steps 7 to 9: the only difference from scratch is that the numbers and charts already exist, so you are giving them an argument and a design, then grading and improving against the rubric.
+      4. **Storyboard, headline, and end** as in 4a steps 3 to 5: group the kept questions into 3 to 6 beats, write a claim-style headline and standfirst for each (from the questions' titles and the numbers they already contain), and decide the takeaway. Reference each by its existing saved id (`<Question id={N} />`): reuse, do not rebuild. You MUST include `<Question>` embeds for all prominent charts.
+      5. **Lock the design language tokens.** The language was settled in the Clarify step (a board/financial dashboard leans B, a public/marketing one leans A); now fix its palette, fonts, and grammar. Each beat should have "highlights" or "takeaways" of some sort. You can use creative section to separate beats, like a quote or a full-bleed question.
+      6. **pre-Build** : Always first go to the new story page, then use EditFile to build. This makes sure the user can see and follow along.
+      7. **Review, screenshot, fix** as in 4a steps 7 to 9: the only difference from scratch is that the numbers and charts already exist, so you are giving them an argument and a design, then grading and improving against the rubric.
 
   skill_notebooks:
     description: Notebook file structure (cells = inline SQL questions + markdown text), the activeCellId convention for editing the right cell, and notebook page behavior

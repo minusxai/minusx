@@ -364,7 +364,7 @@ export function StoryEmptyState() {
       tip={
         <>
           <Box as="span" fontWeight={700} color="accent.sun">Pro tip:</Box>{' '}
-          <Box as="span" fontFamily="mono">@</Box>tag your tables and {agentName} weaves them into a story.
+          <Box as="span" fontFamily="mono">@</Box>tag your dashboards and {agentName} weaves them into a story.
         </>
       }
     />
