@@ -132,10 +132,13 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
       const blob = await captureFileView(fileId, { fullHeight: true });
       const screenshot = await blobToDataURL(blob);
       setShot(screenshot); // show what we're actually sending to the judge
+      // Grade the merged (live-edited) content — the same view the screenshot captured — so the
+      // judge doesn't score stale saved markup against a fresh picture.
+      const content = selectMergedContent(store.getState(), fileId);
       const res = await fetch(`/api/files/${fileId}/rubric`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ screenshot }),
+        body: JSON.stringify({ screenshot, content }),
       });
       const json = await res.json().catch(() => null);
       const nextReport = json?.data?.report as RubricReport | undefined;

@@ -514,12 +514,14 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
  * screenshot and format it as a compact text block appended to the Screenshot result. Best-effort:
  * a non-rubric file type or any failure yields '' (the screenshot still returns normally).
  */
-async function fetchScreenshotRubric(fileId: number, screenshotUrl: string): Promise<string> {
+async function fetchScreenshotRubric(fileId: number, screenshotUrl: string, content?: unknown): Promise<string> {
   try {
     const res = await fetch(`/api/files/${fileId}/rubric`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ screenshotUrl }),
+      // Send the merged (live-edited) content so the rubric grades what the screenshot shows,
+      // not the stale saved snapshot the server would otherwise load.
+      body: JSON.stringify({ screenshotUrl, content }),
     });
     if (!res.ok) return '';
     const report = (await res.json())?.data?.report as RubricReport | undefined;
@@ -544,7 +546,10 @@ registerFrontendTool('Screenshot', async (args, context) => {
     const url = await uploadBlobOrEmbed(blob, 'screenshot.jpg', 'image/jpeg');
     // Piece 2: every screenshot also carries the file's COMBINED health rubric (deterministic +
     // LLM visual judge on THIS screenshot). Best-effort — a rubric failure never blocks the shot.
-    const rubricText = await fetchScreenshotRubric(fileId, url);
+    // Grade the SAME merged content the screenshot rendered (includes this turn's unsaved edits),
+    // read fresh from the live store so it matches the just-captured DOM.
+    const merged = selectMergedContent(getStore().getState(), fileId);
+    const rubricText = await fetchScreenshotRubric(fileId, url, merged);
     return {
       content: [
         { type: 'text', text: `Screenshot of file ${fileId} (rendered view).${rubricText}` },
