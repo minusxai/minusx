@@ -151,13 +151,14 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
     : files.filter(f => selectedTypes.includes(f.type));
 
   // Group files into sections: knowledge base, dashboards, folders, questions, other
-  const SECTION_ORDER = ['context', 'dashboard', 'folder', 'question', '_other'] as const;
+  const SECTION_ORDER = ['context', 'dashboard', 'story', 'folder', 'question', '_other'] as const;
   type SectionKey = typeof SECTION_ORDER[number];
 
   const SECTION_LABELS: Record<SectionKey, string> = {
     context: 'Knowledge Base',
     folder: 'Folders',
     dashboard: 'Dashboards',
+    story: 'Stories',
     question: 'Questions',
     _other: 'Other',
   };
@@ -167,6 +168,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
       context: [],
       folder: [],
       dashboard: [],
+      story: [],
       question: [],
       _other: [],
     };
@@ -175,6 +177,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
       if (f.type === 'context') groups.context.push(f);
       else if (f.type === 'folder') groups.folder.push(f);
       else if (f.type === 'dashboard') groups.dashboard.push(f);
+      else if (f.type === 'story') groups.story.push(f);
       else if (f.type === 'question') groups.question.push(f);
       else groups._other.push(f);
     });
