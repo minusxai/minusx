@@ -156,3 +156,36 @@ describe('warmFileScreenshot dedup', () => {
     expect(imageOf(out)?.url).toBe('https://cdn/1.jpg');
   });
 });
+
+describe('warmFileScreenshot — active-editing guard (the dashboard typing hang)', () => {
+  // Typing in a dashboard text block changes `markup` every debounce tick → new shot key → the
+  // warmer re-fires → a ~1s SYNCHRONOUS snapdom rasterize of the whole dashboard, over and over,
+  // for the entire typing session. The warmer must NOT capture while the user is actively editing
+  // inside the target view — it reschedules and captures once, after the editor blurs.
+  it('does not capture while the user is editing the view; captures after editing stops', async () => {
+    let editing = true;
+    _internal.isEditing = () => editing;
+
+    const app = fileAppState(11, 'typing-v1');
+    warmFileScreenshot(app, 'light', false);
+    await runDeferred();
+    expect(captureCalls).toBe(0);        // guarded: no rasterize mid-typing
+    expect(deferred.length).toBe(1);     // …but it rescheduled itself
+
+    await runDeferred();
+    expect(captureCalls).toBe(0);        // still editing → still guarded
+    expect(deferred.length).toBe(1);
+
+    editing = false;                      // user blurred the editor
+    await runDeferred();
+    expect(captureCalls).toBe(1);        // now it warms exactly once
+  });
+
+  it('the send path still captures fresh even mid-editing (image always rides along)', async () => {
+    _internal.isEditing = () => true;
+    const app = fileAppState(12, 'send-mid-edit');
+    const out = await appStateWithFileScreenshot(app, 'light', false);
+    expect(captureCalls).toBe(1);
+    expect(imageOf(out)?.url).toBe('https://cdn/1.jpg');
+  });
+});
