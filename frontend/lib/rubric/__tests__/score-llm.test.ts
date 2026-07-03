@@ -37,7 +37,7 @@ describe('scoreFileLLM', () => {
     const f = report.categories.flatMap((c) => c.findings).find((x) => x.ruleId === 'llm.chart-type-fit');
     expect(f?.source).toBe('llm');
     expect(f?.severity).toBe('error');
-    expect(f?.category).toBe('correctness');
+    expect(f?.category).toBe('aesthetics');
     expect(f?.title).toBe('Right chart for the data');
     expect(f?.detail).toContain('pie');
     expect(report.overall).toBeLessThan(5);

@@ -11,8 +11,9 @@ import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup } from '@/lib/data/file-markup';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
+import { buildVizTypeCtx } from '@/lib/rubric/refs';
 import { toAgentRubric } from '@/lib/rubric/scoring';
-import type { AgentRubric, DeterministicContext } from '@/lib/rubric/types';
+import type { AgentRubric } from '@/lib/rubric/types';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import type {
@@ -171,17 +172,12 @@ function compressFileState(fs: FileState, refs?: FileState[]): CompressedFileSta
 function computeRubric(type: FileType, content: unknown, refs?: FileState[]): AgentRubric | undefined {
   if (!isRubricFileType(type) || !content) return undefined;
   // Dashboard tile rules AND story width rules need each referenced question's chart type — a
-  // saved embed's viz type lives on the question, not in the dashboard/story content.
-  let ctx: DeterministicContext | undefined;
-  if ((type === 'dashboard' || type === 'story') && refs?.length) {
-    const vizTypeByQuestionId: Record<number, string> = {};
-    for (const r of refs) {
-      if (r.type !== 'question') continue;
-      const vt = (r.content as QuestionContent | null)?.vizSettings?.type;
-      if (vt) vizTypeByQuestionId[r.id] = vt;
-    }
-    ctx = { vizTypeByQuestionId };
-  }
+  // saved embed's viz type lives on the question, not in the dashboard/story content. Build the
+  // ctx through the shared assembler (id set = referencedQuestionIds) so this auto-inject path is
+  // IDENTICAL to the client badge / server scorers; here the lookup source is the resolved `refs`.
+  const vizByRefId = new Map((refs ?? []).filter((r) => r.type === 'question')
+    .map((r) => [r.id, (r.content as QuestionContent | null)?.vizSettings?.type] as const));
+  const ctx = buildVizTypeCtx(type, content, (id) => vizByRefId.get(id));
   try {
     return toAgentRubric(scoreFileDeterministic(type, content, ctx));
   } catch {

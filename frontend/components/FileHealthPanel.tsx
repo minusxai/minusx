@@ -18,9 +18,9 @@ import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
 import { passedChecks } from '@/lib/rubric/checks';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
-import { extractSavedQuestionIds } from '@/lib/data/story-question';
+import { buildVizTypeCtx } from '@/lib/rubric/refs';
 import type { DeterministicContext, FindingSource, RubricCategory, RubricFileType, RubricReport, RubricSeverity } from '@/lib/rubric/types';
-import type { DashboardContent, QuestionContent, StoryContent } from '@/lib/types';
+import type { QuestionContent } from '@/lib/types';
 
 type Level = RubricSeverity | 'pass';
 
@@ -79,18 +79,7 @@ function scorableContent(fileType: string, content: unknown): unknown {
 // the question file, not in the dashboard/story content, so resolve it from Redux. Dashboards list
 // their questions in `assets`; a story's saved embeds are `data-question-id` refs in its body.
 function vizTypeCtx(fileType: string, content: unknown, state: RootState): DeterministicContext | undefined {
-  const ids = fileType === 'dashboard'
-    ? ((content as DashboardContent | null)?.assets ?? []).filter((a) => a.type === 'question').map((a) => a.id)
-    : fileType === 'story'
-      ? extractSavedQuestionIds((content as StoryContent | null)?.story)
-      : [];
-  if (ids.length === 0) return undefined;
-  const vizTypeByQuestionId: Record<number, string> = {};
-  for (const id of ids) {
-    const vt = (selectFile(state, id)?.content as QuestionContent | undefined)?.vizSettings?.type;
-    if (vt) vizTypeByQuestionId[id] = vt;
-  }
-  return { vizTypeByQuestionId };
+  return buildVizTypeCtx(fileType, content, (id) => (selectFile(state, id)?.content as QuestionContent | undefined)?.vizSettings?.type);
 }
 
 export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType: string }) {

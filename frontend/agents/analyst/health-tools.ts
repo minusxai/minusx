@@ -2,8 +2,8 @@ import { Type } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { FilesAPI } from '@/lib/data/files.server';
-import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
-import { scoreFile } from '@/lib/rubric/score-file.server';
+import { isRubricFileType } from '@/lib/rubric/registry';
+import { scoreFile, scoreFileDeterministicResolved } from '@/lib/rubric/score-file.server';
 import { toAgentRubric } from '@/lib/rubric/scoring';
 import type { RubricReport } from '@/lib/rubric/types';
 import type { AnalystAgentContext } from './types';
@@ -71,7 +71,7 @@ export class CheckFileHealth extends MXTool<typeof CheckFileHealthParams, Analys
       const report = llmJudge
         ? await scoreFile(file.type, file.content, user,
             this.parameters.screenshotUrl ?? screenshotUrlFor(this.context.appState, fileId))
-        : scoreFileDeterministic(file.type, file.content);
+        : await scoreFileDeterministicResolved(file.type, file.content, user);
 
       // The agent reads `content` — give it the lean rubric (no weight/assessed; findings tagged
       // rule/llm). `details` keeps the full report for the UI.
