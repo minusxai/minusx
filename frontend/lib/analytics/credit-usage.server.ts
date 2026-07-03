@@ -7,6 +7,7 @@ import {
   resolveIndividualResetAllowance, resolveOrgResetAllowance,
 } from '@/lib/config';
 import { cycleStartSql, cycleNextResetSql } from './credit-budgets';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { UNKNOWN_TRIGGER, type CreditBreakdownRow, type CreditScope, type CreditUsageResponse } from './credits.types';
 
 /**
@@ -116,4 +117,73 @@ export async function getCreditUsage(
   const individual = await loadScope(resolveIndividualAllowance(role), resolveIndividualResetAllowance(role), nextResets, userId);
   const org = includeOrg ? await loadScope(resolveOrgAllowance(), resolveOrgResetAllowance(), nextResets) : null;
   return { individual, org, enforced: ENFORCE_CREDIT_LIMITS };
+}
+
+// Lightweight per-user usage for the gate: reset-window + billing-window credits
+// spent this cycle. No breakdown/rows — just the two SUMs. Mirrors usageSql's
+// window + mode filter. $1 = user_id.
+const GATE_SQL = `
+SELECT
+  SUM(COALESCE(cost, 0)) FILTER (WHERE created_at >= ${RESET_START}) AS reset_cost,
+  SUM(COALESCE(cost, 0))                                             AS billing_cost
+FROM llm_call_events
+WHERE created_at >= ${BILLING_START}
+  AND COALESCE(mode, 'org') IN ('org', 'tutorial')
+  AND user_id = $1
+`;
+
+export interface CreditGate {
+  allowed: boolean;
+  /** Which window was exceeded (null when allowed / not enforced). */
+  exceeded: 'reset' | 'billing' | null;
+  /** User-facing block message (null when allowed). */
+  message: string | null;
+}
+
+const ALLOWED: CreditGate = { allowed: true, exceeded: null, message: null };
+
+/**
+ * Preflight credit check for one user before a turn runs. Returns `allowed`
+ * unless credit limits are ENFORCED and the user has hit their reset-cycle or
+ * billing-cycle allowance. Cheap (a single 2-SUM query); call at orchestration
+ * entry points, not per LLM hop.
+ */
+export async function checkCreditGate(user: EffectiveUser): Promise<CreditGate> {
+  if (!ENFORCE_CREDIT_LIMITS || typeof user.userId !== 'number') return ALLOWED;
+
+  const { rows } = await getModules().db.exec<{ reset_cost: unknown; billing_cost: unknown }>(GATE_SQL, [user.userId]);
+  const toCredits = (v: unknown) => costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: Number(v ?? 0) });
+  const resetUsed = toCredits(rows[0]?.reset_cost);
+  const billingUsed = toCredits(rows[0]?.billing_cost);
+
+  const billingAllowance = resolveIndividualAllowance(user.role);
+  if (billingUsed >= billingAllowance) {
+    return { allowed: false, exceeded: 'billing', message: `Credit limit reached for ${BILLING_CYCLE.label} (${billingAllowance.toLocaleString()} credits).` };
+  }
+  const resetAllowance = resolveIndividualResetAllowance(user.role);
+  if (resetUsed >= resetAllowance) {
+    return { allowed: false, exceeded: 'reset', message: `Credit limit reached for ${RESET_CYCLE.label} (${resetAllowance.toLocaleString()} credits). It resets soon.` };
+  }
+  return ALLOWED;
+}
+
+/** Thrown by the orchestrator credit gate when a user is over their enforced limit. */
+export class CreditLimitError extends Error {
+  constructor(message: string, readonly exceeded: 'reset' | 'billing') {
+    super(message);
+    this.name = 'CreditLimitError';
+  }
+}
+
+/**
+ * Build the `Orchestrator.beforeLlmCall` hook for a user: a pre-LLM-call gate
+ * that throws `CreditLimitError` (message surfaces to the run) when limits are
+ * enforced and exceeded. No-op when enforcement is off. Set this on every
+ * user-facing orchestrator so enforcement lives at the one universal call site.
+ */
+export function creditEnforcer(user: EffectiveUser): () => Promise<void> {
+  return async () => {
+    const gate = await checkCreditGate(user);
+    if (!gate.allowed) throw new CreditLimitError(gate.message!, gate.exceeded!);
+  };
 }

@@ -3,6 +3,7 @@ import { getModules } from '@/lib/modules/registry';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { getUserEffectiveUser } from '@/lib/auth/auth-helpers';
 import { runChatOrchestrationV2 } from '@/lib/chat/run-orchestration-v2.server';
+import { checkCreditGate } from '@/lib/analytics/credit-usage.server';
 import { SlackAgent } from '@/agents/slack/slack-agent';
 import { addReaction, getConversationHistory, getSlackUserEmail, postSlackMessage, publishHomeView, removeReaction, uploadSlackFile, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
 import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
@@ -172,6 +173,13 @@ export async function processSlackEvent(
       threadTs,
       userMessage,
     );
+
+    // Credit gate: when enforced + exceeded, post the block message and skip the run.
+    const gate = await checkCreditGate(effectiveUser);
+    if (!gate.allowed) {
+      await postErrorReply(installation, ev.channel, threadTs, gate.message!);
+      return;
+    }
 
     const agentArgs = await buildSlackAgentArgs(effectiveUser);
 

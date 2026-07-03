@@ -6,7 +6,8 @@ vi.mock('@/lib/database/db-config', () => ({
 }));
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getCreditUsage } from '@/lib/analytics/credit-usage.server';
+import { getCreditUsage, checkCreditGate } from '@/lib/analytics/credit-usage.server';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getModules } from '@/lib/modules/registry';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -139,6 +140,14 @@ describe('getCreditUsage', () => {
     expect(byTrigger['']).toBeUndefined(); // never empty
     expect(byTrigger['explore'].credits).toBeCloseTo(20, 6); // 0.02 * 1000
     expect(byTrigger['slack'].credits).toBeCloseTo(30, 6); // 0.03 * 1000
+  });
+
+  it('checkCreditGate allows everything when enforcement is off (default env)', async () => {
+    // Huge usage, but ENFORCE_CREDIT_LIMITS is unset in the test env → always allowed.
+    await seed({ userId: 9, provider: 'openai', model: 'm', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 9999, createdAtSql: 'NOW()' });
+    const gate = await checkCreditGate({ userId: 9, role: 'viewer', mode: 'org', email: 'x@x.co' } as EffectiveUser);
+    expect(gate.allowed).toBe(true);
+    expect(gate.exceeded).toBeNull();
   });
 
   it('returns org=null when includeOrg is false', async () => {

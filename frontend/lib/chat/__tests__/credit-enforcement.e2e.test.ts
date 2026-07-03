@@ -1,0 +1,69 @@
+// Deep credit enforcement: with ENFORCE_CREDIT_LIMITS on (config mocked) and a
+// user over their reset allowance, a real conversation turn must be blocked at
+// the orchestrator's universal LLM call site (`beforeLlmCall`) — erroring with
+// the credit message and making NO LLM call — not at any entry-point check.
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
+vi.mock('@/lib/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/config')>();
+  return {
+    ...actual,
+    ENFORCE_CREDIT_LIMITS: true,
+    resolveIndividualResetAllowance: () => 100,   // 100-credit daily cap
+    resolveIndividualAllowance: () => 1_000_000,  // billing effectively unreachable
+  };
+});
+
+import { runConversationTurn } from '@/lib/chat/conversation-turn.server';
+import { createConversation } from '@/lib/data/conversations.server';
+import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
+import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
+import { getModules } from '@/lib/modules/registry';
+import { getTestDbPath } from '@/store/__tests__/test-utils';
+import { setupTestDb } from '@/test/harness/test-db';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import type { ChatRequest } from '@/lib/chat-orchestration';
+
+setupTestDb(getTestDbPath('credit_enforcement'));
+
+const user = (userId: number) => ({ userId, email: 't@x.co', name: 'T', role: 'viewer', home_folder: '/org', mode: 'org' } as EffectiveUser);
+const turnBody = (m: string): ChatRequest => ({ user_message: m, agent: 'WebAnalystAgent', agent_args: {} } as unknown as ChatRequest);
+
+async function seedUsage(userId: number, cost: number): Promise<void> {
+  // conversation_id 0 = not tied to the turn's conversation (so the "no LLM call
+  // for this turn" assertion is unambiguous).
+  await getModules().db.exec(
+    `INSERT INTO llm_call_events (conversation_id, model, cost, user_id, mode, created_at) VALUES (0, 'm', $1, $2, 'org', NOW())`,
+    [cost, userId],
+  );
+}
+
+describe('credit enforcement (deep beforeLlmCall hook)', () => {
+  it('blocks the turn at the LLM call when the user is over limit', async () => {
+    await seedUsage(1, 0.2); // 200 credits ≥ 100 cap
+    webAnalystFaux.setResponses([fauxAssistantMessage('should NOT be used', { stopReason: 'stop' })]);
+
+    const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+    const result = await runConversationTurn(conv.id, user(1), turnBody('hi'));
+
+    expect(result.runStatus).toBe('error');
+    expect(result.error ?? '').toMatch(/credit limit/i);
+
+    // Blocked BEFORE dispatch → no LLM call recorded for this conversation.
+    const { rows } = await getModules().db.exec<{ c: number }>(
+      `SELECT COUNT(*) AS c FROM llm_call_events WHERE conversation_id = $1`, [conv.id]);
+    expect(Number(rows[0].c)).toBe(0);
+  });
+
+  it('allows the turn when under limit', async () => {
+    webAnalystFaux.setResponses([fauxAssistantMessage('ok reply', { stopReason: 'stop' })]);
+    const conv = await createConversation({ ownerUserId: 2, mode: 'org', agent: 'WebAnalystAgent' });
+    const result = await runConversationTurn(conv.id, user(2), turnBody('hi'));
+    expect(result.runStatus).toBe('idle');
+    expect(result.error).toBeUndefined();
+  });
+});

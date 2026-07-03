@@ -8,6 +8,7 @@
 
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
+import { creditEnforcer } from '@/lib/analytics/credit-usage.server';
 import type {
   ConversationLog,
   ConversationLogEntry as PiLogEntry,
@@ -403,6 +404,9 @@ export async function setupOrchestration(
       ? withSwaps(V2_REGISTRABLES, BENCHMARK_TOOL_SWAPS)
       : V2_REGISTRABLES;
   const orch = new Orchestrator(registrables, [...savedLog]);
+  // Enforce per-user credit limits deep at the LLM call site (no-op unless
+  // ENFORCE_CREDIT_LIMITS). Covers every agent/sub-agent/resume hop in this run.
+  orch.beforeLlmCall = creditEnforcer(user);
 
   // Resume path: frontend sends back [ToolCall, ToolMessage][] tuples.
   // ToolMessage (from Redux/executeToolCall) lacks .function — patch it from
