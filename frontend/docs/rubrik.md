@@ -88,9 +88,9 @@ this order — so there's always exactly one home for a new rule:
 
 ## Scoring math
 
-A deliberately **coarse 1–5 scale** (avoids false precision / variance). Each category starts
-at **5**; deduct per finding — **error −2, warn −1, info −0.5** — then round to the nearest 0.5
-and clamp to [1, 5]. Overall = weighted mean of category scores (same 1–5 scale). Weights and
+A deliberately **coarse 0–5 scale** (avoids false precision / variance). Each category starts
+at **5**; deduct per finding — **error −3, warn −1, info −0.5** — then round to the nearest 0.5
+and clamp to [0, 5]. Overall = weighted mean of category scores (same 0–5 scale). Weights and
 deductions are constants in one place (`scoring.ts`) so they calibrate against a human gold set
 later. Note the baseline is always 5 regardless of how many rules a category has — a category is
 only penalized for *actual* findings, so adding more granular checks never harshens a clean file.
