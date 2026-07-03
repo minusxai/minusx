@@ -29,6 +29,7 @@ import type { AugmentedToolDetails } from '@/lib/projection/messages';
 import { isImageViz, shouldDropRows } from '@/lib/chart/query-presentation';
 import { takeFilesMarkup, takeAugmentedMarkup, markupTextBlocks } from '@/lib/api/markup-blocks';
 import { captureFileViewBlob } from '@/lib/screenshot/capture';
+import { waitForFileViewReady } from '@/lib/screenshot/readiness';
 import { toAgentRubric } from '@/lib/rubric/scoring';
 import type { RubricReport } from '@/lib/rubric/types';
 import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
@@ -375,9 +376,12 @@ registerFrontendTool('Navigate', async (args, context) => {
 
     const draftId = await createDraftFile(newFileType, path ? { folder: path } : {});
     router.push(`/f/${draftId}`);
-    const msg = path
+    const msg = (path
       ? `Created new ${newFileType} in ${path}, navigating to /f/${draftId}`
-      : `Created new ${newFileType}, navigating to /f/${draftId}`;
+      : `Created new ${newFileType}, navigating to /f/${draftId}`)
+      // The nameless draft's path ends in a random placeholder token until the user saves —
+      // warn the agent up front so it doesn't treat the token as a real path/name later.
+      + `. Note: the draft's \`path\` ends in a random placeholder token (PROVISIONAL — rewritten to the title slug on save); refer to the file by id ${draftId} and give it a title via EditFile \`name\`.`;
     return { content: { success: true, message: msg }, details: { success: true } };
   }
 
@@ -542,6 +546,11 @@ registerFrontendTool('Screenshot', async (args, context) => {
     // Yield once so the chat's "Capturing" tool state can paint before the capture runs —
     // the capture is synchronous main-thread work (DOM clone + rasterize) that briefly freezes the UI.
     await new Promise((r) => setTimeout(r, 0));
+    // Render→capture handshake: after an EditFile the view is often mid-rebuild (story iframe
+    // remounting, embed queries re-running). Capturing immediately rasterizes the OLD/half-built
+    // view — the agent then believes its edit didn't land. Wait for the view to settle (bounded;
+    // a stuck query degrades to a screenshot of its spinner rather than hanging the tool).
+    await waitForFileViewReady(fileId, { timeoutMs: 12000 });
     const blob = await captureFileViewBlob(fileId, { colorMode, fullHeight, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg' });
     const url = await uploadBlobOrEmbed(blob, 'screenshot.jpg', 'image/jpeg');
     // Piece 2: every screenshot also carries the file's COMBINED health rubric (deterministic +
@@ -712,10 +721,17 @@ registerFrontendTool('EditFile', async (args, context) => {
       }
       if (!workingStr.includes(effectiveOld)) {
         const err = `String "${oldMatch}" not found in file`;
+        // The agent matches against its app-state markup, a TURN-START snapshot that goes stale
+        // after any earlier successful EditFile this turn. Return the file's CURRENT markup so the
+        // next attempt can rebuild oldMatch from truth instead of retrying blind (or burning a
+        // ReadFiles round-trip). Edits are atomic — nothing before failedIndex was applied — so
+        // the pre-edit markup IS the current file.
         const failureContent = {
           success: false,
-          error: `Change ${i + 1}/${changes.length} failed: ${err}`,
+          error: `Change ${i + 1}/${changes.length} failed: ${err}. No changes were applied (all changes in one EditFile call apply atomically). `
+            + 'Your view of the file may be stale — the CURRENT file markup is in `currentMarkup`; rebuild oldMatch from it and retry.',
           failedIndex: i,
+          currentMarkup: built.fullFileStr,
         };
         return { content: failureContent, details: { success: false, error: failureContent.error } };
       }
@@ -1127,6 +1143,14 @@ registerFrontendTool('CreateFile', async (args, context) => {
   const result: Record<string, any> = { success: true, state: stateNoMarkup };
   if (vizWarning) result.vizWarning = vizWarning;
   if (createValidation.length) result.validation = createValidation; // non-blocking feedback
+  // A nameless draft's path ends in a random token (DB uniqueness only) that is rewritten to the
+  // name slug when the user saves — without this note the agent treats the token as a real
+  // path/name, echoes it to the user, or references the file by a path that later changes.
+  if (!name) {
+    result.pathNote = 'This draft has no title yet, so its `path` ends in a random placeholder token. '
+      + 'The path is PROVISIONAL — it is rewritten to the title slug when the user saves. '
+      + 'Never show it to the user or reference the file by it; use the stable `id` (and set a title via EditFile `name`).';
+  }
   // NO chart image for CreateFile: a created file is always a background draft (this tool never
   // navigates), so the agent isn't looking at it — the rows + viz settings in `state` already convey
   // the result. Attaching a rendered chart image per create was a major context-bloat source when

@@ -169,28 +169,96 @@ describe('content ⇄ jsx — real QuestionContent (raw SQL leaf, nested viz)', 
   });
 });
 
-describe('jsxToContent — unrecognized top-level tags (the empty-story / hollow-success trap)', () => {
-  // The single source of the "1 FILE EDIT but blank story" bug: a body emitted as loose top-level
-  // markup (not wrapped in its field element) was silently dropped, parsing to {} while reporting
-  // success. jsxToContent must now fail loudly when it recognizes NOTHING.
+describe('jsxToContent — loose top-level body markup (agent omitted the <story> wrapper)', () => {
+  // Agents routinely author a story body as loose top-level markup (<style> + <div>, per the
+  // skill scaffolds) instead of wrapping it in the <story> field element. Dropping it silently
+  // produced the "1 FILE EDIT but blank story" bug; failing loudly made CreateFile always fail.
+  // The right behavior: when the schema has a jsx field and the document doesn't provide it,
+  // ADOPT the unrecognized top-level markup as that field's body.
   const schema = {
     type: 'object',
     properties: { story: { type: 'string', format: 'jsx' }, description: { type: 'string' } },
   };
 
-  it('fails when every top-level element is unrecognized (agent emitted a loose <div> body)', () => {
+  it('adopts a loose <div> body into the jsx field (CreateFile from the skill scaffold)', () => {
     const res = jsxToContent('<div class="story"><h1>Hi</h1><p>Body</p></div>', schema, ctx);
-    expect(res.ok).toBe(false);
-    if (!res.ok) {
-      expect(res.error).toMatch(/story/);      // points the agent at the right field
-      expect(res.error).toMatch(/div/);         // names what was dropped
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const v = res.value as { story?: string };
+      expect(v.story).toContain('<h1>Hi</h1>');
+      expect(v.story).toContain('class="story"');
     }
   });
 
-  it('still parses recognized fields and only ignores loose siblings (partial markup)', () => {
+  it('adopts a loose <style> + <div> pair, preserving both and their order', () => {
+    const res = jsxToContent(
+      '<style>{`.story-x { color: red; }`}</style>\n<div class="story-x"><h1>Hi</h1></div>',
+      schema, ctx
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const story = (res.value as { story?: string }).story ?? '';
+      expect(story).toContain('.story-x');
+      expect(story.indexOf('<style')).toBeLessThan(story.indexOf('<div'));
+    }
+  });
+
+  it('adopts loose body markup alongside recognized sibling fields (mixed document)', () => {
+    const res = jsxToContent(
+      '<description>launch recap</description>\n<style>{`.s{color:red}`}</style>\n<div class="s"><h1>Hi</h1></div>',
+      schema, ctx
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const v = res.value as { description?: string; story?: string };
+      expect(v.description).toBe('launch recap');
+      expect(v.story).toContain('<h1>Hi</h1>');
+    }
+  });
+
+  it('does NOT adopt loose siblings when the jsx field is explicitly provided', () => {
     const res = jsxToContent('<story><h1>Hi</h1></story><div>loose</div>', schema, ctx);
     expect(res.ok).toBe(true);
+    if (res.ok) {
+      const story = (res.value as { story?: string }).story ?? '';
+      expect(story).toContain('Hi');
+      expect(story).not.toContain('loose');
+    }
+  });
+
+  it('still enforces the static-JSX security rules on adopted markup (<script> rejected)', () => {
+    const res = jsxToContent('<div class="story"><script>alert(1)</script></div>', schema, ctx);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.toLowerCase()).toContain('script');
+  });
+
+  it('rescues HTML-isms in a story body via the lenient retry (comments, <br>, stray <)', () => {
+    const res = jsxToContent(
+      '<story><div class="s"><!-- hero --><h1>Churn < 5%</h1><p>a<br>b</p></div></story>',
+      schema, ctx
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const story = (res.value as { story?: string }).story ?? '';
+      expect(story).toContain('Churn');
+      expect(story).not.toContain('<!--');
+    }
+  });
+
+  it('rescues HTML-isms in an ADOPTED loose body too', () => {
+    const res = jsxToContent('<div class="s"><!-- hero --><h1>Hi</h1><p>a<br>b</p></div>', schema, ctx);
+    expect(res.ok).toBe(true);
     if (res.ok) expect((res.value as { story?: string }).story).toContain('Hi');
+  });
+
+  it('still fails loudly for schemas WITHOUT a jsx field (question markup stays strict)', () => {
+    const qSchema = { type: 'object', properties: { query: { type: 'string' }, description: { type: 'string' } } };
+    const res = jsxToContent('<div class="story"><h1>Hi</h1></div>', qSchema, ctx);
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/div/);
+      expect(res.error).toMatch(/query/);
+    }
   });
 
   it('treats an empty document (no elements) as an empty object, not an error', () => {

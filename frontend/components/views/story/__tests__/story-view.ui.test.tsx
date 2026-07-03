@@ -16,8 +16,9 @@
 import React from 'react';
 import { screen, within, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
-import { makeStore } from '@/store/store';
+import { makeStore, getOrCreateStore } from '@/store/store';
 import { setFileEditMode } from '@/store/uiSlice';
+import { addFile } from '@/store/filesSlice';
 import type { StoryContent } from '@/lib/types';
 
 vi.mock('@/components/containers/SmartEmbeddedQuestionContainer', () => ({
@@ -186,6 +187,51 @@ describe('StoryView', () => {
     await waitFor(() => {
       expect(storyRoot().textContent).toContain('The year demand went vertical');
       expect(storyRoot().textContent).toContain('Narrative paragraph.');
+    });
+  });
+
+  it('a programmatic focusout with NO user input never echo-overwrites the story (agent-edit wipe)', async () => {
+    // The live wipe: in edit mode the iframe streams inline edits out via input/focusout. Embedded
+    // React controls mounting/unmounting inside the iframe fire focusout PROGRAMMATICALLY — with no
+    // user edit — and the resulting serialize-echo, taken mid-hydration (embeds half-mounted, DOM
+    // partial), REPLACED the agent's freshly staged content wholesale via applyStoryHtmlEdit →
+    // setFullContent (the "story goes blank after EditFile" bug). An echo must only ever follow a
+    // REAL user input event. applyStoryHtmlEdit dispatches to the GLOBAL store, so use it here.
+    const store = getOrCreateStore();
+    store.dispatch(addFile({
+      id: 7, name: '', path: '/org/x1y2z3', type: 'story',
+      content: { description: 'demo', story: STORY }, references: [], draft: true,
+      version: 1, last_edit_id: null, created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z',
+    } as never));
+    store.dispatch(setFileEditMode({ fileId: 7, editMode: true }));
+    renderWithProviders(<StoryView content={content} fileId={7} />, { store });
+    await waitFor(() => expect(storyRoot().textContent).toContain('The year demand went vertical'));
+
+    // Simulate the mid-hydration moment: the DOM is partial (headline gone) when focusout fires.
+    storyRoot().querySelector('h1')!.remove();
+    storyRoot().dispatchEvent(new Event('focusout', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(store.getState().files.files[7]?.persistableChanges ?? {}).toEqual({});
+  });
+
+  it('a REAL user edit still syncs out (input → focusout flush stages the edited story)', async () => {
+    const store = getOrCreateStore();
+    store.dispatch(addFile({
+      id: 8, name: '', path: '/org/x1y2z4', type: 'story',
+      content: { description: 'demo', story: STORY }, references: [], draft: true,
+      version: 1, last_edit_id: null, created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z',
+    } as never));
+    store.dispatch(setFileEditMode({ fileId: 8, editMode: true }));
+    renderWithProviders(<StoryView content={content} fileId={8} />, { store });
+    await waitFor(() => expect(storyRoot().textContent).toContain('The year demand went vertical'));
+
+    const h1 = storyRoot().querySelector('h1')!;
+    h1.textContent = 'User edited headline';
+    storyRoot().dispatchEvent(new Event('input', { bubbles: true }));
+    storyRoot().dispatchEvent(new Event('focusout', { bubbles: true }));
+    await waitFor(() => {
+      const staged = store.getState().files.files[8]?.persistableChanges as { story?: string } | undefined;
+      expect(staged?.story).toContain('User edited headline');
     });
   });
 

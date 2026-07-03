@@ -18,7 +18,7 @@
  *
  * Top level emits the content object's FIELDS as sibling elements (no wrapper).
  */
-import { parseJsx, serializeJsx, validateJsxSource } from '@/lib/jsx';
+import { parseJsx, serializeJsx, validateJsxSource, sanitizeLooseJsx } from '@/lib/jsx';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { JSX_COMPONENT_NAMES } from '@/lib/jsx/components';
 
@@ -306,8 +306,17 @@ export type JsxToContentResult = { ok: true; value: unknown } | { ok: false; err
 
 /** Parse a jsx document back to typed content (top-level elements = the object's fields). */
 export function jsxToContent(jsx: string, schema: JsonSchema, ctx: SchemaCtx): JsxToContentResult {
-  const parsed = parseJsx(jsx);
-  if (!parsed.ok) return { ok: false, error: parsed.error };
+  let parsed = parseJsx(jsx);
+  if (!parsed.ok) {
+    // Agents author HTML, not strict JSX: comments, unclosed void tags, and a stray `<` in prose
+    // are the common breakers, and one of them anywhere fails the WHOLE document (so a tiny,
+    // correct edit to a large story dies on an unrelated character). Retry once with those
+    // HTML-isms rewritten to JSX-safe forms; a document that already parses is never altered.
+    const cleaned = sanitizeLooseJsx(jsx);
+    const retried = cleaned !== jsx ? parseJsx(cleaned) : null;
+    if (!retried || !retried.ok) return { ok: false, error: parsed.error };
+    parsed = retried;
+  }
   const s = unwrap(schema, ctx);
   const obj: Record<string, unknown> = {};
   const dropped: string[] = [];
@@ -320,6 +329,24 @@ export function jsxToContent(jsx: string, schema: JsonSchema, ctx: SchemaCtx): J
   } catch (e) {
     if (e instanceof JsxFieldError) return { ok: false, error: e.message };
     throw e;
+  }
+  // Loose body adoption: agents routinely author a jsx field's body (a story) as loose top-level
+  // markup — `<style>` + `<div>` per the authoring scaffolds — without the `<story>` field wrapper.
+  // When the schema has a jsx field and the document didn't provide it, the unrecognized top-level
+  // elements ARE that field's body: adopt them (in order, security-validated) instead of dropping
+  // or rejecting. An explicitly provided jsx field keeps the strict behavior (loose siblings drop).
+  if (dropped.length > 0 && s && s.properties) {
+    const jsxKey = Object.keys(s.properties).find((k) => isJsxField(unwrap(s.properties[k], ctx)));
+    if (jsxKey && !(jsxKey in obj)) {
+      const adopted = parsed.nodes.filter((n) => !(n.type === 'element' && n.tag in s.properties));
+      const inner = serializeJsx(adopted).trim();
+      if (inner) {
+        const errs = validateJsxSource(inner, JSX_COMPONENT_NAMES);
+        if (errs.length > 0) return { ok: false, error: errs.map((e) => e.message).join('; ') };
+        obj[jsxKey] = ctx.jsxField ? ctx.jsxField.fromJsx(inner) : inner;
+        dropped.length = 0;
+      }
+    }
   }
   // Guard the silent-drop trap: top-level tags that aren't schema fields are skipped, so markup made
   // entirely of unrecognized top-level elements parses to `{}` and every downstream consumer reports a

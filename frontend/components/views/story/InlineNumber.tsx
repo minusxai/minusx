@@ -50,9 +50,9 @@ function QueryPanel({ query, editable, onEdit }: { query: string; editable?: boo
 
 /** The clickable figure + footnote popover. `source` is the source-question chart. `onEditQuery`
  *  (inline numbers, edit mode) opens the full SqlEditor drawer at the StoryView level. */
-function NumberSpan({ embed, text, source, query, editable, onEditQuery }: {
+function NumberSpan({ embed, text, source, query, editable, onEditQuery, loading }: {
   embed: InlineNumberEmbed; text: string; source?: React.ReactNode;
-  query?: string; editable?: boolean; onEditQuery?: () => void;
+  query?: string; editable?: boolean; onEditQuery?: () => void; loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const display = `${embed.prefix ?? ''}${text}${embed.suffix ?? ''}`;
@@ -62,6 +62,9 @@ function NumberSpan({ embed, text, source, query, editable, onEditQuery }: {
         <span
           role="button"
           aria-label={`live number ${display}`}
+          // Screenshot readiness marker (lib/screenshot/readiness.ts): the capture waits for the
+          // figure's query, so it never rasterizes the "—" placeholder as if it were the value.
+          {...(loading ? { 'data-mx-busy': 'true' } : {})}
           // No default decoration — the agent styles the figure via `style` (add an underline
           // only if it wants one). cursor:pointer hints it's clickable → reveals the source.
           style={{ cursor: 'pointer', ...(embed.style as CSSProperties) }}
@@ -94,7 +97,7 @@ function SavedNumber({ id, embed, externalParamValues, filePath }: { id: number;
   useFile(id);
   const content = useAppSelector((s) => selectMergedContent(s, id)) as QuestionContent | undefined;
   const params = buildQueryParamValues(content?.parameters ?? [], content?.parameterValues ?? {}, externalParamValues);
-  const { data } = useQueryResult(content?.query ?? '', params, content?.connection_name ?? '', content?.references ?? undefined, {
+  const { data, loading } = useQueryResult(content?.query ?? '', params, content?.connection_name ?? '', content?.references ?? undefined, {
     skip: !content?.query || !content?.connection_name, filePath,
   });
   const col = embed.col ?? data?.columns?.[0];
@@ -102,7 +105,7 @@ function SavedNumber({ id, embed, externalParamValues, filePath }: { id: number;
   // Show the saved question's chart in the footnote — but skip a single_value question, whose
   // "chart" is just the figure again (a redundant empty block, like the inline case).
   const showChart = content?.vizSettings?.type !== 'single_value';
-  return <NumberSpan embed={embed} text={text} query={content?.query ?? undefined}
+  return <NumberSpan embed={embed} text={text} query={content?.query ?? undefined} loading={loading}
     source={showChart ? <SmartEmbeddedQuestionContainer questionId={id} showTitle enableDrilldown={false} /> : undefined} />;
 }
 
@@ -116,7 +119,7 @@ function InlineQueryNumber({ embed, externalParamValues, editable, onRequestEdit
   // the story's default params drive the figure live. Same helper the augmentation uses → the
   // rendered number and the agent-seen number share a cache key.
   const params = bindReferencedParams(embed.query, externalParamValues);
-  const { data } = useQueryResult(embed.query ?? '', params, embed.connection ?? '', undefined, {
+  const { data, loading } = useQueryResult(embed.query ?? '', params, embed.connection ?? '', undefined, {
     skip: !embed.query || !embed.connection, filePath,
   });
   const col = embed.col ?? data?.columns?.[0];
@@ -124,7 +127,7 @@ function InlineQueryNumber({ embed, externalParamValues, editable, onRequestEdit
   // No source chart in the footnote: an inline number's "chart" is a single_value of the same
   // query — identical to the figure already shown, and it left an empty white block. The popover
   // shows the SQL (the useful trace) instead.
-  return <NumberSpan embed={embed} text={text} query={embed.query} editable={editable} onEditQuery={onRequestEdit} />;
+  return <NumberSpan embed={embed} text={text} query={embed.query} editable={editable} onEditQuery={onRequestEdit} loading={loading} />;
 }
 
 export default function InlineNumber({ embed, externalParamValues, editable, onRequestEdit, filePath }: {

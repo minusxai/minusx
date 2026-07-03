@@ -11,6 +11,7 @@ export * from './types';
 export { parseJsx } from './parse';
 export { validateJsx } from './validate';
 export { serializeJsx } from './serialize';
+export { sanitizeLooseJsx } from './lenient';
 
 /**
  * Parse → validate a `jsx` source against the static-JSX security rules (registered

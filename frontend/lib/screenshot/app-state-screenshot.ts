@@ -51,19 +51,47 @@ function defaultDefer(fn: () => void): void {
 }
 
 /**
- * Injectable seams (capture / upload / defer) + a reset for tests. Kept as one mutable object so a
- * test can swap the browser-only capture+upload for fakes and drive the deferred warm synchronously.
+ * True while the user is actively editing INSIDE the target file view (focus on an input /
+ * textarea / contenteditable within `[data-file-id]`, including inside a same-origin iframe —
+ * the story editor). Used to hold the warmer off during a typing session: every text edit
+ * changes the shot key, and rasterizing a whole dashboard (~1s, synchronous) between keystrokes
+ * is the "typing on a dashboard hangs the browser" bug. Typing in the CHAT input does not focus
+ * the view, so chat entry still warms normally.
+ */
+function defaultIsEditing(fileId: number): boolean {
+  if (typeof document === 'undefined') return false;
+  const view = document.querySelector(`[data-file-id="${fileId}"]`);
+  if (!view) return false;
+  let ae: Element | null = document.activeElement;
+  if (!ae || !view.contains(ae)) return false;
+  // Focus inside an iframe surfaces as the iframe element in the host document — look inside.
+  for (let depth = 0; depth < 3 && ae instanceof HTMLIFrameElement; depth++) {
+    let doc: Document | null = null;
+    try { doc = ae.contentDocument; } catch { return false; } // cross-origin: not our editor
+    ae = doc?.activeElement ?? null;
+  }
+  if (!ae) return false;
+  const tag = ae.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || (ae as HTMLElement).isContentEditable === true;
+}
+
+/**
+ * Injectable seams (capture / upload / defer / isEditing) + a reset for tests. Kept as one mutable
+ * object so a test can swap the browser-only capture+upload for fakes and drive the deferred warm
+ * synchronously.
  */
 export const _internal = {
   capture: (id: number, colorMode: ColorMode): Promise<Blob> =>
     captureFileViewBlob(id, { colorMode, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg' }),
   upload: (blob: Blob): Promise<string> => uploadBlobOrEmbed(blob, 'file.jpg', 'image/jpeg'),
   defer: defaultDefer as (fn: () => void) => void,
+  isEditing: defaultIsEditing as (fileId: number) => boolean,
   reset(): void {
     lastShot = null;
     inflightKey = null;
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = null;
+    this.isEditing = defaultIsEditing;
   },
 };
 
@@ -71,6 +99,15 @@ export const _internal = {
  * Cache key for the current file view: file id + a content hash of what's rendered (markup, query
  * results, colorMode). Returns null off a file page or outside the browser (no DOM to capture).
  */
+/** djb2 over a raw string — markup is the LARGEST facet and already a string, so hashing it
+ *  directly skips facetHash's deep-clone + JSON re-escape of it on every app-state change
+ *  (this key is recomputed per debounced keystroke while editing a dashboard). */
+function strHash(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(16);
+}
+
 export function appStateShotKey(
   appState: AppState | null | undefined,
   colorMode: ColorMode,
@@ -80,7 +117,8 @@ export function appStateShotKey(
   const state = appState.state as { fileState?: { id?: number; markup?: unknown }; queryResults?: unknown } | undefined;
   const fs = state?.fileState;
   if (!fs?.id) return null;
-  const key = `file:${fs.id}:${facetHash({ markup: fs.markup, qr: state?.queryResults, colorMode })}`;
+  const markupHash = typeof fs.markup === 'string' ? strHash(fs.markup) : facetHash(fs.markup ?? null);
+  const key = `file:${fs.id}:${markupHash}:${facetHash({ qr: state?.queryResults, colorMode })}`;
   return { id: fs.id, key };
 }
 
@@ -121,6 +159,13 @@ export function warmFileScreenshot(
   _internal.defer(() => {
     // Re-check at run time: another warm may have populated this facet while we waited on idle.
     if (lastShot?.key === info.key || inflightKey === info.key) return;
+    // Actively editing the view (typing in a dashboard text block / the story editor): the view is
+    // churning and a synchronous ~1s rasterize NOW would hang the typing session. Reschedule; the
+    // warm lands once the editor blurs. (The SEND path is unaffected — it always captures fresh.)
+    if (_internal.isEditing(info.id)) {
+      warmFileScreenshot(appState, colorMode, disabled);
+      return;
+    }
     inflightKey = info.key;
     captureNow(appState as AppState, colorMode)
       .catch(() => { /* best-effort: a missed screenshot just means no image this turn */ })

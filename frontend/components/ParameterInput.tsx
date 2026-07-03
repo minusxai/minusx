@@ -441,7 +441,11 @@ function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disab
   };
 
   return (
-    <Popover.Root open={open} onOpenChange={(d) => setOpen(d.open)} positioning={{ placement: 'bottom-end' }}>
+    // autoFocus={false}: zag re-runs the popover's initial-focus on controlled re-renders, so
+    // WITHOUT this, every keystroke in the Display-name input (which lifts state to the parent
+    // and re-renders this subtree) yanks focus back to the content div — typing loses every
+    // character after the first.
+    <Popover.Root open={open} onOpenChange={(d) => setOpen(d.open)} positioning={{ placement: 'bottom-end' }} autoFocus={false}>
       <Popover.Trigger asChild>
         <IconButton
           aria-label="Configure source"

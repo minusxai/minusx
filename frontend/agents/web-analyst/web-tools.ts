@@ -46,8 +46,11 @@ ${MARKUP_FORMAT}
 Search for each oldMatch in the file's markup and replace with newMatch. Because the markup is clean text (raw SQL, no JSON-in-JSON escaping), oldMatch is usually a short literal substring — e.g. the changed SQL fragment.
 
 Changes are applied sequentially in order — later entries can depend on earlier ones.
-All changes succeed or the batch fails: on failure the response includes \`succeededCount\`
-and \`failedIndex\` so you know exactly where to retry. On fail, retry with a shortened/uniquer oldMatch.
+All changes succeed or the batch fails ATOMICALLY: on failure nothing was applied, and the
+response includes \`failedIndex\` plus \`currentMarkup\` — the file's CURRENT markup. A match
+failure usually means your view is stale (a previous EditFile this turn already changed the
+file), so rebuild \`oldMatch\` from \`currentMarkup\` and retry — never retry the same
+\`oldMatch\` verbatim, and never guess.
 
 CRITICAL — query + parameters must stay in sync:
 If a change adds or removes :paramName tokens in the query, you MUST include a corresponding
@@ -61,7 +64,7 @@ TITLE: a file's title is its \`name\` metadata, NOT part of the markup. To title
 
 Changes are staged as drafts in Redux. The user reviews and publishes via Publish All. You do not need to call Navigate or PublishFile.
 
-String Matching: copy \`oldMatch\` directly from the \`markup\` in AppState — never call ReadFiles just to get markup already in AppState.`;
+String Matching: copy \`oldMatch\` directly from the freshest markup you have: the \`markup\` in AppState, or — after any EditFile this turn — the file as YOUR EDITS left it (AppState markup is a snapshot from the start of the turn; it does NOT refresh between tool calls). After a failed edit, rebuild from the error's \`currentMarkup\`. Never call ReadFiles just to get markup already in AppState.`;
 
 export class EditFile extends MXTool<typeof EditFileParams, RemoteAnalystContext> {
   static readonly schema: Tool<typeof EditFileParams> = {
