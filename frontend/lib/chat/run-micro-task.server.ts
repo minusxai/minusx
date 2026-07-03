@@ -9,6 +9,7 @@
  */
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
+import { creditEnforcer } from '@/lib/analytics/credit-usage.server';
 import type { AssistantMessage, TextContent, ImageContent } from '@/orchestrator/llm';
 import { MicroAgent } from '@/agents/micro/micro-agent';
 import { getMicroTask } from '@/agents/micro/micro-tasks';
@@ -33,6 +34,9 @@ export async function runMicroTask(
   getMicroTask(taskKey);
 
   const orch = new Orchestrator([MicroAgent]);
+  // Enforce per-user credit limits here too (no-op unless enforced): an over-limit
+  // user spends ZERO credits anywhere — micro-tasks included, no exempt path.
+  orch.beforeLlmCall = creditEnforcer(user);
   const ctx: MicroAgentContext = {
     userId: String(user.userId ?? user.email),
     mode: user.mode === 'tutorial' ? 'tutorial' : 'org',
