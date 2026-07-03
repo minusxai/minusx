@@ -81,9 +81,14 @@ describe('runEvalV2 / EvalAnalystAgent', () => {
     await runEvalV2({
       goal: 'q', assertionType: 'binary', user: USER,
       resolvedContextDocs: {
+        // At/above INLINE_ALL_DOCS_THRESHOLD docs, lazy bodies move to the on-demand
+        // catalog — pad past the threshold so the lazy doc is actually withheld.
         docs: [
           { key: '', title: 'Pinned', content: 'PINNED EVAL BODY', alwaysInclude: true },
           { key: 'revenue', title: 'Revenue', description: 'how revenue maps', content: 'REVENUE LAZY BODY', alwaysInclude: false },
+          { key: 'costs', title: 'Costs', description: 'cost mapping', content: 'COSTS LAZY BODY', alwaysInclude: false },
+          { key: 'users', title: 'Users', description: 'user mapping', content: 'USERS LAZY BODY', alwaysInclude: false },
+          { key: 'orders', title: 'Orders', description: 'order mapping', content: 'ORDERS LAZY BODY', alwaysInclude: false },
         ],
       },
     });
