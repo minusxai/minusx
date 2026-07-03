@@ -25,14 +25,15 @@ interface SeedRow {
   /** SQL expression for created_at, e.g. `NOW()` or `NOW() - INTERVAL '40 days'`. */
   createdAtSql: string;
   trigger?: string | null;
+  mode?: string | null;
 }
 
 async function seed(row: SeedRow): Promise<void> {
   await getModules().db.exec(
     `INSERT INTO llm_call_events
-       (conversation_id, model, provider, prompt_tokens, cached_tokens, completion_tokens, cost, user_id, trigger, created_at)
-     VALUES (0, $1, $2, $3, $4, $5, $6, $7, $8, ${row.createdAtSql})`,
-    [row.model, row.provider, row.promptTokens, row.cachedTokens, row.completionTokens, row.cost, row.userId, row.trigger ?? null],
+       (conversation_id, model, provider, prompt_tokens, cached_tokens, completion_tokens, cost, user_id, trigger, mode, created_at)
+     VALUES (0, $1, $2, $3, $4, $5, $6, $7, $8, $9, ${row.createdAtSql})`,
+    [row.model, row.provider, row.promptTokens, row.cachedTokens, row.completionTokens, row.cost, row.userId, row.trigger ?? null, row.mode ?? null],
   );
 }
 
@@ -89,6 +90,17 @@ describe('getCreditUsage', () => {
     const weird = findRow(individual.billing.rows, 'weird', 'm')!;
     expect(weird.nonCachedInputTokens).toBe(0); // 100 - 300 floored to 0
     expect(weird.cachedTokens).toBe(300);
+  });
+
+  it("counts org + tutorial modes (incl. legacy null) but excludes 'internals'", async () => {
+    await seed({ userId: 8, provider: 'openai', model: 'm', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 1.0, createdAtSql: 'NOW()', mode: 'org' });
+    await seed({ userId: 8, provider: 'openai', model: 'm', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 1.0, createdAtSql: 'NOW()', mode: 'tutorial' });
+    await seed({ userId: 8, provider: 'openai', model: 'm', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 1.0, createdAtSql: 'NOW()', mode: null }); // legacy → org
+    await seed({ userId: 8, provider: 'openai', model: 'm', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 99.0, createdAtSql: 'NOW()', mode: 'internals' }); // excluded
+
+    const { individual } = await getCreditUsage(8, 'viewer', false);
+    // 3 counted rows (org + tutorial + null) at $1 each = 3000 credits; the $99 internals row is excluded.
+    expect(individual.billing.used).toBeCloseTo(3000, 6);
   });
 
   it('reset usage is a subset of billing usage (reset window ⊆ billing window)', async () => {

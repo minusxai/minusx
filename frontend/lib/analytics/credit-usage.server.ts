@@ -39,6 +39,10 @@ async function loadNextResets(): Promise<{ billingNext: string | null; resetNext
   return { billingNext: toIso(rows[0]?.billing_next), resetNext: toIso(rows[0]?.reset_next) };
 }
 
+// The `mode` filter counts only user-facing usage — org + tutorial — and excludes
+// the internal 'internals' mode. Legacy null-mode rows default to 'org' so they
+// aren't dropped. (Kept as a JS comment, NOT an inline SQL `--` comment: an
+// apostrophe inside a SQL comment breaks PGLite's no-param query path.)
 const usageSql = (userFilter: string) => `
 SELECT
   COALESCE(provider, '')                                                     AS provider,
@@ -51,6 +55,7 @@ SELECT
   SUM(COALESCE(cost, 0)) FILTER (WHERE created_at >= ${RESET_START})         AS "resetCost"
 FROM llm_call_events
 WHERE created_at >= ${BILLING_START}
+  AND COALESCE(mode, 'org') IN ('org', 'tutorial')
   ${userFilter}
 GROUP BY COALESCE(provider, ''), model, COALESCE(NULLIF(trigger, ''), 'unknown')
 ORDER BY cost DESC

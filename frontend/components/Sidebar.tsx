@@ -589,9 +589,8 @@ export default function Sidebar() {
                   <Text fontSize="sm" fontWeight="600" fontFamily="mono" truncate>
                     {effectiveUser?.email || effectiveUser?.name}
                   </Text>
-                  <Box mt={2}>
-                    <CreditsUsageBars />
-                  </Box>
+                  <Box h="1px" bg="border.muted" my={3} />
+                  <CreditsUsageBars onClick={() => navigate('/settings')} />
                 </Box>
                 <Box h="1px" bg="border.muted" my={1} />
 

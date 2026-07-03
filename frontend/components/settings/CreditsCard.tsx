@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Box, VStack, HStack, Text, Icon, IconButton, Progress, Table, Spinner } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Icon, IconButton, Progress, ProgressCircle, AbsoluteCenter, Table, Spinner } from '@chakra-ui/react';
 import { LuZap, LuRefreshCw } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import type { CreditBreakdownRow, CreditScope, CreditUsageResponse, CreditWindow } from '@/lib/analytics/credits.types';
@@ -69,22 +69,38 @@ function UsageBar({ window, label, color }: { window: CreditWindow; label: strin
   );
 }
 
-/**
- * A scope (yours / org): the credit-window + billing-cycle bars. Side by side
- * (50% each) by default; `stacked` lays them out vertically for narrow spaces
- * like the sidebar menu.
- */
-function ScopeBars({ title, scope, stacked = false }: { title: string; scope: CreditScope; stacked?: boolean }) {
-  const bars = (
-    <>
-      <UsageBar window={scope.reset} label="this credit window" color="accent.primary" />
-      <UsageBar window={scope.billing} label="this billing cycle" color="accent.teal" />
-    </>
-  );
+/** A scope (yours / org): credit-window + billing-cycle bars side by side (50% each). */
+function ScopeBars({ title, scope }: { title: string; scope: CreditScope }) {
   return (
     <VStack align="stretch" gap={2} aria-label={title}>
       <Text fontSize="xs" fontWeight="600" fontFamily="mono" color="fg.subtle">{title}</Text>
-      {stacked ? <VStack align="stretch" gap={3}>{bars}</VStack> : <HStack align="start" gap={4}>{bars}</HStack>}
+      <HStack align="start" gap={4}>
+        <UsageBar window={scope.reset} label="this credit window" color="accent.primary" />
+        <UsageBar window={scope.billing} label="this billing cycle" color="accent.teal" />
+      </HStack>
+    </VStack>
+  );
+}
+
+/** A tiny donut for the compact sidebar: % used inside the ring, with a small caption. */
+function TinyDonut({ window, color, caption }: { window: CreditWindow; color: string; caption: string }) {
+  const pct = window.allowance > 0 ? Math.min(100, (window.used / window.allowance) * 100) : 0;
+  const overLimit = window.used > window.allowance;
+  return (
+    <VStack gap={1} align="center" minW={0}>
+      <ProgressCircle.Root value={pct} size="md">
+        <ProgressCircle.Circle>
+          <ProgressCircle.Track stroke="bg.muted" />
+          <ProgressCircle.Range stroke={overLimit ? 'accent.danger' : color} />
+        </ProgressCircle.Circle>
+        <AbsoluteCenter>
+          <ProgressCircle.ValueText fontSize="2xs" fontFamily="mono" color={overLimit ? 'accent.danger' : 'fg.muted'} />
+        </AbsoluteCenter>
+      </ProgressCircle.Root>
+      <VStack gap={0} align="center">
+        <Text fontSize="2xs" color="fg.muted" fontFamily="mono">{caption}</Text>
+        <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">{nf.format(Math.round(window.used))}/{nf.format(window.allowance)}</Text>
+      </VStack>
     </VStack>
   );
 }
@@ -196,16 +212,25 @@ export function CreditsUsageCards() {
 }
 
 /**
- * Compact credit bars for the sidebar user menu (under "Signed in as"). Bars
- * only — no card chrome, no breakdown table.
+ * Compact credit usage for the sidebar user menu (under "Signed in as"): two
+ * tiny donuts for YOUR usage only (credit window + billing cycle). Org usage is
+ * intentionally omitted here — it lives in Settings → General.
  */
-export function CreditsUsageBars() {
+export function CreditsUsageBars({ onClick }: { onClick?: () => void }) {
   const { data, loading } = useCreditUsage();
   if (loading || !data) return null;
   return (
-    <VStack align="stretch" gap={3} aria-label="Credits usage bars">
-      <ScopeBars title="Your usage" scope={data.individual} stacked />
-      {data.org && <ScopeBars title="Organization usage" scope={data.org} stacked />}
-    </VStack>
+    <HStack
+      gap={3}
+      justify="space-around"
+      align="start"
+      aria-label="Credits usage bars"
+      cursor={onClick ? 'pointer' : undefined}
+      onClick={onClick}
+      _hover={onClick ? { opacity: 0.75 } : undefined}
+    >
+      <TinyDonut window={data.individual.reset} color="accent.primary" caption="credit window" />
+      <TinyDonut window={data.individual.billing} color="accent.teal" caption="billing cycle" />
+    </HStack>
   );
 }
