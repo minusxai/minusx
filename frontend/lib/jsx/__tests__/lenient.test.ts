@@ -14,6 +14,12 @@ describe('sanitizeLooseJsx', () => {
     expect(parseJsx(out).ok).toBe(true);
   });
 
+  it('strips comments to a fixpoint (a removal must not splice a new <!-- together)', () => {
+    const out = sanitizeLooseJsx('<div><!<!-- x -->-- y --><p>ok</p></div>');
+    expect(out).not.toContain('<!--');
+    expect(out).toContain('<p>ok</p>');
+  });
+
   it('self-closes HTML void tags (<br>, <img>, <hr>)', () => {
     const out = sanitizeLooseJsx('<div>line one<br>line two<hr><img src="/x.png" alt="x"></div>');
     expect(parseJsx(out).ok).toBe(true);

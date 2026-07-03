@@ -17,7 +17,13 @@ const VOID_TAGS = 'area|base|br|col|embed|hr|img|input|link|meta|param|source|tr
 const VOID_RE = new RegExp(`<(${VOID_TAGS})(\\s[^<>]*?)?\\s*>`, 'g');
 
 function sanitizeSegment(seg: string): string {
-  let s = seg.replace(/<!--[\s\S]*?-->/g, '');
+  // Strip comments to a FIXPOINT: one removal pass can splice a new `<!--` together
+  // (`<!<!-- x -->-- y -->`), which would survive a single pass (CodeQL js/incomplete-sanitization).
+  let s = seg;
+  for (let prev = ''; prev !== s; ) {
+    prev = s;
+    s = s.replace(/<!--[\s\S]*?-->/g, '');
+  }
   s = s.replace(VOID_RE, (match, tag: string, attrs?: string) => {
     if (attrs && attrs.trimEnd().endsWith('/')) return match; // already self-closed
     return `<${tag}${attrs ?? ''}/>`;
