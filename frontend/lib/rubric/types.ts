@@ -46,7 +46,7 @@ export interface RubricFinding {
 
 export interface RubricCategoryScore {
   category: RubricCategory;
-  score: number | null;      // 1–5, or null when this source didn't assess the category
+  score: number | null;      // 0–5, or null when this source didn't assess the category
   weight: number;            // per-type category weight (sums to 1 across categories)
   assessed: boolean;         // did this source actually evaluate this category? (e.g. deterministic
                              // never assesses aesthetics for question/dashboard — judge-only there)
@@ -57,7 +57,7 @@ export type RubricGrade = 'good' | 'fair' | 'poor';
 
 export interface RubricReport {
   fileType: FileType;
-  overall: number;           // 1–5 weighted mean of assessed category scores
+  overall: number;           // 0–5 weighted mean of assessed category scores
   grade: RubricGrade;        // >=4 good / >=2.5 fair / else poor
   categories: RubricCategoryScore[];
 }

@@ -262,6 +262,17 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                   <Text fontSize="2xs" color="accent.danger">Visual review failed: {judgeError}</Text>
                 )}
 
+                {HAS_LLM(fileType) && !llmRan && (
+                  <Text
+                    aria-label="Structural checks only — run visual review to add visual checks"
+                    fontSize="2xs"
+                    color="fg.subtle"
+                    fontStyle="italic"
+                  >
+                    * Structural checks only (from file content). Run visual review to add the visual checks.
+                  </Text>
+                )}
+
                 <Table.Root size="sm" css={{ '& td, & th': { borderColor: 'border.muted' } }}>
                   <Table.Header>
                     <Table.Row bg="transparent">

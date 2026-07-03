@@ -1,6 +1,6 @@
 /**
  * Rubric scoring math — pure. Turns a flat findings list into per-category scores and a
- * weighted overall + grade on a coarse **1–5 scale** (deliberately low-resolution to avoid
+ * weighted overall + grade on a coarse **0–5 scale** (deliberately low-resolution to avoid
  * false precision / variance). All tunable constants (deductions, per-type category weights,
  * grade bands) live here so they can be calibrated against a human gold set later.
  *
@@ -19,7 +19,7 @@ import type {
 
 /** Every score starts here (perfect) and findings deduct from it. */
 export const MAX_SCORE = 5;
-export const MIN_SCORE = 1;
+export const MIN_SCORE = 0;
 
 /** Points deducted from the 5 baseline per finding, by severity. */
 export const SEVERITY_DEDUCTION: Record<RubricSeverity, number> = {
@@ -42,7 +42,7 @@ export const CATEGORY_WEIGHTS: Record<RubricFileType, Record<RubricCategory, num
 export const GRADE_GOOD_MIN = 4;
 export const GRADE_FAIR_MIN = 2.5;
 
-/** Round to the nearest 0.5 and clamp into [1, 5]. */
+/** Round to the nearest 0.5 and clamp into [0, 5]. */
 function toScore(raw: number): number {
   const half = Math.round(raw * 2) / 2;
   return Math.max(MIN_SCORE, Math.min(MAX_SCORE, half));

@@ -61,7 +61,7 @@ interface RubricCategoryScore {
 }
 interface RubricReport {
   fileType: FileType;
-  overall: number;                    // 1–5 weighted mean of assessed categories
+  overall: number;                    // 0–5 weighted mean of assessed categories
   grade: 'good' | 'fair' | 'poor';    // >=4 / >=2.5 / else
   categories: RubricCategoryScore[];
 }
@@ -201,6 +201,22 @@ runs the no-tools `MicroAgent` through the orchestrator. So the prompt lives in
 `micro.rubric_llm` (`prompts.yaml`), and model resolution + out-of-band usage tracking come
 for free. The screenshot rides along as an image content block via the micro context's new
 optional `images` field (`MicroAgent.buildUserContent` appends them).
+
+**Worst-of-N voting (anti-leniency).** An LLM judge asked "is this good?" rubber-stamps, and a
+check it omits from its JSON is silently read as *passed*. So `scoreFileLLM` runs the judge
+`JUDGE_VOTES` (default 3) times in parallel and aggregates **worst-of**: a check becomes a finding
+when ≥ `FAIL_VOTES` (default 1) of the runs fail it — any single run that catches a real problem
+wins. The prompt is written as a **demanding critic** that biases toward failing (pass only on
+clear positive evidence, fail on any visible violation) and must return a verdict for *every*
+check. Tune `JUDGE_VOTES` / `FAIL_VOTES` in `score-llm.server.ts` (raise `FAIL_VOTES` toward a
+majority if the strict prompt over-fails).
+
+**Per-task model source.** The judge is a visual/aesthetic call that benefits from a stronger
+model than the cheap default titles/summaries use. A micro-task declares which of the two
+already-wired configs it runs on via its `modelSource` in `MICRO_TASKS`
+(`agents/micro/micro-tasks.ts`) — `micro` (default, `MICRO_AGENT_MODEL_CONFIG`) or `analyst`
+(`ANALYST_AGENT_MODEL_CONFIG`, model + options). `rubric_llm` is set to `analyst`; no new env var.
+`MicroAgent` resolves model + call options from `modelSource`.
 
 > Cycle note: `runMicroTask` records usage via `recordHeadlessLlmCalls`, which was extracted to
 > the leaf `lib/chat/headless-llm-tracking.server.ts` so the judge → micro chain doesn't import

@@ -38,6 +38,14 @@ describe('FileHealthBadge', () => {
     });
   });
 
+  it('flags the pre-visual-review checks as structural-only', async () => {
+    const store = makeStore();
+    seedQuestion(store, 30, { description: '', query: 'SELECT 1', vizSettings: { type: 'table' }, parameters: [], connection_name: 'w' });
+    renderWithProviders(<FileHealthBadge fileId={30} fileType="question" />, { store });
+    await userEvent.click(await screen.findByLabelText(/File health:/));
+    expect(await screen.findByLabelText(/structural checks only/i)).toBeTruthy();
+  });
+
   it('renders nothing for a non-scored file type', () => {
     const store = makeStore();
     renderWithProviders(<FileHealthBadge fileId={3} fileType="folder" />, { store });

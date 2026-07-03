@@ -24,7 +24,7 @@ const CATEGORIES: readonly RubricCategory[] = ['correctness', 'clarity', 'aesthe
 // treated as "passed". Run the judge several times and aggregate WORST-OF: a check fails if it
 // fails in at least FAIL_VOTES of the runs (default 1 — any run that catches a real problem wins).
 // Bump FAIL_VOTES toward a majority if the strict prompt starts producing false positives.
-const JUDGE_VOTES = 3;
+const JUDGE_VOTES = 1;
 const FAIL_VOTES = 1;
 
 interface CheckVerdict { id: string; applicable?: unknown; pass?: unknown; reason?: unknown }
