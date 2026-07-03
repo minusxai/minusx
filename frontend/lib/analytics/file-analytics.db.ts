@@ -15,7 +15,10 @@ export interface InsertFileEventParams {
 }
 
 export interface InsertLlmCallEventParams {
-  conversationId: number;
+  /** NULL for headless runs (micro-tasks, feed-summary, eval) — see `task`. */
+  conversationId?: number | null;
+  /** Headless run tag (e.g. the micro-task name); NULL for conversation-bound turns. */
+  task?: string | null;
   llmCallId?: string | null;
   provider?: string | null;
   model: string;
@@ -138,14 +141,14 @@ export async function recordLlmCallEvent(p: InsertLlmCallEventParams): Promise<v
     const requestId = await getRequestId();
     await getModules().db.exec(
       `INSERT INTO llm_call_events
-         (conversation_id, llm_call_id, provider, model, mode,
+         (conversation_id, task, llm_call_id, provider, model, mode,
           total_tokens, prompt_tokens, completion_tokens,
           cached_tokens, cache_creation_tokens, reasoning_tokens,
           system_prompt_tokens, app_state_tokens, total_tool_calls,
           cost, duration_s, stream, finish_reason, trigger, user_id, request_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21::uuid)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22::uuid)`,
       [
-        p.conversationId, p.llmCallId ?? null, p.provider ?? null, p.model, p.mode ?? null,
+        p.conversationId ?? null, p.task ?? null, p.llmCallId ?? null, p.provider ?? null, p.model, p.mode ?? null,
         p.totalTokens, p.promptTokens, p.completionTokens,
         p.cachedTokens ?? 0, p.cacheCreationTokens ?? 0, p.reasoningTokens ?? 0,
         p.systemPromptTokens ?? 0, p.appStateTokens ?? 0, p.totalToolCalls ?? 0,

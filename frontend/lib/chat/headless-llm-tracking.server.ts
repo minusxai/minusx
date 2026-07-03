@@ -11,7 +11,7 @@ import 'server-only';
 import type { ConversationLogEntry as PiLogEntry } from '@/orchestrator/types';
 import type { AssistantMessage } from '@/orchestrator/llm';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
-import { recordLlmResponse } from '@/lib/analytics/file-analytics.db';
+import { recordLlmResponse, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
@@ -65,6 +65,28 @@ export async function recordHeadlessLlmCalls(piDiff: PiLogEntry[], user: Effecti
       if (!built) continue;
       const { callId, detail } = built;
       llmCalls[callId] = detail;
+
+      // Record per-call stats into llm_call_events (the complete usage ledger).
+      // Headless runs have no conversation — NULL conversation_id, tagged by `task`.
+      await recordLlmCallEvent({
+        conversationId: null,
+        task,
+        llmCallId: callId,
+        provider: detail.provider,
+        model: detail.model,
+        mode: user.mode,
+        totalTokens: detail.total_tokens,
+        promptTokens: detail.prompt_tokens,
+        completionTokens: detail.completion_tokens,
+        cachedTokens: detail.cached_tokens,
+        cacheCreationTokens: detail.cache_creation_tokens,
+        reasoningTokens: detail.reasoning_tokens,
+        cost: detail.cost,
+        durationS: detail.duration,
+        stream: detail.stream ?? true,
+        finishReason: detail.finish_reason,
+        userId,
+      });
 
       try {
         await recordLlmResponse({

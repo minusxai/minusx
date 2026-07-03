@@ -7,6 +7,11 @@ import type { CreditBreakdownRow, CreditScope, CreditUsageResponse } from './cre
 /**
  * Aggregate credit usage from `llm_call_events` for the CURRENT calendar month.
  *
+ * Both conversation-bound chat turns AND headless runs (micro-tasks,
+ * feed-summary, eval — small models, OpenAI, etc.) record into this table, so
+ * it is the complete record of LLM usage. (Headless runs have a NULL
+ * `conversation_id` and a `task` tag instead.)
+ *
  * The month boundary is computed in SQL (`date_trunc('month', NOW())`) so it
  * follows the DB session timezone consistently rather than mixing app-server
  * and DB clocks. Credits themselves are computed in JS via `costToCredits` so
