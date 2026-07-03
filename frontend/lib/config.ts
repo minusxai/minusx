@@ -242,6 +242,45 @@ function parseEventForwardRules(raw: string | undefined): EventForwardRule[] {
 }
 /** Webhook fan-out rules for app-events (Slack channels, central ingest, etc.). */
 export const EVENTS_FORWARD_RULES: EventForwardRule[] = parseEventForwardRules(config.EVENTS_FORWARD_RULES);
+
+// --- Credits / billing allowances -----------------------------------------
+/** Default monthly credit allowance for a single user (any role). */
+export const DEFAULT_INDIVIDUAL_ALLOWANCE = 10_000;
+/** Default monthly credit allowance for the whole org (all users combined). */
+export const DEFAULT_ORG_ALLOWANCE = 100_000;
+
+/**
+ * Parse CREDIT_ALLOWANCES — a role-wise JSON of monthly credit allowances,
+ * e.g. { "admin": 10000, "editor": 10000, "viewer": 10000, "org": 100000 }.
+ * The special key "org" sets the org-wide allowance. Invalid JSON is logged
+ * and ignored (falls back to the DEFAULT_* constants).
+ */
+function parseCreditAllowances(raw: string | undefined): Record<string, number> {
+  if (!raw || !raw.trim()) return {};
+  try {
+    const obj = JSON.parse(raw);
+    const out: Record<string, number> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      const n = Number(value);
+      if (Number.isFinite(n)) out[key] = n;
+    }
+    return out;
+  } catch (e) {
+    console.error('[config] CREDIT_ALLOWANCES is not valid JSON ({ "<role>": <credits> }):', e);
+    return {};
+  }
+}
+/** Role-wise monthly credit allowance overrides (empty when unset). */
+export const CREDIT_ALLOWANCES: Record<string, number> = parseCreditAllowances(process.env.CREDIT_ALLOWANCES);
+
+/** Monthly credit allowance for an individual user, keyed by role. */
+export function resolveIndividualAllowance(role: string): number {
+  return CREDIT_ALLOWANCES[role] ?? DEFAULT_INDIVIDUAL_ALLOWANCE;
+}
+/** Monthly credit allowance for the whole org. */
+export function resolveOrgAllowance(): number {
+  return CREDIT_ALLOWANCES.org ?? DEFAULT_ORG_ALLOWANCE;
+}
 export const DB_TYPE = config.DB_TYPE;
 export const DATABASE_URL = config.DATABASE_URL;
 export const PGLITE_DATA_DIR_ENV = config.PGLITE_DATA_DIR;
