@@ -133,7 +133,7 @@ export async function GET(
     unsub = await subscribe(conversationId, (n) => {
       chain = chain.then(async () => {
         if (closed) return;
-        if (n.kind === 'delta') { send({ type: 'delta', seq: n.seq, text: n.text ?? '' }); return; }
+        if (n.kind === 'delta') { send({ type: 'delta', seq: n.seq, text: n.text ?? '', ...(n.thinking ? { thinking: true } : {}) }); return; }
         if (n.kind === 'message') { await flushCatchup(); return; }
         if (n.kind === 'status' && n.runStatus) {
           await flushCatchup();

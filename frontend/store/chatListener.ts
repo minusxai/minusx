@@ -221,6 +221,9 @@ async function runV3TurnInListener(
     const toolMeta = new Map<string, ToolCallMeta>();
     const result = await runV3Turn(conversationID, conversation.log_index ?? 0, turn, signal, {
       onDelta: (text) => dispatch(addStreamingMessage({ conversationID, type: 'StreamedContent', payload: { chunk: text } } as never)),
+      // Reasoning tokens feed the thinking indicator (streamedThinking), NEVER the reply bubble —
+      // rendering them as StreamedContent showed the chain-of-thought as the answer mid-stream.
+      onThinkingDelta: (text) => dispatch(addStreamingMessage({ conversationID, type: 'StreamedThinking', payload: { chunk: text } } as never)),
       onPending: () => { /* pending is derived from the reloaded log below */ },
       onMessage: (content) => {
         for (const [id, meta] of collectToolCallMeta(content)) toolMeta.set(id, meta);

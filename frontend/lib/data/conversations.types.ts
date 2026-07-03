@@ -78,7 +78,7 @@ export interface ConversationErrorRow {
  */
 export type ConversationStreamEvent =
   | { type: 'message'; seq: number; message: ConversationLogEntry } // a durable, committed entry
-  | { type: 'delta'; seq: number; text: string }                   // ephemeral token chunk (in-flight msg)
+  | { type: 'delta'; seq: number; text: string; thinking?: boolean } // ephemeral token chunk (in-flight msg); thinking=true ⇒ reasoning tokens, render under the thinking affordance, never as reply text
   | { type: 'pending'; seq: number; toolCalls: StreamPendingToolCall[] } // turn paused on a frontend tool
   | { type: 'status'; runStatus: RunStatus; retryable?: boolean }   // run lifecycle transition; retryable=true on a crash-interrupted error the client may silently re-run
   | { type: 'done'; seq: number }                                  // turn finished; cursor is final
@@ -93,5 +93,7 @@ export interface ConversationNotify {
   kind: 'message' | 'delta' | 'status' | 'interrupt';
   /** For delta notifies, the (small) text chunk rides inline. */
   text?: string;
+  /** Delta notifies only: true when the chunk is REASONING (thinking) tokens, not reply text. */
+  thinking?: boolean;
   runStatus?: RunStatus;
 }
