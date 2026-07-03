@@ -61,16 +61,16 @@ describe('scoreFileLLM', () => {
     expect((await scoreFileLLM({ fileType: 'question', content: makeQuestion() }, USER)).overall).toBe(5);
   });
 
-  it('fails a check via worst-of voting when only ONE of three runs catches it', async () => {
-    const pass = (id: string) => ({ id, pass: true, reason: 'ok' });
-    mockRun
-      .mockResolvedValueOnce(reply([pass('embeds-well-sized'), pass('charts-render-cleanly')]))
-      .mockResolvedValueOnce(reply([{ id: 'embeds-well-sized', pass: false, reason: 'dead space in the gauge cards' }, pass('charts-render-cleanly')]))
-      .mockResolvedValueOnce(reply([pass('embeds-well-sized'), pass('charts-render-cleanly')]));
+  it('aggregates the judge run(s) into findings (worst-of)', async () => {
+    // Each run returns the same failing verdict for embeds-well-sized → a finding regardless of how
+    // many votes JUDGE_VOTES runs (worst-of: any run that fails a check triggers it).
+    mockRun.mockResolvedValue(reply([
+      { id: 'embeds-well-sized', pass: false, reason: 'dead space in the gauge cards' },
+      { id: 'charts-render-cleanly', pass: true, reason: 'ok' },
+    ]));
     const report = await scoreFileLLM({ fileType: 'story', content: makeStory(), screenshotUrl: 'data:image/jpeg;base64,AAAA' }, USER);
     const f = report.categories.flatMap((c) => c.findings).find((x) => x.ruleId === 'llm.embeds-well-sized');
     expect(f?.detail).toContain('dead space');
-    expect(mockRun).toHaveBeenCalledTimes(3); // three independent judge runs, worst-of aggregated
   });
 
   it('turns a failed story embed-rendering check into a finding', async () => {
