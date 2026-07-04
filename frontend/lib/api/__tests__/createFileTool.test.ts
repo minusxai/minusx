@@ -255,6 +255,33 @@ describe('CreateFile tool — draft file path conflict validation', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Background-creation guard: stories, like dashboards, are built INTERACTIVELY —
+  // the agent must Navigate to a new story page (user confirms, user watches it build)
+  // and author via EditFile. A background CreateFile produced an invisible story the
+  // user never saw being made.
+  // -------------------------------------------------------------------------
+
+  it('blocks creating a story in the background and points at Navigate', async () => {
+    const result = await executeToolCall(
+      createFileTool({ file_type: 'story', path: '/org', name: 'Sneaky Story' }),
+    );
+    const parsed = parseContent(result);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('background');
+    expect(parsed.error).toContain('Navigate');
+    expect(parsed.error).toContain('story');
+  });
+
+  it('still blocks creating a dashboard in the background (existing rule unchanged)', async () => {
+    const result = await executeToolCall(
+      createFileTool({ file_type: 'dashboard', path: '/org', name: 'Sneaky Dash' }),
+    );
+    const parsed = parseContent(result);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('Navigate');
+  });
+
+  // -------------------------------------------------------------------------
   // Provisional path: a NAMELESS draft gets a random-token path (`/org/k3n8x2p1`)
   // purely for DB uniqueness; it is rewritten to the name slug when the user saves.
   // The agent must be told this or it treats the token as a real path/name.

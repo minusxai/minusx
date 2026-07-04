@@ -1009,9 +1009,11 @@ registerFrontendTool('CreateFile', async (args, context) => {
   const { appState } = state.navigation ? selectAppState(state) : { appState: null };
 
   if (!unrestrictedMode) {
-    // Dashboards can never be created in the background
-    if (file_type === 'dashboard') {
-      const msg = 'Cannot create a dashboard in the background. Use the Navigate tool with new_file_type="dashboard" instead.';
+    // Dashboards and stories can never be created in the background: both are built
+    // INTERACTIVELY — the user confirms the navigation and watches the file take shape.
+    // A background CreateFile produced an invisible story the user never saw being made.
+    if (file_type === 'dashboard' || file_type === 'story') {
+      const msg = `Cannot create a ${file_type} in the background. Use the Navigate tool with new_file_type="${file_type}" first, then build it with EditFile on the new page.`;
       return { content: { success: false, error: msg }, details: { success: false, error: msg } };
     }
 
