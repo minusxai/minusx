@@ -1682,7 +1682,7 @@ export async function getQueryResult(
   params: QueryExecutionParams,
   options: GetQueryResultOptions = {}
 ): Promise<QueryResult> {
-  const { query, params: queryParams, database, references, parameterTypes, filePath, fileId, fileVersion } = params;
+  const { query, params: queryParams, database, references, parameterTypes, filePath, fileId, fileVersion, cachePolicy } = params;
   const { ttl = CACHE_TTL.QUERY, skip = false, forceLoad = false } = options;
 
   if (skip) {
@@ -1748,6 +1748,7 @@ export async function getQueryResult(
           ...(filePath && { filePath }),
           ...(fileId !== undefined && { fileId }),
           ...(fileVersion !== undefined && { fileVersion }),
+          ...(cachePolicy && { cachePolicy }),
           // "Run query" / retry (forceLoad) forces a fresh server execution + cache refresh.
           ...(forceLoad && { forceRefresh: true })
         }),

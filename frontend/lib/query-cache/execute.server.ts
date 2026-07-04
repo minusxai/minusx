@@ -26,7 +26,7 @@ import { createQueryCacheBlobStore, blobRefForKey } from './blob-store';
 import { resultToJsonlStream, queryStreamToJsonl } from './jsonl-stream.server';
 import { classifyCacheRow } from './swr';
 import {
-  claimLease, getCacheRow, markReady, releaseLease, waitForReady, renewLease,
+  claimLease, getCacheRow, markReady, releaseLease, waitForReady, renewLease, sweepExpired,
 } from './store.server';
 import { QUERY_CACHE_LEASE_MS, QUERY_SERVER_TIMEOUT_MS } from '@/lib/config';
 import type { CachePolicy, QueryCacheBlobStore } from './types';
@@ -174,6 +174,9 @@ async function resolve(opts: CachedExec): Promise<Resolved> {
   const now = nowOf(opts);
   const key = cacheKey(opts);
 
+  // Opportunistic, throttled GC of hard-expired rows + blobs (no cron in this deployment).
+  maybeSweepExpired(store(opts), now);
+
   // forceRefresh ("Run query") skips the fresh/stale serve and re-executes,
   // refreshing the cached blob (still lease-guarded inside executeWithLease).
   if (!opts.forceRefresh) {
@@ -289,4 +292,39 @@ function metaOf(result: QueryResult, fromCache: boolean, cachedAt: number): Cach
 
 function nowOf(opts: CachedExec): number {
   return opts.now?.() ?? Date.now();
+}
+
+// ── Opportunistic GC ───────────────────────────────────────────────────────────
+// There is no cron in this deployment, so hard-expired cache rows + their blobs are swept lazily
+// from the hot path: at most once per SWEEP_INTERVAL_MS, fire-and-forget, best-effort. This keeps
+// the query_cache table and the object store from growing unbounded without a scheduler.
+
+const SWEEP_INTERVAL_MS = 10 * 60_000;
+let lastSweepAt = 0;
+
+/** Test hook — reset the throttle so a test can drive the sweep deterministically. */
+export function _resetSweepThrottleForTest(): void { lastSweepAt = 0; }
+
+/** Delete hard-expired cache rows and their orphaned blobs. Returns the blob refs removed. */
+export async function sweepExpiredBlobs(store: QueryCacheBlobStore, now: number): Promise<string[]> {
+  const refs = await sweepExpired(now);
+  await Promise.all(refs.map((r) => store.delete(r).catch(() => { /* best effort */ })));
+  return refs;
+}
+
+/**
+ * Throttled, fire-and-forget sweep for the hot path. `sweep` is injectable for tests; production
+ * passes `sweepExpired`. Never awaited by the request, never throws into it.
+ */
+export function maybeSweepExpired(
+  store: QueryCacheBlobStore,
+  now: number,
+  sweep: (now: number) => Promise<string[]> = sweepExpired,
+): void {
+  if (now - lastSweepAt < SWEEP_INTERVAL_MS) return;
+  lastSweepAt = now;
+  void (async () => {
+    const refs = await sweep(now);
+    await Promise.all(refs.map((r) => store.delete(r).catch(() => { /* best effort */ })));
+  })().catch(() => { /* GC is best-effort; never surface to the request */ });
 }

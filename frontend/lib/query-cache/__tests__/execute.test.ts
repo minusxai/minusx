@@ -8,7 +8,7 @@ vi.mock('@/lib/database/db-config', () => ({
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
-import { getCachedResult, getCachedJsonlStream, getCachedResultBounded } from '../execute.server';
+import { getCachedResult, getCachedJsonlStream, getCachedResultBounded, sweepExpiredBlobs, _resetSweepThrottleForTest, maybeSweepExpired } from '../execute.server';
 import { createQueryCacheBlobStore } from '../blob-store';
 import { decodeJsonl } from '../jsonl';
 import type { ObjectStore } from '@/lib/object-store';
@@ -254,6 +254,37 @@ describe('executeQueryCached (SWR orchestration)', () => {
     const out = await getCachedResultBounded(opts, { maxRows: 100, maxBytes: 1_000_000 });
     expect(out.result.rows).toEqual([{ n: 1 }]);
     expect(out.truncated).toBe(false);
+  });
+
+  it('sweepExpiredBlobs deletes expired cache rows AND their orphaned blobs', async () => {
+    const store = createQueryCacheBlobStore(fakeObjectStore());
+    const opts = { mode: 'org', connectionName: 'duckdb', query: 'SELECT sweep', params: {}, policy: POLICY, execute: makeOpts().exec, blobStore: store };
+    await getCachedResult(opts);            // populate a blob
+    const key = await onlyKey();
+    const row = (await import('../store.server')).getCacheRow;
+    const blobRef = (await row(key))!.blobRef!;
+    expect(await store.getResult(blobRef)).not.toBeNull(); // blob exists
+
+    await age(key, { revalidateAt: 1, expireAt: 2 }); // hard-expired
+    const deleted = await sweepExpiredBlobs(store, Date.now());
+    expect(deleted).toContain(blobRef);
+    expect(await store.getResult(blobRef)).toBeNull();     // blob gone
+    const { getModules } = await import('@/lib/modules/registry');
+    const rows = await getModules().db.exec('SELECT cache_key FROM query_cache WHERE cache_key = $1', [key]);
+    expect(rows.rows.length).toBe(0);                       // row gone
+  });
+
+  it('maybeSweepExpired runs once then is throttled until the interval passes', async () => {
+    _resetSweepThrottleForTest();
+    const store = createQueryCacheBlobStore(fakeObjectStore());
+    let sweeps = 0;
+    const nowRef = { t: 1_000_000 };
+    const run = () => maybeSweepExpired(store, nowRef.t, () => { sweeps++; return Promise.resolve([]); });
+    await run(); await run(); await run();       // three calls, same instant
+    expect(sweeps).toBe(1);                        // throttled to one
+    nowRef.t += 11 * 60_000;                       // past the 10-min interval
+    await run();
+    expect(sweeps).toBe(2);                        // fires again
   });
 
   it('getCachedJsonlStream returns a JSONL body that decodes to the result', async () => {

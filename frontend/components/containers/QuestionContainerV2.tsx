@@ -84,6 +84,14 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     return Object.fromEntries(mergedContent.parameters.map(p => [p.name, p.type])) as Record<string, 'text' | 'number' | 'date'>;
   }, [mergedContent?.parameters]);
 
+  // Per-file cache SWR windows (content.cachePolicy) — forwarded so /api/query honors them.
+  // Memoized on the field values so the query effect isn't re-fired by an unstable object identity.
+  const cachePolicy = mergedContent?.cachePolicy;
+  const cachePolicyOpt = useMemo(
+    () => (cachePolicy ? { revalidateMs: cachePolicy.revalidateMs ?? undefined, expiryMs: cachePolicy.expiryMs ?? undefined } : undefined),
+    [cachePolicy?.revalidateMs, cachePolicy?.expiryMs],
+  );
+
   // Ref-based guard: ensures we auto-execute exactly once per mount with the *current*
   // mergedContent (which includes persistableChanges). This means every fresh mount —
   // whether on the file page, inside a dashboard, or in the PublishModal right-pane —
@@ -117,7 +125,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     queryToExecute.params,
     queryToExecute.database,
     queryToExecute.references,
-    { skip: !queryToExecute.query || (!!file?.draft && !lastExecuted), parameterTypes, filePath: file?.path }
+    { skip: !queryToExecute.query || (!!file?.draft && !lastExecuted), parameterTypes, filePath: file?.path, cachePolicy: cachePolicyOpt }
   );
 
   // Phase 3: Update current state handler - uses editFile from file-state.ts
