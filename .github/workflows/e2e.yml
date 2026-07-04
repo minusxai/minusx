@@ -60,6 +60,29 @@ jobs:
         working-directory: ./frontend
         run: npx playwright install --with-deps chromium
 
+      # Cache Turbopack's incremental compiler cache so unchanged modules aren't
+      # recompiled across PR pushes; restore-keys falls back to the newest cache.
+      - name: Cache Turbopack compiler cache (E2E build)
+        uses: actions/cache@v4
+        with:
+          path: ./frontend/.next-e2e/cache
+          key: nextjs-e2e-${{ runner.os }}-${{ hashFiles('./frontend/package-lock.json') }}-${{ hashFiles('./frontend/**/*.ts', './frontend/**/*.tsx', '!./frontend/node_modules/**') }}
+          restore-keys: |
+            nextjs-e2e-${{ runner.os }}-${{ hashFiles('./frontend/package-lock.json') }}-
+
+      # Build the app ONCE (Turbopack, ~4x faster than webpack) with NEXT_PUBLIC_E2E
+      # baked in so E2E_MODE is permanently on (faux LLM channel + window store).
+      # Precompiled routes make the E2E boot + auth near-instant vs the old `next dev`
+      # on-demand-compile tax (auth.setup alone was ~54s under dev, ~1.4s prebuilt).
+      - name: Build E2E server (turbopack)
+        working-directory: ./frontend
+        env:
+          GIT_COMMIT_SHA: ${{ github.sha }}
+          NEXT_DIST_DIR: .next-e2e
+          NEXT_PUBLIC_E2E: 'true'
+          NODE_OPTIONS: '--max-old-space-size=8192'
+        run: npx next build --turbopack
+
       - name: Run Playwright E2E
         working-directory: ./frontend
         env:
@@ -67,6 +90,9 @@ jobs:
           # required at boot. The webServer (playwright.config) sets the rest.
           NEXTAUTH_SECRET: e2e-ci-secret-not-used-in-prod-000000000000000=
           CI: 'true'
+          # The app is pre-built above → the webServer `next start`s .next-e2e
+          # (no per-run `next dev` build).
+          E2E_SKIP_BUILD: '1'
         run: npm run test:e2e
 
       - name: Upload Playwright report

@@ -15,11 +15,25 @@ env:
 permissions:
   contents: read
 
+# QA is split into a single build job + N parallel flow-shard jobs so no single job
+# exceeds ~2 minutes:
+#   qa-build  — produces the prod-ish server ONCE (Turbopack build → .next-qa) and
+#               uploads it as an artifact.
+#   qa-flows  — sharded matrix: each downloads the build, `next start`s it (NO rebuild,
+#               via QA_SKIP_BUILD), and runs its slice of the flows. Sharding across
+#               separate runners raises total LLM concurrency WITHOUT over-pressuring
+#               any single runner (each still runs ≤ QA_PARALLELISM workers).
+#   qa        — aggregator; keeps the "QA Flows (prod build)" status name stable.
+#
+# Fidelity note: the deploy path still runs a real webpack `next build` (publish.yml),
+# and the deploys repo runs QA against the live deployment post-deploy — so the
+# webpack/standalone/AWS-SDK packaging path (the one that broke in prod) is still
+# exercised before release; PR-time QA trades that for speed via the Turbopack build.
 jobs:
-  qa:
-    name: QA Flows (prod build)
+  qa-build:
+    name: QA Build (turbopack)
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 20
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,6 +46,76 @@ jobs:
           cache-dependency-path: './frontend/package-lock.json'
 
       # Share the node_modules cache with the test/e2e workflows (same key).
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: cache-deps
+        with:
+          path: ./frontend/node_modules
+          key: node-modules-${{ runner.os }}-node20-${{ hashFiles('./frontend/package-lock.json', './frontend/package.json', './frontend/patches/**') }}
+
+      - name: Install frontend dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        working-directory: ./frontend
+        run: npm ci
+
+      # Cache Turbopack's incremental compiler cache (.next-qa/cache, NOT the build
+      # output) so unchanged modules aren't recompiled across PR pushes; restore-keys
+      # falls back to the newest cache for this lockfile when sources change.
+      - name: Cache Turbopack compiler cache (QA build)
+        uses: actions/cache@v4
+        with:
+          path: ./frontend/.next-qa/cache
+          key: nextjs-qa-${{ runner.os }}-${{ hashFiles('./frontend/package-lock.json') }}-${{ hashFiles('./frontend/**/*.ts', './frontend/**/*.tsx', '!./frontend/node_modules/**') }}
+          restore-keys: |
+            nextjs-qa-${{ runner.os }}-${{ hashFiles('./frontend/package-lock.json') }}-
+
+      # Turbopack prod build (~4x faster than webpack) into .next-qa. E2E_MODE stays
+      # off (no NEXT_PUBLIC_E2E) — the runtime `?e2e=<secret>` gate does the work.
+      - name: Build QA server (turbopack)
+        working-directory: ./frontend
+        env:
+          GIT_COMMIT_SHA: ${{ github.sha }}
+          NEXT_DIST_DIR: .next-qa
+          NODE_OPTIONS: '--max-old-space-size=8192'
+        run: npx next build --turbopack
+
+      # `next start` uses .next-qa/server + static + manifests only — it does NOT read
+      # the standalone/ copy (341M, for `node server.js`) or cache/. Exclude both so the
+      # artifact stays small (~190M). cache/ is left on disk for the Turbopack cache save.
+      - name: Upload QA build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-next-build
+          path: |
+            ./frontend/.next-qa
+            !./frontend/.next-qa/standalone
+            !./frontend/.next-qa/cache
+          retention-days: 1
+          include-hidden-files: true
+          compression-level: 1
+
+  qa-flows:
+    name: QA Flows — shard ${{ matrix.shard }}/3
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: qa-build
+    strategy:
+      # Run all shards to completion even if one fails so we surface all
+      # failures in a single CI cycle.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './frontend/package-lock.json'
+
       - name: Cache node_modules
         uses: actions/cache@v4
         id: cache-deps
@@ -60,30 +144,28 @@ jobs:
         working-directory: ./frontend
         run: npx playwright install --with-deps chromium
 
-      # The QA config does a full `npm run build` (NEXT_DIST_DIR=.next-qa) on every
-      # PR — the dominant cost of this job. Cache Next's incremental compiler cache
-      # (.next-qa/cache, NOT the build output) so unchanged modules aren't recompiled;
-      # restore-keys falls back to the newest cache for this lockfile when sources change.
-      - name: Cache Next.js compiler cache (QA build)
-        uses: actions/cache@v4
+      # Restore the prod-ish build produced once by qa-build; QA_SKIP_BUILD below then
+      # makes the Playwright webServer `next start` it directly (no per-shard rebuild).
+      - name: Download QA build artifact
+        uses: actions/download-artifact@v4
         with:
-          path: ./frontend/.next-qa/cache
-          key: nextjs-qa-${{ runner.os }}-${{ hashFiles('./frontend/package-lock.json') }}-${{ hashFiles('./frontend/**/*.ts', './frontend/**/*.tsx', '!./frontend/node_modules/**') }}
-          restore-keys: |
-            nextjs-qa-${{ runner.os }}-${{ hashFiles('./frontend/package-lock.json') }}-
+          name: qa-next-build
+          path: ./frontend/.next-qa
 
-      # No QA_BASE_URL → the QA config builds + starts a local prod-ish server
-      # (runtime e2e gate ON, build-time E2E flag OFF) and runs every flow against
-      # it in tutorial mode. mxfood sample data seeds via the public release
-      # download (no S3 creds in CI → local object store).
-      - name: Run QA flows
+      # No QA_BASE_URL → the QA config `next start`s the restored build and runs its
+      # shard of the flows against it in tutorial mode. mxfood sample data seeds via the
+      # public release download (no S3 creds in CI → local object store).
+      - name: Run QA flows (shard ${{ matrix.shard }}/3)
         working-directory: ./frontend
         env:
           NEXTAUTH_SECRET: qa-ci-secret-not-used-in-prod-0000000000000000=
           CI: 'true'
-          # QA worker count in CI (config defaults to 2 when unset). 3 fans the
-          # flows out a little wider without over-pressuring the runner / LLM rate limits.
-          QA_PARALLELISM: '3'
+          # The build is pre-supplied as an artifact → skip the webServer's build step.
+          QA_SKIP_BUILD: '1'
+          # 2 workers/runner across 3 shards = 6 total LLM concurrency (Bedrock Haiku
+          # handles this comfortably) while keeping per-runner pressure ≤ the old single
+          # job's 3 workers.
+          QA_PARALLELISM: '2'
           # No S3 in CI, so chart→image attachments would otherwise become
           # http://localhost URLs, which the Claude API rejects ("Only HTTPS URLs
           # are supported"). Embedding charts as base64 data URLs lets the real-LLM
@@ -91,17 +173,33 @@ jobs:
           USE_BASE64_UPLOADS: 'true'
           # Real-LLM QA flows (test/qa/chat-flow.spec.ts) run when a provider
           # credential is present. We run them on Bedrock — the SAME provider as
-          # prod — so the standalone build + AWS SDK packaging + Bedrock auth are
-          # exercised end-to-end (this is the path that broke in prod and CI missed
-          # while it ran Anthropic-direct). A Haiku model keeps calls cheap + fast.
+          # prod — with a Haiku model to keep calls cheap + fast.
           AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
           ANALYST_AGENT_MODEL_CONFIG: ${{ secrets.ANALYST_AGENT_MODEL_CONFIG }}
-        run: npm run test:qa
+        run: npm run test:qa -- --shard=${{ matrix.shard }}/3
 
       - name: Upload QA report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: qa-report
+          name: qa-report-shard-${{ matrix.shard }}
           path: ./frontend/playwright-report/
           retention-days: 7
+
+  # Aggregator — this job's `name:` ("QA Flows (prod build)") is the stable status
+  # name PRs reference. It depends on every flow shard and fails if any did not pass.
+  qa:
+    name: QA Flows (prod build)
+    runs-on: ubuntu-latest
+    needs: [qa-flows]
+    if: always()
+    steps:
+      - name: Verify all QA flow shards passed
+        run: |
+          result='${{ needs.qa-flows.result }}'
+          echo "QA flow shard matrix result: $result"
+          if [[ "$result" != "success" ]]; then
+            echo "::error::One or more QA flow shards did not pass (result: $result)"
+            exit 1
+          fi
+          echo "All QA flow shards passed."
