@@ -56,19 +56,17 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
 
+      # No --with-deps: the browser binary is restored from the cache above, and
+      # GitHub's ubuntu-latest image preinstalls Playwright's system libraries, so
+      # the apt step --with-deps runs every time (uncacheable, ~13s) buys nothing.
       - name: Install Playwright Chromium
         working-directory: ./frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
-      # Cache Turbopack's incremental compiler cache so unchanged modules aren't
-      # recompiled across PR pushes; restore-keys falls back to the newest cache.
-      - name: Cache Turbopack compiler cache (E2E build)
-        uses: actions/cache@v4
-        with:
-          path: ./frontend/.next-e2e/cache
-          key: nextjs-e2e-${{ runner.os }}-${{ hashFiles('./frontend/package-lock.json') }}-${{ hashFiles('./frontend/**/*.ts', './frontend/**/*.tsx', '!./frontend/node_modules/**') }}
-          restore-keys: |
-            nextjs-e2e-${{ runner.os }}-${{ hashFiles('./frontend/package-lock.json') }}-
+      # NOTE: no Turbopack compiler-cache step. `next build --turbopack` does NOT
+      # benefit from a restored .next/cache (measured: 69s warm == 71s cold, exact
+      # cache hit) — Next 16 has no effective persistent build cache — so caching it
+      # was pure overhead (~9s restore + ~11s save). Removed.
 
       # Build the app ONCE (Turbopack, ~4x faster than webpack) with NEXT_PUBLIC_E2E
       # baked in so E2E_MODE is permanently on (faux LLM channel + window store).

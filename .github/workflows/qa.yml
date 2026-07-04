@@ -58,16 +58,10 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
-      # Cache Turbopack's incremental compiler cache (.next-qa/cache, NOT the build
-      # output) so unchanged modules aren't recompiled across PR pushes; restore-keys
-      # falls back to the newest cache for this lockfile when sources change.
-      - name: Cache Turbopack compiler cache (QA build)
-        uses: actions/cache@v4
-        with:
-          path: ./frontend/.next-qa/cache
-          key: nextjs-qa-${{ runner.os }}-${{ hashFiles('./frontend/package-lock.json') }}-${{ hashFiles('./frontend/**/*.ts', './frontend/**/*.tsx', '!./frontend/node_modules/**') }}
-          restore-keys: |
-            nextjs-qa-${{ runner.os }}-${{ hashFiles('./frontend/package-lock.json') }}-
+      # NOTE: no Turbopack compiler-cache step. `next build --turbopack` gets no
+      # meaningful speedup from a restored .next/cache (measured on the E2E build:
+      # 69s warm == 71s cold on an exact hit) — Next 16 has no effective persistent
+      # build cache — so caching it was pure overhead (~9s restore + ~11s save).
 
       # Turbopack prod build (~4x faster than webpack) into .next-qa. E2E_MODE stays
       # off (no NEXT_PUBLIC_E2E) — the runtime `?e2e=<secret>` gate does the work.
@@ -152,9 +146,11 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
 
+      # No --with-deps: binary comes from the cache above; ubuntu-latest preinstalls
+      # Playwright's system libs, so the ~13s apt step every run buys nothing.
       - name: Install Playwright Chromium
         working-directory: ./frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       # Restore the prod-ish build produced once by qa-build; QA_SKIP_BUILD below then
       # makes the Playwright webServer `next start` it directly (no per-shard rebuild).
