@@ -26,8 +26,9 @@ import { createQueryCacheBlobStore, blobRefForKey } from './blob-store';
 import { resultToJsonlStream, queryStreamToJsonl } from './jsonl-stream.server';
 import { classifyCacheRow } from './swr';
 import {
-  claimLease, getCacheRow, markReady, releaseLease, waitForReady,
+  claimLease, getCacheRow, markReady, releaseLease, waitForReady, renewLease,
 } from './store.server';
+import { QUERY_CACHE_LEASE_MS, QUERY_SERVER_TIMEOUT_MS } from '@/lib/config';
 import type { CachePolicy, QueryCacheBlobStore } from './types';
 
 export interface CachedExec {
@@ -71,9 +72,17 @@ export interface CachedMeta {
   cachedAt: number;
 }
 
-/** How long a loser waits for the winner's blob before re-claiming. */
-const WAIT_TIMEOUT_MS = 30_000;
+/**
+ * A loser's per-attempt wait for the winner's blob. Must exceed the max time a legitimate execution
+ * can take (query timeout + one lease window of crash-detection slack), so a waiter never gives up
+ * on a still-running winner and stampedes the warehouse. The winner heartbeats its lease
+ * (see runAndStore), so within one attempt a waiter either sees the blob or detects a genuinely
+ * dead lease (crash) and re-claims — it never times out against a live, working holder.
+ */
+const WAIT_TIMEOUT_MS = QUERY_SERVER_TIMEOUT_MS + QUERY_CACHE_LEASE_MS;
 const MAX_LEASE_ATTEMPTS = 3;
+/** Renew the lease at 1/3 of its window so it never lapses mid-execution (2+ renews per window). */
+const HEARTBEAT_MS = Math.max(5_000, Math.floor(QUERY_CACHE_LEASE_MS / 3));
 
 function cacheKey(opts: CachedExec): string {
   const base = `${opts.mode}:${getQueryHash(opts.query, opts.params, opts.connectionName)}`;
@@ -181,30 +190,40 @@ async function executeWithLease(key: string, opts: CachedExec, startNow: number)
  * and materialize so the caller still gets data, just uncached this round.
  */
 async function runAndStore(key: string, opts: CachedExec, now: number): Promise<Resolved> {
-  let stream: QueryStream;
+  // Heartbeat the lease for the whole execution+write so it never lapses while we're working
+  // (a lapsed lease lets a waiter steal it and run a duplicate query). Cleared in `finally`.
+  const heartbeat = setInterval(() => {
+    void renewLease(key, nowOf(opts)).catch(() => { /* best effort; a missed beat just risks a steal */ });
+  }, HEARTBEAT_MS);
+  if (typeof heartbeat === 'object' && 'unref' in heartbeat) heartbeat.unref?.();
   try {
-    stream = await opts.execute();
-  } catch (err) {
-    await releaseLease(key).catch(() => { /* best effort */ });
-    throw err; // execution failure → surfaced to the route as 400
-  }
-  try {
-    const blobRef = blobRefForKey(key);
-    const { readable, rowCount, colCount } = queryStreamToJsonl(stream);
-    const { byteSize } = await store(opts).putStream(blobRef, readable); // connector → gzip → object store
-    const rc = rowCount();
-    await markReady(
-      key,
-      { blobRef, finalQuery: stream.finalQuery, rowCount: rc, colCount, byteSize, policy: opts.policy },
-      Date.now(),
-    );
-    return { source: 'cache', blobRef, finalQuery: stream.finalQuery, rowCount: rc, colCount, cachedAt: now, fromCache: false };
-  } catch {
-    // Cache-infra failure (object store / DB) — degrade: re-execute, materialize,
-    // serve directly (uncached). Bounded by the row cap.
-    await releaseLease(key).catch(() => { /* best effort */ });
-    const fresh = await drainQueryStream(await opts.execute());
-    return { source: 'fresh', result: fresh, cachedAt: now };
+    let stream: QueryStream;
+    try {
+      stream = await opts.execute();
+    } catch (err) {
+      await releaseLease(key).catch(() => { /* best effort */ });
+      throw err; // execution failure → surfaced to the route as 400
+    }
+    try {
+      const blobRef = blobRefForKey(key);
+      const { readable, rowCount, colCount } = queryStreamToJsonl(stream);
+      const { byteSize } = await store(opts).putStream(blobRef, readable); // connector → gzip → object store
+      const rc = rowCount();
+      await markReady(
+        key,
+        { blobRef, finalQuery: stream.finalQuery, rowCount: rc, colCount, byteSize, policy: opts.policy },
+        Date.now(),
+      );
+      return { source: 'cache', blobRef, finalQuery: stream.finalQuery, rowCount: rc, colCount, cachedAt: now, fromCache: false };
+    } catch {
+      // Cache-infra failure (object store / DB) — degrade: re-execute, materialize,
+      // serve directly (uncached). Bounded by the row cap.
+      await releaseLease(key).catch(() => { /* best effort */ });
+      const fresh = await drainQueryStream(await opts.execute());
+      return { source: 'fresh', result: fresh, cachedAt: now };
+    }
+  } finally {
+    clearInterval(heartbeat);
   }
 }
 
