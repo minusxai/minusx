@@ -86,19 +86,24 @@ jobs:
           NEXTAUTH_SECRET: qa-ci-secret-not-used-in-prod-0000000000000000=
         run: npx next build --turbopack
 
-      # `next start` uses .next-qa/server + static + manifests only — it does NOT read
-      # the standalone/ copy (341M, for `node server.js`) or cache/. Exclude both so the
-      # artifact stays small (~190M). cache/ is left on disk for the Turbopack cache save.
+      # Package the build into a single tar BEFORE upload. Turbopack emits chunk
+      # files with a colon in the name (e.g. `[externals]_node:inspector_….js`),
+      # which upload-artifact@v4 rejects as invalid paths ("Contains the character
+      # Colon :"). A tar sidesteps that (colons are legal inside the archive; only
+      # the one `.tar` filename is uploaded) and makes up/download faster.
+      # `next start` needs .next-qa/server + static + manifests only — NOT the
+      # standalone/ copy (341M, for `node server.js`) or cache/ (kept on disk for the
+      # Turbopack cache save), so both are excluded to keep the tar small (~190M).
+      - name: Package QA build
+        working-directory: ./frontend
+        run: tar -cf next-qa.tar --exclude='.next-qa/standalone' --exclude='.next-qa/cache' .next-qa
+
       - name: Upload QA build artifact
         uses: actions/upload-artifact@v4
         with:
           name: qa-next-build
-          path: |
-            ./frontend/.next-qa/**
-            !./frontend/.next-qa/standalone/**
-            !./frontend/.next-qa/cache/**
+          path: ./frontend/next-qa.tar
           retention-days: 1
-          include-hidden-files: true
           compression-level: 1
 
   qa-flows:
@@ -153,11 +158,17 @@ jobs:
 
       # Restore the prod-ish build produced once by qa-build; QA_SKIP_BUILD below then
       # makes the Playwright webServer `next start` it directly (no per-shard rebuild).
+      # The artifact is a tar (see qa-build's colon-filename note) — download it into
+      # frontend/ and extract in place, recreating .next-qa/.
       - name: Download QA build artifact
         uses: actions/download-artifact@v4
         with:
           name: qa-next-build
-          path: ./frontend/.next-qa
+          path: ./frontend
+
+      - name: Extract QA build
+        working-directory: ./frontend
+        run: tar -xf next-qa.tar && rm next-qa.tar
 
       # No QA_BASE_URL → the QA config `next start`s the restored build and runs its
       # shard of the flows against it in tutorial mode. mxfood sample data seeds via the
