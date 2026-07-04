@@ -4,13 +4,6 @@
  * on other connections/schemas for everyone in the workspace.
  */
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 const { CONTEXT_ID } = vi.hoisted(() => ({ CONTEXT_ID: 9001 }));
 
 vi.mock('@/lib/hooks/useContext', () => ({

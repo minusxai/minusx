@@ -16,14 +16,6 @@ import {
   getTestDbPath,
 } from '@/store/__tests__/test-utils';
 
-// Database-specific mock — must be at module top level (Jest hoisting)
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 const TEST_DB_PATH = getTestDbPath('references_helper');
 
 /** Real DB-backed resolver — mirrors the one in files.server.ts */

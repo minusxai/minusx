@@ -1,12 +1,6 @@
 // Integration tests for the v3 conversation store against a real (PGLite) test DB: shared-id
 // allocation (never collides with files), append/load round-trip of the pi log, OCC on concurrent
 // append, the parallel error stream, and list/get/delete.
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 import {
   createConversation, getConversation, listConversations, deleteConversation,

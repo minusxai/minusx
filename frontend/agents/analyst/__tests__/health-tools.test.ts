@@ -2,13 +2,6 @@
 // FilesAPI load + ACL path — not mocks. The deterministic scorer itself is unit-tested in
 // lib/rubric; here we certify the tool wiring (load → score → report envelope).
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { AnalystAgentContext } from '../types';
 import { CheckFileHealth } from '../health-tools';

@@ -22,10 +22,6 @@ import { POST as createFileHandler } from '@/app/api/files/route';
 import { POST as batchHandler } from '@/app/api/files/batch/route';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
-}));
-
 let testStore: any;
 vi.mock('@/store/store', () => ({
   get store() { return testStore; },

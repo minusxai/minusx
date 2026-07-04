@@ -18,6 +18,16 @@ process.env.ANTHROPIC_API_KEY = 'test-stub-no-real-calls';
 // Mock server-only module (Next.js 13+ server components)
 vi.mock('server-only', () => ({}));
 
+// Force every test onto an in-memory PGLite DB (no persistence dirs, no
+// external Postgres). This was previously copy-pasted into 100+ test files;
+// it lives here so no test can accidentally hit a real database path.
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
+
 // Stub analytics module — fire-and-forget; stubs match real error-path behaviour.
 // Keep this in lockstep with the real exports of `lib/analytics/file-analytics.server.ts`:
 // when an export is added there, add a stub here or any test that touches a route

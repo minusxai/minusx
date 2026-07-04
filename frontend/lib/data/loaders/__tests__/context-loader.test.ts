@@ -41,14 +41,6 @@ vi.mock('@/lib/connections/statistics-engine', () => ({
   profileDatabase: vi.fn(async (_t: string, schemas: unknown) => ({ schema: schemas, queryCount: 0 })),
 }));
 
-// Database-specific mock
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 const TEST_DB_PATH = getTestDbPath('context_loader');
 
 // Test users

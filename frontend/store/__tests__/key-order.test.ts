@@ -33,13 +33,6 @@ import authReducer from '../authSlice';
 import { NextRequest } from "next/server";
 import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 let testStore: any;
 vi.mock('@/store/store', () => ({
   get store() { return testStore; },

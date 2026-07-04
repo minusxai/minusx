@@ -7,12 +7,6 @@ import type { Mock } from 'vitest';
  */
 
 // Must be hoisted before any imports that touch the DB — path must match getTestDbPath('infer_columns_e2e')
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 import { NextRequest } from 'next/server';
 import { setupTestDb } from '@/test/harness/test-db';

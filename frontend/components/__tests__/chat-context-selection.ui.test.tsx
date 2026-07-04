@@ -6,9 +6,6 @@ import { makeStore } from '@/store/store';
 import { createConversation } from '@/store/chatSlice';
 
 // ── Mocks: external boundaries + the leaf input widget ──────────────────────
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
-}));
 vi.mock('@/lib/navigation/use-navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => '/explore',

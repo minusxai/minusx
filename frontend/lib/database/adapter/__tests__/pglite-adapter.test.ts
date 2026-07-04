@@ -11,13 +11,6 @@
 
 // Workspace mock is already in vitest.setup.ts (getWorkspaceId → 1, runWithWorkspace → no-op)
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  getDbType: vi.fn().mockReturnValue('pglite'),
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-}));
-
 import { DocumentDB } from '@/lib/database/documents-db';
 import { registerModules, getModules } from '@/lib/modules/registry';
 import { DBModule } from '@/lib/modules/db';

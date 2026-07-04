@@ -11,13 +11,6 @@
  *    token, and an access token can't be redeemed at the refresh grant
  */
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import { NextRequest } from 'next/server';
 import { createHash } from 'crypto';
 import { POST as tokenPost } from '@/app/oauth/token/route';

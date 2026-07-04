@@ -39,14 +39,6 @@ const TEST_USER: EffectiveUser = {
   mode: 'org',
 };
 
-// Mock db-config to use test database
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 // Mock the store import so file-state.ts uses the test store
 let testStore: any;
 vi.mock('@/store/store', () => ({
@@ -494,7 +486,6 @@ describe('Phase 1: Unified File System API E2E', () => {
         type: 'files/clearChanges',
         payload: { fileId: questionId }
       });
-
 
       // Step 3: Reload from database and verify content
       const reloadedFile = await DocumentDB.getById(questionId);
@@ -980,7 +971,6 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(fileState.isDirty).toBe(true);
 
       });
-
 
       it('should successfully replace string in file content', async () => {
 
@@ -1620,7 +1610,6 @@ describe('Phase 1: Unified File System API E2E', () => {
 
     });
   });
-
 
   // ===========================================================================
   // Subfolder viewer — ancestor context discovery (Bug 2)

@@ -12,14 +12,6 @@
  * table names) so they coexist on one instance.
  */
 
-// Must come first — same mock pattern as storeE2E / adminAPI
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import { PGlite } from '@electric-sql/pglite';
 import { POSTGRES_SCHEMA, splitSQLStatements } from '@/lib/database/postgres-schema';
 import { getModules } from '@/lib/modules/registry';

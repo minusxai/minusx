@@ -3,13 +3,6 @@
 // returnExisting, at a deterministic slug path. Exercises validateFileLocation, parent-folder
 // checks, permissions, and the partial unique index end-to-end. Real PGLite via initTestDatabase.
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { FilesAPI } from '@/lib/data/files.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';

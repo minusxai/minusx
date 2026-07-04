@@ -2,13 +2,6 @@
 // that is still executing (result not set yet) — otherwise concurrent firings
 // explode into a re-execution storm.
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 // executeToolCall is gated so the call stays "in flight" while we re-fire the listener.
 const h = vi.hoisted(() => {
   const gate = { resolve: (() => {}) as () => void };

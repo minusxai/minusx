@@ -30,12 +30,6 @@ import type { AlertContent, AlertOutput, JobRun, RunFileContent, Test } from '@/
 import { NextRequest } from 'next/server';
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 const TEST_DB_PATH = getTestDbPath('job_runs_e2e');
 

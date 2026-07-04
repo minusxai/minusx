@@ -1,8 +1,5 @@
 // edit-and-fork on v3: forkConversation copies messages [0, atSeq) into a new conversation (own id,
 // meta.forkedFrom), leaving the source intact, so the caller can run an edited turn on the fork.
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
-}));
 
 import { createConversation, appendMessages, forkConversation, loadLog, getConversation } from '@/lib/data/conversations.server';
 import { getTestDbPath } from '@/store/__tests__/test-utils';

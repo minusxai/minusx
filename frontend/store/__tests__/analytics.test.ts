@@ -20,13 +20,6 @@ import { getModules } from '@/lib/modules/registry';
 // DB mock (same as read-write-e2e)
 // ---------------------------------------------------------------------------
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 // ---------------------------------------------------------------------------
 // next/headers — return null request-id so fire-and-forget gracefully skips it
 // ---------------------------------------------------------------------------

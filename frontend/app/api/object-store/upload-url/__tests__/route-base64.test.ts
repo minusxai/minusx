@@ -9,13 +9,6 @@
  * such deployments is ACCEPTED — do not "fix" it by bypassing the flag per-callsite.
  */
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 vi.mock('@/lib/auth/auth-helpers', () => ({
   getEffectiveUser: vi.fn(),
 }));

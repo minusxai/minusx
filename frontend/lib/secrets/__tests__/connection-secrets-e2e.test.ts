@@ -1,7 +1,7 @@
 // End-to-end: saving a connection through FilesAPI.createFile must move the raw credential
 // to the secrets table — the persisted DOCUMENT (what the agent/markup sees) holds only a
 // @SECRETS/… ref. Query-time resolution recovers the real value.
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { createFile } from '@/lib/data/files.server';
 import { DocumentDB } from '@/lib/database/documents-db';
@@ -10,10 +10,6 @@ import { resolveConnectionSecrets, mergeExistingSecretRefs } from '../connection
 import { isSecretRef } from '../secret-refs';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConnectionContent } from '@/lib/types';
-
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
-}));
 
 const user: EffectiveUser = {
   userId: 1, email: 't@e.com', name: 'T', role: 'admin', home_folder: '/org', mode: 'org',

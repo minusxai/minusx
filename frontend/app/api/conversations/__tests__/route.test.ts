@@ -9,13 +9,6 @@
  * 3. Legacy conversation files in the `files` table are NOT listed.
  */
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import { GET } from '@/app/api/conversations/route';
 import { createConversation, appendMessages } from '@/lib/data/conversations.server';
 import { getTestDbPath } from '@/store/__tests__/test-utils';

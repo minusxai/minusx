@@ -2,12 +2,6 @@
 // Admin-only; `?before=<date>` scopes the deletion. The underlying date-scoped
 // delete is covered in lib/analytics/__tests__/llm-logs.test.ts.
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 vi.mock('@/lib/auth/auth-helpers', () => ({ getEffectiveUser: vi.fn() }));
 
 import { describe, it, expect, vi, type Mock } from 'vitest';

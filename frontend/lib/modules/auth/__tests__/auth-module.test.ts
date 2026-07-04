@@ -14,13 +14,6 @@ import * as path from 'path';
 
 const TEST_DB_PATH = path.join(process.cwd(), 'data', 'test_auth_module.db');
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 // Spy mock — preserves other exports so atomicImport (which doesn't import this
 // module directly) is unaffected, but lets us assert on the seed-copy call.
 // `vi.hoisted` lifts the spy alongside the hoisted `vi.mock` factory so it's

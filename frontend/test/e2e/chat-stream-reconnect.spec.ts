@@ -7,6 +7,10 @@
  * turn is provably still in flight. The turn keeps running server-side (started via /turns); the
  * client reconnects with `?since=<cursor>`, the server replays the gap from the durable log, and the
  * reply lands with no user-visible error.
+ *
+ * KEEP THIS SPEC: it is the only test anywhere that covers mid-turn stream recovery — it needs the
+ * faux LLM's `delayMs` + CDP network control, which the QA layer (real LLM, real deployment) cannot
+ * provide. Smoke/chat-basics live in test/qa; this layer exists for exactly this kind of test.
  */
 import { test, expect, asClient } from './fixtures';
 import { setFauxLLM } from '@/test/flows/e2e-faux';

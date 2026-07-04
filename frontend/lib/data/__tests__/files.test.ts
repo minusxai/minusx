@@ -18,13 +18,6 @@ import type {
   ConnectionContent,
   ContextContent
 } from '@/lib/types';
-// Database-specific mock
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 const TEST_DB_PATH = getTestDbPath('files');
 

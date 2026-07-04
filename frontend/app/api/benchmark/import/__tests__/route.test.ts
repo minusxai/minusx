@@ -2,13 +2,6 @@
 // conversation log is persisted as a v3 conversation (dedicated tables) in the
 // documents DB so it can be opened at /explore/<id> and continued in the chat UI.
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 vi.mock('@/lib/auth/auth-helpers', () => ({
   getEffectiveUser: vi.fn(),
 }));

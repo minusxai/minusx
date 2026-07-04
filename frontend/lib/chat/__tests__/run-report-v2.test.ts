@@ -2,12 +2,6 @@
 // production registrables (V2_REGISTRABLES + ReportAgent + RemoteAnalystAgent),
 // proving the wiring resolves. No DB or backend: faux LLMs + stubbed runQuery.
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 vi.mock('@/lib/connections/run-query', () => ({
   runQuery: vi.fn(async (_db: string, sql: string) => ({
     columns: ['n'], types: ['int'], rows: [{ n: 1 }], finalQuery: sql,

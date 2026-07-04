@@ -6,13 +6,6 @@
  * Verified by intercepting the log-error POST and asserting the payload shape.
  */
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import * as storeModule from '@/store/store';
 import { makeStore } from '@/store/store';
 import { createConversation } from '@/store/chatSlice';

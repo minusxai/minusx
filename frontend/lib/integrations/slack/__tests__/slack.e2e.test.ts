@@ -13,12 +13,6 @@
 // ============================================================================
 // DB mock — MUST be declared before any imports (Jest hoisting)
 // ============================================================================
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 import crypto from 'crypto';
 import { NextRequest } from 'next/server';

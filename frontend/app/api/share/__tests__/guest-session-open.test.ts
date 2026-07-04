@@ -2,13 +2,6 @@
 // first time a NEW visitor opens a share (no existing guest cookie), and does
 // NOT re-fire on a reload/return visit (cookie reused).
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import { NextRequest } from 'next/server';
 import { POST } from '../guest-session/route';
 import { addShare, createFile } from '@/lib/data/files.server';

@@ -60,6 +60,18 @@ jobs:
         working-directory: ./frontend
         run: npx playwright install --with-deps chromium
 
+      # The QA config does a full `npm run build` (NEXT_DIST_DIR=.next-qa) on every
+      # PR — the dominant cost of this job. Cache Next's incremental compiler cache
+      # (.next-qa/cache, NOT the build output) so unchanged modules aren't recompiled;
+      # restore-keys falls back to the newest cache for this lockfile when sources change.
+      - name: Cache Next.js compiler cache (QA build)
+        uses: actions/cache@v4
+        with:
+          path: ./frontend/.next-qa/cache
+          key: nextjs-qa-${{ runner.os }}-${{ hashFiles('./frontend/package-lock.json') }}-${{ hashFiles('./frontend/**/*.ts', './frontend/**/*.tsx', '!./frontend/node_modules/**') }}
+          restore-keys: |
+            nextjs-qa-${{ runner.os }}-${{ hashFiles('./frontend/package-lock.json') }}-
+
       # No QA_BASE_URL → the QA config builds + starts a local prod-ish server
       # (runtime e2e gate ON, build-time E2E flag OFF) and runs every flow against
       # it in tutorial mode. mxfood sample data seeds via the public release

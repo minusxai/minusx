@@ -15,10 +15,6 @@ import { executeToolCall } from '@/lib/api/tool-handlers';
 import type { ToolCall, UserRole } from '@/lib/types';
 import type { Mode } from '@/lib/mode/mode-types';
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
-}));
-
 let testStore: any;
 vi.mock('@/store/store', () => ({
   get store() { return testStore; },

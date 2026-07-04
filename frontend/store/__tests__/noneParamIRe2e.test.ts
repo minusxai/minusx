@@ -16,13 +16,6 @@ import type { Mock } from 'vitest';
 
 // ---- Jest module mocks (hoisted before imports) ----------------------------
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 let testStore: any;
 vi.mock('@/store/store', () => ({
   get store() { return testStore; },
@@ -85,7 +78,6 @@ function capturedParams(): Record<string, unknown> {
 describe('Parameterised query execution E2E (local WASM)', () => {
   // No backend to spawn — sql-to-ir and ir-to-sql run locally via WASM
   setupMockFetch({});
-
 
   beforeEach(() => {
     vi.clearAllMocks();

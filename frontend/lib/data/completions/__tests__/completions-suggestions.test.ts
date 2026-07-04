@@ -3,14 +3,6 @@
  * Tests getTableSuggestions and getColumnSuggestions at the completions API level
  */
 
-// Database-specific mock (test name must match)
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 // Inject schema via a fake Node.js connector (the loader fetches schema through
 // getNodeConnector(...).getSchema()). No backend to spawn.
 vi.mock('@/lib/connections', () => ({

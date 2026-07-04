@@ -18,13 +18,6 @@
  * sending the stale-closure app_state).
  */
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 // The agent's analytics queries are not exercised by this faux flow (it only emits
 // EditFile); run-query is stubbed so an accidental real query can't hit a warehouse.
 vi.mock('@/lib/connections/run-query', () => ({ runQuery: vi.fn(async () => ({ columns: [], types: [], rows: [], finalQuery: '' })) }));

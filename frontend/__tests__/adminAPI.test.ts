@@ -24,12 +24,6 @@ const gunzipAsync = promisify(gunzip);
 const TEST_DB_PATH = path.join(process.cwd(), 'data', 'test_admin_api.db');
 
 // Mock database config
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const
-}));
 
 // Import after mocking
 import { InitData, exportDatabase, atomicImport } from '@/lib/database/import-export';

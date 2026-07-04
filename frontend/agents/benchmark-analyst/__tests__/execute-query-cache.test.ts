@@ -3,9 +3,6 @@
  * /api/query (arch doc §5): a second identical execution is served from the
  * cached blob WITHOUT re-running the connector.
  */
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
-}));
 
 const { mockRunQuery } = vi.hoisted(() => ({ mockRunQuery: vi.fn() }));
 // ExecuteQuery streams into the durable cache now — expose runQueryStream over the mock so the REAL

@@ -2,13 +2,6 @@
 // real PNGs), the public share-image route (serves the stored card, falls back to generic),
 // and the share page's server-rendered metadata (incl. no title leak for revoked links).
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import { ogCacheKey, truncate, MINUSX_TAGLINE } from '@/lib/og/og-helpers';
 import { renderGenericOgImage } from '@/lib/og/og-cards';
 import { composeStoryCard } from '@/lib/og/og-image';

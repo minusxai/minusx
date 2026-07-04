@@ -4,13 +4,6 @@
 // (The HTTP routes are thin E2E-gated wrappers over these channel functions;
 // they're exercised for real by Playwright.)
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
 import { runConversationTurn } from '@/lib/chat/conversation-turn.server';
 import { createConversation, loadLog } from '@/lib/data/conversations.server';

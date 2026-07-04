@@ -12,12 +12,6 @@ import type { ConnectionContent, CsvFileInfo, RunFileContent } from '@/lib/types
 import { NextRequest } from 'next/server';
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 const TEST_DB_PATH = getTestDbPath('sheets_sync_e2e');
 

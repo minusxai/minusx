@@ -11,13 +11,6 @@
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 vi.mock('next/cache', () => ({
   revalidateTag: vi.fn(),
   unstable_cache: vi.fn((fn: any) => fn),

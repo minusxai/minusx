@@ -60,12 +60,6 @@ import { NextRequest } from 'next/server';
 // ---------------------------------------------------------------------------
 // Mock: test database
 // ---------------------------------------------------------------------------
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 // ---------------------------------------------------------------------------
 // Mock: Redux store (file-state.ts reads from this via getStore())

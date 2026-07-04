@@ -21,14 +21,6 @@ import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { getModules } from '@/lib/modules/registry';
 
-// Mock db-config to use test database
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 // Mock the store import so file-state.ts uses the test store
 let testStore: any;
 vi.mock('@/store/store', () => ({
@@ -337,8 +329,6 @@ describe('editFile - Question content validation', () => {
   const dbPath = getTestDbPath('edit_file'); // same mock path as db-config module mock above
   let questionId: number;
 
-
-
   function setupStore() {
     return configureStore({
       reducer: {
@@ -519,8 +509,6 @@ describe('editFile - Question content validation', () => {
 describe('editFile - Dashboard content validation', () => {
   const dbPath = getTestDbPath('edit_file'); // same db-config mock path
   let dashboardId: number;
-
-
 
   // Initial dashboard content — serialises to a known JSON string for oldMatch
   const initialContent: DashboardContent = {

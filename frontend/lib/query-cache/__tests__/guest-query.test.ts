@@ -4,9 +4,6 @@
  * embed extraction (question, story inline + saved ref, notebook cell, dashboard
  * asset) and the connection-swap attempt.
  */
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
-}));
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { FilesAPI } from '@/lib/data/files.server';
