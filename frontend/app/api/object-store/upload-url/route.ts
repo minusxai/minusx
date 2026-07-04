@@ -100,12 +100,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // base64 embedding is for EPHEMERAL images only (chat/chart attachments). An upload destined
-    // for persistent FILE CONTENT (`persistent=true`: dashboard text blocks, context docs, notebook
-    // cells) must get a real object-store URL — a data URL embedded in content rides through every
-    // dirty-check serialization, markup build, LLM payload, and DB row forever.
-    const persistent = req.nextUrl.searchParams.get('persistent') === 'true';
-    if (USE_BASE64_UPLOADS && isImageContentType(contentType) && !persistent) {
+    if (USE_BASE64_UPLOADS && isImageContentType(contentType)) {
       return NextResponse.json({ uploadUrl: 'base64:', publicUrl: '' });
     }
 

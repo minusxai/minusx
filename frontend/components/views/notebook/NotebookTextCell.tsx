@@ -65,7 +65,7 @@ export default function NotebookTextCell({
 
   const handleImageUpload = useCallback(async (file: File): Promise<string> => {
     try {
-      const { publicUrl } = await uploadFile(file, undefined, { persistent: true }); // embedded in file content — never base64
+      const { publicUrl } = await uploadFile(file);
       return publicUrl;
     } catch (err: unknown) {
       toaster.create({ title: err instanceof Error ? err.message : 'Failed to upload image', type: 'error' });

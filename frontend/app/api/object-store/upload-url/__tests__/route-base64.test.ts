@@ -1,9 +1,12 @@
 /**
- * USE_BASE64_UPLOADS must only affect EPHEMERAL images (chat/chart attachments). An image that is
- * uploaded for PERSISTENT file content (dashboard text blocks, context docs, notebook cells) must
- * get a real object-store URL: a multi-hundred-KB data URL embedded in file content rides through
- * every dirty-check serialization, markup build, LLM payload, and DB row forever.
- * Callers declare intent with `persistent=true`.
+ * USE_BASE64_UPLOADS contract — pinned.
+ *
+ * When the flag is on, EVERY image upload gets the `base64:` sentinel and the client embeds the
+ * image as a data URL — regardless of what the image is for (chat attachment, dashboard text
+ * block, context doc, notebook cell). Deployments set this flag precisely because they have no
+ * usable object store (ephemeral FS, no S3); routing any image upload to the store there would
+ * break uploads or mint URLs that die on restart. The perf cost of data URLs in file content on
+ * such deployments is ACCEPTED — do not "fix" it by bypassing the flag per-callsite.
  */
 
 vi.mock('@/lib/database/db-config', () => ({
@@ -50,24 +53,28 @@ function request(params: Record<string, string>): NextRequest {
   return new NextRequest(url);
 }
 
-describe('upload-url — USE_BASE64_UPLOADS scoping', () => {
+describe('upload-url — USE_BASE64_UPLOADS applies to ALL image uploads', () => {
   beforeEach(() => {
     (getEffectiveUser as Mock).mockResolvedValue(USER);
   });
 
-  it('returns the base64 sentinel for an EPHEMERAL image upload (default)', async () => {
+  it('chart-attachment images get the base64 sentinel', async () => {
     const res = await GET(request({ filename: 'chart.jpg', contentType: 'image/jpeg', keyType: 'charts' }));
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.uploadUrl).toBe('base64:');
+    expect((await res.json()).uploadUrl).toBe('base64:');
   });
 
-  it('returns a REAL upload URL for a persistent=true image upload (file content)', async () => {
-    const res = await GET(request({ filename: 'photo.png', contentType: 'image/png', persistent: 'true' }));
+  it('general/content images ALSO get the base64 sentinel (no per-callsite bypass)', async () => {
+    const res = await GET(request({ filename: 'photo.png', contentType: 'image/png' }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).uploadUrl).toBe('base64:');
+  });
+
+  it('non-image files still use the real object store even with the flag on', async () => {
+    const res = await GET(request({ filename: 'data.csv', contentType: 'text/csv' }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.uploadUrl).not.toBe('base64:');
     expect(body.uploadUrl).toContain('https://');
-    expect(body.publicUrl).toContain('https://');
   });
 });
