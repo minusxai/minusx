@@ -4,6 +4,7 @@ import { resolveConnectionSecrets } from '@/lib/secrets/connection-secrets.serve
 import { getNodeConnector } from '@/lib/connections';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { connectionTypeToDialect } from '@/lib/types';
+import { QUERY_SERVER_TIMEOUT_MS } from '@/lib/config';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { drainQueryStream, queryResultToStream, type QueryResult, type QueryStream } from './base';
 
@@ -30,7 +31,30 @@ export async function runQuery(
 ): Promise<QueryResult> {
   // Materialized convenience — drains the streaming path. Every execution flows
   // through runQueryStream, so streaming-capable connectors stream even here.
-  return drainQueryStream(await runQueryStream(databaseName, query, params, user));
+  //
+  // Wall-clock bound (QUERY_SERVER_TIMEOUT_MS, 0 disables): this is the single materializing
+  // seam for /api/query misses, server tools (ExecuteQuery), and headless ReadFiles — callers the
+  // browser's 120s guard can't protect. A stuck warehouse query otherwise hangs them all
+  // indefinitely. The connector's work is abandoned, not cancelled (connectors lack a uniform
+  // cancel API) — the point is unblocking the caller and its semaphore/turn.
+  const work = (async () => drainQueryStream(await runQueryStream(databaseName, query, params, user)))();
+  if (QUERY_SERVER_TIMEOUT_MS <= 0) return work;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(
+        `Query timed out after ${Math.round(QUERY_SERVER_TIMEOUT_MS / 1000)}s (server bound; tune via QUERY_SERVER_TIMEOUT_MS). `
+        + 'The query may still be running on the warehouse.',
+      )),
+      QUERY_SERVER_TIMEOUT_MS,
+    );
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+    work.catch(() => { /* abandoned after timeout — swallow so it never surfaces as unhandled */ });
+  }
 }
 
 /**

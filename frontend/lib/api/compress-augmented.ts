@@ -119,13 +119,39 @@ export function compressQueryResult(qr: QueryResult & { error?: string }, maxCha
   return { columns, types, data: md, totalRows, shownRows, truncated, id: qr.id, finalQuery: qr.finalQuery };
 }
 
-function compressFileState(fs: FileState, refs?: FileState[]): CompressedFileState {
+/**
+ * Cache of the EXPENSIVE derived facets of a FileState (merged/shaped content, markup
+ * projection, rubric, queryResultId), keyed by the FileState object itself.
+ *
+ * Why this is sound: Redux (immer) keeps a file's FileState identity stable until THAT file
+ * changes — an unrelated action (another file edited, a query result landing, per-keystroke
+ * ticks elsewhere) replaces the files map but not this entry. selectAppState recomputes on
+ * every such change and used to rebuild markup + rubric from scratch each time; this cache
+ * makes those recomputes O(lookup) for untouched files. The rubric additionally depends on the
+ * referenced files' viz types, so an entry is only valid while the refs' identities match too.
+ */
+interface DerivedFacets {
+  refs: FileState[] | undefined;
+  agentContent: FileState['content'];
+  markup: string;
+  rubric: AgentRubric | undefined;
+  queryResultId: string | undefined;
+}
+const derivedFacetsCache = new WeakMap<FileState, DerivedFacets>();
+
+function sameRefIdentities(a: FileState[] | undefined, b: FileState[] | undefined): boolean {
+  const la = a?.length ?? 0;
+  const lb = b?.length ?? 0;
+  if (la !== lb) return false;
+  for (let i = 0; i < la; i++) if (a![i] !== b![i]) return false;
+  return true;
+}
+
+function deriveFacets(fs: FileState, refs?: FileState[]): DerivedFacets {
+  const cached = derivedFacetsCache.get(fs);
+  if (cached && sameRefIdentities(cached.refs, refs)) return cached;
+
   const mergedContent = { ...(fs.content || {}), ...(fs.persistableChanges || {}) } as FileState['content'];
-  const isDirty = !!(
-    (fs.persistableChanges && Object.keys(fs.persistableChanges).length > 0) ||
-    fs.metadataChanges?.name !== undefined ||
-    fs.metadataChanges?.path !== undefined
-  );
   let queryResultId = fs.queryResultId;
   if (fs.type === 'question') {
     const qc = mergedContent as QuestionContent;
@@ -149,7 +175,25 @@ function compressFileState(fs: FileState, refs?: FileState[]): CompressedFileSta
   // multi-MB schema cache off the wire when this AppState is sent to chat (it's a no-op for other
   // types, whose `content` stays full).
   const agentContent = fs.type === 'context' ? shapeContextForAgent(mergedContent) : mergedContent;
-  const rubric = computeRubric(fs.type as FileType, agentContent, refs);
+  const facets: DerivedFacets = {
+    refs: refs ? [...refs] : undefined,
+    agentContent,
+    // File Architecture v2: the markup the agent reads + edits (matches buildCurrentFileStr).
+    markup: fileToMarkup(fs.type as FileType, agentContent),
+    rubric: computeRubric(fs.type as FileType, agentContent, refs),
+    queryResultId,
+  };
+  derivedFacetsCache.set(fs, facets);
+  return facets;
+}
+
+function compressFileState(fs: FileState, refs?: FileState[]): CompressedFileState {
+  const { agentContent, markup, rubric, queryResultId } = deriveFacets(fs, refs);
+  const isDirty = !!(
+    (fs.persistableChanges && Object.keys(fs.persistableChanges).length > 0) ||
+    fs.metadataChanges?.name !== undefined ||
+    fs.metadataChanges?.path !== undefined
+  );
   return {
     id: fs.id,
     name: fs.metadataChanges?.name ?? fs.name,
@@ -158,8 +202,7 @@ function compressFileState(fs: FileState, refs?: FileState[]): CompressedFileSta
     content: agentContent,
     isDirty,
     ...(queryResultId ? { queryResultId } : {}),
-    // File Architecture v2: the markup the agent reads + edits (matches buildCurrentFileStr).
-    markup: fileToMarkup(fs.type as FileType, agentContent),
+    markup,
     ...(rubric ? { rubric } : {}),
   };
 }

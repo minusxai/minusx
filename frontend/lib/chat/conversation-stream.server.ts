@@ -61,9 +61,9 @@ export async function publish(conversationId: number, n: ConversationNotify): Pr
 export const notifyMessage = (conversationId: number, seq: number): Promise<void> =>
   publish(conversationId, { kind: 'message', seq });
 
-/** Ephemeral token chunk for the in-flight message at `seq`. */
-export const notifyDelta = (conversationId: number, seq: number, text: string): Promise<void> =>
-  publish(conversationId, { kind: 'delta', seq, text });
+/** Ephemeral token chunk for the in-flight message at `seq`. `thinking` marks reasoning tokens. */
+export const notifyDelta = (conversationId: number, seq: number, text: string, thinking = false): Promise<void> =>
+  publish(conversationId, { kind: 'delta', seq, text, ...(thinking ? { thinking: true } : {}) });
 
 /** Run lifecycle transition (running/paused/idle/error). */
 export const notifyStatus = (conversationId: number, runStatus: RunStatus, seq: number): Promise<void> =>

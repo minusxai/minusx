@@ -216,14 +216,19 @@ export async function runConversationTurn(
     await notifyMessage(conversationId, committedSeq - 1);
   };
 
+  // Delta buffer. Thinking and text deltas are buffered SEPARATELY-BY-KIND (one buffer, tagged):
+  // merging them into one untyped chunk made the client render reasoning as the visible reply
+  // until the turn finalized. A kind switch flushes first, so ordering is preserved on the wire.
   let buf = '';
+  let bufThinking = false;
   let lastFlush = Date.now();
   const flush = async () => {
     if (!buf) return;
     const text = buf;
+    const thinking = bufThinking;
     buf = '';
     lastFlush = Date.now();
-    await notifyDelta(conversationId, committedSeq, text);
+    await notifyDelta(conversationId, committedSeq, text, thinking);
   };
 
   try {
@@ -236,6 +241,9 @@ export async function runConversationTurn(
           const errMsg = (ev as { error?: { errorMessage?: string } }).error?.errorMessage;
           if (errMsg && !runError) runError = errMsg;
         } else if (t === 'text_delta' || t === 'thinking_delta') {
+          const isThinking = t === 'thinking_delta';
+          if (buf && bufThinking !== isThinking) await flush(); // kind switch: emit the previous kind first
+          bufThinking = isThinking;
           buf += (ev as { delta?: string }).delta ?? '';
           if (Date.now() - lastFlush >= DELTA_FLUSH_MS) await flush();
         }

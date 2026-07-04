@@ -161,6 +161,9 @@ export async function executeToolCall(
  * Returns image_url content blocks (OpenAI format — LiteLLM converts to Anthropic).
  * Browser-only. Never throws — returns [] on any failure.
  */
+/** Cap on chart images rendered per tool call (main-thread ECharts render + 2 uploads each). */
+const MAX_CHART_IMAGE_BLOCKS = 8;
+
 async function renderFileChartImageBlocks(
   files: AugmentedFile[],
 ): Promise<{ type: 'image_url'; image_url: { url: string } }[]> {
@@ -175,7 +178,10 @@ async function renderFileChartImageBlocks(
     // null), so skip it here rather than emit a blank image block.
     if (!qr || !qr.rows?.length || !RENDERABLE_CHART_TYPES.has(vizType)) return [];
     return [{ queryResult: qr, vizSettings: (f.fileState.content as any).vizSettings, titleOverride: f.fileState.name }];
-  });
+  })
+    // Each render is synchronous main-thread ECharts work plus two upload round-trips; uncapped, a
+    // wide ReadFiles (20+ questions) freezes the tab for seconds and stalls the turn on uploads.
+    .slice(0, MAX_CHART_IMAGE_BLOCKS);
   if (entries.length === 0) return [];
 
   try {
@@ -470,11 +476,13 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
  * Returns CompressedAugmentedFile[] — pre-merged content/persistableChanges so the
  * model always sees a single flat content layer (no layer reasoning needed).
  */
-registerFrontendTool('ReadFiles', async (args, _context) => {
+registerFrontendTool('ReadFiles', async (args, context) => {
   const { fileIds, maxChars: rawMaxChars, runQueries = true, rawData = false } = args;
   const maxChars = Math.min(rawMaxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
 
-  const result = await readFiles(fileIds, { runQueries });
+  // Thread the conversation's abort signal into the query auto-execution: a ReadFiles over a wide
+  // dashboard can otherwise block on every uncached query to its full timeout with Stop doing nothing.
+  const result = await readFiles(fileIds, { runQueries, signal: context.signal });
   // The agent reads `markup`, not JSON `content` — strip the duplicate content, then pull the
   // JSX `markup` out into a separate raw <file_markup> block (real JSX, not escaped JSON).
   const { files: noMarkup, blocks } = takeFilesMarkup(
@@ -1001,9 +1009,11 @@ registerFrontendTool('CreateFile', async (args, context) => {
   const { appState } = state.navigation ? selectAppState(state) : { appState: null };
 
   if (!unrestrictedMode) {
-    // Dashboards can never be created in the background
-    if (file_type === 'dashboard') {
-      const msg = 'Cannot create a dashboard in the background. Use the Navigate tool with new_file_type="dashboard" instead.';
+    // Dashboards and stories can never be created in the background: both are built
+    // INTERACTIVELY — the user confirms the navigation and watches the file take shape.
+    // A background CreateFile produced an invisible story the user never saw being made.
+    if (file_type === 'dashboard' || file_type === 'story') {
+      const msg = `Cannot create a ${file_type} in the background. Use the Navigate tool with new_file_type="${file_type}" first, then build it with EditFile on the new page.`;
       return { content: { success: false, error: msg }, details: { success: false, error: msg } };
     }
 

@@ -68,6 +68,35 @@ describe('v3 turn runner', () => {
     expect(got.some((n) => n.kind === 'message')).toBe(true);
   });
 
+  it('streams thinking deltas TAGGED as thinking — never merged into plain text deltas', async () => {
+    // The "thoughts appear as actual reply text while streaming" bug: the turn runner concatenated
+    // text_delta AND thinking_delta into one untyped buffer, so the client rendered reasoning as
+    // the visible reply until the turn finalized. Thinking deltas must be tagged on the wire.
+    webAnalystFaux.setResponses([
+      fauxAssistantMessage(
+        [
+          { type: 'thinking', thinking: 'Let me reason about which month wins.' },
+          { type: 'text', text: 'June is the answer.' },
+        ] as never,
+        { stopReason: 'stop' },
+      ),
+    ]);
+    const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+
+    const got: ConversationNotify[] = [];
+    const unsub = await subscribe(conv.id, (n) => got.push(n));
+    await runConversationTurn(conv.id, ADMIN, turnBody('which month has max mrr?'));
+    await new Promise((r) => setTimeout(r, 100));
+    await unsub();
+
+    const deltas = got.filter((n) => n.kind === 'delta');
+    const thinkingText = deltas.filter((d) => d.thinking).map((d) => d.text ?? '').join('');
+    const plainText = deltas.filter((d) => !d.thinking).map((d) => d.text ?? '').join('');
+    expect(thinkingText).toContain('reason about');       // reasoning arrives, tagged
+    expect(plainText).toContain('June is the answer');     // reply arrives, untagged
+    expect(plainText).not.toContain('reason about');       // reasoning NEVER leaks into reply text
+  });
+
   it('appends a second turn incrementally (seq continues)', async () => {
     webAnalystFaux.setResponses([fauxAssistantMessage('first', { stopReason: 'stop' })]);
     const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });

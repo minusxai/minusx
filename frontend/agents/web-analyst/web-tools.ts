@@ -131,6 +131,7 @@ const ReadFilesParams = Type.Object({
   fileIds: Type.Array(Type.Number(), { description: 'IDs of files to load.' }),
   maxChars: Type.Optional(Type.Number({ description: 'Max characters of compressed text per file (default 10,000).' })),
   runQueries: Type.Optional(Type.Boolean({ description: 'When true (default), executes saved queries and returns results.' })),
+  rawData: Type.Optional(Type.Boolean({ description: 'Default false: a question with a CHART viz returns its result as an IMAGE + summary and the row data is dropped. Set true to ALSO get the actual rows — use this whenever you need real values from a chart question (e.g. picking a number for a claim or a <Number> embed, checking sort order) instead of eyeballing the image.' })),
 });
 
 export class ReadFiles extends MXTool<typeof ReadFilesParams, RemoteAnalystContext> {

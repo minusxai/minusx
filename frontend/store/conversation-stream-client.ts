@@ -19,6 +19,8 @@ export interface V3TurnInput {
 export interface V3StreamCallbacks {
   /** A live (ephemeral) token chunk for the in-flight assistant message. */
   onDelta: (text: string) => void;
+  /** A live REASONING (thinking) chunk — render under the thinking affordance, never as reply text. */
+  onThinkingDelta?: (text: string) => void;
   /** The turn paused on frontend-bridged tool calls the client must execute. */
   onPending: (toolCalls: StreamPendingToolCall[]) => void;
   /** A committed message landed (seq advanced) — used to track the resume cursor. */
@@ -85,7 +87,10 @@ function readStreamOnce(
           cb.onMessage?.(e.message);
           break;
         case 'delta':
-          cb.onDelta(e.text);
+          // Thinking chunks route to the thinking affordance; without a handler they are DROPPED,
+          // never shown as reply text (they reappear under "Show Thinking" from the durable rows).
+          if (e.thinking) cb.onThinkingDelta?.(e.text);
+          else cb.onDelta(e.text);
           break;
         case 'pending':
           state.result.pendingToolCalls = e.toolCalls;

@@ -100,8 +100,13 @@ function ChatInputInner({
   const hasContent = input.trim().length > 0 || attachments.length > 0;
   const isCollapsed = isFloating && !isFocused && !hasContent;
 
-  // Detect platform for keyboard shortcut display
-  const isMac = typeof window !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  // Detect platform for keyboard shortcut display. Resolved in an effect, NOT during render:
+  // a `typeof window` branch renders 'Ctrl+k' on the server and '⌘+k' on a Mac client, and that
+  // hydration mismatch made React throw away and re-render the whole tree on every page load.
+  const [isMac, setIsMac] = useState(false);
+  useEffect(() => {
+    setIsMac(navigator.platform.toUpperCase().indexOf('MAC') >= 0);
+  }, []);
   const shortcutKey = isMac ? '⌘+k' : 'Ctrl+k';
 
   // Global Cmd+K shortcut for floating mode

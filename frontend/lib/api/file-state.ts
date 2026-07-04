@@ -203,7 +203,7 @@ export async function readFiles(
   fileIds: number[],
   options: ReadFilesOptions = {}
 ): Promise<AugmentedFile[]> {
-  const { ttl = CACHE_TTL.FILE, skip = false, runQueries = false } = options;
+  const { ttl = CACHE_TTL.FILE, skip = false, runQueries = false, signal } = options;
 
   await loadFiles(fileIds, ttl, skip);
 
@@ -236,7 +236,7 @@ export async function readFiles(
           filePath: f.path,
           fileId: f.id,
           fileVersion: f.version,
-        }));
+        }, signal ? { signal } : undefined));
       }
     }
     await Promise.allSettled(runs);
