@@ -56,6 +56,9 @@ export interface QueryExecutionParams {
   fileId?: number;
   /** Version of the question file at execution time — stored in queries table for lineage tracking */
   fileVersion?: number;
+  /** Per-file cache SWR windows (from the question's content.cachePolicy). When set, overrides the
+   *  env-default revalidate/expiry for this query's durable cache entry; omitted → env defaults. */
+  cachePolicy?: { revalidateMs?: number; expiryMs?: number };
 }
 
 export interface GetQueryResultOptions {

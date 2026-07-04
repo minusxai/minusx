@@ -63,6 +63,12 @@ export default function EmbeddedQuestionContainer({
     [externalParamValues, localQuestion.parameters, localQuestion.parameterValues],
   );
 
+  // Per-file cache SWR windows (content.cachePolicy) — memoized on values to keep effect identity stable.
+  const cachePolicyOpt = useMemo(
+    () => (localQuestion.cachePolicy ? { revalidateMs: localQuestion.cachePolicy.revalidateMs ?? undefined, expiryMs: localQuestion.cachePolicy.expiryMs ?? undefined } : undefined),
+    [localQuestion.cachePolicy?.revalidateMs, localQuestion.cachePolicy?.expiryMs],
+  );
+
   // Phase 3: Use useQueryResult hook for automatic execution with TTL caching
   const {
     data: queryData,
@@ -75,7 +81,7 @@ export default function EmbeddedQuestionContainer({
     queryParams,
     localQuestion.connection_name || '', // Empty string if missing, rely on skip to prevent execution
     localQuestion.references || EMPTY_REFERENCES,
-    { skip: !localQuestion.query || !localQuestion.connection_name, filePath } // Skip if no query or no database
+    { skip: !localQuestion.query || !localQuestion.connection_name, filePath, cachePolicy: cachePolicyOpt } // Skip if no query or no database
   );
 
   // Update handler - propagate changes to parent if onChange provided

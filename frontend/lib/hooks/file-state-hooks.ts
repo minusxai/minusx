@@ -387,6 +387,7 @@ export interface UseQueryResultOptions {
   skip?: boolean;    // Skip execution (for conditional use)
   parameterTypes?: Record<string, 'text' | 'number' | 'date'>;  // Declared types for asyncpg coercion
   filePath?: string; // Question file path — forwarded to /api/query for whitelist validation
+  cachePolicy?: { revalidateMs?: number; expiryMs?: number }; // Per-file SWR windows (content.cachePolicy)
 }
 
 /**
@@ -446,7 +447,7 @@ export function useQueryResult(
   references?: QuestionReference[],
   options: UseQueryResultOptions = {}
 ): UseQueryResultReturn {
-  const { ttl = CACHE_TTL.QUERY, skip = false, parameterTypes, filePath } = options;
+  const { ttl = CACHE_TTL.QUERY, skip = false, parameterTypes, filePath, cachePolicy } = options;
 
   // Coerce empty-numeric params to None ONCE here, so the SAME params drive both the
   // execute-effect and the result selector below. (Coercing inside getQueryResult would
@@ -456,8 +457,8 @@ export function useQueryResult(
 
   useEffect(() => {
     if (skip) return;
-    getQueryResult({ query, params, database, references, parameterTypes, filePath }, { ttl }).catch(() => {});
-  }, [query, params, database, references, parameterTypes, filePath, ttl, skip]);
+    getQueryResult({ query, params, database, references, parameterTypes, filePath, cachePolicy }, { ttl }).catch(() => {});
+  }, [query, params, database, references, parameterTypes, filePath, cachePolicy, ttl, skip]);
 
   // Force a fresh fetch, bypassing the TTL cache — used by retry buttons after a
   // transient network failure. Swallows rejection (error already lands in Redux).

@@ -9,8 +9,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 import {
-  claimLease, getCacheRow, markReady, releaseLease, waitForReady, sweepExpired,
+  claimLease, getCacheRow, markReady, releaseLease, waitForReady, sweepExpired, renewLease,
 } from '../store.server';
+import { QUERY_CACHE_LEASE_MS } from '@/lib/config';
 import { classifyCacheRow } from '../swr';
 import type { CachePolicy } from '../types';
 
@@ -103,6 +104,39 @@ describe('QueryCacheStore (lease + SWR windows)', () => {
     await releaseLease('m:k8'); // execution failed
     const retry = await claimLease('m:k8', INIT, 1100);
     expect(retry.won).toBe(true);
+  });
+
+  it('renewLease pushes lease_expires_at forward without touching blob/status/windows', async () => {
+    await claimLease('m:hb', INIT, 1000);
+    await markReady('m:hb', { blobRef: 'r', finalQuery: 'q', rowCount: 2, colCount: 1, byteSize: 9, policy: POLICY }, 1000);
+    // Re-claim (a revalidation) so there's a live lease to renew.
+    await claimLease('m:hb', INIT, QUERY_CACHE_LEASE_MS + 2000);
+    const before = (await getCacheRow('m:hb'))!;
+    await renewLease('m:hb', before.leaseExpiresAt + 5000);
+    const after = (await getCacheRow('m:hb'))!;
+    expect(after.leaseExpiresAt).toBe(before.leaseExpiresAt + 5000 + QUERY_CACHE_LEASE_MS);
+    expect(after.blobRef).toBe('r');          // untouched
+    expect(after.rowCount).toBe(2);           // untouched
+    expect(after.revalidateAt).toBe(before.revalidateAt); // SWR windows untouched
+  });
+
+  it('a heartbeat-renewed lease keeps blocking stealers PAST the original lease window', async () => {
+    // The stampede fix: an executor running longer than one lease window renews its lease,
+    // so a waiter cannot steal it and double-run mid-execution.
+    await claimLease('m:hb2', INIT, 1000);
+    // Simulate the executor heartbeating right before the original lease would lapse.
+    await renewLease('m:hb2', 1000 + QUERY_CACHE_LEASE_MS - 1);
+    // A stealer arriving just after the ORIGINAL lease window still loses (renewed lease is live).
+    const stealer = await claimLease('m:hb2', INIT, 1000 + QUERY_CACHE_LEASE_MS + 10);
+    expect(stealer.won).toBe(false);
+  });
+
+  it('renewLease is a no-op on a freed (ready) lease — never resurrects a completed row', async () => {
+    await claimLease('m:hb3', INIT, 1000);
+    await markReady('m:hb3', { blobRef: 'r', finalQuery: 'q', rowCount: 0, colCount: 0, byteSize: 1, policy: POLICY }, 1000);
+    await renewLease('m:hb3', 9999); // lease is 0 (freed) — must not extend it
+    const row = (await getCacheRow('m:hb3'))!;
+    expect(row.leaseExpiresAt).toBe(0);
   });
 
   it('sweepExpired deletes expired rows and returns their blob refs', async () => {

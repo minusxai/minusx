@@ -6,11 +6,15 @@
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
 }));
+// readFilesServer executes via runQueryBounded now (bounded RAM). Echo the query+bound params back
+// as one row, and add `truncated:false` so the bounded-result shape matches.
+const echoRun = (_db: string, query: string, params: Record<string, unknown>) => {
+  const row = { received_min_mrr: params.min_mrr ?? 'UNBOUND', kind: query.includes('SUM') ? 'inline_number' : 'other' };
+  return { columns: Object.keys(row), types: ['VARCHAR', 'VARCHAR'], rows: [row], truncated: false };
+};
 vi.mock('@/lib/connections/run-query', () => ({
-  runQuery: vi.fn(async (_db: string, query: string, params: Record<string, unknown>) => {
-    const row = { received_min_mrr: params.min_mrr ?? 'UNBOUND', kind: query.includes('SUM') ? 'inline_number' : 'other' };
-    return { columns: Object.keys(row), types: ['VARCHAR', 'VARCHAR'], rows: [row] };
-  }),
+  runQuery: vi.fn(async (db: string, query: string, params: Record<string, unknown>) => echoRun(db, query, params)),
+  runQueryBounded: vi.fn(async (db: string, query: string, params: Record<string, unknown>) => echoRun(db, query, params)),
 }));
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';

@@ -135,6 +135,22 @@ export async function releaseLease(cacheKey: string): Promise<void> {
 }
 
 /**
+ * Heartbeat: extend a LIVE lease to `now + QUERY_CACHE_LEASE_MS`. The executor calls this
+ * periodically while a long query runs so its lease never lapses mid-execution — otherwise a
+ * waiter would steal the lease at the original expiry and run a duplicate query. The
+ * `lease_expires_at > 0` guard makes it a no-op on a freed/ready row, so it can never resurrect a
+ * completed entry. Only extends forward (`GREATEST`), never shortens.
+ */
+export async function renewLease(cacheKey: string, now: number): Promise<void> {
+  await db().exec(
+    `UPDATE query_cache
+       SET lease_expires_at = GREATEST(lease_expires_at, $2)
+     WHERE cache_key = $1 AND lease_expires_at > 0`,
+    [cacheKey, now + QUERY_CACHE_LEASE_MS],
+  );
+}
+
+/**
  * Poll for a ready blob after losing the lease. Resolves with the ready row, or
  * null if the holder's lease expires without producing a blob (caller re-claims).
  */

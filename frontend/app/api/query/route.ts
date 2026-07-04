@@ -128,8 +128,12 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // forceRefresh ("Run query") re-executes + refreshes the cache. NOT honored for
     // guests — public shares must stay cache-served so they can't hammer the warehouse.
     const forceRefresh = bodyForceRefresh === true && !user.guest;
+    const refsForKey = Array.isArray(references)
+      ? (references as QuestionReference[]).map((r) => ({ id: r.id, alias: r.alias }))
+      : undefined;
     const { stream, meta } = await getCachedJsonlStream({
       mode, connectionName, query, params: paramValues, policy, execute, forceRefresh,
+      parameterTypes: paramTypes, references: refsForKey,
     });
 
     // One analytics event per request, from the executor's meta (covers hit + miss).

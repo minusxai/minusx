@@ -73,7 +73,6 @@ interface EnvironmentConfig {
   /** Server-side wall-clock bound on one query execution (runQuery) — the backstop for callers
    *  the client 120s guard can't protect (server tools, headless ReadFiles). 0 disables. */
   QUERY_SERVER_TIMEOUT_MS: number;
-  QUERY_CACHE_TTL_MS: number;
   QUERY_CACHE_REVALIDATE_MS: number;
   QUERY_CACHE_EXPIRY_MS: number;
   QUERY_CACHE_LEASE_MS: number;
@@ -176,7 +175,6 @@ const config: EnvironmentConfig = {
   // queries especially). Bounds hangs so a stuck embed query can't freeze the run
   // (and hold a querySemaphore slot) forever. 0 disables the cap.
   QUERY_TIMEOUT_MS: getOptionalNumber(process.env.QUERY_TIMEOUT_MS, 120_000),
-  QUERY_CACHE_TTL_MS: getOptionalNumber(process.env.QUERY_CACHE_TTL_MS, 60_000),
   // Query Execution, Cache & Params Arch V2 — default SWR windows + execution lease TTL.
   QUERY_CACHE_REVALIDATE_MS: getOptionalNumber(process.env.QUERY_CACHE_REVALIDATE_MS, 20 * 60_000),
   QUERY_CACHE_EXPIRY_MS: getOptionalNumber(process.env.QUERY_CACHE_EXPIRY_MS, 60 * 60_000),
@@ -268,7 +266,6 @@ export const SHARE_GUEST_CHAT_ENABLED = config.SHARE_GUEST_CHAT_ENABLED;
 export const MAX_CONCURRENT_QUERIES = config.MAX_CONCURRENT_QUERIES;
 export const QUERY_SERVER_TIMEOUT_MS = config.QUERY_SERVER_TIMEOUT_MS;
 export const QUERY_TIMEOUT_MS = config.QUERY_TIMEOUT_MS;
-export const QUERY_CACHE_TTL_MS = config.QUERY_CACHE_TTL_MS;
 export const QUERY_CACHE_REVALIDATE_MS = config.QUERY_CACHE_REVALIDATE_MS;
 export const QUERY_CACHE_EXPIRY_MS = config.QUERY_CACHE_EXPIRY_MS;
 export const QUERY_CACHE_LEASE_MS = config.QUERY_CACHE_LEASE_MS;

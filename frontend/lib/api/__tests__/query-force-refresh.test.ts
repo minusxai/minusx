@@ -55,3 +55,22 @@ describe('getQueryResult — forceRefresh contract', () => {
     expect(normalBody.forceRefresh).toBeUndefined();
   });
 });
+
+describe('getQueryResult — cachePolicy plumbing', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('sends cachePolicy in the request body when provided, omits it otherwise', async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      String(url).includes('/api/query') ? emptyJsonlResponse() : ({ ok: true, status: 200, json: async () => ({}) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await getQueryResult({ query: 'SELECT 10', params: {}, database: 'wh', cachePolicy: { revalidateMs: 5000, expiryMs: 60000 } });
+    const withPolicy = bodyOf(fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/query'))!);
+    expect(withPolicy.cachePolicy).toEqual({ revalidateMs: 5000, expiryMs: 60000 });
+
+    fetchMock.mockClear();
+    await getQueryResult({ query: 'SELECT 11', params: {}, database: 'wh' });
+    const noPolicy = bodyOf(fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/query'))!);
+    expect(noPolicy.cachePolicy).toBeUndefined();
+  });
+});

@@ -8,7 +8,7 @@ vi.mock('@/lib/database/db-config', () => ({
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
-import { getCachedResult, getCachedJsonlStream } from '../execute.server';
+import { getCachedResult, getCachedJsonlStream, getCachedResultBounded, sweepExpiredBlobs, _resetSweepThrottleForTest, maybeSweepExpired } from '../execute.server';
 import { createQueryCacheBlobStore } from '../blob-store';
 import { decodeJsonl } from '../jsonl';
 import type { ObjectStore } from '@/lib/object-store';
@@ -152,6 +152,139 @@ describe('executeQueryCached (SWR orchestration)', () => {
     expect(slowExec).toHaveBeenCalledTimes(1);
     expect(a.result.rows).toEqual([{ n: 1 }]);
     expect(b.result.rows).toEqual([{ n: 1 }]);
+  });
+
+  it('DIFFERENT parameterTypes → DIFFERENT cache key (no wrong-typed blob collision)', async () => {
+    // Same value "2024-01-01" but declared date vs text binds differently at the warehouse
+    // (BigQuery DATE vs STRING) → different result. They must not share a blob.
+    const base = { mode: 'org', connectionName: 'bq', query: 'SELECT :d', params: { d: '2024-01-01' }, policy: POLICY };
+    const store = createQueryCacheBlobStore(fakeObjectStore());
+    const execA = vi.fn(async (): Promise<QueryStream> =>
+      queryResultToStream({ columns: ['a'], types: ['date'], rows: [{ a: 'DATE' }], finalQuery: 'as-date' }));
+    const execB = vi.fn(async (): Promise<QueryStream> =>
+      queryResultToStream({ columns: ['a'], types: ['text'], rows: [{ a: 'TEXT' }], finalQuery: 'as-text' }));
+
+    const a = await getCachedResult({ ...base, blobStore: store, execute: execA, parameterTypes: { d: 'date' } });
+    const b = await getCachedResult({ ...base, blobStore: store, execute: execB, parameterTypes: { d: 'text' } });
+
+    expect(a.result.rows).toEqual([{ a: 'DATE' }]);
+    expect(b.result.rows).toEqual([{ a: 'TEXT' }]); // NOT a's cached blob
+    expect(execA).toHaveBeenCalledTimes(1);
+    expect(execB).toHaveBeenCalledTimes(1);
+    const { getModules } = await import('@/lib/modules/registry');
+    const rows = await getModules().db.exec('SELECT cache_key FROM query_cache');
+    expect(rows.rows.length).toBe(2); // two distinct keys
+  });
+
+  it('parameterTypes key is ORDER-INDEPENDENT (same map, different key order → same cache entry)', async () => {
+    const base = { mode: 'org', connectionName: 'bq', query: 'SELECT :a, :b', params: { a: '1', b: '2' }, policy: POLICY };
+    const store = createQueryCacheBlobStore(fakeObjectStore());
+    const { opts: _o, exec } = makeOpts();
+    const shared = { ...base, blobStore: store, execute: exec };
+    await getCachedResult({ ...shared, parameterTypes: { a: 'number', b: 'date' } });
+    const hit = await getCachedResult({ ...shared, parameterTypes: { b: 'date', a: 'number' } });
+    expect(hit.meta.fromCache).toBe(true); // same logical types → one entry
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
+
+  it('DIFFERENT references → DIFFERENT cache key (composed-query collision)', async () => {
+    // Same raw SQL + params but composed against different reference ids → different finalQuery.
+    const base = { mode: 'org', connectionName: 'duckdb', query: 'SELECT * FROM base', params: {}, policy: POLICY };
+    const store = createQueryCacheBlobStore(fakeObjectStore());
+    const execA = vi.fn(async (): Promise<QueryStream> =>
+      queryResultToStream({ columns: ['n'], types: ['number'], rows: [{ n: 5 }], finalQuery: 'via-5' }));
+    const execB = vi.fn(async (): Promise<QueryStream> =>
+      queryResultToStream({ columns: ['n'], types: ['number'], rows: [{ n: 6 }], finalQuery: 'via-6' }));
+
+    const a = await getCachedResult({ ...base, blobStore: store, execute: execA, references: [{ id: 5, alias: 'r' }] });
+    const b = await getCachedResult({ ...base, blobStore: store, execute: execB, references: [{ id: 6, alias: 'r' }] });
+
+    expect(a.result.rows).toEqual([{ n: 5 }]);
+    expect(b.result.rows).toEqual([{ n: 6 }]); // NOT a's blob
+    expect(execA).toHaveBeenCalledTimes(1);
+    expect(execB).toHaveBeenCalledTimes(1);
+  });
+
+  it('no parameterTypes / no references → key unchanged (back-compat, still one entry)', async () => {
+    const { opts, exec } = makeOpts();
+    await getCachedResult(opts);
+    const second = await getCachedResult(opts);
+    expect(second.meta.fromCache).toBe(true);
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
+
+  it('getCachedResultBounded caps rows on a MISS but reports the true total via meta.rowCount', async () => {
+    const bigExec = vi.fn(async (): Promise<QueryStream> => queryResultToStream({
+      columns: ['n'], types: ['number'],
+      rows: Array.from({ length: 500 }, (_, i) => ({ n: i })), finalQuery: 'big',
+    }));
+    const opts = {
+      mode: 'org', connectionName: 'duckdb', query: 'SELECT big', params: {}, policy: POLICY,
+      execute: bigExec, blobStore: createQueryCacheBlobStore(fakeObjectStore()),
+    };
+    const out = await getCachedResultBounded(opts, { maxRows: 10 });
+    expect(out.result.rows.length).toBe(10);   // only 10 materialized
+    expect(out.truncated).toBe(true);
+    // The blob still holds all 500; a normal read proves it, and meta.rowCount is authoritative.
+    const full = await getCachedResult(opts);
+    expect(full.result.rows.length).toBe(500);
+    expect(full.meta.rowCount).toBe(500);
+  });
+
+  it('getCachedResultBounded caps rows on a cache HIT (bounded blob read) with true total in meta', async () => {
+    const bigExec = vi.fn(async (): Promise<QueryStream> => queryResultToStream({
+      columns: ['n'], types: ['number'],
+      rows: Array.from({ length: 300 }, (_, i) => ({ n: i })), finalQuery: 'big',
+    }));
+    const opts = {
+      mode: 'org', connectionName: 'duckdb', query: 'SELECT hit', params: {}, policy: POLICY,
+      execute: bigExec, blobStore: createQueryCacheBlobStore(fakeObjectStore()),
+    };
+    await getCachedResult(opts);                 // populate the blob (300 rows)
+    const bounded = await getCachedResultBounded(opts, { maxRows: 5 });
+    expect(bounded.meta.fromCache).toBe(true);
+    expect(bounded.result.rows.length).toBe(5);  // bounded blob read
+    expect(bounded.truncated).toBe(true);
+    expect(bounded.meta.rowCount).toBe(300);     // authoritative full total from the cache row
+    expect(bigExec).toHaveBeenCalledTimes(1);    // hit — no re-execute
+  });
+
+  it('getCachedResultBounded returns everything untruncated when under budget', async () => {
+    const { opts } = makeOpts(); // 1 row
+    const out = await getCachedResultBounded(opts, { maxRows: 100, maxBytes: 1_000_000 });
+    expect(out.result.rows).toEqual([{ n: 1 }]);
+    expect(out.truncated).toBe(false);
+  });
+
+  it('sweepExpiredBlobs deletes expired cache rows AND their orphaned blobs', async () => {
+    const store = createQueryCacheBlobStore(fakeObjectStore());
+    const opts = { mode: 'org', connectionName: 'duckdb', query: 'SELECT sweep', params: {}, policy: POLICY, execute: makeOpts().exec, blobStore: store };
+    await getCachedResult(opts);            // populate a blob
+    const key = await onlyKey();
+    const row = (await import('../store.server')).getCacheRow;
+    const blobRef = (await row(key))!.blobRef!;
+    expect(await store.getResult(blobRef)).not.toBeNull(); // blob exists
+
+    await age(key, { revalidateAt: 1, expireAt: 2 }); // hard-expired
+    const deleted = await sweepExpiredBlobs(store, Date.now());
+    expect(deleted).toContain(blobRef);
+    expect(await store.getResult(blobRef)).toBeNull();     // blob gone
+    const { getModules } = await import('@/lib/modules/registry');
+    const rows = await getModules().db.exec('SELECT cache_key FROM query_cache WHERE cache_key = $1', [key]);
+    expect(rows.rows.length).toBe(0);                       // row gone
+  });
+
+  it('maybeSweepExpired runs once then is throttled until the interval passes', async () => {
+    _resetSweepThrottleForTest();
+    const store = createQueryCacheBlobStore(fakeObjectStore());
+    let sweeps = 0;
+    const nowRef = { t: 1_000_000 };
+    const run = () => maybeSweepExpired(store, nowRef.t, () => { sweeps++; return Promise.resolve([]); });
+    await run(); await run(); await run();       // three calls, same instant
+    expect(sweeps).toBe(1);                        // throttled to one
+    nowRef.t += 11 * 60_000;                       // past the 10-min interval
+    await run();
+    expect(sweeps).toBe(2);                        // fires again
   });
 
   it('getCachedJsonlStream returns a JSONL body that decodes to the result', async () => {
