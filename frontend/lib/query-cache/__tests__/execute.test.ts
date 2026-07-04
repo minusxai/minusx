@@ -154,6 +154,65 @@ describe('executeQueryCached (SWR orchestration)', () => {
     expect(b.result.rows).toEqual([{ n: 1 }]);
   });
 
+  it('DIFFERENT parameterTypes → DIFFERENT cache key (no wrong-typed blob collision)', async () => {
+    // Same value "2024-01-01" but declared date vs text binds differently at the warehouse
+    // (BigQuery DATE vs STRING) → different result. They must not share a blob.
+    const base = { mode: 'org', connectionName: 'bq', query: 'SELECT :d', params: { d: '2024-01-01' }, policy: POLICY };
+    const store = createQueryCacheBlobStore(fakeObjectStore());
+    const execA = vi.fn(async (): Promise<QueryStream> =>
+      queryResultToStream({ columns: ['a'], types: ['date'], rows: [{ a: 'DATE' }], finalQuery: 'as-date' }));
+    const execB = vi.fn(async (): Promise<QueryStream> =>
+      queryResultToStream({ columns: ['a'], types: ['text'], rows: [{ a: 'TEXT' }], finalQuery: 'as-text' }));
+
+    const a = await getCachedResult({ ...base, blobStore: store, execute: execA, parameterTypes: { d: 'date' } });
+    const b = await getCachedResult({ ...base, blobStore: store, execute: execB, parameterTypes: { d: 'text' } });
+
+    expect(a.result.rows).toEqual([{ a: 'DATE' }]);
+    expect(b.result.rows).toEqual([{ a: 'TEXT' }]); // NOT a's cached blob
+    expect(execA).toHaveBeenCalledTimes(1);
+    expect(execB).toHaveBeenCalledTimes(1);
+    const { getModules } = await import('@/lib/modules/registry');
+    const rows = await getModules().db.exec('SELECT cache_key FROM query_cache');
+    expect(rows.rows.length).toBe(2); // two distinct keys
+  });
+
+  it('parameterTypes key is ORDER-INDEPENDENT (same map, different key order → same cache entry)', async () => {
+    const base = { mode: 'org', connectionName: 'bq', query: 'SELECT :a, :b', params: { a: '1', b: '2' }, policy: POLICY };
+    const store = createQueryCacheBlobStore(fakeObjectStore());
+    const { opts: _o, exec } = makeOpts();
+    const shared = { ...base, blobStore: store, execute: exec };
+    await getCachedResult({ ...shared, parameterTypes: { a: 'number', b: 'date' } });
+    const hit = await getCachedResult({ ...shared, parameterTypes: { b: 'date', a: 'number' } });
+    expect(hit.meta.fromCache).toBe(true); // same logical types → one entry
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
+
+  it('DIFFERENT references → DIFFERENT cache key (composed-query collision)', async () => {
+    // Same raw SQL + params but composed against different reference ids → different finalQuery.
+    const base = { mode: 'org', connectionName: 'duckdb', query: 'SELECT * FROM base', params: {}, policy: POLICY };
+    const store = createQueryCacheBlobStore(fakeObjectStore());
+    const execA = vi.fn(async (): Promise<QueryStream> =>
+      queryResultToStream({ columns: ['n'], types: ['number'], rows: [{ n: 5 }], finalQuery: 'via-5' }));
+    const execB = vi.fn(async (): Promise<QueryStream> =>
+      queryResultToStream({ columns: ['n'], types: ['number'], rows: [{ n: 6 }], finalQuery: 'via-6' }));
+
+    const a = await getCachedResult({ ...base, blobStore: store, execute: execA, references: [{ id: 5, alias: 'r' }] });
+    const b = await getCachedResult({ ...base, blobStore: store, execute: execB, references: [{ id: 6, alias: 'r' }] });
+
+    expect(a.result.rows).toEqual([{ n: 5 }]);
+    expect(b.result.rows).toEqual([{ n: 6 }]); // NOT a's blob
+    expect(execA).toHaveBeenCalledTimes(1);
+    expect(execB).toHaveBeenCalledTimes(1);
+  });
+
+  it('no parameterTypes / no references → key unchanged (back-compat, still one entry)', async () => {
+    const { opts, exec } = makeOpts();
+    await getCachedResult(opts);
+    const second = await getCachedResult(opts);
+    expect(second.meta.fromCache).toBe(true);
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
+
   it('getCachedJsonlStream returns a JSONL body that decodes to the result', async () => {
     const { opts } = makeOpts();
     const { stream, meta } = await getCachedJsonlStream(opts);

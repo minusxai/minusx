@@ -20,7 +20,8 @@
 import 'server-only';
 import type { Readable } from 'stream';
 import { drainQueryStream, type QueryResult, type QueryStream } from '@/lib/connections/base';
-import { getQueryHash } from '@/lib/utils/query-hash';
+import { getQueryHash, hashContent } from '@/lib/utils/query-hash';
+import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { createQueryCacheBlobStore, blobRefForKey } from './blob-store';
 import { resultToJsonlStream, queryStreamToJsonl } from './jsonl-stream.server';
 import { classifyCacheRow } from './swr';
@@ -38,6 +39,18 @@ export interface CachedExec {
   policy: CachePolicy;
   /** Runs the actual query and returns a STREAMING result (runQueryStream). */
   execute: () => Promise<QueryStream>;
+  /**
+   * Declared param TYPES ('text'|'number'|'date'). They change how the SAME param value binds at
+   * the warehouse (BigQuery DATE vs STRING) → different result. Folded into the cache key so a
+   * differently-typed request can't read a wrong-typed blob. Order-independent.
+   */
+  parameterTypes?: Record<string, string>;
+  /**
+   * Composed-query references ({id, alias}). The route CTE-composes these into a different final
+   * SQL, so two requests with identical raw SQL+params but different refs must not share a blob.
+   * Keyed by id+alias in order (order affects the composed SQL).
+   */
+  references?: Array<{ id: number; alias?: string }>;
   /**
    * Force a fresh execution that refreshes the cache, bypassing the fresh/stale
    * serve (the "Run query" button). Still lease-guarded, so concurrent forced
@@ -63,7 +76,19 @@ const WAIT_TIMEOUT_MS = 30_000;
 const MAX_LEASE_ATTEMPTS = 3;
 
 function cacheKey(opts: CachedExec): string {
-  return `${opts.mode}:${getQueryHash(opts.query, opts.params, opts.connectionName)}`;
+  const base = `${opts.mode}:${getQueryHash(opts.query, opts.params, opts.connectionName)}`;
+  // Fold in the facets getQueryHash omits but that change the executed SQL/result. Omit the suffix
+  // entirely when neither is present so existing keys are unchanged (back-compat, no needless
+  // cold cache for the common no-refs/no-types case). parameterTypes canonicalized (key-sorted)
+  // so map order doesn't fork the key; references kept in order (order affects composition).
+  const hasTypes = opts.parameterTypes && Object.keys(opts.parameterTypes).length > 0;
+  const hasRefs = opts.references && opts.references.length > 0;
+  if (!hasTypes && !hasRefs) return base;
+  const extra = hashContent({
+    t: hasTypes ? sortObjectKeysDeep(opts.parameterTypes) : null,
+    r: hasRefs ? opts.references!.map((r) => [r.id, r.alias ?? null]) : null,
+  });
+  return `${base}:${extra}`;
 }
 
 function store(opts: CachedExec): QueryCacheBlobStore {
