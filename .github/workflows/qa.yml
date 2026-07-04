@@ -77,6 +77,13 @@ jobs:
           GIT_COMMIT_SHA: ${{ github.sha }}
           NEXT_DIST_DIR: .next-qa
           NODE_OPTIONS: '--max-old-space-size=8192'
+          # Skip the in-build tsc/eslint passes — the `validate` job gates types+lint.
+          NEXT_SKIP_TYPECHECK: 'true'
+          # Required at build time: "Collecting page data" executes the auth route
+          # modules and lib/config.ts throws if NEXTAUTH_SECRET is unset. (Sessions
+          # are signed at runtime with the flows step's own value; this just needs
+          # to be non-empty for the build.)
+          NEXTAUTH_SECRET: qa-ci-secret-not-used-in-prod-0000000000000000=
         run: npx next build --turbopack
 
       # `next start` uses .next-qa/server + static + manifests only — it does NOT read
@@ -87,9 +94,9 @@ jobs:
         with:
           name: qa-next-build
           path: |
-            ./frontend/.next-qa
-            !./frontend/.next-qa/standalone
-            !./frontend/.next-qa/cache
+            ./frontend/.next-qa/**
+            !./frontend/.next-qa/standalone/**
+            !./frontend/.next-qa/cache/**
           retention-days: 1
           include-hidden-files: true
           compression-level: 1

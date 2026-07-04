@@ -81,6 +81,11 @@ jobs:
           NEXT_DIST_DIR: .next-e2e
           NEXT_PUBLIC_E2E: 'true'
           NODE_OPTIONS: '--max-old-space-size=8192'
+          # Skip the in-build tsc/eslint passes — the `validate` job gates types+lint.
+          NEXT_SKIP_TYPECHECK: 'true'
+          # Required at build time: "Collecting page data" executes the auth route
+          # modules and lib/config.ts throws if NEXTAUTH_SECRET is unset.
+          NEXTAUTH_SECRET: e2e-ci-secret-not-used-in-prod-000000000000000=
         run: npx next build --turbopack
 
       - name: Run Playwright E2E
