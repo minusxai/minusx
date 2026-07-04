@@ -8,7 +8,15 @@ vi.mock('@/lib/database/db-config', () => ({
 }));
 
 const { mockRunQuery } = vi.hoisted(() => ({ mockRunQuery: vi.fn() }));
-vi.mock('@/lib/connections/run-query', () => ({ runQuery: mockRunQuery }));
+// ExecuteQuery streams into the durable cache now — expose runQueryStream over the mock so the REAL
+// cache (write-through + bounded read) is exercised end-to-end; the connector = mockRunQuery.
+vi.mock('@/lib/connections/run-query', async () => {
+  const { queryResultToStream } = await import('@/lib/connections/base');
+  return {
+    runQuery: mockRunQuery,
+    runQueryStream: async (...args: unknown[]) => queryResultToStream(await mockRunQuery(...args)),
+  };
+});
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Orchestrator } from '@/orchestrator/orchestrator';

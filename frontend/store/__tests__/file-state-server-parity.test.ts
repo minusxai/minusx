@@ -79,25 +79,24 @@ vi.mock('@/store/store', () => ({
 // ---------------------------------------------------------------------------
 // Mock: runQuery (single chokepoint for SQL execution).
 // ---------------------------------------------------------------------------
-const { mockRunQuery } = vi.hoisted(() => ({
-  mockRunQuery: vi.fn(async (
-    _db: string,
-    query: string,
-    _params?: Record<string, string | number>,
-    _user?: unknown,
+const { mockRunQuery, mockRunQueryBounded } = vi.hoisted(() => {
+  const echo = (
+    _db: string, query: string, _params?: Record<string, string | number>, _user?: unknown,
   ) => ({
-    columns: ['month', 'total'],
-    types: ['TEXT', 'INTEGER'],
-    rows: [
-      { month: 'Jan', total: 1000 },
-      { month: 'Feb', total: 1500 },
-    ],
-    finalQuery: query,
-  })),
-}));
+    columns: ['month', 'total'], types: ['TEXT', 'INTEGER'],
+    rows: [{ month: 'Jan', total: 1000 }, { month: 'Feb', total: 1500 }],
+    finalQuery: query, truncated: false,
+  });
+  return {
+    mockRunQuery: vi.fn(async (d: string, q: string, p?: Record<string, string | number>, u?: unknown) => echo(d, q, p, u)),
+    // readFilesServer executes via runQueryBounded now.
+    mockRunQueryBounded: vi.fn(async (d: string, q: string, p?: Record<string, string | number>, u?: unknown) => echo(d, q, p, u)),
+  };
+});
 
 vi.mock('@/lib/connections/run-query', () => ({
   runQuery: mockRunQuery,
+  runQueryBounded: mockRunQueryBounded,
 }));
 
 // ---------------------------------------------------------------------------
@@ -361,16 +360,16 @@ describe('Client-Server File State Parity', () => {
     expect(server[0]).toEqual(client); // parity
 
     // And executing the query keys the result under the SAME canonical id, so it attaches.
-    mockRunQuery.mockClear();
+    mockRunQueryBounded.mockClear();
     const withQueries = await readFilesServer([unsetNumParamQuestionId], testUser, { executeQueries: true });
     expect(withQueries[0].queryResults).toHaveLength(1);
     expect(withQueries[0].queryResults[0].id).toEqual(canonicalHash);
     expect(withQueries[0].queryResults[0].id).toEqual(withQueries[0].fileState.queryResultId);
-    // The None param must be resolved BEFORE the connector runs — the SQL handed to runQuery must
-    // not still contain an unbound `:min_mrr` (which would be a SQL error), and the bound params
+    // The None param must be resolved BEFORE the connector runs — the SQL handed to the connector
+    // must not still contain an unbound `:min_mrr` (which would be a SQL error), and the bound params
     // must not include min_mrr. (applyNoneParams removed the filter / substituted NULL.)
-    expect(mockRunQuery).toHaveBeenCalledTimes(1);
-    const [, executedSql, boundParams] = mockRunQuery.mock.calls[0];
+    expect(mockRunQueryBounded).toHaveBeenCalledTimes(1);
+    const [, executedSql, boundParams] = mockRunQueryBounded.mock.calls[0];
     expect(executedSql).not.toMatch(/:min_mrr\b/);
     expect(boundParams).not.toHaveProperty('min_mrr');
   });

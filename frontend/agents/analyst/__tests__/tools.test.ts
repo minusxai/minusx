@@ -14,9 +14,26 @@ const { mockLoadSchema, mockRunQuery } = vi.hoisted(() => ({
 vi.mock('@/lib/connections/load-schema', () => ({
   loadConnectionSchema: mockLoadSchema,
 }));
-vi.mock('@/lib/connections/run-query', () => ({
-  runQuery: mockRunQuery,
-}));
+// ExecuteQuery now streams (runQueryStream) and reads BOUNDED through the durable cache
+// (getCachedResultBounded). Keep the tests driving rows via mockRunQuery: expose runQueryStream as
+// a one-shot stream over its result, and stub the cache to just run the execute thunk + bounded-drain
+// it with the REAL primitive (so truncation/compression behavior is exercised, no blob store needed).
+vi.mock('@/lib/connections/run-query', async () => {
+  const { queryResultToStream } = await import('@/lib/connections/base');
+  return {
+    runQuery: mockRunQuery,
+    runQueryStream: async (...args: unknown[]) => queryResultToStream(await mockRunQuery(...args)),
+  };
+});
+vi.mock('@/lib/query-cache/execute.server', async () => {
+  const { drainQueryStreamBounded } = await import('@/lib/connections/base');
+  return {
+    getCachedResultBounded: async (opts: { execute: () => Promise<any> }, budget: any) => {
+      const result = await drainQueryStreamBounded(await opts.execute(), budget);
+      return { result, truncated: result.truncated, meta: { rowCount: result.rows.length, colCount: result.columns.length, fromCache: false, cachedAt: 0, finalQuery: result.finalQuery } };
+    },
+  };
+});
 
 // Production tools route via `loadConnectionSchema(name, user)` /
 // `runQuery(name, sql, params, user)` — both require an EffectiveUser on

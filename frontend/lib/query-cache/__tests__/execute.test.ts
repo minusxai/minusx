@@ -8,7 +8,7 @@ vi.mock('@/lib/database/db-config', () => ({
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
-import { getCachedResult, getCachedJsonlStream } from '../execute.server';
+import { getCachedResult, getCachedJsonlStream, getCachedResultBounded } from '../execute.server';
 import { createQueryCacheBlobStore } from '../blob-store';
 import { decodeJsonl } from '../jsonl';
 import type { ObjectStore } from '@/lib/object-store';
@@ -211,6 +211,49 @@ describe('executeQueryCached (SWR orchestration)', () => {
     const second = await getCachedResult(opts);
     expect(second.meta.fromCache).toBe(true);
     expect(exec).toHaveBeenCalledTimes(1);
+  });
+
+  it('getCachedResultBounded caps rows on a MISS but reports the true total via meta.rowCount', async () => {
+    const bigExec = vi.fn(async (): Promise<QueryStream> => queryResultToStream({
+      columns: ['n'], types: ['number'],
+      rows: Array.from({ length: 500 }, (_, i) => ({ n: i })), finalQuery: 'big',
+    }));
+    const opts = {
+      mode: 'org', connectionName: 'duckdb', query: 'SELECT big', params: {}, policy: POLICY,
+      execute: bigExec, blobStore: createQueryCacheBlobStore(fakeObjectStore()),
+    };
+    const out = await getCachedResultBounded(opts, { maxRows: 10 });
+    expect(out.result.rows.length).toBe(10);   // only 10 materialized
+    expect(out.truncated).toBe(true);
+    // The blob still holds all 500; a normal read proves it, and meta.rowCount is authoritative.
+    const full = await getCachedResult(opts);
+    expect(full.result.rows.length).toBe(500);
+    expect(full.meta.rowCount).toBe(500);
+  });
+
+  it('getCachedResultBounded caps rows on a cache HIT (bounded blob read) with true total in meta', async () => {
+    const bigExec = vi.fn(async (): Promise<QueryStream> => queryResultToStream({
+      columns: ['n'], types: ['number'],
+      rows: Array.from({ length: 300 }, (_, i) => ({ n: i })), finalQuery: 'big',
+    }));
+    const opts = {
+      mode: 'org', connectionName: 'duckdb', query: 'SELECT hit', params: {}, policy: POLICY,
+      execute: bigExec, blobStore: createQueryCacheBlobStore(fakeObjectStore()),
+    };
+    await getCachedResult(opts);                 // populate the blob (300 rows)
+    const bounded = await getCachedResultBounded(opts, { maxRows: 5 });
+    expect(bounded.meta.fromCache).toBe(true);
+    expect(bounded.result.rows.length).toBe(5);  // bounded blob read
+    expect(bounded.truncated).toBe(true);
+    expect(bounded.meta.rowCount).toBe(300);     // authoritative full total from the cache row
+    expect(bigExec).toHaveBeenCalledTimes(1);    // hit — no re-execute
+  });
+
+  it('getCachedResultBounded returns everything untruncated when under budget', async () => {
+    const { opts } = makeOpts(); // 1 row
+    const out = await getCachedResultBounded(opts, { maxRows: 100, maxBytes: 1_000_000 });
+    expect(out.result.rows).toEqual([{ n: 1 }]);
+    expect(out.truncated).toBe(false);
   });
 
   it('getCachedJsonlStream returns a JSONL body that decodes to the result', async () => {

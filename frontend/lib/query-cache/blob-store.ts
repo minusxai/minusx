@@ -11,7 +11,9 @@ import { createGzip, createGunzip } from 'zlib';
 import { createObjectStore, type ObjectStore } from '@/lib/object-store';
 import type { QueryCacheBlobStore } from './types';
 import { decodeJsonl } from './jsonl';
-import type { QueryResult } from '@/lib/connections/base';
+import type { JsonlHeader } from './types';
+import type { QueryResult, BoundedDrainOptions, BoundedQueryResult } from '@/lib/connections/base';
+import { createInterface } from 'readline';
 
 const CONTENT_TYPE = 'application/gzip';
 
@@ -49,9 +51,50 @@ class ObjectStoreBlobStore implements QueryCacheBlobStore {
     return decodeJsonl(Buffer.concat(chunks).toString('utf8'));
   }
 
+  async getResultBounded(ref: string, opts: BoundedDrainOptions = {}): Promise<BoundedQueryResult | null> {
+    const stream = await this.getStream(ref);
+    if (!stream) return null;
+    return decodeGunzippedJsonlBounded(stream, opts);
+  }
+
   async delete(ref: string): Promise<void> {
     await this.store.delete(ref);
   }
+}
+
+/**
+ * Decode a gunzipped-JSONL stream line-by-line, stopping once a row/byte budget is hit — so a cache
+ * HIT is bounded in RAM exactly like a bounded fresh drain (no `Buffer.concat` of the whole blob).
+ * The header (line 1) carries the authoritative full rowCount, so `truncated` is exact here.
+ */
+async function decodeGunzippedJsonlBounded(
+  stream: Readable,
+  { maxRows = Infinity, maxBytes = Infinity }: BoundedDrainOptions,
+): Promise<BoundedQueryResult> {
+  const rl = createInterface({ input: stream, crlfDelay: Infinity });
+  let header: JsonlHeader | null = null;
+  const rows: Record<string, unknown>[] = [];
+  let bytes = 0;
+  let sourceRowLines = 0;
+  try {
+    for await (const line of rl) {
+      if (!line) continue;
+      if (header === null) { header = JSON.parse(line) as JsonlHeader; continue; }
+      sourceRowLines++;
+      if (rows.length >= maxRows || bytes >= maxBytes) continue; // keep counting source rows, stop collecting
+      bytes += Buffer.byteLength(line, 'utf8');
+      rows.push(JSON.parse(line) as Record<string, unknown>);
+    }
+  } finally {
+    rl.close();
+    stream.destroy(); // stop pulling the object-store body once we've read enough
+  }
+  if (!header) throw new Error('decodeGunzippedJsonlBounded: empty blob (no header line)');
+  const total = header.rowCount ?? sourceRowLines;
+  return {
+    columns: header.columns, types: header.types, finalQuery: header.finalQuery,
+    rows, truncated: total > rows.length,
+  };
 }
 
 /** Object-store key for a cache blob. Flat namespace keyed by the cache key hash. */

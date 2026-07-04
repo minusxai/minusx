@@ -6,9 +6,28 @@ import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { connectionTypeToDialect } from '@/lib/types';
 import { QUERY_SERVER_TIMEOUT_MS } from '@/lib/config';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { drainQueryStream, queryResultToStream, type QueryResult, type QueryStream } from './base';
+import { drainQueryStream, drainQueryStreamBounded, queryResultToStream, type QueryResult, type QueryStream, type BoundedDrainOptions, type BoundedQueryResult } from './base';
 
 export type { QueryResult, QueryStream };
+
+/** Race a materialization against the server wall-clock bound (shared by runQuery + runQueryBounded). */
+function withServerTimeout<T>(work: Promise<T>): Promise<T> {
+  if (QUERY_SERVER_TIMEOUT_MS <= 0) return work;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(
+        `Query timed out after ${Math.round(QUERY_SERVER_TIMEOUT_MS / 1000)}s (server bound; tune via QUERY_SERVER_TIMEOUT_MS). `
+        + 'The query may still be running on the warehouse.',
+      )),
+      QUERY_SERVER_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([work, deadline]).finally(() => {
+    clearTimeout(timer);
+    work.catch(() => { /* abandoned after timeout — swallow so it never surfaces as unhandled */ });
+  });
+}
 
 /**
  * Execute a SQL query against a named connection.
@@ -37,24 +56,24 @@ export async function runQuery(
   // browser's 120s guard can't protect. A stuck warehouse query otherwise hangs them all
   // indefinitely. The connector's work is abandoned, not cancelled (connectors lack a uniform
   // cancel API) — the point is unblocking the caller and its semaphore/turn.
-  const work = (async () => drainQueryStream(await runQueryStream(databaseName, query, params, user)))();
-  if (QUERY_SERVER_TIMEOUT_MS <= 0) return work;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(
-        `Query timed out after ${Math.round(QUERY_SERVER_TIMEOUT_MS / 1000)}s (server bound; tune via QUERY_SERVER_TIMEOUT_MS). `
-        + 'The query may still be running on the warehouse.',
-      )),
-      QUERY_SERVER_TIMEOUT_MS,
-    );
-  });
-  try {
-    return await Promise.race([work, deadline]);
-  } finally {
-    clearTimeout(timer);
-    work.catch(() => { /* abandoned after timeout — swallow so it never surfaces as unhandled */ });
-  }
+  return withServerTimeout((async () => drainQueryStream(await runQueryStream(databaseName, query, params, user)))());
+}
+
+/**
+ * Like {@link runQuery} but materializes only up to a row/byte budget, then stops pulling (the
+ * pull-based stream stops the connector cursor too). For agent/file-read consumers that truncate to
+ * a character budget anyway — bounds peak RAM to the budget instead of the full (or uncapped) result,
+ * which is what makes reading a many-question dashboard safe. Same connection resolution, row cap,
+ * and wall-clock timeout as runQuery.
+ */
+export async function runQueryBounded(
+  databaseName: string,
+  query: string,
+  params: Record<string, string | number>,
+  user: EffectiveUser,
+  budget: BoundedDrainOptions,
+): Promise<BoundedQueryResult> {
+  return withServerTimeout((async () => drainQueryStreamBounded(await runQueryStream(databaseName, query, params, user), budget))());
 }
 
 /**

@@ -35,6 +35,17 @@ export const APP_STATE_LIMIT_CHARS    = 2_000;    // Always-on context — keep 
 export const TOOL_DEFAULT_LIMIT_CHARS = 10_000;   // ReadFiles / ExecuteQuery default
 export const TOOL_MAX_LIMIT_CHARS     = 100_000;  // Hard ceiling agents can request
 
+/**
+ * RAM budget for a bounded agent drain (drainQueryStreamBounded). The agent's row data is truncated
+ * to a CHARACTER budget downstream (compressQueryResult, ≤ TOOL_MAX_LIMIT_CHARS = 100k), so we only
+ * ever need enough rows to fill that. Bounding at ~2 MB (≈ 20× the max char budget, generous for
+ * JSON-vs-markdown expansion) guarantees we never under-fill the text while capping peak RAM per
+ * result — so reading a many-question dashboard is N × 2 MB, not N × (full or uncapped) result.
+ * A chart rendered from the bounded rows is unaffected in practice (the warehouse row cap already
+ * bounds it, and a chart of >this-many points is not meaningful). */
+export const AGENT_DRAIN_MAX_BYTES = 2_000_000;
+export const AGENT_DRAIN_MAX_ROWS  = 10_000;      // secondary ceiling = the warehouse MAX_LIMIT
+
 // ---------------------------------------------------------------------------
 // DbFile → FileState
 // ---------------------------------------------------------------------------
@@ -96,7 +107,7 @@ function mdTableCell(value: string): string {
     .replace(/\r?\n|\r/g, ' ');
 }
 
-export function compressQueryResult(qr: QueryResult & { error?: string }, maxChars = LIMIT_CHARS): CompressedQueryResult {
+export function compressQueryResult(qr: QueryResult & { error?: string; truncated?: boolean }, maxChars = LIMIT_CHARS): CompressedQueryResult {
   if ((qr as any).error) {
     return { columns: [], types: [], data: '', totalRows: 0, shownRows: 0, truncated: false, id: qr.id, error: (qr as any).error, finalQuery: qr.finalQuery };
   }
@@ -107,7 +118,10 @@ export function compressQueryResult(qr: QueryResult & { error?: string }, maxCha
   const sep    = `| ${columns.map(() => '---').join(' | ')} |`;
   let md = `${header}\n${sep}\n`;
 
-  let truncated = false;
+  // Carry through a row/byte bound applied upstream (drainQueryStreamBounded): the rows we hold are
+  // already a prefix of a larger result, so the agent must know it's clipped even if the char budget
+  // isn't hit here.
+  let truncated = qr.truncated === true;
   let shownRows = 0;
   for (const row of rows) {
     const line = `| ${columns.map(c => mdTableCell(String(row[c] ?? ''))).join(' | ')} |\n`;

@@ -86,6 +86,43 @@ export async function drainQueryStream(stream: QueryStream): Promise<QueryResult
   return { columns: stream.columns, types: stream.types, finalQuery: stream.finalQuery, rows };
 }
 
+export interface BoundedDrainOptions {
+  /** Stop after this many rows (secondary ceiling). */
+  maxRows?: number;
+  /** Stop once accumulated row JSON reaches this many bytes (primary RAM bound). */
+  maxBytes?: number;
+}
+
+export type BoundedQueryResult = QueryResult & {
+  /** True when the source had MORE rows than were drained (budget hit). */
+  truncated: boolean;
+};
+
+/**
+ * Drain only until a row/byte budget is hit, then STOP pulling. Because the stream is pull-based
+ * with backpressure, stopping here also stops the connector cursor — so peak server RAM is bounded
+ * by the budget regardless of how many rows the query would produce. For agent/text consumers that
+ * truncate to a character budget anyway: keeping the whole result in RAM to then throw most of it
+ * away is wasteful and an OOM risk on a huge/uncapped result. `truncated` tells the caller the set
+ * was clipped (exact total is unknown without a full drain — read it from the cache row when cached).
+ */
+export async function drainQueryStreamBounded(
+  stream: QueryStream,
+  { maxRows = Infinity, maxBytes = Infinity }: BoundedDrainOptions = {},
+): Promise<BoundedQueryResult> {
+  const rows: Record<string, unknown>[] = [];
+  let bytes = 0;
+  let truncated = false;
+  for await (const row of stream.rows) {
+    if (rows.length >= maxRows) { truncated = true; break; }
+    // Measure this row's JSON size; stop BEFORE exceeding the byte budget (but always keep ≥1 row).
+    bytes += Buffer.byteLength(JSON.stringify(row), 'utf8');
+    rows.push(row);
+    if (bytes >= maxBytes) { truncated = true; break; }
+  }
+  return { columns: stream.columns, types: stream.types, finalQuery: stream.finalQuery, rows, truncated };
+}
+
 /** Wrap a materialized QueryResult as a one-shot QueryStream (the base-class fallback for unconverted connectors). */
 export function queryResultToStream(result: QueryResult): QueryStream {
   async function* gen(): AsyncGenerator<Record<string, unknown>> {

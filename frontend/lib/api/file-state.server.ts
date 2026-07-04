@@ -8,13 +8,15 @@
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
-import { runQuery } from '@/lib/connections/run-query';
+import { runQueryBounded } from '@/lib/connections/run-query';
 import { applyNoneParams } from '@/lib/sql/none-params';
 import { connectionTypeToDialect } from '@/lib/types';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import {
   compressAugmentedFile,
   dbFileToFileState,
+  AGENT_DRAIN_MAX_BYTES,
+  AGENT_DRAIN_MAX_ROWS,
 } from '@/lib/api/compress-augmented';
 import {
   getRootParamsFromContent,
@@ -160,7 +162,9 @@ async function getQueryResultImpl(
   }
 
   const id = getQueryHash(query, queryParams, database);
-  const result = await runQuery(database, query, paramRecord, user);
+  // Bounded drain: the agent truncates row data to a char budget, so cap RAM at the byte budget
+  // rather than materializing the full (or uncapped) result. `truncated` rides along for the LLM.
+  const result = await runQueryBounded(database, query, paramRecord, user, { maxBytes: AGENT_DRAIN_MAX_BYTES, maxRows: AGENT_DRAIN_MAX_ROWS });
   return { ...result, id };
 }
 
@@ -202,7 +206,8 @@ async function executeQueriesForFile(
     }
     try {
       const { sql, params: execParams } = await applyNoneParams(query, paramsForNone, await getDialect(connectionName));
-      const result = await runQuery(connectionName, sql, execParams, user);
+      // Bounded: many-question file reads accumulate N results — cap each so peak RAM is N × budget.
+      const result = await runQueryBounded(connectionName, sql, execParams, user, { maxBytes: AGENT_DRAIN_MAX_BYTES, maxRows: AGENT_DRAIN_MAX_ROWS });
       results.push({ ...result, id });
     } catch (err) {
       results.push({

@@ -12,7 +12,7 @@
  *     Modeled by {@link QueryCacheBlobStore}.
  */
 import type { Readable } from 'stream';
-import type { QueryResult } from '@/lib/connections/base';
+import type { QueryResult, BoundedDrainOptions, BoundedQueryResult } from '@/lib/connections/base';
 
 /**
  * Per-file cache windows. Stored on `QuestionContent.cachePolicy` and copied
@@ -82,6 +82,8 @@ export interface QueryCacheBlobStore {
   getStream(ref: string): Promise<Readable | null>;
   /** Convenience: fully read + decode a blob into a QueryResult (used by tests / small reads). */
   getResult(ref: string): Promise<QueryResult | null>;
+  /** Read + decode only up to a row/byte budget, stopping early (agent reads — bounds RAM). */
+  getResultBounded(ref: string, opts?: BoundedDrainOptions): Promise<BoundedQueryResult | null>;
   delete(ref: string): Promise<void>;
 }
 

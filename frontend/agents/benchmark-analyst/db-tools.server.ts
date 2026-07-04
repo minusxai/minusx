@@ -10,10 +10,10 @@ import 'server-only';
 import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
-import { runQuery } from '@/lib/connections/run-query';
-import { queryResultToStream } from '@/lib/connections/base';
-import { getCachedResult } from '@/lib/query-cache/execute.server';
+import { runQueryStream } from '@/lib/connections/run-query';
+import { getCachedResultBounded } from '@/lib/query-cache/execute.server';
 import { resolveCachePolicy } from '@/lib/query-cache/policy.server';
+import { AGENT_DRAIN_MAX_BYTES, AGENT_DRAIN_MAX_ROWS } from '@/lib/api/compress-augmented';
 import { loadConnectionSchema } from '@/lib/connections/load-schema';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { QueryResult, SchemaEntry } from '@/lib/connections/base';
@@ -70,17 +70,20 @@ export class ExecuteQuery extends BaseExecuteQuery {
     // Route through the SHARED durable cache (arch doc §5): an agent query and a
     // UI query of the same SQL+params in the same mode hit one blob + SWR. The
     // cache is best-effort, so a DB/blob hiccup degrades to direct execution.
-    const { result } = await getCachedResult({
+    //
+    // Read the result BOUNDED: the agent truncates row data to a character budget anyway, so we
+    // only materialize enough rows to fill it (peak RAM = AGENT_DRAIN_MAX_BYTES, not the full
+    // result). The blob still holds/streams the FULL set, and meta.rowCount is the true total.
+    const { result } = await getCachedResultBounded({
       mode: user.mode,
       connectionName: connectionId,
       query,
       params: params as Record<string, string | number | null>,
       policy: resolveCachePolicy(null),
-      // The agent fundamentally materializes (LLM needs finite text/chart), so it
-      // uses runQuery and wraps it as a one-shot stream for the executor. The
-      // streaming write-through still avoids a second server-side copy.
-      execute: async () => queryResultToStream(await runQuery(connectionId, query, params, user)),
-    });
+      // The execute thunk streams; the write-through avoids a second server-side copy. Its own
+      // (uncached-degrade) drain is bounded inside getCachedResultBounded.
+      execute: async () => runQueryStream(connectionId, query, params, user),
+    }, { maxBytes: AGENT_DRAIN_MAX_BYTES, maxRows: AGENT_DRAIN_MAX_ROWS });
     return result;
   }
 

@@ -19,7 +19,7 @@
  */
 import 'server-only';
 import type { Readable } from 'stream';
-import { drainQueryStream, type QueryResult, type QueryStream } from '@/lib/connections/base';
+import { drainQueryStream, drainQueryStreamBounded, type QueryResult, type QueryStream, type BoundedDrainOptions } from '@/lib/connections/base';
 import { getQueryHash, hashContent } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { createQueryCacheBlobStore, blobRefForKey } from './blob-store';
@@ -121,6 +121,37 @@ export async function getCachedResult(opts: CachedExec): Promise<{ result: Query
   // Blob vanished between index read and blob read → execute fresh (materialized).
   const fresh = await drainQueryStream(await opts.execute());
   return { result: fresh, meta: metaOf(fresh, false, nowOf(opts)) };
+}
+
+/**
+ * Like {@link getCachedResult} but materializes only up to a row/byte budget — for agent consumers
+ * that truncate to a character budget anyway. Peak RAM is the budget, not the full result (which
+ * still lives fully + streamed in the blob). `meta.rowCount` stays AUTHORITATIVE (the full total
+ * from the cache row / header), so the agent can still be told the true size while holding few rows;
+ * `truncated` says the returned rows were clipped.
+ */
+export async function getCachedResultBounded(
+  opts: CachedExec,
+  budget: BoundedDrainOptions,
+): Promise<{ result: QueryResult; meta: CachedMeta; truncated: boolean }> {
+  const r = await resolve(opts);
+  if (r.source === 'fresh') {
+    // Degrade path: the result is already materialized in RAM, so just clip the array (no benefit
+    // to re-streaming). meta.rowCount reflects the FULL result; truncated iff we clipped.
+    const clipped = clipRows(r.result, budget);
+    return { result: clipped.result, meta: metaOf(r.result, false, r.cachedAt), truncated: clipped.truncated };
+  }
+  const bounded = await store(opts).getResultBounded(r.blobRef, budget);
+  if (bounded) {
+    return {
+      result: bounded,
+      // rowCount from the cache row is the FULL total, even though we only hold `bounded.rows`.
+      meta: { finalQuery: r.finalQuery, rowCount: r.rowCount, colCount: r.colCount, fromCache: r.fromCache, cachedAt: r.cachedAt },
+      truncated: bounded.truncated || (r.rowCount > bounded.rows.length),
+    };
+  }
+  const b = await drainQueryStreamBounded(await opts.execute(), budget);
+  return { result: b, meta: metaOf(b, false, nowOf(opts)), truncated: b.truncated };
 }
 
 /** Get the cached result as a JSONL stream (the streaming `/api/query` body). */
@@ -238,6 +269,18 @@ function backgroundRevalidate(key: string, opts: CachedExec): void {
     if (!claim.won) return; // someone else is already revalidating
     await runAndStore(key, opts, Date.now()).catch(() => { /* stale blob keeps serving */ });
   })().catch(() => { /* never surface to the request */ });
+}
+
+/** Clip an already-materialized result to a row/byte budget (degrade path — rows already in RAM). */
+function clipRows(result: QueryResult, { maxRows = Infinity, maxBytes = Infinity }: BoundedDrainOptions): { result: QueryResult; truncated: boolean } {
+  const rows: Record<string, unknown>[] = [];
+  let bytes = 0;
+  for (const row of result.rows) {
+    if (rows.length >= maxRows || bytes >= maxBytes) break;
+    bytes += Buffer.byteLength(JSON.stringify(row), 'utf8');
+    rows.push(row);
+  }
+  return { result: { ...result, rows }, truncated: rows.length < result.rows.length };
 }
 
 function metaOf(result: QueryResult, fromCache: boolean, cachedAt: number): CachedMeta {
