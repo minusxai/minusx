@@ -50,17 +50,17 @@ jobs:
         run: npm run validate
 
   # Sharded test execution. Vitest distributes test files evenly across shards
-  # (by file hash), so each shard runs roughly half the suite in parallel. The
+  # (by file hash), so each shard runs ~a quarter of the suite in parallel. The
   # shards share the node_modules cache via the same key as the validate job.
   test-frontend-shard:
-    name: Frontend Tests — shard ${{ matrix.shard }}/2
+    name: Frontend Tests — shard ${{ matrix.shard }}/4
     runs-on: ubuntu-latest
     strategy:
-      # Run both shards to completion even if one fails so we surface all
+      # Run all shards to completion even if one fails so we surface all
       # failures in a single CI cycle.
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -84,9 +84,9 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
-      - name: Run frontend tests (shard ${{ matrix.shard }}/2)
+      - name: Run frontend tests (shard ${{ matrix.shard }}/4)
         working-directory: ./frontend
-        run: npm test -- --coverage --max-workers=4 --shard=${{ matrix.shard }}/2
+        run: npm test -- --max-workers=4 --shard=${{ matrix.shard }}/4
 
   # Aggregator job — this is the required-check name in branch protection. It
   # depends on every shard and fails if any of them failed. Keeping a single
