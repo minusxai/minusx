@@ -78,7 +78,10 @@ describe('key-order - deterministic markup projection', () => {
     });
   }
 
-  beforeAll(() => {
+  // DB boots ONCE for the whole file: no test mutates the document (edits stay in
+  // Redux; each test gets a fresh store below), so re-initializing PGLite per test
+  // was pure fixed cost (~3.5s × 3 tests).
+  beforeAll(async () => {
     global.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
       if (urlStr.includes('/api/files/batch')) {
@@ -90,13 +93,7 @@ describe('key-order - deterministic markup projection', () => {
       }
       throw new Error(`Unmocked fetch call to ${urlStr}`);
     });
-  });
 
-  afterAll(() => {
-    vi.restoreAllMocks();
-  });
-
-  beforeEach(async () => {
     await initTestDatabase(dbPath);
 
     const { DocumentDB } = await import('@/lib/database/documents-db');
@@ -113,7 +110,13 @@ describe('key-order - deterministic markup projection', () => {
       } as DashboardContent,
       []
     );
+  });
 
+  afterAll(() => {
+    vi.restoreAllMocks();
+  });
+
+  beforeEach(() => {
     testStore = setupStore();
     vi.clearAllMocks();
   });
