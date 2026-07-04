@@ -24,13 +24,6 @@ import { loadUsers, setUsersInStore, _resetForTesting } from '@/lib/hooks/useUse
 // Jest module mocks — hoisted to top by Jest
 // ---------------------------------------------------------------------------
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 // Make users-state.ts use our test store
 let testStore: any;
 vi.mock('@/store/store', () => ({

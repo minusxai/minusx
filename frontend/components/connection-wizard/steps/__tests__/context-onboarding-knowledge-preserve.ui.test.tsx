@@ -5,13 +5,6 @@
  * definitions, column/table annotations) is silently dropped on "Save & Continue".
  */
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 const { CONTEXT_ID } = vi.hoisted(() => ({ CONTEXT_ID: 9101 }));
 
 vi.mock('@/lib/hooks/useContext', () => ({

@@ -30,13 +30,6 @@ import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__
 // Mocks
 // ---------------------------------------------------------------------------
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 let testStore: any;
 vi.mock('@/store/store', () => ({
   get store() { return testStore; },

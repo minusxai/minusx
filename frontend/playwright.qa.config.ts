@@ -71,7 +71,11 @@ export default defineConfig({
         // A real PROD build + start (not `next dev`): precompiled routes are stable
         // under parallel workers — the dev server compiles on-demand and races cold
         // builds → page.goto timeouts. Also genuinely "prod-ish" (the config's intent).
-        command: 'npm run build && npm run start',
+        //
+        // QA_SKIP_BUILD: in CI the build is produced ONCE by a dedicated job and the
+        // .next-qa output is restored here as an artifact, so the sharded flow jobs
+        // only `next start` (no rebuild). Locally the default builds then starts.
+        command: process.env.QA_SKIP_BUILD ? 'npm run start' : 'npm run build && npm run start',
         url: LOCAL_URL,
         timeout: 600_000, // a cold prod build can take several minutes
         reuseExistingServer: !process.env.CI,

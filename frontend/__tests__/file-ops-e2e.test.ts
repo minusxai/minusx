@@ -4,13 +4,6 @@
  * share one DB init/seed and one module-import load).
  */
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import { NextRequest } from 'next/server';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';

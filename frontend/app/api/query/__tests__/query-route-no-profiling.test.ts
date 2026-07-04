@@ -15,13 +15,6 @@
  * results.
  */
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 // Spies must be defined via vi.hoisted because vi.mock factories are hoisted
 // above all imports.
 const { getSchemaSpy, querySpy } = vi.hoisted(() => ({

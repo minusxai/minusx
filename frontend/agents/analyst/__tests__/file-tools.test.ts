@@ -1,13 +1,6 @@
 // Tests for ReadFiles + SearchFiles. Uses real PGLite via initTestDatabase to
 // exercise the actual FilesAPI ACL and search ranking — not mocks.
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { AnalystAgentContext } from '../types';
 import { ReadFiles, SearchFiles } from '../analyst-agent';

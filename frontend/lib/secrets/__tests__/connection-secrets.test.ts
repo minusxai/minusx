@@ -1,14 +1,10 @@
 // Connection secrets: raw credentials are moved to the server-only `secrets` table on
 // save (config keeps a @SECRETS/… ref) and resolved back only at query time.
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { isSecretField, isSecretRef, connectionSecretPath, SECRET_REF_PREFIX } from '../secret-refs';
 import { extractConnectionSecrets, resolveConnectionSecrets } from '../connection-secrets.server';
 import { SecretsDB } from '../secrets-db.server';
-
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
-}));
 
 describe('secret-refs (pure helpers)', () => {
   it('flags credential-ish field names, not plain ones', () => {

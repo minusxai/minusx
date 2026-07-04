@@ -1,12 +1,6 @@
 // Full v3 turn through the real in-process orchestrator + faux LLM: a user turn persists the pi log
 // as `messages` rows, sets the title from the first message, flips run_status idle, and emits
 // running -> message -> idle wakeups. Proves the turn runner end-to-end.
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 import { runConversationTurn } from '@/lib/chat/conversation-turn.server';
 import { createConversation, getConversation, loadMessages } from '@/lib/data/conversations.server';

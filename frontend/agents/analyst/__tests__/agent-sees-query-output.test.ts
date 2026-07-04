@@ -3,9 +3,6 @@
 // referenced saved <Question id> — in ReadFiles, which IS the AppState. runQuery is mocked to echo
 // the query + bound params back as a row, so the assertions prove BOTH visibility and that a story
 // <Param> value flows into an inline <Number>'s SQL.
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
-}));
 // readFilesServer executes via runQueryBounded now (bounded RAM). Echo the query+bound params back
 // as one row, and add `truncated:false` so the bounded-result shape matches.
 const echoRun = (_db: string, query: string, params: Record<string, unknown>) => {

@@ -1,12 +1,6 @@
 // Phase 4 crash-resume: a turn claims a lease + heartbeats while running and releases it on
 // completion; an orphaned turn (status 'running' but a stale/absent heartbeat = the owner died) is
 // detected and failed cleanly, with the eagerly-committed user message preserved for a retry.
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 import { runConversationTurn } from '@/lib/chat/conversation-turn.server';
 import {

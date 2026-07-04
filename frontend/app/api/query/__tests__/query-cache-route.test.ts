@@ -4,12 +4,6 @@
  * Proves the in-process maps are gone: a second identical request is served from
  * the persisted cache (X-Cache: hit) WITHOUT re-running the connector.
  */
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 const { querySpy } = vi.hoisted(() => ({
   querySpy: vi.fn(async () => ({ columns: ['x'], types: ['number'], rows: [{ x: 1 }], finalQuery: 'SELECT 1 AS x' })),

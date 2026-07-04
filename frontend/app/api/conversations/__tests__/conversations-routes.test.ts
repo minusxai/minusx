@@ -1,12 +1,6 @@
 // In-process tests for the v3 conversation REST surface: create (POST), list (GET, unioned + tagged
 // version:3), get-with-messages (GET :id), delete (DELETE :id), and owner/mode authorization.
 // Auth is globally mocked to userId:1, mode:'org' (test/setup/vitest.setup.ts).
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 import { NextRequest } from 'next/server';
 import { POST, GET as listConversationsRoute } from '@/app/api/conversations/route';

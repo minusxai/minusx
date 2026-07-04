@@ -10,13 +10,6 @@ import type { Mock } from 'vitest';
  *  - s3Key is a signed token that verifyStorageToken can decode back to the raw key
  */
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 vi.mock('@/lib/auth/auth-helpers', () => ({
   getEffectiveUser: vi.fn(),
 }));

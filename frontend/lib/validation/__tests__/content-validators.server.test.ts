@@ -7,10 +7,6 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { extractConnectionSecrets } from '@/lib/secrets/connection-secrets.server';
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
-}));
-
 // Capture the config the connector is actually handed, and mimic BigQuery's credential parsing.
 const captured = vi.hoisted(() => ({ config: null as Record<string, any> | null }));
 vi.mock('@/lib/connections', () => ({

@@ -8,13 +8,6 @@
 // at its `if (!conversation) return` guard. Net user symptom: the edited conversation is
 // truncated but the agent never runs — "the conversation just ends".
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import * as storeModule from '@/store/store';
 import { makeStore } from '@/store/store';
 import { createConversation, editAndForkMessage, selectConversation } from '@/store/chatSlice';

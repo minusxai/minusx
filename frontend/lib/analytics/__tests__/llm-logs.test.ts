@@ -3,14 +3,7 @@
 // column, read-back, and the date-scoped clear (Settings → Data Management).
 // End-to-end capture against the real chat is covered by the QA chat flows.
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { getLlmLog, clearLlmLogsBefore, recordLlmRequest, recordLlmResponse } from '@/lib/analytics/file-analytics.db';
 import { getModules } from '@/lib/modules/registry';
 import { getTestDbPath } from '@/store/__tests__/test-utils';

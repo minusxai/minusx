@@ -12,9 +12,6 @@ import { createConversation } from '@/store/chatSlice';
 
 const { conversationVersion } = vi.hoisted(() => ({ conversationVersion: { value: 1 } }));
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
-}));
 // next/navigation drives useUseChatV2 (?v=2 → v2 mode).
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), forward: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),

@@ -8,12 +8,6 @@
  * Run: npm test -- store/__tests__/evalsE2E.test.ts
  */
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 vi.mock('@/lib/connections/run-query', () => ({
   runQuery: vi.fn(async (_db: string, sql: string) => ({ columns: [], types: [], rows: [], finalQuery: sql })),
 }));

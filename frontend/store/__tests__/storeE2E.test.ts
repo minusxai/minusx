@@ -6,12 +6,6 @@
  */
 
 // Must be first — Jest hoists these above all imports
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 const { mockRunQuery } = vi.hoisted(() => ({ mockRunQuery: vi.fn() }));
 vi.mock('@/lib/connections/run-query', () => ({

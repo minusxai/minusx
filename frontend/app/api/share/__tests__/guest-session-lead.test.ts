@@ -2,13 +2,6 @@
 // visitor submits their name/email (lead capture) — and does NOT for anonymous
 // (skip_lead) sessions.
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import { NextRequest } from 'next/server';
 import { POST } from '../guest-session/route';
 import { addShare, createFile } from '@/lib/data/files.server';

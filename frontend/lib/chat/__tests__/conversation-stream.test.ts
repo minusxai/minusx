@@ -1,12 +1,6 @@
 // The LISTEN/NOTIFY wakeup bus, end-to-end on a real PGLite DB: a publish reaches a subscriber,
 // delta payloads ride inline, and unsubscribing stops delivery. This proves PGLite LISTEN/NOTIFY
 // works through the adapter (the v3 streaming transport).
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 import { subscribe, notifyMessage, notifyDelta, setConversationChannelNamespace } from '@/lib/chat/conversation-stream.server';
 import type { ConversationNotify } from '@/lib/data/conversations.types';

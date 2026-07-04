@@ -1,13 +1,6 @@
 import type { Mock, MockInstance } from 'vitest';
 // ─── Hoisted mocks ───────────────────────────────────────────────────────────
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 vi.mock('@/store/filesSlice', async () => {
   const actual = await vi.importActual<typeof import('@/store/filesSlice')>('@/store/filesSlice');
   return {
@@ -896,7 +889,6 @@ describe('Dashboard edit/cancel mode toggle', () => {
 
 describe('Dashboard agentic scenarios', () => {
   setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
-
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
   let getStoreSpy: MockInstance;

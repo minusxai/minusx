@@ -37,13 +37,6 @@ import { getModules } from '@/lib/modules/registry';
 // Jest module mocks — hoisted to top of file by Jest
 // ---------------------------------------------------------------------------
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 let testStore: any;
 vi.mock('@/store/store', () => ({
   get store() { return testStore; },

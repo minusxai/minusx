@@ -1,11 +1,5 @@
 // Phase 5 backfill: conversation FILES (v=1 legacy + v=2 pi) port into the v3 tables, preserving
 // ids, converting v1 logs to pi, carrying errors[], and skipping already-migrated ids (idempotent).
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 import { migrateConversationsToV3 } from '@/lib/data/migrate-conversations-v3.server';
 import { getConversation, loadLog, loadMessages, loadErrors } from '@/lib/data/conversations.server';

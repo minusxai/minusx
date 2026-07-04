@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 // The Screenshot frontend tool: captures the current file's rendered DOM and returns it as an
 // image_url content block, going through the SAME upload path (uploadBlobOrEmbed) the chart
 // attachments use. Capture + upload are mocked (no real DOM render / network).
@@ -6,6 +5,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/screenshot/capture', () => ({
   captureFileViewBlob: vi.fn(async () => new Blob(['img'], { type: 'image/jpeg' })),
+}));
+// The render→capture handshake polls the live DOM for the FileView to settle (12s
+// bound). No FileView exists here and readiness isn't under test — without this
+// mock each test burns the full 12s timeout.
+vi.mock('@/lib/screenshot/readiness', () => ({
+  waitForFileViewReady: vi.fn(async () => {}),
 }));
 vi.mock('@/lib/object-store/client', () => ({
   uploadBlobOrEmbed: vi.fn(async () => 'https://cdn.example/screenshot.jpg'),

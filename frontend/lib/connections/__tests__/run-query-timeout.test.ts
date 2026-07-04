@@ -4,9 +4,6 @@
  * indefinitely (the client's 120s guard only protects browser callers). runQuery is the single
  * materializing seam, so bounding it covers them all.
  */
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined, DB_PATH: undefined, DB_DIR: undefined, getDbType: () => 'pglite' as const,
-}));
 
 const { mockGetRawByName, mockConnector } = vi.hoisted(() => ({
   mockGetRawByName: vi.fn(),

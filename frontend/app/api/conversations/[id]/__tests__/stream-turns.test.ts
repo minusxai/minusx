@@ -1,11 +1,5 @@
 // End-to-end through the v3 chat routes: POST a turn (detached runner → rows + NOTIFY), then the
 // resumable GET stream replays the committed log + status + done. Plus the interrupt route. Faux LLM.
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
 
 import { NextRequest } from 'next/server';
 import { POST as turnsRoute } from '@/app/api/conversations/[id]/turns/route';

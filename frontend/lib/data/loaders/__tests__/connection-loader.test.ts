@@ -35,14 +35,6 @@ vi.mock('@/lib/connections/statistics-engine', () => ({
   profileDatabase: vi.fn(async (_type: string, schemas: unknown) => ({ schema: schemas, queryCount: 0 })),
 }));
 
-// Database-specific mock — must be at module top level (Jest hoisting)
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 const TEST_DB_PATH = getTestDbPath('connection_loader');
 
 const testUser: EffectiveUser = {

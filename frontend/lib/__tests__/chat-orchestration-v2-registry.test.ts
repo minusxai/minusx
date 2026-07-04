@@ -8,13 +8,6 @@
 
 import { describe, it, expect } from 'vitest';
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import {
   V2_REGISTRABLES,
   getRootAgentName,

@@ -56,9 +56,35 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
 
+      # No --with-deps: the browser binary is restored from the cache above, and
+      # GitHub's ubuntu-latest image preinstalls Playwright's system libraries, so
+      # the apt step --with-deps runs every time (uncacheable, ~13s) buys nothing.
       - name: Install Playwright Chromium
         working-directory: ./frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
+
+      # NOTE: no Turbopack compiler-cache step. `next build --turbopack` does NOT
+      # benefit from a restored .next/cache (measured: 69s warm == 71s cold, exact
+      # cache hit) — Next 16 has no effective persistent build cache — so caching it
+      # was pure overhead (~9s restore + ~11s save). Removed.
+
+      # Build the app ONCE (Turbopack, ~4x faster than webpack) with NEXT_PUBLIC_E2E
+      # baked in so E2E_MODE is permanently on (faux LLM channel + window store).
+      # Precompiled routes make the E2E boot + auth near-instant vs the old `next dev`
+      # on-demand-compile tax (auth.setup alone was ~54s under dev, ~1.4s prebuilt).
+      - name: Build E2E server (turbopack)
+        working-directory: ./frontend
+        env:
+          GIT_COMMIT_SHA: ${{ github.sha }}
+          NEXT_DIST_DIR: .next-e2e
+          NEXT_PUBLIC_E2E: 'true'
+          NODE_OPTIONS: '--max-old-space-size=8192'
+          # Skip the in-build tsc/eslint passes — the `validate` job gates types+lint.
+          NEXT_SKIP_TYPECHECK: 'true'
+          # Required at build time: "Collecting page data" executes the auth route
+          # modules and lib/config.ts throws if NEXTAUTH_SECRET is unset.
+          NEXTAUTH_SECRET: e2e-ci-secret-not-used-in-prod-000000000000000=
+        run: npx next build --turbopack
 
       - name: Run Playwright E2E
         working-directory: ./frontend
@@ -67,6 +93,9 @@ jobs:
           # required at boot. The webServer (playwright.config) sets the rest.
           NEXTAUTH_SECRET: e2e-ci-secret-not-used-in-prod-000000000000000=
           CI: 'true'
+          # The app is pre-built above → the webServer `next start`s .next-e2e
+          # (no per-run `next dev` build).
+          E2E_SKIP_BUILD: '1'
         run: npm run test:e2e
 
       - name: Upload Playwright report

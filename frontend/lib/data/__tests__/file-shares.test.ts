@@ -3,13 +3,6 @@
 // getShares lists them, revokeShare soft-revokes, and the guards (admin-only,
 // story-only) hold.
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import { addShare, getShares, revokeShare, resolveShare, createFile } from '@/lib/data/files.server';
 import { decodeShareLink, isLiveShareNonce } from '@/lib/auth/share-tokens';
 import { getTestDbPath } from '@/store/__tests__/test-utils';

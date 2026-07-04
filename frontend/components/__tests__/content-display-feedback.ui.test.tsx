@@ -9,13 +9,6 @@
  * so it appeared while the answer was still streaming.
  */
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
 import React from 'react';
 import { screen } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';

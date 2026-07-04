@@ -2,14 +2,7 @@
 // replacing the central events DB. Typed analytics tables (file_events, llm_call_events,
 // …) remain for their specific queries; this is the raw catch-all audit log.
 
-vi.mock('@/lib/database/db-config', () => ({
-  PGLITE_DATA_DIR: undefined,
-  DB_PATH: undefined,
-  DB_DIR: undefined,
-  getDbType: () => 'pglite' as const,
-}));
-
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { recordAppEvent } from '@/lib/analytics/app-events.db';
 import { getModules } from '@/lib/modules/registry';
 import { getTestDbPath } from '@/store/__tests__/test-utils';

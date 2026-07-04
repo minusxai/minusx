@@ -20,6 +20,13 @@ const nextConfig: NextConfig = {
   // Build output dir. Overridable so the E2E server (Playwright webServer) can use
   // its own dir and not collide with a running `next dev` (`.next/dev/lock`).
   distDir: process.env.NEXT_DIST_DIR || '.next',
+  // The CI test-server builds (E2E/QA) set NEXT_SKIP_TYPECHECK=true to skip the
+  // in-build tsc pass (~37s), which the dedicated `validate` job already runs on
+  // every PR. The real prod build (publish.yml) leaves this unset → full type
+  // checking. (Next 16 no longer runs eslint during build.) eslint-disable:
+  // next.config reads process.env by design.
+  // eslint-disable-next-line no-restricted-syntax
+  typescript: { ignoreBuildErrors: process.env.NEXT_SKIP_TYPECHECK === 'true' },
   // Embed git commit SHA and build time at build time — available as process.env.* everywhere
   env: {
     GIT_COMMIT_SHA,

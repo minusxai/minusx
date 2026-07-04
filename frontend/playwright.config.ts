@@ -45,7 +45,12 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
+    // Local default: `next dev` (hot reload, fast iteration). In CI the app is
+    // built ONCE by a dedicated job (with NEXT_PUBLIC_E2E=true baked in, so E2E_MODE
+    // is permanently on) and restored here as a .next-e2e artifact — E2E_SKIP_BUILD
+    // then just `next start`s it, so precompiled routes make boot + auth near-instant
+    // (no on-demand `next dev` compilation, the old ~100s tax).
+    command: process.env.E2E_SKIP_BUILD ? 'npm run start' : 'npm run dev',
     url: BASE_URL,
     timeout: 180_000,
     reuseExistingServer: !process.env.CI,
