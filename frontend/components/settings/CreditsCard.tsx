@@ -4,12 +4,16 @@ import { useCallback, useEffect, useState } from 'react';
 import { Box, VStack, HStack, Text, Icon, IconButton, Progress, ProgressCircle, AbsoluteCenter, Table, Spinner } from '@chakra-ui/react';
 import { LuZap, LuRefreshCw } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
+import { selectCreditsEnabled } from '@/store/configsSlice';
 import type { CreditBreakdownRow, CreditScope, CreditUsageResponse, CreditWindow } from '@/lib/analytics/credits.types';
 
 const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
-/** Fetch the current user's (and, for admins, the org's) credit usage. */
-function useCreditUsage() {
+/**
+ * Fetch the current user's (and, for admins, the org's) credit usage.
+ * Skips the network call entirely when `enabled` is false (credits module off).
+ */
+function useCreditUsage(enabled: boolean) {
   const [data, setData] = useState<CreditUsageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +33,7 @@ function useCreditUsage() {
     }
   }, []);
 
-  useEffect(() => { void refetch(); }, [refetch]);
+  useEffect(() => { if (enabled) void refetch(); }, [enabled, refetch]);
 
   return { data, loading, error, refetch };
 }
@@ -164,8 +168,11 @@ function BreakdownTable({ rows, total }: { rows: CreditBreakdownRow[]; total: nu
  * table is shown only when dev mode is on.
  */
 export function CreditsUsageCards() {
-  const { data, loading, error, refetch } = useCreditUsage();
+  const creditsEnabled = useAppSelector(selectCreditsEnabled);
+  const { data, loading, error, refetch } = useCreditUsage(creditsEnabled);
   const devMode = useAppSelector((s) => s.ui.devMode);
+
+  if (!creditsEnabled) return null;
 
   return (
     <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" px={6} py={4} aria-label="Credits usage">
@@ -221,8 +228,9 @@ export function CreditsUsageCards() {
  * intentionally omitted here — it lives in Settings → General.
  */
 export function CreditsUsageBars({ onClick }: { onClick?: () => void }) {
-  const { data, loading } = useCreditUsage();
-  if (loading || !data) return null;
+  const creditsEnabled = useAppSelector(selectCreditsEnabled);
+  const { data, loading } = useCreditUsage(creditsEnabled);
+  if (!creditsEnabled || loading || !data) return null;
   return (
     <HStack
       gap={3}

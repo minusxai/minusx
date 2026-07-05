@@ -27,6 +27,7 @@ interface ProvidersProps {
     disableAppStateImages?: boolean;  // Server runtime env flag (DISABLE_APP_STATE_IMAGES)
     maxConcurrentQueries?: number;    // Server runtime env (MAX_CONCURRENT_QUERIES)
     queryTimeoutMs?: number;          // Server runtime env (QUERY_TIMEOUT_MS)
+    creditsEnabled?: boolean;         // Server runtime env (CREDITS_ENABLED)
     e2eEnabled?: boolean;             // QA runtime E2E opt-in (?e2e=<secret>)
   };
 }
@@ -43,6 +44,7 @@ export function Providers({ children, initialData }: ProvidersProps) {
       disableAppStateImages: initialData?.disableAppStateImages ?? false,
       maxConcurrentQueries: initialData?.maxConcurrentQueries ?? 10,
       queryTimeoutMs: initialData?.queryTimeoutMs ?? 120_000,
+      creditsEnabled: initialData?.creditsEnabled ?? false,
     },
 
     // Auth (if user present)
