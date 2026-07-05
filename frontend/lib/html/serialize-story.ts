@@ -18,16 +18,41 @@
 // AgentHtml-injected style tags that are NOT part of the authored story and
 // must be stripped on save: the mirrored app CSS and the fluid/mobile shim.
 const INJECTED_STYLE_SELECTOR = 'style[data-mx-app-styles], style[data-mx-fluid-shim], [data-mx-embed-root]';
+// sanitizeAgentHtml wraps the authored story in a single <div data-mx-story-root> on EVERY
+// render. We serialize only this wrapper's content (never the wrapper itself), and collapse
+// any nested wrappers that prior buggy saves baked in — otherwise the story re-nests one level
+// deeper on every load→save round-trip.
+const STORY_ROOT_SELECTOR = '[data-mx-story-root]';
+// Ark UI / Zag runtime component roots (popover, menu, tooltip, …) carry a data-scope attr.
+// These are LIVE-render DOM — inline widgets like <Number> portal their popover into the iframe
+// body via Chakra's <Portal> — never authored story content. They must never be serialized back
+// into content.story. Stripping them both drops any freshly-leaked popover AND heals stories
+// already corrupted by the pre-fix leak (where the popover DOM is baked into the saved content).
+const LEAKED_WIDGET_SELECTOR = '[data-scope]';
 const ORIG_STYLE_ATTR = 'data-mx-osz';
 
 export function serializeEditedStory(
   root: Element | ShadowRoot | DocumentFragment,
   imports: string[] = [],
 ): string {
-  const container = document.createElement('div');
-  root.childNodes.forEach(node => container.appendChild(node.cloneNode(true)));
+  // Scope to the authored story wrapper. AgentHtml passes the whole iframe <body>, which also
+  // holds non-story siblings (the hidden embed-root host, body-level Ark popover/menu portals) —
+  // taking the wrapper's children alone drops them. Fall back to `root` when there is no wrapper
+  // (unit tests pass bare content).
+  const storyRoot = root.querySelector(STORY_ROOT_SELECTOR);
+  const source: Element | ShadowRoot | DocumentFragment = storyRoot ?? root;
 
-  container.querySelectorAll(INJECTED_STYLE_SELECTOR).forEach(el => el.remove());
+  // Build the working clone in the ROOT's own document (the iframe doc in the live path, or a
+  // parser document when healing a stored string) — never a foreign global `document`.
+  const ownerDoc: Document = root.ownerDocument ?? globalThis.document;
+  const container = ownerDoc.createElement('div');
+  source.childNodes.forEach(node => container.appendChild(node.cloneNode(true)));
+
+  // Collapse any nested <div data-mx-story-root> wrappers accumulated by prior saves down to the
+  // real content (unwrap each: replace it with its children).
+  container.querySelectorAll(STORY_ROOT_SELECTOR).forEach(w => w.replaceWith(...w.childNodes));
+
+  container.querySelectorAll(`${INJECTED_STYLE_SELECTOR}, ${LEAKED_WIDGET_SELECTOR}`).forEach(el => el.remove());
 
   container.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline],[data-number-inline]').forEach(el => {
     const authored = el.getAttribute(ORIG_STYLE_ATTR);
@@ -45,7 +70,7 @@ export function serializeEditedStory(
     if (firstStyle) {
       firstStyle.textContent = `${imports.join('\n')}\n${firstStyle.textContent ?? ''}`;
     } else {
-      const style = document.createElement('style');
+      const style = ownerDoc.createElement('style');
       style.textContent = imports.join('\n');
       container.insertBefore(style, container.firstChild);
     }
