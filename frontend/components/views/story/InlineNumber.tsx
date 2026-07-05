@@ -57,7 +57,12 @@ function NumberSpan({ embed, text, source, query, editable, onEditQuery, loading
   const [open, setOpen] = useState(false);
   const display = `${embed.prefix ?? ''}${text}${embed.suffix ?? ''}`;
   return (
-    <Popover.Root open={open} onOpenChange={(e) => setOpen(e.open)} positioning={{ placement: 'top' }}>
+    // lazyMount + unmountOnExit: mount the popover only while it is open. It portals (below) to the
+    // iframe <body> — a sibling of the story content — so an eagerly-mounted closed popover would sit
+    // in the serializable body and get baked into content.story on save (the historical bloat bug).
+    // Deferring the mount keeps closed popovers out of the DOM entirely; serializeEditedStory also
+    // strips any that are open at save time.
+    <Popover.Root open={open} onOpenChange={(e) => setOpen(e.open)} positioning={{ placement: 'top' }} lazyMount unmountOnExit>
       <Popover.Trigger asChild>
         <span
           role="button"

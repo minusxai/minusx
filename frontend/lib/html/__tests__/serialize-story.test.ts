@@ -85,3 +85,79 @@ describe('serializeEditedStory', () => {
     expect(out.indexOf('@import')).toBeLessThan(out.indexOf('.s{color:blue}'));
   });
 });
+
+/**
+ * AgentHtml renders `sanitizeAgentHtml(html)` — which wraps the authored story in a single
+ * `<div data-mx-story-root>` — into the iframe <body>, and calls serializeEditedStory(doc.body).
+ * The body ALSO holds non-story siblings (the hidden embed-root host, and Ark popover/menu DOM
+ * that inline widgets portal to the body). Two historical bugs bloated content.story on every save:
+ *   (1) serialize returned the WHOLE body incl. the wrapper → each load+save re-nested the story;
+ *   (2) it captured the body-level Ark popover portals as if they were prose.
+ * These tests pin the fixed behaviour: serialize the wrapper's CONTENT only, collapse any nested
+ * wrappers accumulated by prior saves, and strip leaked Ark runtime DOM ([data-scope]).
+ */
+describe('serializeEditedStory — story-root wrapper + leaked-DOM handling', () => {
+  /** doc.body after a normal render: the story wrapped in <div data-mx-story-root>. */
+  function bodyWithWrapper(inner: string): HTMLDivElement {
+    const body = document.createElement('div');
+    body.innerHTML = `<div data-mx-story-root>${inner}</div>`;
+    return body;
+  }
+
+  it('strips the data-mx-story-root wrapper, keeping only its content', () => {
+    const out = serializeEditedStory(bodyWithWrapper('<h1>REAL HEADLINE</h1><p>body</p>'), []);
+    expect(out).toContain('REAL HEADLINE');
+    expect(out).toContain('<p>body</p>');
+    expect(out).not.toContain('data-mx-story-root');
+  });
+
+  it('collapses nested data-mx-story-root wrappers left by prior buggy saves', () => {
+    const nested = '<div data-mx-story-root><div data-mx-story-root><div data-mx-story-root>' +
+      '<h1>ONCE</h1></div></div></div>';
+    const out = serializeEditedStory(bodyWithWrapper(nested), []);
+    expect(out).not.toContain('data-mx-story-root');
+    // the real content survives exactly once
+    expect(out.match(/ONCE/g)?.length).toBe(1);
+  });
+
+  it('excludes Ark popover DOM portaled to the body (sibling of the story wrapper)', () => {
+    const body = document.createElement('div');
+    body.innerHTML =
+      '<div data-mx-story-root><p>prose</p>' +
+      '<span data-number-inline="{&quot;query&quot;:&quot;SELECT 1 AS v&quot;}">$1</span></div>' +
+      // leaked live popover, portaled to the body next to the wrapper
+      '<div data-scope="popover" data-part="positioner"><div data-part="content">' +
+      '<pre aria-label="inline number query">SELECT leaked_query</pre></div></div>';
+    const out = serializeEditedStory(body, []);
+    expect(out).toContain('prose');
+    expect(out).toContain('data-number-inline');
+    expect(out).not.toContain('leaked_query');
+    expect(out).not.toContain('inline number query');
+    expect(out).not.toContain('data-scope');
+  });
+
+  it('self-heals a story with popover DOM already baked into its content', () => {
+    // Existing corrupted files: the leaked popover is now INSIDE the saved content (it gets
+    // re-wrapped on load). It carries Ark's data-scope, so serialize strips it on the next save.
+    const inner = '<p>kept prose</p>' +
+      '<div data-scope="popover" data-part="content"><pre aria-label="inline number query">SELECT baked_leak</pre></div>' +
+      '<span data-number-inline="{&quot;query&quot;:&quot;SELECT 1 AS v&quot;}">$1</span>';
+    const out = serializeEditedStory(bodyWithWrapper(inner), []);
+    expect(out).toContain('kept prose');
+    expect(out).toContain('data-number-inline');
+    expect(out).not.toContain('baked_leak');
+    expect(out).not.toContain('data-scope');
+  });
+
+  it('still restores placeholders and re-injects imports when scoped to the wrapper', () => {
+    const inner = '<style>.s{color:blue}</style>' +
+      '<div data-question-id="5" data-mx-osz="width:100%;height:420px">' +
+      '<div class="rendered-chart">junk</div></div>';
+    const out = serializeEditedStory(bodyWithWrapper(inner), ["@import url('x');"]);
+    expect(out).toContain('data-question-id="5"');
+    expect(out).toContain('width:100%;height:420px');
+    expect(out).not.toContain('rendered-chart');
+    expect(out).not.toContain('data-mx-osz');
+    expect(out).toContain("@import url('x');");
+  });
+});

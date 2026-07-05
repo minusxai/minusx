@@ -61,4 +61,32 @@ describe('InlineNumber footnote popover — positioning context (iframe document
     // And it must NOT have leaked into the top-level document body (the old broken path).
     expect(document.body.querySelector('[aria-label="source chart 1026"]')).toBeNull();
   });
+
+  // Leak fix: the popover content used to render EAGERLY (mounted even while closed). Because it
+  // portals to the iframe body — a sibling of the story content — every closed popover sat in the
+  // serializable body and got baked into content.story on save (30 numbers × repeated saves →
+  // hundreds of orphan panels). With lazyMount, a popover the reader never opened is absent from
+  // the DOM entirely, so serialize has nothing to capture; it mounts only on open.
+  it('does not mount the footnote popover while it is closed (no serializable leak)', async () => {
+    renderWithProviders(<StoryView content={content} />);
+
+    let trigger: HTMLElement | undefined;
+    await waitFor(() => {
+      trigger = within(storyRoot() as unknown as HTMLElement).getByLabelText(/^live number/);
+      expect(trigger).toBeTruthy();
+    });
+
+    // Closed (never opened): the popover body (source chart) is NOT anywhere in the iframe
+    // document, and none of the portaled popover parts (positioner/content — the DOM that leaks
+    // into the serializable body) are mounted. (The trigger part stays on the number span itself,
+    // inside the [data-number-inline] placeholder, which serialize clears — that's fine.)
+    expect(within(storyRoot() as unknown as HTMLElement).queryByLabelText('source chart 1026')).toBeNull();
+    expect((storyRoot() as unknown as HTMLElement).querySelectorAll('[data-part="positioner"], [data-part="content"]').length).toBe(0);
+
+    // Open → it mounts (the popover still works).
+    fireEvent.click(trigger!);
+    await waitFor(() => {
+      expect(within(storyRoot() as unknown as HTMLElement).queryByLabelText('source chart 1026')).toBeTruthy();
+    });
+  });
 });
