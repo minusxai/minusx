@@ -65,7 +65,7 @@ describe('getCreditUsage', () => {
 
     // 4 groups: (anthropic,opus), (openai,gpt), (weird,m), ('',nulltest) — last-month row excluded.
     expect(individual.billing.rows).toHaveLength(4);
-    expect(individual.billing.allowance).toBe(10_000);
+    expect(individual.billing.allowance).toBe(5_000);
     expect(individual.reset.allowance).toBe(1_000);
 
     // opus group merges the two this-month user-1 rows (last-month row NOT included).
@@ -74,12 +74,12 @@ describe('getCreditUsage', () => {
     expect(opus.cachedTokens).toBe(300);
     expect(opus.outputTokens).toBe(700);
     expect(opus.requests).toBe(2); // two this-month opus calls merged
-    expect(opus.credits).toBeCloseTo(400, 6); // (0.3 + 0.1) * 1000
+    expect(opus.credits).toBeCloseTo(42, 6); // (0.3 + 0.1)*100 + 2 requests
 
-    // Billing used = 400 + 50 + 20 + 10. Every seeded row is at NOW(), so the
-    // reset window (today) captures the same total.
-    expect(individual.billing.used).toBeCloseTo(480, 6);
-    expect(individual.reset.used).toBeCloseTo(480, 6);
+    // Billing used = opus 42 + gpt 6 + weird 3 + nulltest 2. Every seeded row is
+    // at NOW(), so the reset window (today) captures the same total.
+    expect(individual.billing.used).toBeCloseTo(53, 6);
+    expect(individual.reset.used).toBeCloseTo(53, 6);
 
     // Calendar mode → each window reports when it next resets (a future instant).
     expect(individual.reset.resetsAt).toBeTruthy();
@@ -101,8 +101,9 @@ describe('getCreditUsage', () => {
     await seed({ userId: 8, provider: 'openai', model: 'm', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 99.0, createdAtSql: 'NOW()', mode: 'internals' }); // excluded
 
     const { individual } = await getCreditUsage(8, 'viewer', false);
-    // 3 counted rows (org + tutorial + null) at $1 each = 3000 credits; the $99 internals row is excluded.
-    expect(individual.billing.used).toBeCloseTo(3000, 6);
+    // 3 counted rows (org + tutorial + null) at $1 each, one group → 3*100 + 3 requests
+    // = 303 credits; the $99 internals row is excluded.
+    expect(individual.billing.used).toBeCloseTo(303, 6);
   });
 
   it('reset usage is a subset of billing usage (reset window ⊆ billing window)', async () => {
@@ -113,16 +114,16 @@ describe('getCreditUsage', () => {
     await seed({ userId: 5, provider: 'openai', model: 'r', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 0.5, createdAtSql: 'NOW()' });
 
     const { individual } = await getCreditUsage(5, 'viewer', false);
-    expect(individual.billing.used).toBeCloseTo(1500, 6);            // both rows (1.0 + 0.5) * 1000
+    expect(individual.billing.used).toBeCloseTo(152, 6);            // both rows (1.0 + 0.5)*100 + 2 requests
     expect(individual.reset.used).toBeLessThanOrEqual(individual.billing.used);
-    expect(individual.reset.used).toBeGreaterThanOrEqual(500 - 1e-6); // at least the NOW() row
+    expect(individual.reset.used).toBeGreaterThanOrEqual(51 - 1e-6); // at least the NOW() row (0.5*100 + 1)
   });
 
   it('normalizes a NULL provider to an empty string', async () => {
     const { individual } = await getCreditUsage(1, 'viewer', false);
     const nullRow = findRow(individual.billing.rows, '', 'nulltest')!;
     expect(nullRow).toBeDefined();
-    expect(nullRow.credits).toBeCloseTo(10, 6);
+    expect(nullRow.credits).toBeCloseTo(2, 6); // 0.01*100 + 1 request
   });
 
   it('splits the same provider+model into separate rows by trigger', async () => {
@@ -139,8 +140,8 @@ describe('getCreditUsage', () => {
     expect(byTrigger['slack']).toBeDefined();
     expect(byTrigger['unknown']).toBeDefined();
     expect(byTrigger['']).toBeUndefined(); // never empty
-    expect(byTrigger['explore'].credits).toBeCloseTo(20, 6); // 0.02 * 1000
-    expect(byTrigger['slack'].credits).toBeCloseTo(30, 6); // 0.03 * 1000
+    expect(byTrigger['explore'].credits).toBeCloseTo(3, 6); // 0.02*100 + 1 request
+    expect(byTrigger['slack'].credits).toBeCloseTo(4, 6); // 0.03*100 + 1 request
   });
 
   it('checkCreditGate allows everything when enforcement is off (default env)', async () => {
@@ -159,18 +160,18 @@ describe('getCreditUsage', () => {
   it('aggregates all users for the org scope when includeOrg is true', async () => {
     const { individual, org } = await getCreditUsage(1, 'admin', true);
     expect(org).not.toBeNull();
-    expect(org!.billing.allowance).toBe(100_000);
-    expect(org!.reset.allowance).toBe(10_000);
+    expect(org!.billing.allowance).toBe(5_000);
+    expect(org!.reset.allowance).toBe(1_000);
 
-    // org opus group = user1 (0.40) + user2 (1.00) = 1.40 → 1400 credits
+    // org opus group = user1 (0.40, 2 reqs) + user2 (1.00, 1 req) → 1.40*100 + 3 = 143 credits
     const opus = findRow(org!.billing.rows, 'anthropic', 'opus')!;
-    expect(opus.credits).toBeCloseTo(1400, 6);
+    expect(opus.credits).toBeCloseTo(143, 6);
     expect(opus.outputTokens).toBe(700 + 1000);
 
-    // org used = individual (480) + user2 (1000)
-    expect(org!.billing.used).toBeCloseTo(1480, 6);
+    // org used = individual (53) + user2 opus (1.0*100 + 1 = 101) = 154
+    expect(org!.billing.used).toBeCloseTo(154, 6);
 
     // user 2's usage is absent from the individual scope
-    expect(individual.billing.used).toBeCloseTo(480, 6);
+    expect(individual.billing.used).toBeCloseTo(53, 6);
   });
 });

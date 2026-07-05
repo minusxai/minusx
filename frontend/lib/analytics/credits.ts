@@ -25,7 +25,7 @@ export interface CostToCreditsInput {
 /**
  * Credits as a weighted sum of cost + token buckets + request count. The
  * `weights` come from the effective credit config (env-overridable); callers
- * that don't pass them use the CREDIT_BUDGETS defaults (v0: credits = cost × 1000).
+ * that don't pass them use the CREDIT_BUDGETS defaults (credits = cost × 100 + 1 per request).
  */
 export function costToCredits(input: CostToCreditsInput, weights: CreditWeights = CREDIT_BUDGETS.weights): number {
   return (

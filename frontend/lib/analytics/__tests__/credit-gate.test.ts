@@ -42,14 +42,14 @@ describe('checkCreditGate (enforced)', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('allows a user under the reset allowance', async () => {
-    await seed(1, 0.05); // 50 credits < 100
+    await seed(1, 0.05); // 0.05*100 + 1 req = 6 credits < 100
     const gate = await checkCreditGate(user(1));
     expect(gate.allowed).toBe(true);
     expect(gate.exceeded).toBeNull();
   });
 
   it('blocks a user at/over the reset allowance', async () => {
-    await seed(2, 0.12); // 120 credits ≥ 100
+    await seed(2, 1.2); // 1.2*100 + 1 req = 121 credits ≥ 100
     const gate = await checkCreditGate(user(2));
     expect(gate.allowed).toBe(false);
     expect(gate.exceeded).toBe('reset');
@@ -57,20 +57,20 @@ describe('checkCreditGate (enforced)', () => {
   });
 
   it('scopes usage per user (another user over limit does not block this one)', async () => {
-    await seed(3, 0.02); // this user: 20 credits
-    await seed(4, 5.0);  // other user: way over
+    await seed(3, 0.02); // this user: 0.02*100 + 1 = 3 credits (under)
+    await seed(4, 5.0);  // other user: 501 credits (way over)
     expect((await checkCreditGate(user(3))).allowed).toBe(true);
     expect((await checkCreditGate(user(4))).allowed).toBe(false);
   });
 
   it('creditEnforcer (the beforeLlmCall hook) throws CreditLimitError when over', async () => {
-    await seed(5, 0.20); // 200 ≥ 100
+    await seed(5, 2.0); // 2.0*100 + 1 req = 201 ≥ 100
     const enforce = creditEnforcer(user(5));
     await expect(enforce()).rejects.toBeInstanceOf(CreditLimitError);
   });
 
   it('creditEnforcer resolves (no throw) when under the limit', async () => {
-    await seed(6, 0.03); // 30 < 100
+    await seed(6, 0.03); // 0.03*100 + 1 = 4 < 100
     await expect(creditEnforcer(user(6))()).resolves.toBeUndefined();
   });
 });

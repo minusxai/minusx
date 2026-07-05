@@ -46,7 +46,7 @@ async function seedUsage(userId: number, cost: number): Promise<void> {
 
 describe('credit enforcement (deep beforeLlmCall hook)', () => {
   it('blocks the turn at the LLM call when the user is over limit', async () => {
-    await seedUsage(1, 0.2); // 200 credits ≥ 100 cap
+    await seedUsage(1, 1.2); // 1.2*100 + 1 req = 121 credits ≥ 100 cap
     webAnalystFaux.setResponses([fauxAssistantMessage('should NOT be used', { stopReason: 'stop' })]);
 
     const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
@@ -70,7 +70,7 @@ describe('credit enforcement (deep beforeLlmCall hook)', () => {
   });
 
   it('also blocks MICRO-TASKS for an over-limit user (no exempt path)', async () => {
-    await seedUsage(3, 0.2); // 200 ≥ 100 cap → the ONLY row for user 3
+    await seedUsage(3, 1.2); // 1.2*100 + 1 req = 121 ≥ 100 cap → the ONLY row for user 3
     microFaux.setResponses([fauxAssistantMessage('should NOT be used', { stopReason: 'stop' })]);
     // The gate throws before the LLM call, so the micro-task produces no result and rejects.
     await expect(

@@ -17,7 +17,7 @@
  * per-call cost + token buckets + request count:
  *   credits = cost·cost + nonCachedTokens·nonCachedTokens + cachedTokens·cachedTokens
  *           + outputTokens·outputTokens + requests·requests
- * v0 default: credits = cost × 1000 (1 credit = $0.001), everything else 0.
+ * Default: credits = cost × 100 + 1 per request (≈ 1 credit per $0.01); token buckets 0.
  */
 export interface CreditWeights {
   /** Credits per $1 of USD cost. */

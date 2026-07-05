@@ -3,24 +3,24 @@ import { costToCredits, remainingCredits, remainingInWindow } from '@/lib/analyt
 import type { CreditScope } from '@/lib/analytics/credits.types';
 import { parseBillingCycle, cycleStartSql, cycleNextResetSql, resolveCreditConfig, CREDIT_BUDGETS, CYCLE_MODE } from '@/lib/analytics/credit-budgets';
 
-describe('costToCredits (v0: credits = cost * 1000)', () => {
-  it('multiplies cost by 1000', () => {
-    expect(costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: 0.5 })).toBe(500);
+describe('costToCredits (default weights: credits = cost*100 + 1 per request)', () => {
+  it('applies the cost weight (×100) with no requests', () => {
+    expect(costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: 0.5 })).toBe(50);
   });
 
-  it('is 0 for zero cost', () => {
+  it('is 0 for zero cost and no requests', () => {
     expect(costToCredits({ cachedTokens: 10, nonCachedTokens: 20, outputTokens: 30, cost: 0 })).toBe(0);
   });
 
   it('handles fractional cost', () => {
-    expect(costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: 1.2345 })).toBeCloseTo(1234.5, 6);
+    expect(costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, cost: 1.2345 })).toBeCloseTo(123.45, 6);
   });
 
-  it('ignores token/request fields with default weights (only cost drives credits)', () => {
-    const a = costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, requests: 0, cost: 2 });
-    const b = costToCredits({ cachedTokens: 999, nonCachedTokens: 888, outputTokens: 777, requests: 5, cost: 2 });
-    expect(a).toBe(b);
-    expect(a).toBe(2000);
+  it('ignores token fields (weight 0) but counts requests with default weights', () => {
+    const a = costToCredits({ cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, requests: 3, cost: 2 });
+    const b = costToCredits({ cachedTokens: 999, nonCachedTokens: 888, outputTokens: 777, requests: 3, cost: 2 });
+    expect(a).toBe(b);       // token buckets have weight 0 → ignored
+    expect(a).toBe(203);     // 2*100 + 3 requests
   });
 
   it('applies custom weights: cost + tokens + requests', () => {
@@ -130,12 +130,12 @@ describe('allowance resolvers', () => {
     vi.resetModules();
   });
 
-  it('defaults to 10,000 per user and 100,000 for org when unset', async () => {
+  it('defaults to 5,000 per user and 5,000 for org when unset', async () => {
     delete process.env.CREDIT_ALLOWANCES;
     const { resolveIndividualAllowance, resolveOrgAllowance } = await import('@/lib/config');
-    expect(resolveIndividualAllowance('admin')).toBe(10_000);
-    expect(resolveIndividualAllowance('viewer')).toBe(10_000);
-    expect(resolveOrgAllowance()).toBe(100_000);
+    expect(resolveIndividualAllowance('admin')).toBe(5_000);
+    expect(resolveIndividualAllowance('viewer')).toBe(5_000);
+    expect(resolveOrgAllowance()).toBe(5_000);
   });
 
   it('applies role-wise overrides from CREDIT_ALLOWANCES', async () => {
@@ -150,22 +150,22 @@ describe('allowance resolvers', () => {
   it('falls back to the default for a role missing from the override', async () => {
     process.env.CREDIT_ALLOWANCES = JSON.stringify({ admin: 5000 });
     const { resolveIndividualAllowance, resolveOrgAllowance } = await import('@/lib/config');
-    expect(resolveIndividualAllowance('viewer')).toBe(10_000);
-    expect(resolveOrgAllowance()).toBe(100_000);
+    expect(resolveIndividualAllowance('viewer')).toBe(5_000);
+    expect(resolveOrgAllowance()).toBe(5_000);
   });
 
   it('falls back to defaults when CREDIT_ALLOWANCES is invalid JSON', async () => {
     process.env.CREDIT_ALLOWANCES = 'not-json';
     const { resolveIndividualAllowance, resolveOrgAllowance } = await import('@/lib/config');
-    expect(resolveIndividualAllowance('admin')).toBe(10_000);
-    expect(resolveOrgAllowance()).toBe(100_000);
+    expect(resolveIndividualAllowance('admin')).toBe(5_000);
+    expect(resolveOrgAllowance()).toBe(5_000);
   });
 
-  it('resolves reset-cycle allowances independently (default 1,000 / 10,000)', async () => {
+  it('resolves reset-cycle allowances independently (default 1,000 / 1,000)', async () => {
     delete process.env.CREDIT_RESET_ALLOWANCES;
     const cfg = await import('@/lib/config');
     expect(cfg.resolveIndividualResetAllowance('viewer')).toBe(1_000);
-    expect(cfg.resolveOrgResetAllowance()).toBe(10_000);
+    expect(cfg.resolveOrgResetAllowance()).toBe(1_000);
   });
 
   it('applies role-wise CREDIT_RESET_ALLOWANCES overrides', async () => {

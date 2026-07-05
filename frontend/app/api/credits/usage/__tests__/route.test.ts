@@ -36,8 +36,8 @@ describe('GET /api/credits/usage', () => {
   setupTestDb(TEST_DB_PATH);
 
   beforeEach(async () => {
-    await seed(1, 0.5); // signed-in user → 500 credits
-    await seed(2, 1.0); // another user → 1000 credits (org only)
+    await seed(1, 0.5); // signed-in user → 0.5*100 + 1 req = 51 credits
+    await seed(2, 1.0); // another user → 1.0*100 + 1 req = 101 credits (org only)
   });
 
   it('returns individual + org totals for an admin', async () => {
@@ -48,12 +48,13 @@ describe('GET /api/credits/usage', () => {
     const data = body.data as CreditUsageResponse;
 
     expect(data.enforced).toBe(false); // ENFORCE_CREDIT_LIMITS unset → not enforced
-    expect(data.individual.billing.used).toBeCloseTo(500, 6);
-    expect(data.individual.billing.allowance).toBe(10_000);
+    expect(data.individual.billing.used).toBeCloseTo(51, 6);
+    expect(data.individual.billing.allowance).toBe(5_000);
     expect(data.individual.reset.allowance).toBe(1_000);
     expect(data.org).not.toBeNull();
-    expect(data.org!.billing.used).toBeCloseTo(1500, 6); // user1 (500) + user2 (1000)
-    expect(data.org!.billing.allowance).toBe(100_000);
+    // user1 + user2 merge into one (anthropic,opus) group → 1.5*100 + 2 requests
+    expect(data.org!.billing.used).toBeCloseTo(152, 6);
+    expect(data.org!.billing.allowance).toBe(5_000);
   });
 
   it('returns only the individual scope for a non-admin', async () => {
@@ -62,7 +63,7 @@ describe('GET /api/credits/usage', () => {
     expect(res.status).toBe(200);
     const data = (await res.json()).data as CreditUsageResponse;
 
-    expect(data.individual.billing.used).toBeCloseTo(500, 6); // scoped to user 1 only
+    expect(data.individual.billing.used).toBeCloseTo(51, 6); // scoped to user 1 only
     expect(data.org).toBeNull();
   });
 
