@@ -3,14 +3,11 @@ import { validateWebhook } from '@/lib/messaging/webhook-executor';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import type { VisualizationType } from '@/lib/types';
-
-const VALID_VIZ_TYPES: readonly VisualizationType[] = [
-  'table', 'bar', 'row', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot', 'trend', 'waterfall', 'combo', 'radar', 'geo'
-];
+import { VIZ_TYPES } from '@/lib/validation/atlas-schemas';
 
 function validateAllowedVizTypes(value: unknown): value is VisualizationType[] {
   if (!Array.isArray(value) || value.length === 0) return false;
-  return value.every(item => typeof item === 'string' && (VALID_VIZ_TYPES as readonly string[]).includes(item));
+  return value.every(item => typeof item === 'string' && (VIZ_TYPES as readonly string[]).includes(item));
 }
 
 const VALID_ROLES = ['admin', 'editor', 'viewer'] as const;

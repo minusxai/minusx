@@ -28,7 +28,7 @@ const NullableD = <T extends TSchema>(schema: T, description: string) =>
 // Visualization Settings
 // ============================================================================
 
-const VIZ_TYPES = [
+export const VIZ_TYPES = [
   'table', 'bar', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot',
   'trend', 'waterfall', 'combo', 'radar', 'geo', 'single_value', 'row',
 ] as const;
