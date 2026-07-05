@@ -267,7 +267,9 @@ export async function runConversationTurn(
   const piDiff = setup.orchestrator.log.slice(startSeq) as ConversationLog;
   const finalSeq = committedSeq;
   await mirrorErrors(conversationId, piDiff, runError);
-  await recordLlmCalls(piDiff, conversationId, user);
+  // `setup.pageType` (explore/question/dashboard/…) is recorded as the LLM-call `trigger`
+  // so usage can be split by surface.
+  await recordLlmCalls(piDiff, conversationId, user, setup.pageType);
 
   const pendingToolCalls = setup.orchestrator.getPendingToolCalls();
   const runStatus: TurnResult['runStatus'] = runError ? 'error' : pendingToolCalls.length > 0 ? 'paused' : 'idle';

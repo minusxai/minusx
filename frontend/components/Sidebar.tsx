@@ -11,6 +11,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import ImpersonationSelector from './ImpersonationSelector';
 import CreateMenu from './CreateMenu';
+import { CreditsUsageBars } from './settings/CreditsCard';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { toggleLeftSidebar, selectDevMode, setDevMode, selectShowAdvanced, toggleColorMode } from '@/store/uiSlice';
@@ -588,6 +589,8 @@ export default function Sidebar() {
                   <Text fontSize="sm" fontWeight="600" fontFamily="mono" truncate>
                     {effectiveUser?.email || effectiveUser?.name}
                   </Text>
+                  <Box h="1px" bg="border.muted" my={3} />
+                  <CreditsUsageBars onClick={() => navigate('/settings')} />
                 </Box>
                 <Box h="1px" bg="border.muted" my={1} />
 

@@ -93,7 +93,7 @@ describe('LoadSkill tool', () => {
     const payload = payloadOf((res as { content: { type: string }[] }).content);
     expect(payload.success).toBe(true);
     expect(payload.skill).toBe('visualizations');
-    expect(String(payload.content)).toContain('## Instructions: Visualizations');
+    expect(String(payload.content)).toContain('## Visualizations');
   });
 
   it('defers unknown (user-defined) skills to the frontend via UserInputException', async () => {

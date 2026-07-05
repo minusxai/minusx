@@ -15,7 +15,8 @@
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { ConversationLog, RegistrableClass } from '@/orchestrator/types';
-import { V2_HEADLESS_REGISTRABLES } from '@/lib/chat-orchestration-v2.server';
+import { V2_HEADLESS_REGISTRABLES, recordLlmCalls } from '@/lib/chat-orchestration-v2.server';
+import { creditEnforcer } from '@/lib/analytics/credit-usage.server';
 import { piLogToLegacy } from '@/lib/chat-translator';
 import { loadLog, appendMessages } from '@/lib/data/conversations.server';
 import { getPageType } from '@/agents/analyst/skills';
@@ -139,6 +140,8 @@ export async function runChatOrchestrationV2({
   const ctx = await buildAnalystContext(agent_args, user);
   const registrables: RegistrableClass[] = [...V2_HEADLESS_REGISTRABLES];
   const orch = new Orchestrator(registrables, [...savedLog]);
+  // Enforce per-user credit limits deep at the LLM call site (no-op unless enforced).
+  orch.beforeLlmCall = creditEnforcer(user);
 
   const agent = new agentClass(orch, { userMessage }, ctx);
   const stream = orch.run(agent as never);
@@ -159,6 +162,11 @@ export async function runChatOrchestrationV2({
   if (piDiff.length > 0) {
     await appendMessages(conversationId, piDiff, expectedLogIndex);
   }
+
+  // Record this turn's LLM usage (Slack and other clientless callers). Conversation-bound
+  // like the browser chat path — without this, Slack usage never reaches llm_call_events.
+  // The surface (e.g. 'slack') is recorded as the LLM-call `trigger`.
+  await recordLlmCalls(piDiff, conversationId, user, getPageType(agent_args.app_state));
 
   return {
     conversationId,

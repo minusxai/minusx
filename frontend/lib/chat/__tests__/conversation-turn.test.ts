@@ -12,12 +12,24 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConversationNotify } from '@/lib/data/conversations.types';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
+import { getModules } from '@/lib/modules/registry';
 
 const TEST_DB_PATH = getTestDbPath('conversation_turn');
 const ADMIN = { userId: 1, email: 'test@example.com', name: 'Test', role: 'admin', home_folder: '/org', mode: 'org' } as EffectiveUser;
 
 const turnBody = (userMessage: string): ChatRequest =>
   ({ user_message: userMessage, agent: 'WebAnalystAgent', agent_args: {} } as unknown as ChatRequest);
+
+// A turn whose app_state is a dashboard file page (mirrors the client's appStateSelector output).
+const dashboardTurnBody = (userMessage: string): ChatRequest =>
+  ({ user_message: userMessage, agent: 'WebAnalystAgent',
+     agent_args: { app_state: { type: 'file', state: { fileState: { type: 'dashboard' } } } } } as unknown as ChatRequest);
+
+async function recordedTriggers(conversationId: number): Promise<string[]> {
+  const { rows } = await getModules().db.exec<{ trigger: string | null }>(
+    `SELECT trigger FROM llm_call_events WHERE conversation_id = $1`, [conversationId]);
+  return rows.map((r) => r.trigger ?? '');
+}
 
 describe('v3 turn runner', () => {
   setupTestDb(TEST_DB_PATH);
@@ -43,6 +55,28 @@ describe('v3 turn runner', () => {
     const after = await getConversation(conv.id);
     expect(after?.runStatus).toBe('idle');
     expect(after?.title).toBe('which month has max mrr?'); // titled from first message
+  });
+
+  it('records the page surface (dashboard) as the LLM-call trigger', async () => {
+    webAnalystFaux.setResponses([fauxAssistantMessage('The dashboard shows Q2 revenue.', { stopReason: 'stop' })]);
+    const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+
+    await runConversationTurn(conv.id, ADMIN, dashboardTurnBody('summarize this dashboard'));
+
+    const triggers = await recordedTriggers(conv.id);
+    expect(triggers.length).toBeGreaterThanOrEqual(1);
+    expect(triggers.every((t) => t === 'dashboard')).toBe(true);
+  });
+
+  it('falls back to "unknown" when the turn has no resolvable surface', async () => {
+    webAnalystFaux.setResponses([fauxAssistantMessage('ok', { stopReason: 'stop' })]);
+    const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+
+    await runConversationTurn(conv.id, ADMIN, turnBody('hi')); // agent_args: {} → no app_state
+
+    const triggers = await recordedTriggers(conv.id);
+    expect(triggers.length).toBeGreaterThanOrEqual(1);
+    expect(triggers.every((t) => t === 'unknown')).toBe(true);
   });
 
   it('emits running -> message -> idle wakeups for the turn', async () => {

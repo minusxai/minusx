@@ -15,6 +15,9 @@ export interface ConfigsState {
   // Server-side runtime env (QUERY_TIMEOUT_MS), hydrated from SSR preloadedState.
   // Wall-clock cap (ms) for a single /api/query call; bounds hung queries. 0 = off.
   queryTimeoutMs: number;
+  // Server-side runtime env (CREDITS_ENABLED), hydrated from SSR preloadedState.
+  // When false, the credits usage module is hidden throughout the UI.
+  creditsEnabled: boolean;
 }
 
 const initialState: ConfigsState = {
@@ -23,6 +26,7 @@ const initialState: ConfigsState = {
   disableAppStateImages: false,
   maxConcurrentQueries: 10,
   queryTimeoutMs: 120_000,
+  creditsEnabled: false,
 };
 
 const configsSlice = createSlice({
@@ -50,3 +54,4 @@ export const selectConfigsLoaded = (state: RootState) => state.configs.loadedAt 
 export const selectDisableAppStateImages = (state: RootState) => state.configs.disableAppStateImages;
 export const selectMaxConcurrentQueries = (state: RootState) => state.configs.maxConcurrentQueries;
 export const selectQueryTimeoutMs = (state: RootState) => state.configs.queryTimeoutMs;
+export const selectCreditsEnabled = (state: RootState) => state.configs.creditsEnabled;

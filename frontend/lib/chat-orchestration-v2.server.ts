@@ -8,6 +8,7 @@
 
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
+import { creditEnforcer } from '@/lib/analytics/credit-usage.server';
 import type {
   ConversationLog,
   ConversationLogEntry as PiLogEntry,
@@ -60,6 +61,7 @@ import {
 import { getConversation as getV3Conversation, loadLog as loadV3Log } from '@/lib/data/conversations.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { recordLlmRequest, recordLlmResponse, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
+import { UNKNOWN_TRIGGER } from '@/lib/analytics/credits.types';
 import { buildLlmCallDetail } from '@/lib/chat/headless-llm-tracking.server';
 import { setLlmCallRecorder } from '@/orchestrator/llm';
 import type { AssistantMessage } from '@/orchestrator/llm';
@@ -227,6 +229,8 @@ export interface OrchestrationSetup {
   rawStream: ReturnType<Orchestrator['run']> | null;
   rootAgent?: MXAgent;
   fatalError?: string;
+  /** Surface the turn ran on (explore/question/dashboard/…) — recorded as the LLM-call `trigger`. */
+  pageType?: string | null;
 }
 
 /**
@@ -400,6 +404,9 @@ export async function setupOrchestration(
       ? withSwaps(V2_REGISTRABLES, BENCHMARK_TOOL_SWAPS)
       : V2_REGISTRABLES;
   const orch = new Orchestrator(registrables, [...savedLog]);
+  // Enforce per-user credit limits deep at the LLM call site (no-op unless
+  // ENFORCE_CREDIT_LIMITS). Covers every agent/sub-agent/resume hop in this run.
+  orch.beforeLlmCall = creditEnforcer(user);
 
   // Resume path: frontend sends back [ToolCall, ToolMessage][] tuples.
   // ToolMessage (from Redux/executeToolCall) lacks .function — patch it from
@@ -420,6 +427,7 @@ export async function setupOrchestration(
       expectedLogIndex,
       orchestrator: orch,
       rawStream: orch.resume(piResults),
+      pageType,
     };
   }
 
@@ -458,6 +466,7 @@ export async function setupOrchestration(
         orchestrator: orch,
         rootAgent: agent,
         rawStream: options?.preview ? null : orch.run(agent),
+        pageType,
       };
     }
     const ctx: RemoteAnalystContext = {
@@ -492,6 +501,7 @@ export async function setupOrchestration(
       orchestrator: orch,
       rootAgent: agent,
       rawStream: options?.preview ? null : orch.run(agent),
+      pageType,
     };
   }
 
@@ -542,7 +552,7 @@ export async function estimateNextChatContextV2(
  * best-effort central stats forward. The call id + duration are the ones the
  * engine already stamps onto each message. Best-effort.
  */
-export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser): Promise<void> {
+export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser, source?: string | null): Promise<void> {
   try {
     const userId = typeof user.userId === 'number' ? user.userId : null;
     const llmCalls: Record<string, LLMCallDetail> = {};
@@ -570,6 +580,8 @@ export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: numbe
         durationS: detail.duration,
         stream: true,
         finishReason: detail.finish_reason,
+        // Never empty — a conversation surface (explore/question/…), else 'unknown'.
+        trigger: source && source.length > 0 ? source : UNKNOWN_TRIGGER,
         userId,
       });
 

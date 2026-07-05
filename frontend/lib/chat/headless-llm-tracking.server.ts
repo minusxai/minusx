@@ -11,9 +11,16 @@ import 'server-only';
 import type { ConversationLogEntry as PiLogEntry } from '@/orchestrator/types';
 import type { AssistantMessage } from '@/orchestrator/llm';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
-import { recordLlmResponse } from '@/lib/analytics/file-analytics.db';
+import { recordLlmResponse, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+
+/**
+ * Sentinel conversation_id for headless LLM calls (no real conversation). Keeps
+ * llm_call_events.conversation_id NOT NULL without a schema change; the run is
+ * identified by `trigger` (the task tag) instead.
+ */
+export const HEADLESS_CONVERSATION_ID = 0;
 
 /**
  * Recover the call id + `LLMCallDetail` for one log entry, or `null` if it isn't a recordable
@@ -65,6 +72,29 @@ export async function recordHeadlessLlmCalls(piDiff: PiLogEntry[], user: Effecti
       if (!built) continue;
       const { callId, detail } = built;
       llmCalls[callId] = detail;
+
+      // Record per-call stats into llm_call_events (the complete usage ledger).
+      // Headless runs have no conversation — use the 0 sentinel and tag the run
+      // via `trigger` (which is otherwise unset), avoiding any schema change.
+      await recordLlmCallEvent({
+        conversationId: HEADLESS_CONVERSATION_ID,
+        trigger: task,
+        llmCallId: callId,
+        provider: detail.provider,
+        model: detail.model,
+        mode: user.mode,
+        totalTokens: detail.total_tokens,
+        promptTokens: detail.prompt_tokens,
+        completionTokens: detail.completion_tokens,
+        cachedTokens: detail.cached_tokens,
+        cacheCreationTokens: detail.cache_creation_tokens,
+        reasoningTokens: detail.reasoning_tokens,
+        cost: detail.cost,
+        durationS: detail.duration,
+        stream: detail.stream ?? true,
+        finishReason: detail.finish_reason,
+        userId,
+      });
 
       try {
         await recordLlmResponse({

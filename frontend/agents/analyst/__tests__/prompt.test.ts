@@ -34,19 +34,19 @@ describe('AnalystAgent system prompt', () => {
 describe('AnalystAgent skills rendering', () => {
   it('preloads page-relevant skills + the restricted nav skill by default', () => {
     const sp: string = newAgent({ pageType: 'question' }).getSystemPrompt();
-    expect(sp).toContain('## Instructions: Questions');
-    expect(sp).toContain('## Instructions: Navigation & Background File Rules');
+    expect(sp).toContain('**Skill: questions**');
+    expect(sp).toContain('**Skill: navigation_restricted**');
   });
 
   it('falls back to the default skill set when no page type is set', () => {
     const sp: string = newAgent().getSystemPrompt();
-    expect(sp).toContain('## Instructions: Questions');
-    expect(sp).toContain('## Instructions: Explore / Folder Page');
+    expect(sp).toContain('**Skill: questions**');
+    expect(sp).toContain('**Skill: explore**');
   });
 
   it('switches to the unrestricted nav skill when unrestrictedMode is set', () => {
     const sp: string = newAgent({ unrestrictedMode: true }).getSystemPrompt();
-    expect(sp).toContain('## Instructions: Navigation & Background File Rules (Background Agent Mode)');
+    expect(sp).toContain('**Skill: navigation_unrestricted**');
   });
 
   it('lists non-preloaded system skills in the LoadSkill catalog', () => {
@@ -65,8 +65,8 @@ describe('AnalystAgent skills rendering', () => {
       ],
       userSkillCatalog: [{ name: 'kb_thing', description: 'a kb skill' }],
     }).getSystemPrompt();
-    expect(sp).toContain('## Instructions: Alerts'); // selected system skill now preloaded
-    expect(sp).toContain('## Instructions: kb_thing (user-defined)');
+    expect(sp).toContain('**Skill: alerts**'); // selected system skill now preloaded
+    expect(sp).toContain('**Skill: kb_thing (user-defined)**');
     expect(sp).toContain('KB_CONTENT_MARKER_42');
   });
 });

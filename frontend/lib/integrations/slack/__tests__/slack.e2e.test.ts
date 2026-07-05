@@ -659,6 +659,34 @@ describe('Slack Bot Integration', () => {
       expect(logJson).not.toContain('"result":"interrupted"');
     }, 60000);
 
+    it('records the Slack turn LLM usage into llm_call_events', async () => {
+      slackFaux.setResponses([
+        fauxAssistantMessage('Revenue is up 12% this week.', { stopReason: 'stop' }),
+      ]);
+
+      const installation = buildInstallation();
+      await processSlackEvent(
+        makeAppMentionPayload({
+          ts: '1700012000.000001',
+          eventId: `Ev_record_${Date.now()}`,
+          text: `<@${TEST_BOT_USER_ID}> what is the revenue?`,
+        }) as any,
+        installation,
+      );
+
+      // The Slack turn's LLM call(s) must be recorded against its conversation so
+      // Slack usage shows up in the credits card — not dropped like it used to be.
+      const { getModules } = await import('@/lib/modules/registry');
+      const { rows } = await getModules().db.exec<{ cnt: number; trigger: string | null }>(
+        `SELECT COUNT(*) AS cnt, MAX(trigger) AS trigger FROM llm_call_events
+           WHERE conversation_id = (SELECT MAX(id) FROM conversations WHERE agent = 'SlackAgent')`,
+        [],
+      );
+      expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(1);
+      // Recorded with the surface as trigger so Slack usage is attributable.
+      expect(rows[0].trigger).toBe('slack');
+    }, 60000);
+
     it('unknown MinusX user receives a polite error reply', async () => {
       const installation = buildInstallation();
       // TEST_UNKNOWN_USER_ID resolves to nobody@unknown.example which is not in the DB

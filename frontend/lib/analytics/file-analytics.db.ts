@@ -15,6 +15,7 @@ export interface InsertFileEventParams {
 }
 
 export interface InsertLlmCallEventParams {
+  /** Real conversation id for chat turns; 0 sentinel for headless runs (see `trigger`). */
   conversationId: number;
   llmCallId?: string | null;
   provider?: string | null;

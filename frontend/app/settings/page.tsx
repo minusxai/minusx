@@ -12,6 +12,7 @@ import { canEdit } from '@/lib/auth/role-helpers';
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
 import { ChannelsSection } from '@/components/settings/ChannelsSection';
+import { CreditsUsageCards } from '@/components/settings/CreditsCard';
 import { SlackIntegration } from '@/components/settings/integrations/SlackIntegration';
 import { McpIntegration } from '@/components/settings/integrations/McpIntegration';
 import UsersContent from '@/components/UsersContent';
@@ -783,6 +784,7 @@ function SettingsContent() {
             </VStack>
           </Box>
         )}
+        {tab.id === 'general' && <CreditsUsageCards />}
         {[...sectionMap.entries()].map(([sectionName, entries]) => (
           <Box key={sectionName || '__default__'} bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
             {sectionName && (

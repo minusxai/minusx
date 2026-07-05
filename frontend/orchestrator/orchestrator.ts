@@ -59,6 +59,14 @@ export class Orchestrator {
    *  and sub-agent lifecycle events so callers (e.g. benchmark runner)
    *  can render live status without parsing the stream. */
   onActivity: ActivityCallback | null = null;
+  /**
+   * Optional pre-call gate, run before EVERY LLM dispatch at the one universal
+   * call site (`callLLM`). Throwing aborts the call (and the run), so the server
+   * can enforce per-user credit limits deep in the engine — covering every agent,
+   * sub-agent, and tool-resume hop, not just the entry point. The engine stays
+   * app-agnostic: the injected closure carries whatever context it needs.
+   */
+  beforeLlmCall: (() => void | Promise<void>) | null = null;
   protected stream: EventStream<StreamEvent, AssistantMessage | null> | null = null;
   protected controller: AbortController | null = null;
   protected readonly registrables: RegistrableClass[];
@@ -125,6 +133,11 @@ export class Orchestrator {
   ): Promise<AssistantMessage> {
     const callId = randomUUID();
     const t0 = Date.now();
+
+    // Pre-call gate (e.g. per-user credit enforcement). Runs BEFORE the
+    // concurrency slot / provider socket, so a blocked call spends nothing.
+    // Throwing aborts this call and the run (surfaced as a run error event).
+    if (this.beforeLlmCall) await this.beforeLlmCall();
 
     // Optional global LLM-concurrency cap (MAX_LLM_CONCURRENCY env). No-op
     // when unset, so production code paths are unaffected. Acquire before

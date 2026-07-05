@@ -230,7 +230,7 @@ templates:
   skill_questions:
     description: Question file structure (query, vizSettings, parameters, references), question page behavior guidelines
     content: |
-      ## Instructions: Questions
+      ## Questions
 
       ### File Structure
       The content is edited as MARKUP — the JSX projection of the schema below (see the EditFile tool for how fields map to JSX). The question content schema is generated LIVE from code (the single source of truth — never invent fields):
@@ -249,7 +249,7 @@ templates:
   skill_dashboards:
     description: Dashboard file structure (assets, 12-column grid layout, inline elements), dashboard page behavior guidelines
     content: |
-      ## Instructions: Dashboards
+      ## Dashboards
 
       ### File Structure
       The content is edited as MARKUP — the JSX projection of the schema below (see the EditFile tool for how fields map to JSX). The dashboard content schema is generated LIVE from code (the single source of truth — never invent fields):
@@ -271,7 +271,7 @@ templates:
   skill_contexts:
     description: Context file structure (docs, metrics, annotations, skills, evals), context page behavior guidelines
     content: |
-      ## Instructions: Contexts
+      ## Contexts
 
       A context is the KNOWLEDGE LAYER for a folder's data: documentation, metric definitions, table/column annotations, skills, and evals. You author that knowledge on top of the schema. You do NOT control which tables/columns are exposed — that whitelisting is managed by users in the Databases tab. The tables you can document are exactly the ones already resolved into your app-state schema.
 
@@ -354,7 +354,7 @@ templates:
   skill_reports:
     description: Dealing with report files — freeform reportPrompt with @ mentions, schedule, recipients, report page behavior guidelines
     content: |
-      ## Instructions: Reports
+      ## Reports
 
       A report is a scheduled job that runs ONE freeform analysis prompt and emails the result. There are no separate "references" — everything the report should cover goes into `reportPrompt` as plain text.
 
@@ -388,7 +388,7 @@ templates:
   skill_alerts:
     description: Dealing with alert files — file structure (conditions, schedules, recipients), alert page behavior guidelines
     content: |
-      ## Instructions: Alerts
+      ## Alerts
 
       ### File Structure
       The content is read and edited as markup (see the EditFile tool for the markup format). Example alert markup:
@@ -421,7 +421,7 @@ templates:
   skill_parameters:
     description: Parameter syntax (:paramName), types, sources (dropdown from query), dashboard parameter merging, EditFile ordering. Basic parameter usage is covered in the questions skill, but Load this skill for complex parameter scenarios, dashboard parameters, and source-driven dropdowns.
     content: |
-      ## Instructions: Parameters
+      ## Parameters
 
       > Parameter **definitions** (name/type/label/source) live in the question's content and are edited as **markup** via EditFile — `<parameters>` with one `<item>` per parameter. Saved defaults live in `<parameterValues>` (a compact JSON map). The only place parameters are plain JSON is the runtime name→value bindings you pass as the ExecuteQuery `parameters` arg (e.g. `{"status":"open"}`).
 
@@ -473,7 +473,7 @@ templates:
   skill_visualizations:
     description: VizSettings types (line, bar, row, area, scatter, funnel, pie, radar, pivot, geo, combo, waterfall, trend, single_value), xCols/yCols config, combo / dual-axis charts (yRightCols + axisConfig.dualAxis), pivot table pivotConfig, geo map geoConfig. Basic vizSettings are covered in the questions skill, but Load this skill for combo / dual-axis charts and other complex visualizations and options.
     content: |
-      ## Instructions: Visualizations
+      ## Visualizations
 
       **VizSettings types**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`, `combo`, `waterfall`, `trend`, `single_value`
 
@@ -583,7 +583,7 @@ templates:
   skill_composed_questions:
     description: Composed Questions (Question References) — @alias syntax for referencing other questions as CTEs in SQL. Read this skill for guidelines on how to use question references in your SQL queries, or if the SQL you are looking at contains question references(@alias)
     content: |
-      ## Instructions: Composed Questions
+      ## Composed Questions
 
       - Questions can reference other questions as composable building blocks using the @alias syntax
       - Referenced questions become CTEs (Common Table Expressions) at execution time
@@ -599,7 +599,7 @@ templates:
   skill_app_guide:
     description: App guide — pages, navigation, settings, and how-to for common tasks. Load when users ask 'how do I...', 'where can I find...', or need help using the app.
     content: |
-      ## Instructions: App Guide
+      ## App Guide
 
       When guiding users, prefer showing the in-app link directly. Only mention docs for complex multi-step tasks.
 
@@ -700,7 +700,7 @@ templates:
   skill_explore:
     description: Explore/folder page behavior — when to use ExecuteQuery vs Navigate+EditFile, creating new files from explore
     content: |
-      ## Instructions: Explore / Folder Page
+      ## Explore / Folder Page
 
       ### Behavior
       - ALWAYS prefer ExecuteQuery. NEVER call CreateFile or EditFile on the explore page unless the user explicitly asks you to.
@@ -708,7 +708,7 @@ templates:
   skill_navigation_restricted:
     description: Navigation and background file creation rules (restricted mode — require navigation before creating/editing)
     content: |
-      ## Instructions: Navigation & Background File Rules
+      ## Navigation & Background File Rules
 
       ### Question Page
       - ONLY navigate to a different question if the user explicitly asks to go to that question
@@ -735,7 +735,7 @@ templates:
   skill_navigation_unrestricted:
     description: Navigation and background file creation rules (unrestricted mode — freely create/edit in background)
     content: |
-      ## Instructions: Navigation & Background File Rules (Background Agent Mode)
+      ## Navigation & Background File Rules (Background Agent Mode)
       Background agent mode is enabled. You can freely CreateFile and EditFile for any file type in the background without navigating to the target page first. Navigation is still available but not required.
 
       ### Explore / Folder Page
@@ -746,7 +746,7 @@ templates:
   skill_large_file:
     description: Large file handling — make small targeted edits to avoid context and output limits
     content: |
-      ## Instructions: Large File Handling
+      ## Large File Handling
 
       Reason for these instructions: 
       The current AppState you are working with is very large (>50k tokens). 3 issues can occur:
@@ -1037,7 +1037,7 @@ templates:
   skill_notebooks:
     description: Notebook file structure (cells = inline SQL questions + markdown text), the activeCellId convention for editing the right cell, and notebook page behavior
     content: |-
-      ## Instructions: Notebooks
+      ## Notebooks
 
       A notebook is an ordered, vertical list of **cells**. Each cell is either a SQL cell (a full inline question) or a text cell (markdown). Cells run top-to-bottom and are independent.
 
@@ -1139,7 +1139,7 @@ prompts:
       {guidelines}
 
       ## Important Page/App State specific instructions
-      The following instructions are specifically crafted for your current page and app state. Follow them strictly — they are not optional.
+      The following skills are specifically crafted for your current page and app state. Follow them strictly — they are not optional. You do not need to load them from skill library again, these are preloaded.
       {preloaded_skills}
 
       {connection_section}

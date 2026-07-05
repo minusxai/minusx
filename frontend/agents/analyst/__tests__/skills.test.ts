@@ -165,7 +165,7 @@ describe('buildPreloadedSkillsContent', () => {
         { type: 'system', name: 'alerts' }, // not user → not appended as content here
       ],
     });
-    expect(out).toContain('## Instructions: my_kb (user-defined)\nKB body here');
+    expect(out).toContain('**Skill: my_kb (user-defined)**\nKB body here');
     expect(out).not.toContain('Alerts content'); // system selection not injected here
   });
 });
