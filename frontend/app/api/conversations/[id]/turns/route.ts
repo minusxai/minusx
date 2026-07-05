@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { getConversation, releaseRunLease, acquireRunLease, appendError, getMaxSeq } from '@/lib/data/conversations.server';
+import { getConversation, releaseRunLease, acquireRunLease, appendError, getMaxSeq, resetAutoRetries } from '@/lib/data/conversations.server';
 import { notifyStatus } from '@/lib/chat/conversation-stream.server';
 import { runConversationTurn, INSTANCE_ID } from '@/lib/chat/conversation-turn.server';
 import { getModules } from '@/lib/modules/registry';
@@ -38,7 +38,12 @@ export const POST = withAuth(async (
     const body = await request.json().catch(() => ({} as Record<string, unknown>));
     const userMessage = typeof body.userMessage === 'string' ? body.userMessage : undefined;
     const completedToolCalls = Array.isArray(body.completedToolCalls) ? body.completedToolCalls : undefined;
-    const autoRetry = body.autoRetry === true;
+    // A MANUAL retry ("Try again" on a transient error) replays the dead turn exactly like the silent
+    // crash auto-retry (truncate its partial rows + replay the preserved user message), but resets the
+    // auto-retry budget first so a human click is never blocked by MAX_AUTO_RETRIES. It runs through
+    // the same `autoRetry` path in the runner.
+    const manualRetry = body.manualRetry === true;
+    const autoRetry = body.autoRetry === true || manualRetry;
     if (!userMessage && !completedToolCalls && !autoRetry) {
       return ApiErrors.validationError('turn requires userMessage, completedToolCalls, or autoRetry');
     }
@@ -68,6 +73,9 @@ export const POST = withAuth(async (
     const startSeq = autoRetry && conversation.runStartedSeq != null
       ? conversation.runStartedSeq
       : (await getMaxSeq(conversationId)) + 1;
+    // Manual retry is human-gated (no loop risk), so clear the consecutive auto-retry budget before
+    // running — otherwise a turn that already exhausted its silent retries would refuse the click.
+    if (manualRetry) await resetAutoRetries(conversationId);
     await acquireRunLease(conversationId, INSTANCE_ID, startSeq);
     await notifyStatus(conversationId, 'running', startSeq);
 

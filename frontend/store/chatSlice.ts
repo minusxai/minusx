@@ -3,6 +3,7 @@ import type { RootState } from './store';
 import type { UserInput } from '@/lib/api/user-input-exception';
 import type { MessageDebugInfo, ErrorLogEntry } from '@/lib/types';
 import type { AppState } from '@/lib/appState';
+import { classifyErrorRetryability, type ErrorRetryability } from '@/lib/chat/error-retryability';
 
 // Types
 interface ToolCall {
@@ -92,6 +93,10 @@ export interface Conversation {
   agent: string;
   agent_args: any;
   error?: string;
+  // Whether the errored turn can plausibly be retried. transient → offer "Try again" (a clean
+  // re-run may succeed); terminal → hide retry, steer to a new conversation (an identical request
+  // would re-fail, e.g. context-length). Set alongside `error`; see classifyErrorRetryability.
+  errorRetryability?: ErrorRetryability;
 
   // Streaming state (ephemeral) - built from streaming events
   streamedCompletedToolCalls: CompletedToolCall[];
@@ -232,6 +237,20 @@ const chatSlice = createSlice({
       });
       conv.executionState = 'WAITING';
       conv.error = undefined;
+      conv.errorRetryability = undefined;
+      conv.wasInterrupted = false;
+    },
+
+    // Retry a TRANSIENT-failed turn → triggers listener (server-side truncate-dead-turn + replay of
+    // the preserved user message; no "Continue" bubble is appended). Only clears the error banner and
+    // flips to WAITING; the durable log reload after the turn rebuilds messages. Do NOT push a user
+    // message here — the replayed turn re-runs the original one from the log.
+    retryConversationTurn(state, action: PayloadAction<{ conversationID: number }>) {
+      const conv = state.conversations[action.payload.conversationID];
+      if (!conv) return;
+      conv.executionState = 'WAITING';
+      conv.error = undefined;
+      conv.errorRetryability = undefined;
       conv.wasInterrupted = false;
     },
 
@@ -329,6 +348,7 @@ const chatSlice = createSlice({
       conv.log_index = logIndex;
       conv.executionState = 'WAITING';
       conv.error = undefined;
+      conv.errorRetryability = undefined;
     },
 
     // Update agent_args (e.g., to refresh app_state before sending new message)
@@ -439,11 +459,13 @@ const chatSlice = createSlice({
     setError(state, action: PayloadAction<{
       conversationID: number;
       error: string;
+      retryability?: ErrorRetryability;
     }>) {
-      const { conversationID, error } = action.payload;
+      const { conversationID, error, retryability } = action.payload;
       const conv = state.conversations[conversationID];
       if (conv) {
         conv.error = error;
+        conv.errorRetryability = retryability ?? classifyErrorRetryability(error);
         conv.executionState = 'FINISHED';
       }
     },
@@ -666,6 +688,7 @@ export const {
   createConversation,
   loadConversation,
   sendMessage,
+  retryConversationTurn,
   addInputHistoryEntry,
   queueMessage,
   clearQueuedMessages,

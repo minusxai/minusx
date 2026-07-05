@@ -4,6 +4,7 @@ import type { RootState, AppDispatch } from './store';
 import {
   createConversation,
   sendMessage,
+  retryConversationTurn,
   queueMessage,
   clearQueuedMessages,
   flushQueuedMessages,
@@ -26,6 +27,7 @@ import { selectAllowChatQueue, selectQueueStrategy } from './uiSlice';
 import { UserInputException } from '@/lib/api/user-input-exception';
 import { generateUniqueId } from '@/lib/utils/id-generator';
 import { captureError } from '@/lib/messaging/capture-error';
+import { classifyErrorRetryability } from '@/lib/chat/error-retryability';
 import { parsePiConversation } from '@/lib/conversations-utils';
 import type { ConversationLog } from '@/orchestrator/types';
 import type { AgentSkillSelection } from '@/lib/types';
@@ -145,19 +147,25 @@ async function handleStreamError(
   dispatch: AppDispatch,
 ): Promise<boolean> {
   if (!error || typeof error !== 'object') {
-    void captureError(captureLabel, new Error(String(error)), { conversationID: String(conversationID) });
-    dispatch(setError({ conversationID, error: String(error) }));
+    const msg = String(error);
+    void captureError(captureLabel, new Error(msg), { conversationID: String(conversationID) });
+    dispatch(setError({ conversationID, error: msg, retryability: classifyErrorRetryability(msg) }));
     dispatch(clearStreamingContent({ conversationID }));
     abortControllers.delete(stableId);
-    reportClientErrorToServer(conversationID, String(error));
+    reportClientErrorToServer(conversationID, msg);
     return false;
   }
   if (error.name === 'AbortError') return true;
   const { source, httpStatus } = classifyError(error);
   // v3: the durable rows are the source of truth and reconnect is handled in conversation-stream-client;
-  // by the time an error reaches here the turn genuinely failed, so surface it.
+  // by the time an error reaches here the turn genuinely failed, so surface it. Classify whether a
+  // "Try again" can plausibly succeed (transient) or would deterministically re-fail (terminal, e.g.
+  // context-length → steer to a new conversation instead of a retry that loops). A session-expiry
+  // (401) is always terminal — a retry with the same dead session re-fails.
+  const errMsg = error.message || 'Unknown error';
+  const retryability = source === 'session' ? 'terminal' : classifyErrorRetryability(errMsg);
   void captureError(captureLabel, error, { conversationID: String(conversationID) });
-  dispatch(setError({ conversationID, error: error.message || 'Unknown error' }));
+  dispatch(setError({ conversationID, error: errMsg, retryability }));
   dispatch(clearStreamingContent({ conversationID }));
   abortControllers.delete(stableId);
   reportClientErrorToServer(conversationID, error.message || 'Unknown error', source, httpStatus);
@@ -194,6 +202,8 @@ async function runV3TurnInListener(
     const res = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${conversationID}/turns`), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        ...(turn.manualRetry ? { manualRetry: true } : {}),
+        ...(turn.autoRetry ? { autoRetry: true } : {}),
         ...(turn.userMessage != null ? { userMessage: turn.userMessage } : {}),
         ...(turn.completedToolCalls ? { completedToolCalls: turn.completedToolCalls } : {}),
         ...(turn.agent ? { agent: turn.agent } : {}),
@@ -345,6 +355,34 @@ chatListenerMiddleware.startListening({
         dispatch, abortController.signal);
     } catch (error: any) {
       if (await handleStreamError(error, 'chatListener:sendMessage', conversationID, conversation._id, dispatch)) return;
+    }
+  }
+});
+
+/**
+ * retryConversationTurn → v3 MANUAL retry of a transient-failed turn.
+ * Replays the dead turn server-side (truncate its partial rows + replay the preserved user message,
+ * budget reset so the click is uncapped) — no "Continue" bubble is appended. Used by the "Try again"
+ * affordance for transient errors only; terminal errors don't offer it.
+ */
+chatListenerMiddleware.startListening({
+  actionCreator: retryConversationTurn,
+  effect: async (action, listenerApi) => {
+    const { conversationID } = action.payload;
+    const state = listenerApi.getState() as RootState;
+    const conversation = selectConversation(state, conversationID);
+    if (!conversation) return;
+
+    const dispatch = listenerApi.dispatch as AppDispatch;
+    const abortController = new AbortController();
+    abortControllers.set(conversation._id, abortController);
+
+    try {
+      await runV3TurnInListener(conversationID, conversation,
+        { manualRetry: true, agent: conversation.agent, agentArgs: conversation.agent_args },
+        dispatch, abortController.signal);
+    } catch (error: any) {
+      if (await handleStreamError(error, 'chatListener:retryConversationTurn', conversationID, conversation._id, dispatch)) return;
     }
   }
 });
