@@ -12,9 +12,6 @@ import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
 import Markdown from '@/components/Markdown';
-import { useAppSelector } from '@/store/hooks';
-import { selectFileEditMode } from '@/store/uiSlice';
-import { selectIsDirty } from '@/store/filesSlice';
 
 interface ReportViewProps {
   report: ReportContent;
@@ -28,6 +25,8 @@ interface ReportViewProps {
   runFileId?: number;
   /** Context databases for the report's path — powers @-mention of tables/columns. */
   whitelistedSchemas?: DatabaseWithSchema[];
+  editMode: boolean;
+  isDirty: boolean;
 
   onChange: (updates: Partial<ReportContent>) => void;
   onRunNow: (opts: RunOptions) => Promise<void>;
@@ -44,15 +43,13 @@ export default function ReportView({
   runFileContent,
   runFileId,
   whitelistedSchemas,
+  editMode,
+  isDirty,
   onChange,
   onRunNow,
   onSelectRun
 }: ReportViewProps) {
   const reportOutput = runFileContent?.output as ReportOutput | undefined;
-  // editMode and isDirty sourced from Redux (managed by FileHeader). The Code view
-  // is rendered centrally by FileView, so this view only renders the visual surface.
-  const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
-  const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(50); // percentage
@@ -352,7 +349,7 @@ export default function ReportView({
                   )}
                 </VStack>
               ) : runs.length === 0 ? (
-                <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
+                <VStack aria-label="No report runs" gap={4} align="center" justify="center" h="100%" color="fg.muted">
                   <LuHistory size={48} opacity={0.3} />
                   <Text fontSize="sm">
                     {isDirty
