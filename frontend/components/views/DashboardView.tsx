@@ -10,16 +10,11 @@ import { useState, useMemo, useCallback, useRef } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { DashboardEmptyState } from '@/components/views/shared/empty-states';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent } from '@/store/filesSlice';
-import { editFile } from '@/lib/file-state/file-state';
-import { pushView, selectFileEditMode } from '@/store/uiSlice';
+import type { FileState } from '@/store/filesSlice';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
-import { shallowEqual } from 'react-redux';
 import { QuestionBrowserPanel } from '../question/QuestionBrowserPanel';
 import { useDashboardPublishHighlights, type PublishHighlight } from '@/lib/context/dashboard-publish-highlights';
 
-const EMPTY_PARAMS: Record<string, any> = {};
 // Must match the grid's rowHeight / margin props below. Used to translate a text
 // block's expanded pixel height into grid rows for "Read more".
 const GRID_ROW_HEIGHT = 80;
@@ -35,15 +30,27 @@ interface DashboardViewProps {
   // Data props (all from Redux via smart component)
   document: DocumentContent;
   folderPath: string;
-  fileId: number;  // File ID for Redux operations
+  fileId: number;  // File ID for Redux operations (used for dispatch payloads via container callbacks)
 
   // Content change callback (header/save/editMode now live in FileHeader via Redux)
   onChange: (updates: Partial<DocumentContent>) => void;
 
-  mode?: 'view' | 'create' | 'preview';
+  // Redux-derived value props — owned by DashboardContainerV2 (this view is pure presentation).
+  // editMode already folds in the mode/readOnly override (see DashboardContainerV2).
+  editMode: boolean;
+  isDirty: boolean;
+  paramValues: Record<string, any>;
+  lastExecutedParams: Record<string, any>;
+  questionContents: (QuestionContent | undefined)[];
+  fileState: FileState | undefined;
+  dirtyFiles: FileState[];
 
-  // If true, all editing is disabled (role-based permission)
-  readOnly?: boolean;
+  // Redux-derived callbacks — dispatch lives in the container.
+  onTextBlockContentChange: (textBlockId: string, content: string) => void;
+  onQuestionEdit: (questionId: number, dashboardParamValues: Record<string, any>) => void;
+  onParamSubmit: (newParamValues: Record<string, any>) => void;
+  onAddQuestion: (questionId: number) => void;
+  onAddTextBlock: () => void;
 }
 
 export default function DashboardView({
@@ -51,16 +58,19 @@ export default function DashboardView({
   folderPath,
   fileId,
   onChange,
-  mode = 'view',
-  readOnly = false,
+  editMode,
+  isDirty,
+  paramValues,
+  lastExecutedParams,
+  questionContents,
+  fileState,
+  dirtyFiles,
+  onTextBlockContentChange,
+  onQuestionEdit,
+  onParamSubmit,
+  onAddQuestion,
+  onAddTextBlock,
 }: DashboardViewProps) {
-  const dispatch = useAppDispatch();
-
-  // editMode sourced from Redux (managed by FileHeader). The JSON/XML "Code view"
-  // is rendered centrally by FileView, so this view only renders the visual surface.
-  const reduxEditMode = useAppSelector(state => selectFileEditMode(state, fileId));
-  const editMode = (mode === 'preview' || readOnly) ? false : reduxEditMode;
-
   // Ref to always have the latest document for callbacks that may fire with stale closures
   const documentRef = useRef(document);
   documentRef.current = document;
@@ -86,15 +96,10 @@ export default function DashboardView({
     });
   }, []);
 
-  // Stable across renders so React.memo(TextBlockCard) can skip unaffected blocks.
-  const handleTextBlockContentChange = useCallback((textBlockId: string, content: string) => {
-    dispatch(updateTextBlockContent({ dashboardId: fileId, textBlockId, content }));
-  }, [dispatch, fileId]);
-
   // Force react-grid-layout to remount when file reverts from dirty → clean (discard/save).
   // ResponsiveGridLayout maintains internal layout state that doesn't always sync
-  // with the `layouts` prop, so we force a remount via key change.
-  const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
+  // with the `layouts` prop, so we force a remount via key change. `isDirty` is a prop
+  // (selectIsDirty lives in the container).
   const [gridVersion, setGridVersion] = useState(0);
   const [prevIsDirty, setPrevIsDirty] = useState(isDirty);
   if (prevIsDirty !== isDirty) {
@@ -104,9 +109,8 @@ export default function DashboardView({
     }
   }
 
-  // Read current parameter values from merged content (persisted in file)
-  const mergedDashboardContent = useAppSelector(state => selectMergedContent(state, fileId)) as any;
-  const paramValues = mergedDashboardContent?.parameterValues || EMPTY_PARAMS;
+  // paramValues (dashboard-level persisted parameterValues, merged content) is a prop
+  // (selectMergedContent lives in the container — it already computes mergedContent for `document`).
 
   // Local state for in-progress edits (not submitted yet, does not trigger execution)
   // Syncs from paramValues when it changes externally (e.g. agent update, publish, initial load)
@@ -118,12 +122,10 @@ export default function DashboardView({
     setLocalParamValues(paramValues);
   }
 
-  // Last-submitted param values from lastExecuted (gates execution)
-  // NOTE: ?? EMPTY_PARAMS (not ?? {}) — a new {} each render makes effectiveSubmittedValues unstable
-  // which cascades to queryParams in EmbeddedQuestionContainer and triggers infinite retry on errors.
-  const lastExecutedParams = useAppSelector(
-    state => (state.files.files[fileId]?.ephemeralChanges as any)?.lastExecuted?.params as Record<string, any> | undefined
-  ) ?? EMPTY_PARAMS;
+  // lastExecutedParams (ephemeralChanges.lastExecuted.params, gates execution) is a prop.
+  // NOTE: the container falls back to a stable module-level EMPTY_PARAMS (not a fresh {} each
+  // render) — a new {} each render makes effectiveSubmittedValues unstable, which cascades to
+  // queryParams in EmbeddedQuestionContainer and triggers infinite retry on errors.
 
   const questionCount = document?.assets?.filter(a => a.type === 'question').length || 0;
 
@@ -145,13 +147,9 @@ export default function DashboardView({
     ?.filter(asset => asset.type === 'question' && ('id' in asset) && asset.id)
     ?.map(asset => (asset as { type: 'question'; id: number }).id) || [];
 
-  // Extract and merge parameters from all questions in Redux
-  // Questions are already loaded by SmartEmbeddedQuestionContainer's useFile calls
-  // Get all question contents (memoized with shallowEqual to prevent re-renders)
-  const questionContents = useAppSelector(
-    state => questionIds.map(id => selectMergedContent(state, id) as QuestionContent | undefined),
-    shallowEqual
-  );
+  // questionContents (per-question merged content, one per questionIds entry) is a prop —
+  // the container computes it with shallowEqual to prevent re-renders (selectMergedContent
+  // lives there now).
 
   // Merge parameters from all questions (memoized to prevent re-renders)
   // Also collect default values from questions' own parameterValues
@@ -202,8 +200,7 @@ export default function DashboardView({
   // Widget highlights: added / moved / edited questions. In PublishModal preview, provided via context.
   // On the main dashboard page, computed directly from content vs persistableChanges + child dirty state.
   const { highlights: contextHighlights } = useDashboardPublishHighlights();
-  const fileState = useAppSelector(state => state.files.files[fileId]);
-  const dirtyFiles = useAppSelector(selectDirtyFiles, shallowEqual);
+  // fileState (state.files.files[fileId]) and dirtyFiles (selectDirtyFiles) are props.
   const localHighlights = useMemo(() => {
     if (contextHighlights !== null) return null; // context active (PublishModal) — defer to it
     if (!editMode || !fileState) return null;
@@ -437,7 +434,7 @@ export default function DashboardView({
               editMode={editMode}
               index={index}
               dashboardId={fileId}
-              onEdit={() => dispatch(pushView({ type: 'question', fileId: questionId, dashboardId: fileId, dashboardParamValues: effectiveSubmittedValues }))}
+              onEdit={() => onQuestionEdit(questionId, effectiveSubmittedValues)}
               onRemove={() => handleRemoveAsset(questionId.toString())}
             />
           </Box>
@@ -464,14 +461,14 @@ export default function DashboardView({
             content={textAsset.content || ''}
             editMode={editMode}
             filePath={folderPath}
-            onContentChange={handleTextBlockContentChange}
+            onContentChange={onTextBlockContentChange}
             onRemove={handleRemoveAsset}
             onResize={handleTextBlockResize}
           />
         </Box>
       );
     });
-  }, [layoutableAssets, editMode, handleRemoveAsset, handleTextBlockResize, handleTextBlockContentChange, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, dispatch, publishHighlights, folderPath]);
+  }, [layoutableAssets, editMode, handleRemoveAsset, handleTextBlockResize, onTextBlockContentChange, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, onQuestionEdit, publishHighlights, folderPath]);
 
   const handleLayoutChange = (newLayout: Layout[]) => {
     if (!document) return;
@@ -506,20 +503,7 @@ export default function DashboardView({
                 onValueChange={(paramName, value) => {
                   setLocalParamValues(prev => ({ ...prev, [paramName]: value }));
                 }}
-                onSubmit={(newParamValues) => {
-                  // Update lastExecuted.params to trigger execution
-                  dispatch(setEphemeral({
-                    fileId,
-                    changes: {
-                      lastExecuted: { query: '', params: newParamValues, database: '', references: [] }
-                    }
-                  }));
-                  // In edit mode: persist to dirty state (saveable with Update)
-                  // Outside edit mode: ephemeral only (no dirty, no save needed)
-                  if (editMode) {
-                    editFile({ fileId, changes: { content: { parameterValues: newParamValues } } });
-                  }
-                }}
+                onSubmit={onParamSubmit}
                 disableTypeChange={true}
                 onHoverParam={setHoveredParamKey}
                 database={dashboardDatabase}
@@ -569,10 +553,8 @@ export default function DashboardView({
                   <Box flex={{ base: '0 1 auto', lg: '1 1 0' }} width="100%" maxW={{ base: '420px', lg: 'none' }} pb={{ base: 4, lg: 0 }} position="relative" zIndex={10}>
                     <QuestionBrowserPanel
                       folderPath={folderPath}
-                      onAddQuestion={(questionId) => {
-                        dispatch(addQuestionToDashboard({ dashboardId: fileId, questionId }));
-                      }}
-                      onAddTextBlock={() => dispatch(addTextBlockToDashboard({ dashboardId: fileId }))}
+                      onAddQuestion={onAddQuestion}
+                      onAddTextBlock={onAddTextBlock}
                       excludedIds={questionIds}
                       title="Add questions / text"
                       dashboardId={fileId}
@@ -588,10 +570,8 @@ export default function DashboardView({
               <Box mt={4} maxW="500px" mx="auto" position="relative" zIndex={10}>
                 <QuestionBrowserPanel
                   folderPath={folderPath}
-                  onAddQuestion={(questionId) => {
-                    dispatch(addQuestionToDashboard({ dashboardId: fileId, questionId }));
-                  }}
-                  onAddTextBlock={() => dispatch(addTextBlockToDashboard({ dashboardId: fileId }))}
+                  onAddQuestion={onAddQuestion}
+                  onAddTextBlock={onAddTextBlock}
                   excludedIds={questionIds}
                   title="Add more questions / text"
                   dashboardId={fileId}
