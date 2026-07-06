@@ -36,11 +36,10 @@ import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { QuestionEmptyState } from '@/components/views/shared/empty-states';
-import QuestionPickerModal from '../modals/QuestionPickerModal';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
-import { addReferenceToQuestion, removeReferenceFromQuestion, setFile } from '@/store/filesSlice';
-import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode } from '@/store/uiSlice';
+import { removeReferenceFromQuestion, setFile } from '@/store/filesSlice';
+import { setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode } from '@/store/uiSlice';
 import { selectView } from '@/store/authSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
 import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '../query-builder';
@@ -125,18 +124,9 @@ export default function QuestionViewV2({
   const connectionType = content.connection_name ? connections[content.connection_name]?.metadata?.type : undefined;
   const dialect = connectionTypeToDialect(connectionType ?? '');
 
-  // SQL editor collapsed state — persisted in Redux per question so it survives navigation.
-  // Default: open in page mode, collapsed in toolcall/embedded mode. In an embedded
-  // content view (view >= content), default to collapsed too so the viz shows expanded
-  // instead of the query. This is only the DEFAULT — the user can still toggle it open.
-  // When questionId is undefined (e.g. toolcall mode), use local state as fallback.
+  // Embedded content view (view >= content): default the full-page split to showing
+  // the viz expanded (collapse the left/query panel) on mount — see the mount effect below.
   const view = useAppSelector(selectView);
-  const defaultSqlCollapsed = !fullMode || viewAtLeast(view, 'content');
-  const [localSqlEditorCollapsed, setLocalSqlEditorCollapsed] = useState(defaultSqlCollapsed);
-  const reduxSqlEditorCollapsed = useAppSelector(
-    state => selectSqlEditorCollapsed(state, questionId, defaultSqlCollapsed)
-  );
-  const sqlEditorCollapsed = questionId !== undefined ? reduxSqlEditorCollapsed : localSqlEditorCollapsed;
   // editMode sourced from Redux (managed by FileHeader). The JSON/XML "Code view"
   // is rendered centrally by FileView, so this view only renders the visual surface.
   const reduxEditMode = useAppSelector(state => selectFileEditMode(state, questionId ?? -1));
@@ -144,7 +134,6 @@ export default function QuestionViewV2({
   const [containerWidth, setContainerWidth] = useState(0);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
-  const [showQuestionPicker, setShowQuestionPicker] = useState(false);
   const [sqlPreviewId, setSqlPreviewId] = useState<number | null>(null);
 
   // Resizable panel state
@@ -178,14 +167,6 @@ export default function QuestionViewV2({
       dispatch(setQuestionCollapsedPanel('left'));
     }
   }, [view, dispatch]);
-
-  const handleSqlEditorToggle = useCallback(() => {
-    if (questionId !== undefined) {
-      dispatch(setSqlEditorCollapsed({ fileId: questionId, collapsed: !sqlEditorCollapsed }));
-    } else {
-      setLocalSqlEditorCollapsed(prev => !prev);
-    }
-  }, [dispatch, questionId, sqlEditorCollapsed]);
 
   // Query mode state (SQL, GUI, or Viz)
   const [queryMode, setQueryMode] = useState<QueryTab>('sql');
@@ -418,16 +399,6 @@ export default function QuestionViewV2({
     onChange({ vizSettings: { ...content.vizSettings, axisConfig } });
   };
 
-  // Handle adding a question reference
-  const handleAddReference = (referencedQuestionId: number, alias: string) => {
-    if (!questionId) return;
-    dispatch(addReferenceToQuestion({
-      questionId,
-      referencedQuestionId,
-      alias
-    }));
-  };
-
   // Handle removing a question reference
   const handleRemoveReference = (referencedQuestionId: number) => {
     if (!questionId) return;
@@ -524,18 +495,6 @@ export default function QuestionViewV2({
           overflow="hidden"
           minHeight="0"
         >
-
-          {/* Question Picker Modal */}
-          {questionId && (
-            <QuestionPickerModal
-              isOpen={showQuestionPicker}
-              onClose={() => setShowQuestionPicker(false)}
-              onSelect={handleAddReference}
-              currentQuestionId={questionId}
-              currentConnectionId={content.connection_name}
-              excludedIds={referencedQuestions.map(r => r.id)}
-            />
-          )}
 
           {/* Collapsed Left Panel Strip */}
           {!useCompactLayout && collapsedPanel === 'left' && (
