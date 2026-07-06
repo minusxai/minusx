@@ -8,7 +8,7 @@
 // Wire-up uses STUB sources for now — replace with real adapters when available.
 
 import 'dotenv/config';
-import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
+import { runAgentTestSpec, type TestSpec } from '@/orchestrator/__tests__/support/test-spec-runner';
 import {
   RemoteAnalystAgent,
   ExecuteQuery,

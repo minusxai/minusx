@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import Link from 'next/link';
-import { rehypeMentions } from '@/lib/markdown/rehype-mentions';
+import { rehypeMentions } from './rehype-mentions';
 import { splitMentions } from '@/lib/utils/mentions';
 import { MentionChip } from '@/components/chat/MentionChip';
 import { LuChartColumnIncreasing, LuChevronDown, LuFilePlus2, LuRocket, LuShieldCheck, LuShieldAlert, LuShieldQuestion, LuSearch } from 'react-icons/lu';
@@ -20,11 +20,11 @@ import { selectShowSuggestedQuestions, selectShowTrustScore } from '@/store/uiSl
 import { selectContextFromPath } from '@/store/filesSlice';
 import { isViewer } from '@/lib/auth/role-helpers';
 import { resolvePath } from '@/lib/mode/path-resolver';
-import { isInternalAppLink } from '@/lib/utils/internal-link';
+import { isInternalAppLink } from './internal-link';
 import { ReportQueryResult, QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
-import { parseContentParts, type ContentPart } from '@/lib/markdown/content-parts';
+import { parseContentParts, type ContentPart } from './content-parts';
 
 // Inline chart component for query references in reports
 function InlineChart({ queryData }: { queryData: ReportQueryResult }) {

@@ -27,7 +27,7 @@ import { createShareLink, decodeShareLink, isLiveShareNonce, type ShareRecord } 
 import { extractReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
-import { getTemplateDefaults } from '@/lib/data/template-defaults';
+import { getTemplateDefaults } from '@/lib/data/story/template-defaults';
 import { validateFileStateServer } from '@/lib/validation/content-validators.server';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
 import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType, canCreateFileByRole } from '@/lib/auth/access-rules';

@@ -8,14 +8,14 @@ import {
   RemoteAnalystAgent,
   fauxRegistration,
 } from '../analyst-agent';
-import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
+import { runAgentTestSpec, type TestSpec } from '@/orchestrator/__tests__/support/test-spec-runner';
 import { FilesAPI } from '@/lib/data/files.server';
 import { readFilesServer } from '@/lib/file-state/file-state.server';
 import { TOOL_DEFAULT_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/chat/compress-augmented';
 import { takeFilesMarkup } from '@/lib/chat/markup-blocks';
 import { getQueryHash } from '@/lib/utils/query-hash';
-import { inlineQuestionToPlaceholder } from '@/lib/data/story-question';
-import { numberToPlaceholder } from '@/lib/data/story-number';
+import { inlineQuestionToPlaceholder } from '@/lib/data/story/story-question';
+import { numberToPlaceholder } from '@/lib/data/story/story-number';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { QuestionContent, FolderContent, DocumentContent, CompressedAugmentedFile, ReadFilesResult } from '@/lib/types';
 import {

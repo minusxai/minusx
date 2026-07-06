@@ -10,12 +10,12 @@
  */
 import { type FileType } from '@/lib/types';
 import { setEphemeral, selectMergedContent, type FileId } from '@/store/filesSlice';
-import { isTitleMissing, missingTitleFeedback } from '@/lib/data/file-title';
+import { isTitleMissing, missingTitleFeedback } from '@/lib/data/story/file-title';
 import { clearQueryResult } from '@/store/queryResultsSlice';
 import { getStore } from '@/store/store';
-import { getTemplateDefaults } from '@/lib/data/template-defaults';
+import { getTemplateDefaults } from '@/lib/data/story/template-defaults';
 import { readFiles, getQueryResult, createDraftFile, editFile as editFileOp } from '@/lib/file-state/file-state';
-import { markupToContent } from '@/lib/data/file-markup';
+import { markupToContent } from '@/lib/data/story/file-markup';
 import { compressAugmentedFile } from '@/lib/chat/compress-augmented';
 import { compressedToAugmentedFiles } from '@/lib/projection/from-compressed';
 import type { AugmentedToolDetails } from '@/lib/projection/messages';

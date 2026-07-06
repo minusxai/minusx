@@ -1,12 +1,12 @@
 import type { TextContent, ToolCall } from '@/orchestrator/llm';
 import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
 import type { FauxResponseStep } from '@/orchestrator/llm/testing';
-import { Orchestrator } from './orchestrator';
+import { Orchestrator } from '@/orchestrator/orchestrator';
 import type {
   AgentContext,
   ConversationLog,
   RegistrableClass,
-} from './types';
+} from '@/orchestrator/types';
 
 type ArgPredicateOp = '=' | '!=' | '~' | '!~' | '>' | '>=' | '<' | '<=' | 'contains';
 

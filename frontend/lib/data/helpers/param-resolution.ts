@@ -10,8 +10,8 @@ import type { RootState } from '@/store/store';
 import { selectFile, selectMergedContent, type FileState } from '@/store/filesSlice';
 import { selectQueryResult } from '@/store/queryResultsSlice';
 import { getQueryHash } from '@/lib/utils/query-hash';
-import { extractInlineQuestions } from '@/lib/data/story-question';
-import { extractInlineNumbers } from '@/lib/data/story-number';
+import { extractInlineQuestions } from '@/lib/data/story/story-question';
+import { extractInlineNumbers } from '@/lib/data/story/story-number';
 import { bindReferencedParams, buildQueryParamValues } from '@/lib/sql/sql-params';
 import type { DocumentContent, QuestionContent, QuestionParameter, QueryResult, NotebookContent } from '@/lib/types';
 

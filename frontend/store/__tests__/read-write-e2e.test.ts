@@ -445,7 +445,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       // Build oldMatch from normalized Redux state (post-dbFileToFileState), not raw DB object,
       // mirroring how the LLM builds oldMatch from ReadFiles/AppState output.
       const normalizedContent = (store.getState() as any).files.files[questionId].content;
-      const { fileToMarkup } = await import('@/lib/data/file-markup');
+      const { fileToMarkup } = await import('@/lib/data/story/file-markup');
       await editFileStr({
         fileId: questionId,
         oldMatch: fileToMarkup('question', normalizedContent),
@@ -982,7 +982,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         });
 
         // Get current content as markup
-        const { fileToMarkup } = await import('@/lib/data/file-markup');
+        const { fileToMarkup } = await import('@/lib/data/story/file-markup');
         const currentContent = fileToMarkup('question', questionFile?.content);
         const queryMatch = currentContent.match(/<query>[^<]+<\/query>/);
         expect(queryMatch).toBeTruthy();
@@ -1042,7 +1042,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         });
 
         // Get current content as markup
-        const { fileToMarkup } = await import('@/lib/data/file-markup');
+        const { fileToMarkup } = await import('@/lib/data/story/file-markup');
         const currentContent = fileToMarkup('question', questionFile?.content);
         const queryMatch = currentContent.match(/<query>[^<]+<\/query>/);
         expect(queryMatch).toBeTruthy();
@@ -1128,7 +1128,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         });
 
         // Get current description
-        const { fileToMarkup } = await import('@/lib/data/file-markup');
+        const { fileToMarkup } = await import('@/lib/data/story/file-markup');
         const currentContent = fileToMarkup('question', questionFile?.content);
         const descMatch = currentContent.match(/<description>[^<]*<\/description>/);
         expect(descMatch).toBeTruthy();
@@ -1166,7 +1166,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         });
 
         // Get the actual content to match against
-        const { fileToMarkup } = await import('@/lib/data/file-markup');
+        const { fileToMarkup } = await import('@/lib/data/story/file-markup');
         const initialContent = fileToMarkup('question', questionFile?.content);
         const descMatch = initialContent.match(/<description>[^<]+<\/description>/);
         expect(descMatch).toBeTruthy();

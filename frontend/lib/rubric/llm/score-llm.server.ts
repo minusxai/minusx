@@ -11,7 +11,7 @@
  */
 import 'server-only';
 import { runMicroTask } from '@/lib/chat/run-micro-task.server';
-import { fileToMarkup } from '@/lib/data/file-markup';
+import { fileToMarkup } from '@/lib/data/story/file-markup';
 import type { ImageContent } from '@/orchestrator/llm';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { RubricCategory, RubricFinding, RubricFileType, RubricReport } from '../types';

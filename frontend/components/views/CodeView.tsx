@@ -19,7 +19,7 @@ import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectPersistableContent } from '@/store/filesSlice';
 import { applyJsonContentEdit } from '@/lib/file-state/file-state';
-import { fileToMarkup } from '@/lib/data/file-markup';
+import { fileToMarkup } from '@/lib/data/story/file-markup';
 import type { FileType } from '@/lib/types';
 
 interface CodeViewProps {

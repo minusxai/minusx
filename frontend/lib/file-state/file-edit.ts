@@ -11,11 +11,11 @@
 
 import { getStore } from '@/store/store';
 import { selectFile, selectMergedContent, setEdit, setFullContent, setMetadataEdit, selectEffectiveName, setEphemeral, type FileId } from '@/store/filesSlice';
-import { deepMerge, generateDiff } from '@/lib/utils/deep-merge';
-import { fileToMarkup, markupToContent } from '@/lib/data/file-markup';
+import { deepMerge, generateDiff } from '@/lib/file-state/shared';
+import { fileToMarkup, markupToContent } from '@/lib/data/story/file-markup';
 import { shapeContextForAgent, foldContextAgentView } from '@/lib/context/context-agent-view';
-import { extractStoryParams, lintStoryParams, lintDashboardParams, lintStoryParamSources, type EmbeddedQuestion } from '@/lib/data/story-params';
-import { extractSavedQuestionIds, extractInlineQuestions } from '@/lib/data/story-question';
+import { extractStoryParams, lintStoryParams, lintDashboardParams, lintStoryParamSources, type EmbeddedQuestion } from '@/lib/data/story/story-params';
+import { extractSavedQuestionIds, extractInlineQuestions } from '@/lib/data/story/story-question';
 import { paramTypeMap, buildQueryParamValues } from '@/lib/sql/sql-params';
 import type { FileState, FileType, DbFile, QuestionContent } from '@/lib/types';
 import { validateFileState } from '@/lib/validation/content-validators';

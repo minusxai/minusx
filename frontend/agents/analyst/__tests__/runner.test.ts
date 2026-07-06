@@ -1,4 +1,4 @@
-import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
+import { runAgentTestSpec, type TestSpec } from '@/orchestrator/__tests__/support/test-spec-runner';
 import {
   RemoteAnalystAgent,
   ExecuteQuery,

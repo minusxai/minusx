@@ -11,7 +11,7 @@
  */
 import { Box, Text, Input } from '@chakra-ui/react';
 import type { CSSProperties } from 'react';
-import type { StoryParam } from '@/lib/data/story-params';
+import type { StoryParam } from '@/lib/data/story/story-params';
 import { SourceDropdownWidget } from '@/components/params/ParameterInput';
 
 interface Props {

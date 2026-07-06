@@ -1,6 +1,6 @@
 import type React from 'react';
 import type { MessageWithFlags } from './message/messageHelpers';
-import { embeddedQuestionCount } from '@/lib/data/story-question';
+import { embeddedQuestionCount } from '@/lib/data/story/story-question';
 import { getToolConfig } from '@/lib/tools/tool-config';
 import { type WebSearchResult } from './tools/WebSearchDisplay';
 import { ToolNames } from '@/lib/types';

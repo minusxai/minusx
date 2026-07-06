@@ -9,7 +9,7 @@
  */
 import type { EditFileDetails, NotebookContent, NotebookSqlCell } from '@/lib/types';
 import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
-import { isTitleMissing, missingTitleFeedback } from '@/lib/data/file-title';
+import { isTitleMissing, missingTitleFeedback } from '@/lib/data/story/file-title';
 import { contextEditWithinBounds } from '@/lib/context/context-agent-view';
 import { clearQueryResult } from '@/store/queryResultsSlice';
 import { getStore } from '@/store/store';

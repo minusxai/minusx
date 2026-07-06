@@ -12,7 +12,6 @@ import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, s
 import { runOrDefer } from '@/lib/navigation/nav-progress';
 import { selectMaxConcurrentQueries, selectQueryTimeoutMs } from '@/store/configsSlice';
 import { Semaphore } from '@/lib/utils/semaphore';
-import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import { captureError } from '@/lib/messaging/capture-error';
 import { getQueryHash } from '@/lib/utils/query-hash';
@@ -22,6 +21,7 @@ import type {
   QueryExecutionParams,
   GetQueryResultOptions,
 } from '@/lib/file-state/file-state-interface';
+import { PromiseManager } from '@/lib/file-state/shared';
 
 // ============================================================================
 // Get Query Result

@@ -1,4 +1,4 @@
-import { runAgentTestSpec, type TestSpec } from '../test-spec-runner';
+import { runAgentTestSpec, type TestSpec } from './support/test-spec-runner';
 import {
   ErrorTool,
   EchoTool,

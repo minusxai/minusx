@@ -6,7 +6,7 @@
  * source of truth + agent-facing contract.
  */
 import { validateFileState } from '@/lib/validation/content-validators';
-import { getTemplateDefaults } from '@/lib/data/template-defaults';
+import { getTemplateDefaults } from '@/lib/data/story/template-defaults';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 
 const sqlCell = {

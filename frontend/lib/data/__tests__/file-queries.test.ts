@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { extractInlineFileQueries } from '../file-queries';
-import { inlineQuestionToPlaceholder } from '../story-question';
-import { numberToPlaceholder } from '../story-number';
+import { inlineQuestionToPlaceholder } from '../story/story-question';
+import { numberToPlaceholder } from '../story/story-number';
 
 describe('extractInlineFileQueries — inline queries per file type', () => {
   it('question → its own (query, connection)', () => {

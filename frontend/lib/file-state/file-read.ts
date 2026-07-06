@@ -25,7 +25,6 @@ import { getStore } from '@/store/store';
 import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, setLoading, setFolderLoading, setLoadError, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setFilePlaceholder, type FileState } from '@/store/filesSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { FilesAPI, getFiles } from '@/lib/data/files';
-import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import { isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
@@ -36,7 +35,7 @@ import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { getQueryResult } from '@/lib/file-state/query-results';
-import { hashString } from '@/lib/file-state/shared';
+import { hashString, PromiseManager } from '@/lib/file-state/shared';
 import type {
   ReadFilesOptions,
   ReadFilesByCriteriaOptions,

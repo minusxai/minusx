@@ -12,9 +12,9 @@ import StoryEmbeds, {
   type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget,
 } from '@/components/views/shared/StoryEmbeds';
 import StorySelectionPopover from '@/components/views/story/StorySelectionPopover';
-import { paramFromPlaceholderEl, type StoryParam } from '@/lib/data/story-params';
-import { inlineQuestionFromEl, inlineEmbedToQuestionContent } from '@/lib/data/story-question';
-import { numberFromEl } from '@/lib/data/story-number';
+import { paramFromPlaceholderEl, type StoryParam } from '@/lib/data/story/story-params';
+import { inlineQuestionFromEl, inlineEmbedToQuestionContent } from '@/lib/data/story/story-question';
+import { numberFromEl } from '@/lib/data/story/story-number';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 import { useAppSelector } from '@/store/hooks';
 

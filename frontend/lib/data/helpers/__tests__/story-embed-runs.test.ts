@@ -3,7 +3,7 @@
 // inline <Question> — so a reader's slider / the agent's default param flows into the number.
 import { describe, it, expect } from 'vitest';
 import { storyEmbedRuns, getRootParamsFromContent } from '../param-resolution';
-import { numberToPlaceholder } from '@/lib/data/story-number';
+import { numberToPlaceholder } from '@/lib/data/story/story-number';
 
 describe('getRootParamsFromContent — a story flows its parameterValues (like a dashboard)', () => {
   it('returns a story\'s saved parameterValues as the inherited params', () => {

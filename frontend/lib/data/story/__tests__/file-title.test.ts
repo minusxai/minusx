@@ -1,4 +1,4 @@
-import { isTitleBearingType, isTitleMissing, missingTitleFeedback } from '@/lib/data/file-title';
+import { isTitleBearingType, isTitleMissing, missingTitleFeedback } from '../file-title';
 
 describe('file-title helpers', () => {
   it('flags content types as title-bearing, not system/structural ones', () => {

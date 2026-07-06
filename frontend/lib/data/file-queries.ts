@@ -13,8 +13,8 @@
  * lib/data/__tests__/file-queries.test.ts.
  */
 import type { FileType, QuestionContent, NotebookContent } from '@/lib/types';
-import { extractInlineQuestions } from '@/lib/data/story-question';
-import { extractInlineNumbers } from '@/lib/data/story-number';
+import { extractInlineQuestions } from '@/lib/data/story/story-question';
+import { extractInlineNumbers } from '@/lib/data/story/story-number';
 
 export interface FileQueryRef {
   query: string;

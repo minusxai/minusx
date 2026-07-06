@@ -6,8 +6,8 @@ import { getTestDbPath, waitFor, initTestDatabase, cleanupTestDatabase, parseToo
 import { editFile, editFileStr, readFiles } from '@/lib/file-state/file-state';
 import { selectIsDirty, selectMergedContent, selectFile, selectNotebookCellExecuted, selectPersistableContent } from '@/store/filesSlice';
 import { selectQueryResult } from '@/store/queryResultsSlice';
-import { inlineQuestionToPlaceholder } from '@/lib/data/story-question';
-import { numberToPlaceholder } from '@/lib/data/story-number';
+import { inlineQuestionToPlaceholder } from '@/lib/data/story/story-question';
+import { numberToPlaceholder } from '@/lib/data/story/story-number';
 import { executeToolCall } from '@/lib/tools/tool-handlers';
 import { FilesAPI } from '@/lib/data/files';
 import { QuestionContent, DashboardContent } from '@/lib/types';

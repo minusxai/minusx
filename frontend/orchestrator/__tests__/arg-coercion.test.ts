@@ -1,6 +1,6 @@
 import { Type } from 'typebox';
 import { coerceParameters, normalizeParameters, validateParameters } from '../utils';
-import { runAgentTestSpec, type TestSpec } from '../test-spec-runner';
+import { runAgentTestSpec, type TestSpec } from './support/test-spec-runner';
 import {
   EchoTool,
   TypedTool,

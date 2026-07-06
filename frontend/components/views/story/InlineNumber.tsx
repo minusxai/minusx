@@ -15,7 +15,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent } from '@/store/filesSlice';
 import { formatLargeNumber } from '@/lib/chart/chart-format';
 import { buildQueryParamValues, bindReferencedParams } from '@/lib/sql/sql-params';
-import type { InlineNumberEmbed } from '@/lib/data/story-number';
+import type { InlineNumberEmbed } from '@/lib/data/story/story-number';
 import type { QuestionContent } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
 

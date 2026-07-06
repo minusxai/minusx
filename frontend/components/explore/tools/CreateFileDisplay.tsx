@@ -8,7 +8,7 @@ import type { FileType } from '@/lib/ui/file-metadata';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { type DetailCardProps, parseToolArgs, isToolSuccess, parseToolContent } from './DetailCarousel';
-import { embeddedQuestionCount } from '@/lib/data/story-question';
+import { embeddedQuestionCount } from '@/lib/data/story/story-question';
 
 // ─── Shared file detail card (used by created/edited/read) ───────
 

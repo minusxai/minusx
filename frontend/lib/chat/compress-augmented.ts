@@ -9,7 +9,7 @@
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import { sortObjectKeysDeep } from '@/lib/chat/file-encoding';
-import { fileToMarkup } from '@/lib/data/file-markup';
+import { fileToMarkup } from '@/lib/data/story/file-markup';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
 import { buildVizTypeCtx } from '@/lib/rubric/refs';
 import { toAgentRubric } from '@/lib/rubric/scoring';

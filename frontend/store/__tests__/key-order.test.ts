@@ -24,7 +24,7 @@
 import { getTestDbPath, initTestDatabase } from './test-utils';
 import { readFiles, buildCurrentFileStr, editFileStr } from '@/lib/file-state/file-state';
 import { setEdit } from '@/store/filesSlice';
-import { fileToMarkup } from '@/lib/data/file-markup';
+import { fileToMarkup } from '@/lib/data/story/file-markup';
 import { DashboardContent } from '@/lib/types';
 import { configureStore } from '@reduxjs/toolkit';
 import filesReducer from '../filesSlice';
