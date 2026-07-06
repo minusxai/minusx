@@ -57,7 +57,7 @@ export type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
 // Files/documents domain — see lib/types/files.ts
 export type {
-  BaseEntity, BaseFileMetadata, QuestionContainer, AssetReference,
+  BaseEntity, BaseFileMetadata, AssetReference,
   QueryResult, CompressedQueryResult,
   BaseFileContent, DocumentContent, FolderContent, StylesContent,
   SessionRecordingMetadata, SessionRecordingFileContent, DbFile,
@@ -97,7 +97,6 @@ export type {
   WhitelistNode, Whitelist, WhitelistItem, DocEntry, MetricDef, ColumnAnnotation,
   TableAnnotation, SkillEntry, DatabaseContext, ContextVersion, PublishedVersions,
   ContextContent, ResolvedContextDoc, ResolvedContextDocs, ContextInfo,
-  SchemaInfo,
 } from './types/context';
 
 // Chat/conversation domain — see lib/types/chat.ts
@@ -105,7 +104,7 @@ export type {
   Attachment, ChatMentionData, SkillMention, SlashCommand,
   AgentSkillSelection, AgentUserSkillCatalogItem,
   ToolCall, ToolCallDetails, EditFileDetails, ScreenshotDetails, ClarifyDetails,
-  ToolMessage, CompletedToolCall, ToolCallRound, ChatMessage,
+  ToolMessage, CompletedToolCall,
   ConversationSource, ConversationMetadata,
   TaskLogEntry, TaskResultEntry, TaskDebugEntry, ConversationLogEntry,
   LLMDebugInfo, MessageDebugInfo, ErrorLogEntry, ConversationFileContent,
@@ -117,7 +116,6 @@ export { contentToDetails, ToolNames } from './types/chat';
 
 // Evals/tests domain — see lib/types/evals.ts
 export type {
-  EvalAppState, BinaryAssertion, NumberAssertion, EvalAssertion,
   RowIndex, TestSubject, TestAnswerType, TestOperator, TestValue, Test, TestRunResult,
 } from './types/evals';
 
