@@ -415,6 +415,10 @@ export default function DashboardView({
         return (
           <Box
             key={key}
+            // Surfaces the publish/edit highlight state (added/moved/edited) for
+            // component tests — there's no other visible affordance for it besides
+            // the border color below.
+            aria-label={`Dashboard tile ${questionId}${publishMark ? ` (${publishMark})` : ''}`}
             bg="bg.subtle"
             borderWidth={publishMark ? '2px' : '1px'}
             borderColor={borderColor}
