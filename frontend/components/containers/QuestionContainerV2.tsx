@@ -12,18 +12,20 @@
  * - Background refetch for stale data
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { shallowEqual } from 'react-redux';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, setEphemeral, type FileId } from '@/store/filesSlice';
+import { selectMergedContent, setEphemeral, setFile, removeReferenceFromQuestion, type FileId } from '@/store/filesSlice';
 import { clearQueryResult } from '@/store/queryResultsSlice';
-import { selectProposedQuery } from '@/store/uiSlice';
+import { selectProposedQuery, selectFileEditMode, selectQuestionCollapsedPanel, setQuestionCollapsedPanel } from '@/store/uiSlice';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { editFile, getQueryResult } from '@/lib/file-state/file-state';
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
-import { QuestionContent } from '@/lib/types';
+import { QuestionContent, type DbFile } from '@/lib/types';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
-import { selectEffectiveUser } from '@/store/authSlice';
+import { selectEffectiveUser, selectView } from '@/store/authSlice';
 import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
+import { viewAtLeast } from '@/lib/view/view-types';
 import { useSearchParams } from 'next/navigation';
 
 interface QuestionContainerV2Props {
@@ -57,10 +59,47 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   // Phase 3: Use useFile hook for file state management (purely reactive)
   const { fileState: file } = useFile(fileId) ?? {};
 
+  // Convert fileId to number for questionId (handle both number and 'new' string).
+  // Computed early (above the loading early-return below) since several Redux reads
+  // that used to live inside QuestionViewV2 key off it.
+  const questionId = typeof fileId === 'number' ? fileId : undefined;
+
   // Derive readOnly from the user's role — prevents persistable changes for non-editors
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const readOnly = !!effectiveUser && !!file && !canCreateFileByRole(effectiveUser.role, file.type as 'question');
   const fileLoading = !file || file.loading;
+
+  // --- Redux state that used to live directly inside QuestionViewV2 (a Container/View
+  // convention violation) — now read here and passed down as props. See CLAUDE.md
+  // "Component Patterns". ---
+  const editMode = useAppSelector(state => selectFileEditMode(state, questionId ?? -1));
+  const collapsedPanel = useAppSelector(selectQuestionCollapsedPanel);
+  // shallowEqual avoids re-rendering when Immer rotates the bag's top-level ref on an
+  // unrelated write.
+  const filesState = useAppSelector(state => state.files.files, shallowEqual);
+  const view = useAppSelector(selectView);
+
+  const onTogglePanel = useCallback((panel: 'none' | 'left' | 'right') => {
+    dispatch(setQuestionCollapsedPanel(panel));
+  }, [dispatch]);
+
+  const onSetFile = useCallback((referencedFile: DbFile) => {
+    dispatch(setFile({ file: referencedFile, references: [] }));
+  }, [dispatch]);
+
+  const onRemoveReference = useCallback((referencedQuestionId: number) => {
+    if (questionId === undefined) return;
+    dispatch(removeReferenceFromQuestion({ questionId, referencedQuestionId }));
+  }, [questionId, dispatch]);
+
+  // Embedded content view (view >= content): default the full-page split to showing
+  // the viz expanded (collapse the left/query panel) on mount. This sets real state
+  // so the panel toggles keep working — the user can re-open the query if they want.
+  useEffect(() => {
+    if (viewAtLeast(view, 'content')) {
+      dispatch(setQuestionCollapsedPanel('left'));
+    }
+  }, [view, dispatch]);
 
   // Phase 3: Get merged content (content + persistableChanges + ephemeralChanges)
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as QuestionContent | undefined;
@@ -231,9 +270,6 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     return <div>Loading question...</div>;
   }
 
-  // Convert fileId to number for questionId (handle both number and 'new' string)
-  const questionId = typeof fileId === 'number' ? fileId : undefined;
-
   // In preview mode, pass the original (saved) query for diff display
   const originalQuery = containerMode === 'preview'
     ? (file.content as QuestionContent | null)?.query
@@ -255,6 +291,12 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
       originalQuery={originalQuery}
       mode={containerMode}
       readOnly={readOnly}
+      editMode={editMode}
+      collapsedPanel={collapsedPanel}
+      onTogglePanel={onTogglePanel}
+      fileState={filesState}
+      onSetFile={onSetFile}
+      onRemoveReference={onRemoveReference}
       onChange={handleChange}
       onParameterValueChange={handleParameterValueChange}
       onExecute={handleExecuteForced}

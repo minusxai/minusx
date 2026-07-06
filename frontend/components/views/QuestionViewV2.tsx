@@ -25,7 +25,7 @@ import {
   LuX,
   LuGripVertical,
 } from 'react-icons/lu';
-import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType } from '@/lib/types';
+import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType, type DbFile } from '@/lib/types';
 import SqlEditor from '../query-builder/SqlEditor';
 import ParameterRow from '../params/ParameterRow';
 import DatabaseSelector from '../selectors/DatabaseSelector';
@@ -36,18 +36,18 @@ import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { QuestionEmptyState } from '@/components/views/shared/empty-states';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { shallowEqual } from 'react-redux';
-import { removeReferenceFromQuestion, setFile } from '@/store/filesSlice';
-import { setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode } from '@/store/uiSlice';
-import { selectView } from '@/store/authSlice';
-import { viewAtLeast } from '@/lib/view/view-types';
+import type { FileId, FileState } from '@/store/filesSlice';
 import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '../query-builder';
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
 import { FilesAPI } from '@/lib/data/files';
 import { useGuiCompat } from '@/lib/hooks/use-gui-compat';
+
+// Which side of the split view is collapsed (or neither). Page mode persists this
+// globally in Redux (state.ui.questionCollapsedPanel); toolcall mode keeps it local
+// to the caller since it has no layout effect there (see callers' comments).
+type CollapsedPanel = 'none' | 'left' | 'right';
 
 /**
  * Props for QuestionViewV2
@@ -57,7 +57,7 @@ interface QuestionViewV2Props {
   // Content (merged: content + persistableChanges + ephemeralChanges)
   content: QuestionContent;
   filePath?: string;               // File path for context lookup (schema autocomplete)
-  questionId?: number;             // Question ID (also used to read editMode from Redux)
+  questionId?: number;             // Question ID
 
   // Query result (from useQueryResult hook in container)
   queryData: any | null;           // Query result data (columns + rows)
@@ -86,6 +86,27 @@ interface QuestionViewV2Props {
   // Estimated query duration from analytics history (shown during loading)
   queryEstimatedDurationMs?: number | null;
 
+  // --- Formerly-internal Redux state, now supplied by the caller (Container/View
+  // convention — see CLAUDE.md "Component Patterns"). Page-mode containers
+  // (QuestionContainerV2, CreateQuestionModalContainer) source these from Redux;
+  // toolcall callers (InlineChart, ExecuteQueryDisplay) supply local/no-op values. ---
+
+  // Raw file-edit-mode flag (sourced from selectFileEditMode by page containers).
+  // The view derives the *effective* edit mode below via isPreview/readOnly.
+  editMode?: boolean;
+
+  // Split-panel collapse state + toggle.
+  collapsedPanel: CollapsedPanel;
+  onTogglePanel: (panel: CollapsedPanel) => void;
+
+  // Referenced-question lookup (mirrors state.files.files) + setter used to persist
+  // a freshly-fetched referenced question back into Redux.
+  fileState: Record<FileId, FileState>;
+  onSetFile: (file: DbFile) => void;
+
+  // Remove a question reference (edit-mode only). Omitted where unreachable (toolcall).
+  onRemoveReference?: (referencedQuestionId: number) => void;
+
   // Handlers
   onChange: (updates: Partial<QuestionContent>) => void;
   onParameterValueChange?: (paramName: string, value: string | number | null) => void;  // Ephemeral
@@ -108,6 +129,12 @@ export default function QuestionViewV2({
   readOnly = false,
   showVizControls = true,
   queryEstimatedDurationMs,
+  editMode: editModeProp = false,
+  collapsedPanel,
+  onTogglePanel,
+  fileState,
+  onSetFile,
+  onRemoveReference,
   onChange,
   onParameterValueChange,
   onExecute,
@@ -124,13 +151,10 @@ export default function QuestionViewV2({
   const connectionType = content.connection_name ? connections[content.connection_name]?.metadata?.type : undefined;
   const dialect = connectionTypeToDialect(connectionType ?? '');
 
-  // Embedded content view (view >= content): default the full-page split to showing
-  // the viz expanded (collapse the left/query panel) on mount — see the mount effect below.
-  const view = useAppSelector(selectView);
-  // editMode sourced from Redux (managed by FileHeader). The JSON/XML "Code view"
-  // is rendered centrally by FileView, so this view only renders the visual surface.
-  const reduxEditMode = useAppSelector(state => selectFileEditMode(state, questionId ?? -1));
-  const editMode = (isPreview || readOnly) ? false : reduxEditMode;
+  // editMode: managed by FileHeader in Redux, supplied as a prop (see Props doc above).
+  // The JSON/XML "Code view" is rendered centrally by FileView, so this view only
+  // renders the visual surface.
+  const editMode = (isPreview || readOnly) ? false : editModeProp;
   const [containerWidth, setContainerWidth] = useState(0);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
@@ -139,7 +163,6 @@ export default function QuestionViewV2({
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(45); // percentage
   const [isResizing, setIsResizing] = useState(false);
-  const collapsedPanel = useAppSelector(selectQuestionCollapsedPanel);
   const resizeStartX = useRef<number>(0);
   const resizeStartWidth = useRef<number>(45);
   const rafRef = useRef<number | null>(null);
@@ -154,35 +177,19 @@ export default function QuestionViewV2({
   // to the sibling VizConfigPanel so its color swatches match the chart exactly
   // for split-by charts — without the panel re-aggregating the rows.
   const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
-  const dispatch = useAppDispatch();
-  const toggleCollapsedPanel = useCallback((panel: 'none' | 'left' | 'right') => {
-    dispatch(setQuestionCollapsedPanel(panel));
-  }, [dispatch]);
-
-  // Embedded content view (view >= content): default the full-page split to showing
-  // the viz expanded (collapse the left/query panel) on mount. This sets real state
-  // so the panel toggles keep working — the user can re-open the query if they want.
-  useEffect(() => {
-    if (viewAtLeast(view, 'content')) {
-      dispatch(setQuestionCollapsedPanel('left'));
-    }
-  }, [view, dispatch]);
+  const toggleCollapsedPanel = onTogglePanel;
 
   // Query mode state (SQL, GUI, or Viz)
   const [queryMode, setQueryMode] = useState<QueryTab>('sql');
-
-  // Get files state for referenced questions. shallowEqual avoids re-rendering
-  // this view when Immer rotates the bag's top-level ref on an unrelated write.
-  const filesState = useAppSelector(state => state.files.files, shallowEqual);
 
   // Memoize referencedQuestions to avoid unnecessary re-renders
   const referencedQuestions = useMemo(() => {
     const refs = content.references || [];
     return refs.map(ref => ({
       ...ref,
-      question: filesState[ref.id]
+      question: fileState[ref.id]
     }));
-  }, [content.references, filesState]);
+  }, [content.references, fileState]);
 
   // Get available questions for inline @reference autocomplete
   const { questions: availableQuestions } = useAvailableQuestions(
@@ -191,7 +198,7 @@ export default function QuestionViewV2({
     referencedQuestions.map(r => r.id)
   );
 
-  // Load referenced questions into Redux
+  // Load referenced questions into Redux (via the onSetFile callback supplied by the caller)
   useEffect(() => {
     const referencedIds = content.references?.map(ref => ref.id) || [];
     if (referencedIds.length === 0) return;
@@ -207,12 +214,12 @@ export default function QuestionViewV2({
     // Load missing questions
     FilesAPI.loadFiles(missingIds).then(result => {
       result.data.forEach(file => {
-        dispatch(setFile({ file, references: [] }));
+        onSetFile(file);
       });
     }).catch(err => {
       console.error('[QuestionViewV2] Failed to load referenced questions:', err);
     });
-  }, [content.references, referencedQuestions, dispatch]);
+  }, [content.references, referencedQuestions, onSetFile]);
 
   // Track container width for responsive layout
   useEffect(() => {
@@ -401,11 +408,7 @@ export default function QuestionViewV2({
 
   // Handle removing a question reference
   const handleRemoveReference = (referencedQuestionId: number) => {
-    if (!questionId) return;
-    dispatch(removeReferenceFromQuestion({
-      questionId,
-      referencedQuestionId
-    }));
+    onRemoveReference?.(referencedQuestionId);
   };
 
   // Merge parameters from current question + referenced questions
