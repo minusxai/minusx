@@ -134,7 +134,7 @@ Work queue (grouped; skip anything that fails grep-confirm):
 
 **Running false-positive tally for this milestone (5 total, all caught before merge):** `delivery-options.ts`, `selectCompanyName`, `file-queries.ts`, `yaml-loader`, `tailwindcss`. None came from knip's own "Unused files" list (which had exactly one true entry) — all were either (a) knip "Unused exports" false positives on barrel-adjacent or otherwise-hard-to-trace files, or (b) dependency-usage blind spots (config-file-only references invisible to JS/TS import analysis). Lesson generalized into the M3+ work: treat every automated dead-code signal as a lead requiring independent grep confirmation, never as proof.
 
-**Acceptance for M1:** `npm run validate` + full `npm test` green; `npm run test:e2e` green; knip finding count drops to ~0 (modulo config-registered entries); no runtime behavior change. Commit + push to PR #567.
+**Acceptance for M1: MET.** `npm run validate` + full `npm test` (3941 passed, 5 skipped — same as baseline) + `npm run test:e2e` (2 passed) all green across both waves. **M1 complete** — 5 false positives from the original audit caught and reverted during execution (documented inline above); one lint-rule side-effect fixed (`immutableSet()` for a de-exported module-level `Set`). Pushed to PR #567 in two commits (`M1 wave 1`, `M1 wave 2`).
 
 ---
 
