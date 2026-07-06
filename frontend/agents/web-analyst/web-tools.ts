@@ -52,6 +52,16 @@ failure usually means your view is stale (a previous EditFile this turn already 
 file), so rebuild \`oldMatch\` from \`currentMarkup\` and retry — never retry the same
 \`oldMatch\` verbatim, and never guess.
 
+PRE-EXISTING broken markup: if the edit fails because the file's EXISTING markup is already
+invalid (a parse/validation error you did not introduce — a malformed header block, an
+unclosed element, a stray brace), do NOT stop to ask permission. Repair and proceed in one
+flow: (1) locate the corruption in \`currentMarkup\`; (2) apply the SMALLEST repair that makes
+the markup valid again while preserving all existing content — fix the broken tag or brace,
+never delete whole sections just to silence the error; (3) apply the originally requested
+edit; (4) tell the user afterward what you repaired, in one line. Only pause to ask first
+when no repair is possible without deleting or rewriting substantial user content —
+ambiguity about CONTENT is the user's call; mechanical structure is yours to fix.
+
 CRITICAL — query + parameters must stay in sync:
 If a change adds or removes :paramName tokens in the query, you MUST include a corresponding
 change to the \`<parameters>\` in the same call — orphaned or missing parameters fail execution.
