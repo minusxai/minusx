@@ -5,23 +5,14 @@ import { headers, cookies } from 'next/headers';
 import { GUEST_COOKIE, verifyGuestToken, guestToEffectiveUser, isShareGuestPath } from './guest-session';
 import { UserRole } from '../types';
 import { isAdmin } from './role-helpers';
-import { CURRENT_TOKEN_VERSION, TOKEN_REFRESH_THRESHOLD } from './auth-constants';
+import { CURRENT_TOKEN_VERSION } from './auth-constants';
 import { Mode, DEFAULT_MODE, isValidMode } from '@/lib/mode/mode-types';
 import { View, DEFAULT_VIEW, isValidView } from '@/lib/view/view-types';
 
 /**
- * Check if a token should be refreshed based on age
- */
-export function shouldRefreshToken(createdAt?: number): boolean {
-  if (!createdAt) return false;
-  const age = Math.floor(Date.now() / 1000) - createdAt;
-  return age > TOKEN_REFRESH_THRESHOLD;
-}
-
-/**
  * Check if token version is outdated
  */
-export function isTokenOutdated(tokenVersion?: number): boolean {
+function isTokenOutdated(tokenVersion?: number): boolean {
   return !tokenVersion || tokenVersion < CURRENT_TOKEN_VERSION;
 }
 
@@ -47,7 +38,7 @@ export interface EffectiveUser {
 /**
  * Get the current mode from request headers
  */
-export const getMode = cache(async (): Promise<Mode> => {
+const getMode = cache(async (): Promise<Mode> => {
   const headersList = await headers();
   const modeHeader = headersList.get('x-mode');
   if (modeHeader && isValidMode(modeHeader)) {
@@ -59,7 +50,7 @@ export const getMode = cache(async (): Promise<Mode> => {
 /**
  * Get the current view from request headers (chrome-stripping for embedding).
  */
-export const getView = cache(async (): Promise<View> => {
+const getView = cache(async (): Promise<View> => {
   const headersList = await headers();
   const viewHeader = headersList.get('x-view');
   if (viewHeader && isValidView(viewHeader)) {
@@ -67,13 +58,6 @@ export const getView = cache(async (): Promise<View> => {
   }
   return DEFAULT_VIEW;
 });
-
-/**
- * Get the current session (wrapper around auth())
- */
-export async function getServerSession() {
-  return await auth();
-}
 
 /**
  * Get the effective user (impersonated or actual session user).

@@ -30,7 +30,7 @@ const CATEGORICAL_RATIO_MAX = 0.5; // permissive for 100-doc samples
 type Classification = 'categorical' | 'numeric' | 'temporal' | 'text' | 'other';
 
 /** Build a Mongo `{collection, pipeline}` query string for one $sample call. */
-export function buildSampleQuery(collection: string, size: number = SAMPLE_SIZE): string {
+function buildSampleQuery(collection: string, size: number = SAMPLE_SIZE): string {
   return JSON.stringify({ collection, pipeline: [{ $sample: { size } }] });
 }
 

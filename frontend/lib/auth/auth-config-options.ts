@@ -1,6 +1,6 @@
 import type { JWT } from 'next-auth/jwt';
 
-export interface AuthUserRow {
+interface AuthUserRow {
   id: number;
   email: string;
   name: string;

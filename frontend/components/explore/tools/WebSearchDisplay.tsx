@@ -82,7 +82,3 @@ export function WebSearchDetailCard({ results, icon }: WebSearchDetailCardProps)
     </Box>
   );
 }
-
-export default function WebSearchDisplay() {
-  return null;
-}

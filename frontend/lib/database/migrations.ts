@@ -9,8 +9,8 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
 import workspaceTemplate from './workspace-template.json';
 import { remapStoryQuestionIds } from '@/lib/data/story-question';
 
-export type DataMigration = (data: InitData) => InitData;
-export type SchemaMigration = null;  // Null means "recreate DB with new schema"
+type DataMigration = (data: InitData) => InitData;
+type SchemaMigration = null;  // Null means "recreate DB with new schema"
 
 export interface MigrationEntry {
   dataVersion?: number;      // Target data version (if data format changes)

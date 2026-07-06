@@ -103,7 +103,7 @@ const variantStylesLight: Record<ChipVariant, VariantStyle> = {
   },
 };
 
-export function useChipVariantStyles(variant: ChipVariant): VariantStyle {
+function useChipVariantStyles(variant: ChipVariant): VariantStyle {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   return (colorMode === 'light' ? variantStylesLight : variantStylesDark)[variant];
 }

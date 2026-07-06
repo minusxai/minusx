@@ -200,7 +200,7 @@ function TimingChip({ icon, label, value, color }: { icon: React.ReactNode; labe
 /*  AlertRunView — reusable presentation component                     */
 /* ------------------------------------------------------------------ */
 
-export interface AlertRunViewProps {
+interface AlertRunViewProps {
   status: ExecutionStatus;
   alertId?: number;
   alertName?: string;
@@ -224,7 +224,7 @@ export interface AlertRunViewProps {
   onSnooze?: (value: string) => void;
 }
 
-export function AlertRunView({
+function AlertRunView({
   status,
   alertId,
   alertName,

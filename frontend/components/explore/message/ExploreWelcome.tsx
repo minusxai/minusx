@@ -77,7 +77,7 @@ interface SuggestedQuestionCardProps {
 }
 
 /** A single "try these questions" card. Reused by the explore empty-state and the share gate. */
-export function SuggestedQuestionCard({ prompt, locked = false, onClick }: SuggestedQuestionCardProps) {
+function SuggestedQuestionCard({ prompt, locked = false, onClick }: SuggestedQuestionCardProps) {
   const PromptIcon = prompt.icon ?? LuSparkles;
   // Locked = a lightweight "preview" row (dashed, no fill, no category) so a stack
   // of them reads as a calm teaser list rather than three heavy interactive cards.

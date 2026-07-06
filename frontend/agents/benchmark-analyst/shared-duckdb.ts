@@ -497,7 +497,7 @@ export interface BenchmarkConnectorOptions {
  * No ATTACH, no file_path, no datasetKey namespacing — it's just a thin
  * BenchmarkSharedDuckdbConnector pointing at `memory`.
  */
-export const SCRATCH_CONNECTION_NAME = '_scratch';
+const SCRATCH_CONNECTION_NAME = '_scratch';
 
 export async function getOrCreateBenchmarkConnector(
   name: string,

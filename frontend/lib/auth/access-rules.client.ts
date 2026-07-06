@@ -36,7 +36,7 @@ function getEffectiveRule(role: UserRole, overrides?: AccessRulesOverride) {
  * @param overrides - Optional per-org access rules overrides
  * @returns true if user can access the file type
  */
-export function canAccessFileType(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
+function canAccessFileType(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
   const rule = getEffectiveRule(role, overrides);
 
   if (!rule) return false;
@@ -67,7 +67,7 @@ export function canCreateFileByRole(role: UserRole, fileType: FileType, override
 /**
  * Get creation blocklist from rules (client-side)
  */
-export function getCreationBlocklist(): FileType[] {
+function getCreationBlocklist(): FileType[] {
   const rule = rulesConfig.rules.find(
     (r: any) => r.type === 'creationBlocklist'
   );
@@ -77,7 +77,7 @@ export function getCreationBlocklist(): FileType[] {
 /**
  * Get deletion blocklist from rules (client-side)
  */
-export function getDeletionBlocklist(): FileType[] {
+function getDeletionBlocklist(): FileType[] {
   const rule = rulesConfig.rules.find(
     (r: any) => r.type === 'deletionBlocklist'
   );
@@ -105,7 +105,7 @@ export function canDeleteFileType(type: FileType): boolean {
  * This is purely for UI filtering - API can still create types not in this list
  * @param overrides - Optional per-org access rules overrides
  */
-export function canShowInCreateMenu(role: UserRole, type: FileType, overrides?: AccessRulesOverride): boolean {
+function canShowInCreateMenu(role: UserRole, type: FileType, overrides?: AccessRulesOverride): boolean {
   const rule = getEffectiveRule(role, overrides);
 
   if (!rule) return false;

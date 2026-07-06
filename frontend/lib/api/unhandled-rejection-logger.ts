@@ -8,7 +8,7 @@
 import 'server-only';
 import { appendError } from '@/lib/data/conversations.server';
 
-export interface TaggedError {
+interface TaggedError {
   conversationId?: number;
   message?: string;
   stack?: string;

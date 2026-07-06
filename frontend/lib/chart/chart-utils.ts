@@ -16,7 +16,7 @@ import type { OrgBranding } from '@/lib/branding/whitelabel'
  * Passed as a function so ECharts re-evaluates it on each tooltip show, picking
  * up fullscreen enter/exit without rebuilding the chart option.
  */
-export const tooltipAppendTo = (): HTMLElement =>
+const tooltipAppendTo = (): HTMLElement =>
   (typeof document !== 'undefined' && (document.fullscreenElement as HTMLElement | null)) || document.body
 
 /** Chart types handled by buildChartOption / BaseChart (ECharts-based standard charts). */
@@ -87,7 +87,7 @@ export function buildCompactYLabel(names: string[], maxNames = 1): string {
 }
 
 /** Truncate a string to maxLen chars, preserving a trailing "(+N more)" suffix if present */
-export function truncateLabel(s: string, maxLen: number): string {
+function truncateLabel(s: string, maxLen: number): string {
   if (s.length <= maxLen) return s
   const suffixMatch = s.match(/(\s*\(\+\d+ more\))$/)
   if (suffixMatch) {
@@ -363,7 +363,7 @@ export const formatLargeNumber = (value: number): string => {
 
 // Determine a consistent scale suffix based on the max absolute value across all series
 type NumberScale = { divisor: number; suffix: string }
-export const getNumberScale = (series: Array<{ data: number[] }>): NumberScale => {
+const getNumberScale = (series: Array<{ data: number[] }>): NumberScale => {
   const maxAbs = Math.max(...series.flatMap(s => s.data.map(v => Math.abs(v || 0))))
   if (maxAbs >= 1e9) return { divisor: 1e9, suffix: 'B' }
   if (maxAbs >= 1e6) return { divisor: 1e6, suffix: 'M' }
@@ -372,7 +372,7 @@ export const getNumberScale = (series: Array<{ data: number[] }>): NumberScale =
 }
 
 // Format a number using a fixed scale (for consistent axis labels)
-export const formatWithScale = (value: number, scale: NumberScale): string => {
+const formatWithScale = (value: number, scale: NumberScale): string => {
   if (scale.divisor === 1) return value.toFixed(1)
   const scaled = value / scale.divisor
   // Use more decimal places for small scaled values to avoid "0.0M"
@@ -451,7 +451,7 @@ export const formatDateValue = (dateStr: string, format: string): string => {
 }
 
 // Resolve format configs for chart axes (shared by PiePlot, FunnelPlot, and buildChartOption)
-export const resolveChartFormats = (
+const resolveChartFormats = (
   columnFormats?: Record<string, ColumnFormatConfig>,
   xAxisColumns?: string[],
   yAxisColumns?: string[],
@@ -1362,7 +1362,7 @@ interface ChartToolboxConfig {
 }
 
 // Build toolbox configuration for charts (PNG + CSV download)
-export const buildToolbox = ({
+const buildToolbox = ({
   colorMode,
   downloadCsv,
   onDownloadImage,

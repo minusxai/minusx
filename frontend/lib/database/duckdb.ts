@@ -33,7 +33,7 @@ const LOCAL_BUNDLES: duckdb.DuckDBBundles = {
   },
 }
 
-export async function initDuckDB() {
+async function initDuckDB() {
   // If already initialized, return existing db
   if (db && connection) return db
 
@@ -64,14 +64,14 @@ export async function initDuckDB() {
   }
 }
 
-export async function getConnection() {
+async function getConnection() {
   if (!connection) {
     await initDuckDB()
   }
   return connection!
 }
 
-export interface NumberStats {
+interface NumberStats {
   type: 'number'
   min: number
   max: number
@@ -79,14 +79,14 @@ export interface NumberStats {
   unique: number
 }
 
-export interface DateStats {
+interface DateStats {
   type: 'date'
   min: string
   max: string
   unique: number
 }
 
-export interface TextStats {
+interface TextStats {
   type: 'text'
   unique: number
   topValues: Array<{ value: string; count: number }>

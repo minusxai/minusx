@@ -5,19 +5,18 @@ import { Orchestrator } from './orchestrator';
 import type {
   AgentContext,
   ConversationLog,
-  ConversationLogEntry,
   RegistrableClass,
 } from './types';
 
-export type ArgPredicateOp = '=' | '!=' | '~' | '!~' | '>' | '>=' | '<' | '<=' | 'contains';
+type ArgPredicateOp = '=' | '!=' | '~' | '!~' | '>' | '>=' | '<' | '<=' | 'contains';
 
-export interface ArgPredicate {
+interface ArgPredicate {
   arg: string;
   op: ArgPredicateOp;
   value: unknown;
 }
 
-export type Assertion =
+type Assertion =
   | { kind: 'toolCalled'; name: string; args?: ArgPredicate[] }
   | { kind: 'oneOf'; names: string[] }
   | { kind: 'noToolCalled'; name: string }
@@ -26,7 +25,7 @@ export type Assertion =
   | { kind: 'finalText'; op: '~' | 'contains' | '='; value: string }
   | { kind: 'maxTurns'; n: number };
 
-export type SpecResponse =
+type SpecResponse =
   | { type: 'toolUse'; toolCalls: { name: string; args: Record<string, unknown> }[] }
   | { type: 'stop'; text: string };
 
@@ -196,6 +195,3 @@ function evalArgPredicate(args: Record<string, unknown>, p: ArgPredicate): boole
     }
   }
 }
-
-// Re-export so tests can use the type narrowly.
-export type { ConversationLogEntry };

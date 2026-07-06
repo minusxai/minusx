@@ -11,7 +11,7 @@ import { CONTEXT_BUDGETS, PER_DOC_CONTENT_CHARS } from '../context/context-budge
  * description block in Schema Notes. Sourced from the central context-budget
  * dashboard (`lib/context/context-budgets.ts`).
  */
-export const DEFAULT_SCHEMA_NOTES_BUDGET_CHARS = CONTEXT_BUDGETS.schemaNotesChars;
+const DEFAULT_SCHEMA_NOTES_BUDGET_CHARS = CONTEXT_BUDGETS.schemaNotesChars;
 
 /**
  * Greedily renders context-authored table/column descriptions into markdown
@@ -429,7 +429,7 @@ function slugifyDocKey(title: string): string {
  * to carry an explicit title + description (enforced in the context editor), so
  * this only fires for older data.
  */
-export function deriveDocMeta(content: string): { title: string; description: string } {
+function deriveDocMeta(content: string): { title: string; description: string } {
   const lines = content.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
   const title = lines[0] ? lines[0].replace(/^#+\s*/, '').trim() : '';
   const description = lines.slice(1, 3).join(' ');
@@ -545,7 +545,7 @@ export function inlineContextDocsText(resolved: ResolvedContextDocs): string {
  * docs, return them but warn the agent to be more selective. Absolute (not a
  * fraction of the library) since contexts often start with only 1-2 docs.
  */
-export const LOAD_CONTEXT_MAX_KEYS_BEFORE_WARNING = 5;
+const LOAD_CONTEXT_MAX_KEYS_BEFORE_WARNING = 5;
 
 export interface LoadContextResult {
   /** JSON payload returned to the caller verbatim (tool result / MCP text). */

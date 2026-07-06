@@ -14,9 +14,8 @@
 //     omitted; `handle_error` carries the DuckDB message (e.g. duplicate
 //     column names from the source query). The agent still gets the data.
 //
-// `BatchResults` is the wrapper for tools that return N entries (SearchDBSchema,
-// V2 ExecuteQuery, V2 Explore). V1's new chained-pipeline ExecuteQuery returns
-// a single `ResultEntry` (the final query's output) — not wrapped.
+// V1's new chained-pipeline ExecuteQuery returns a single `ResultEntry` (the
+// final query's output) — not wrapped.
 
 import type { ResultStats } from './v2/result-stats';
 
@@ -33,10 +32,4 @@ export interface ResultEntry {
    * `stats` are still populated.
    */
   handle_error?: string;
-}
-
-export interface BatchResults {
-  results: ResultEntry[];
-  /** Cross-result summary from the lighter-model `prompt` pass (V2-only). */
-  info?: string;
 }

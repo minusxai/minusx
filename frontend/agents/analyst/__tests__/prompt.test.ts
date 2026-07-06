@@ -1,14 +1,14 @@
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { MXAgent } from '@/orchestrator/types';
-import { AnalystAgent } from '../analyst-agent';
+import { RemoteAnalystAgent } from '../analyst-agent';
 import type { AnalystAgentContext } from '../types';
 
 const ctx: AnalystAgentContext = { userId: 'u', mode: 'org', connectionId: 'conn-7' };
 
 function newAgent(overrides: Partial<AnalystAgentContext> = {}) {
-  const orch = new Orchestrator([AnalystAgent]);
+  const orch = new Orchestrator([RemoteAnalystAgent]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const agent: any = new AnalystAgent(
+  const agent: any = new RemoteAnalystAgent(
     orch,
     { userMessage: 'how many users?' },
     { ...ctx, ...overrides },
@@ -27,7 +27,7 @@ describe('AnalystAgent system prompt', () => {
 
   it('enforces the hard step cap (35)', () => {
     // The prompt hint (30) is maxSteps − 5; the loop hard-stops at maxSteps.
-    expect((AnalystAgent as unknown as typeof MXAgent).maxSteps).toBe(35);
+    expect((RemoteAnalystAgent as unknown as typeof MXAgent).maxSteps).toBe(35);
   });
 });
 
@@ -97,13 +97,13 @@ describe('AnalystAgent buildUserContent (no app state / no per-message date)', (
   });
 
   it('threads ImageContent items before the raw goal', () => {
-    const orch = new Orchestrator([AnalystAgent]);
+    const orch = new Orchestrator([RemoteAnalystAgent]);
     const userMessage = [
       { type: 'text' as const, text: 'see chart' },
       { type: 'image' as const, mimeType: 'image/png', data: 'base64...' },
     ];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const agent: any = new AnalystAgent(orch, { userMessage } as any, ctx);
+    const agent: any = new RemoteAnalystAgent(orch, { userMessage } as any, ctx);
     const content = agent.buildUserContent();
     expect(content).toHaveLength(2);
     expect(content[0].type).toBe('image');

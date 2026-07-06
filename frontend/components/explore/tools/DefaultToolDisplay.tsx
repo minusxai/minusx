@@ -5,8 +5,8 @@ import { Box, HStack, VStack, Text, IconButton, Icon, GridItem } from '@chakra-u
 import { LuChevronDown, LuChevronRight, LuWrench, LuCheck, LuFileText, LuCornerRightUp, LuLoader } from 'react-icons/lu';
 import { DisplayProps } from '@/lib/types';
 
-export const DEFAULT_TOOL_MAX_COLS = 12
-export const DEFAULT_TOOL_MAX_COLS_COMPACT = 12  // Compact: 4 tools per row
+const DEFAULT_TOOL_MAX_COLS = 12
+const DEFAULT_TOOL_MAX_COLS_COMPACT = 12  // Compact: 4 tools per row
 
 export default function DefaultToolDisplay({ toolCallTuple, databaseName, isCompact, showThinking }: DisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false);

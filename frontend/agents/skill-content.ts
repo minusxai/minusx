@@ -11,9 +11,6 @@ import { PROMPTS } from '@/orchestrator/prompts';
 import { getSkill as getSkillFromTree, type PromptTree } from '@/orchestrator/prompts/prompt-loader';
 import { SCHEMA_TEMPLATE_VARS } from '@/lib/validation/atlas-json-schemas';
 
-/** The live `schema_<type>` template vars, re-exported for callers that build their own trees. */
-export { SCHEMA_TEMPLATE_VARS } from '@/lib/validation/atlas-json-schemas';
-
 const withSchemas = (tree: PromptTree): PromptTree => ({
   ...tree,
   templates: { ...tree.templates, ...SCHEMA_TEMPLATE_VARS },

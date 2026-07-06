@@ -5,7 +5,7 @@ import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { AnalystAgentContext } from '../types';
 import { ReadFiles, SearchFiles } from '../analyst-agent';
 import {
-  AnalystAgent,
+  RemoteAnalystAgent,
   fauxRegistration,
 } from '../analyst-agent';
 import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
@@ -311,7 +311,7 @@ describe('unknown-tool recovery for unregistered file ops', () => {
 
     const { failures, log, pass } = await runAgentTestSpec(
       spec,
-      [ReadFiles, SearchFiles, AnalystAgent],
+      [ReadFiles, SearchFiles, RemoteAnalystAgent],
       (steps) => fauxRegistration.setResponses(steps),
     );
 

@@ -10,33 +10,7 @@ import { SqliteConnector } from './sqlite-connector';
 import { MongoConnector } from './mongo-connector';
 import { ClickHouseConnector } from './clickhouse-connector';
 
-export type {
-  SchemaEntry,
-  SchemaTable,
-  SchemaColumn,
-  QueryResult,
-  TestConnectionResult,
-  ConnectorConfigMap,
-  ConnectorDialect,
-  DuckDbConfig,
-  SqliteConfig,
-  PostgresConfig,
-  BigQueryConfig,
-  AthenaConfig,
-  CsvConfig,
-  MongoConfig,
-  ClickHouseConfig,
-} from './base';
 export { NodeConnector } from './base';
-export { getOrCreateDuckDbInstance } from './duckdb-registry';
-export { DuckDbConnector, resolveDuckDbFilePath } from './duckdb-connector';
-export { CsvConnector } from './csv-connector';
-export { PostgresConnector } from './postgres-connector';
-export { BigQueryConnector } from './bigquery-connector';
-export { AthenaConnector } from './athena-connector';
-export { InternalDbConnector } from './internal-db-connector';
-export { SqliteConnector } from './sqlite-connector';
-export { ClickHouseConnector } from './clickhouse-connector';
 
 /**
  * Factory: return a NodeConnector for the given type, or null if the type is unknown.

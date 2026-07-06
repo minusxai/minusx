@@ -17,7 +17,7 @@ export interface GetConfigsResult {
  * Incoming fields override base fields; missing incoming fields keep base values.
  * Nested objects (branding, links) are deep-merged so partial nested updates don't wipe sibling fields.
  */
-export function mergePartialConfigs(
+function mergePartialConfigs(
   base: Partial<OrgConfig>,
   incoming: Partial<OrgConfig>
 ): Partial<OrgConfig> {
@@ -96,7 +96,7 @@ class ConfigsDataLayerServer {
   }
 }
 
-export const ConfigsAPI = new ConfigsDataLayerServer();
+const ConfigsAPI = new ConfigsDataLayerServer();
 export const getConfigs = ConfigsAPI.getConfig.bind(ConfigsAPI);
 export const saveConfig = ConfigsAPI.saveConfig.bind(ConfigsAPI);
 

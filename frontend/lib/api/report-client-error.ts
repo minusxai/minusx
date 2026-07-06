@@ -17,9 +17,9 @@ function patchApiUrl(path: string): string {
   return path; // browser uses relative; SSR/node uses the prefixed URL above
 }
 
-export type ReportableErrorSource = 'transport' | 'session' | 'unhandled';
+type ReportableErrorSource = 'transport' | 'session' | 'unhandled';
 
-export function reportClientErrorToChat(
+function reportClientErrorToChat(
   conversationID: number,
   message: string,
   source: ReportableErrorSource = 'transport',

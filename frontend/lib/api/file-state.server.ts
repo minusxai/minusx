@@ -1,9 +1,8 @@
 /**
- * Server-side File State — implements IFileStateRead for use in tool handlers,
- * MCP tools, test runners, and cron jobs.
+ * Server-side File State — read-only file access for tool handlers, MCP tools,
+ * test runners, and cron jobs.
  *
- * Use createServerFileState(user) to get an IFileStateRead bound to a user.
- * readFilesServer() is the legacy compressed variant for LLM tool responses.
+ * readFilesServer() is the compressed variant for LLM tool responses.
  */
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
@@ -25,44 +24,15 @@ import {
   storyEmbedRuns,
 } from '@/lib/data/helpers/param-resolution';
 import type { QuestionParameter } from '@/lib/validation/atlas-schemas';
-import type {
-  IFileStateRead,
-  ReadFilesOptions,
-  ReadFilesByCriteriaOptions,
-  ReadFolderOptions,
-  ReadFolderResult,
-  QueryExecutionParams,
-  GetQueryResultOptions,
-} from '@/lib/api/file-state-interface';
+import type { ReadFilesOptions } from '@/lib/api/file-state-interface';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { FileInfo } from '@/lib/data/types';
 import type {
   DbFile,
-  FileState,
   AugmentedFile,
   CompressedAugmentedFile,
   QuestionContent,
   QueryResult,
 } from '@/lib/types';
-
-/**
- * Convert metadata-only FileInfo (no content) to a minimal FileState.
- * Used for folder listings and partial reads where content is not needed.
- */
-function fileInfoToFileState(info: FileInfo): FileState {
-  return {
-    ...info,
-    content: null,
-    queryResultId: undefined,
-    loading: false,
-    saving: false,
-    updatedAt: Date.now(),
-    loadError: null,
-    persistableChanges: {},
-    ephemeralChanges: {},
-    metadataChanges: {},
-  } as unknown as FileState;
-}
 
 // ---------------------------------------------------------------------------
 // Internal implementations (take explicit user param)
@@ -97,75 +67,6 @@ async function readFilesImpl(
   }
 
   return results;
-}
-
-async function readFilesByCriteriaImpl(
-  options: ReadFilesByCriteriaOptions,
-  user: EffectiveUser
-): Promise<AugmentedFile[]> {
-  const { criteria, partial } = options;
-  const result = await FilesAPI.getFiles(criteria, user);
-
-  if (partial) {
-    return result.data.map(file => ({
-      fileState: fileInfoToFileState(file),
-      references: [],
-      queryResults: [],
-    }));
-  }
-
-  const fileIds = result.data.map(f => f.id);
-  return readFilesImpl(fileIds, user);
-}
-
-async function readFolderImpl(
-  path: string,
-  options: ReadFolderOptions = {},
-  user: EffectiveUser
-): Promise<ReadFolderResult> {
-  const { depth = 1 } = options;
-  try {
-    const result = await FilesAPI.getFiles({ paths: [path], depth }, user);
-    const files = result.data.map(file => fileInfoToFileState(file));
-    return { files, loading: false, error: null };
-  } catch (error) {
-    return {
-      files: [],
-      loading: false,
-      error: {
-        message: error instanceof Error ? error.message : String(error),
-        code: 'SERVER_ERROR',
-      },
-    };
-  }
-}
-
-async function getQueryResultImpl(
-  params: QueryExecutionParams,
-   
-  _options: GetQueryResultOptions = {},
-  user: EffectiveUser
-): Promise<QueryResult> {
-  const { query, params: queryParams, database } = params;
-
-  if (_options.skip) {
-    throw new Error('Cannot execute query with skip=true');
-  }
-
-  const paramRecord: Record<string, string | number> = {};
-  for (const [k, v] of Object.entries(queryParams)) {
-    if (typeof v === 'string' || typeof v === 'number') {
-      paramRecord[k] = v;
-    } else if (v != null) {
-      paramRecord[k] = String(v);
-    }
-  }
-
-  const id = getQueryHash(query, queryParams, database);
-  // Bounded drain: the agent truncates row data to a char budget, so cap RAM at the byte budget
-  // rather than materializing the full (or uncapped) result. `truncated` rides along for the LLM.
-  const result = await runQueryBounded(database, query, paramRecord, user, { maxBytes: AGENT_DRAIN_MAX_BYTES, maxRows: AGENT_DRAIN_MAX_ROWS });
-  return { ...result, id };
 }
 
 // ---------------------------------------------------------------------------
@@ -261,23 +162,6 @@ async function executeQueriesForFile(
 // Public API
 // ---------------------------------------------------------------------------
 
-/**
- * createServerFileState — returns an IFileStateRead bound to a specific user.
- * Use this in agents and tool handlers that need runtime-agnostic file access.
- *
- * @example
- * const fs = createServerFileState(user);
- * const files = await fs.readFiles([42]);
- */
-export function createServerFileState(user: EffectiveUser): IFileStateRead {
-  return {
-    readFiles: (ids, opts) => readFilesImpl(ids, user, opts),
-    readFilesByCriteria: (opts) => readFilesByCriteriaImpl(opts, user),
-    readFolder: (path, opts) => readFolderImpl(path, opts, user),
-    getQueryResult: (params, opts) => getQueryResultImpl(params, opts, user),
-  };
-}
-
 export interface ReadFilesServerOptions {
   /** Execute queries for question files. Default: false */
   executeQueries?: boolean;
@@ -287,7 +171,6 @@ export interface ReadFilesServerOptions {
 
 /**
  * readFilesServer — load files and return compressed output for LLM tool responses.
- * For runtime-agnostic access, prefer createServerFileState(user).readFiles() instead.
  */
 export async function readFilesServer(
   fileIds: number[],

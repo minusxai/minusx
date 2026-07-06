@@ -34,7 +34,7 @@ export interface ToolConfig {
 }
 
 // Centralized tool configurations
-export const TOOL_CONFIGS: Record<string, ToolConfig> = {
+const TOOL_CONFIGS: Record<string, ToolConfig> = {
   [ToolNames.EXECUTE_QUERY]: {
     displayComponent: ExecuteQueryDisplay,
 
@@ -263,7 +263,7 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 };
 
 // Default configuration for unknown tools
-export const DEFAULT_TOOL_CONFIG: ToolConfig = {
+const DEFAULT_TOOL_CONFIG: ToolConfig = {
   displayComponent: DefaultToolDisplay,
   chipLabel: 'action',
   chipLabelPlural: 'actions',

@@ -30,7 +30,7 @@ export {
   SearchDBSchema,
   ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools.server';
-export type { AnalystAgentContext, ConnectionInfo, RemoteAnalystContext } from './types';
+export type { RemoteAnalystContext } from './types';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-analyst-api',
@@ -176,7 +176,3 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     return projectMessages(msgs);
   }
 }
-
-// Backward-compat alias. Pre-existing call sites (faux specs with
-// `agent: 'AnalystAgent'`, slack tests, file-tools tests, etc.) keep working.
-export const AnalystAgent = RemoteAnalystAgent;

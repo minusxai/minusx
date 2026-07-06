@@ -28,5 +28,3 @@ export const MXFOOD_TABLES = [
   'users',
   'zones',
 ] as const;
-
-export type MxfoodTable = typeof MXFOOD_TABLES[number];

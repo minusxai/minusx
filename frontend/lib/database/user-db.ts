@@ -23,7 +23,7 @@ export interface User {
  * Validate and normalize home_folder based on role.
  * Admins always get "" (mode root). Non-admins get a relative path.
  */
-export function validateAndNormalizeHomeFolder(home_folder: string, role: UserRole): string {
+function validateAndNormalizeHomeFolder(home_folder: string, role: UserRole): string {
   if (isAdmin(role)) return '';
   const normalized = home_folder.replace(/^\/+|\/+$/g, '');
   if (normalized.startsWith('/')) {

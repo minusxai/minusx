@@ -281,9 +281,4 @@ export const FilesAPI = new FilesDataLayerClient();
 
 // Deprecated: Export individual functions for backward compatibility
 // TODO Phase 3: Remove these and use FilesAPI namespace everywhere
-export const loadFile = FilesAPI.loadFile.bind(FilesAPI);
-export const loadFiles = FilesAPI.loadFiles.bind(FilesAPI);
 export const getFiles = FilesAPI.getFiles.bind(FilesAPI);
-export const createFile = FilesAPI.createFile.bind(FilesAPI);
-export const saveFile = FilesAPI.saveFile.bind(FilesAPI);
-export const getTemplate = FilesAPI.getTemplate.bind(FilesAPI);

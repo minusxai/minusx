@@ -27,4 +27,4 @@ export function getSkill(name: string): string | null {
   return getSkillFromTree(PROMPTS, name);
 }
 
-export { pyFormat, HIDDEN_SKILLS, type PromptTree } from './prompt-loader';
+export { pyFormat, type PromptTree } from './prompt-loader';

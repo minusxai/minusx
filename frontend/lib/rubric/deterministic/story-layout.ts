@@ -26,7 +26,7 @@ export interface CssDecls {
 }
 
 /** One `<Question>` embed with its resolved layout context. */
-export interface EmbedBox {
+interface EmbedBox {
   vizType: string | null;   // inline `viz.type`; saved (`id`) embeds resolve type via ctx later
   savedId: number | null;   // `id={N}` for a saved embed, else null
   fraction: number;         // estimated share of the story column width, (0..1]
@@ -34,7 +34,7 @@ export interface EmbedBox {
 }
 
 /** An inline query's param usage: names it references vs names it declares locally (`params` prop). */
-export interface ParamRef { refs: string[]; local: string[] }
+interface ParamRef { refs: string[]; local: string[] }
 
 export interface StoryLayoutScan {
   embeds: EmbedBox[];

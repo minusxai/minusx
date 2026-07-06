@@ -77,7 +77,6 @@ function pathToPlaceholderId(path: string): number {
 }
 
 export type {
-  IFileStateRead,
   ReadFilesOptions,
   ReadFilesByCriteriaOptions,
   ReadFolderOptions,
@@ -786,9 +785,6 @@ export interface PublishFileResult {
   id: number;
   name: string;
 }
-
-/** @deprecated Use PublishFileResult instead */
-export type SaveResult = PublishFileResult;
 
 /**
  * PublishFile - Save file and dirty references to database

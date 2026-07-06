@@ -1,10 +1,7 @@
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
 import type { ResolvedContextDocs } from '@/lib/types';
-import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
-
-// Re-export so existing imports keep working.
-export type { ConnectionInfo };
+import type { BenchmarkAnalystContext } from '@/agents/benchmark-analyst/types';
 
 /**
  * Context shape for RemoteAnalystAgent (and SlackAgent / WebAnalystAgent).

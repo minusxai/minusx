@@ -16,7 +16,7 @@ export interface RubricCheck {
   category: RubricCategory;
 }
 
-export const DETERMINISTIC_CHECKS: Record<RubricFileType, RubricCheck[]> = {
+const DETERMINISTIC_CHECKS: Record<RubricFileType, RubricCheck[]> = {
   question: [
     { ruleId: 'question.undeclared-param', label: 'Parameters declared', category: 'correctness' },
     { ruleId: 'question.unused-param', label: 'No unused parameters', category: 'correctness' },

@@ -38,18 +38,3 @@ export const ErrorCodes = {
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
-
-/**
- * API Error class for throwing structured errors
- */
-export class ApiError extends Error {
-  constructor(
-    public code: ErrorCode,
-    message: string,
-    public statusCode: number = 500,
-    public details?: unknown
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}

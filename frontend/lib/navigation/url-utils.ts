@@ -10,15 +10,6 @@
 import { DEFAULT_CHAT_VERSION, type ChatVersion } from '@/lib/chat-v2/chat-version';
 
 /**
- * Extract `as_user` parameter from URL (server-side)
- * @param url - URL object to extract parameter from
- * @returns User email if present, null otherwise
- */
-export function getAsUserFromUrl(url: URL): string | null {
-  return url.searchParams.get('as_user');
-}
-
-/**
  * Preserve `as_user`, `mode`, `v`, and `view` parameters from current URL to
  * target URL (client-side). The `v` parameter gates chat-v2 surfaces (`v=2`
  * switches the sidebar from Conversations to Chats); `view=file` strips app
@@ -66,16 +57,6 @@ export function preserveParams(targetUrl: string): string {
   }
 
   return targetURL.pathname + targetURL.search;
-}
-
-/**
- * Preserve `as_user` parameter from current URL to target URL (client-side)
- * @deprecated Use preserveParams() instead for consistency
- * @param targetUrl - The URL to navigate to
- * @returns URL with `as_user` parameter preserved if it exists
- */
-export function preserveAsUserParam(targetUrl: string): string {
-  return preserveParams(targetUrl);
 }
 
 /**

@@ -21,22 +21,3 @@ export function isViewer(role: UserRole): boolean {
   return role === 'viewer';
 }
 
-/**
- * Get numeric role priority (higher = more permissions)
- * Useful for role comparisons
- */
-export function getRolePriority(role: UserRole): number {
-  const priorities: Record<UserRole, number> = {
-    'admin': 3,
-    'editor': 2,
-    'viewer': 1
-  };
-  return priorities[role];
-}
-
-/**
- * Check if role A has equal or higher permissions than role B
- */
-export function hasEqualOrHigherRole(roleA: UserRole, roleB: UserRole): boolean {
-  return getRolePriority(roleA) >= getRolePriority(roleB);
-}

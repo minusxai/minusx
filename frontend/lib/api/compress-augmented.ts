@@ -60,14 +60,14 @@ export function extractReferences(file: DbFile): number[] {
 }
 
 /** Strip legacy queryResultId persisted inside question content */
-export function stripQueryResultId(file: DbFile): DbFile['content'] {
+function stripQueryResultId(file: DbFile): DbFile['content'] {
   if (file.type !== 'question' || !file.content) return file.content;
   const { queryResultId: _, ...rest } = file.content as any;
   return rest as DbFile['content'];
 }
 
 /** Compute the query result cache key for a question file */
-export function computeQueryResultId(file: DbFile): string | undefined {
+function computeQueryResultId(file: DbFile): string | undefined {
   if (file.type !== 'question' || !file.content) return undefined;
   const content = file.content as QuestionContent;
   if (!content.query || !content.connection_name) return undefined;

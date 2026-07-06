@@ -384,8 +384,3 @@ export const API = {
     },
   },
 } as const;
-
-// Type helpers for API declarations
-export type ApiDeclaration = typeof API;
-export type ApiCategory = keyof ApiDeclaration;
-export type ApiMethod<C extends ApiCategory> = keyof ApiDeclaration[C];

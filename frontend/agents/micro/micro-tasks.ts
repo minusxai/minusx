@@ -4,7 +4,7 @@
  * `ANALYST_AGENT_MODEL_CONFIG` for tasks that need a stronger model (e.g. the visual rubric judge).
  * No new env var — a task just picks one of the two configs already wired for agents.
  */
-export type MicroModelSource = 'micro' | 'analyst';
+type MicroModelSource = 'micro' | 'analyst';
 
 /**
  * A named single-turn LLM use-case (title, description, summary, …). The

@@ -12,7 +12,7 @@ import { CONTEXT_BUDGETS } from '@/lib/context/context-budgets';
 
 // Char budget at which a context's schema fields are degraded: under it → keep columns; over → drop
 // columns (names only); for the editor MENU (parentSchema) only, still over → cap the table list.
-export const PARENT_SCHEMA_BUDGET_CHARS = CONTEXT_BUDGETS.contextParentSchemaChars;
+const PARENT_SCHEMA_BUDGET_CHARS = CONTEXT_BUDGETS.contextParentSchemaChars;
 
 /**
  * Reduce a DatabaseWithSchema[] to a NAMES-ONLY table-of-contents (connection → schema → table, no

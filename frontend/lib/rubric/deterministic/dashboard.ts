@@ -1,16 +1,17 @@
 import type { DashboardContent, DashboardLayoutItem } from '@/lib/types';
 import type { DeterministicContext, RubricFinding } from '../types';
 import { estimateTokens, finding, isBlank } from './shared';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 
 const MIN_TILE = 3;
 export const MIN_TILE_W = 2;
-export const MIN_TILE_H = 2;
+const MIN_TILE_H = 2;
 export const MAX_VISUALS = 15;
 export const MAX_TEXT_TOKENS = 400;
 export const MAX_TEXT_TOKENS_ERROR = 800;
 // Cartesian plots need real 2-D room to read; a sliver tile is unreadable.
-export const MIN_PLOT_TILE = 3;
-export const PLOT_VIZ_TYPES = new Set(['line', 'area', 'bar', 'scatter']);
+const MIN_PLOT_TILE = 3;
+const PLOT_VIZ_TYPES = immutableSet(['line', 'area', 'bar', 'scatter']);
 
 function overlaps(a: DashboardLayoutItem, b: DashboardLayoutItem): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;

@@ -34,7 +34,7 @@ export const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'row', 'area', 'sc
 /** Height-to-width ratio per chart type. Used by image renderers to pick a
  *  sensible canvas size. Charts with outside labels (pie, radar) need more
  *  vertical space; wide charts (bar, line) work best at 16:9.  */
-export const CHART_ASPECT_RATIO: Record<string, number> = {
+const CHART_ASPECT_RATIO: Record<string, number> = {
   line:      0.5625,  // 16:9
   bar:       0.5625,
   row:       0.75,    // 4:3 — horizontal bars need more vertical room

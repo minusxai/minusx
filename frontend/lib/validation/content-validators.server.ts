@@ -4,8 +4,6 @@ import { getNodeConnector } from '@/lib/connections';
 import { resolveConnectionSecrets } from '@/lib/secrets/connection-secrets.server';
 import type { FileType } from '@/lib/types';
 
-export { validateFileState } from './content-validators';
-
 /**
  * Server-only extension of validateFileState. Runs the same structural checks
  * plus an async live connection test for connection-type files.

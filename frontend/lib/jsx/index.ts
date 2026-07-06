@@ -9,7 +9,6 @@ import type { ValidationError } from './types';
 
 export * from './types';
 export { parseJsx } from './parse';
-export { validateJsx } from './validate';
 export { serializeJsx } from './serialize';
 export { sanitizeLooseJsx } from './lenient';
 

@@ -52,7 +52,7 @@ import type { VizSettings } from '@/lib/types';
 /**
  * Context object bundling all frontend tool dependencies
  */
-export interface FrontendToolContext {
+interface FrontendToolContext {
   dispatch?: AppDispatch;
   signal?: AbortSignal;
   state?: RootState;
@@ -65,7 +65,7 @@ export interface FrontendToolContext {
  * `content` is identical to the old flat return — LLM sees this.
  * `details` is structured metadata for UI rendering — not sent to LLM.
  */
-export interface ToolHandlerResult<TDetails extends ToolCallDetails = ToolCallDetails> {
+interface ToolHandlerResult<TDetails extends ToolCallDetails = ToolCallDetails> {
   content: string | object;
   details: TDetails;
 }
@@ -76,7 +76,7 @@ export interface ToolHandlerResult<TDetails extends ToolCallDetails = ToolCallDe
  * @param context - Bundled frontend dependencies
  * @returns ToolHandlerResult with content (for LLM) and details (for UI)
  */
-export type FrontendToolHandler = (
+type FrontendToolHandler = (
   args: Record<string, any>,
   context: FrontendToolContext
 ) => Promise<ToolHandlerResult>;
@@ -89,7 +89,7 @@ const frontendToolRegistry: Record<string, FrontendToolHandler> = {};
 /**
  * Register a frontend tool handler
  */
-export function registerFrontendTool(name: string, handler: FrontendToolHandler) {
+function registerFrontendTool(name: string, handler: FrontendToolHandler) {
   frontendToolRegistry[name] = handler;
 }
 

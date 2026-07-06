@@ -80,7 +80,7 @@ export interface MentionsConfig {
 }
 
 // --- Theme ---
-export const editorTheme = {
+const editorTheme = {
   heading: {
     h1: 'lexical-h1',
     h2: 'lexical-h2',
@@ -115,7 +115,7 @@ export const editorTheme = {
 };
 
 /** Shared CSS for the Lexical editor content — used in both edit and read-only modes. */
-export const LEXICAL_CONTENT_CSS = {
+const LEXICAL_CONTENT_CSS = {
   // Paragraphs
   '& p': { marginBottom: '1em', lineHeight: 1.8 },
   '& p:last-child': { marginBottom: 0 },
@@ -364,7 +364,7 @@ function FloatingSelectionToolbar({ children }: { children: React.ReactNode }) {
 }
 
 // --- Toolbar Plugin ---
-export function ToolbarPlugin({ onImageUpload, enableMetric }: { onImageUpload?: (file: File) => Promise<string>; enableMetric?: boolean }) {
+function ToolbarPlugin({ onImageUpload, enableMetric }: { onImageUpload?: (file: File) => Promise<string>; enableMetric?: boolean }) {
   const [editor] = useLexicalComposerContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
 

@@ -17,7 +17,7 @@ function resolveExec(db?: QueryContext): (sql: string, params?: any[]) => Promis
   return (sql, params) => getModules().db.exec(sql, params);
 }
 
-export async function getConfigValue(key: string, db?: QueryContext): Promise<string | null> {
+async function getConfigValue(key: string, db?: QueryContext): Promise<string | null> {
   const exec = resolveExec(db);
   try {
     const result = await exec('SELECT value FROM configs WHERE key = $1', [key]);
@@ -28,7 +28,7 @@ export async function getConfigValue(key: string, db?: QueryContext): Promise<st
   }
 }
 
-export async function setConfigValue(key: string, value: string, db?: QueryContext): Promise<void> {
+async function setConfigValue(key: string, value: string, db?: QueryContext): Promise<void> {
   const exec = resolveExec(db);
   await exec(
     `INSERT INTO configs (key, value, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)

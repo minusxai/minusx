@@ -10,7 +10,7 @@ import type { ColumnFormatConfig } from '@/lib/types'
 // Shared types
 export type ColumnType = 'date' | 'number' | 'text' | 'json'
 
-export const getTypeIcon = (type: ColumnType) => {
+const getTypeIcon = (type: ColumnType) => {
   switch (type) {
     case 'number': return LuHash
     case 'date': return LuCalendar
@@ -19,7 +19,7 @@ export const getTypeIcon = (type: ColumnType) => {
   }
 }
 
-export const getTypeColor = (type: ColumnType) => {
+const getTypeColor = (type: ColumnType) => {
   switch (type) {
     case 'number': return '#2980b9' // Primary blue
     case 'date': return '#9b59b6'   // Purple

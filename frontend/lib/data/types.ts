@@ -61,7 +61,7 @@ export interface SaveFileResult {
 /**
  * Options for createFile operation
  */
-export interface CreateFileOptions {
+interface CreateFileOptions {
   createPath?: boolean;      // Create parent directories if they don't exist
   returnExisting?: boolean;  // Return existing file if path already exists (instead of error)
 }

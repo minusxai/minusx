@@ -24,7 +24,7 @@ declare global {
   var __minusx_db_adapter__: Promise<IDatabaseAdapter> | undefined;
 }
 
-export async function createAdapter(config?: DatabaseConfig): Promise<IDatabaseAdapter> {
+async function createAdapter(config?: DatabaseConfig): Promise<IDatabaseAdapter> {
   const dbType = config?.type || getDbType();
 
   if (dbType === 'postgres') {

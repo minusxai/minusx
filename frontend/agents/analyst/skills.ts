@@ -29,7 +29,7 @@ export const PAGE_SKILL_MAP: Record<string, string[]> = {
 };
 
 /** Used when the page type is unknown or null. */
-export const DEFAULT_PRELOADED_SKILLS = ['questions', 'explore'];
+const DEFAULT_PRELOADED_SKILLS = ['questions', 'explore'];
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;

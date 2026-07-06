@@ -1,15 +1,15 @@
 /**
- * IFileStateRead — shared contract for reading file state.
+ * Shared option/result types for reading file state.
  *
- * Implemented by:
+ * Used by the read-side shape of:
  *   - file-state.ts (client): reads from Redux, caches via TTL, user comes from store
- *   - file-state.server.ts (server): reads from DB directly via createServerFileState(user)
+ *   - file-state.server.ts (server): reads from DB directly, user passed explicitly
  *
  * Intentionally excludes write/optimistic operations (editFile, publishFile,
  * createVirtualFile, etc.) which are client-only concepts.
  */
 
-import type { AugmentedFile, FileState, QueryResult, FileType, QuestionReference } from '@/lib/types';
+import type { FileState, FileType, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 
 export interface ReadFilesOptions {
@@ -70,11 +70,4 @@ export interface GetQueryResultOptions {
    * the built-in wall-clock timeout — whichever fires first aborts the /api/query fetch.
    */
   signal?: AbortSignal;
-}
-
-export interface IFileStateRead {
-  readFiles(fileIds: number[], options?: ReadFilesOptions): Promise<AugmentedFile[]>;
-  readFilesByCriteria(options: ReadFilesByCriteriaOptions): Promise<AugmentedFile[]>;
-  readFolder(path: string, options?: ReadFolderOptions): Promise<ReadFolderResult>;
-  getQueryResult(params: QueryExecutionParams, options?: GetQueryResultOptions): Promise<QueryResult>;
 }

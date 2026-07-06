@@ -16,7 +16,7 @@ export interface ValidationResult {
 /**
  * Validate that all file references exist and are of correct type
  */
-export function validateFileReferences(documents: ExportedDocument[]): ValidationResult {
+function validateFileReferences(documents: ExportedDocument[]): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -78,7 +78,7 @@ export function validateFileReferences(documents: ExportedDocument[]): Validatio
 /**
  * Validate that at least one admin user exists
  */
-export function validateAdminExists(users: User[]): ValidationResult {
+function validateAdminExists(users: User[]): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -93,7 +93,7 @@ export function validateAdminExists(users: User[]): ValidationResult {
 /**
  * Validate that all file content is valid
  */
-export function validateFileContent(documents: ExportedDocument[]): ValidationResult {
+function validateFileContent(documents: ExportedDocument[]): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -115,7 +115,7 @@ export function validateFileContent(documents: ExportedDocument[]): ValidationRe
 /**
  * Validate basic data structure
  */
-export function validateDataStructure(initData: InitData): ValidationResult {
+function validateDataStructure(initData: InitData): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 

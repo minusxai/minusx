@@ -41,7 +41,7 @@ export function parseReferenceAlias(alias: string): { id: number; slug: string }
  * Converts to lowercase, replaces spaces and special chars with underscores
  * Example: "Revenue by Month" -> "revenue_by_month"
  */
-export function generateSlug(name: string): string {
+function generateSlug(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')  // Replace non-alphanumeric with underscore
@@ -110,11 +110,4 @@ export function syncReferencesWithSQL(
   }
 
   return newRefs;
-}
-
-/**
- * Check if a reference alias is valid (matches @{slug}_{id} format)
- */
-export function isValidReferenceAlias(alias: string): boolean {
-  return /^\w+_\d+$/.test(alias);
 }

@@ -13,6 +13,3 @@ export const SelectPositioner = ChakraSelect.Positioner;
 export const SelectContent = ChakraSelect.Content;
 export const SelectItem = ChakraSelect.Item;
 export const SelectValueText = ChakraSelect.ValueText;
-export const SelectLabel = ChakraSelect.Label;
-export const SelectItemText = ChakraSelect.ItemText;
-export const SelectItemIndicator = ChakraSelect.ItemIndicator;

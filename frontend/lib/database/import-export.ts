@@ -90,7 +90,7 @@ export async function exportDatabase(_dbPath: string = ''): Promise<InitData> {
  * Import data to database.
  * dbPath is accepted for API compat but ignored.
  */
-export async function importToDatabase(_dbPath: string, initData: InitData): Promise<void> {
+async function importToDatabase(_dbPath: string, initData: InitData): Promise<void> {
   const { users, documents } = resolveFlatData(initData);
   const db = getModules().db;
 

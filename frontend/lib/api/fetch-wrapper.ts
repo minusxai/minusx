@@ -184,33 +184,3 @@ async function performFetch<TOutput>(
   }
 }
 
-/**
- * Manually invalidate cache for a URL pattern
- */
-export function invalidateCache(urlPattern: string | RegExp): void {
-  const keysToDelete: string[] = [];
-
-  for (const [key] of cache) {
-    const url = key.split(':')[1];  // Extract URL from "METHOD:URL:BODY"
-    if (typeof urlPattern === 'string') {
-      if (url.includes(urlPattern)) {
-        keysToDelete.push(key);
-      }
-    } else {
-      if (urlPattern.test(url)) {
-        keysToDelete.push(key);
-      }
-    }
-  }
-
-  keysToDelete.forEach(key => cache.delete(key));
-  console.log(`[fetchWithCache] Invalidated ${keysToDelete.length} cache entries`);
-}
-
-/**
- * Clear all cache
- */
-export function clearCache(): void {
-  cache.clear();
-  console.log('[fetchWithCache] Cleared all cache');
-}

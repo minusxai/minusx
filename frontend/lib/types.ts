@@ -84,10 +84,6 @@ export type QuestionContainer = AnalyticsFileType | 'explore' | 'sidebar';
 export type AssetReference = FileReference | InlineAsset;
 
 // Type guards for AssetReference
-export function isFileReference(asset: AssetReference): asset is FileReference {
-  return asset.type === 'question';
-}
-
 export function isInlineAsset(asset: AssetReference): asset is InlineAsset {
   return ['text', 'image', 'divider'].includes(asset.type);
 }

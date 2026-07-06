@@ -28,7 +28,7 @@ import type { ReportRunContent } from '@/lib/types';
 
 // Kept only so `ReportAgent.model` (required by MXAgent) resolves — the
 // controller never calls the LLM itself, so this provider is never invoked.
-export const fauxRegistration = registerFauxProvider({
+const fauxRegistration = registerFauxProvider({
   api: 'faux-report-api',
   provider: 'faux-report',
   models: [{ id: 'stub-report' }],

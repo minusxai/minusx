@@ -48,36 +48,6 @@ export function checkFileAccess(file: DbFile, user: EffectiveUser): boolean {
 }
 
 /**
- * Check if user has access to a file type (type-based)
- * @param overrides - Optional per-org access rules overrides
- */
-export function checkFileTypeAccess(file: DbFile, user: EffectiveUser, overrides?: AccessRulesOverride): boolean {
-  return canAccessFileType(user.role, file.type, overrides);
-}
-
-/**
- * Check full file access (both path and type)
- */
-export function checkFullFileAccess(file: DbFile, user: EffectiveUser): boolean {
-  return checkFileAccess(file, user) && checkFileTypeAccess(file, user);
-}
-
-/**
- * Filter files by user permissions (path-based)
- * Returns only files the user is authorized to access
- */
-export function filterByPermissions(files: DbFile[], user: EffectiveUser): DbFile[] {
-  return files.filter(file => checkFileAccess(file, user));
-}
-
-/**
- * Filter files by type permissions (type-based)
- */
-export function filterByTypePermissions(files: DbFile[], user: EffectiveUser): DbFile[] {
-  return files.filter(file => checkFileTypeAccess(file, user));
-}
-
-/**
  * Check if path is a system path that non-admins can access
  * System paths: /database/* (connections), /logs/conversations/{userId}/* (user conversations)
  *

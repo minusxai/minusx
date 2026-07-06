@@ -30,7 +30,7 @@ export interface CachePolicy {
 }
 
 /** Lifecycle of a cache index row. */
-export type QueryCacheStatus = 'pending' | 'ready';
+type QueryCacheStatus = 'pending' | 'ready';
 
 /**
  * A row in the `query_cache` control-plane table. The big result payload is NOT

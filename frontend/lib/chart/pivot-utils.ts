@@ -28,7 +28,7 @@ function compareDimValues(a: string[], b: string[]): number {
   return a.length - b.length
 }
 
-export function applyAggregation(values: number[], fn: AggregationFunction): number {
+function applyAggregation(values: number[], fn: AggregationFunction): number {
   if (values.length === 0) return 0
 
   switch (fn) {
@@ -163,7 +163,7 @@ export function aggregatePivotData(
 
 // --- Formula computation ---
 
-export interface FormulaRowResult {
+interface FormulaRowResult {
   name: string
   cells: number[]                // Same width as PivotData cells columns
   rowTotal: number
@@ -172,7 +172,7 @@ export interface FormulaRowResult {
   parentValues?: string[]        // Parent dimension values for scoping (when dimensionLevel > 0)
 }
 
-export interface FormulaColumnResult {
+interface FormulaColumnResult {
   name: string
   rowValues: number[][]          // [dataRowIndex] → number[] of length numValues
   subtotalValues: Map<string, number[]>  // groupKey → values for subtotal rows
@@ -184,7 +184,7 @@ export interface FormulaResults {
   columnFormulas: FormulaColumnResult[]
 }
 
-export function applyOperator(a: number, b: number, op: FormulaOperator): number {
+function applyOperator(a: number, b: number, op: FormulaOperator): number {
   switch (op) {
     case '+': return a + b
     case '-': return a - b

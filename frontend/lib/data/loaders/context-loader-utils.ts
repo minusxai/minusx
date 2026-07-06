@@ -155,7 +155,7 @@ async function loadAllConnectionsAsSchema(user: EffectiveUser): Promise<Database
  * @param allContexts - Array of all context file metadata in the system
  * @returns Nearest ancestor context file metadata or null if none found
  */
-export function findNearestAncestorContext(currentPath: string, allContexts: any[]): any | null {
+function findNearestAncestorContext(currentPath: string, allContexts: any[]): any | null {
   const segments = currentPath.split('/').filter(Boolean);
   segments.pop(); // Remove current file name
 

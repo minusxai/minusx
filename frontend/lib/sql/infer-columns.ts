@@ -12,7 +12,7 @@ async function ensureInit() {
   }
 }
 
-export interface InferredColumn {
+interface InferredColumn {
   name: string;
   type: string;
 }
