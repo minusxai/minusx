@@ -6,17 +6,17 @@ codebase. Use it to audit doc drift: everything merged after this commit is a
 candidate for a docs update.
 
 ```
-DOCS_SYNCED_TO: 684d9ca5  (2026-06-03)
+DOCS_SYNCED_TO: ddb79028  (2026-07-06)
 ```
 
 ## See what's changed since the last sync
 
 ```bash
 # commit subjects since docs were last reconciled
-git log --oneline 684d9ca5..HEAD
+git log --oneline ddb79028..HEAD
 
 # full diff of code (ignore the docs themselves)
-git diff 684d9ca5..HEAD -- . ':!docs' ':!*.md'
+git diff ddb79028..HEAD -- . ':!docs' ':!*.md'
 ```
 
 ## When you update the docs

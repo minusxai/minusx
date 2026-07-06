@@ -40,8 +40,6 @@ These directories hold the in-process TypeScript orchestrator and agent/tool def
 - `frontend/agents/` — agent + tool definitions (`analyst/`, `benchmark-analyst/`, `web-analyst/`, ...). Server-only tools live in `*.server.ts` variants; the `Base*` classes (no `server-only` import) are reused by the benchmark CLI.
 - Both trees have their own tests under `__tests__/` (the `orchestrator` Vitest project), plus integration coverage through the chat API routes.
 
-**While the migration is in progress:** when changing shared code in `frontend/lib/`, keep both the v1 and v2 chat paths working.
-
 ---
 
 ## Project Overview
@@ -106,7 +104,7 @@ in-process inside the Next.js app (TypeScript orchestrator under
 `frontend/orchestrator/` + `frontend/agents/`). Analytics queries run
 in the Node.js connectors (`frontend/lib/connections/`).
 
-Chat is served by the Next.js routes `POST /api/chat` and `POST /api/chat/stream`, which run the in-process orchestrator. Tool/skill schemas are served from TypeScript (`GET /api/tools/schema`).
+Chat is served by `POST /api/conversations/[id]/turns` (fires `runConversationTurn` detached — does not block on the LLM call) and `GET /api/conversations/[id]/stream` (resumable SSE via Postgres LISTEN/NOTIFY), both routing through `lib/chat/conversation-turn.server.ts` → the orchestration core. Tool/skill schemas are served from TypeScript (`GET /api/tools/schema`).
 
 **Query execution** runs on the Next.js side: `app/api/query/route.ts` → `lib/connections/run-query.ts` → Node.js connectors in `lib/connections/` (DuckDB, BigQuery, PostgreSQL, SQLite, Athena, Mongo, CSV, Google Sheets).
 
@@ -242,7 +240,7 @@ Connection schemas are enriched with column-level metadata (category, null count
   - The typed interface is the single source of truth. Only extract specific keys when the target API requires a different shape (e.g. Mixpanel's `$email` reserved field).
 
 **Component Patterns**
-- **Container/View separation**: Containers (smart) connect to Redux, Views (dumb) are pure presentation
+- **Container/View separation (intended convention, not currently enforced)**: containers (`components/containers/`) should connect to Redux and pass data/callbacks down; views (`components/views/`) should be pure presentation. In practice this is widely violated — 14 view files (including the two most-used, `QuestionViewV2.tsx` and `DashboardView.tsx`) dispatch Redux or read `state.files` directly. A 2026-07 audit decided to enforce the convention going forward, but found none of the 14 files had the component-level test coverage (`*.ui.test.tsx`) needed to safely move their Redux logic up without risking a silent behavior change — so no moves were made; see `Refactor-v2.md` M4.2 for the full list and evidence. **When touching one of these files**: don't assume the convention already holds; if you add new Redux access to a view, that's consistent with the current (unenforced) state, but adding component-level test coverage for the file first, then moving the dispatch into its container, is the preferred fix if you have the room for it.
 - **Composition over inheritance**: Build complex UIs from simple, reusable components
 - **Single responsibility**: Each component should do one thing well
 
@@ -388,14 +386,14 @@ export async function POST(req: NextRequest) {
 ### Client-Side Error Handling
 
 Browser-side complement to `handleApiError`:
-- `lib/utils/error-parser.ts` — `parseErrorMessage()` → `{ title, hint, details?, isNetworkError? }`; flags transport failures (`'failed to fetch'`, etc.) as `isNetworkError` so the UI shows a retryable "Couldn't load results" instead of a SQL error.
+- `components/question/error-parser.ts` — `parseErrorMessage()` → `{ title, hint, details?, isNetworkError? }`; flags transport failures (`'failed to fetch'`, etc.) as `isNetworkError` so the UI shows a retryable "Couldn't load results" instead of a SQL error.
 - `lib/messaging/capture-error.ts` — `captureError()` POSTs to `/api/capture-error` with exponential backoff + jitter and 60s dedup; best-effort, never throws.
 - `lib/utils/semaphore.ts` — `Semaphore` (limit may be a getter for live runtime caps); used as `querySemaphore` in `file-state.ts`.
 
 ### Adding Agent Tools / Agents
 1. Add a tool (`MXTool` subclass with a TypeBox param schema) or agent under `frontend/agents/**`
 2. Register it in `lib/chat/orchestration-core.server.ts` (`REGISTRABLES`); headless runners use `HEADLESS_REGISTRABLES`
-3. Implement the client/server behavior in `tool-handlers.ts` (frontend bridge) / `tool-handlers.server.ts` (server) as needed
+3. Implement the behavior: server tools implement it directly in the `MXTool` subclass's `execute()` method; frontend-bridged tools register a handler in `lib/tools/tool-handlers.ts` (the registry barrel), implemented in `lib/tools/handlers/*.ts`
 4. Keep the TypeBox param schema (colocated with the tool) and the handler behavior in sync — the schema is the single source of truth for the args the LLM is told it can pass
 
 ## Important Technical Details
@@ -469,9 +467,10 @@ Browser-side complement to `handleApiError`:
   - `filesSlice.ts` - File/document state management
   - `chatSlice.ts` - Chat conversation state
   - `queryResultsSlice.ts` - Query results cache
-  - `connectionsSlice.ts` - Database connections
-  - `contextsSlice.ts` - Context files
   - `authSlice.ts` - Authentication state
+  - `configsSlice.ts`, `usersSlice.ts`, `jobRunsSlice.ts`, `navigationSlice.ts`, `recordingsSlice.ts`, `uiSlice.ts` - remaining domain slices (see `store/store.ts` for the full reducer map)
+
+  Connections and contexts are **not** Redux-slice-backed — they're loaded via SSR `preloadedState` + hooks (see "Loading Strategy" above), not a dedicated slice.
 - `frontend/components/containers/` - Smart container components (QuestionContainerV2, DashboardContainerV2)
 - `frontend/components/views/` - View components (QuestionViewV2, DashboardView)
 - `frontend/app/f/[id]/page.tsx` - File detail page route
@@ -495,9 +494,9 @@ Browser-side complement to `handleApiError`:
 - Use shared test utilities from `store/__tests__/test-utils.ts` (`setupTestDb` + `getTestDbPath`) and `test/harness/mock-fetch.ts` (`setupMockFetch` with the real route handlers)
 - **Automatic tool execution**: observe automatic system behaviors (middleware, listeners) rather than manually simulating them
 
-**Reference patterns:** `lib/integrations/slack/__tests__/slack.e2e.test.ts` (headless v2 orchestration via faux), `store/__tests__/storeE2E.test.ts` (in-process eval agent), and `app/api/chat/__tests__/v2-happy-path.test.ts` (chat route).
+**Reference patterns:** `lib/integrations/slack/__tests__/slack.e2e.test.ts` (headless orchestration via faux), `store/__tests__/storeE2E.test.ts` (in-process eval agent), and `app/api/conversations/[id]/__tests__/stream-turns.test.ts` (end-to-end through the real v3 chat routes — turn POST, resumable stream GET, interrupt — with a faux LLM).
 
-For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention — these run in the jsdom-based `ui` Vitest project (`npm run test:ui`, or `npx vitest run --project=ui <pattern>`). See `components/__tests__/agent-e2e.ui.test.tsx` and `components/__tests__/streaming-render.ui.test.tsx` for the reference pattern (in-process orchestrator + faux LLM, Redux, async agent flow + tool execution, `waitFor` assertions) and `components/__tests__/chat-input.ui.test.tsx` for chat-input interaction patterns.
+For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention — these run in the jsdom-based `ui` Vitest project (`npm run test:ui`, or `npx vitest run --project=ui <pattern>`). See `components/__tests__/agent-e2e.ui.test.tsx` for the reference pattern (in-process orchestrator + faux LLM, Redux, async agent flow + tool execution, `waitFor` assertions) and `components/__tests__/chat-input.ui.test.tsx` for chat-input interaction patterns.
 
 **UI test element queries: `aria-label` ONLY.** Never use `getByRole`, `getByText`, `getByPlaceholderText`, `getByTestId`, or any other query strategy. Every interactive element must be located exclusively via `getByLabelText` / `findByLabelText` (which matches `aria-label`). If an element lacks an `aria-label`, add one to the component — do not work around it with a different query.
 
@@ -507,7 +506,7 @@ For component-level UI interaction tests (React rendering, user events, DOM asse
 
 **Pipeline (no codegen — pure in-process):**
 1. `frontend/lib/validation/atlas-json-schemas.ts` rebuilds the JSON-Schema objects at module load: full `atlasSchema` and the viz-stripped `atlasSchemaNoViz`. TypeBox's `Symbol(Kind)` metadata is dropped via `JSON.parse(JSON.stringify(...))` so Ajv sees a clean object.
-2. Consumers of `atlasSchema` import directly from there: `lib/validation/content-validators.ts` (Ajv compile — `ajv.addSchema(atlasSchema, 'atlas')`) and `lib/data/file-markup.ts` + `lib/data/content-jsx.ts` (use `atlasSchema.$defs` to resolve `$ref`s when converting content ↔ JSX markup). The **EditFile / CreateFile tool descriptions do NOT embed the schema** — per-file-type markup is documented in each type's skill (`skill_questions`, `skill_dashboards`, `skill_reports`, `skill_alerts`, `skill_stories`, `skill_notebooks` in `orchestrator/prompts/prompts.yaml`); the tool description (`agents/web-analyst/web-tools.ts` → `MARKUP_FORMAT`) carries only the generic markup mechanics + a pointer to those skills. `atlasSchemaNoViz` currently has no production consumer (referenced only by schema tests).
+2. Consumers of `atlasSchema` import directly from there: `lib/validation/content-validators.ts` (Ajv compile — `ajv.addSchema(atlasSchema, 'atlas')`) and `lib/data/story/file-markup.ts` + `lib/data/story/content-jsx.ts` (use `atlasSchema.$defs` to resolve `$ref`s when converting content ↔ JSX markup). The **EditFile / CreateFile tool descriptions do NOT embed the schema** — per-file-type markup is documented in each type's skill (`skill_questions`, `skill_dashboards`, `skill_reports`, `skill_alerts`, `skill_stories`, `skill_notebooks` in `orchestrator/prompts/prompts.yaml`); the tool description (`agents/web-analyst/web-tools.ts` → `MARKUP_FORMAT`) carries only the generic markup mechanics + a pointer to those skills.
 3. Types come directly from `Static<typeof …>` — consumers import from `@/lib/validation/atlas-schemas`; `frontend/lib/types.ts` re-exports them and adds frontend-only fields.
 
 **Key rules:**
@@ -518,7 +517,7 @@ For component-level UI interaction tests (React rendering, user events, DOM asse
 
 ## Tool Schemas
 
-Frontend tool arg schemas are TypeBox `Type.Object` definitions colocated with the tool (`frontend/agents/**`). They are the single source of truth for what args the LLM is told it can pass — keep the schema and the `tool-handlers.ts` / `tool-handlers.server.ts` behavior (which produces the return shape) in sync.
+Frontend tool arg schemas are TypeBox `Type.Object` definitions colocated with the tool (`frontend/agents/**`). They are the single source of truth for what args the LLM is told it can pass — keep the schema and the handler behavior (`lib/tools/handlers/*.ts` for frontend-bridged tools; the `MXTool.execute()` method for server tools) in sync.
 
 ## Previous Mistakes
 
