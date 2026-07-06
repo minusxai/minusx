@@ -6,8 +6,12 @@ codebase. Use it to audit doc drift: everything merged after this commit is a
 candidate for a docs update.
 
 ```
-DOCS_SYNCED_TO: ddb79028  (2026-07-06)
+DOCS_SYNCED_TO: fd4efaf8  (2026-07-06)
 ```
+
+> ⚠️ Record a **post-merge** SHA from `main` (e.g. `git rev-parse --short origin/main`
+> after your PR lands). A pre-squash branch SHA stops existing once the PR is
+> squash-merged, which breaks the `git log <hash>..HEAD` audit below.
 
 ## See what's changed since the last sync
 

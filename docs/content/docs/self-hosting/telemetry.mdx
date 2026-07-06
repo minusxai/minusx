@@ -1,0 +1,58 @@
+---
+title: Telemetry & Privacy
+description: Exactly what MinusX reports outside your deployment, and the one variable that controls all of it
+---
+
+This page is the complete inventory of everything a self-hosted MinusX deployment can send outside your infrastructure, what each channel contains, its default state, and how to control it.
+
+## The control: `MX_TELEMETRY`
+
+One **runtime** environment variable governs all telemetry — set it in `frontend/.env` (the installer's env file) or pass `-e MX_TELEMETRY=off` to `docker run`. No rebuild needed; restart the container and it applies.
+
+| Level | Alias | What is sent |
+|-------|-------|--------------|
+| `off` | `0` | **Nothing.** No crash reports, no analytics, no outbound telemetry of any kind. |
+| `errors` | `1` | **Default.** Crash/error reports only — no performance traces, no logs, no PII. Product analytics stays off unless you configure it yourself. |
+| `full` | `2` | Crash reports **plus** performance traces, logs, and request metadata (including IP addresses); default analytics baked into official images applies. |
+
+```bash
+# nothing leaves your box
+MX_TELEMETRY=off
+```
+
+---
+
+## Channel inventory
+
+| Channel | Default | Contains | Control |
+|---------|---------|----------|---------|
+| Crash & error reporting (Sentry) | On, errors-only | At `errors`: stack traces and error context. At `full`: also traces, logs, request metadata incl. IPs | `MX_TELEMETRY` |
+| Product analytics (Mixpanel) | Off at `errors` (default); baked image default applies only at `full` | Usage events (page views, feature usage), user identity (email, role) | `MX_TELEMETRY`, or `ANALYTICS_CONFIG='{"enabled":false}'` to pin analytics off at any level |
+| App-event webhooks | Off | Whatever events your rules match, sent to webhooks **you** choose | Opt-in only — exists solely if you set `EVENTS_FORWARD_RULES` |
+| LLM requests | On (required for the agent) | Schema metadata, Knowledge Base context, conversation content — sent to the provider **you** configure with **your** key | Not telemetry — see [LLM Providers](/docs/self-hosting/llm-providers) |
+
+### Crash & error reporting
+
+Production builds initialize [Sentry](https://sentry.io) on the server, edge, and browser runtimes, pointed at a MinusX-operated Sentry project (the DSN is hardcoded in `sentry.server.config.ts`, `sentry.edge.config.ts`, and `instrumentation-client.ts` — you can read exactly what is configured). This is how crashes in self-hosted deployments get noticed and fixed without users having to file issues.
+
+At the default `errors` level the SDK is configured with `tracesSampleRate: 0`, `enableLogs: false`, and `sendDefaultPii: false` — crash reports only. `full` enables all three.
+
+The browser bundle can't read runtime environment variables (they're inlined at build time), so the server stamps the level as an attribute on the HTML document during rendering and the client reads it before initializing — meaning the setting works on prebuilt images without a rebuild. If the attribute is missing the client assumes `errors`, never `full`.
+
+### Product analytics
+
+Analytics is provider-based (`noop` or Mixpanel) and controlled by `ANALYTICS_CONFIG` (JSON, runtime).
+
+<Callout type="info">
+Official prebuilt images may include a default analytics configuration baked in at build time (`NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG`). That baked default only takes effect at `MX_TELEMETRY=full` — at the default `errors` level, analytics runs only if **you** set `ANALYTICS_CONFIG` at runtime, and your runtime setting always overrides the baked one.
+</Callout>
+
+### App-event webhooks
+
+`EVENTS_FORWARD_RULES` lets you forward matching app events (errors, shares, …) to webhooks you choose — e.g. your own Slack. It is unset by default: nothing is forwarded anywhere unless you configure it. All events are always recorded in your local `app_events` table regardless.
+
+---
+
+## Verifying
+
+Everything above is auditable in the source: the Sentry init files sit at the repo root of `frontend/`, the level logic is `frontend/lib/telemetry.ts`, and analytics wiring is `frontend/lib/analytics/`. If you find a channel not documented on this page, that's a bug — please [open an issue](https://github.com/minusxai/minusx/issues).

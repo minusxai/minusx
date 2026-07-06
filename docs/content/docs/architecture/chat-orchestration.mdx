@@ -1,0 +1,112 @@
+---
+title: Chat & Agent Orchestration
+description: The append-only conversation log, the orchestrator engine, tool tiers, and resumable streaming
+---
+
+All chat in MinusX — Explore, the side-chat on questions and dashboards, Slack — runs through one in-process TypeScript orchestrator. There is no separate agent service. This page covers the conversation model, how tools execute, and how streaming survives disconnects and server restarts.
+
+The full design document is on GitHub: [chat-architecture-v3.md](https://github.com/minusxai/minusx/blob/main/docs/chat-architecture-v3.md).
+
+---
+
+## Conversations are append-only logs
+
+A conversation is not a mutable document. It's an **append-only log** of entries — assistant messages, tool calls, tool results — that is:
+
+- **Immutable** — entries are only ever appended, never edited in place.
+- **Forkable** — editing an earlier message, or two writers colliding on the same position, forks the log: a new conversation is created seeded with entries `0..seq`, pointing back at its parent (`forked_from`).
+- **Time-travel capable** — because the log is the complete history, the orchestrator can reconstruct the exact state at any point by replaying entries up to that index.
+
+Conversations live in dedicated tables in the document DB (PGLite or Postgres — same code path on both):
+
+| Table | Contents |
+|---|---|
+| `conversations` | One row per conversation: owner, mode, root agent, run status, lease/heartbeat fields |
+| `messages` | One row per log entry: contiguous `seq`, kind (`assistant` / `toolCall` / `toolResult`), and the entry verbatim as JSON |
+
+Two properties do a lot of work here:
+
+- `UNIQUE (conversation_id, seq)` enforces contiguous append and doubles as optimistic concurrency control — a conflicting append violates the constraint and triggers a fork instead of corrupting the log.
+- `seq` is simultaneously the log index **and** the stream cursor, so "reconstruct the conversation" and "resume the stream" are the same read: `SELECT content ... ORDER BY seq`.
+
+Errors are rows too (`kind='error'`, `seq=NULL`), so they never occupy a log index and never leak into the LLM's context, but still render in the UI.
+
+---
+
+## The orchestrator engine
+
+The orchestrator is **single-use**: each turn constructs a fresh engine over the loaded log, runs it to completion (or pause), and discards it. Nothing durable lives in process memory — the `messages` table is the sole source of truth, and each finalized entry is committed **incrementally** as it's produced, not once at turn end. A crash mid-turn therefore leaves a consistent partial log.
+
+Agents dispatch **tool calls**. Each tool call goes `pending → executing → completed`, and a turn finishes when no pending tool calls remain.
+
+### Registries
+
+Tools and agents self-register in a registry (`REGISTRABLES`) keyed by schema name. This is how a saved conversation is resumed: the orchestrator reads the log, looks each tool call and sub-agent up by name in the registry, and reconstructs the execution tree (entries thread on a parent ID). Tool argument schemas are TypeBox definitions colocated with each tool — the same schema is the runtime validator and what the LLM is told it can pass.
+
+### Skills
+
+Per-file-type authoring knowledge (how to write a question, a dashboard, a report, an alert...) lives in **skills** — prompt modules the agent loads on demand — rather than being baked into every tool description. The generic file tools carry only the markup mechanics plus a pointer to the relevant skill.
+
+---
+
+## Two tiers of tools
+
+Tools execute in whichever tier has the state they need:
+
+| Tier | Examples | How they run |
+|---|---|---|
+| **Server tools** | `ExecuteQuery`, `SearchDBSchema`, `ReadFiles`, `SearchFiles` | In-process during orchestration; they need the document DB or the query connectors |
+| **Frontend-bridged tools** | Modify the current question, edit dashboard layout, navigate, ask the user to clarify | Need live Redux/UI state; executed in the browser |
+
+The handoff works via a pause/resume protocol. When an agent calls a frontend tool, the tool throws a `UserInputException`: the orchestrator stops, marks the run **paused**, and returns the pending tool calls to the client. Browser middleware executes them against the live UI state, then POSTs the results back — which resumes the orchestrator where it left off.
+
+```
+user message → orchestrator
+  → server tools auto-execute in-process, looping
+  → hits a frontend-only tool → pause, return pending calls
+  → browser executes them → POST results → resume
+  → ... → no pending calls → turn done
+```
+
+When a pass produces both completed and pending work, completions are recorded before the pending items are returned — so nothing is lost across the pause.
+
+Headless contexts (e.g. the Slack bot) swap frontend-bridged tools for server equivalents where one exists.
+
+---
+
+## Turns and streaming are decoupled
+
+Producing output and receiving output are separate API calls, and that separation is what makes the stream resilient:
+
+| Endpoint | Role |
+|---|---|
+| `POST /api/conversations/:id/turns` | **Causes** work — starts a turn (user message or completed tool results) and returns immediately; the turn runs detached |
+| `GET /api/conversations/:id/stream?since=<cursor>` | **Receives** work — a resumable Server-Sent Events stream |
+
+The stream is a cursor read over the durable log, with Postgres `LISTEN/NOTIFY` as a low-latency wakeup (supported by both PGLite and hosted Postgres — one transport, no dual code path):
+
+1. **Catch-up**: `SELECT` all messages past the client's cursor and emit them.
+2. **Subscribe**: `LISTEN` on the conversation's channel.
+3. **Loop**: each `NOTIFY` is a pointer ("there are new rows"), never the data — the stream re-reads past its cursor and emits. A lost NOTIFY is harmless; the next read catches up.
+
+Live token deltas (the "typing" effect) are ephemeral: batched chunks broadcast over a delta channel, never persisted. Durability is at message granularity — if a delta is lost, the committed message replays it in full.
+
+<Callout type="info">
+Because correctness lives in the database plus a cursor — not in any process's memory — a network blip, a page reload, or even a server restart mid-turn doesn't lose the conversation. The client reconnects with its last cursor and the catch-up read replays exactly the gap.
+</Callout>
+
+### Crash detection and resume
+
+Liveness is tracked with a **lease + heartbeat** on the conversation row: a running turn holds a lease and bumps a heartbeat every few seconds. If a stream finds `running` with a stale heartbeat, the owner is dead: the turn is failed cleanly (lease released, an error row appended, committed messages preserved) and the client is told the failure is retryable. For user-message turns, the client silently retries: the server rolls back the dead turn's partial entries and replays from the preserved user message, with a server-enforced attempt cap stored on the conversation row. The user typically just sees the turn complete.
+
+---
+
+## Chat contexts
+
+Each surface sends the relevant app state along with the user's message:
+
+- **Explore** — full-page chat for ad-hoc SQL and analysis.
+- **Question sidebar** — current query, parameters, and results.
+- **Dashboard sidebar** — the dashboard's questions and layout.
+
+On question and dashboard pages, current charts are also rendered off-screen to images and attached to the message, so the model sees what the user sees.

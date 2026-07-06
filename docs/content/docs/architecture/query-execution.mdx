@@ -1,0 +1,124 @@
+---
+title: Query Execution & Caching
+description: The streaming query path, the stale-while-revalidate cache, execution leases, parameters, and guest access
+---
+
+Every analytics query — whether triggered by a person clicking Run, a dashboard loading, or an agent calling `ExecuteQuery` — flows through one path: `POST /api/query` → the query cache → a streaming connector. The design goal is that the server is a *pipe*: no full result set is ever materialized in server RAM, and results are cached durably across instances.
+
+The full design document is on GitHub: [Query Execution, Cache, & Params Arch V2](https://github.com/minusxai/minusx/blob/main/docs/Query%20Execution%2C%20Cache%2C%20%26%20Params%20Arch%20V2.md).
+
+---
+
+## One format everywhere: gzipped JSONL
+
+The wire format and the at-rest cache format are the same, so the row stream tees to both with zero divergence:
+
+```
+connector row-stream → JSONL encoder → tee ─┬─→ gzip → object store   (cache write)
+                                            └─→ HTTP response body    (to client)
+```
+
+- **Wire**: `/api/query` returns a streamed JSONL body — a metadata preamble line (`{columns, types, finalQuery, ...}`), then one JSON object per row. Errors remain non-200 JSON.
+- **At-rest**: the same JSONL, gzipped, stored as a blob in the object store (S3 for hosted, local files for open-source). A cache hit streams the blob back through gunzip straight to the client.
+- **Why not Arrow**: only two of the nine connectors are Arrow-native; JSONL is trivially produced from any row-object connector, needs no client dependency, and DuckDB can still read the cached blobs natively (`read_ndjson`, including gzip) — which keeps cross-connection joins over cached results on the table without a recompaction step.
+
+Peak server memory per query is one row batch, never the whole result. The client parses JSONL incrementally at the fetch boundary into the same result shape downstream code always used.
+
+---
+
+## Connector dispatch
+
+The route resolves the connection, derives the SQL dialect, and dispatches to the matching Node.js connector. The connector contract is **streaming-first** — `queryStream()` is the primary method; the materialized `query()` just drains it. Eight of nine connectors stream natively from the driver:
+
+| Connector | Streaming mechanism |
+|---|---|
+| DuckDB / SQLite / CSV | driver stream + chunk fetch (shared implementation) |
+| PostgreSQL | `pg-cursor` batched server-side cursor |
+| MongoDB | aggregation cursor (columns sampled from the first batch) |
+| BigQuery | paged `getQueryResults` |
+| ClickHouse | `JSONCompactEachRowWithNamesAndTypes` stream |
+| Athena | `NextToken` pagination |
+
+Results are row-capped at 10k rows, which keeps any single result bounded.
+
+---
+
+## Storage: control plane + data plane
+
+The cache is split by access pattern:
+
+- **`query_cache` table (control plane, Postgres/PGLite)** — one row per cache key: the query, connection, params, result metadata (row/column count, byte size), the blob reference, SWR timestamps, and the execution lease. A sweeper deletes expired rows and their blobs.
+- **Blob store (data plane, object store)** — the gzipped JSONL result itself, pure get/put/delete by key. S3 multipart upload on hosted (no full-object buffering); local files on open-source.
+
+The cache key is `${mode}:${queryHash}`, where the hash covers query text, bound params, and connection — so identical runs share one blob regardless of who triggered them, while tutorial and org modes never share entries.
+
+---
+
+## SWR state machine
+
+Each request classifies its cache row into one of four states:
+
+| State | Condition | Behavior |
+|---|---|---|
+| **Fresh** | `now < revalidate_at` | Stream the cached blob. No lease, no warehouse hit. |
+| **Stale** | `revalidate_at ≤ now < expire_at` | Stream the stale blob immediately **and** fire-and-forget a background revalidation. |
+| **Expired** | `now ≥ expire_at` | Execute, stream fresh result, rewrite the blob. |
+| **Miss** | no row | Same as expired. |
+
+**Per-file cache policies**: a question's content can carry `cachePolicy: { revalidateMs?, expiryMs? }`, clamped server-side, with environment-configurable defaults (20 minutes revalidate / 60 minutes expiry). For guest requests the policy is always read from the file server-side — a guest can't set it.
+
+A force-refresh (the retry button, or an explicit reload) skips the fresh/stale serve and re-executes — still under the lease.
+
+---
+
+## Execution leases
+
+Concurrent identical misses or revalidations must not all hit the warehouse. Coordination is a **row lease in `query_cache`** (pool-safe and PGLite-safe, unlike an advisory lock):
+
+1. **Claim** — an atomic upsert with a lease TTL; exactly one caller wins the row.
+2. **Winner** executes, streams to the blob store (tee), then flips the row to `ready` with fresh SWR windows.
+3. **Losers** poll the row and stream the ready blob.
+
+Two invariants keep this honest:
+
+- **Reads never lease.** Only executions (miss + background revalidation) take the lease; fresh and stale serves are lock-free.
+- **A crashed winner can't block forever.** The lease has a TTL; a stale lease is steal-able, so waiters recover instead of hanging.
+
+On single-process PGLite the lease degrades to a graceful no-op (requests serialize anyway); it earns its keep on hosted multi-instance Postgres.
+
+---
+
+## Parameters
+
+Queries use named parameters with `:name` syntax (`:limit`, `:start_date`), typed as `text`, `number`, or `date`, and auto-extracted from the SQL. Dashboards merge parameters that share a name and type across their questions.
+
+Parameter values have deliberate semantics around "empty" vs. "none":
+
+| State | Value | SQL behavior |
+|---|---|---|
+| Has a value | `"foo"` / `100` | Filter kept; `:param` bound to the value |
+| Empty text | `""` | A real value — filter kept, bound to `""` |
+| Empty number | `""` → `null` | Normalized to None client-side (engines can't cast `""` to a number) |
+| **None** (explicit) | `null` | The filter condition is **removed from the query**; any remaining `:param` references become `NULL` |
+
+Server-side, only `null` means None — an empty string is forwarded as a real value. Dashboards only fall back to a question's saved default when the key is *absent* from the dashboard's submitted params; an explicit `null` or `""` is never overridden.
+
+<Callout type="info">
+Parameters are always <strong>bound</strong>, never string-concatenated into SQL. This is a security-critical invariant, verified per connector.
+</Callout>
+
+---
+
+## Guest access: execute by file ID only
+
+A guest viewing a publicly shared story can run its queries — but never arbitrary SQL. The contract is the published file itself; there is no separate "public query" table:
+
+```
+POST /api/query  { fileId, params }        (guest session)
+  → access check gates the file to the guest's shared folder
+  → the file's FROZEN query + connection are used; any query in the body is ignored
+  → params are validated against the file's declared parameter spec, then bound
+  → result streams back as JSONL — the raw SQL never leaves the server
+```
+
+Authenticated users can still send raw SQL on `/api/query` (that's how Explore and in-progress edits work); guests are blocked from that mode entirely. Because the cache is mode-scoped rather than user-scoped, a guest run and an authenticated run of the same question share one cached blob — and a guest can only ever reach cache keys derivable from files they're authorized to see.

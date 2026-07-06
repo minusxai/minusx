@@ -1,0 +1,23 @@
+name: Deploy Docs
+
+# Docs-site deploy mechanics live in the (private) deploys repo. This workflow
+# triggers them on every push to main that touches docs/ — the same pattern as
+# publish.yml's deploy-staging job (gh workflow run + DEPLOYS_DISPATCH_TOKEN).
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+
+jobs:
+  trigger-docs-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger docs deploy in minusxai/deploys
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOYS_DISPATCH_TOKEN }}
+        run: |
+          gh workflow run deploy-docs.yaml \
+            --repo minusxai/deploys \
+            --ref main

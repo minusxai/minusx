@@ -170,20 +170,29 @@ if [ ! -f frontend/.env.example ]; then
 fi
 [ -f frontend/.env ] || { [ -f frontend/.env.example ] && cp frontend/.env.example frontend/.env || touch frontend/.env; }
 
-# ANTHROPIC_API_KEY — the in-process orchestrator reads it at LLM call time.
+# LLM configuration — the in-process orchestrator reads the provider key at
+# call time. Default provider is Anthropic (ANTHROPIC_API_KEY); a custom
+# provider/endpoint via ANALYST_AGENT_MODEL_CONFIG skips the key prompt.
+# Docs: https://docs.minusx.ai/docs/self-hosting/llm-providers
 ANTHROPIC_API_KEY=$(get_env_val frontend/.env ANTHROPIC_API_KEY)
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-  printf "\n  ${SPARKLE} ${BOLD}Anthropic API Key required${RESET}\n"
-  printf "  ${GRAY}Get one at ${RESET}${BOLD}https://console.anthropic.com${RESET}\n\n"
+ANALYST_MODEL_CONFIG=$(get_env_val frontend/.env ANALYST_AGENT_MODEL_CONFIG)
+if [ -n "$ANALYST_MODEL_CONFIG" ]; then
+  success "Custom model config detected (ANALYST_AGENT_MODEL_CONFIG) — skipping Anthropic key"
+elif [ -z "$ANTHROPIC_API_KEY" ]; then
+  printf "\n  ${SPARKLE} ${BOLD}Anthropic API Key${RESET} ${GRAY}(default LLM provider)${RESET}\n"
+  printf "  ${GRAY}Get one at ${RESET}${BOLD}https://console.anthropic.com${RESET}\n"
+  printf "  ${GRAY}Press Enter to skip if you'll use another provider or a local model.${RESET}\n\n"
   printf "  ${ARROW} Enter your key: "
   read -r ANTHROPIC_API_KEY </dev/tty
   echo ""
   if [ -z "$ANTHROPIC_API_KEY" ]; then
-    fail "API key is required to continue"
-    exit 1
+    warn "No LLM configured yet — the agent won't work until you set ANTHROPIC_API_KEY"
+    warn "or ANALYST_AGENT_MODEL_CONFIG in frontend/.env and restart the container."
+    warn "See ${BOLD}https://docs.minusx.ai/docs/self-hosting/llm-providers${RESET}"
+  else
+    set_env_val frontend/.env ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
+    success "API key saved"
   fi
-  set_env_val frontend/.env ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
-  success "API key saved"
 else
   success "API key already configured"
 fi

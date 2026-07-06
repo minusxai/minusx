@@ -1,0 +1,9 @@
+{
+  "title": "Self-Hosting",
+  "pages": [
+    "index",
+    "configuration",
+    "llm-providers",
+    "telemetry"
+  ]
+}

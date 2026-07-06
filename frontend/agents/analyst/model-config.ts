@@ -1,25 +1,30 @@
-import { getModel } from '@/orchestrator/llm';
-import type { Api, Model } from '@/orchestrator/llm';
+import { buildCustomModel, getModel } from '@/orchestrator/llm';
+import type { Api, CustomModelSpec, Model } from '@/orchestrator/llm';
 import { E2E_MODE } from '@/lib/constants';
 
 /**
  * Shape of `ANALYST_AGENT_MODEL_CONFIG` env JSON.
  *
  * Mirrors a two-layer separation:
- *   - `provider` + `model`: model identity, passed to the orchestrator's `getModel`.
+ *   - `provider` + `model`: model identity, passed to the orchestrator's `getModel`;
+ *     OR `customModel`: a {@link CustomModelSpec} for a local / custom
+ *     OpenAI-compatible endpoint (Ollama, vLLM, …) not in the registry.
+ *     `customModel` wins when both are present.
  *   - `options`: call-time `SimpleStreamOptions` (e.g. `reasoning`,
  *     `thinkingBudgets`, `metadata`, `maxRetryDelayMs`). The orchestrator
  *     spreads this **blindly** into the orchestrator's `streamSimple`/`callLLM` so
  *     adding a new stream option requires zero code change here — just edit
  *     the env JSON.
  *
- * Example:
+ * Examples:
  *   { "provider": "anthropic", "model": "claude-opus-4-5",
  *     "options": { "reasoning": "low" } }
+ *   { "customModel": { "baseUrl": "http://localhost:11434/v1", "id": "qwen3:32b" } }
  */
 export interface AnalystModelConfig {
-  provider: string;
-  model: string;
+  provider?: string;
+  model?: string;
+  customModel?: CustomModelSpec;
   options?: Record<string, unknown>;
 }
 
@@ -73,6 +78,10 @@ export function getAnalystModelConfig(): AnalystModelConfig | null {
 function getAnalystModel(): Model<Api> | null {
   const cfg = getAnalystModelConfig();
   if (!cfg) return null;
+  if (cfg.customModel) return buildCustomModel(cfg.customModel);
+  if (!cfg.provider || !cfg.model) {
+    throw new Error('ANALYST_AGENT_MODEL_CONFIG needs either customModel or provider+model');
+  }
   return getModel(cfg.provider, cfg.model);
 }
 
@@ -106,7 +115,17 @@ export function getAgentModelOrTestFallback(testFallback: Model<Api>): Model<Api
 /**
  * Returns the call-time options blob (or undefined). Spread directly into
  * the orchestrator's stream options at call sites — no per-key knowledge needed.
+ * When the config names a custom endpoint with `apiKeyEnv`, the key is read
+ * from that env var here (call time) and injected as `options.apiKey`; an
+ * explicit `options.apiKey` always wins.
  */
 export function getAnalystModelOptions(): Record<string, unknown> | undefined {
-  return getAnalystModelConfig()?.options;
+  const cfg = getAnalystModelConfig();
+  if (!cfg) return undefined;
+  const keyEnv = cfg.customModel?.apiKeyEnv;
+  if (keyEnv && !cfg.options?.apiKey) {
+    // eslint-disable-next-line no-restricted-syntax -- the env var NAME comes from the scoped model config; resolved at call time like the config itself
+    return { ...cfg.options, apiKey: process.env[keyEnv] };
+  }
+  return cfg.options;
 }

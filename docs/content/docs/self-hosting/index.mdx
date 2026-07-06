@@ -1,0 +1,44 @@
+---
+title: Self-Hosting Overview
+description: What runs where, what leaves your infrastructure, and how to operate MinusX on your own hardware
+---
+
+MinusX is designed to run entirely on your own infrastructure. This section covers everything you need to operate it: [configuration](/docs/self-hosting/configuration), [LLM providers](/docs/self-hosting/llm-providers), and [telemetry](/docs/self-hosting/telemetry).
+
+---
+
+## What runs where
+
+MinusX is a **single Next.js application** — there is no separate backend service. The AI agent orchestrator runs in-process, analytics queries run in Node.js connectors inside the same container, and documents (questions, dashboards, reports) live in an embedded PGLite database (or external Postgres if you configure one).
+
+| Component | Where it runs |
+|-----------|---------------|
+| Web app + API | Your container |
+| AI agent orchestrator | Your container (in-process) |
+| Document storage (questions, dashboards, …) | Your disk (PGLite) or your Postgres |
+| Query execution | Your container → your databases |
+| Warehouse credentials | Your disk, never transmitted |
+| LLM calls | Direct from your container to the provider you configure |
+
+## What leaves your infrastructure
+
+Being precise about this matters more than anything else on this page:
+
+1. **LLM requests.** The agent sends schema metadata, the context you've curated in the Knowledge Base, and conversation content to whichever LLM provider you configure — using **your API key, from your container**. No MinusX-operated proxy sits in between. See [LLM Providers](/docs/self-hosting/llm-providers).
+2. **Telemetry** — by default, crash reports only (no traces, no PII, no analytics); one environment variable (`MX_TELEMETRY=off`) turns even that off. The full, honest inventory is on the [Telemetry](/docs/self-hosting/telemetry) page.
+3. **Nothing else.** Query results, warehouse credentials, and your documents stay on your infrastructure.
+
+## Installation
+
+Two supported paths — both are covered in the [installation guide](/docs/installation/self-hosted):
+
+- **Installer script** (recommended): pulls the prebuilt image from GitHub Container Registry, prompts for the required secrets, and starts the container.
+- **From source**: clone the repo and `docker compose up` — builds the image locally.
+
+## Upgrades & data persistence
+
+All state lives under the `data/` directory you mount into the container (PGLite documents, DuckDB analytics, uploads). Upgrading is: pull the newer image, restart the container with the same mounts. Re-running the installer script does exactly this.
+
+<Callout type="info">
+Back up the `data/` directory (and your external Postgres, if you use one) — that is the entirety of MinusX's state.
+</Callout>

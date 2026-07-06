@@ -10,8 +10,9 @@ import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { E2E_HEADER } from '@/lib/auth/e2e-runtime';
 import { getConfigs, getConfigsForMode, getOrgStyles, getStylesForMode } from '@/lib/data/configs.server';
 import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, getBrandTagline } from '@/lib/branding/whitelabel';
-import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES, QUERY_TIMEOUT_MS, CREDITS_ENABLED } from '@/lib/config';
+import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES, QUERY_TIMEOUT_MS, CREDITS_ENABLED, TELEMETRY_LEVEL } from '@/lib/config';
 import { parseAnalyticsConfig } from '@/lib/constants';
+import { TELEMETRY_LEVEL_ATTR } from '@/lib/telemetry';
 import type { AnalyticsConfig } from '@/lib/analytics/types';
 import { GlobalErrorHandler } from '@/components/app-shell/ErrorHandler';
 import { Toaster } from '@/components/ui/toaster';
@@ -94,6 +95,8 @@ async function loadInitialState(): Promise<{
   return {
     user,
     config,
+    // ANALYTICS_CONFIG is already telemetry-level-aware (lib/config.ts): the
+    // image-baked default only applies at `full`, and `off` zeroes it.
     analyticsConfig: parseAnalyticsConfig(ANALYTICS_CONFIG),
     disableAppStateImages: DISABLE_APP_STATE_IMAGES,
     maxConcurrentQueries: MAX_CONCURRENT_QUERIES,
@@ -137,7 +140,14 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+      // Telemetry-level handshake for the prebuilt client bundle:
+      // instrumentation-client.ts reads this before initializing Sentry.
+      {...{ [TELEMETRY_LEVEL_ATTR]: TELEMETRY_LEVEL }}
+    >
       <head>
         <script
           dangerouslySetInnerHTML={{

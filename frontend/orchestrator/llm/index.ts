@@ -212,7 +212,73 @@ export class EventStream<T, R = T> extends PiEventStream<T, R> {}
  * so there is no request-path proxy.
  */
 export function getModel<P extends string, M extends string>(provider: P, model: M): Model<Api> {
-  return piGetModel(provider as never, model as never);
+  const resolved = piGetModel(provider as never, model as never);
+  if (!resolved) {
+    throw new Error(
+      `Unknown LLM provider/model: "${provider}"/"${model}" — not in the model registry. ` +
+      `For a local or custom OpenAI-compatible endpoint (Ollama, vLLM, …), use ` +
+      `"customModel" in the agent model config instead of "provider"/"model".`,
+    );
+  }
+  return resolved;
+}
+
+/**
+ * Spec for a model served from a custom endpoint that is NOT in the provider
+ * registry — a local Ollama/vLLM/llama.cpp server or any OpenAI-compatible
+ * gateway. Only `baseUrl` and `id` are required; everything else has
+ * conservative defaults. Provider-specific quirks are auto-detected from the
+ * URL and can be overridden via `compat`.
+ */
+export interface CustomModelSpec {
+  /** Endpoint base URL, e.g. `http://localhost:11434/v1`. */
+  baseUrl: string;
+  /** Model id the endpoint expects, e.g. `qwen3:32b`. */
+  id: string;
+  /** Wire API. Default: `openai-completions`. */
+  api?: string;
+  /** Display name. Default: the id. */
+  name?: string;
+  /** Provider slug (also used for env API-key lookup). Default: `custom`. */
+  provider?: string;
+  /** Env var name holding the endpoint's API key, injected at call time. */
+  apiKeyEnv?: string;
+  /** Whether the model emits reasoning/thinking. Default: false. */
+  reasoning?: boolean;
+  /** Supported input modalities. Default: `['text']`. */
+  input?: ('text' | 'image')[];
+  /** Context window in tokens. Default: 128000. */
+  contextWindow?: number;
+  /** Max output tokens per call. Default: 8192. */
+  maxTokens?: number;
+  /** Extra HTTP headers merged into requests. */
+  headers?: Record<string, string>;
+  /** OpenAI-compat overrides (e.g. `maxTokensField`, `thinkingFormat`). */
+  compat?: Record<string, unknown>;
+}
+
+/**
+ * Build a Model handle for a custom endpoint. The stream implementations read
+ * `baseUrl` straight off the model, so no registry entry is needed; cost is
+ * zeroed because there is no meaningful per-token price for a custom endpoint.
+ */
+export function buildCustomModel(spec: CustomModelSpec): Model<Api> {
+  if (!spec.baseUrl) throw new Error('customModel requires a baseUrl');
+  if (!spec.id) throw new Error('customModel requires a model id');
+  return {
+    id: spec.id,
+    name: spec.name ?? spec.id,
+    api: spec.api ?? 'openai-completions',
+    provider: spec.provider ?? 'custom',
+    baseUrl: spec.baseUrl,
+    reasoning: spec.reasoning ?? false,
+    input: spec.input ?? ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: spec.contextWindow ?? 128_000,
+    maxTokens: spec.maxTokens ?? 8_192,
+    ...(spec.headers ? { headers: spec.headers } : {}),
+    ...(spec.compat ? { compat: spec.compat } : {}),
+  } as unknown as Model<Api>;
 }
 
 /**
