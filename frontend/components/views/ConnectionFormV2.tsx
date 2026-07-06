@@ -33,8 +33,8 @@ import { ConnectionContent, ContextContent, DatabaseContext } from '@/lib/types'
 import { testConnection } from '@/lib/connections/client/connection-test';
 import TabSwitcher from '../selectors/TabSwitcher';
 import Editor from '@monaco-editor/react';
-import { useAppSelector } from '@/store/hooks';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import type { Mode } from '@/lib/mode/mode-types';
 import { useFileByPath, useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile } from '@/lib/file-state/file-state';
 import { convertDatabaseContextToWhitelist } from '@/lib/context/context-utils';
@@ -87,6 +87,11 @@ interface ConnectionFormV2Props {
   onStaticSelect?: (tab: 'csv' | 'sheets') => void;
   /** Skip the type selection step and go straight to configure (type already set on content). */
   skipTypeSelection?: boolean;
+  colorMode: 'light' | 'dark';
+  userMode: Mode;
+  showJson: boolean;
+  homeFolder: string;
+  userId: number | undefined;
 }
 
 export default function ConnectionFormV2({
@@ -107,14 +112,15 @@ export default function ConnectionFormV2({
   wizardMode = false,
   onStaticSelect,
   skipTypeSelection = false,
+  colorMode,
+  userMode,
+  showJson,
+  homeFolder,
+  userId,
 }: ConnectionFormV2Props) {
   const router = useRouter();
-  const colorMode = useAppSelector((state) => state.ui.colorMode);
-  const userMode = useAppSelector((state) => state.auth.user?.mode) || 'org';
-  const showJson = useAppSelector((state) => state.ui.devMode);
   const staticConnectionPath = resolvePath(userMode, '/database/static');
   const { file: staticConnectionFile, loading: staticConnectionLoading } = useFileByPath(staticConnectionPath);
-  const homeFolder = useAppSelector((state) => state.auth.user?.home_folder) || '';
   const homePath = resolvePath(userMode, homeFolder || '/');
   const { databases: contextDatabases, contextDocs: resolvedContextDocs, hasContext, contextId } = useContextHook(homePath, undefined, true);
   const contextDocs = resolvedContextDocs ? inlineContextDocsText(resolvedContextDocs) : '';
@@ -132,7 +138,6 @@ export default function ConnectionFormV2({
   // Load context file content for whitelist toggle
   const contextFileState = useFile(contextId, { skip: !contextId })?.fileState;
   const contextContent = contextFileState?.content as ContextContent | undefined;
-  const userId = useAppSelector((state) => state.auth.user?.id);
   const [whitelistToggling, setWhitelistToggling] = useState(false);
 
   const handleWhitelistToggle = useCallback(async () => {
