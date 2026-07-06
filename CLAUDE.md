@@ -202,14 +202,14 @@ The configs system provides per-company configuration stored as database documen
 - When loading a dashboard, referenced questions are fetched and included
 - References prevent circular dependencies at save time
 
-**Query Execution Flow**
+**Query Execution Flow** (`lib/query-cache/` — implements `docs/Query Execution, Cache, & Params Arch V2.md`)
 1. User edits SQL → Redux tracks state
 2. Execute → `POST /api/query`; client calls are funneled through `querySemaphore` (caps concurrency at `MAX_CONCURRENT_QUERIES`)
 3. Route applies params (`applyNoneParams`) and derives dialect via the lightweight `ConnectionsAPI.getRawByName` — *not* `FilesAPI.loadFile`, which can trigger schema profiling
-4. Server `queryCache` (TTL `QUERY_CACHE_TTL_MS`, default 60s) serves hits; concurrent identical queries share one run via `queryInflight`
-5. On a miss, `runQuery` (`lib/connections/run-query.ts`) picks the connector via `getNodeConnector`, executes → QueryResult → viz updates
+4. `getCachedJsonlStream` (`lib/query-cache/execute.server.ts`) classifies the cache key (`query_cache` control-plane row) as **fresh** (serve the blob), **stale** (serve the blob + fire-and-forget background revalidation), **expired**, or a **miss** (execute) — per-file SWR windows come from `resolveCachePolicy` (`revalidateMs`/`expiryMs`, `lib/query-cache/policy.server.ts`). Execution is lease-guarded (`claimLease`/`renewLease`/`releaseLease`): concurrent identical requests share one run, and a crashed holder's lease is steal-able rather than blocking waiters forever
+5. On a miss/expired/revalidate, `runQueryStream` (`lib/connections/run-query.ts`) picks the connector via `getNodeConnector`, executes, and the result is gzipped-JSONL-encoded to both the client stream and the object-store blob (`QueryCacheBlobStore`) so the wire format and at-rest format never diverge
 
-`getQueryResult({ forceLoad: true })` / `useQueryResult().refetch()` bypass the cache (powers the retry button).
+Guests of a public story can only execute by file id (`assertGuestQueryAllowed`/`sanitizeGuestParams`, `lib/query-cache/guest-query.server.ts`) — never raw SQL. `getQueryResult({ forceLoad: true })` / `useQueryResult().refetch()` pass `forceRefresh`, which skips the fresh/stale serve and re-executes (still lease-guarded) — powers the retry button.
 
 **Schema Profiling & Statistics Enrichment**
 
