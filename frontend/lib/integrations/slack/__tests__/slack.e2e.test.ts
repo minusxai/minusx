@@ -2,10 +2,12 @@
  * Slack Bot Integration — E2E Tests
  *
  * Tests the full Slack event → MinusX agent → Slack reply flow.
- * The Slack path now runs the v2 (in-process TypeScript orchestrator) — the
- * No backend is spawned. Only LLM calls are mocked (via the
- * SlackAgent's faux provider); everything else is real (PGLite DB, real
- * orchestration loop, Slack API calls mocked via fetch interceptors).
+ * The Slack path runs headlessly through the same v3 turn runner
+ * (runConversationTurn) the browser chat uses — persisting to the dedicated
+ * conversations/messages tables. No backend is spawned. Only LLM calls are
+ * mocked (via the SlackAgent's faux provider); everything else is real
+ * (PGLite DB, real orchestration loop, Slack API calls mocked via fetch
+ * interceptors).
  *
  * Run: npm test -- lib/integrations/slack/__tests__/slack.e2e.test.ts
  */
@@ -224,8 +226,9 @@ describe('Slack Bot Integration', () => {
   const postedMessages: Array<{ channel: string; text: string; thread_ts?: string }> = [];
 
   // ── Fetch mock ──────────────────────────────────────────────────────────────
-  // No subprocess/LLM-mock ports: the v2 Slack path runs the orchestrator in-process
-  // and mocks LLM output via the SlackAgent faux provider (`slackFaux`).
+  // No subprocess/LLM-mock ports: the Slack path runs the orchestrator in-process
+  // (via the shared v3 turn runner) and mocks LLM output via the SlackAgent faux
+  // provider (`slackFaux`).
   setupMockFetch({
     additionalInterceptors: [
       async (urlStr: string, init?: RequestInit) => {
@@ -686,6 +689,44 @@ describe('Slack Bot Integration', () => {
       expect(Number(rows[0].cnt)).toBeGreaterThanOrEqual(1);
       // Recorded with the surface as trigger so Slack usage is attributable.
       expect(rows[0].trigger).toBe('slack');
+    }, 60000);
+
+    it('a server-tool error during a Slack turn is mirrored to the v3 error stream (kind=\'error\' row)', async () => {
+      // Regression for the v2→v3 headless migration: the shared turn runner
+      // (runConversationTurn) mirrors tool/LLM failures into the conversation's
+      // parallel error stream (messages rows with kind='error') via
+      // mirrorErrors/appendError — a capability the old bespoke
+      // runChatOrchestrationV2 loop never had (it only console.error'd).
+      slackFaux.setResponses([
+        fauxAssistantMessage(
+          [fauxToolCall('NonExistentTool', { foo: 1 }, { id: 'tc_slack_unknown_001' })],
+          { stopReason: 'toolUse' },
+        ),
+        fauxAssistantMessage('done anyway', { stopReason: 'stop' }),
+      ]);
+
+      const threadTs = '1700013000.000001';
+      const installation = buildInstallation();
+      await processSlackEvent(
+        makeAppMentionPayload({
+          ts: threadTs,
+          threadTs,
+          eventId: `Ev_toolerror_${Date.now()}`,
+          text: `<@${TEST_BOT_USER_ID}> call a bogus tool`,
+        }) as any,
+        installation,
+      );
+
+      const { findConversationIdByMeta, loadErrors } = await import('@/lib/data/conversations.server');
+      const threadKey = `slack:${TEST_TEAM_ID}:${TEST_CHANNEL}:${threadTs}`;
+      const convId = await findConversationIdByMeta('slackThreadKey', threadKey);
+      expect(convId).not.toBeNull();
+
+      const errors = await loadErrors(convId!);
+      expect(errors.some((e) => e.source === 'server-tool')).toBe(true);
+      const toolError = errors.find((e) => e.source === 'server-tool')!;
+      expect(String(toolError.message)).toMatch(/Unknown tool/i);
+      expect(toolError.details?.tool_name).toBe('NonExistentTool');
     }, 60000);
 
     it('unknown MinusX user receives a polite error reply', async () => {

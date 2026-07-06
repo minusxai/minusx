@@ -2,9 +2,10 @@
 // (`setupOrchestration`), records LLM calls (`recordLlmCalls`), estimates next-turn
 // context size (`estimateNextChatContext`), and exposes the tool/agent registries
 // (`REGISTRABLES` / `HEADLESS_REGISTRABLES`). Consumed by the v3 turn runner
-// (`lib/chat/conversation-turn.server.ts`) and the headless runner
-// (`lib/chat/run-orchestration.server.ts`). Translates a legacy ChatRequest into an
-// orchestrator message/resume via `lib/chat-translator`.
+// (`lib/chat/conversation-turn.server.ts`) for ALL chat — browser (Explore/side-chat/
+// onboarding) AND headless callers with no client to bridge tool calls back to
+// (Slack — see `lib/integrations/slack/process-event.ts`). Translates a legacy
+// ChatRequest into an orchestrator message/resume via `lib/chat-translator`.
 
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
@@ -49,11 +50,13 @@ import {
   loadBenchmarkConnectionsFromEnv,
   type BenchmarkConnectionEntry,
 } from '@/agents/benchmark-analyst/connection-source';
+import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { getPageType } from '@/agents/analyst/skills';
 import { normalizeAttachments } from '@/lib/chat/attachments.server';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
+import { listAllConnections } from '@/lib/data/connections.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import {
   legacyToolResultToPi,
@@ -116,10 +119,11 @@ export const REGISTRABLES: RegistrableClass[] = [
   LoadSkill,
   LoadContext,
   WebAnalystAgent,
-  // Slack chat runs the orchestrator headlessly (see runChatOrchestrationV2).
-  // SlackAgent extends RemoteAnalystAgent and advertises ListDBConnections (which
-  // WebAnalystAgent drops), so both must be registered for the orchestrator to
-  // instantiate them on a new turn or when reconstructing a saved Slack log.
+  // Slack chat runs headlessly through the same shared turn runner (setupOrchestration
+  // picks SlackAgent as root when body.agent === 'SlackAgent' — see below). SlackAgent
+  // extends RemoteAnalystAgent and advertises ListDBConnections (which WebAnalystAgent
+  // drops), so both must be registered for the orchestrator to instantiate them on a
+  // new turn or when reconstructing a saved Slack log.
   SlackAgent,
   ListDBConnections,
   // Onboarding-wizard agents (connection setup): run on the chat path with the
@@ -279,15 +283,23 @@ export function buildBenchmarkContextFromSavedLog(log: ConversationLog): Benchma
 /**
  * Root agent class selected by the request's `agent` name for a NEW production
  * (non-benchmark) turn. Production chat sends `AnalystAgent`/`WebAnalystAgent`
- * (→ WebAnalystAgent); the onboarding wizard sends its specialized agents. Any
- * unknown/absent name falls back to WebAnalystAgent. (On resume the orchestrator
- * reconstructs the root from the saved log via the registrables, not this map.)
+ * (→ WebAnalystAgent); the onboarding wizard sends its specialized agents; the
+ * headless Slack runner (which controls `body.agent` itself, never client-supplied)
+ * sends `SlackAgent`. Any unknown/absent name falls back to WebAnalystAgent. (On
+ * resume the orchestrator reconstructs the root from the saved log via the
+ * registrables, not this map — but Slack re-sends `agent: 'SlackAgent'` on every
+ * turn anyway, same as the browser resends its own agent name.)
+ *
+ * Return type is the common `RemoteAnalystAgent` ancestor (not `WebAnalystAgent`)
+ * so `SlackAgent` — which extends `RemoteAnalystAgent` directly, not
+ * `WebAnalystAgent` — is a valid map value alongside the WebAnalystAgent-derived
+ * onboarding agents.
  */
 type RootAgentCtor = new (
   orch: Orchestrator,
   params: { userMessage: string },
   context: RemoteAnalystContext,
-) => WebAnalystAgent;
+) => RemoteAnalystAgent;
 
 // A Map (not a plain object) so a user-controlled `body.agent` can't reach
 // inherited keys like `constructor`/`__proto__` (CodeQL: unvalidated dynamic
@@ -297,6 +309,7 @@ const ROOT_AGENT_BY_NAME = immutableMap<string, RootAgentCtor>([
   ['AnalystAgent', WebAnalystAgent],
   ['OnboardingContextAgent', OnboardingContextAgent],
   ['OnboardingDashboardAgent', OnboardingDashboardAgent],
+  ['SlackAgent', SlackAgent],
 ]);
 
 export async function setupOrchestration(
@@ -394,15 +407,24 @@ export async function setupOrchestration(
   // disambiguate by scanning the log for V2-only markers (V2 agent name or
   // V2-exclusive tools).
   const isV2Bench = isBenchmarkRoot && isV2BenchmarkConversation(savedLog);
+  // Slack (headless, no browser to bridge frontend-only tools to) — detected from
+  // either the request's own `agent` (the Slack runner sends this on every turn,
+  // trusted since it's server-controlled, never client input) or the saved log's
+  // root (defensive, for resume paths that omit `body.agent`).
+  const isSlackRoot = body.agent === 'SlackAgent' || rootName === 'SlackAgent';
 
   // V2 benchmark conversations get the V2 toolset + V2 agent classes; V1
   // benchmark conversations get the `Base*` tool swaps on the production
-  // registrables; production conversations get the default registrables.
+  // registrables; Slack (headless) swaps frontend-bridge tools (ReadFiles) for
+  // server equivalents (see HEADLESS_TOOL_SWAPS); production conversations get
+  // the default registrables.
   const registrables = isV2Bench
     ? V2_BENCHMARK_REGISTRABLES
     : isBenchmarkRoot
       ? withSwaps(REGISTRABLES, BENCHMARK_TOOL_SWAPS)
-      : REGISTRABLES;
+      : isSlackRoot
+        ? HEADLESS_REGISTRABLES
+        : REGISTRABLES;
   const orch = new Orchestrator(registrables, [...savedLog]);
   // Enforce per-user credit limits deep at the LLM call site (no-op unless
   // ENFORCE_CREDIT_LIMITS). Covers every agent/sub-agent/resume hop in this run.
@@ -469,11 +491,23 @@ export async function setupOrchestration(
         pageType,
       };
     }
+    // Slack must discover connections itself (it has ListDBConnections + no
+    // client-selected connection_id) — unlike browser chat, which already knows
+    // the connection from Redux and never registers that tool. Only fetched for
+    // the Slack root so the hot browser-turn path pays no extra query.
+    const connections: ConnectionInfo[] | undefined = isSlackRoot
+      ? (await listAllConnections(user)).connections.map((c) => ({
+          name: c.name,
+          dialect: c.type,
+          config: c.config,
+        }))
+      : undefined;
     const ctx: RemoteAnalystContext = {
       userId: String(user.userId ?? user.email),
       mode: narrowedMode,
       effectiveUser: user,
       connectionId: serverArgs.connection_id,
+      connections,
       whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
       // Context docs (structure) and schema are server-resolved from the request's
       // pointers (see buildServerAgentArgs above) — never taken from the client

@@ -1,22 +1,24 @@
 # Chat Architecture v3 — Conversations as a First-Class Resource
 
-> Status: **IMPLEMENTED** (PR #513). All **browser-initiated** chat runs on v3 (dedicated tables +
-> LISTEN/NOTIFY streaming): Explore, side-chat, edit-and-fork, and the /view-context-size estimate.
-> The 502 existing conversations were ported by the backfill migration (run locally).
+> Status: **IMPLEMENTED** (PR #513). **All** chat — browser-initiated (Explore, side-chat,
+> edit-and-fork, the /view-context-size estimate) *and* headless (Slack, benchmark import, the
+> connection wizard's onboarding agents) — runs on v3 (dedicated `conversations`/`messages` tables +
+> LISTEN/NOTIFY streaming). The 502 pre-existing conversations were ported by the backfill migration
+> (run locally); `useConversation` reads `/api/conversations/:id` only — there is no file-conversation
+> fallback left in the client.
 >
-> **v2 is intentionally retained** (not deleted) because it still backs HEADLESS conversation
-> creation that the browser then views/continues:
-> - **Slack** threads (`app/api/integrations/slack/events` → `runChatOrchestrationV2`, writes v2 files)
-> - **Benchmark import** (`app/api/benchmark/import`)
-> - the **connection wizard** onboarding agents (kept on v2 — flipping them gained nothing since the
->   above already block full deletion, and added risk to the onboarding flow)
->
-> Deleting v2 (`/api/chat/*` routes, run-registry, `runChatTurnV2`/`runChatTurnStreamV2`, the v2
-> chat-listener branches) is a clean follow-up that first requires migrating those headless flows to
-> write the v3 store. The shared orchestration core (`setupOrchestration`, `recordLlmCalls`,
-> `estimateNextChatContext`) stays — v3 depends on it. The browser read path is already v3-first
-> (`useConversation` tries `/api/conversations/:id`, falls back to the v2 file), so a v2-file Slack
-> thread still loads + continues correctly today.
+> **v2 is fully removed** — both the old file-shaped conversation surface (`type:'conversation'`
+> documents, the in-memory run-registry, `/api/chat/*` routes, `runChatTurnV2`/`runChatTurnStreamV2`,
+> the v2 chat-listener branches) *and* the last headless caller still bypassing the shared turn
+> runner. Slack used to drive its own bespoke orchestration loop
+> (`runChatOrchestrationV2` in the now-deleted `lib/chat/run-orchestration.server.ts`) that wrote v3
+> rows directly but skipped lease/heartbeat, LISTEN/NOTIFY, and error-stream mirroring; it now calls
+> `runConversationTurn` (via `lib/integrations/slack/run-turn.server.ts`) — the exact same machinery
+> browser chat uses. `setupOrchestration` (`lib/chat/orchestration-core.server.ts`) selects
+> `SlackAgent` as root and swaps in the headless tool registrables (server-side `ReadFiles`, etc.)
+> whenever `agent === 'SlackAgent'`. The shared orchestration core (`setupOrchestration`,
+> `recordLlmCalls`, `estimateNextChatContext`) is what all of the above — browser and headless alike
+> — is built on.
 
 ---
 
@@ -316,7 +318,7 @@ Retained, intentionally: a **small, ephemeral** per-instance set of "currently o
 ## 11. Greenfield now, migrate later
 
 - **New conversations** → `conversations`/`messages` (`meta.version = 3`).
-- **Old conversations** → keep rendering via the legacy file read path. The list endpoint UNIONs both stores; a fetch by id tries `conversations` first, falls back to the conversation file (unambiguous because IDs are globally unique, §6).
+- **Old conversations** — during the transitional dual-read window, kept rendering via the legacy file read path (list endpoint UNIONed both stores; a fetch by id tried `conversations` first, falling back to the conversation file, unambiguous because IDs are globally unique, §6). That window has since closed: the backfill migration is complete and the client (`useConversation`) is v3-only — there is no runtime file-conversation fallback left.
 - **Backfill migration:** for each `type:'conversation'` file, insert a `conversations` row **with its existing id**, explode `content.log` into `messages` rows (`seq = index`, `content = entry`), and `errors[]` into `kind='error'` rows. Implemented as a standalone idempotent backfill (`npm run migrate-conversations-to-v3` / `POST /api/admin/migrate-conversations-v3`) — not a `MIGRATIONS` entry, since it does live cross-table writes the InitData-based framework can't express. Source files are left intact (re-runnable). Schema is self-healing via `CREATE TABLE IF NOT EXISTS` + the ALTER/DROP guards in §4.3.
 
 Conversation-id couplings that keep working because IDs are preserved: `llm_call_events.conversation_id`, `feedback_events.conversation_id` (+ `user_message_log_index`, which a `message_id` FK can later replace), `app_events`, and `/explore/:id` URLs.

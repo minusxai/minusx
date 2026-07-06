@@ -6,9 +6,8 @@
  */
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { getUserEffectiveUser } from '@/lib/auth/auth-helpers';
-import { runChatOrchestrationV2 } from '@/lib/chat/run-orchestration.server';
+import { runSlackChatTurn } from '@/lib/integrations/slack/run-turn.server';
 import { checkCreditGate } from '@/lib/analytics/credit-usage.server';
-import { SlackAgent } from '@/agents/slack/slack-agent';
 import {
   addReaction,
   getConversationHistory,
@@ -197,13 +196,7 @@ export async function processSlackEvent(
 
     const agentArgs = await buildSlackAgentArgs(effectiveUser);
 
-    const result = await runChatOrchestrationV2({
-      agentClass: SlackAgent,
-      agent_args: agentArgs,
-      user: effectiveUser,
-      userMessage,
-      conversationId,
-    });
+    const result = await runSlackChatTurn(conversationId, effectiveUser, userMessage, agentArgs);
 
     const slackReply = extractSlackReply(result.logDiff);
     const fallbackText = 'I finished the run, but I do not have a text reply to post back.';

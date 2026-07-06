@@ -30,7 +30,8 @@ export class SlackAgent extends RemoteAnalystAgent {
   protected getSystemPrompt(): string {
     // Impersonate the invoking user: their allowed viz types, role, whitelisted
     // schema, context docs, connection, and home folder all flow from the context
-    // the headless runner resolved for that user (see run-orchestration.server).
+    // the shared orchestration core resolved for that user (see setupOrchestration
+    // in lib/chat/orchestration-core.server.ts).
     const ctx = this.context;
     const base = renderPrompt('default.system', {
       agent_name: 'SlackAgent',
