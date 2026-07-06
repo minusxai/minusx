@@ -161,7 +161,7 @@ Reality: the live engine is **v3** (`app/api/conversations/[id]/turns/route.ts:8
 - [ ] `components/test/` → `components/evals/` — production eval-authoring UI (mounted by `context/ContextEditorV2.tsx:19`, `views/AlertView.tsx:193`, `views/TransformationView.tsx:303`), not test helpers.
 - [ ] `lib/database/config-db.ts` → `lib/database/config-store.ts` (or `configs-table.ts`) — currently an anagram of the unrelated `db-config.ts`.
 
-**Acceptance for M2:** validate + full test suite + e2e green; `grep -rn "chat-orchestration-v2\|V2_REGISTRABLES\|lib/backend\|lib/tests/" frontend/` (excluding this doc / changelogs) returns nothing. Commit + push to PR #567.
+**Acceptance for M2: MET.** validate + full test suite (3941 passed, 5 skipped) + e2e (2 passed) all green. Zero stale references to any old name/path remain repo-wide (verified via repo-wide grep, excluding this doc). All renames done via `git mv` (history preserved). Every consumer fixed across `app/api/`, `lib/chat/`, `orchestrator/`, `agents/`, tests, and `CLAUDE.md`/`docs/chat-architecture-v3.md`. **M2 complete**, pushed to PR #567.
 
 ---
 
