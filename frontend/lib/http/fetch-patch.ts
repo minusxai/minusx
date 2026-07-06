@@ -7,7 +7,7 @@
 
 'use client';
 
-import { getCurrentAsUser, getCurrentV } from '@/lib/navigation/url-utils';
+import { getCurrentAsUser } from '@/lib/navigation/url-utils';
 import { getCurrentMode } from '@/lib/mode/mode-utils';
 
 // Store original fetch (only in browser)
@@ -54,9 +54,8 @@ function installPatch() {
     if (urlString.startsWith('/api/') || urlString.includes('/api/')) {
       const asUser = getCurrentAsUser();
       const mode = getCurrentMode();
-      const v = getCurrentV();
 
-      if (asUser || mode !== 'org' || v) {
+      if (asUser || mode !== 'org') {
         // Parse and modify URL
         const url = new URL(urlString, window.location.origin);
 
@@ -67,10 +66,6 @@ function installPatch() {
         // Don't add default mode to avoid cluttering URLs
         if (mode !== 'org') {
           url.searchParams.set('mode', mode);
-        }
-
-        if (v) {
-          url.searchParams.set('v', v);
         }
 
         const patchedUrl = url.pathname + url.search;
@@ -97,13 +92,4 @@ function installPatch() {
   };
 
   isPatched = true;
-}
-
-/**
- * Restore original fetch (for testing)
- */
-export function unpatchFetch() {
-  if (typeof window === 'undefined' || !originalFetch || !isPatched) return;
-  window.fetch = originalFetch;
-  isPatched = false;
 }

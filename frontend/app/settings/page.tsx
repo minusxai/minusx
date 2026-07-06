@@ -6,8 +6,6 @@ import { LuRefreshCw, LuUser, LuX } from 'react-icons/lu';
 import { ColorModeSwitch } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
-import { useUseChatV2 } from '@/lib/chat-v2/use-chat-v2';
-import { setVInUrl } from '@/lib/navigation/url-utils';
 import { canEdit } from '@/lib/auth/role-helpers';
 import RecordingControl from '@/components/dev/RecordingControl';
 import DataManagementSection from '@/components/settings/DataManagementSection';
@@ -366,9 +364,6 @@ function SettingsContent() {
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
   const showExpandedMessages = useAppSelector((state) => state.ui.showExpandedMessages ?? false);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
-  // Chat-v2 toggle is URL-only (`?v=2`). The settings switch reads from URL
-  // and writes by reloading the page with `v=2` set or removed.
-  const useChatV2 = useUseChatV2();
   const { config } = useConfigs();
 
   const searchParams = useSearchParams();
@@ -567,22 +562,6 @@ function SettingsContent() {
         />
       ),
     },
-    {
-      tab: 'dev',
-      section: 'Alpha Flags',
-      title: 'Use new chat interface',
-      description: 'The new Chats surface (TS-orchestrator) is the default. Turn this off to use the legacy Conversations surface. Toggling reloads the page, adding `?v=1` (off) or clearing `v` (on) — the URL is the only source of truth.',
-      control: (
-        <SwitchControl
-          checked={useChatV2}
-          onChange={(checked) => {
-            // Single source of truth: the URL. Full reload guarantees every
-            // component sees the new state on next render.
-            window.location.href = setVInUrl(checked);
-          }}
-        />
-      ),
-    },
     // ── General: Developer Tools toggle (admin only, unlabeled card) ──
     {
       tab: 'general',
@@ -661,7 +640,7 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, useChatV2, devMode, showExpandedMessages, config.analytics]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

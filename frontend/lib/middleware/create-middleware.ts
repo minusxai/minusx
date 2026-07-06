@@ -12,17 +12,6 @@ import { GUEST_COOKIE, verifyGuestToken, isShareGuestPath } from '@/lib/auth/gue
 
 export type AuthReq = NextRequest & { auth: Session | null };
 
-/**
- * Pull the chat-v2 `v` param off a request's search params and shape it as
- * a forwarded-header tuple. Returns null when `v` is absent or empty.
- * Mirrors how `as_user` and `mode` are stamped onto request headers below.
- */
-export function extractVHeader(searchParams: URLSearchParams): { key: 'x-v'; value: string } | null {
-  const v = searchParams.get('v');
-  if (!v) return null;
-  return { key: 'x-v', value: v };
-}
-
 
 export function createMiddleware() {
   return auth(async (req) => {
@@ -135,12 +124,6 @@ async function routeRequest(req: AuthReq): Promise<NextResponse> {
     // Forward `view` (chrome-stripping for embedding) the same way as mode.
     const view = req.nextUrl.searchParams.get('view');
     requestHeaders.set('x-view', view && isValidView(view) ? view : DEFAULT_VIEW);
-
-    // Forward `v` (chat-v2 toggle) the same way as_user / mode are forwarded.
-    const vHeader = extractVHeader(req.nextUrl.searchParams);
-    if (vHeader) {
-      requestHeaders.set(vHeader.key, vHeader.value);
-    }
 
     const e2eParam = req.nextUrl.searchParams.get(E2E_PARAM);
     if (matchesE2ESecret(e2eParam)) {

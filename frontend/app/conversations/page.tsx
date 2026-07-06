@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Flex, Heading, VStack, Text, Spinner, HStack, Input, Button } from '@chakra-ui/react';
-// Param-preserving router so chat navigation keeps ?v=2 (and as_user/mode).
+// Param-preserving router so chat navigation keeps as_user/mode.
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useCallback, useState } from 'react';
 import { LuSearch, LuPlus } from 'react-icons/lu';
