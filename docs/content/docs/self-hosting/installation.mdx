@@ -1,0 +1,90 @@
+---
+title: Installation
+description: Get MinusX running with Docker in 5 minutes
+---
+
+<Callout type="warn">
+MinusX is currently in **alpha**. Expect rough edges, breaking changes, and incomplete features. We'd love your feedback — [open an issue](https://github.com/minusxai/minusx/issues) or reach out to the team.
+</Callout>
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) (the from-source path also needs Docker Compose)
+- An [Anthropic API key](https://console.anthropic.com/) — or any [supported LLM provider](/docs/self-hosting/llm-providers)
+
+---
+
+## Option A — installer script (recommended)
+
+Pulls the prebuilt image from GitHub Container Registry, prompts for the required secrets, and starts the container:
+
+```bash
+curl -fsSL https://minusx.ai/install.sh | bash
+```
+
+Prefer to read it before you run it: [minusx.ai/install.sh](https://minusx.ai/install.sh) (it's [in the repo](https://github.com/minusxai/minusx/blob/main/install.sh)). The script checks Docker, creates a `minusx/` directory, writes `frontend/.env` (asking for your API key, generating `NEXTAUTH_SECRET`), pulls the image, and starts it on the first free port from 3000.
+
+Re-running the same command later **upgrades in place** — your data lives in `minusx/data/` and survives restarts and upgrades.
+
+MinusX will be available at [http://localhost:3000](http://localhost:3000).
+
+---
+
+## Option B — from source
+
+Builds the image locally instead of pulling the prebuilt one.
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/minusxai/minusx.git
+cd minusx
+```
+
+### 2. Configure environment variables
+
+MinusX is a single Next.js app — the AI agent orchestrator runs in-process, so
+all configuration lives in `frontend/.env` (there is no separate backend).
+
+```bash
+cp frontend/.env.example frontend/.env
+```
+
+Edit `frontend/.env` — add your Anthropic key and a generated NextAuth secret:
+
+```bash
+# LLM provider for the in-process agent orchestrator
+ANTHROPIC_API_KEY=<your-anthropic-key>
+
+# Generate with: openssl rand -base64 32
+NEXTAUTH_SECRET=<generated-secret-here>
+```
+
+### 3. Download sample data
+
+Download the **mxfood** demo dataset (~140MB) — a food delivery analytics database:
+
+```bash
+mkdir -p data
+curl -L -o data/mxfood.duckdb https://github.com/minusxai/sample_datasets/releases/download/v1.0/mxfood.duckdb
+```
+
+### 4. Start MinusX
+
+```bash
+docker compose up -d
+```
+
+MinusX will be available at [http://localhost:3000](http://localhost:3000).
+
+<Callout type="info">
+For local development without Docker, see the [development setup guide](https://github.com/minusxai/minusx/blob/main/LOCAL_DEV.md).
+</Callout>
+
+---
+
+## Next steps
+
+- The full environment-variable reference: [Configuration](/docs/self-hosting/configuration)
+- Pointing the agent at a different model or provider: [LLM Providers](/docs/self-hosting/llm-providers)
+- What reports outside your box and how to turn it off: [Telemetry & Privacy](/docs/self-hosting/telemetry)
