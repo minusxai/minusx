@@ -36,6 +36,13 @@ function InlineChart({ queryData }: { queryData: ReportQueryResult }) {
     connection_name: queryData.connectionId || ''
   }));
 
+  // Split-panel collapse state: local to this instance, not global Redux — this is a
+  // read-mostly toolcall render (no questionId, never in edit mode), and collapsedPanel
+  // has no layout effect in toolcall/compact mode (see QuestionViewV2's useCompactLayout);
+  // its only reachable effect here is the Show/Hide Viz Config button label, which local
+  // state reproduces exactly without leaking into the global page-mode panel state.
+  const [collapsedPanel, setCollapsedPanel] = useState<'none' | 'left' | 'right'>('none');
+
   const queryResult = useMemo(() => ({
     columns: queryData.columns,
     types: queryData.types,
@@ -81,6 +88,11 @@ function InlineChart({ queryData }: { queryData: ReportQueryResult }) {
         queryLoading={false}
         queryError={null}
         queryStale={false}
+        editMode={false}
+        collapsedPanel={collapsedPanel}
+        onTogglePanel={setCollapsedPanel}
+        fileState={{}}
+        onSetFile={() => {}}
         onChange={handleContentChange}
         onExecute={() => {}}
       />

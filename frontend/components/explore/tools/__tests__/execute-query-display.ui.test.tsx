@@ -32,9 +32,16 @@ describe('ExecuteQueryDisplay (compact)', () => {
     expect(screen.getByLabelText(ROW_LABEL)).toBeInTheDocument();
   });
 
-  it('renders the Execute SQL row for a CHART query (regression guard)', () => {
+  it('renders the Execute SQL row for a CHART query (regression guard)', async () => {
     renderWithProviders(<ExecuteQueryDisplay {...props(chartArgs, { success: true, queryResult: { columns: ['m', 'v'], types: ['text', 'number'], rows: [['a', 1]] } }, false)} />);
     expect(screen.getByLabelText(ROW_LABEL)).toBeInTheDocument();
+
+    // A chart-viz result auto-expands, mounting QuestionViewV2 in 'toolcall' mode — this
+    // asserts that render actually succeeds with the props ExecuteQueryDisplay now supplies
+    // (editMode, collapsedPanel/onTogglePanel, fileState/onSetFile) after the Container/View
+    // move that lifted QuestionViewV2's internal Redux reads out to its callers. The Monaco
+    // editor loads async via next/dynamic, hence findBy.
+    expect(await screen.findByLabelText('SQL editor')).toBeInTheDocument();
   });
 
   it('renders the Execute SQL row when the query errored', () => {
