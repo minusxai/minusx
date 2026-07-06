@@ -3,7 +3,7 @@
 // re-exports everything here; see lib/types.ts for the barrel).
 // ============================================================================
 
-import { AnalyticsFileType, FileType } from '../ui/file-metadata';
+import { FileType } from '../ui/file-metadata';
 import type { FileReference, InlineAsset, QuestionContent, StoryContent, NotebookContent } from '../validation/atlas-schemas';
 import type { ContextContent } from './context';
 import type { ConnectionContent, ConnectorContent } from './connections';
@@ -37,10 +37,6 @@ export interface BaseFileMetadata extends BaseEntity {
   draft?: boolean;               // true until first real save (invisible in listings); undefined = false
   meta?: Record<string, unknown> | null;  // arbitrary file-level metadata (future use)
 }
-
-// Document-based architecture types
-export type QuestionContainer = AnalyticsFileType | 'explore' | 'sidebar';
-
 
 // Named alias for the discriminated union (inlined in generated DashboardContent.assets)
 export type AssetReference = FileReference | InlineAsset;
