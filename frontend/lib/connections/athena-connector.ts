@@ -6,11 +6,31 @@ import {
   GetQueryResultsCommand,
 } from '@aws-sdk/client-athena';
 import { GlueClient, GetDatabasesCommand, GetTablesCommand } from '@aws-sdk/client-glue';
-import type { QueryResult, QueryStream, SchemaEntry, TestConnectionResult } from './base';
+import type { QueryResult, QueryStream, SchemaEntry } from './base';
 import { NodeConnector as NodeConnectorBase } from './base';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
+import { rewriteNamedParams } from './named-to-positional';
 
 const POLL_INTERVAL_MS = 500;
+
+/**
+ * Rewrite `:name` placeholders into Athena's `?` positional form, collecting
+ * values in order (`ExecutionParameters`). Negative lookbehind (in the
+ * shared `rewriteNamedParams`) skips the second `:` of `::cast` operators
+ * (Athena/Trino support PostgreSQL casts). Shared by `query()` and
+ * `queryStream()` below.
+ */
+function namedToAthena(
+  sql: string,
+  params?: Record<string, string | number>,
+): { sql: string; paramValues: string[] } {
+  const paramValues: string[] = [];
+  const athenaSql = rewriteNamedParams(sql, params, (_key, value) => {
+    paramValues.push(value != null ? String(value) : 'NULL');
+    return '?';
+  });
+  return { sql: athenaSql, paramValues };
+}
 
 export class AthenaConnector extends NodeConnectorBase {
   private athenaClient: AthenaClient | null = null;
@@ -56,41 +76,25 @@ export class AthenaConnector extends NodeConnectorBase {
     }
   }
 
-  async testConnection(includeSchema = false): Promise<TestConnectionResult> {
-    try {
-      const client = this.getAthenaClient();
-      const { QueryExecutionId } = await client.send(
-        new StartQueryExecutionCommand({
-          QueryString: 'SELECT 1',
-          WorkGroup: (this.config.work_group as string) ?? 'primary',
-          ResultConfiguration: {
-            OutputLocation: this.config.s3_staging_dir as string,
-          },
-        })
-      );
-      await this.waitForQuery(client, QueryExecutionId!);
-      if (includeSchema) {
-        const schemas = await this.getSchema();
-        return { success: true, message: 'Connection successful', schema: { schemas } };
-      }
-      return { success: true, message: 'Connection successful' };
-    } catch (err: any) {
-      return { success: false, message: err?.message ?? String(err) };
-    }
+  protected async ping(): Promise<void> {
+    const client = this.getAthenaClient();
+    const { QueryExecutionId } = await client.send(
+      new StartQueryExecutionCommand({
+        QueryString: 'SELECT 1',
+        WorkGroup: (this.config.work_group as string) ?? 'primary',
+        ResultConfiguration: {
+          OutputLocation: this.config.s3_staging_dir as string,
+        },
+      })
+    );
+    await this.waitForQuery(client, QueryExecutionId!);
   }
 
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
     const client = this.getAthenaClient();
 
-    // Substitute :paramName → ? (Athena positional), collect values in
-    // order. Negative lookbehind skips the second `:` of `::cast`
-    // operators (Athena/Trino support PostgreSQL casts).
-    const paramValues: string[] = [];
-    const athenaSql = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
-      const val = params?.[key];
-      paramValues.push(val != null ? String(val) : 'NULL');
-      return '?';
-    });
+    // Substitute :paramName → ? (Athena positional); see namedToAthena.
+    const { sql: athenaSql, paramValues } = namedToAthena(sql, params);
 
     const finalQuery = inlineSqlParams(sql, params);
 
@@ -135,12 +139,7 @@ export class AthenaConnector extends NodeConnectorBase {
    */
   override async queryStream(sql: string, params?: Record<string, string | number>): Promise<QueryStream> {
     const client = this.getAthenaClient();
-    const paramValues: string[] = [];
-    const athenaSql = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
-      const val = params?.[key];
-      paramValues.push(val != null ? String(val) : 'NULL');
-      return '?';
-    });
+    const { sql: athenaSql, paramValues } = namedToAthena(sql, params);
     const finalQuery = inlineSqlParams(sql, params);
 
     const { QueryExecutionId } = await client.send(

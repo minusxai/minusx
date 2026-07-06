@@ -1,10 +1,30 @@
 import 'server-only';
 import { BigQuery } from '@google-cloud/bigquery';
-import type { QueryResult, QueryStream, SchemaEntry, TestConnectionResult } from './base';
+import type { QueryResult, QueryStream, SchemaEntry } from './base';
 import { NodeConnector as NodeConnectorBase } from './base';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
+import { rewriteNamedParams } from './named-to-positional';
 
 const POLL_INTERVAL_MS = 500;
+
+/**
+ * Rewrite `:name` placeholders into BigQuery `@name` named-param form and
+ * collect the raw (pre-typed) param values. Negative lookbehind (in the
+ * shared `rewriteNamedParams`) skips the second `:` of `::cast` operators
+ * (BigQuery uses CAST() rather than `::`, but legacy SQL queries can still
+ * contain it). Shared by `query()` and `queryStream()` below.
+ */
+function namedToBigQuery(
+  sql: string,
+  params?: Record<string, string | number>,
+): { sql: string; queryParams: Record<string, string | number | null> } {
+  const queryParams: Record<string, string | number | null> = {};
+  const bqSql = rewriteNamedParams(sql, params, (key, value) => {
+    queryParams[key] = value ?? null;
+    return `@${key}`;
+  });
+  return { sql: bqSql, queryParams };
+}
 
 // BigQuery typed values (TIMESTAMP, DATE, DATETIME, TIME) are returned as { value: string }
 // objects by the client library. Flatten them to plain strings so they render correctly.
@@ -132,11 +152,7 @@ export class BigQueryConnector extends NodeConnectorBase {
     _timeoutMs?: number,
     paramTypes?: Record<string, string>,
   ): Promise<QueryStream> {
-    const queryParams: Record<string, string | number | null> = {};
-    const bqSql = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
-      queryParams[key] = params?.[key] ?? null;
-      return `@${key}`;
-    });
+    const { sql: bqSql, queryParams } = namedToBigQuery(sql, params);
     const finalQuery = inlineSqlParams(sql, params);
 
     const hasParams = Object.keys(queryParams).length > 0;
@@ -169,28 +185,13 @@ export class BigQueryConnector extends NodeConnectorBase {
     return { columns, types, finalQuery, rows: rows() };
   }
 
-  async testConnection(includeSchema = false): Promise<TestConnectionResult> {
-    try {
-      await this.runQueryJob('SELECT 1');
-      if (includeSchema) {
-        const schemas = await this.getSchema();
-        return { success: true, message: 'Connection successful', schema: { schemas } };
-      }
-      return { success: true, message: 'Connection successful' };
-    } catch (err: any) {
-      return { success: false, message: err?.message ?? String(err) };
-    }
+  protected async ping(): Promise<void> {
+    await this.runQueryJob('SELECT 1');
   }
 
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
-    // Substitute :paramName → @paramName (BigQuery named params). Negative
-    // lookbehind skips the second `:` of `::cast` operators (BigQuery uses
-    // CAST() rather than `::`, but legacy SQL queries can still contain it).
-    const queryParams: Record<string, string | number | null> = {};
-    const bqSql = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
-      queryParams[key] = params?.[key] ?? null;
-      return `@${key}`;
-    });
+    // Substitute :paramName → @paramName (BigQuery named params); see namedToBigQuery.
+    const { sql: bqSql, queryParams } = namedToBigQuery(sql, params);
 
     const finalQuery = inlineSqlParams(sql, params);
 

@@ -17,8 +17,8 @@ import { findNearestContextPath } from '@/lib/context/context-utils';
 import { resolveHomeFolderSync, resolvePath } from '@/lib/mode/path-resolver';
 import { getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
 import { resolveContextDocs } from '@/lib/sql/context-docs';
-import { connectionTypeToDialect } from '@/lib/utils/connection-dialect';
 import { selectDatabase } from '@/lib/utils/database-selector';
+import { connectionTypeToDialect } from '@/lib/types';
 import type { ContextContent, DatabaseWithSchema, ResolvedContextDocs, TableAnnotation } from '@/lib/types';
 
 export interface ServerAgentArgs {

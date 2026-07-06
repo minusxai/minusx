@@ -257,53 +257,61 @@ No directory `index.ts` barrel was touched by any of the 16; no file's public ex
 
 ## Milestone 5 — Boundary enforcement & duplication lifts
 
-### 5.1 DocumentDB boundary (decide + enforce)
+**All 6 sub-milestones done.** `npm run validate` + full `npm test` (3945 passed, 5 skipped) green against the combined diff.
 
-CLAUDE.md says DocumentDB may only be used inside the server FilesAPI, but three sibling modules import `@/lib/database/documents-db` directly: `lib/data/connections.server.ts:10`, `lib/data/configs.server.ts:2`, `lib/data/heal-stories.server.ts:8`.
+### 5.1 DocumentDB boundary (decide + enforce) — DONE
 
-- [ ] **Decide**: (a) funnel all three through FilesAPI, or (b) bless DocumentDB as the shared server-side data primitive for `lib/data/*` server modules and update the CLAUDE.md rule to match. Default (in the absence of the owner): (b) — these are all server-only `lib/data/*` siblings of `files.server.ts` doing legitimate direct data access for non-file-shaped concerns (connections, configs, one-shot healing), not a boundary violation from outside the data layer. Blessing this is lower-risk than restructuring three working modules through an interface not designed for their shapes.
-- [ ] Enforce with an ESLint `no-restricted-imports` rule scoped to everything outside the blessed files.
+- [x] **Decided (b)**: blessed DocumentDB as the shared primitive for `lib/data/*.server.ts` server modules (siblings of `files.server.ts`: `connections.server.ts`, `configs.server.ts`, `heal-stories.server.ts`, plus `shares.server.ts` added later in 5.2). An enforcing ESLint `no-restricted-imports` rule for this boundary **already existed** in `eslint.config.mjs` — updated its allowlist glob (`lib/data/*.server.ts` → also `lib/data/*/*.server.ts` to cover the new `lib/data/shares/` subdirectory) and its message/comment to state the actual rule; updated CLAUDE.md's stale "FilesAPI-only" wording to match. Verified with a scratch negative test (import from outside the allowlist → lint error) and a scratch positive test (new `lib/data/*.server.ts` sibling → clean), both deleted after confirming.
 
-### 5.2 Shares modeled twice → one `SharesAPI`
+### 5.2 Shares modeled twice → one `SharesAPI` — DONE
 
-Server FilesAPI carries `resolveShare`/`getShares`/`addShare`/`revokeShare`/`setStoryPreview` (`files.server.ts:1040-1089`) that are absent from `IFilesDataLayer` and unmirrored on the client; the client side is a separate raw-fetch module `lib/api/share-links.ts:21-35`.
+- [x] Built `lib/data/shares/` (`types.ts`, `shares.interface.ts`, `shares.server.ts`, `shares.ts`) following the `lib/data/completions/` client+server pattern. `ShareModal.tsx` now calls `SharesAPI.listShares/createShare/revokeShare`. `files.server.ts`'s 5 share methods removed from `FilesDataLayerServer`; kept as thin top-level wrapper functions (old signatures preserved) since several routes/pages/tests still import them by name (`app/api/share/guest-session/route.ts`, `app/l/[shareId]/page.tsx`, `app/l/[shareId]/og/route.ts`, `app/api/files/[id]/share/route.ts`, `app/api/files/[id]/preview/route.ts`). Deleted `lib/api/share-links.ts` and the now-empty `lib/api/`. `resolveShare`/`setStoryPreview` kept as server-only extras outside the client-facing interface (no HTTP route needs them client-side). Bonus item (`lib/og/capture-story-preview.ts` → SharesAPI) skipped: it's pure canvas/OG-image generation, not a shares concern — folding it in would mix unrelated responsibilities.
+- [x] 456 tests passing across `lib/data`, share/preview routes, and `og`.
 
-- [ ] Extract a dedicated `SharesAPI` with client+server implementations behind one interface (follow the `lib/data/completions/` pattern, which does this correctly).
-- [ ] Delete `lib/api/share-links.ts` once absorbed; remove the share methods from the FilesAPI server bulge.
+### 5.3 Raw `fetch('/api/files…')` bypasses → FilesAPI — DONE
 
-### 5.3 Raw `fetch('/api/files…')` bypasses → FilesAPI
+- [x] `components/question/QuestionSchemaSection.tsx` → `FilesAPI.loadFiles`.
+- [x] `components/containers/TransformationContainerV2.tsx` → `FilesAPI.loadFile(id, undefined, {refresh: true})`.
+- [x] `lib/file-state/file-mutations.ts`'s `deleteFile()` → `FilesAPI.deleteFile` (this client method existed but had zero callers before this — now wired up, and its error handling upgraded from a generic `Error` to `FileNotFoundError` on 404).
+- [x] Added `FilesAPI.getRubric(id, options)` (client-only — deliberately not in `IFilesDataLayer`, mirroring the `resolveShare`/`getShares` precedent, since the server computes rubrics directly with no HTTP counterpart). Migrated `FileHealthPanel.tsx` and `lib/tools/handlers/screenshot.ts`.
+- [x] 156+ tests passing (file-health-panel, screenshot-tool, files, file-state, read-write-e2e/publishAll/draftFile suites).
 
-- [ ] `components/QuestionSchemaSection.tsx:54` (`/api/files/batch`) → `FilesAPI.loadFiles`
-- [ ] `components/containers/TransformationContainerV2.tsx:51` (`/api/files/:id?refresh`) → `FilesAPI.loadFile`
-- [ ] `lib/api/file-state.ts:998` raw fetch → route through the client FilesAPI
-- [ ] Add a FilesAPI method for rubric fetch; migrate `components/FileHealthPanel.tsx:138` and `lib/api/tool-handlers.ts:531`
-- [ ] Add a FilesAPI/SharesAPI method for preview; migrate `lib/og/capture-story-preview.ts:34`
+### 5.4 Connector duplication → lift into `lib/connections/base.ts` — DONE
 
-### 5.4 Connector duplication → lift into `lib/connections/base.ts`
+- [x] `rewriteNamedParams(sql, params, mapFn)` extracted into `named-to-positional.ts` (grammar + `::cast` lookbehind preserved verbatim), re-exported from `base.ts`; `clickhouse`/`bigquery`/`athena` connectors delegate to it at all their call sites. `csv-connector.ts` deliberately **left untouched** — its inline regex genuinely lacks the cast lookbehind (a separate latent bug, out of scope, not in the task's file list — flagged, not fixed).
+- [x] `ping()` template method: `base.ts`'s `testConnection` is now concrete (try/`ping()`/includeSchema/catch), with `protected abstract ping()`. All 8 connectors (postgres, clickhouse, athena, bigquery, csv, duckdb, mongo, sqlite) reduced to just their connectivity check. `internal-db-connector.ts` and the benchmark harness's `BenchmarkSharedDuckdbConnector` (different response shape, not part of the 8) kept their own `testConnection` override plus added `ping()` to satisfy the new abstract contract.
+- [x] `groupColumnsIntoSchemaEntries(rows, keyFns)` extracted into `base.ts`, used by `postgres-connector.ts`, `clickhouse-connector.ts`, `statistics-engine.ts`.
+- [x] Dialect collapse: kept `lib/types/connections.ts`'s `connectionTypeToDialect` (covers `sqlite`, and its Athena mapping `'presto'` empirically parses via `@polyglot-sql/sdk`), deleted `lib/utils/connection-dialect.ts` (its `'awsathena'` value **does not parse** — confirmed via the SDK's `Dialect` enum — and it silently fell through to `'postgresql'` for `sqlite`, both real pre-existing bugs). Repointed `ChartCarousel.tsx` and `lib/chat/agent-args.server.ts`. **This is a real, in-scope behavior fix** (the task explicitly asked to determine which of the two disagreeing functions is correct and collapse to it) — for Athena, the LLM-facing dialect string changes `awsathena`→`presto`; `ChartCarousel`'s fallback changes `postgresql`→`duckdb`. Not test-guarded (no existing test exercises this edge), verified by compile + a manual `@polyglot-sql/sdk` parse check instead.
+- [x] Added a one-line comment at `agents/benchmark-analyst/shared-duckdb.ts`'s `lib/connections/*` internals imports documenting the sanctioned barrel bypass.
+- [x] Connector suite (`lib/connections/__tests__/*`, 21 files): 269/269 passing, before and after. Full suite green.
 
-- [ ] Extract `rewriteNamedParams(sql, params, mapFn)` owning the grammar + `::cast` lookbehind (currently copy-pasted at `clickhouse-connector.ts:29`, `bigquery-connector.ts:136` & `:190`, `athena-connector.ts:89` & `:139`, `named-to-positional.ts:25`; the bug-history knowledge lives only in `named-to-positional.ts:6-11`). Connectors pass only a replacement mapper.
-- [ ] Make `NodeConnector.testConnection` a concrete template method calling a new abstract `ping()`; delete the 8 near-identical implementations (`postgres`, `clickhouse`, `athena`, `bigquery`, `csv`, `duckdb`, `mongo`, `sqlite` connectors — each repeats the try/catch + `includeSchema` branch + `'Connection successful'` shape).
-- [ ] Extract `groupColumnsIntoSchemaEntries(rows, keyFns)` (near-identical reduces at `postgres-connector.ts:124-142`, `clickhouse-connector.ts:165-177`, re-grouped again in `statistics-engine.ts:104-108`).
-- [ ] Collapse the two disagreeing `connectionTypeToDialect` functions (`lib/types.ts:1360` vs `lib/utils/connection-dialect.ts:4` — they differ on Athena; `ADDING_A_CONNECTOR.md:152-155` documents the disagreement) into one source of truth; delete the other.
-- [ ] Document (or promote to the public surface) the one sanctioned internals bypass: `agents/benchmark-analyst/shared-duckdb.ts:23-26` imports DuckDB connector internals directly — acceptable for the eval harness, but mark it intentional.
+### 5.5 Fat routes → extract business logic to lib/ — DONE
 
-### 5.5 Fat routes → extract business logic to lib/
+- [x] Slack events route 362→109 LOC: `processSlackEvent` + helpers moved to `lib/integrations/slack/process-event.ts`; `interact/route.ts` and the Slack e2e test repointed.
+- [x] `jobs/cron` route 298→28 LOC: cron evaluator (`matchesCronField`/`isCronDue`/`getPrevFireTime`) → `lib/jobs/cron.ts` (cross-referenced with, not merged into, `JobDefinition.getCron` in `job-definitions.ts` — one abstraction split by concern: schedule extraction vs. evaluation); scan/dispatch loop (`runForOrg`) → `lib/jobs/cron-scan.ts`.
+- [x] `jobs/run` route 237→49 LOC: orchestration → `lib/jobs/run-job.ts` (`runJob`, discriminated `RunJobOutcome`); delivery dispatch unified into new `lib/jobs/deliver-messages.ts` (`deliverMessages`), reusing `lib/messaging/webhook-executor.ts` + `webhook-resolver.server.ts`, used by both the cron and manual-run paths.
+- [x] `query` route 176→172 LOC: `whitelistToSchemaContext` → `lib/sql/whitelist-resolver.server.ts`.
+- [x] Shadow tool registry: backed by the **real `REGISTRABLES`** (preferred option — investigation showed it was tractable, not a large undertaking). Added `lib/chat/tool-inspector.server.ts` (`executeRegisteredTool`), instantiating the real tool class with a minimal `{effectiveUser}` context; guards against agent-type entries and treats `UserInputException` as "not executable." Rewired `app/api/tools/execute/route.ts` onto it (53→39 LOC) and deleted the shadow registry (`app/api/chat/orchestrator.ts`, `tool-handlers.server.ts`, `frontend-tool-exception.ts`). New test: `lib/chat/__tests__/tool-inspector.server.test.ts`.
+- [x] 81+ targeted tests passing; full `orchestrator` project 549/551 (2 pre-existing skips).
 
-- [ ] `app/api/integrations/slack/events/route.ts` (362 LOC): move `processSlackEvent` (lines 69–267) into `lib/integrations/slack/`.
-- [ ] `app/api/jobs/cron/route.ts` (298): move the hand-rolled cron parser (`matchesCronField`/`isCronDue`/`getPrevFireTime`, lines 35–98) + `runForOrg` into `lib/jobs/` (a `getCron` concept already exists in `lib/jobs/job-definitions.ts` — unify).
-- [ ] `app/api/jobs/run/route.ts` (237): move job-run orchestration + the delivery-dispatch block (email/phone/slack, lines 135–208) into `lib/jobs/`, reusing `lib/messaging`.
-- [ ] `app/api/query/route.ts` (176): move `whitelistToSchemaContext` helper into `lib/sql/`.
-- [ ] Unify or dev-namespace the **shadow tool registry**: `app/api/chat/orchestrator.ts` + `app/api/chat/tool-handlers.server.ts` re-declare `SearchDBSchema`/`ExecuteQuery`/`FuzzyMatch`/`SearchFiles`/`LoadSkill`/`Clarify` solely for the dev Tool Inspector (`app/api/tools/execute/route.ts:5` ← `components/explore/ToolInspectModal.tsx:157`). Either back it with the real `REGISTRABLES` or move it under a clearly-dev path and gate it.
+**Behavior-change finding, resolved (owner-conservative default):** the unified `deliverMessages` helper initially made cron-triggered alerts attempt Slack delivery — the *old* cron route never imported `sendSlackViaWebhook` at all, so Slack-channel alert recipients on a cron schedule silently sat at `status: 'pending'` forever (confirmed real via `lib/jobs/handlers/alert-handler.ts`, which does construct `slack_alert` messages). This is a genuine latent bug, but fixing it is a **production delivery-behavior change** or organizations with cron-scheduled Slack alerts, not something a mechanical dedup refactor should ship silently — per this plan's owner-unavailable-default posture (conservative, behavior-preserving), it was **not** kept as part of M5. Added a `skipTypes` option to `deliverMessages` and pass `skipTypes: ['slack_alert']` from `cron-scan.ts` (with an explanatory comment), restoring the exact pre-refactor cron behavior while keeping the shared helper's dedup value. **Flagged here for a future PR with explicit product sign-off**, not fixed as a side effect.
 
-### 5.6 Small colocations (low priority, batch into one commit)
+### 5.6 Small colocations — DONE
 
-- [ ] Move single-consumer `lib/utils/*` helpers to their sole caller: `deep-merge` + `promise-manager` → `lib/file-state/`; `error-parser` → `components/question/QuestionVisualization.tsx`'s module; `internal-link` → Markdown module; `id-generator` + `tool-watchdog` → `store/chatListener.ts`'s module. Keep the genuinely shared ones (`immutable-collections`, `query-hash`, `database-selector`, `xml-parser`, `attachment-extract`).
-- [ ] Fold `lib/markdown/` (2 files, sole consumer `components/Markdown.tsx`) into a `components/Markdown/` module.
-- [ ] Move `orchestrator/test-spec-runner.ts` (201 LOC, imported only by tests) out of the production `orchestrator/` tree into a test-support dir.
-- [ ] Relocate story/markup transformation cluster out of `lib/data/` into `lib/data/story/` (or `lib/story/`): `story-number.ts`, `story-params.ts`, `story-question.ts`, `story-v2.ts`, `content-jsx.ts`, `file-markup.ts`, `html-attr.ts`, `file-title.ts`, `template-defaults.ts` — these are HTML↔content conversion, not data access.
-- [ ] Relocate maintenance one-shots out of `lib/data/`: `heal-stories.server.ts` (+ its script) and `migrate-conversations-v3.server.ts` → `lib/data/migrations/` (pending M6.1 deletion decision — don't move what you're about to delete).
+- [x] `deep-merge.ts` + `promise-manager.ts` → merged into `lib/file-state/shared.ts` (sole consumers were `file-edit`/`file-read`/`query-results.ts`).
+- [x] `error-parser.ts` → `components/question/error-parser.ts`.
+- [x] `internal-link.ts` → `components/Markdown/internal-link.ts`.
+- [x] `id-generator.ts` + `tool-watchdog.ts` → `store/id-generator.ts` / `store/tool-watchdog.ts` (sole consumer `store/chatListener.ts`).
+- [x] Verified `immutable-collections`, `query-hash`, `database-selector`, `xml-parser`, `attachment-extract` are genuinely multi-consumer — left in `lib/utils/`.
+- [x] `lib/markdown/` folded into `components/Markdown/`: `Markdown.tsx` → `Markdown/index.tsx` (directory-index resolution keeps all ~11 `@/components/Markdown` importers unchanged), `content-parts.ts`/`rehype-mentions.ts` moved in as siblings with their tests.
+- [x] `orchestrator/test-spec-runner.ts` (test-only, confirmed zero production imports) → `orchestrator/__tests__/support/test-spec-runner.ts`; 7 test-file importers repointed.
+- [x] Story/markup cluster → `lib/data/story/`: `story-number.ts`, `story-params.ts`, `story-question.ts`, `story-v2.ts`, `content-jsx.ts`, `file-markup.ts`, `html-attr.ts`, `file-title.ts`, `template-defaults.ts` + their tests; ~30 importers repointed repo-wide, including a dynamic-`import()` string literal in `read-write-e2e.test.ts` that `tsc` wouldn't have caught.
+- [x] `heal-stories.server.ts` / `migrate-conversations-v3.server.ts` deliberately left in `lib/data/`, pending the M6.1 deletion decision.
+- [x] Full `npm test` (3941 tests) green after this sub-task alone; repo-wide grep confirmed zero leftover references to any old path.
 
-**Acceptance for M5:** validate + full tests green. Commit + push to PR #567.
+**Process note — two crash variants from the same transient-API-error class (extends the M4.3 note above):** M5's dispatch hit both known variants again. **Zero-progress crashes** (5.2's first two attempts, 5.3/5.4/5.5's first attempts, one of which — 5.2 and 5.4 — crashed mid-`advisor()`-consultation before writing anything): confirmed via `git status`/`diff` showing no changes at all; each was re-dispatched fresh, and for 5.2 (crashed twice this way) the third attempt was given pre-specified design decisions up front and told to implement before consulting advisor, which broke the loop. **Crashed-but-already-done** did not recur in M5 (all crashes here were zero-progress). Lesson holds: **never trust a crashed transcript's own narrative — `git status`/`diff` is the only source of truth for what actually landed**, in either direction.
+
+**Acceptance for M5:** validate + full tests green (confirmed, including a re-run after one flaky `vi.waitFor`-timing test failed under full-suite parallel load and passed cleanly both in isolation and on a full re-run — resource-contention noise, not a regression). Commit + push to PR #567.
 
 ---
 

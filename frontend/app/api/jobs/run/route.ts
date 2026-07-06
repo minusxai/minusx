@@ -1,28 +1,15 @@
 /**
  * POST /api/jobs/run
  * Trigger a job execution (manual or forced).
- * Dispatches to registered job handlers via JOB_HANDLERS.
- *
- * Flow:
- *  1. Validate job_id, job_type, look up handler
- *  2. Dedup: skip if a RUNNING run already exists for this job
- *  3. Create run file upfront with status='running'
- *  4. Create job_run record with output_file_id set immediately
- *  5. Execute handler → {output, messages}
- *  6. Deliver messages (email), update run file with final statuses
- *  7. Complete job_run record
+ * Parses the request and delegates orchestration to `runJob`
+ * (`lib/jobs/run-job.ts`), which dispatches to registered job handlers via
+ * JOB_HANDLERS and delivers any resulting messages via `deliverMessages`.
  */
 import { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/http/with-auth';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
-import { JobRunsDB } from '@/lib/database/job-runs-db';
-import { FilesAPI } from '@/lib/data/files.server';
-import { resolvePath } from '@/lib/mode/path-resolver';
-import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
-import { getConfigsForMode } from '@/lib/data/configs.server';
-import { sendEmailViaWebhook, sendPhoneAlertViaWebhook, sendSlackViaWebhook } from '@/lib/messaging/webhook-executor';
-import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
-import type { MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
+import { runJob } from '@/lib/jobs/run-job';
+import type { TransformRunMode } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -35,201 +22,26 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       job_type: string;
       force?: boolean;
       send?: boolean;
-      run_mode?: import('@/lib/types').TransformRunMode;
+      run_mode?: TransformRunMode;
     };
 
     if (!job_id || !job_type) {
       return ApiErrors.badRequest('job_id and job_type are required');
     }
 
-    const handler = JOB_HANDLERS[job_type];
-    if (!handler) {
-      return ApiErrors.badRequest(`Unsupported job_type: ${job_type}`);
-    }
+    const outcome = await runJob({ jobId: job_id, jobType: job_type, force, send, runMode: run_mode }, user);
 
-    await JobRunsDB.ensureTable();
-
-    const jobFileId = parseInt(job_id, 10);
-    if (isNaN(jobFileId)) {
-      return ApiErrors.badRequest('job_id must be a numeric file ID');
-    }
-
-    // Load the job file to get its content
-    const jobFileResult = await FilesAPI.loadFile(jobFileId, user);
-    const jobFile = jobFileResult.data;
-    if (!jobFile?.content) {
-      return ApiErrors.notFound('Job file');
-    }
-
-    // Dedup: skip if already running (force bypasses by using a 1s window)
-    if (!force) {
-      const existingRun = await JobRunsDB.getRunningByJobId(job_id, job_type);
-      if (existingRun) {
-        return successResponse({
-          runId: existingRun.id,
-          fileId: existingRun.output_file_id,
-          status: 'already_running',
-        });
-      }
-    }
-
-    // Load previous runs for handler context
-    const previousRuns = await JobRunsDB.getByJobId(job_id, job_type, 10);
-
-    const startedAt = new Date().toISOString();
-
-    // Create run file upfront with status='running'
-    const runPath = resolvePath(user.mode, `/logs/runs/${Date.now()}`);
-    const initialContent: RunFileContent = {
-      job_type,
-      status: 'running',
-      startedAt,
-    };
-    const runFileType = `${job_type}_run` as import('@/lib/ui/file-metadata').FileType;
-    const createResult = await FilesAPI.createFile(
-      {
-        name: `run-${job_id}-${job_type}`,
-        path: runPath,
-        type: runFileType,
-        content: initialContent,
-        references: [jobFileId],
-        options: { createPath: true },
-      },
-      user
-    );
-    const runFile = createResult.data;
-    const runFileId = runFile.id;
-
-    // Create job_run record with output file linked upfront
-    const runId = await JobRunsDB.create({
-      job_id,
-      job_type,
-      output_file_id: runFileId,
-      output_file_type: runFileType,
-      source: 'manual',
-    });
-
-    try {
-      const result = await handler.execute(
-        { runFileId, jobId: job_id, jobType: job_type, file: jobFile.content, previousRuns, runMode: run_mode },
-        user
-      );
-
-      // Build message records (pending)
-      const messages: RunMessageRecord[] = result.messages.map((m) => ({ ...m, status: 'pending' }));
-
-      // Save run file with output + pending messages
-      const runStatus = result.status === 'failure' ? 'failure' : 'success';
-      const successContent: RunFileContent = {
-        job_type,
-        status: runStatus,
-        startedAt,
-        completedAt: new Date().toISOString(),
-        output: result.output,
-        messages,
-      };
-      await FilesAPI.saveFile(runFileId, runFile.name, runFile.path, successContent, [jobFileId], user);
-
-      // Deliver messages (skipped when send=false)
-      if (send) {
-        const { config } = await getConfigsForMode(user.mode);
-        const _emailRaw = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
-        const emailWebhook = _emailRaw ? resolveWebhook(_emailRaw) : null;
-        const _phoneRaw = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
-        const phoneAlertWebhook = _phoneRaw ? resolveWebhook(_phoneRaw) : null;
-        const _slackRaw = config.messaging?.webhooks?.find(w => w.type === 'slack_alert');
-        const slackWebhook = _slackRaw ? resolveWebhook(_slackRaw) : null;
-        for (const msg of messages) {
-          try {
-            if (msg.type === 'email_alert') {
-              if (!emailWebhook) {
-                msg.status = 'failed';
-                msg.deliveryError = 'No email_alert webhook configured';
-              } else {
-                const result = await sendEmailViaWebhook(emailWebhook, msg.metadata.to, msg.metadata.subject, msg.content);
-                const attemptLog: MessageAttemptLog = { attemptedAt: new Date().toISOString(), success: result.success, statusCode: result.statusCode, error: result.error, requestBody: result.requestBody, responseBody: result.responseBody };
-                msg.logs = [...(msg.logs ?? []), attemptLog];
-                if (result.success) {
-                  msg.status = 'sent';
-                  msg.sentAt = new Date().toISOString();
-                } else {
-                  msg.status = 'failed';
-                  msg.deliveryError = result.error ?? `HTTP ${result.statusCode}`;
-                }
-              }
-            } else if (msg.type === 'phone_alert') {
-              if (!phoneAlertWebhook) {
-                msg.status = 'failed';
-                msg.deliveryError = 'No phone_alert webhook configured';
-              } else {
-                const result = await sendPhoneAlertViaWebhook(phoneAlertWebhook, msg.metadata.to, msg.content, { title: msg.metadata.title, desc: msg.metadata.desc, link: msg.metadata.link, summary: msg.metadata.summary });
-                const attemptLog: MessageAttemptLog = { attemptedAt: new Date().toISOString(), success: result.success, statusCode: result.statusCode, error: result.error, requestBody: result.requestBody, responseBody: result.responseBody };
-                msg.logs = [...(msg.logs ?? []), attemptLog];
-                if (result.success) {
-                  msg.status = 'sent';
-                  msg.sentAt = new Date().toISOString();
-                } else {
-                  msg.status = 'failed';
-                  msg.deliveryError = result.error ?? `HTTP ${result.statusCode}`;
-                }
-              }
-            } else if (msg.type === 'slack_alert') {
-              if (!slackWebhook) {
-                msg.status = 'failed';
-                msg.deliveryError = 'No slack_alert webhook configured';
-              } else {
-                const result = await sendSlackViaWebhook(slackWebhook, msg.content, { webhook_url: msg.metadata.webhook_url, properties: msg.metadata.properties });
-                const attemptLog: MessageAttemptLog = { attemptedAt: new Date().toISOString(), success: result.success, statusCode: result.statusCode, error: result.error, requestBody: result.requestBody, responseBody: result.responseBody };
-                msg.logs = [...(msg.logs ?? []), attemptLog];
-                if (result.success) {
-                  msg.status = 'sent';
-                  msg.sentAt = new Date().toISOString();
-                } else {
-                  msg.status = 'failed';
-                  msg.deliveryError = result.error ?? `HTTP ${result.statusCode}`;
-                }
-              }
-            }
-          } catch (err) {
-            const deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
-            msg.logs = [...(msg.logs ?? []), { attemptedAt: new Date().toISOString(), success: false, error: deliveryError }];
-            msg.status = 'failed';
-            msg.deliveryError = deliveryError;
-          }
-        }
-      } else {
-        for (const msg of messages) {
-          msg.status = 'skipped';
-        }
-      }
-
-      // Save final message statuses if any messages were dispatched
-      if (messages.length > 0) {
-        await FilesAPI.saveFile(
-          runFileId,
-          runFile.name,
-          runFile.path,
-          { ...successContent, messages },
-          [jobFileId],
-          user
-        );
-      }
-
-      const jobRunStatus = result.status === 'failure' ? 'FAILURE' : 'SUCCESS';
-      await JobRunsDB.complete(runId, jobRunStatus);
-      return successResponse({ runId, fileId: runFileId, status: jobRunStatus });
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      const failureContent: RunFileContent = {
-        job_type,
-        status: 'failure',
-        startedAt,
-        completedAt: new Date().toISOString(),
-        error: errorMessage,
-      };
-      await FilesAPI.saveFile(runFileId, runFile.name, runFile.path, failureContent, [jobFileId], user);
-      await JobRunsDB.complete(runId, 'FAILURE', errorMessage);
-      return successResponse({ runId, fileId: runFileId, status: 'FAILURE' });
+    switch (outcome.kind) {
+      case 'unsupported_job_type':
+        return ApiErrors.badRequest(`Unsupported job_type: ${job_type}`);
+      case 'invalid_job_id':
+        return ApiErrors.badRequest('job_id must be a numeric file ID');
+      case 'not_found':
+        return ApiErrors.notFound('Job file');
+      case 'already_running':
+        return successResponse({ runId: outcome.runId, fileId: outcome.fileId, status: 'already_running' });
+      case 'completed':
+        return successResponse({ runId: outcome.runId, fileId: outcome.fileId, status: outcome.status });
     }
   } catch (error) {
     return handleApiError(error);

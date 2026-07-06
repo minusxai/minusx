@@ -9,7 +9,7 @@ import {
   OBJECT_STORE_ENDPOINT,
   LOCAL_UPLOAD_PATH,
 } from '@/lib/config';
-import { NodeConnector, SchemaEntry, QueryResult, QueryStream, TestConnectionResult } from './base';
+import { NodeConnector, SchemaEntry, QueryResult, QueryStream } from './base';
 import { duckDbStreamFromConn } from './duckdb-stream';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 
@@ -170,20 +170,10 @@ export class CsvConnector extends NodeConnector {
     this.cacheKey = JSON.stringify(this.files);
   }
 
-  async testConnection(includeSchema = false): Promise<TestConnectionResult> {
-    try {
-      await withConnection(this.cacheKey, this.files, async (conn) => {
-        await conn.run('SELECT 1');
-      });
-
-      if (includeSchema) {
-        const schemas = await this.getSchema();
-        return { success: true, message: 'Connection successful', schema: { schemas } };
-      }
-      return { success: true, message: 'Connection successful' };
-    } catch (err: any) {
-      return { success: false, message: err?.message || String(err) };
-    }
+  protected async ping(): Promise<void> {
+    await withConnection(this.cacheKey, this.files, async (conn) => {
+      await conn.run('SELECT 1');
+    });
   }
 
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {

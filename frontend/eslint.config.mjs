@@ -10,7 +10,10 @@ const RESTRICT_DOCUMENTS_DB = {
   name: "@/lib/database/documents-db",
   message:
     "Do not import DocumentDB outside the data layer. Use FilesAPI, ConnectionsAPI, or ConfigsAPI from lib/data/** instead. " +
-    "DocumentDB is only allowed in lib/data/**, lib/database/**.",
+    "DocumentDB is a shared server-side data primitive, allowed only in lib/data/*.server.ts modules and " +
+    "lib/data/*/*.server.ts modules (files.server.ts, connections.server.ts, configs.server.ts, heal-stories.server.ts, " +
+    "shares/shares.server.ts, and future siblings doing legitimate direct data access for non-file-shaped or " +
+    "cross-file-lookup concerns) and lib/database/** internals.",
 };
 
 const RESTRICT_ADAPTER_FACTORY = {
@@ -198,11 +201,20 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-require-imports": "off",
     },
   },
-  // lib/data/*.server.ts and test files — DocumentDB allowed, adapter still restricted.
-  // DocumentDB is clean (routes through getModules().db) so tests may use it for fixtures/assertions.
+  // lib/data/*.server.ts (+ one level of subdirectory, e.g. lib/data/shares/shares.server.ts)
+  // and test files — DocumentDB allowed, adapter still restricted.
+  // DocumentDB is the shared server-side data primitive for files.server.ts's siblings doing
+  // legitimate direct data access for non-file-shaped concerns (connections, configs, one-shot
+  // healing/migration scripts) or cross-file lookups with no FilesAPI equivalent (shares'
+  // findByShareNonce) — confirmed current members: files.server.ts, connections.server.ts,
+  // configs.server.ts, heal-stories.server.ts, shares/shares.server.ts. Keyed on the *.server.ts
+  // category (not a hardcoded file list) so a genuine new sibling doesn't need an eslint edit to
+  // exercise the same access. DocumentDB is clean (routes through getModules().db) so tests may
+  // use it for fixtures/assertions.
   {
     files: [
       "lib/data/*.server.ts",
+      "lib/data/*/*.server.ts",
       "**/*.test.ts",
       "**/*.test.tsx",
       "**/__tests__/**",

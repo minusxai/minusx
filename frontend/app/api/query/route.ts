@@ -13,15 +13,11 @@ import { applyNoneParams } from '@/lib/sql/none-params';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { validateQueryTables } from '@/lib/sql/validate-query-tables';
-import { getWhitelistForPath, WhitelistSchema } from '@/lib/sql/whitelist-resolver.server';
+import { getWhitelistForPath, whitelistToSchemaContext } from '@/lib/sql/whitelist-resolver.server';
 import { getModules } from '@/lib/modules/registry';
 import { getCachedJsonlStream } from '@/lib/query-cache/execute.server';
 import { resolveCachePolicy } from '@/lib/query-cache/policy.server';
 import { assertGuestQueryAllowed, sanitizeGuestParams, GuestQueryDeniedError } from '@/lib/query-cache/guest-query.server';
-
-function whitelistToSchemaContext(whitelist: WhitelistSchema): Array<{ schema: string; table: string; columns: string[] }> {
-  return whitelist.flatMap(w => w.tables.map(t => ({ schema: w.schema, table: t.table, columns: [] })));
-}
 
 type ParamMap = Record<string, string | number | null>;
 

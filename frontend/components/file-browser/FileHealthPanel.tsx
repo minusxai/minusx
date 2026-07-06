@@ -13,6 +13,7 @@ import { Box, HStack, VStack, Text, Icon, Image, Popover, Portal, Button, Spinne
 import { LuHeartPulse, LuScanEye, LuRefreshCw } from 'react-icons/lu';
 import { useAppSelector, useAppStore } from '@/store/hooks';
 import { selectFile, selectMergedContent } from '@/store/filesSlice';
+import { FilesAPI } from '@/lib/data/files';
 import type { RootState } from '@/store/store';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
@@ -135,19 +136,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
       // Grade the merged (live-edited) content — the same view the screenshot captured — so the
       // judge doesn't score stale saved markup against a fresh picture.
       const content = selectMergedContent(store.getState(), fileId);
-      const res = await fetch(`/api/files/${fileId}/rubric`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ screenshot, content }),
-      });
-      const json = await res.json().catch(() => null);
-      const nextReport = json?.data?.report as RubricReport | undefined;
-      if (!res.ok || !nextReport) {
-        const msg = json?.error?.message ?? json?.message ?? `Visual review failed (HTTP ${res.status}).`;
-        console.error('[rubric] visual review failed', res.status, json);
-        setJudgeError(String(msg));
-        return;
-      }
+      const { report: nextReport } = await FilesAPI.getRubric(fileId, { screenshot, content });
       setOverride(nextReport);
       setLlmRan(true); // the combined report now includes the LLM checklist
     } catch (e) {

@@ -9,9 +9,9 @@ import { getStore } from '@/store/store';
 import { captureFileViewBlob } from '@/lib/screenshot/capture';
 import { waitForFileViewReady } from '@/lib/screenshot/readiness';
 import { toAgentRubric } from '@/lib/rubric/scoring';
-import type { RubricReport } from '@/lib/rubric/types';
 import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
+import { FilesAPI } from '@/lib/data/files';
 import type { FrontendToolHandler } from './types';
 
 /**
@@ -21,15 +21,9 @@ import type { FrontendToolHandler } from './types';
  */
 async function fetchScreenshotRubric(fileId: number, screenshotUrl: string, content?: unknown): Promise<string> {
   try {
-    const res = await fetch(`/api/files/${fileId}/rubric`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // Send the merged (live-edited) content so the rubric grades what the screenshot shows,
-      // not the stale saved snapshot the server would otherwise load.
-      body: JSON.stringify({ screenshotUrl, content }),
-    });
-    if (!res.ok) return '';
-    const report = (await res.json())?.data?.report as RubricReport | undefined;
+    // Send the merged (live-edited) content so the rubric grades what the screenshot shows,
+    // not the stale saved snapshot the server would otherwise load.
+    const { report } = await FilesAPI.getRubric(fileId, { screenshotUrl, content });
     return report ? `\n\nHealth rubric (deterministic + visual judge):\n${JSON.stringify(toAgentRubric(report))}` : '';
   } catch {
     return '';

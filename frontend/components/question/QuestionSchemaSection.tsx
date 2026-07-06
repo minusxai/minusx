@@ -51,14 +51,9 @@ export default function QuestionSchemaSection() {
         }
 
         // Batch load to get query content
-        const res = await fetch('/api/files/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids }),
-        });
-        const json = await res.json();
+        const result = await FilesAPI.loadFiles(ids);
         const filesMap: Record<number, any> = {};
-        (json.data || []).forEach((f: any) => { filesMap[f.id] = f; });
+        result.data.forEach((f: any) => { filesMap[f.id] = f; });
 
         const leafQuestions: QuestionItem[] = [];
         files.forEach((f: any) => {

@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { SchemaEntry, SchemaColumn, ColumnMeta } from './base';
 import type { QueryResult } from './base';
+import { groupColumnsIntoSchemaEntries } from './base';
 import { profileMongo } from './profile-mongo';
 
 // ─── Internal Classification ─────────────────────────────────────────────────
@@ -101,14 +102,12 @@ export async function profileDatabase(
   }
 
   // Re-group into SchemaEntry[] (grouped by schema name)
-  const schemaMap = new Map<string, SchemaEntry>();
-  for (const t of enrichedTables) {
-    if (!schemaMap.has(t.schema)) schemaMap.set(t.schema, { schema: t.schema, tables: [] });
-    schemaMap.get(t.schema)!.tables.push({ table: t.table, columns: t.columns });
-  }
-
   return {
-    schema: Array.from(schemaMap.values()),
+    schema: groupColumnsIntoSchemaEntries(enrichedTables, {
+      schema: (t) => t.schema,
+      table: (t) => t.table,
+      columns: (t) => t.columns,
+    }),
     generatedAt: new Date().toISOString(),
     connectorType,
     queryCount,

@@ -1,6 +1,6 @@
 import 'server-only';
 import { MongoClient } from 'mongodb';
-import { NodeConnector, SchemaEntry, QueryResult, QueryStream, TestConnectionResult } from './base';
+import { NodeConnector, SchemaEntry, QueryResult, QueryStream } from './base';
 import { DEFAULT_LIMIT, MAX_LIMIT } from '@/lib/sql/limit-enforcer';
 
 /**
@@ -113,18 +113,9 @@ export class MongoConnector extends NodeConnector {
     return getSharedMongoClient(this.uri);
   }
 
-  async testConnection(includeSchema = false): Promise<TestConnectionResult> {
-    try {
-      const client = await this.getClient();
-      await client.db(this.database).command({ ping: 1 });
-      if (includeSchema) {
-        const schemas = await this.collectSchema(client);
-        return { success: true, message: 'Connection successful', schema: { schemas } };
-      }
-      return { success: true, message: 'Connection successful' };
-    } catch (err: any) {
-      return { success: false, message: err?.message || String(err) };
-    }
+  protected async ping(): Promise<void> {
+    const client = await this.getClient();
+    await client.db(this.database).command({ ping: 1 });
   }
 
   /**

@@ -12,6 +12,7 @@ import { setFiles } from '@/store/filesSlice';
 import { useAppDispatch } from '@/store/hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile } from '@/lib/file-state/file-state';
+import { FilesAPI } from '@/lib/data/files';
 import { useJobRuns } from '@/lib/hooks/job-runs-hooks';
 import TransformationView from '@/components/views/TransformationView';
 import type { TransformationContent } from '@/lib/types';
@@ -46,12 +47,10 @@ export default function TransformationContainerV2({ fileId }: TransformationCont
     // Refresh connection schemas client-side after run completes
     setSchemaRefreshing(true);
     try {
-      const refreshed = await Promise.all(
-        connectionIds.map(id =>
-          fetch(`/api/files/${id}?refresh=true`).then(r => r.ok ? r.json() : null)
-        )
+      const refreshed = await Promise.allSettled(
+        connectionIds.map(id => FilesAPI.loadFile(id, undefined, { refresh: true }))
       );
-      const files = refreshed.flatMap(r => r?.data ? [r.data] : []);
+      const files = refreshed.flatMap(r => r.status === 'fulfilled' ? [r.value.data] : []);
       if (files.length > 0) dispatch(setFiles({ files }));
     } catch (err) {
       console.error('[TransformationContainer] Schema refresh failed:', err);

@@ -6,7 +6,7 @@ import {
 } from '@chakra-ui/react';
 import { LuCopy, LuCheck, LuTrash2, LuLink, LuRefreshCw } from 'react-icons/lu';
 import type { ShareRecord } from '@/lib/auth/share-tokens';
-import { createShareLink, listShareLinks, revokeShareLink } from '@/lib/api/share-links';
+import { SharesAPI } from '@/lib/data/shares/shares';
 import { captureStoryPreview } from '@/lib/og/capture-story-preview';
 
 interface ShareModalProps {
@@ -36,7 +36,7 @@ export default function ShareModal({ fileId, fileName, isOpen, onClose }: ShareM
     let cancelled = false;
     setLoading(true);
     setError(null);
-    listShareLinks(fileId)
+    SharesAPI.listShares(fileId)
       .then((s) => { if (!cancelled) setShares(s); })
       .catch(() => { if (!cancelled) setError('Could not load share links.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -49,7 +49,7 @@ export default function ShareModal({ fileId, fileName, isOpen, onClose }: ShareM
     setCreating(true);
     setError(null);
     try {
-      const created = await createShareLink(fileId);
+      const created = await SharesAPI.createShare(fileId);
       setShares((prev) => [...prev, created.record]);
       // Now that it's public, compose + store the social-share card from the rendered story.
       await captureStoryPreview(fileId);
@@ -82,7 +82,7 @@ export default function ShareModal({ fileId, fileName, isOpen, onClose }: ShareM
   const handleRevoke = async (nonce: string) => {
     setError(null);
     try {
-      await revokeShareLink(fileId, nonce);
+      await SharesAPI.revokeShare(fileId, nonce);
       setShares((prev) => prev.map((s) => (s.nonce === nonce ? { ...s, revoked: true } : s)));
     } catch {
       setError('Could not revoke the link.');

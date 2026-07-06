@@ -5,7 +5,13 @@ export interface JobDefinition {
   job_type: string;
   file_type: FileType;
   isActive: (content: ScheduledJobContent) => boolean;
-  /** Cron expression gating this job (null → skip). Without getCron, the job runs on every cron tick while active. */
+  /**
+   * Cron expression gating this job (null → skip). Without getCron, the job runs
+   * on every cron tick while active. This only extracts the expression *string*
+   * from the job's content shape (e.g. `alert.schedule.cron`); the expression is
+   * evaluated by `isCronDue`/`getPrevFireTime` in `lib/jobs/cron.ts`, which
+   * `lib/jobs/cron-scan.ts` calls with the string this hook returns.
+   */
   getCron?: (content: ScheduledJobContent) => string | null;
 }
 

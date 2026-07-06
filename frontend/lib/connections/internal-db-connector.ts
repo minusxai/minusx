@@ -66,7 +66,15 @@ export class InternalDbConnector extends NodeConnector {
     }));
   }
 
-  async testConnection(includeSchema?: boolean): Promise<TestConnectionResult> {
+  protected async ping(): Promise<void> {
+    await getModules().db.exec('SELECT 1');
+  }
+
+  // Not one of the 8 connectors that share the base `testConnection` template
+  // (own success message "Connected to document DB", `schema: null` rather
+  // than omitted) — kept as its own override; `ping()` above still exists to
+  // satisfy the abstract contract, for a caller that invokes it directly.
+  override async testConnection(includeSchema?: boolean): Promise<TestConnectionResult> {
     try {
       await getModules().db.exec('SELECT 1');
       const schema = includeSchema ? { schemas: await this.getSchema() } : null;

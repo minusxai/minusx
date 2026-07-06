@@ -35,15 +35,7 @@ export async function deleteFile(options: DeleteFileOptions): Promise<void> {
   const { fileId } = options;
 
   // Call API to delete file
-  const response = await fetch(`/api/files/${fileId}`, {
-    method: 'DELETE',
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    const errorMessage = errorData.error?.message || errorData.error || 'Failed to delete file';
-    throw new Error(errorMessage);
-  }
+  await FilesAPI.deleteFile(fileId);
 
   // Remove from Redux
   const state = getStore().getState();

@@ -1,5 +1,11 @@
 import 'server-only';
 
+// Named-parameter (`:paramName`) rewriting grammar shared by every SQL
+// connector — see the header comment in named-to-positional.ts for the
+// `::cast` lookbehind's bug history. Re-exported here for discoverability
+// alongside the rest of the connector base surface.
+export { rewriteNamedParams, namedToPositional } from './named-to-positional';
+
 export interface ColumnMeta {
   description?: string;
   category?: 'categorical' | 'numeric' | 'temporal' | 'text' | 'other';
@@ -46,6 +52,44 @@ export interface SchemaTable {
 export interface SchemaEntry {
   schema: string;
   tables: SchemaTable[];
+}
+
+/**
+ * Group flat rows into `SchemaEntry[]` (schema → tables → columns), via
+ * caller-supplied key extractors. Shared by every connector/engine that
+ * introspects a flat schema/table/column result and needs it re-nested into
+ * the `SchemaEntry[]` shape.
+ *
+ * `keyFns.columns` returns an ARRAY of columns for a given row rather than a
+ * single column — this covers both shapes callers have: one row per COLUMN
+ * (Postgres/ClickHouse catalog queries — return a one-element array), and one
+ * row per TABLE that already carries its full column list (re-grouping an
+ * already-profiled table list by schema in `statistics-engine.ts` — return
+ * the row's whole `columns` array). Columns from rows sharing a
+ * (schema, table) pair are concatenated in encounter order; a schema/table
+ * appears once, with tables in first-seen order.
+ */
+export function groupColumnsIntoSchemaEntries<T>(
+  rows: readonly T[],
+  keyFns: {
+    schema: (row: T) => string;
+    table: (row: T) => string;
+    columns: (row: T) => SchemaColumn[];
+  },
+): SchemaEntry[] {
+  const schemaMap = new Map<string, Map<string, SchemaColumn[]>>();
+  for (const row of rows) {
+    const schema = keyFns.schema(row);
+    const table = keyFns.table(row);
+    if (!schemaMap.has(schema)) schemaMap.set(schema, new Map());
+    const tableMap = schemaMap.get(schema)!;
+    if (!tableMap.has(table)) tableMap.set(table, []);
+    tableMap.get(table)!.push(...keyFns.columns(row));
+  }
+  return Array.from(schemaMap.entries()).map(([schema, tableMap]) => ({
+    schema,
+    tables: Array.from(tableMap.entries()).map(([table, columns]) => ({ table, columns })),
+  }));
 }
 
 export interface QueryResult {
@@ -215,10 +259,34 @@ export abstract class NodeConnector {
   ) {}
 
   /**
+   * Connector-specific connectivity check (e.g. `SELECT 1`, a driver `ping`
+   * command). Throw on failure — `testConnection` below catches and reports
+   * the error message. This is the ONLY part of connection testing that
+   * varies per connector; everything else (the `includeSchema` branch, the
+   * success/error response shape) is the shared template in `testConnection`.
+   */
+  protected abstract ping(): Promise<void>;
+
+  /**
    * Test if the connection is valid.
    * Returns { success, message, schema? }
+   *
+   * Concrete template method: calls the connector's own `ping()`, then
+   * optionally attaches the schema. Connectors should NOT override this —
+   * implement `ping()` instead.
    */
-  abstract testConnection(includeSchema?: boolean): Promise<TestConnectionResult>;
+  async testConnection(includeSchema = false): Promise<TestConnectionResult> {
+    try {
+      await this.ping();
+      if (includeSchema) {
+        const schemas = await this.getSchema();
+        return { success: true, message: 'Connection successful', schema: { schemas } };
+      }
+      return { success: true, message: 'Connection successful' };
+    } catch (err: any) {
+      return { success: false, message: err?.message ?? String(err) };
+    }
+  }
 
   /**
    * Execute a query and return results.

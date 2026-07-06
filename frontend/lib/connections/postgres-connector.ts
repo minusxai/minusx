@@ -1,7 +1,7 @@
 import 'server-only';
 import Cursor from 'pg-cursor';
-import type { QueryResult, QueryStream, SchemaEntry, TableIndex, TestConnectionResult } from './base';
-import { NodeConnector as NodeConnectorBase } from './base';
+import type { QueryResult, QueryStream, SchemaEntry, TableIndex } from './base';
+import { NodeConnector as NodeConnectorBase, groupColumnsIntoSchemaEntries } from './base';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 import { getOrCreatePgPool } from './pg-registry';
 import { namedToPositional } from './named-to-positional';
@@ -29,18 +29,9 @@ const PG_OID_TO_TYPE: Record<number, string> = {
 
 export class PostgresConnector extends NodeConnectorBase {
 
-  async testConnection(includeSchema = false): Promise<TestConnectionResult> {
-    try {
-      const pool = getOrCreatePgPool(this.config);
-      await pool.query('SELECT 1', []);
-      if (includeSchema) {
-        const schemas = await this.getSchema();
-        return { success: true, message: 'Connection successful', schema: { schemas } };
-      }
-      return { success: true, message: 'Connection successful' };
-    } catch (err: any) {
-      return { success: false, message: err?.message ?? String(err) };
-    }
+  protected async ping(): Promise<void> {
+    const pool = getOrCreatePgPool(this.config);
+    await pool.query('SELECT 1', []);
   }
 
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
@@ -121,20 +112,20 @@ export class PostgresConnector extends NodeConnectorBase {
       ORDER BY table_schema, table_name, ordinal_position
     `);
 
-    const schemaMap = new Map<string, Map<string, Array<{ name: string; type: string }>>>();
-    for (const row of result.rows) {
-      const { table_schema, table_name, column_name, data_type } = row;
-      if (!schemaMap.has(table_schema)) schemaMap.set(table_schema, new Map());
-      const tableMap = schemaMap.get(table_schema)!;
-      if (!tableMap.has(table_name)) tableMap.set(table_name, []);
-      tableMap.get(table_name)!.push({ name: column_name, type: data_type });
-    }
+    const grouped = groupColumnsIntoSchemaEntries(
+      result.rows as Array<{ table_schema: string; table_name: string; column_name: string; data_type: string }>,
+      {
+        schema: (row) => row.table_schema,
+        table: (row) => row.table_name,
+        columns: (row) => [{ name: row.column_name, type: row.data_type }],
+      },
+    );
 
     const indexMap = await this.getIndexes(pool);
 
-    return Array.from(schemaMap.entries()).map(([schema, tableMap]) => ({
+    return grouped.map(({ schema, tables }) => ({
       schema,
-      tables: Array.from(tableMap.entries()).map(([table, columns]) => ({
+      tables: tables.map(({ table, columns }) => ({
         table,
         columns,
         indexes: indexMap.get(`${schema}.${table}`) ?? [],

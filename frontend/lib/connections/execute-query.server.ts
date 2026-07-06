@@ -7,11 +7,21 @@
  * Does NOT modify any files - pure query execution.
  */
 
-import { ExecuteQueryInput, ExecuteQueryDetails, QueryResult } from '@/lib/types';
+import { ExecuteQueryInput, ExecuteQueryDetails, QueryResult, ToolCallDetails } from '@/lib/types';
 import { runQuery } from '@/lib/connections/run-query';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
-import type { ServerToolResult } from '@/app/api/chat/orchestrator';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+
+/**
+ * Structured return type for server tool handlers that want to pass
+ * details to the UI without sending them to the LLM (the MCP server's
+ * tool-call shape — distinct from the v2 orchestrator's `ToolResponse`,
+ * which is content-block based; see `orchestrator/types.ts`).
+ */
+export interface ServerToolResult {
+  content: string | object;
+  details?: ToolCallDetails;
+}
 
 /**
  * ExecuteQuery implementation

@@ -1,5 +1,6 @@
 import { DbFile, FileType, BaseFileMetadata, BaseFileContent } from '@/lib/types';
 import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
+import type { RubricReport } from '@/lib/rubric/types';
 
 /**
  * FileInfo: File metadata without content (for efficient folder listings)
@@ -151,6 +152,27 @@ export interface DryRunSaveResult {
 export interface DeleteFileResult {
   id: number;
   deletedCount: number;  // 1 for files, 1+descendants for folders
+}
+
+/**
+ * Options for getRubric operation — body of POST /api/files/[id]/rubric.
+ * Client-only: the server computes rubrics directly (scoreFile /
+ * scoreFileDeterministicResolved), so there is no server-side data-layer counterpart.
+ */
+export interface GetRubricOptions {
+  /** Freshly-captured screenshot as a data URL, graded by the LLM visual judge. */
+  screenshot?: string;
+  /** Already-uploaded screenshot URL (used by the screenshot tool, which uploads first). */
+  screenshotUrl?: string;
+  /** Live-edited (merged) content to score instead of the saved DB snapshot. */
+  content?: unknown;
+}
+
+/**
+ * Result for getRubric operation
+ */
+export interface GetRubricResult {
+  report: RubricReport;
 }
 
 /**
