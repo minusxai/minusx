@@ -1,5 +1,5 @@
-import { getModel } from '@/orchestrator/llm';
-import type { Api, Model } from '@/orchestrator/llm';
+import { buildCustomModel, getModel } from '@/orchestrator/llm';
+import type { Api, CustomModelSpec, Model } from '@/orchestrator/llm';
 import { E2E_MODE } from '@/lib/constants';
 
 /**
@@ -8,7 +8,9 @@ import { E2E_MODE } from '@/lib/constants';
  * so low-stakes single-turn helpers (titles/descriptions/summaries/…) don't
  * piggyback on the heavier analyst model.
  *
- *   - `provider` + `model`: model identity, passed to `getModel`.
+ *   - `provider` + `model`: model identity, passed to `getModel`; OR
+ *     `customModel`: a {@link CustomModelSpec} for a local / custom
+ *     OpenAI-compatible endpoint. `customModel` wins when both are present.
  *   - `options`: call-time stream options (e.g. `reasoning`), spread blindly
  *     into the orchestrator's `streamSimple`/`callLLM`.
  *
@@ -16,8 +18,9 @@ import { E2E_MODE } from '@/lib/constants';
  *   { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" }
  */
 interface MicroModelConfig {
-  provider: string;
-  model: string;
+  provider?: string;
+  model?: string;
+  customModel?: CustomModelSpec;
   options?: Record<string, unknown>;
 }
 
@@ -60,6 +63,10 @@ function getMicroModelConfig(): MicroModelConfig | null {
 function getMicroModel(): Model<Api> | null {
   const cfg = getMicroModelConfig();
   if (!cfg) return null;
+  if (cfg.customModel) return buildCustomModel(cfg.customModel);
+  if (!cfg.provider || !cfg.model) {
+    throw new Error('MICRO_AGENT_MODEL_CONFIG needs either customModel or provider+model');
+  }
   return getModel(cfg.provider, cfg.model);
 }
 
@@ -82,7 +89,18 @@ export function getMicroModelOrTestFallback(testFallback: Model<Api>): Model<Api
   return testFallback;
 }
 
-/** Call-time stream options blob (or undefined). Spread into the agent's callOptions. */
+/**
+ * Call-time stream options blob (or undefined). Spread into the agent's
+ * callOptions. `customModel.apiKeyEnv` injects the key as `options.apiKey`
+ * at call time; an explicit `options.apiKey` always wins.
+ */
 export function getMicroModelOptions(): Record<string, unknown> | undefined {
-  return getMicroModelConfig()?.options;
+  const cfg = getMicroModelConfig();
+  if (!cfg) return undefined;
+  const keyEnv = cfg.customModel?.apiKeyEnv;
+  if (keyEnv && !cfg.options?.apiKey) {
+    // eslint-disable-next-line no-restricted-syntax -- the env var NAME comes from the scoped model config; resolved at call time like the config itself
+    return { ...cfg.options, apiKey: process.env[keyEnv] };
+  }
+  return cfg.options;
 }

@@ -437,7 +437,7 @@ Browser-side complement to `handleApiError`:
 - `NEXTAUTH_URL`: NextAuth URL (default: `http://localhost:3000`)
 - `MAX_CONCURRENT_QUERIES`: max concurrent client `/api/query` calls (default: `10`); hydrated SSR → `configsSlice.maxConcurrentQueries`, read live by `querySemaphore` via `selectMaxConcurrentQueries`
 - `QUERY_CACHE_TTL_MS`: TTL for the server-side `queryCache` (default: `60000`)
-- `MX_DISABLE_TELEMETRY`: umbrella runtime kill-switch for all outbound telemetry — Sentry (server/edge/client) + product analytics (`lib/telemetry.ts`). Client bundles can't read runtime env, so the root layout stamps `data-mx-telemetry="off"` on `<html>` and `instrumentation-client.ts` checks it before `Sentry.init`. Documented for users in `docs/content/docs/self-hosting/telemetry.mdx`.
+- `MX_TELEMETRY`: leveled runtime control for all outbound telemetry (`lib/telemetry.ts`) — `off`/`0` = nothing; `errors`/`1` (default) = Sentry crash reports only (no traces/logs/PII, baked analytics default ignored); `full`/`2` = traces + logs + PII + baked analytics. Client bundles can't read runtime env, so the root layout stamps `data-mx-telemetry="<level>"` on `<html>` and `instrumentation-client.ts` reads it before `Sentry.init` (absent → `errors`, never `full`). Documented for users in `docs/content/docs/self-hosting/telemetry.mdx`.
 
 **Runtime-config → Redux pattern:** server config read in `lib/config.ts` → Redux `preloadedState` at SSR → consumed via selector; `Semaphore` takes a *getter* limit so Redux changes apply without recreating it.
 

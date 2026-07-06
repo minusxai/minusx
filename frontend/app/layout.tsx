@@ -10,9 +10,9 @@ import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { E2E_HEADER } from '@/lib/auth/e2e-runtime';
 import { getConfigs, getConfigsForMode, getOrgStyles, getStylesForMode } from '@/lib/data/configs.server';
 import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, getBrandTagline } from '@/lib/branding/whitelabel';
-import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES, QUERY_TIMEOUT_MS, CREDITS_ENABLED, TELEMETRY_DISABLED } from '@/lib/config';
+import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES, QUERY_TIMEOUT_MS, CREDITS_ENABLED, TELEMETRY_LEVEL } from '@/lib/config';
 import { parseAnalyticsConfig } from '@/lib/constants';
-import { TELEMETRY_OPT_OUT_ATTR, TELEMETRY_OPT_OUT_VALUE } from '@/lib/telemetry';
+import { TELEMETRY_LEVEL_ATTR } from '@/lib/telemetry';
 import type { AnalyticsConfig } from '@/lib/analytics/types';
 import { GlobalErrorHandler } from '@/components/app-shell/ErrorHandler';
 import { Toaster } from '@/components/ui/toaster';
@@ -95,9 +95,9 @@ async function loadInitialState(): Promise<{
   return {
     user,
     config,
-    // The telemetry kill-switch also zeroes product analytics — SSR passes the
-    // disabled default so the client provider never sees a live config.
-    analyticsConfig: parseAnalyticsConfig(TELEMETRY_DISABLED ? undefined : ANALYTICS_CONFIG),
+    // ANALYTICS_CONFIG is already telemetry-level-aware (lib/config.ts): the
+    // image-baked default only applies at `full`, and `off` zeroes it.
+    analyticsConfig: parseAnalyticsConfig(ANALYTICS_CONFIG),
     disableAppStateImages: DISABLE_APP_STATE_IMAGES,
     maxConcurrentQueries: MAX_CONCURRENT_QUERIES,
     queryTimeoutMs: QUERY_TIMEOUT_MS,
@@ -144,9 +144,9 @@ export default async function RootLayout({
       lang="en"
       className={`${inter.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
-      // Telemetry opt-out handshake for the prebuilt client bundle:
+      // Telemetry-level handshake for the prebuilt client bundle:
       // instrumentation-client.ts reads this before initializing Sentry.
-      {...(TELEMETRY_DISABLED ? { [TELEMETRY_OPT_OUT_ATTR]: TELEMETRY_OPT_OUT_VALUE } : {})}
+      {...{ [TELEMETRY_LEVEL_ATTR]: TELEMETRY_LEVEL }}
     >
       <head>
         <script

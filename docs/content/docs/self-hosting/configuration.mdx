@@ -38,7 +38,7 @@ MinusX stores documents (questions, dashboards, users, …) in an embedded Postg
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `MX_DISABLE_TELEMETRY` | unset | `1`/`true` disables all outbound telemetry (crash reporting + analytics). Full details: [Telemetry & Privacy](/docs/self-hosting/telemetry). |
+| `MX_TELEMETRY` | `errors` | Telemetry level: `off` (nothing), `errors` (crash reports only, no PII), `full` (traces + logs + PII). Accepts `0`/`1`/`2`. Full details: [Telemetry & Privacy](/docs/self-hosting/telemetry). |
 | `ANALYTICS_CONFIG` | unset | JSON product-analytics config; overrides any default baked into the image. `{"enabled":false}` disables analytics only. |
 | `EVENTS_FORWARD_RULES` | unset | Opt-in JSON map `{"<event regex>": "<webhook url>"}` forwarding app events to your webhooks (e.g. errors → your Slack). |
 

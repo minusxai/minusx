@@ -25,7 +25,7 @@ MinusX is a **single Next.js application** — there is no separate backend serv
 Being precise about this matters more than anything else on this page:
 
 1. **LLM requests.** The agent sends schema metadata, the context you've curated in the Knowledge Base, and conversation content to whichever LLM provider you configure — using **your API key, from your container**. No MinusX-operated proxy sits in between. See [LLM Providers](/docs/self-hosting/llm-providers).
-2. **Telemetry** — crash reporting is on by default and product analytics may be enabled by default in official images; both are disabled by a single environment variable. The full, honest inventory is on the [Telemetry](/docs/self-hosting/telemetry) page.
+2. **Telemetry** — by default, crash reports only (no traces, no PII, no analytics); one environment variable (`MX_TELEMETRY=off`) turns even that off. The full, honest inventory is on the [Telemetry](/docs/self-hosting/telemetry) page.
 3. **Nothing else.** Query results, warehouse credentials, and your documents stay on your infrastructure.
 
 ## Installation

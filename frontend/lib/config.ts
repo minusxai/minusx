@@ -1,7 +1,7 @@
 import 'server-only';
 import { join, resolve } from 'path';
 import { parseFrameAncestors } from '@/lib/auth/embed';
-import { parseTelemetryDisabled } from '@/lib/telemetry';
+import { parseTelemetryLevel } from '@/lib/telemetry';
 import { CREDIT_BUDGETS, resolveCreditConfig, parseBillingCycle, type BillingCycle, type CreditConfig } from '@/lib/analytics/credit-budgets';
 
 /**
@@ -60,7 +60,7 @@ interface EnvironmentConfig {
   ENABLE_ORG_CREATION: boolean;
   ANALYTICS_CONFIG: string | undefined;
   NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG: string | undefined;
-  MX_DISABLE_TELEMETRY: string | undefined;
+  MX_TELEMETRY: string | undefined;
   DAB_BENCH_BASE_DIR: string | undefined;
   DAB_BENCH_DATASETS: string | undefined;
   DAB_BENCH_RERUN: string | undefined;
@@ -165,7 +165,7 @@ const config: EnvironmentConfig = {
   ENABLE_ORG_CREATION: process.env.ENABLE_ORG_CREATION !== 'false',
   ANALYTICS_CONFIG: process.env.ANALYTICS_CONFIG,
   NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG: process.env.NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG,
-  MX_DISABLE_TELEMETRY: process.env.MX_DISABLE_TELEMETRY,
+  MX_TELEMETRY: process.env.MX_TELEMETRY,
   DAB_BENCH_BASE_DIR: process.env.DAB_BENCH_BASE_DIR,
   DAB_BENCH_DATASETS: process.env.DAB_BENCH_DATASETS,
   DAB_BENCH_RERUN: process.env.DAB_BENCH_RERUN,
@@ -358,11 +358,16 @@ export const MD_REGISTER = config.MD_REGISTER;
 export const CUSTOM_MODULE = config.CUSTOM_MODULE;
 export const LANDING_HTML = config.LANDING_HTML;
 export const ENABLE_ORG_CREATION = config.ENABLE_ORG_CREATION;
-export const ANALYTICS_CONFIG = config.ANALYTICS_CONFIG ?? config.NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG;
-// Umbrella kill-switch for everything that reports outside the deployment
-// (Sentry + product analytics). Client-side propagation happens via the
-// html attribute the root layout stamps — see lib/telemetry.ts.
-export const TELEMETRY_DISABLED = parseTelemetryDisabled(config.MX_DISABLE_TELEMETRY);
+// Leveled control over everything that reports outside the deployment —
+// off / errors (default) / full; see lib/telemetry.ts. Client-side propagation
+// happens via the html attribute the root layout stamps.
+export const TELEMETRY_LEVEL = parseTelemetryLevel(config.MX_TELEMETRY);
+// Product analytics honors the level: `full` applies the image-baked default,
+// `errors` only an explicit runtime config, `off` nothing.
+export const ANALYTICS_CONFIG =
+  TELEMETRY_LEVEL === 'off' ? undefined
+  : TELEMETRY_LEVEL === 'errors' ? config.ANALYTICS_CONFIG
+  : (config.ANALYTICS_CONFIG ?? config.NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG);
 export const DAB_BENCH_BASE_DIR = config.DAB_BENCH_BASE_DIR;
 export const DAB_BENCH_DATASETS = config.DAB_BENCH_DATASETS;
 export const DAB_BENCH_RERUN = config.DAB_BENCH_RERUN;
