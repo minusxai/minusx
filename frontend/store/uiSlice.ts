@@ -19,7 +19,6 @@ interface UIState {
   showAdvanced: boolean;
   fileEditMode: Record<number, boolean>;       // fileId -> editMode (dashboard, story, question, report, alert)
   fileViewMode: Record<number, 'visual' | 'json'>;  // fileId -> active tab
-  sqlEditorCollapsed: Record<number, boolean>;  // fileId -> collapsed state
   notebookActiveCell: Record<number, string>;   // notebook fileId -> active cell id (for agent context + highlight)
   questionCollapsedPanel: 'none' | 'left' | 'right';  // global: which panel is collapsed across all questions
   proposedQueries: Record<number, string>;  // fileId -> proposed SQL query (for diff view)
@@ -58,7 +57,6 @@ const initialState: UIState = {
   showAdvanced: false,
   fileEditMode: {},
   fileViewMode: {},
-  sqlEditorCollapsed: {},
   notebookActiveCell: {},
   questionCollapsedPanel: 'none',
   proposedQueries: {},
@@ -155,10 +153,6 @@ const uiSlice = createSlice({
     setFileViewMode: (state, action: PayloadAction<{ fileId: number; mode: 'visual' | 'json' }>) => {
       const { fileId, mode } = action.payload;
       state.fileViewMode[fileId] = mode;
-    },
-    setSqlEditorCollapsed: (state, action: PayloadAction<{ fileId: number; collapsed: boolean }>) => {
-      const { fileId, collapsed } = action.payload;
-      state.sqlEditorCollapsed[fileId] = collapsed;
     },
     setNotebookActiveCell: (state, action: PayloadAction<{ fileId: number; cellId: string }>) => {
       const { fileId, cellId } = action.payload;
@@ -258,7 +252,6 @@ export const {
   setShowAdvanced,
   setFileEditMode,
   setFileViewMode,
-  setSqlEditorCollapsed,
   setNotebookActiveCell,
   setQuestionCollapsedPanel,
   addChatAttachment,
@@ -308,18 +301,11 @@ export const selectQueueStrategy = (state: RootState) => state.ui.queueStrategy 
 export const selectFileEditMode = (state: RootState, fileId: number) => state.ui.fileEditMode[fileId] ?? false;
 export const selectFileViewMode = (state: RootState, fileId: number | undefined) =>
   fileId !== undefined ? (state.ui.fileViewMode[fileId] ?? 'visual') : 'visual';
-// Returns collapsed state for a question's SQL editor.
-// Falls back to mode-appropriate default when not yet stored (open in page mode, closed in toolcall).
 export const selectNotebookActiveCell = (
   state: { ui: UIState },
   fileId: number | undefined,
 ): string | undefined => fileId !== undefined ? state.ui.notebookActiveCell[fileId] : undefined;
 
-export const selectSqlEditorCollapsed = (
-  state: RootState,
-  fileId: number | undefined,
-  defaultCollapsed: boolean
-) => fileId !== undefined ? (state.ui.sqlEditorCollapsed[fileId] ?? defaultCollapsed) : defaultCollapsed;
 export const selectQuestionCollapsedPanel = (state: RootState) => state.ui.questionCollapsedPanel;
 export const selectProposedQuery = (state: RootState, fileId: number | undefined) =>
   fileId ? state.ui.proposedQueries[fileId] : undefined;
