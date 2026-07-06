@@ -376,7 +376,7 @@ If ever revisited, treat it as its own standalone PR, not a rider on a reorg.
   - **~64 findings**: confirmed used **internally** within their own file (2+ occurrences via grep) but exported unnecessarily — e.g. Redux slice state interfaces (`ConfigsState`, `EphemeralChanges`, `UsersState`, `ViewStackItem`), `lib/jobs/cron.ts`'s `matchesCronField` (used only by its own sibling functions). Left as-is: removing `export` from ~64 declarations is a zero-functional-benefit cosmetic tightening not worth the file-touch risk at this point.
   - **7 findings**: genuinely unused but carry an explicit "kept for future/other callers" comment in their own source (`STEP_LABELS`, `TOKEN_REFRESH_THRESHOLD`, `setQueryCacheObjectStoreFactory`, `commonInterceptors`, `addTestConnection`, `ensureMxfoodDataset`, `addMxfoodConnection`) — deliberate extensibility hooks / reusable test infra, not dead code. Kept.
   - **10 findings**: genuinely dead (zero references anywhere, including internally) — **deleted**: `clearAutoContextCache`, `getSamplingEnabled`, `hasHandle`, `createNextRequest` (referenced the since-deleted `/api/chat` route), `selectActiveRecordingId`, `selectIsRecording`, `clickByLabel`, `ConnectorDialect`, `CsvDeleteResult`, `QueryParams`. `npm run validate` + full test suite green after deletion.
-- [x] Pushed final state to PR #567; **all GitHub Actions checks green** (`Validate`, all 6 `Frontend Tests` shards, `Playwright E2E`, `QA Build`, all 3 `QA Flows` shards) except the pre-accepted CodeQL exception below. **Not merged**, per standing instruction — left open for manual review.
+- [x] Pushed final state to PR #567; **all GitHub Actions checks green** (`Validate`, all 6 `Frontend Tests` shards, `Playwright E2E`, `QA Build`, all 3 `QA Flows` shards) except the pre-accepted CodeQL exception below. Left open for manual review as instructed at the time; **merged by the owner on 2026-07-06** (`02d042d1`) after review.
 - [x] Final summary: see the section immediately below.
 
 ---
@@ -401,7 +401,7 @@ If ever revisited, treat it as its own standalone PR, not a rider on a reorg.
 
 **Process lessons captured in this doc for future large autonomous refactors** (see the M3, M4.3, and M5 sections above for the full detail): resource contention from concurrent agent processes can masquerade as test regressions immediately after a workflow completes — check system load before concluding a regression; a crashed background agent's transcript narrative is never trustworthy on its own — `git status`/`git diff` is the only source of truth for what actually landed, in both directions (a crash can mean "already finished, crashed on wrap-up" or "made zero progress," and only the working tree tells you which); knip (and similar static dead-code tools) produce large numbers of structurally-explainable false positives around barrel/re-export patterns in a codebase that deliberately uses barrel preservation for large refactors — categorize before deleting, and grep for "used internally but over-exported" before assuming "no external importers" means "dead."
 
-**The refactor project is complete.** PR #567 has every CI check green except the one pre-accepted CodeQL exception (owner-approved, pre-existing, out of scope). It has not been merged, per standing instruction — it's ready for manual review and merge at the owner's discretion.
+**The refactor project is complete.** PR #567 had every CI check green except the one pre-accepted CodeQL exception (owner-approved, pre-existing, out of scope). **Merged by the owner on 2026-07-06** (`02d042d1`) after manual review.
 
 ---
 
@@ -422,7 +422,7 @@ GitHub's CodeQL check on PR #567 flags 3 "new" alerts. All three are **confirmed
 - [x] All milestones (0–8) complete or explicitly annotated as blocked/skipped with a reason (M7 skipped by owner decision; M6's 3 items kept in place with evidence; M4.2 blocked on missing test coverage); `npm run knip` — every one of 280 baseline findings individually verified (10 genuinely dead ones deleted, rest categorized as false-positive/used-internally/intentional — see Final validation)
 - [x] CLAUDE.md, README, LOCAL_DEV, docs/ consistent with the new layout (`frontend/` retained, M7 skipped); `docs/DOCS_SYNC.md` bumped to `ddb79028`
 - [x] ESLint guard for M5.1's DocumentDB boundary: already existed pre-refactor, allowlist/docs updated to match the actual blessed-primitive decision. **No `views↛Redux` guard added for M4.2** — the convention was decided ("enforce") but zero files were actually moved (blocked on missing test coverage for all 11 candidates), so adding a lint rule that would immediately fail on 14 pre-existing violations wouldn't reflect an enforced reality; left for the future work that actually closes the coverage gap and performs the moves.
-- [x] PR #567 has every CI check green except the one pre-accepted CodeQL exception (owner-approved); **not merged** (per owner instruction — left for manual review)
+- [x] PR #567 has every CI check green except the one pre-accepted CodeQL exception (owner-approved); left for manual review as instructed, **merged by the owner on 2026-07-06** (`02d042d1`)
 - [x] This file updated: every box checked or annotated with why an item was rejected/blocked (rejections/blocks are fine; silent skips are not)
 
 ---

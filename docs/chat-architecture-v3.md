@@ -309,7 +309,7 @@ The only orchestrator change is **where it reads/writes the log**:
 
 - ❌ `lib/chat/run-registry.server.ts` (the `runs` Map, frame buffering, 5-min retention, `attach`/`resume_miss`). Replaced by DB cursor + `LISTEN/NOTIFY`.
 - ❌ `tryRecoverConversationFromFile` heuristic (file-length comparison). Replaced by deterministic cursor replay.
-- ❌ The pi↔legacy translation for v3 conversations (they're pi-native end to end). `piLogToLegacy` stays only for legacy file-conversations during the dual-read window.
+- ❌ The pi↔legacy translation *as a dual-read fallback* — that window has closed (§11), `useConversation` is v3-only with no file-conversation path. `piLogToLegacy`/`chat-translator` itself is **not** retired — it's permanent v3 infrastructure with several live, unrelated consumers (`lib/integrations/slack/run-turn.server.ts`, `lib/conversations-utils.ts`'s `parsePiConversation`, `app/benchmark/page.tsx`): translating the orchestrator's native pi log format to/from the legacy UI-rendering shape, not a dual-read shim.
 
 Retained, intentionally: a **small, ephemeral** per-instance set of "currently open SSE writers" that the shared listener fans out to. It's bounded by live connections and rebuildable — not the leaky source-of-truth buffer being removed.
 

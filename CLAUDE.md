@@ -33,7 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Chat orchestration: `frontend/orchestrator/` and `frontend/agents/`
 
-These directories hold the in-process TypeScript orchestrator and agent/tool definitions that power **all chat**. They are wired into production via `lib/chat/orchestration-core.server.ts` (the shared orchestration core — `setupOrchestration`, `recordLlmCalls`, the tool/agent registries), which the chat API routes (`app/api/conversations/[id]/turns/route.ts`, `app/api/conversations/[id]/stream/route.ts`) invoke for every request. **This is the only chat engine.** (`lib/chat/chat-types.ts` survives only as a shared request/response *types* module, despite the `ChatRequest` name.)
+These directories hold the in-process TypeScript orchestrator and agent/tool definitions that power **all chat**. They are wired into production via `lib/chat/orchestration-core.server.ts` (the shared orchestration core — `setupOrchestration`, `recordLlmCalls`, the tool/agent registries), which the browser chat API routes (`app/api/conversations/[id]/turns/route.ts`, `app/api/conversations/[id]/stream/route.ts`) invoke for every request — and which Slack invokes the same way in-process (`lib/integrations/slack/process-event.ts` → `run-turn.server.ts` → `conversation-turn.server.ts`), bypassing those HTTP routes entirely since it has no browser to respond to. **This is the only chat engine.** (`lib/chat/chat-types.ts` survives only as a shared request/response *types* module, despite the `ChatRequest` name.)
 
 **What's where:**
 - `frontend/orchestrator/` — the `Orchestrator` engine plus conversation-log types (`@/orchestrator/types`) and LLM types (`@/orchestrator/llm`).
