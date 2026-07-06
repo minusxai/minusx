@@ -5,7 +5,7 @@
 **Tracking:** all work lands on branch `feature/refactor-v2`, tracked by PR #567 (`minusxai/minusx`). Commit and push to this PR continuously as each milestone completes — do not hoard everything for one final push. **Do not merge** — the PR is left open for manual review; getting every CI check green is the deliverable, not clicking merge.
 
 **How to use this doc:**
-- Milestones are ordered by risk/leverage AND by dependency — do them in order. M7 (repo rename) and M8 (docs) are deliberately last: the rename is pure mechanical path churn that should happen once, after content is stable, and docs should describe the *actual final* structure rather than a mid-refactor snapshot that then keeps moving under it.
+- Milestones are ordered by risk/leverage AND by dependency — do them in order. M7 (repo rename) was **skipped by owner decision** (see Milestone 7) — `frontend/` was judged too much added blast-radius/review-cost for this PR. M8 (docs) is deliberately last regardless, so docs describe the *actual final* structure rather than a mid-refactor snapshot that then keeps moving under it.
 - Every checkbox lists its evidence (file:line where relevant). **If reality disagrees with a claim here, stop and re-verify rather than forcing the change** — the codebase moves fast and some claims may drift stale.
 - Items marked **[VERIFY-FIRST]** must be re-confirmed (grep / prod check) before acting.
 - **Verification cadence — after every milestone (not just at the end):** `cd frontend && npm run validate && npm test`, then commit + push to PR #567. Milestones touching UI flows: also `npm run test:e2e`; touching QA-covered flows: `npm run test:qa`. `npm run validate` (typecheck+lint) does **not** catch behavior-preserving-refactor breakage — the test suite is what proves behavior didn't change; don't treat a clean `validate` as a green light on its own. Run `npm run build` at least once before the final push — Next.js route/server-boundary breaks (e.g. a `server-only` import leaking into a client bundle) surface only at build, never at `validate`.
@@ -140,7 +140,7 @@ Work queue (grouped; skip anything that fails grep-confirm):
 
 ## Milestone 2 — Intra-repo renames: make names stop lying (cheap, high value)
 
-Pure renames + import-path updates. No logic changes. (The `frontend/` → `src/` repo-root rename is deliberately **not** here — see Milestone 7.)
+Pure renames + import-path updates. No logic changes. (The `frontend/` → `src/` repo-root rename was considered — see Milestone 7 — but skipped by owner decision.)
 
 ### 2.1 Chat naming (the "v2" lie)
 
@@ -200,19 +200,15 @@ None of it is the HTTP API surface (that's `app/api/`). Actual decomposition lan
 
 ## Milestone 4 — UI plane: taxonomy, discipline, god components
 
-### 4.1 `components/` root taxonomy (70 root files, ~20.6k LOC — none dead, all misfiled)
+### 4.1 `components/` root taxonomy (70 root files, ~20.6k LOC — none dead, all misfiled) — DONE
 
-Move-only changes (plus import updates). Proposed buckets:
+- [x] `components/file-browser/`, `components/app-shell/`, `components/selectors/`, `components/banners/`, `components/modals/` (added to), `components/dev/`, `components/params/` — all landed per the original plan.
+- [x] Additions to existing dirs beyond the original plan: `components/question/` (+ExplainButton, QuestionBrowserPanel, QuestionSchemaSection), `components/ui/` (+Dither, ImageLightbox), `components/settings/` (+UsersContent, DataManagementSection), `components/query-builder/` (+SqlEditor).
+- [x] New bucket not in the original plan: `components/schema-browser/` (ConnectionTablesBrowser, SchemaTreeView, StaticTablesBrowser) — verified cohesive (the two browsers both depend on SchemaTreeView).
+- [x] Left at root (3, goal was ≤10): `Markdown.tsx` (deliberately, reserved for a later fold with `lib/markdown/`), `EditWithAgentPopover.tsx` (cross-cutting — used by SqlEditor, lexical, and story components, no single bucket fits), `TextBlockCard.tsx` (single consumer, no dashboard-specific directory exists yet).
+- [x] Consolidated `components/lexical/` + `components/chat/lexical/` (`MentionsPlugin.tsx`, `MentionNode.tsx`) → merged into `components/lexical/`, no naming collisions, old directory deleted.
 
-- [ ] `components/file-browser/` ← `FileView`, `FilesList`, `FolderView`, `FileHeader`, `FileLayout`, `FileActionMenu`, `FileSearchBar`, `FileTypeBadge`, `FileNotFound`, `FileHealthPanel`, `HomeFolderFiles`, `RecentFilesSection`, `Breadcrumb`, `InfiniteScrollSentinel`, `ViewStack`
-- [ ] `components/app-shell/` ← `Providers`, `ReduxProvider`, `AuthProvider`, `AnalyticsProvider`, `ColorModeSync`, `NavigationSync`, `LayoutWrapper`, `DataLoader`, `ErrorHandler`, `Sidebar`, `RightSidebar`, `MobileRightSidebar`, `MobileBottomNav`, `MobileHamburgerMenu`, `MobileNewFileSheet`, `FloatingChatWrapper`
-- [ ] `components/selectors/` ← `DatabaseSelector`, `GenericSelector`, `ImpersonationSelector`, `ChildPathSelector`, `DatePicker`, `TabSwitcher`
-- [ ] `components/banners/` ← `DataPrepBanner`, `DemoModeBanner`, `UpdateBanner`, `DashboardUsageBadge`
-- [ ] `components/modals/` (exists) ← `SaveFileModal`, `PublishModal`, `MoveFileModal`, `BulkMoveFileModal`, `NewFolderModal`
-- [ ] `components/dev/` ← `DevToolsPanel`, `AppStateViewer`, `JsonViewer`, `SessionPlayer`, `RecordingControl`
-- [ ] `components/params/` ← `ParameterInput` (901 LOC), `ParameterRow`
-- [ ] Remaining root files: place case-by-case; goal is ≤10 files left at root.
-- [ ] Consolidate the two lexical dirs: `components/lexical/` + `components/chat/lexical/` (`MentionsPlugin.tsx` 801 LOC) → one module.
+validate + full test suite (3941 passed) + `test:ui` (404 passed) + e2e (2 passed) all green.
 
 ### 4.2 Container/View discipline (or retire the convention honestly)
 
@@ -316,33 +312,24 @@ These require information no grep can supply (prod DB state, team roadmap decisi
 
 ---
 
-## Milestone 7 — Repo rename: `frontend/` → `src/` (last content change)
+## Milestone 7 — Repo rename: `frontend/` → `src/` — **SKIPPED (owner decision, 2026-07-06)**
 
-Do this **after** M1–M6 are complete and green, and **before** M8 (docs), so the docs milestone describes the true final layout instead of a structure that then moves again. Pure mechanical path churn — no logic changes — but repo-wide, so do it in one clean pass rather than interleaved with other work.
+**Status: descoped, not attempted.** Owner call: *"Let's skip the `frontend` folder renaming to `src`. This PR is getting too complex as it is."* Confirmed before this decision: M7 had not been started (no `git mv` performed, `frontend/` still the live directory name) — nothing to unwind.
 
-`frontend/` contains the entire product (UI + in-process orchestrator + connectors + document DB) — the separate backend it was named against no longer exists. Rename the directory; **keep the published Docker image names**.
+Rationale accepted: this was pure mechanical path churn with no APoSD/complexity-reduction value on its own (the audit's naming complaint was real, but a rename touching every CI workflow, both Dockerfiles, `install.sh`, self-hosted upgrade paths, and a companion cross-repo PR against `~/projects/deploys` is a large blast-radius, high-review-cost change for a cosmetic fix — not worth bundling into an already-large reorg PR). The `deploys/qa.yml` companion-PR requirement noted in the original plan is now moot; no changes to `~/projects/deploys` are needed anywhere in this effort.
 
-- [ ] `git mv frontend src` + update all path references:
-  - [ ] `.github/workflows/test.yml`, `qa.yml`, `e2e.yml`, `publish.yml`
-  - [ ] `docker-compose.yml` + `docker-compose.prod.yml` (the `./frontend/.env` env_file mount)
-  - [ ] `src/Dockerfile` build context references
-  - [ ] Repo docs: `README.md`, `LOCAL_DEV.md`, `CLAUDE.md`, `docs/`, root `scripts/` (leave the CLAUDE.md content rewrite itself to M8 — just fix the `frontend/` path references here so M8 isn't also chasing a stale directory name)
-- [ ] **Do NOT rename** `ghcr.io/minusxai/minusx-frontend[-canary]` images — `install.sh` on self-hosted machines pulls them by name. (Optionally publish under a second name later and dual-publish for a deprecation window.)
-- [ ] **Companion change in the separate `~/projects/deploys` repo** (confirmed local, no need to guess at its contents): `deploys/.github/workflows/qa.yml` checks out `minusxai/minusx` fresh and runs everything with `working-directory: ./frontend` (7 occurrences: Node cache path, node_modules cache key + path, `npm ci`, Playwright version resolution, Playwright install, `npm run test:qa`, report upload path). This workflow **will break** the next time it's dispatched unless these 7 paths are updated to `./src`. Prepare this as a **separate small PR against `minusxai/deploys`** (not part of PR #567, since it's a different repo) — open it, but per the same "don't merge without review" policy, do not merge it either. Note in both PR descriptions that they must land together.
-- [ ] Self-hosters who `git pull` will have an orphaned `frontend/.env`: update `install.sh`/upgrade path to move it, or keep a compat symlink for one release and document in release notes.
-
-**Acceptance for M7:** validate + full test suite + e2e + qa green with the new `src/` layout; `grep -rln "frontend" --include="*.yml" --include="*.yaml" .github/ docker-compose*.yml` (in `minusx`) returns nothing except the intentionally-kept Docker image name strings; the companion `deploys` PR is opened (unmerged) and cross-referenced. Commit + push to PR #567.
+If ever revisited, treat it as its own standalone PR, not a rider on a reorg.
 
 ---
 
 ## Milestone 8 — Documentation reconciliation (describes the final, post-rename state)
 
-`docs/DOCS_SYNC.md` says docs were last reconciled at `684d9ca5` (2026-06-03) — well over a hundred commits behind at audit time, and further behind still after M1–M7. Do this milestone **last**, against the final `src/` layout, so it isn't immediately stale again.
+`docs/DOCS_SYNC.md` says docs were last reconciled at `684d9ca5` (2026-06-03) — well over a hundred commits behind at audit time, and further behind still after M1–M6. Do this milestone **last**, against the final layout (M7 skipped — `frontend/` remains the directory name), so it isn't immediately stale again.
 
 - [ ] Rewrite the CLAUDE.md chat section: the claimed entry points `app/api/chat/route.ts` and `app/api/chat/stream/route.ts` **do not exist**. Document the actual v3 flow: `POST /api/conversations/[id]/turns` (fires `runConversationTurn` detached) + `GET /api/conversations/[id]/stream` (resumable SSE via Postgres LISTEN/NOTIFY) → `lib/chat/conversation-turn.server.ts` → orchestration core. Include the run-lease/auto-retry model and the conversations tables.
 - [ ] Update every CLAUDE.md mention of `lib/chat-orchestration-v2.server.ts` / `V2_REGISTRABLES` to the M2 names.
 - [ ] Remove the `atlasSchemaNoViz` mention from CLAUDE.md (deleted in M1).
-- [ ] Reflect all M2–M7 renames (`lib/evals/`, `lib/connections/client/`, `components/evals/`, `src/`) throughout CLAUDE.md / README / LOCAL_DEV / docs site.
+- [ ] Reflect all M2–M6 renames (`lib/evals/`, `lib/connections/client/`, `components/evals/`) throughout CLAUDE.md / README / LOCAL_DEV / docs site. Note M7 (`frontend/` → `src/`) was skipped by owner decision — do not describe a `src/` layout that doesn't exist.
 - [ ] Write up the M4.2 container/view decision (whichever was actually applied) and the M5.1 DocumentDB boundary decision in CLAUDE.md, replacing the old prescriptive text with what's actually enforced.
 - [ ] Bump `docs/DOCS_SYNC.md` to the reconciliation commit.
 
@@ -356,8 +343,7 @@ Do this **after** M1–M6 are complete and green, and **before** M8 (docs), so t
 - [ ] Manually browser-verify the golden paths per CLAUDE.md's TDD workflow (step 6): open a question, edit + run a query, open a dashboard, open the side-chat, send a message, and expand the debug message to confirm the exact LLM request/response — don't assume the refactor left chat intact, check it.
 - [ ] `npm run knip` clean against the M0 config (or every remaining finding individually justified in this doc).
 - [ ] Push final state to PR #567; confirm all GitHub Actions checks (`test.yml`, `qa.yml`, `e2e.yml`, `publish.yml` build step) are green on the PR. **Do not merge.**
-- [ ] Open (don't merge) the companion `~/projects/deploys` PR fixing `qa.yml`'s `./frontend` → `./src` paths; link it from PR #567.
-- [ ] Write a final summary comment/section in this doc: what was completed, what was explicitly skipped with reasons (expected: some/all of M6's conditional deletions, possibly parts of M4.2/M4.3 if test coverage was too thin), and what decisions were made at the two owner-decision points (M4.2 container/view, M5.1 DocumentDB boundary) with rationale.
+- [ ] Write a final summary comment/section in this doc: what was completed, what was explicitly skipped with reasons (M7 repo rename skipped by owner decision; expected: some/all of M6's conditional deletions, possibly parts of M4.2/M4.3 if test coverage was too thin), and what decisions were made at the owner-decision points (M4.2 container/view, M5.1 DocumentDB boundary) with rationale.
 
 ---
 
@@ -375,9 +361,8 @@ GitHub's CodeQL check on PR #567 flags 3 "new" alerts. All three are **confirmed
 
 ## Completion checklist
 
-- [ ] All milestones (0–8) complete or explicitly annotated as blocked with a reason; `npm run knip` ≈ clean against the M0 config
-- [ ] CLAUDE.md, README, LOCAL_DEV, docs/ consistent with the new layout; `docs/DOCS_SYNC.md` bumped
+- [ ] All milestones (0–8) complete or explicitly annotated as blocked/skipped with a reason (M7 skipped by owner decision); `npm run knip` ≈ clean against the M0 config
+- [ ] CLAUDE.md, README, LOCAL_DEV, docs/ consistent with the new layout (`frontend/` retained); `docs/DOCS_SYNC.md` bumped
 - [ ] ESLint guards added for the newly-decided boundaries (views↛Redux if M4.2(a) chosen; DocumentDB rule per M5.1)
-- [ ] `frontend/` no longer exists; CI, Docker, install path all green on `src/`; companion `deploys` PR opened and linked
 - [ ] PR #567 has every CI check green; **not merged** (per owner instruction — leave for manual review)
 - [ ] This file updated: check every box or annotate why an item was rejected (rejections are fine; silent skips are not)
