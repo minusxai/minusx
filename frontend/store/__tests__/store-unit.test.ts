@@ -16,7 +16,7 @@ import type { RootState } from '../store';
 import type { UserMessage } from '../chatSlice';
 
 describe('chat queue across conflict-fork (real → new real)', () => {
-  // Conversations now always start with real positive IDs (from /api/chat/init).
+  // Conversations now always start with real positive IDs (from POST /api/conversations).
   // Forks still happen on conflict resolution: updateConversation with newConversationID != conversationID.
 
   it('merges queued messages from original conversation into forked conversation', () => {

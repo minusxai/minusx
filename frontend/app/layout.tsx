@@ -17,7 +17,6 @@ import type { AnalyticsConfig } from '@/lib/analytics/types';
 import { GlobalErrorHandler } from '@/components/app-shell/ErrorHandler';
 import { Toaster } from '@/components/ui/toaster';
 import ImageLightbox from '@/components/ui/ImageLightbox';
-import FileModal from '@/components/modals/FileModal';
 
 const getEffectiveUserCached = cache(() => getEffectiveUser().catch(() => null));
 
@@ -180,7 +179,6 @@ export default async function RootLayout({
       <body suppressHydrationWarning>
         <Providers initialData={initialData}>
           <GlobalErrorHandler />
-          <FileModal />
           <LayoutWrapper>
             {children}
           </LayoutWrapper>

@@ -79,8 +79,8 @@ export async function findSlackInstallationByTeam(
 // Thread conversation — one v3 conversation per Slack thread.
 //
 // Idempotent lookup by `meta.slackThreadKey` (Slack threads have no surrogate id of their own).
-// On first message a v3 conversation is created; follow-ups resolve to the same id, and the headless
-// orchestrator (runChatOrchestrationV2) appends to its `messages` rows.
+// On first message a v3 conversation is created; follow-ups resolve to the same id, and the shared
+// v3 turn runner (runConversationTurn, driven via runSlackChatTurn) appends to its `messages` rows.
 // ============================================================================
 
 function slackThreadKey(teamId: string, channelId: string, threadTs: string): string {

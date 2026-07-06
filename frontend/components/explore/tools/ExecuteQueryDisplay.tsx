@@ -19,6 +19,13 @@ export default function ExecuteQueryDisplay({ toolCallTuple, databaseName, isCom
   // Local state for viz changes (read-only display, but allow viz type switching)
   const [localContent, setLocalContent] = useState<QuestionContent | null>(null);
 
+  // Split-panel collapse state: local to this instance, not global Redux — this is a
+  // read-mostly toolcall render (no questionId, never in edit mode), and collapsedPanel
+  // has no layout effect in toolcall/compact mode (see QuestionViewV2's useCompactLayout);
+  // its only reachable effect here is the Show/Hide Viz Config button label, which local
+  // state reproduces exactly without leaking into the global page-mode panel state.
+  const [collapsedPanel, setCollapsedPanel] = useState<'none' | 'left' | 'right'>('none');
+
   const args = toolCall.function.arguments;
 
   // Parse tool call once and memoize to prevent infinite loops
@@ -219,6 +226,11 @@ export default function ExecuteQueryDisplay({ toolCallTuple, databaseName, isCom
               queryError={error}
               queryStale={false}
               showVizControls={!isCompact}
+              editMode={false}
+              collapsedPanel={collapsedPanel}
+              onTogglePanel={setCollapsedPanel}
+              fileState={{}}
+              onSetFile={() => {}}
               onChange={handleContentChange} // Allow viz type changes locally
               onExecute={() => {}} // No re-execution in explore
             />

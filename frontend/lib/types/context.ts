@@ -189,8 +189,3 @@ export interface ContextInfo {
   hasContext: boolean;                    // True if context file found
   contextLoading: boolean;                // True if context file is loading
 }
-
-export interface SchemaInfo {
-  name: string;
-  tables: string[];
-}

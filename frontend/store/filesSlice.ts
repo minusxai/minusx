@@ -878,36 +878,6 @@ const filesSlice = createSlice({
     },
 
     /**
-     * Add a reference to a question (composed questions)
-     * - Check for duplicates (by id and alias)
-     * - Single-level only enforced at UI level
-     */
-    addReferenceToQuestion(state, action: PayloadAction<{
-      questionId: number;
-      referencedQuestionId: number;
-      alias: string;
-    }>) {
-      const { questionId, referencedQuestionId, alias } = action.payload;
-      const question = state.files[questionId];
-      if (!question || question.type !== 'question') return;
-
-      const content = question.content as QuestionContent;
-      const changes = question.persistableChanges as Partial<QuestionContent> | undefined;
-      const currentRefs = changes?.references ?? content.references ?? [];
-
-      // Prevent duplicates (by ID or alias)
-      if (currentRefs.some((ref: QuestionReference) => ref.id === referencedQuestionId || ref.alias === alias)) {
-        return;
-      }
-
-      // Add new reference
-      state.files[questionId].persistableChanges = {
-        ...changes,
-        references: [...currentRefs, { id: referencedQuestionId, alias }]
-      };
-    },
-
-    /**
      * Remove a reference from a question
      */
     removeReferenceFromQuestion(state, action: PayloadAction<{
@@ -962,7 +932,6 @@ export const {
   addQuestionToDashboard,
   addTextBlockToDashboard,
   updateTextBlockContent,
-  addReferenceToQuestion,
   removeReferenceFromQuestion,
 } = filesSlice.actions;
 

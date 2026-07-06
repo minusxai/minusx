@@ -166,7 +166,7 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
       ? await cachedConnectorSchema(this.parameters.connection_id, local)
       : await this._loadSchemaFallback(this.parameters.connection_id);
 
-    // Per-run whitelist (set by chat-v2 from a context file) filters schemas
+    // Per-run whitelist (set by the orchestrator from a context file) filters schemas
     // before they reach the LLM. Same logic as production tool-handlers.server.ts.
     const whitelist = this.context.whitelistedTables;
     const filteredSchemas = whitelist

@@ -1,7 +1,8 @@
-// #4 guard: the conversations (chat) page must preserve ?v=2 on navigation, so
-// users in v2 mode stay in v2 when opening or starting a chat. We let the real
-// param-preserving useRouter (lib/navigation/use-navigation) run and mock only
-// next/navigation's router to capture the final, preserved URL.
+// The conversations (chat) page must preserve as_user/mode on navigation, so an
+// admin impersonating a user (or viewing a non-default mode) stays impersonating
+// when opening or starting a chat. We let the real param-preserving useRouter
+// (lib/navigation/use-navigation) run and mock only next/navigation's router to
+// capture the final, preserved URL.
 
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -37,21 +38,29 @@ vi.mock('@/components/file-browser/Breadcrumb', () => ({ __esModule: true, defau
 
 import ConversationsPage from '@/app/conversations/page';
 
-describe('conversations page preserves ?v=2 (#4)', () => {
+describe('conversations page preserves as_user + mode on navigation', () => {
   beforeEach(() => {
     pushSpy.mockClear();
-    window.history.replaceState({}, '', '/conversations?v=2');
+    window.history.replaceState({}, '', '/conversations?as_user=alice%40example.com&mode=tutorial');
   });
 
-  it('opening a chat navigates to /explore/<id>?v=2', async () => {
+  it('opening a chat navigates to /explore/<id> with as_user + mode preserved', async () => {
     const { findByLabelText } = renderWithProviders(<ConversationsPage />);
     fireEvent.click(await findByLabelText('Open conversation: Test chat'));
-    expect(pushSpy.mock.calls[0]?.[0]).toBe('/explore/42?v=2');
+    const pushed = pushSpy.mock.calls[0]?.[0] as string;
+    expect(pushed.split('?')[0]).toBe('/explore/42');
+    const parsed = new URLSearchParams(pushed.split('?')[1] ?? '');
+    expect(parsed.get('as_user')).toBe('alice@example.com');
+    expect(parsed.get('mode')).toBe('tutorial');
   });
 
-  it('New Chat preserves v=2', async () => {
+  it('New Chat preserves as_user + mode', async () => {
     const { findByLabelText } = renderWithProviders(<ConversationsPage />);
     fireEvent.click(await findByLabelText('New chat'));
-    expect(pushSpy.mock.calls[0]?.[0]).toBe('/explore?v=2');
+    const pushed = pushSpy.mock.calls[0]?.[0] as string;
+    expect(pushed.split('?')[0]).toBe('/explore');
+    const parsed = new URLSearchParams(pushed.split('?')[1] ?? '');
+    expect(parsed.get('as_user')).toBe('alice@example.com');
+    expect(parsed.get('mode')).toBe('tutorial');
   });
 });

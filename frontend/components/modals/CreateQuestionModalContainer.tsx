@@ -2,13 +2,16 @@
 
 import { useState, useCallback, useEffect, useRef, MutableRefObject } from 'react';
 import { Box, Button, HStack, Input, Text } from '@chakra-ui/react';
+import { shallowEqual } from 'react-redux';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, clearFileChanges, createDraftFile, deleteFile } from '@/lib/file-state/file-state';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
-import { selectMergedContent, selectEffectiveName, setEphemeral } from '@/store/filesSlice';
-import { setFileEditMode } from '@/store/uiSlice';
-import { QuestionContent } from '@/lib/types';
+import { selectMergedContent, selectEffectiveName, setEphemeral, setFile, removeReferenceFromQuestion } from '@/store/filesSlice';
+import { setFileEditMode, selectFileEditMode, selectQuestionCollapsedPanel, setQuestionCollapsedPanel } from '@/store/uiSlice';
+import { selectView } from '@/store/authSlice';
+import { viewAtLeast } from '@/lib/view/view-types';
+import { QuestionContent, type DbFile } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 
 interface CreateQuestionModalContainerProps {
@@ -65,6 +68,39 @@ export default function CreateQuestionModalContainer({
 
   const mergedContent = useAppSelector(state => effectiveId ? selectMergedContent(state, effectiveId) as QuestionContent | undefined : undefined);
   const effectiveName = useAppSelector(state => effectiveId ? selectEffectiveName(state, effectiveId) || '' : '');
+
+  // --- Redux state that used to live directly inside QuestionViewV2 (a Container/View
+  // convention violation) — now read here and passed down as props. See CLAUDE.md
+  // "Component Patterns". This modal always dispatches setFileEditMode(true) below, but
+  // reads the selector back (rather than hardcoding true) to stay faithful to the exact
+  // prior behavior — false for the render before that effect fires, true afterward. ---
+  const editMode = useAppSelector(state => selectFileEditMode(state, effectiveId ?? -1));
+  const collapsedPanel = useAppSelector(selectQuestionCollapsedPanel);
+  // shallowEqual avoids re-rendering when Immer rotates the bag's top-level ref on an
+  // unrelated write.
+  const filesState = useAppSelector(state => state.files.files, shallowEqual);
+  const view = useAppSelector(selectView);
+
+  const onTogglePanel = useCallback((panel: 'none' | 'left' | 'right') => {
+    dispatch(setQuestionCollapsedPanel(panel));
+  }, [dispatch]);
+
+  const onSetFile = useCallback((referencedFile: DbFile) => {
+    dispatch(setFile({ file: referencedFile, references: [] }));
+  }, [dispatch]);
+
+  const onRemoveReference = useCallback((referencedQuestionId: number) => {
+    if (typeof effectiveId !== 'number') return;
+    dispatch(removeReferenceFromQuestion({ questionId: effectiveId, referencedQuestionId }));
+  }, [effectiveId, dispatch]);
+
+  // Embedded content view (view >= content): default the full-page split to showing
+  // the viz expanded (collapse the left/query panel) on mount.
+  useEffect(() => {
+    if (viewAtLeast(view, 'content')) {
+      dispatch(setQuestionCollapsedPanel('left'));
+    }
+  }, [view, dispatch]);
 
   // Local state
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -273,6 +309,12 @@ export default function CreateQuestionModalContainer({
           queryLoading={queryLoading}
           queryError={queryError}
           queryStale={queryStale}
+          editMode={editMode}
+          collapsedPanel={collapsedPanel}
+          onTogglePanel={onTogglePanel}
+          fileState={filesState}
+          onSetFile={onSetFile}
+          onRemoveReference={onRemoveReference}
           onChange={handleChange}
           onExecute={handleExecute}
         />
