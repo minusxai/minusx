@@ -14,7 +14,7 @@
 import { useState } from 'react';
 import { Box, HStack } from '@chakra-ui/react';
 import { LuBraces, LuCode } from 'react-icons/lu';
-import TabSwitcher from '../TabSwitcher';
+import TabSwitcher from '../selectors/TabSwitcher';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectPersistableContent } from '@/store/filesSlice';

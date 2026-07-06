@@ -14,9 +14,9 @@
  */
 import { Box, VStack, Flex, useBreakpointValue } from '@chakra-ui/react';
 import Breadcrumb from './Breadcrumb';
-import RightSidebar, { RightSidebarProps } from './RightSidebar';
-import MobileRightSidebar from './MobileRightSidebar';
-import FloatingChatWrapper from './FloatingChatWrapper';
+import RightSidebar, { RightSidebarProps } from '../app-shell/RightSidebar';
+import MobileRightSidebar from '../app-shell/MobileRightSidebar';
+import FloatingChatWrapper from '../app-shell/FloatingChatWrapper';
 import { ReactNode } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { DbFile } from '@/lib/types';

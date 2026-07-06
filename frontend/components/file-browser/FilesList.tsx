@@ -11,9 +11,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { generateFileUrl } from '@/lib/slug-utils';
 import { Link } from '@/components/ui/Link';
-import DashboardUsageBadge from './DashboardUsageBadge';
+import DashboardUsageBadge from '../banners/DashboardUsageBadge';
 import { moveFile, deleteFile, duplicateFile } from '@/lib/file-state/file-state';
-import BulkMoveFileModal from './BulkMoveFileModal';
+import BulkMoveFileModal from '../modals/BulkMoveFileModal';
 import { canDeleteFileType, canCreateFileType } from '@/lib/auth/access-rules.client';
 
 interface FilesListProps {

@@ -2,7 +2,7 @@ import React from 'react'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/helpers/render-with-providers'
-import GenericSelector from '@/components/GenericSelector'
+import GenericSelector from '@/components/selectors/GenericSelector'
 import { LuDatabase } from 'react-icons/lu'
 
 const OPTIONS = [

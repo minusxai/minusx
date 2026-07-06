@@ -41,7 +41,7 @@ vi.mock('@/components/question/QuestionVisualization', () => ({
     React.createElement('div', { 'aria-label': 'Cell results' }, JSON.stringify(data?.rows ?? null)),
 }));
 
-vi.mock('@/components/DatabaseSelector', () => ({
+vi.mock('@/components/selectors/DatabaseSelector', () => ({
   __esModule: true,
   default: ({ value }: any) =>
     React.createElement('div', { 'aria-label': 'Cell connection' }, value ?? ''),

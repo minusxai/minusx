@@ -2,13 +2,13 @@
 
 import { use, useState, useMemo } from 'react';
 import { Spinner, Center } from '@chakra-ui/react';
-import FileLayout from '@/components/FileLayout';
-import FileView from '@/components/FileView';
+import FileLayout from '@/components/file-browser/FileLayout';
+import FileView from '@/components/file-browser/FileView';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { parseFileId } from '@/lib/slug-utils';
 import { useAppSelector } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
-import FileNotFound from '@/components/FileNotFound';
+import FileNotFound from '@/components/file-browser/FileNotFound';
 import { ContextContent } from '@/lib/types';
 import { useSearchParams } from 'next/navigation';
 

@@ -15,7 +15,7 @@ vi.mock('@/components/explore/ConversationList', () => ({
   ConversationList: () => null,
 }));
 
-import Sidebar from '@/components/Sidebar';
+import Sidebar from '@/components/app-shell/Sidebar';
 
 const renderSidebar = (store: ReturnType<typeof storeModule.makeStore>) =>
   renderWithProviders(

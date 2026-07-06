@@ -3,7 +3,7 @@
 import { Box } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
 import { selectViewStack, selectViewStackDepth } from '@/store/uiSlice';
-import QuestionStackLayer from './stack-layers/QuestionStackLayer';
+import QuestionStackLayer from '../stack-layers/QuestionStackLayer';
 
 const SLIDE_IN_CSS = `
   @keyframes viewStackSlideIn {

@@ -9,11 +9,11 @@ import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin';
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { Box } from '@chakra-ui/react';
-import { MentionNode } from './lexical/MentionNode';
-import { MentionsPlugin } from './lexical/MentionsPlugin';
+import { MentionNode } from '../lexical/MentionNode';
+import { MentionsPlugin } from '../lexical/MentionsPlugin';
 import { EditorState, $getRoot, $createParagraphNode, $getSelection, $isRangeSelection, $createTextNode, COMMAND_PRIORITY_HIGH, COMMAND_PRIORITY_LOW, KEY_ENTER_COMMAND, KEY_ARROW_UP_COMMAND, KEY_ARROW_DOWN_COMMAND, PASTE_COMMAND, LexicalEditor, FOCUS_COMMAND, BLUR_COMMAND, TextNode } from 'lexical';
 import { useEffect } from 'react';
-import { $createMentionNode, MentionData as MentionNodeData } from './lexical/MentionNode';
+import { $createMentionNode, MentionData as MentionNodeData } from '../lexical/MentionNode';
 import type { ChatMentionData, DatabaseWithSchema, SkillMention, SlashCommand } from '@/lib/types';
 
 interface LexicalMentionEditorProps {

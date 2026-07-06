@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
-import SchemaTreeView, { type SchemaTreeItem } from '@/components/SchemaTreeView';
+import SchemaTreeView, { type SchemaTreeItem } from '@/components/schema-browser/SchemaTreeView';
 
 describe('SchemaTreeView', () => {
   it('renders without crashing when a table is missing its columns array', () => {

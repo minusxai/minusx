@@ -19,9 +19,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from '@chakra-ui/react';
 import NotebookCellHeader from './NotebookCellHeader';
-import SqlEditor from '@/components/SqlEditor';
-import ParameterRow from '@/components/ParameterRow';
-import DatabaseSelector from '@/components/DatabaseSelector';
+import SqlEditor from '@/components/query-builder/SqlEditor';
+import ParameterRow from '@/components/params/ParameterRow';
+import DatabaseSelector from '@/components/selectors/DatabaseSelector';
 import { QuestionVisualization } from '@/components/question/QuestionVisualization';
 import { VizTypeSelector } from '@/components/question/VizTypeSelector';
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';

@@ -9,9 +9,9 @@ import { ReactNode, useMemo, useState, useEffect } from 'react';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import ImpersonationSelector from './ImpersonationSelector';
+import ImpersonationSelector from '../selectors/ImpersonationSelector';
 import CreateMenu from './CreateMenu';
-import { CreditsUsageBars } from './settings/CreditsCard';
+import { CreditsUsageBars } from '../settings/CreditsCard';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { toggleLeftSidebar, selectDevMode, setDevMode, selectShowAdvanced, toggleColorMode } from '@/store/uiSlice';
@@ -21,7 +21,7 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { selectConfig } from '@/store/configsSlice';
 import { analytics, AnalyticsEvents } from '@/lib/analytics';
 import { switchMode } from '@/lib/mode/mode-utils';
-import { ConversationList } from './explore/ConversationList';
+import { ConversationList } from '../explore/ConversationList';
 
 interface NavItemProps {
   href: string;

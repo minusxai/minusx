@@ -18,7 +18,7 @@ import type { FileViewMode } from '@/lib/ui/fileComponents';
 import { LuBell, LuCirclePause, LuExternalLink, LuMail, LuMessageCircle, LuSettings } from 'react-icons/lu';
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
-import DatePicker from '@/components/DatePicker';
+import DatePicker from '@/components/selectors/DatePicker';
 
 /* ------------------------------------------------------------------ */
 /*  Shared sub-components                                              */

@@ -9,8 +9,8 @@ import { FileType } from '@/lib/types';
 import { deleteFile, duplicateFile } from '@/lib/file-state/file-state';
 import { useAppSelector } from '@/store/hooks';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import MoveFileModal from './MoveFileModal';
-import ShareModal from './share/ShareModal';
+import MoveFileModal from '../modals/MoveFileModal';
+import ShareModal from '../share/ShareModal';
 
 interface FileActionMenuProps {
   fileId: number;

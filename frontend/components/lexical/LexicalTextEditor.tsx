@@ -65,7 +65,7 @@ import { useAppSelector } from '@/store/hooks';
 import type { DatabaseWithSchema, MetricDef } from '@/lib/types';
 import { $createImageNode } from './ImageNode';
 import { $createMetricNode } from './MetricNode';
-import { MentionsPlugin } from '@/components/chat/lexical/MentionsPlugin';
+import { MentionsPlugin } from './MentionsPlugin';
 import { DOCS_TRANSFORMERS, DOCS_NODES } from './docs-transformers';
 import { InsertMenuPlugin } from './InsertMenuPlugin';
 import { EditSelectionPlugin } from './EditSelectionPlugin';

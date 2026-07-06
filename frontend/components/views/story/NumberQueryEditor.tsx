@@ -9,7 +9,7 @@
  */
 import { useState } from 'react';
 import { Dialog, Portal, Box, Button, HStack } from '@chakra-ui/react';
-import SqlEditor from '@/components/SqlEditor';
+import SqlEditor from '@/components/query-builder/SqlEditor';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { useConnections } from '@/lib/hooks/useConnections';
 import type { NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';

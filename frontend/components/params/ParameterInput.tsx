@@ -12,9 +12,9 @@ import { QuestionParameter, QuestionContent } from '@/lib/types';
 import type { QuestionParameterSource, SqlParameterSource } from '@/lib/validation/atlas-schemas';
 import { getTypeColor, getTypeIcon } from '@/lib/sql/param-type-display';
 import { getParameterDisplayName, generateLabel } from '@/lib/sql/sql-params';
-import DatePicker from './DatePicker';
+import DatePicker from '../selectors/DatePicker';
 import { useFile, useFilesByCriteria, useQueryResult } from '@/lib/hooks/file-state-hooks';
-import FileSearchSelect from './shared/FileSearchSelect';
+import FileSearchSelect from '../shared/FileSearchSelect';
 
 const ROW_H = '32px';
 

@@ -23,7 +23,7 @@ vi.mock('@/lib/ui/fileComponents', async (orig) => {
   };
 });
 
-import FileView from '@/components/FileView';
+import FileView from '@/components/file-browser/FileView';
 
 const FILE_ID = 7777;
 

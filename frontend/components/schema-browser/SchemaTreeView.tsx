@@ -5,8 +5,8 @@ import { Box, VStack, HStack, Text, Icon, Collapsible, IconButton, Input } from 
 import { Tooltip } from '@/components/ui/tooltip';
 import { LuTable, LuChevronRight, LuChevronDown, LuColumns3, LuSearch, LuX, LuDatabase, LuEye, LuRefreshCw } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
-import ChildPathSelector from './ChildPathSelector';
-import TableMetricsEditor from './context/TableMetricsEditor';
+import ChildPathSelector from '../selectors/ChildPathSelector';
+import TableMetricsEditor from '../context/TableMetricsEditor';
 import type { TableAnnotation, MetricDef } from '@/lib/types';
 
 /**

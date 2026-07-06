@@ -8,20 +8,20 @@ import { setRightSidebarCollapsed, setRightSidebarWidth, setActiveSidebarSection
 import { IS_DEV } from '@/lib/constants';
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from '@/store/store';
-import QuestionSchemaSection from './QuestionSchemaSection';
+import QuestionSchemaSection from '../question/QuestionSchemaSection';
 import { FileType, DatabaseWithSchema, type ResolvedContextDocs } from '@/lib/types';
-import SchemaTreeView from './SchemaTreeView';
-import Markdown from './Markdown';
-import ChatInterface from './explore/ChatInterface';
-import DevToolsPanel from './DevToolsPanel';
+import SchemaTreeView from '../schema-browser/SchemaTreeView';
+import Markdown from '../Markdown';
+import ChatInterface from '../explore/ChatInterface';
+import DevToolsPanel from '../dev/DevToolsPanel';
 
 import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import type { Mode } from '@/lib/mode/mode-types';
-import { Tooltip } from './ui/tooltip';
+import { Tooltip } from '../ui/tooltip';
 import { useContext } from '@/lib/hooks/useContext';
 import { formatContextDocsSection } from '@/lib/sql/context-docs';
 import { useAppState } from '@/lib/hooks/file-state-hooks';
-import { ContextSelector } from './explore/ContextSelector';
+import { ContextSelector } from '../explore/ContextSelector';
 import { selectActiveConversation, selectConversation } from '@/store/chatSlice';
 import { getSidebarSection, SidebarSectionMetadata } from '@/lib/ui/sidebar-sections';
 

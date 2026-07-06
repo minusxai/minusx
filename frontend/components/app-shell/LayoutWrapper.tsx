@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import Sidebar from './Sidebar';
 import MobileBottomNav from './MobileBottomNav';
-import DataPrepBanner from './DataPrepBanner';
+import DataPrepBanner from '../banners/DataPrepBanner';
 import { RecordingProvider } from '@/lib/hooks/useRecordingContext';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { endNavigation } from '@/lib/navigation/nav-progress';

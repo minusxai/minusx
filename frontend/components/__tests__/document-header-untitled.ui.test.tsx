@@ -2,7 +2,7 @@
 // "Untitled <Type>" so a nameless file is still recognizable (consistent with list views).
 import { describe, it, expect, vi } from 'vitest';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
-import DocumentHeader, { type DocumentHeaderProps } from '@/components/DocumentHeader';
+import DocumentHeader, { type DocumentHeaderProps } from '@/components/file-browser/DocumentHeader';
 
 function baseProps(overrides: Partial<DocumentHeaderProps> = {}): DocumentHeaderProps {
   return {

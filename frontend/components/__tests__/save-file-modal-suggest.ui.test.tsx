@@ -18,7 +18,7 @@ vi.mock('@/lib/hooks/file-state-hooks', () => ({
   useFilesByCriteria: () => ({ files: [] }),
 }));
 
-import SaveFileModal from '@/components/SaveFileModal';
+import SaveFileModal from '@/components/modals/SaveFileModal';
 import { runMicroTaskClient, buildFileMicroInput } from '@/lib/tools/micro-task';
 
 describe('SaveFileModal suggest name', () => {

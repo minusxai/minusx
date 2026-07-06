@@ -3,7 +3,7 @@
 import { Box, VStack, HStack, Badge, Text } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
 import { selectFile } from '@/store/filesSlice';
-import JsonViewer from '@/components/JsonViewer';
+import JsonViewer from '@/components/dev/JsonViewer';
 import { ConversationFileContent } from '@/lib/types';
 import { FileComponentProps } from '@/lib/ui/fileComponents';
 

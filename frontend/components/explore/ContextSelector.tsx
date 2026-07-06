@@ -7,7 +7,7 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { LuNotebookText } from 'react-icons/lu';
 import { memo, useEffect, useMemo } from 'react';
 import { ContextContent } from '@/lib/types';
-import GenericSelector, { SelectorOption } from '@/components/GenericSelector';
+import GenericSelector, { SelectorOption } from '@/components/selectors/GenericSelector';
 import { useContexts } from '@/lib/hooks/useContexts';
 import { useStableCallback, shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 

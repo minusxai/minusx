@@ -20,9 +20,9 @@ import { selectView } from '@/store/authSlice';
 import { selectFileViewMode } from '@/store/uiSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
 import FileHeader from './FileHeader';
-import CodeView from './views/CodeView';
-import { FileToolbarProvider } from './file-toolbar/FileToolbarContext';
-import { PresentationProvider } from './file-toolbar/PresentationContext';
+import CodeView from '../views/CodeView';
+import { FileToolbarProvider } from '../file-toolbar/FileToolbarContext';
+import { PresentationProvider } from '../file-toolbar/PresentationContext';
 
 export interface FileViewProps {
   fileId: FileId;

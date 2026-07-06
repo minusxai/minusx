@@ -22,7 +22,7 @@ import {
 } from '@/store/uiSlice';
 import { editFile } from '@/lib/file-state/file-state';
 import { runMicroTaskClient, buildFileMicroInput } from '@/lib/tools/micro-task';
-import { toaster } from './ui/toaster';
+import { toaster } from '../ui/toaster';
 import { isUserFacingError } from '@/lib/errors';
 import { redirectAfterSave, hasGeneratableContent } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -33,11 +33,11 @@ import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { useSaveDecision } from '@/lib/hooks/file-state-hooks';
 import DocumentHeader from './DocumentHeader';
 import { FileHealthBadge } from './FileHealthPanel';
-import PublishModal from './PublishModal';
-import SaveFileModal from './SaveFileModal';
-import { useFileToolbar } from './file-toolbar/FileToolbarContext';
-import { usePresentation } from './file-toolbar/PresentationContext';
-import { Tooltip } from './ui/tooltip';
+import PublishModal from '../modals/PublishModal';
+import SaveFileModal from '../modals/SaveFileModal';
+import { useFileToolbar } from '../file-toolbar/FileToolbarContext';
+import { usePresentation } from '../file-toolbar/PresentationContext';
+import { Tooltip } from '../ui/tooltip';
 
 // File types whose content reads well fullscreen — the generic Present toggle is
 // offered for these. Individual views adapt their own layout via usePresentation().

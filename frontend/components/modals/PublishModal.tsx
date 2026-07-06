@@ -30,7 +30,7 @@ import { Dialog } from '@chakra-ui/react';
 import { LuSave, LuUndo2, LuX, LuCheck, LuPanelLeftClose, LuPanelLeftOpen, LuCode, LuEye } from 'react-icons/lu';
 import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
-import FileView from '@/components/FileView';
+import FileView from '@/components/file-browser/FileView';
 import { publishAll, discardAll, editFile } from '@/lib/file-state/file-state';
 import { setFileEditMode } from '@/store/uiSlice';
 import { selectFile, selectEffectiveName } from '@/store/filesSlice';

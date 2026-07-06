@@ -17,7 +17,7 @@ import { NextRequest } from 'next/server';
 import * as storeModule from '@/store/store';
 import { setFile } from '@/store/filesSlice';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
-import FilesList from '@/components/FilesList';
+import FilesList from '@/components/file-browser/FilesList';
 
 import { setupTestDb } from '@/test/harness/test-db';
 import { getTestDbPath } from '@/store/__tests__/test-utils';

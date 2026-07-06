@@ -9,9 +9,9 @@ import type { TestSubject } from '@/lib/types';
 import { connectionTypeToDialect } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
-import DatabaseSelector from '@/components/DatabaseSelector';
+import DatabaseSelector from '@/components/selectors/DatabaseSelector';
 import { QueryModeSelector, QueryBuilderRoot, type QueryTab } from '@/components/query-builder';
-import SqlEditor from '@/components/SqlEditor';
+import SqlEditor from '@/components/query-builder/SqlEditor';
 import SimpleSelect from './SimpleSelect';
 
 interface TestSubjectEditorProps {

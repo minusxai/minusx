@@ -23,7 +23,7 @@ import { clearFileChanges } from '@/lib/file-state/file-state';
 import { selectDirtyFiles } from '@/store/filesSlice';
 import { selectUnrestrictedMode } from '@/store/uiSlice';
 import { getStore } from '@/store/store';
-import PublishModal from '@/components/PublishModal';
+import PublishModal from '@/components/modals/PublishModal';
 
 /**
  * Extract file ID from pathname

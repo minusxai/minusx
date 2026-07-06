@@ -29,7 +29,7 @@ import {
   appStateShotKey,
 } from '@/lib/screenshot/app-state-screenshot';
 import ExampleQuestions from './message/ExampleQuestions';
-import FileNotFound from '../FileNotFound';
+import FileNotFound from '../file-browser/FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
 

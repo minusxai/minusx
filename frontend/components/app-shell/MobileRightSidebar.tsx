@@ -5,14 +5,14 @@ import { Box, VStack, HStack, Text, Icon, Dialog, Portal } from '@chakra-ui/reac
 import { LuX, LuMove } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSidebarSection } from '@/store/uiSlice';
-import SchemaTreeView from './SchemaTreeView';
-import Markdown from './Markdown';
-import ChatInterface from './explore/ChatInterface';
-import AppStateViewer from './AppStateViewer';
+import SchemaTreeView from '../schema-browser/SchemaTreeView';
+import Markdown from '../Markdown';
+import ChatInterface from '../explore/ChatInterface';
+import AppStateViewer from '../dev/AppStateViewer';
 import { useContext } from '@/lib/hooks/useContext';
 import { formatContextDocsSection } from '@/lib/sql/context-docs';
 import { useAppState } from '@/lib/hooks/file-state-hooks';
-import { ContextSelector } from './explore/ContextSelector';
+import { ContextSelector } from '../explore/ContextSelector';
 import { selectActiveConversation } from '@/store/chatSlice';
 import { getSidebarSection, SidebarSectionMetadata } from '@/lib/ui/sidebar-sections';
 

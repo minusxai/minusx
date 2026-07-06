@@ -6,7 +6,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { switchMode } from '@/lib/mode/mode-utils';
 import { useConfigs } from '@/lib/hooks/useConfigs';
-import FileSearchBar from './FileSearchBar';
+import FileSearchBar from '../file-browser/FileSearchBar';
 
 const containerQueryStyles = `
   .demo-description {

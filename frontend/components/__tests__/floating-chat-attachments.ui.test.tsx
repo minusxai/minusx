@@ -23,7 +23,7 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
 import { selectChatAttachments } from '@/store/uiSlice';
-import FloatingChatWrapper from '@/components/FloatingChatWrapper';
+import FloatingChatWrapper from '@/components/app-shell/FloatingChatWrapper';
 
 describe('FloatingChatWrapper: attachment hand-off to the sidebar chat', () => {
   it('preserves dropped attachments through clearChat when starting a chat', async () => {

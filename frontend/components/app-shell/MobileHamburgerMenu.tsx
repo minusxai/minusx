@@ -4,7 +4,7 @@ import { Box, Flex, HStack, Icon, Text, VStack } from '@chakra-ui/react';
 import { LuLogOut, LuSettings } from 'react-icons/lu';
 import { signOut } from 'next-auth/react';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
-import ImpersonationSelector from './ImpersonationSelector';
+import ImpersonationSelector from '../selectors/ImpersonationSelector';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser, selectCompanyName } from '@/store/authSlice';
 import { APP_VERSION } from '@/lib/constants';

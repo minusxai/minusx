@@ -29,12 +29,12 @@ vi.mock('@/lib/navigation/use-navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock('@/components/Sidebar', () => ({
+vi.mock('@/components/app-shell/Sidebar', () => ({
   __esModule: true,
   default: () => null,
 }));
 
-vi.mock('@/components/MobileBottomNav', () => ({
+vi.mock('@/components/app-shell/MobileBottomNav', () => ({
   __esModule: true,
   default: () => null,
 }));
@@ -83,9 +83,9 @@ import { encodeFileStr } from '@/lib/chat/file-encoding';
 import type { DbFile, ToolCall, ToolMessage, CompletedToolCall, EditFileDetails } from '@/lib/types';
 
 import EditFileDisplay from '@/components/explore/tools/EditFileDisplay';
-import FilesList from '@/components/FilesList';
-import ViewStackOverlay from '@/components/ViewStack';
-import LayoutWrapper from '@/components/LayoutWrapper';
+import FilesList from '@/components/file-browser/FilesList';
+import ViewStackOverlay from '@/components/file-browser/ViewStack';
+import LayoutWrapper from '@/components/app-shell/LayoutWrapper';
 import ChatInterface from '@/components/explore/ChatInterface';
 
 // ─── EditFileDisplay restore buttons ─────────────────────────────────────────

@@ -18,7 +18,7 @@ import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { isViewer } from '@/lib/auth/role-helpers';
 import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
-import NewFolderModal from './NewFolderModal';
+import NewFolderModal from '../modals/NewFolderModal';
 
 // Static _hover style presets hoisted to module scope so they don't get a
 // fresh identity on every render (flagged in the perf trace).

@@ -7,8 +7,8 @@ import { useCallback, useState } from 'react';
 import { LuSearch, LuPlus } from 'react-icons/lu';
 import type { ConversationSummary } from '@/app/api/conversations/route';
 import { useConversationsList } from '@/lib/hooks/useConversationsList';
-import { InfiniteScrollSentinel } from '@/components/InfiniteScrollSentinel';
-import Breadcrumb from '@/components/Breadcrumb';
+import { InfiniteScrollSentinel } from '@/components/file-browser/InfiniteScrollSentinel';
+import Breadcrumb from '@/components/file-browser/Breadcrumb';
 
 function getRelativeTime(timestamp: string) {
   const date = new Date(timestamp);

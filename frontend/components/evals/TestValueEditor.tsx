@@ -7,7 +7,7 @@ import {
 import { useState, useMemo } from 'react';
 import type { TestAnswerType, TestValue } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
-import DatabaseSelector from '@/components/DatabaseSelector';
+import DatabaseSelector from '@/components/selectors/DatabaseSelector';
 import SimpleSelect from './SimpleSelect';
 
 function QuestionPicker({

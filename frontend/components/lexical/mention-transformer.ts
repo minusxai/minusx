@@ -19,7 +19,7 @@ import {
   $createMentionNode,
   $isMentionNode,
   type MentionData,
-} from '@/components/chat/lexical/MentionNode';
+} from './MentionNode';
 
 export const MENTION: TextMatchTransformer = {
   dependencies: [MentionNode],

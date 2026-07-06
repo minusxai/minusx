@@ -27,7 +27,7 @@ import type { IconType } from 'react-icons';
 import { useFolder } from '@/lib/hooks/file-state-hooks';
 import FilesList from './FilesList';
 import GettingStartedSection from './GettingStartedSection';
-import CreateMenu from './CreateMenu';
+import CreateMenu from '../app-shell/CreateMenu';
 import type { FileType } from '@/lib/types';
 import type { ReactNode } from 'react';
 import { useAppSelector } from '@/store/hooks';

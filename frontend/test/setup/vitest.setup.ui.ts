@@ -123,7 +123,7 @@ vi.mock('@/components/chat/LexicalMentionEditor', () => {
 // aria-label selectors on the real FileHeader; the modal content itself is
 // outside scope for UI unit tests.
 // ---------------------------------------------------------------------------
-vi.mock('@/components/PublishModal', () => {
+vi.mock('@/components/modals/PublishModal', () => {
   const React = require('react');
   return {
     __esModule: true,

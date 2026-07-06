@@ -5,9 +5,9 @@ import { Box, Portal } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setSidebarPendingSlashCommand, setActiveSidebarSection, addChatAttachment } from '@/store/uiSlice';
 import { useContext } from '@/lib/hooks/useContext';
-import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './explore/slash-commands';
+import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from '../explore/slash-commands';
 import { selectDatabase } from '@/lib/utils/database-selector';
-import ChatInput from './explore/ChatInput';
+import ChatInput from '../explore/ChatInput';
 import type { Attachment, SlashCommand } from '@/lib/types';
 import type { AppState } from '@/lib/appState';
 

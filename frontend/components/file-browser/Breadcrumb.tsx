@@ -9,10 +9,10 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
-import DemoModeBanner from '@/components/DemoModeBanner';
+import DemoModeBanner from '@/components/banners/DemoModeBanner';
 import FileSearchBar from './FileSearchBar';
 import { useSaveDecision } from '@/lib/hooks/file-state-hooks';
-import PublishModal from './PublishModal';
+import PublishModal from '../modals/PublishModal';
 
 interface BreadcrumbItem {
   label: string;

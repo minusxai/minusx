@@ -10,7 +10,7 @@ import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 
 const sqlEditorProps: Array<Record<string, unknown>> = [];
-vi.mock('@/components/SqlEditor', () => ({
+vi.mock('@/components/query-builder/SqlEditor', () => ({
   __esModule: true,
   default: (props: { value: string; onChange?: (v: string) => void }) => {
     sqlEditorProps.push(props);

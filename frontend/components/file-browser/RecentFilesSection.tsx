@@ -10,7 +10,7 @@ import { generateFileUrl } from '@/lib/slug-utils';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectHomePage, setSidebarPendingMessage, setActiveSidebarSection, setRightSidebarCollapsed } from '@/store/uiSlice';
-import { useClearChat } from './explore/slash-commands';
+import { useClearChat } from '../explore/slash-commands';
 import { readFiles } from '@/lib/file-state/file-state';
 import { compressAugmentedFile } from '@/lib/chat/compress-augmented';
 import { appStateForLlm, type AppState } from '@/lib/appState';

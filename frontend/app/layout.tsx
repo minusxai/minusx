@@ -3,8 +3,8 @@ import { cache } from "react";
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import "./globals.css";
-import { Providers } from "@/components/Providers";
-import LayoutWrapper from "@/components/LayoutWrapper";
+import { Providers } from "@/components/app-shell/Providers";
+import LayoutWrapper from "@/components/app-shell/LayoutWrapper";
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { E2E_HEADER } from '@/lib/auth/e2e-runtime';
@@ -13,9 +13,9 @@ import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, getBrandTagline } from '@/li
 import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES, QUERY_TIMEOUT_MS, CREDITS_ENABLED } from '@/lib/config';
 import { parseAnalyticsConfig } from '@/lib/constants';
 import type { AnalyticsConfig } from '@/lib/analytics/types';
-import { GlobalErrorHandler } from '@/components/ErrorHandler';
+import { GlobalErrorHandler } from '@/components/app-shell/ErrorHandler';
 import { Toaster } from '@/components/ui/toaster';
-import ImageLightbox from '@/components/ImageLightbox';
+import ImageLightbox from '@/components/ui/ImageLightbox';
 import FileModal from '@/components/modals/FileModal';
 
 const getEffectiveUserCached = cache(() => getEffectiveUser().catch(() => null));

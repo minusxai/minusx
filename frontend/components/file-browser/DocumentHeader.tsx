@@ -14,10 +14,10 @@ import {
 import { Tooltip } from '@/components/ui/tooltip';
 import { LuSave, LuPencil, LuTriangleAlert, LuCircleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
-import TabSwitcher from './TabSwitcher';
+import TabSwitcher from '../selectors/TabSwitcher';
 import FileTypeBadge from './FileTypeBadge';
-import ExplainButton from '@/components/ExplainButton';
-import { GenerateButton } from './ui/GenerateButton';
+import ExplainButton from '@/components/question/ExplainButton';
+import { GenerateButton } from '../ui/GenerateButton';
 import { useAppSelector } from '@/store/hooks';
 
 const pulseAnimation = `

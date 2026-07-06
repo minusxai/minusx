@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { LuLogIn, LuBuilding2 } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Dither } from '@/components/Dither';
+import { Dither } from '@/components/ui/Dither';
 import { ColorModeSwitch } from '@/components/ui/color-mode';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { OrgConfig } from '@/lib/branding/whitelabel';

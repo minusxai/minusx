@@ -7,7 +7,7 @@ import type { MessageWithFlags } from '../message/messageHelpers';
 import type { QuestionContent, QueryResult, ExecuteQueryDetails } from '@/lib/types';
 import { contentToDetails } from '@/lib/types';
 import { QuestionVisualization } from '@/components/question/QuestionVisualization';
-import SqlEditor from '@/components/SqlEditor';
+import SqlEditor from '@/components/query-builder/SqlEditor';
 import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import { connectionTypeToDialect } from '@/lib/utils/connection-dialect';
 import { useGuiCompat } from '@/lib/hooks/use-gui-compat';

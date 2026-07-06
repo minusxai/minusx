@@ -28,7 +28,7 @@ import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
 import { useAppSelector } from '@/store/hooks';
 import LexicalTextEditor, { LexicalTextViewer, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
-import ChildPathSelector from '../ChildPathSelector';
+import ChildPathSelector from '../selectors/ChildPathSelector';
 import { GenerateButton } from '@/components/ui/GenerateButton';
 import { runMicroTaskClient } from '@/lib/tools/micro-task';
 

@@ -5,7 +5,7 @@ import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
 } from '@lexical/markdown';
-import { $isMentionNode } from '@/components/chat/lexical/MentionNode';
+import { $isMentionNode } from '../MentionNode';
 import type { ChatMentionData } from '@/lib/types';
 import { DOCS_TRANSFORMERS, DOCS_NODES } from '../docs-transformers';
 

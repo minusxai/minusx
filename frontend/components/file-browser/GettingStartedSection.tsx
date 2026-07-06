@@ -34,7 +34,7 @@ import {
   setActiveSidebarSection,
   setRightSidebarCollapsed
 } from '@/store/uiSlice';
-import { useClearChat } from './explore/slash-commands';
+import { useClearChat } from '../explore/slash-commands';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { switchMode } from '@/lib/mode/mode-utils';
 

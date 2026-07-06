@@ -361,6 +361,18 @@ Do this **after** M1–M6 are complete and green, and **before** M8 (docs), so t
 
 ---
 
+## Pre-existing CodeQL findings surfaced during this PR (not caused by the refactor, left untouched by owner decision)
+
+GitHub's CodeQL check on PR #567 flags 3 "new" alerts. All three are **confirmed pre-existing** — verified byte-for-byte identical against `main` before any milestone touched them (`git show main:<path>` matches exactly). CodeQL's own annotation explains the misattribution: *"Alerts not introduced by this pull request might have been detected because the code changes were too large"* — likely compounded by two of the three files being renamed (M2), which can confuse GitHub's novelty-tracking for code-scanning diffs.
+
+- **`lib/chat/orchestration-core.server.ts` (agent dispatch, "unvalidated dynamic method call")** — `ROOT_AGENT_BY_NAME.get(body.agent)` looks up a fixed, developer-defined `ReadonlyMap` of agent classes by a user-controlled key, falling back to `WebAnalystAgent` on a miss. This is a standard, safe allowlist-dispatch idiom (`Map.get()` cannot escape its fixed key-space) — assessed as a likely CodeQL false positive.
+- **`lib/database/user-db.ts:28` ("polynomial regex on uncontrolled data")** — `home_folder.replace(/^\/+|\/+$/g, '')`. The pattern has no catastrophic-backtracking shape (no nested/overlapping quantifiers), so real exploitability is doubtful, but it would be a trivial, zero-risk rewrite without regex.
+- **`lib/evals/index.ts:98` ("regex injection")** — `new RegExp(e).test(a)` where `e` is a user-authored test-assertion pattern (already length-capped at 100 chars). This is an intentional "regex-match" feature for eval/test specs, reachable only by users who already have write access to their own org's alerts/jobs (not an anonymous-attacker surface) — real but narrow, no complexity guard against a pathological pattern today.
+
+**Decision (owner, 2026-07-06): leave all three untouched in this PR.** None were introduced by the refactor; fixing them is out of scope for a reorg PR. Recorded here for separate triage — a future PR should either dismiss the two likely-false-positives on GitHub with justification, or hardening-fix the `lib/evals/index.ts` regex construction (e.g. a nested-quantifier complexity guard) and simplify the `user-db.ts` slash-trim to avoid the regex entirely.
+
+---
+
 ## Completion checklist
 
 - [ ] All milestones (0–8) complete or explicitly annotated as blocked with a reason; `npm run knip` ≈ clean against the M0 config
