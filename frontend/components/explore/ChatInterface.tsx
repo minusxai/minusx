@@ -13,7 +13,7 @@ import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector, useAppStore } from '@/store/hooks';
-import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setActiveConversation, setConversationTitle, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
+import { createConversation, sendMessage, retryConversationTurn, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setActiveConversation, setConversationTitle, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { ConversationsAPI } from '@/lib/data/conversations';
 import { useUseChatV2, isLegacyChatInV2 } from '@/lib/chat-v2/use-chat-v2';
@@ -468,24 +468,6 @@ export default function ChatInterface({
     );
   }, [conversation?.pending_tool_calls]);
 
-  // Extract warning_type from the last agent result after the last user message
-  const warningType = useMemo(() => {
-    if (conversation?.executionState !== 'FINISHED') return null;
-    const msgs = conversation.messages;
-    const lastUserIdx = msgs.reduce((last, m, i) => m.role === 'user' ? i : last, -1);
-    if (lastUserIdx < 0) return null;
-    const agentResult = msgs.slice(lastUserIdx + 1).findLast(m => {
-      const tc = m as import('@/store/chatSlice').CompletedToolCall;
-      return tc.function?.name === conversation.agent;
-    }) as import('@/store/chatSlice').CompletedToolCall | undefined;
-    if (!agentResult) return null;
-    const c = agentResult.content;
-    if (typeof c === 'object' && c !== null) {
-      return (c as Record<string, unknown>).warning_type as string ?? null;
-    }
-    return null;
-  }, [conversation?.executionState, conversation?.messages, conversation?.agent]);
-
   // Warn near the model's context window. The whole conversation (system + skills + the full
   // append-only log + app state) is re-sent on every LLM call, so `total_tokens` is the size of the
   // entire conversation at that point. The chat models in use are ~200k–400k window
@@ -511,6 +493,10 @@ export default function ChatInterface({
   const [localError, setLocalError] = useState<LoadError | null>(null);
   // Only show runtime/execution errors here (not loadError - that's shown in dedicated section above)
   const error = conversation?.error || localError;
+  // A terminal error (context-length, auth, malformed request) would deterministically re-fail on a
+  // retry, so we hide "Try again" and steer to a fresh chat. Transient (and any local/load error) →
+  // offer a clean replay. `errorRetryability` is only set for conversation runtime errors.
+  const isTerminalError = conversation?.error != null && conversation.errorRetryability === 'terminal';
   const [contextSizePanel, setContextSizePanel] = useState<ContextSizePanelState | null>(null);
   const contextSizeAbortRef = useRef<AbortController | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -1223,48 +1209,29 @@ export default function ChatInterface({
             </GridItem></Grid>
           )}
 
-          {/* Error Display */}
+          {/* Error Display. Terminal errors (context-length, auth, malformed) can't be retried — an
+              identical re-run re-fails — so we steer to a fresh chat instead of "Try again". Transient
+              (and local/load) errors offer a clean replay of the failed turn (no "Continue" bubble). */}
           {error && (() => {
+            const message = isTerminalError
+              ? "This conversation can't continue — it may have grown too long or hit a limit. Start a new chat to keep going."
+              : (devMode ? (typeof error === 'string' ? error : error?.message || 'An error occurred') : 'An error occurred');
             return (
               <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
                 <GridItem colSpan={colSpan} colStart={colStart}>
-                  <Box p={3} bg="accent.danger/10" borderLeft="3px solid" borderColor="accent.danger" borderRadius="md">
-                    <Text color="accent.danger" fontSize="sm" fontFamily="mono">
-                      {devMode
-                        ? (typeof error === 'string' ? error : error?.message || 'An error occurred')
-                        : 'An error occurred'}
-                    </Text>
-                    {conversationID && (
+                  <Box p={3} bg="accent.danger/10" border="1px solid" borderColor="accent.danger/20" borderRadius="md">
+                    <Text color="accent.danger" fontSize="sm" fontFamily="mono">{message}</Text>
+                    {isTerminalError ? (
+                      <Button mt={2} size="xs" variant="outline" colorPalette="red" aria-label="Start a new chat"
+                        onClick={handleNewChat}>
+                        <Icon as={LuPlus} boxSize={4} mr={1} />Start a new chat
+                      </Button>
+                    ) : conversationID ? (
                       <Button mt={2} size="xs" variant="outline" colorPalette="red" aria-label="Try again"
-                        onClick={() => dispatch(sendMessage({ conversationID, message: 'Continue' }))}>
+                        onClick={() => dispatch(retryConversationTurn({ conversationID }))}>
                         Try again
                       </Button>
-                    )}
-                  </Box>
-                </GridItem>
-              </Grid>
-            );
-          })()}
-
-          {/* Warning Display (backend-signalled warnings e.g. context_length, max_iterations) */}
-          {warningType && (() => {
-            const WARNING_CONFIG: Record<string, { msg: string; label: string; cta: string }> = {
-              context_length: { msg: 'The output was too long. Do you want to continue?', label: 'Continue', cta: 'Continue with the previous request. Break the previous request down and proceed part by part and not all at once' },
-              max_iterations: { msg: 'Maximum steps reached. Please try a simpler request.', label: 'Try again', cta: 'Try again' },
-            };
-            const cfg = WARNING_CONFIG[warningType];
-            if (!cfg) return null;
-            return (
-              <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
-                <GridItem colSpan={colSpan} colStart={colStart}>
-                  <Box p={3} bg="accent.warning/10" borderLeft="3px solid" borderColor="accent.warning" borderRadius="md">
-                    <Text color="accent.warning" fontSize="sm" fontFamily="mono">{cfg.msg}</Text>
-                    {conversationID && (
-                      <Button mt={2} size="xs" variant="outline" colorPalette="yellow" aria-label={cfg.label}
-                        onClick={() => dispatch(sendMessage({ conversationID, message: cfg.cta }))}>
-                        {cfg.label}
-                      </Button>
-                    )}
+                    ) : null}
                   </Box>
                 </GridItem>
               </Grid>

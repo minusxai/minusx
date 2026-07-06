@@ -14,6 +14,12 @@ export interface V3TurnInput {
   completedToolCalls?: unknown[];
   agent?: string;
   agentArgs?: Record<string, unknown>;
+  // MANUAL "Try again" on a transient error: re-run the failed turn server-side by rolling back its
+  // partial rows and replaying the preserved user message (no userMessage/completedToolCalls needed,
+  // no "Continue" bubble). `manualRetry` additionally resets the auto-retry budget so a user's click
+  // is never blocked by the crash-auto-retry cap. Distinct from the SILENT crash auto-retry below.
+  autoRetry?: boolean;
+  manualRetry?: boolean;
 }
 
 export interface V3StreamCallbacks {
@@ -168,6 +174,7 @@ async function startAndStream(
     signal,
     body: JSON.stringify({
       ...(autoRetry ? { autoRetry: true } : {}),
+      ...(turn.manualRetry ? { manualRetry: true } : {}),
       ...(turn.userMessage != null ? { userMessage: turn.userMessage } : {}),
       ...(turn.completedToolCalls ? { completedToolCalls: turn.completedToolCalls } : {}),
       ...(turn.agent ? { agent: turn.agent } : {}),
@@ -221,7 +228,7 @@ export async function runV3Turn(
   signal: AbortSignal,
   cb: V3StreamCallbacks,
 ): Promise<V3TurnResult> {
-  let result = await startAndStream(conversationId, sinceLogIndex, turn, false, signal, cb);
+  let result = await startAndStream(conversationId, sinceLogIndex, turn, turn.autoRetry ?? false, signal, cb);
   for (let retry = 0; result.status === 'error' && result.retryable && retry < MAX_CLIENT_AUTO_RETRIES; retry++) {
     if (signal.aborted) break;
     // Replay server-side from the preserved log (no userMessage). Re-stream from the same point.
