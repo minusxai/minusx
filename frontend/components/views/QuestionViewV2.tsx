@@ -551,6 +551,8 @@ export default function QuestionViewV2({
               justifyContent="center"
               cursor="pointer"
               onClick={() => toggleCollapsedPanel('none')}
+              aria-label="Expand query panel"
+              role="button"
               _hover={{ bg: 'accent.teal/50' }}
               my={2}
               borderRadius="lg"
@@ -633,6 +635,7 @@ export default function QuestionViewV2({
                       cursor="pointer"
                       _hover={{ opacity: 0.85 }}
                       onClick={() => setSqlPreviewId(isSelected ? null : ref.id)}
+                      aria-label={`Reference: ${ref.alias}`}
                     >
                       <Code fontSize="xs" color="accent.secondary" bg="transparent" fontWeight="600">
                         @{ref.alias}
@@ -807,6 +810,8 @@ export default function QuestionViewV2({
                   borderRadius="sm"
                   onClick={() => toggleCollapsedPanel('left')}
                   onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                  aria-label="Collapse query panel"
+                  role="button"
                   _hover={{ opacity: 0.7 }}
                 >
                   <Box
@@ -829,6 +834,8 @@ export default function QuestionViewV2({
                   borderRadius="sm"
                   onClick={() => toggleCollapsedPanel('right')}
                   onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                  aria-label="Collapse results panel"
+                  role="button"
                   _hover={{ opacity: 0.7 }}
                 >
                   <Box
@@ -856,6 +863,8 @@ export default function QuestionViewV2({
               justifyContent="center"
               cursor="pointer"
               onClick={() => toggleCollapsedPanel('none')}
+              aria-label="Expand results panel"
+              role="button"
               _hover={{ bg: 'accent.teal/50' }}
               my={2}
               borderRadius="lg"
