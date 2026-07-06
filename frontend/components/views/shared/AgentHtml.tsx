@@ -16,7 +16,6 @@ import { paramFromPlaceholderEl, type StoryParam } from '@/lib/data/story/story-
 import { inlineQuestionFromEl, inlineEmbedToQuestionContent } from '@/lib/data/story/story-question';
 import { numberFromEl } from '@/lib/data/story/story-number';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
-import { useAppSelector } from '@/store/hooks';
 
 interface AgentHtmlProps {
   html: string;
@@ -26,6 +25,8 @@ interface AgentHtmlProps {
   height?: number;
   /** Public read-only render (shared story): embedded charts hide actions + auth-gated links. */
   readOnly?: boolean;
+  /** Color mode for the iframe document's dark/light class (sourced by the caller, M4.2). */
+  colorMode: 'light' | 'dark';
   /**
    * Fluid mode (mobile): render at 100% of the container width and let the
    * authored flow layout reflow, instead of pinning to `width`px.
@@ -82,7 +83,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource, onChange, filePath },
+  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource, onChange, filePath, colorMode },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -92,7 +93,6 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   const [inlineTargets, setInlineTargets] = useState<InlineChartTarget[]>([]);
   const [numberTargets, setNumberTargets] = useState<NumberTarget[]>([]);
   const [paramTargets, setParamTargets] = useState<ParamTarget[]>([]);
-  const colorMode = useAppSelector(s => s.ui.colorMode);
 
   const sanitized = useMemo(() => sanitizeAgentHtml(html || ''), [html]);
 

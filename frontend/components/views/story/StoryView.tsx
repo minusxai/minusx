@@ -8,9 +8,6 @@ import NumberQueryEditor from '@/components/views/story/NumberQueryEditor';
 import { StoryEmptyState } from '@/components/views/shared/empty-states';
 import { StoryContent } from '@/lib/types';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
-import { useAppSelector } from '@/store/hooks';
-import { selectFile } from '@/store/filesSlice';
-import { selectFileEditMode } from '@/store/uiSlice';
 import { applyStoryHtmlEdit } from '@/lib/file-state/file-state';
 import { STORY_W } from './ScaledStoryFrame';
 
@@ -38,6 +35,13 @@ interface StoryViewProps {
   fileId?: number;
   /** Public read-only render (shared story): embedded charts hide actions + auth-gated links. */
   readOnly?: boolean;
+  /** The shared header's fileEditMode for this file (selectFileEditMode), sourced by the container. */
+  headerEditMode: boolean;
+  /** The story file's path (selectFile), sourced by the container — schema/connection autocomplete + guest embed allowlist. */
+  storyPath?: string;
+  /** The story file's name (selectFile), sourced by the container — select-to-chat provenance fallback. */
+  storyName?: string;
+  colorMode: 'light' | 'dark';
 }
 
 /**
@@ -48,22 +52,19 @@ interface StoryViewProps {
  * `onChange` (so the header's Save persists them and Cancel reverts them); the html is frozen during
  * the session so the iframe doesn't rebuild mid-edit.
  */
-export default function StoryView({ content, fileId, readOnly = false }: StoryViewProps) {
+export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode }: StoryViewProps) {
   const numericId = typeof fileId === 'number' ? fileId : undefined;
   const canEdit = !readOnly && numericId !== undefined;
-  const headerEditMode = useAppSelector(s => (numericId !== undefined ? selectFileEditMode(s, numericId) : false));
   const editing = canEdit && headerEditMode;
 
   // Inline <Number> query editing opens the full SqlEditor in a light-DOM modal (Monaco can't live
   // in the story iframe). The story's path feeds schema/connection autocomplete.
   const [numberEdit, setNumberEdit] = useState<NumberQueryEditRequest | null>(null);
-  const storyFile = useAppSelector(s => (numericId !== undefined ? selectFile(s, numericId) : undefined));
-  const storyPath = storyFile?.path;
   // Select-to-chat provenance: only for an owned story (canEdit); the popover itself is gated to edit
   // mode inside AgentHtml. The selection is rich-text (HTML).
   const selectionSource: EditWithAgentSource | undefined =
     canEdit && numericId !== undefined
-      ? { editorKind: 'richtext', fileName: storyFile?.name ?? 'Story', filePath: storyPath, fileId: numericId }
+      ? { editorKind: 'richtext', fileName: storyName ?? 'Story', filePath: storyPath, fileId: numericId }
       : undefined;
 
   // Freeze the html the iframe renders for the duration of an edit session: the user's INLINE edits
@@ -120,6 +121,7 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
             fluid
             editable={editing}
             readOnly={readOnly}
+            colorMode={colorMode}
             filePath={storyPath}
             paramValues={content.parameterValues ?? undefined}
             onEditNumber={setNumberEdit}

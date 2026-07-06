@@ -41,7 +41,7 @@ function storyRoot(): HTMLElement {
 
 describe('InlineNumber footnote popover — positioning context (iframe document)', () => {
   it('opens the footnote INSIDE the story iframe (not the top document.body → no top-left pin)', async () => {
-    renderWithProviders(<StoryView content={content} />);
+    renderWithProviders(<StoryView content={content} headerEditMode={false} storyPath={undefined} storyName={undefined} colorMode="dark" />);
 
     // The number hydrates into a clickable figure inside the shadow root.
     let trigger: HTMLElement | undefined;
@@ -68,7 +68,7 @@ describe('InlineNumber footnote popover — positioning context (iframe document
   // hundreds of orphan panels). With lazyMount, a popover the reader never opened is absent from
   // the DOM entirely, so serialize has nothing to capture; it mounts only on open.
   it('does not mount the footnote popover while it is closed (no serializable leak)', async () => {
-    renderWithProviders(<StoryView content={content} />);
+    renderWithProviders(<StoryView content={content} headerEditMode={false} storyPath={undefined} storyName={undefined} colorMode="dark" />);
 
     let trigger: HTMLElement | undefined;
     await waitFor(() => {
