@@ -41,6 +41,28 @@ const RESTRICT_PI_AI = {
     "and import Type/TSchema/Static directly from 'typebox'.",
 };
 
+// Container/View convention (CLAUDE.md "Component Patterns", Refactor-v2.md M4.2):
+// views must be pure presentation, containers own Redux. Scoped to just the 2 files
+// that have been migrated so far (QuestionViewV2, DashboardView) — 9 other
+// components/views/** files still violate this and aren't part of this pass; widen
+// the file list here only as each one is actually migrated, never all at once.
+const RESTRICT_VIEW_REDUX = [
+  {
+    name: "@/store/hooks",
+    message:
+      "Views must not read/write Redux directly (Container/View convention, CLAUDE.md " +
+      "'Component Patterns'). Move the useAppDispatch/useAppSelector call into this view's " +
+      "container and pass the value/callback down as a prop instead.",
+  },
+  {
+    name: "react-redux",
+    message:
+      "Views must not read/write Redux directly (Container/View convention, CLAUDE.md " +
+      "'Component Patterns'). Move the Redux access into this view's container and pass " +
+      "the value/callback down as a prop instead.",
+  },
+];
+
 // Shared no-restricted-syntax selectors — reused across multiple file-scoped overrides
 // so that per-file configs can extend rather than replace the base rules.
 const BASE_RESTRICTED_SYNTAX = [
@@ -247,6 +269,20 @@ const eslintConfig = defineConfig([
     files: ["scripts/**"],
     rules: {
       "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI] }],
+    },
+  },
+  // Container/View convention (CLAUDE.md, Refactor-v2.md M4.2) — these 2 views were
+  // migrated to pure presentation; guard against regression. See RESTRICT_VIEW_REDUX.
+  {
+    files: [
+      "components/views/QuestionViewV2.tsx",
+      "components/views/DashboardView.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { paths: [RESTRICT_DOCUMENTS_DB, RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI, ...RESTRICT_VIEW_REDUX] },
+      ],
     },
   },
 
