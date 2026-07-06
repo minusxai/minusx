@@ -27,7 +27,7 @@ import { FileHealthBadge } from '../file-browser/FileHealthPanel';
 import CodeView from '../views/CodeView';
 import { useAppSelector } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
-import { selectConnectionsLoading } from '@/store/filesSlice';
+import { selectConnectionsLoading, selectPersistableContent, selectMergedContent } from '@/store/filesSlice';
 import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { useContext as useKnowledgeContext } from '@/lib/hooks/useContext';
@@ -156,6 +156,9 @@ export default function ContextEditorV2({
 
   // Get connections loading state from Redux (for loading indicator)
   const isLoading = useAppSelector(selectConnectionsLoading);
+  // Sourced here (rather than inside CodeView) per Container/View discipline (M4.2).
+  const codeViewPersistableContent = useAppSelector(state => selectPersistableContent(state, file?.id as number));
+  const codeViewMergedContent = useAppSelector(state => selectMergedContent(state, file?.id as number));
 
   // Use parentSchema (what the parent makes available to select) for the editor.
   // parentSchema is computed by the loader BEFORE applying this context's own whitelist,
@@ -460,6 +463,8 @@ export default function ContextEditorV2({
         <CodeView
           fileId={file.id}
           fileType="context"
+          persistableContent={codeViewPersistableContent}
+          mergedContent={codeViewMergedContent}
           editable={editMode}
           omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullAnnotations', 'fullMetrics', 'fullSkills']}
           xmlContentTransform={shapeContextForAgent}

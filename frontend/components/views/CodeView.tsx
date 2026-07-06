@@ -16,8 +16,6 @@ import { Box, HStack } from '@chakra-ui/react';
 import { LuBraces, LuCode } from 'react-icons/lu';
 import TabSwitcher from '../selectors/TabSwitcher';
 import JsonEditor from '../slides/JsonEditor';
-import { useAppSelector } from '@/store/hooks';
-import { selectMergedContent, selectPersistableContent } from '@/store/filesSlice';
 import { applyJsonContentEdit } from '@/lib/file-state/file-state';
 import { fileToMarkup } from '@/lib/data/story/file-markup';
 import type { FileType } from '@/lib/types';
@@ -25,6 +23,10 @@ import type { FileType } from '@/lib/types';
 interface CodeViewProps {
   fileId: number;
   fileType: FileType;
+  /** file.persistableChanges-merged content (selectPersistableContent), sourced by the caller. */
+  persistableContent: unknown;
+  /** Fully merged content incl. non-persistable fields (selectMergedContent), sourced by the caller. */
+  mergedContent: unknown;
   /** When true the JSON tab is editable (writes back via applyJsonContentEdit). */
   editable?: boolean;
   /**
@@ -52,11 +54,9 @@ function omit(obj: unknown, keys: readonly string[]): unknown {
   return rest;
 }
 
-export default function CodeView({ fileId, fileType, editable = false, omitKeys = [], xmlContentTransform }: CodeViewProps) {
+export default function CodeView({ fileId, fileType, persistableContent, mergedContent, editable = false, omitKeys = [], xmlContentTransform }: CodeViewProps) {
   const [tab, setTab] = useState<'json' | 'agentJson' | 'xml'>('json');
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const persistableContent = useAppSelector(state => selectPersistableContent(state, fileId));
-  const mergedContent = useAppSelector(state => selectMergedContent(state, fileId));
 
   const fullContent = (persistableContent ?? mergedContent ?? {}) as Record<string, unknown>;
   const displayContent = omit(fullContent, omitKeys);
