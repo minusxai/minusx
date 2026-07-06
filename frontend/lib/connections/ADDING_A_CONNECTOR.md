@@ -36,25 +36,24 @@ Copy structure from whichever existing connector is closest to the new engine:
 
 ---
 
-## Step 1 — Add the config shape & dialect to `base.ts`
+## Step 1 — Add the connection type & dialect mapping
 
-`frontend/lib/connections/base.ts`
+There is no shared per-dialect config-shape registry — `NodeConnector.config` is typed as
+`Record<string, any>` throughout, and each connector defines its own local config type (or inline
+shape) for its constructor. Two places to register the new type string itself:
 
-- Add a config interface near the other `*Config` interfaces (line ~69). Mirror an existing one —
-  e.g. `PostgresConfig` (line 73) for a server DB:
-  ```typescript
-  export interface NewDbConfig {
-    host: string;
-    port?: number;
-    database: string;
-    username: string;
-    password?: string;
-  }
-  ```
-- Add it to `ConnectorConfigMap` (line ~111): `'newdb': NewDbConfig;`
-  This automatically extends the `ConnectorDialect` union (line 123).
+- `DatabaseConnection.type` union — `frontend/lib/types/connections.ts` (~line 14): add
+  `'newdb'` to the string-literal union. This is the canonical list of connection-type strings;
+  a TS error here (caught by `npm run validate`) is your signal if you miss a downstream switch/map.
+- `connectionTypeToDialect()` — same file (~line 128): add `newdb: '<sqlglot-dialect-name>'` to the
+  map (mirrors the backend's `_get_dialect_for_connection`). Falls back to `'duckdb'` if omitted, so
+  don't skip this if your engine's SQL dialect actually differs.
 
-The contract a connector must implement (`NodeConnector`, line 129):
+Define `NewDbConfig` (or an inline object type) directly in `newdb-connector.ts` (Step 2) — mirror
+an existing connector's constructor for the shape, e.g. `PostgresConnector`'s `{ host?, port?,
+database, username, password?, ssl? }`.
+
+The contract a connector must implement (`NodeConnector`, `base.ts`):
 - `testConnection(includeSchema?)` → `{ success, message, schema? }`
 - `query(query, params?, timeoutMs?)` → `QueryResult` (`{ columns, types, rows, finalQuery }`)
 - `getSchema()` → `SchemaEntry[]` (`{ schema, tables: [{ table, columns, indexes? }] }`)
@@ -274,11 +273,9 @@ Run: `npm run test:main -- newdb` then `npm run validate`.
 
 ## Quick checklist
 
-- [ ] `base.ts` — `NewDbConfig` interface + `ConnectorConfigMap` entry
-- [ ] `newdb-connector.ts` — implement `NodeConnector` (`testConnection`/`query`/`getSchema`)
+- [ ] `newdb-connector.ts` — define `NewDbConfig`, implement `NodeConnector` (`testConnection`/`query`/`getSchema`)
 - [ ] `index.ts` — import, re-export, `getNodeConnector` branch
-- [ ] `lib/types.ts` — 3 unions (884/890/951)
-- [ ] `lib/types/connections.ts` — `connectionTypeToDialect` map entry
+- [ ] `lib/types/connections.ts` — `DatabaseConnection.type` union + `connectionTypeToDialect` map entry (barrel-re-exported via `lib/types.ts`, no separate edit needed there)
 - [ ] `lib/data/connections.interface.ts` — 2 unions
 - [ ] `lib/data/helpers/connections.ts` — `getSafeConfig` branch (required)
 - [ ] `statistics-engine.ts` — `profileDatabase` case
