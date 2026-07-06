@@ -7,7 +7,8 @@
  */
 import { Box } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
-import { selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
+import { selectMergedContent, selectEffectiveName, selectIsDirty, type FileId } from '@/store/filesSlice';
+import { selectFileEditMode } from '@/store/uiSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile } from '@/lib/file-state/file-state';
 import { useJobRuns } from '@/lib/hooks/job-runs-hooks';
@@ -26,6 +27,8 @@ export default function AlertContainerV2({ fileId }: AlertContainerV2Props) {
   const fileLoading = !file || file.loading;
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) || '';
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as AlertContent | undefined;
+  const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
+  const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   const numericId = typeof fileId === 'number' && fileId > 0 ? fileId : null;
   const { runs, selectedRunId, isRunning, trigger, selectRun } = useJobRuns(numericId, 'alert');
@@ -48,6 +51,8 @@ export default function AlertContainerV2({ fileId }: AlertContainerV2Props) {
       isRunning={isRunning}
       runs={runs}
       selectedRunId={selectedRunId}
+      editMode={editMode}
+      isDirty={isDirty}
       onChange={handleChange}
       onRunNow={(options) => trigger(options)}
       onSelectRun={selectRun}

@@ -23,7 +23,6 @@ interface AlertViewProps {
   selectedRunId?: number | null;
   editMode: boolean;
   isDirty: boolean;
-
   onChange: (updates: Partial<AlertContent>) => void;
   onRunNow: (opts: RunOptions) => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
@@ -42,7 +41,6 @@ export default function AlertView({
   onRunNow,
   onSelectRun
 }: AlertViewProps) {
-
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(50);
   const [isResizing, setIsResizing] = useState(false);
