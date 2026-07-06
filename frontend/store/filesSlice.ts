@@ -956,7 +956,6 @@ export const {
   clearMetadataEdits,
   setSaving,
   updateFileContent,
-  clearFiles,
   setFolderInfo,
   deleteFile,
   addFile,
@@ -1086,7 +1085,7 @@ export const selectFileIdByPath = (state: RootState, path: string): number | und
  * Check if folder is loaded (content is not null)
  * Simple check: content === null means not loaded (metadata-only)
  */
-export const selectIsFolderLoaded = (state: RootState, path: string): boolean => {
+const selectIsFolderLoaded = (state: RootState, path: string): boolean => {
   const folderId = state.files.pathIndex[path];
   if (!folderId) return false;
 
@@ -1126,7 +1125,7 @@ export const selectIsDirty = (state: RootState, id: FileId): boolean => {
 /**
  * Get effective file name (with pending metadata changes) (Phase 5)
  */
-export function effectiveName(file: FileState): string {
+function effectiveName(file: FileState): string {
   return file.metadataChanges?.name ?? file.name;
 }
 
@@ -1143,22 +1142,6 @@ export const selectEffectivePath = (state: RootState, id: FileId): string | unde
   const file = state.files.files[id];
   if (!file) return undefined;
   return file.metadataChanges.path ?? file.path;
-};
-
-/**
- * Check if file has unsaved metadata changes (Phase 5)
- */
-export const selectHasMetadataChanges = (state: RootState, id: FileId): boolean => {
-  const file = state.files.files[id];
-  if (!file) return false;
-  return file.metadataChanges.name !== undefined || file.metadataChanges.path !== undefined;
-};
-
-/**
- * Get load error for a file (returns null if no error)
- */
-export const selectFileLoadError = (state: RootState, id: FileId): LoadError | null => {
-  return state.files.files[id]?.loadError ?? null;
 };
 
 /**
@@ -1231,16 +1214,6 @@ export const selectConnectionIds = createSelector(
     .map(f => f.id as number)
 );
 
-export const selectDashboardFiles = createSelector(
-  [(state: RootState) => state.files.files],
-  (files) => Object.values(files).filter(f => f.type === 'dashboard' && f.id > 0)
-);
-
-export const selectQuestionFiles = createSelector(
-  [(state: RootState) => state.files.files],
-  (files) => Object.values(files).filter(f => f.type === 'question' && f.id > 0)
-);
-
 // Boolean selectors — return primitives so useAppSelector never triggers spurious re-renders.
 // Use these in DataLoader instead of subscribing to the full files dictionary.
 export const selectConnectionsContentLoaded = createSelector(
@@ -1309,15 +1282,5 @@ export const selectContextFromPath = createSelector(
     return sortedContexts[0];
   }
 );
-
-/**
- * Get current parameter values for a file (from merged content)
- * Used by question/dashboard views for param display and execution
- */
-const EMPTY_PARAM_VALUES: Record<string, any> = {};
-export const selectParamValues = (state: RootState, id: FileId): Record<string, any> => {
-  const content = selectMergedContent(state, id) as any;
-  return content?.parameterValues || EMPTY_PARAM_VALUES;
-};
 
 export default filesSlice.reducer;

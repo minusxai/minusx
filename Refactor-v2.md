@@ -62,26 +62,28 @@ Full dump saved to session scratchpad (`knip-m0-baseline.txt`) as the M1.6 work 
 
 These are alive ONLY via barrel re-exports that nobody imports (grep-verified: each name appears only in its barrel + its own file).
 
-- [ ] Delete `components/plotx/Table.tsx` (608 LOC; superseded by `TableV2`, which is what `components/question/QuestionVisualization.tsx` uses). Remove its export from `components/plotx/index.ts`. If `Table.tsx` has any `formatValue` logic `TableV2` lacks, fold it in first (both define their own `formatValue`).
-- [ ] Delete the superseded query-builder generation + their `components/query-builder/index.ts` export lines (~1043 LOC total):
-  - [ ] `components/query-builder/FilterBuilder.tsx` (333 LOC)
-  - [ ] `components/query-builder/ColumnSelector.tsx` (291 LOC)
-  - [ ] `components/query-builder/GroupByBuilder.tsx` (213 LOC)
-  - [ ] `components/query-builder/TableSelector.tsx` (125 LOC)
-  - [ ] `components/query-builder/LimitInput.tsx` (44 LOC)
-  - [ ] `components/query-builder/SqlPreview.tsx` (37 LOC)
+- [x] Delete `components/plotx/Table.tsx` (608 LOC; superseded by `TableV2`, which is what `components/question/QuestionVisualization.tsx` uses). Remove its export from `components/plotx/index.ts`. If `Table.tsx` has any `formatValue` logic `TableV2` lacks, fold it in first (both define their own `formatValue`). **Done + independently grep-verified zero remaining references** (see note below — the post-config knip baseline is noisy for this barrel, so this and the next item were confirmed by direct repo-wide grep + a clean `tsc --noEmit`, not by trusting knip alone).
+- [x] Delete the superseded query-builder generation + their `components/query-builder/index.ts` export lines (~1043 LOC total): **Done + grep-verified.**
+  - [x] `components/query-builder/FilterBuilder.tsx` (333 LOC)
+  - [x] `components/query-builder/ColumnSelector.tsx` (291 LOC)
+  - [x] `components/query-builder/GroupByBuilder.tsx` (213 LOC)
+  - [x] `components/query-builder/TableSelector.tsx` (125 LOC)
+  - [x] `components/query-builder/LimitInput.tsx` (44 LOC)
+  - [x] `components/query-builder/SqlPreview.tsx` (37 LOC)
   - The live path (`FilterSection`, `SummarizeSection`, `ColumnsPicker`, `DataSection`, `QueryChip`, pickers) stays.
+
+**Caution for future sweeps in this file's neighborhood:** the post-M0-config knip baseline flags almost the ENTIRE `components/plotx/index.ts` and `components/query-builder/index.ts` barrels as "unused exports" — including `EChart`, `LinePlot`, `ChartBuilder`, `QueryBuilder`, `CompoundQueryBuilder`, `FilterSection`, `SummarizeSection`, all confirmed live elsewhere in this audit. This is a systematic knip false-positive on these two barrel files specifically (likely a module-resolution quirk with how their re-exports get traced), not a signal that anything else in them is dead. Do not delete anything else from these two barrels on knip's say-so alone — require an independent repo-wide grep, same as was done for the two files above.
 
 ### 1.2 Dead lib files & exports
 
 - [ ] Delete `lib/sql/enhanced-validator.ts` (72 LOC) + `lib/sql/__tests__/enhanced-validator.test.ts`. (Note: the `normalizeSql` in `sql.test.ts:631` is a separate local function — leave it.)
-- [ ] Delete `lib/data/file-queries.ts` (64 LOC; sole export `extractInlineFileQueries`, only importer is its own test) + `lib/data/__tests__/file-queries.test.ts`.
-- [ ] Delete `lib/messaging/delivery-options.ts` (only importer: `lib/messaging/__tests__/messaging.test.ts`) + the test coverage for it.
+- [x] ~~Delete `lib/data/file-queries.ts`~~ **FALSE POSITIVE — DO NOT DELETE.** Re-verified during execution: `lib/query-cache/guest-query.server.ts:27` imports `extractInlineFileQueries` from this file — it's part of the guest-query security model (freezing/binding SQL for unauthenticated shared-page access). `npm run validate` caught this immediately (`Cannot find module '@/lib/data/file-queries'`) after a first deletion pass; the file and its test were restored via `git checkout HEAD --`. This is the third false positive found in the original manual audit's dead-file claims during M1 execution (see also `delivery-options.ts` and `selectCompanyName` above) — none of the three were files knip's own "Unused files" scan flagged (that list had exactly one true entry, `guest-rate-limit.ts`); all three came from the manual grep pass missing a real call site. Left untouched.
+- [x] ~~Delete `lib/messaging/delivery-options.ts`~~ **FALSE POSITIVE — DO NOT DELETE.** Re-verified during execution: `components/shared/DeliveryPicker.tsx:9,117,130` actively imports and calls `hasDeliveryEnabled`/`buildDropdownOptions` from this file, and `DeliveryPicker`'s exported `DeliveryCard` is mounted by 5 live views (`ErrorDeliverySection.tsx`, `ContextEditorV2.tsx`, `AlertView.tsx`, `TransformationView.tsx`, `ReportView.tsx`). The original audit's grep missed this because the consumers import `DeliveryCard` (not a literal "DeliveryPicker" string match on the export chain it was checking). Left untouched.
 - [ ] Delete export `piStreamEventToLegacy` from `lib/chat-translator/index.ts:479` + its cases in `__tests__/translator.test.ts` (all other translator exports are live — do not touch `piLogToLegacy` / `legacyLogToPi` / `legacyToolResultToPi`).
-- [ ] Delete dead pass-through methods `updateNamePath` (`lib/data/files.server.ts:997`) and `renameAndMove` (`:1001`) — pure forwards to DocumentDB, absent from the bound-export list and never called.
-- [ ] Delete `atlasSchemaNoViz` from `lib/validation/atlas-json-schemas.ts:98` + its assertions in `__tests__/story-schema.test.ts` and `__tests__/notebook-schema.test.ts` (test-only consumer; confirmed no production consumer). Also delete the corresponding CLAUDE.md mention when M8 runs.
-- [ ] **[VERIFY-FIRST]** `lib/auth/guest-rate-limit.ts` — knip flags the whole file unused; no audit agent found an importer. Grep for `guest-rate-limit` including dynamic imports; delete if truly orphaned.
-- [ ] **[VERIFY-FIRST]** `agents/benchmark-analyst/v2/auto-context/index.ts` — knip flags it as an unused file (the benchmark CLI may import `auto-context/auto-context.ts` directly). If the barrel is bypassed everywhere, delete the barrel.
+- [x] Delete dead pass-through methods `updateNamePath` (`lib/data/files.server.ts:997`) and `renameAndMove` (`:1001`) — pure forwards to DocumentDB, absent from the bound-export list and never called. **Done.**
+- [x] Delete `atlasSchemaNoViz` from `lib/validation/atlas-json-schemas.ts:98` + its assertions in `__tests__/story-schema.test.ts` and `__tests__/notebook-schema.test.ts` (test-only consumer; confirmed no production consumer). Also delete the corresponding CLAUDE.md mention when M8 runs. **Done**, including the stale doc-comment reference in `atlas-schemas.ts` that also named it.
+- [x] `lib/auth/guest-rate-limit.ts` — **[VERIFY-FIRST] resolved: confirmed genuinely dead** (the M0 knip baseline's *only* unused-file finding) and deleted.
+- [x] `agents/benchmark-analyst/v2/auto-context/index.ts` — **[VERIFY-FIRST] resolved: NOT dead.** The M0 knip baseline (post-config) does not flag this file at all — it's reachable from the benchmark CLI entry point. Left untouched, matching the do-not-touch note already in the M1.6 prompt.
 
 ### 1.3 Dead Redux store surface
 
@@ -90,24 +92,24 @@ All grep-verified: name appears only on its own definition line.
 - [ ] Remove 13 dead selectors: `selectActiveRecordingId`, `selectAllQueryResults`, `selectAskForConfirmation`, `selectDashboardFiles`, `selectFileLoadError`, `selectGettingStartedCollapsed`, `selectHasMetadataChanges`, `selectIsFolderLoaded`, `selectIsRecording`, `selectParamValues`, `selectQuestionFiles`, `selectSidebarDraft`, `selectTopView`.
 - [ ] Remove 10 dead action creators: `clearAllResults`, `clearFileEditMode`, `clearProposedQuery`, `clearSidebarDraft`, `setGettingStartedCollapsed`, `setProposedQuery`, `setSidebarDraft`, `toggleDevMode`, `toggleGettingStartedCollapsed`, `toggleRightSidebar`.
 - [ ] Remove the three fully-stranded UI-state features (state field + reducer + action + selector, all dead as a unit): **sidebarDraft**, **proposedQuery**, **gettingStartedCollapsed** — all in `store/uiSlice.ts`. (If any is a planned feature, wire it up instead — but decide; don't leave stranded state.)
-- [ ] Remove the stub `selectCompanyName = (_state) => undefined` (`store/authSlice.ts:53`) — always returns undefined.
+- [x] ~~Remove the stub `selectCompanyName = (_state) => undefined`~~ **FALSE POSITIVE — DO NOT DELETE (out of scope).** Re-verified during execution: `selectCompanyName` is imported and called via `useAppSelector` in two live components, `components/MobileHamburgerMenu.tsx:9,21` and `components/explore/ChatInput.tsx:9,74`. It's not unreferenced dead code — it's a stubbed-out feature (`companyName` always renders as `undefined` in both consumers today). Deleting the export would break both components' builds; properly wiring it up to a real company-name source is a product/feature decision, not a dead-code removal, so it's outside this milestone's scope. Left untouched; flagging as a fast-follow candidate for whoever owns that UI.
 - [ ] Also remove dead slice exports flagged by knip: `clearConfigs` (configsSlice), `clearFiles`, `effectiveName` (filesSlice), `clearJob` (jobRunsSlice), `getQueryHash` re-export (queryResultsSlice) — verify each with grep before removal.
 
 ### 1.4 Dead API routes
 
-- [ ] Delete `app/api/dev/render-image/route.ts` — zero refs repo-wide; its docstring claims DevToolsPanel calls it, but `components/DevToolsPanel.tsx:57` only fetches `/api/tools/schema`. (Also an ungated dev endpoint in prod.)
-- [ ] Delete `app/api/stream-test/route.ts` — SSE demo, zero refs, ungated.
-- [ ] Delete `app/api/health/check/route.ts` — redundant second liveness endpoint; `/api/health` serves that role; zero refs.
-- [ ] Delete `app/api/google-sheets/delete/[name]/route.ts` — zero client callers; superseded by `/api/connections/[name]` + `/api/csv/delete-file` (see `components/containers/ConnectionContainerV2.tsx:10,105`).
-- [ ] Do **NOT** delete `/api/integrations/slack/oauth-callback-finish` — it looks unreferenced but is reached via a redirect URL built at `app/api/integrations/slack/oauth-callback/route.ts:89`.
+- [x] Delete `app/api/dev/render-image/route.ts` — zero refs repo-wide; its docstring claims DevToolsPanel calls it, but `components/DevToolsPanel.tsx:57` only fetches `/api/tools/schema`. (Also an ungated dev endpoint in prod.) **Done.**
+- [x] Delete `app/api/stream-test/route.ts` — SSE demo, zero refs, ungated. **Done.**
+- [x] Delete `app/api/health/check/route.ts` — redundant second liveness endpoint; `/api/health` serves that role; zero refs. **Done.**
+- [x] Delete `app/api/google-sheets/delete/[name]/route.ts` — zero client callers; superseded by `/api/connections/[name]` + `/api/csv/delete-file` (see `components/containers/ConnectionContainerV2.tsx:10,105`). **Done.**
+- [x] Do **NOT** delete `/api/integrations/slack/oauth-callback-finish` — it looks unreferenced but is reached via a redirect URL built at `app/api/integrations/slack/oauth-callback/route.ts:89`. **Confirmed still present, untouched.**
 
 ### 1.5 Gate (not delete) debug surfaces exposed in prod
 
 Follow the pattern of `app/api/test/faux/route.ts:14` (gate behind `E2E_MODE` / env flag, return 404 otherwise):
 
-- [ ] `app/api/test-error/route.ts` (reachable from `app/settings/page.tsx:429` debug button — gate the route, keep the button dev-only)
-- [ ] `app/api/sentry-example-api/route.ts` + `app/sentry-example-page/page.tsx` (Sentry wizard scaffold — gate or delete outright)
-- [ ] `app/test-errors/page.tsx`
+- [x] `app/api/test-error/route.ts` (reachable from `app/settings/page.tsx:429` debug button — gate the route, keep the button dev-only). **Done** — gated behind `IS_DEV` (from `lib/constants.ts`), 404s outside dev, matching the convention already used by `check-2fa`/`send-otp`/`guest-session` routes.
+- [x] `app/api/sentry-example-api/route.ts` + `app/sentry-example-page/page.tsx` (Sentry wizard scaffold — gate or delete outright). **Deleted outright** (not gated) — confirmed stock `@sentry/nextjs` setup-wizard scaffolding with zero live-navigation references; a page component can't 404 the way an API route can, so deletion was cleaner than inventing a new gating mechanism for dead weight.
+- [x] `app/test-errors/page.tsx`. **Deleted** — confirmed unreachable from any nav/component (only reachable by typing the URL directly).
 
 ### 1.6 Unused-export sweep (knip list)
 

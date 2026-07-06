@@ -8,11 +8,6 @@
  * Exports:
  *   - atlasSchema      — full discriminated `oneOf` schema; consumed by Ajv in
  *                        `content-validators.ts`.
- *   - atlasSchemaNoViz — same shape with `content.properties.vizSettings`
- *                        replaced by a prose stub; embedded in the EditFile /
- *                        CreateFile tool descriptions (the full viz schema is
- *                        already documented via ExecuteQuery.vizSettings, so
- *                        repeating it wastes prompt tokens).
  *
  * Built once at module load — Ajv's `compile()` results are cached separately.
  */
@@ -59,7 +54,7 @@ export const atlasSchema: Record<string, unknown> = topLevel({
   AtlasNotebookFile: toJson(AtlasNotebookFile),
 });
 
-// ── No-viz schema (vizSettings collapsed to a prose note) ────────────────────
+// ── vizSettings stripping (used for per-file-type SKILL prompt schemas) ──────
 const VIZ_NOTE = {
   type: 'object',
   description: 'vizSettings — see ExecuteQuery.vizSettings for schema',
@@ -88,19 +83,6 @@ function stripVizDeep(node: unknown): void {
   }
   for (const value of Object.values(obj)) stripVizDeep(value);
 }
-
-function stripViz(fileSchema: Record<string, unknown>): Record<string, unknown> {
-  const clone = toJson(fileSchema);
-  stripVizDeep(clone);
-  return clone;
-}
-
-export const atlasSchemaNoViz: Record<string, unknown> = topLevel({
-  AtlasQuestionFile: stripViz(toJson(AtlasQuestionFile)),
-  AtlasDashboardFile: stripViz(toJson(AtlasDashboardFile)),
-  AtlasStoryFile: stripViz(toJson(AtlasStoryFile)),
-  AtlasNotebookFile: stripViz(toJson(AtlasNotebookFile)),
-});
 
 // ── Per-file-type content schema for SKILL prompts ───────────────────────────
 // Each file type's skill embeds the LIVE content schema (below) instead of a hand-typed example,

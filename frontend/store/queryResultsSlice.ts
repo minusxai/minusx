@@ -14,7 +14,7 @@
  *   round-trips)
  * - Loading state tracked per query
  */
-import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type { RootState } from './store';
 import { getQueryHash } from '@/lib/utils/query-hash';
 
@@ -49,9 +49,6 @@ interface QueryResultsState {
 const initialState: QueryResultsState = {
   results: {}
 };
-
-// Re-export getQueryHash for convenience
-export { getQueryHash };
 
 const queryResultsSlice = createSlice({
   name: 'queryResults',
@@ -135,13 +132,6 @@ const queryResultsSlice = createSlice({
     },
 
     /**
-     * Clear all query results
-     */
-    clearAllResults(state) {
-      state.results = {};
-    },
-
-    /**
      * Clear specific query result
      */
     clearQueryResult(state, action: PayloadAction<{ query: string; params: Record<string, any>; database: string }>) {
@@ -166,7 +156,6 @@ export const {
   setQueryLoading,
   setQueryResult,
   setQueryError,
-  clearAllResults,
   clearQueryResult
 } = queryResultsSlice.actions;
 
@@ -218,14 +207,5 @@ export const selectHasQueryData = (
   const result = selectQueryResult(state, query, params, database);
   return !!result && !!result.data;
 };
-
-/**
- * Select all query results (for debugging)
- * Memoized to prevent unnecessary re-renders
- */
-export const selectAllQueryResults = createSelector(
-  [(state: RootState) => state.queryResults.results],
-  (results): QueryResult[] => Object.values(results)
-);
 
 export default queryResultsSlice.reducer;

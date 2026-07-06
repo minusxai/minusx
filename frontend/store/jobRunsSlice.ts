@@ -34,16 +34,10 @@ const jobRunsSlice = createSlice({
       const { jobId, isRunning } = action.payload;
       state.isRunningByJob[jobId] = isRunning;
     },
-    clearJob(state, action: PayloadAction<number>) {
-      const jobId = action.payload;
-      delete state.runsByJob[jobId];
-      delete state.selectedByJob[jobId];
-      delete state.isRunningByJob[jobId];
-    },
   },
 });
 
-export const { setRuns, setSelectedRun, setIsRunning, clearJob } = jobRunsSlice.actions;
+export const { setRuns, setSelectedRun, setIsRunning } = jobRunsSlice.actions;
 
 // ── Selectors ──────────────────────────────────────────────────────────────────
 

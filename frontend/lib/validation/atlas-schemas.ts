@@ -5,8 +5,7 @@
  * Authored in TypeBox: each `export const X = Type.Object(...)` is BOTH a runtime
  * JSON Schema (consumed at module load by `atlas-json-schemas.ts` → the `atlasSchema`
  * object used by Ajv validation in `content-validators.ts` and `$ref` resolution in the
- * content↔markup conversion in `file-markup.ts`/`content-jsx.ts`; `atlasSchemaNoViz` is
- * currently test-only — the EditFile/CreateFile tools do NOT embed the schema)
+ * content↔markup conversion in `file-markup.ts`/`content-jsx.ts`)
  * and a static TypeScript type via the colocated `export type X = Static<typeof X>`.
  *
  * No codegen step — edit this file and consumers re-build on next module load.

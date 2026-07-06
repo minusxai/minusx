@@ -994,14 +994,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
     return DocumentDB.appendJsonArray(id, entries, expectedLength, arrayPath, metaPath);
   }
 
-  async updateNamePath(id: number, name: string, path: string, _user: EffectiveUser): Promise<void> {
-    return DocumentDB.updateNamePath(id, name, path);
-  }
-
-  async renameAndMove(id: number, name: string, path: string, _user: EffectiveUser): Promise<void> {
-    return DocumentDB.renameAndMove(id, name, path);
-  }
-
   /**
    * Load the file behind a share-management operation and enforce the share guards:
    * admin role, regular access, and `story` type (shares are story-only in v1).

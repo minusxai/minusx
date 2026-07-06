@@ -17,13 +17,11 @@ interface UIState {
   activeSidebarSection: string | null;
   askForConfirmation: boolean;
   showAdvanced: boolean;
-  gettingStartedCollapsed: boolean;
   fileEditMode: Record<number, boolean>;       // fileId -> editMode (dashboard, story, question, report, alert)
   fileViewMode: Record<number, 'visual' | 'json'>;  // fileId -> active tab
   sqlEditorCollapsed: Record<number, boolean>;  // fileId -> collapsed state
   notebookActiveCell: Record<number, string>;   // notebook fileId -> active cell id (for agent context + highlight)
   questionCollapsedPanel: 'none' | 'left' | 'right';  // global: which panel is collapsed across all questions
-  sidebarDrafts: Record<number, string>;  // fileId -> draft input text
   proposedQueries: Record<number, string>;  // fileId -> proposed SQL query (for diff view)
   modalFile: { fileId: number; state: 'ACTIVE' | 'COLLAPSED' } | null;
   viewStack: ViewStackItem[];
@@ -59,13 +57,11 @@ const initialState: UIState = {
   activeSidebarSection: null,
   askForConfirmation: false,
   showAdvanced: false,
-  gettingStartedCollapsed: false,
   fileEditMode: {},
   fileViewMode: {},
   sqlEditorCollapsed: {},
   notebookActiveCell: {},
   questionCollapsedPanel: 'none',
-  sidebarDrafts: {},
   proposedQueries: {},
   modalFile: null,
   viewStack: [],
@@ -106,9 +102,6 @@ const uiSlice = createSlice({
       }
         state.rightSidebarCollapsed = action.payload;
     },
-    toggleRightSidebar: (state) => {
-      state.rightSidebarCollapsed = !state.rightSidebarCollapsed;
-    },
     setRightSidebarWidth: (state, action: PayloadAction<number>) => {
       state.rightSidebarWidth = action.payload;
     },
@@ -122,12 +115,6 @@ const uiSlice = createSlice({
       state.devMode = action.payload;
       if (typeof window !== 'undefined') {
         try { localStorage.setItem('devMode', String(action.payload)); } catch { /* ignore */ }
-      }
-    },
-    toggleDevMode: (state) => {
-      state.devMode = !state.devMode;
-      if (typeof window !== 'undefined') {
-        try { localStorage.setItem('devMode', String(state.devMode)); } catch { /* ignore */ }
       }
     },
     setSidebarPendingMessage: (state, action: PayloadAction<string | null>) => {
@@ -163,18 +150,9 @@ const uiSlice = createSlice({
         try { localStorage.setItem('showTrustScore', String(action.payload)); } catch { /* ignore */ }
       }
     },
-    setGettingStartedCollapsed: (state, action: PayloadAction<boolean>) => {
-      state.gettingStartedCollapsed = action.payload;
-    },
-    toggleGettingStartedCollapsed: (state) => {
-      state.gettingStartedCollapsed = !state.gettingStartedCollapsed;
-    },
     setFileEditMode: (state, action: PayloadAction<{ fileId: number; editMode: boolean }>) => {
       const { fileId, editMode } = action.payload;
       state.fileEditMode[fileId] = editMode;
-    },
-    clearFileEditMode: (state, action: PayloadAction<number>) => {
-      delete state.fileEditMode[action.payload];
     },
     setFileViewMode: (state, action: PayloadAction<{ fileId: number; mode: 'visual' | 'json' }>) => {
       const { fileId, mode } = action.payload;
@@ -190,24 +168,6 @@ const uiSlice = createSlice({
     },
     setQuestionCollapsedPanel: (state, action: PayloadAction<'none' | 'left' | 'right'>) => {
       state.questionCollapsedPanel = action.payload;
-    },
-    setSidebarDraft: (state, action: PayloadAction<{ fileId: number; draft: string }>) => {
-      const { fileId, draft } = action.payload;
-      if (draft.trim() === '') {
-        delete state.sidebarDrafts[fileId];
-      } else {
-        state.sidebarDrafts[fileId] = draft;
-      }
-    },
-    clearSidebarDraft: (state, action: PayloadAction<number>) => {
-      delete state.sidebarDrafts[action.payload];
-    },
-    setProposedQuery: (state, action: PayloadAction<{ fileId: number; query: string }>) => {
-      const { fileId, query } = action.payload;
-      state.proposedQueries[fileId] = query;
-    },
-    clearProposedQuery: (state, action: PayloadAction<number>) => {
-      delete state.proposedQueries[action.payload];
     },
     openFileModal: (state, action: PayloadAction<number>) => {
       state.modalFile = { fileId: action.payload, state: 'ACTIVE' };
@@ -301,29 +261,20 @@ export const {
   setLeftSidebarCollapsed,
   toggleLeftSidebar,
   setRightSidebarCollapsed,
-  toggleRightSidebar,
   setRightSidebarWidth,
   setColorMode,
   toggleColorMode,
   setDevMode,
-  toggleDevMode,
   setSidebarPendingMessage,
   setSidebarPendingSlashCommand,
   setActiveSidebarSection,
   setAskForConfirmation,
   setShowAdvanced,
-  setGettingStartedCollapsed,
-  toggleGettingStartedCollapsed,
   setFileEditMode,
-  clearFileEditMode,
   setFileViewMode,
   setSqlEditorCollapsed,
   setNotebookActiveCell,
   setQuestionCollapsedPanel,
-  setSidebarDraft,
-  clearSidebarDraft,
-  setProposedQuery,
-  clearProposedQuery,
   openFileModal,
   closeFileModal,
   collapseFileModal,
@@ -368,12 +319,10 @@ export const selectRightSidebarUIState = createSelector(
   })
 );
 
-export const selectAskForConfirmation = (state: RootState) => state.ui.askForConfirmation;
 export const selectDevMode = (state: RootState) => state.ui.devMode;
 export const selectShowAdvanced = (state: RootState) => state.ui.showAdvanced;
 export const selectAllowChatQueue = (state: RootState) => state.ui.allowChatQueue ?? true;
 export const selectQueueStrategy = (state: RootState) => state.ui.queueStrategy ?? 'end-of-turn';
-export const selectGettingStartedCollapsed = (state: RootState) => state.ui.gettingStartedCollapsed;
 export const selectFileEditMode = (state: RootState, fileId: number) => state.ui.fileEditMode[fileId] ?? false;
 export const selectFileViewMode = (state: RootState, fileId: number | undefined) =>
   fileId !== undefined ? (state.ui.fileViewMode[fileId] ?? 'visual') : 'visual';
@@ -390,8 +339,6 @@ export const selectSqlEditorCollapsed = (
   defaultCollapsed: boolean
 ) => fileId !== undefined ? (state.ui.sqlEditorCollapsed[fileId] ?? defaultCollapsed) : defaultCollapsed;
 export const selectQuestionCollapsedPanel = (state: RootState) => state.ui.questionCollapsedPanel;
-export const selectSidebarDraft = (state: RootState, fileId: number | undefined) =>
-  fileId ? state.ui.sidebarDrafts[fileId] ?? '' : '';
 export const selectProposedQuery = (state: RootState, fileId: number | undefined) =>
   fileId ? state.ui.proposedQueries[fileId] : undefined;
 export const selectModalFile = (state: RootState) => state.ui.modalFile;
@@ -399,8 +346,6 @@ export const selectChatAttachments = (state: RootState) => state.ui.chatAttachme
 export const selectPendingUploads = (state: RootState) => state.ui.pendingUploads;
 export const selectLightboxImageUrl = (state: RootState) => state.ui.lightboxImageUrl;
 export const selectViewStack = (state: RootState) => state.ui.viewStack;
-export const selectTopView = (state: RootState): ViewStackItem | undefined =>
-  state.ui.viewStack[state.ui.viewStack.length - 1];
 export const selectViewStackDepth = (state: RootState) => state.ui.viewStack.length;
 export const selectShowSuggestedQuestions = (state: RootState) => state.ui.showSuggestedQuestions;
 export const selectShowTrustScore = (state: RootState) => state.ui.showTrustScore;
