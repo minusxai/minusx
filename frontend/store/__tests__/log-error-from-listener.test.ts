@@ -90,7 +90,7 @@ describe('client-side error reporters → POST /api/chat/log-error', () => {
   });
 
   it('Cycle 9: logInitFailure posts to the active conversation when /api/conversations create has nowhere else to attach', async () => {
-    const { logInitFailure } = await import('@/lib/api/report-client-error');
+    const { logInitFailure } = await import('@/lib/messaging/report-client-error');
 
     // Seed an "active" conversation in the store (some prior chat the user has open).
     const ACTIVE_CONV = 7777;
@@ -110,7 +110,7 @@ describe('client-side error reporters → POST /api/chat/log-error', () => {
   });
 
   it('Cycle 9: logInitFailure is a no-op when no active conversation exists (cold-start init failure)', async () => {
-    const { logInitFailure } = await import('@/lib/api/report-client-error');
+    const { logInitFailure } = await import('@/lib/messaging/report-client-error');
     // store has no active conversation
     logInitFailure('init endpoint returned 500', 500);
     // Wait a tick to be sure no post fires.

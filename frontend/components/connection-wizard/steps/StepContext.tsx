@@ -8,13 +8,13 @@ import { pulseKeyframes, sparkleKeyframes, cursorBlinkKeyframes } from '@/lib/ui
 import type { ConnectionWithSchema } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
-import { editFile, publishFile } from '@/lib/api/file-state';
-import { logInitFailure } from '@/lib/api/report-client-error';
+import { editFile, publishFile } from '@/lib/file-state/file-state';
+import { logInitFailure } from '@/lib/messaging/report-client-error';
 import { getStore } from '@/store/store';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { createConversation, selectActiveConversation, selectConversation, interruptChat } from '@/store/chatSlice';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
-import { compressAugmentedFile } from '@/lib/api/compress-augmented';
+import { compressAugmentedFile } from '@/lib/chat/compress-augmented';
 import { mergeWhitelist } from '@/lib/context/context-utils';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import ContextDocsEditor from '@/components/context/ContextDocsEditor';

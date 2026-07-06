@@ -10,7 +10,7 @@ import { Box, Text, VStack, HStack, Badge, Separator, Button } from '@chakra-ui/
 import { useState, useCallback } from 'react';
 import { LuChevronDown, LuChevronRight, LuClock, LuTimer, LuHash } from 'react-icons/lu';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, publishFile } from '@/lib/api/file-state';
+import { editFile, publishFile } from '@/lib/file-state/file-state';
 import type { AlertContent, AlertOutput, AlertRunContent, MessageAttemptLog, RunFileContent, RunMessageRecord, TestRunResult } from '@/lib/types';
 import TestRunResultsList from '@/components/evals/TestRunResultsList';
 import type { FileId } from '@/store/filesSlice';

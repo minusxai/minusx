@@ -5,7 +5,7 @@ import { Box, VStack, Text, Spinner, Icon } from '@chakra-ui/react';
 import { LuPlug } from 'react-icons/lu';
 import ConnectionContainerV2 from '@/components/containers/ConnectionContainerV2';
 import ConnectionTypePicker from '@/components/shared/ConnectionTypePicker';
-import { createDraftFile, editFile } from '@/lib/api/file-state';
+import { createDraftFile, editFile } from '@/lib/file-state/file-state';
 import { useAppSelector } from '@/store/hooks';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type { ConnectionTypeOption } from '@/lib/ui/connection-type-options';

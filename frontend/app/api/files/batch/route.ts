@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { successResponse, handleApiError } from '@/lib/api/api-responses';
-import { withAuth } from '@/lib/api/with-auth';
+import { successResponse, handleApiError } from '@/lib/http/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
 import { loadFiles } from '@/lib/data/files.server';
 import { validateFileIds } from '@/lib/data/helpers/validation';
 import { FileEventType, trackFileEvents } from '@/lib/analytics/file-analytics.server';

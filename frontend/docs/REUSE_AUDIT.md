@@ -13,7 +13,7 @@
 |---|---|---|
 | `storyEmbedRuns(html, params)` — which queries a story body runs + with what params | `lib/data/helpers/param-resolution.ts` | client `augmentWithParams`, server `executeQueriesForFile`, EditFile auto-execute (3×) |
 | `setCachedResult()` — cache data/error → augmentation map | `lib/data/helpers/param-resolution.ts` | `augmentWithParams` question/notebook/inline-question/inline-number (4×) |
-| `runResolved()` — execute pre-resolved params + push data/error | `lib/api/file-state.server.ts` | split out of `runOne` |
+| `runResolved()` — execute pre-resolved params + push data/error | `lib/file-state/file-state.server.ts` | split out of `runOne` |
 | `bindReferencedParams(query, values)` — bind the `:names` a raw query references | `lib/sql/sql-params.ts` | new; used by InlineNumber renderer + storyEmbedRuns (same hash both sides) |
 | `escTemplate`, `styleAttr` | `lib/data/html-attr.ts` | story-number.ts, story-question.ts, story-params.ts (3×) |
 | `normalizeInlineQuery` (cook `\n`/`\t`) | `lib/data/story-question.ts` | now reused by `<Number>` (was `<Question>`-only) |
@@ -74,7 +74,7 @@ From a codebase-wide audit. Highest-value first; each is a small, mechanical, te
 | 2 | **`buildDataAttrs` / `buildPlaceholder(tag, attrs)`** — data-attr array + wrap | `numberToPlaceholder`, `inlineQuestionToPlaceholder`, `paramToPlaceholder` | `lib/data/html-attr.ts` | low |
 | 3 | **`extractPlaceholders<T>(html, re, parse)`** — `for (m of html.matchAll(re)) { push parse(m) }` | `extractInlineNumbers`, `extractInlineQuestions`, `extractSavedQuestionIds`, `extractStoryParams` (4×) | `lib/data/placeholder-extractor.ts` | low-med |
 | 4 | **`discoverAndCollect<T>(root, selector, parse)`** — DOM discovery loop | AgentHtml.tsx ~212/221/235/243 (4×, ~60 lines) | `components/views/shared/discovery-utils.ts` | med (effect ordering) |
-| 5 | **`autoExecuteQuery(...)`** — clear cache + setEphemeral/setExecuted + best-effort `getQueryResult` | tool-handlers.ts EditFile-question/notebook/story + CreateFile-question (~80 lines) | `lib/api/query-utils.ts` | med (critical path; guarded by editFile.test.ts) |
+| 5 | **`autoExecuteQuery(...)`** — clear cache + setEphemeral/setExecuted + best-effort `getQueryResult` | tool-handlers.ts EditFile-question/notebook/story + CreateFile-question (~80 lines) | `lib/tools/query-utils.ts` | med (critical path; guarded by editFile.test.ts) |
 | 6 | **`ensureArray<T>(v)`** — `Array.isArray(x) ? x : []` | param-resolution.ts, file-selectors.ts, extract-references.ts, files.server.ts, migrations.ts (8+×) | `lib/utils/safe-array.ts` | low |
 | 7 | **`extractSingleCellValue(data, col, fmt)`** — `formatCell` + `rows[0][col]` | InlineNumber.tsx (2×); likely EmbeddedQuestionContainer single_value | `lib/chart/chart-utils.ts` | low |
 | 8 | **`fromDomAttr<T>(el, attr, parse)`** — `getAttribute` → parse | `numberFromEl`, `inlineQuestionFromEl`, `paramFromPlaceholderEl` | `lib/data/dom-codec.ts` | low |

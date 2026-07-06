@@ -20,8 +20,8 @@ import {
   selectFileEditMode, setFileEditMode,
   selectFileViewMode, setFileViewMode,
 } from '@/store/uiSlice';
-import { editFile } from '@/lib/api/file-state';
-import { runMicroTaskClient, buildFileMicroInput } from '@/lib/api/micro-task';
+import { editFile } from '@/lib/file-state/file-state';
+import { runMicroTaskClient, buildFileMicroInput } from '@/lib/tools/micro-task';
 import { toaster } from './ui/toaster';
 import { isUserFacingError } from '@/lib/errors';
 import { redirectAfterSave, hasGeneratableContent } from '@/lib/ui/file-utils';

@@ -9,7 +9,7 @@
  *   const runner = createClientRunner();
  *   const result = await runner.execute(test);
  */
-import { readFiles, getQueryResult } from '@/lib/api/file-state';
+import { readFiles, getQueryResult } from '@/lib/file-state/file-state';
 import type { QuestionContent, Test, TestRunResult, TestValue } from '@/lib/types';
 import { compareValues, extractCellValue, type TestRunner } from './index';
 

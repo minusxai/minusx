@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { createConversation, appendMessages } from '@/lib/data/conversations.server';
 import { truncateMessageForName } from '@/lib/conversations-utils';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 import type { ConversationLog } from '@/orchestrator/types';
 import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connection-source';
 

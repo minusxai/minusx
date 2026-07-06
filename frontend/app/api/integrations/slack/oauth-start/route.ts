@@ -1,8 +1,8 @@
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { withAuth } from '@/lib/api/with-auth';
-import { ApiErrors } from '@/lib/api/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
+import { ApiErrors } from '@/lib/http/api-responses';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { isSlackOAuthConfigured, buildOAuthUrl } from '@/lib/integrations/slack/config';
 import { buildState } from '@/lib/integrations/slack/oauth-state';

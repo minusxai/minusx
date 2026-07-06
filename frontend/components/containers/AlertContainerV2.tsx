@@ -9,7 +9,7 @@ import { Box } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile } from '@/lib/api/file-state';
+import { editFile } from '@/lib/file-state/file-state';
 import { useJobRuns } from '@/lib/hooks/job-runs-hooks';
 import AlertView from '@/components/views/AlertView';
 import type { AlertContent } from '@/lib/types';

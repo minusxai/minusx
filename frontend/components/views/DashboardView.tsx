@@ -12,7 +12,7 @@ import 'react-grid-layout/css/styles.css';
 import { DashboardEmptyState } from '@/components/views/shared/empty-states';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent } from '@/store/filesSlice';
-import { editFile } from '@/lib/api/file-state';
+import { editFile } from '@/lib/file-state/file-state';
 import { pushView, selectFileEditMode } from '@/store/uiSlice';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';

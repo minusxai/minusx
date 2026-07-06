@@ -2,17 +2,17 @@ import { Type } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/types';
 import { loadSkill } from '@/agents/skill-content';
-import { loadContextDocsByKeys } from '@/lib/sql/schema-filter';
+import { loadContextDocsByKeys } from '@/lib/sql/context-docs';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 // All tools below execute in the browser via the existing
-// `executeToolCall` registry (lib/api/tool-handlers.ts). Server-side they
+// `executeToolCall` registry (lib/tools/tool-handlers.ts). Server-side they
 // throw UserInputException so the orchestrator pauses; the bridge (Redux
 // listener middleware) calls `executeToolCall(...)` for real and resumes the
 // orchestrator with the resulting ToolResultMessage. The Node side is a thin
 // declaration — no logic, no reimplementation.
 
 // ─── EditFile ────────────────────────────────────────────────────────────────
-// Schema MUST match the runtime handler in `lib/api/tool-handlers.ts`
+// Schema MUST match the runtime handler in `lib/tools/tool-handlers.ts`
 // (`registerFrontendTool('EditFile', ...)`) — the dual-update rule. The
 // handler expects `changes: [{oldMatch, newMatch, replaceAll?}]`.
 const EditFileParams = Type.Object({
@@ -80,7 +80,7 @@ export class EditFile extends MXTool<typeof EditFileParams, RemoteAnalystContext
 
 // ─── CreateFile ──────────────────────────────────────────────────────────────
 // Schema MUST match `registerFrontendTool('CreateFile', ...)` in
-// `lib/api/tool-handlers.ts`. Handler reads `file_type`, `name`, `path`, `content`.
+// `lib/tools/tool-handlers.ts`. Handler reads `file_type`, `name`, `path`, `content`.
 const CreateFileParams = Type.Object({
   file_type: Type.String({ description: 'File type to create (question, dashboard, folder, etc.).' }),
   name: Type.String({ description: 'Name of the new file/folder. It is slugified and appended to `path` to form the full path.' }),
@@ -239,7 +239,7 @@ export class PublishAll extends MXTool<typeof PublishAllParams, RemoteAnalystCon
 // LLM-facing skill loader (matches what the skill docstrings tell the model to
 // call). System skills resolve server-side from the shared prompts.yaml; unknown names are
 // user-defined Knowledge Base skills, resolved on the frontend via the
-// `registerFrontendTool('LoadSkill', ...)` handler in lib/api/tool-handlers.ts.
+// `registerFrontendTool('LoadSkill', ...)` handler in lib/tools/tool-handlers.ts.
 const LoadSkillParams = Type.Object({
   name: Type.String({
     description: "Skill name to load (e.g., 'alerts', 'reports', or a user-defined skill name).",
@@ -305,7 +305,7 @@ export class LoadContext extends MXTool<typeof LoadContextParams, RemoteAnalystC
 
 // Note: DeleteFile is intentionally NOT exported. There is no
 // `registerFrontendTool('DeleteFile', ...)` runtime handler in
-// `lib/api/tool-handlers.ts`, so advertising the tool to the LLM would
+// `lib/tools/tool-handlers.ts`, so advertising the tool to the LLM would
 // produce "Unknown client-side tool" errors when the bridge tries to
 // resolve it. If/when a DeleteFile runtime handler is added, restore the
 // schema here and add it back to WebAnalystAgent.tools.

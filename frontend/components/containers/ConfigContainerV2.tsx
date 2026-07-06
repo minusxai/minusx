@@ -11,7 +11,7 @@
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectIsDirty, setFullContent, clearEdits, setSaving, updateFileContent, type FileId } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { reloadFile } from '@/lib/api/file-state';
+import { reloadFile } from '@/lib/file-state/file-state';
 import { reloadConfigs } from '@/lib/hooks/useConfigs';
 import ConfigEditor from '@/components/config/ConfigEditor';
 import { ConfigContent } from '@/lib/types';

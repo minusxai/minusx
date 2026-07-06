@@ -10,7 +10,7 @@ import { storeHandle } from './handle-store';
 import { computeResultStats } from './result-stats';
 import { getCatalogStore } from './catalog';
 import { V2DataTool, getLighterModel } from './data-tool-base';
-import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 import type { ResultEntry } from '../result-shapes';
 
 const ExploreFilter = Type.Object({

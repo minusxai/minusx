@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getConfigs, validateOrgConfig, saveConfig } from '@/lib/data/configs.server';
-import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
-import { withAuth } from '@/lib/api/with-auth';
+import { successResponse, handleApiError, ApiErrors } from '@/lib/http/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
 import { revalidateTag } from 'next/cache';
 
 /**

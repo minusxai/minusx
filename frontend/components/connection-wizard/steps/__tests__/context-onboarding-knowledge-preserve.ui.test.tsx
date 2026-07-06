@@ -13,8 +13,8 @@ vi.mock('@/lib/hooks/useContext', () => ({
 
 const editFileSpy = vi.fn();
 const publishFileSpy = vi.fn(async () => ({ id: CONTEXT_ID }));
-vi.mock('@/lib/api/file-state', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api/file-state')>('@/lib/api/file-state');
+vi.mock('@/lib/file-state/file-state', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/file-state/file-state')>('@/lib/file-state/file-state');
   return {
     ...actual,
     loadFiles: vi.fn(async () => []),

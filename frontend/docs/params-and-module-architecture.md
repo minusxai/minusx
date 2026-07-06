@@ -173,7 +173,7 @@ engines. No cycles. Lower layers never import upward.
   content-jsx. Exports `fileToMarkup` / `markupToContent`.
 - `lib/validation/content-validators.ts` — `validateFileState` (Ajv).
 
-**Orchestration:** `lib/api/file-state.ts` — the one stateful, wide module. It is the
+**Orchestration:** `lib/file-state/file-state.ts` — the one stateful, wide module. It is the
 documented CORE (all file/query ops). Pulls the pure transforms together + Redux + fetch.
 
 ### Exact imports (project-internal only) — the edges above

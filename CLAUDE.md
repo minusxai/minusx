@@ -373,7 +373,7 @@ Update `lib/database/postgres-schema.ts` (PGLite uses this schema), update `lib/
 
 **Always use `handleApiError` in catch blocks** — never return `NextResponse.json({ error }, { status: 500 })` directly:
 ```typescript
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 
 export async function POST(req: NextRequest) {
   try {
@@ -453,7 +453,7 @@ Browser-side complement to `handleApiError`:
 
 > **CRITICAL — always reuse, never re-implement.** `file-state.ts` and `file-state-hooks.ts` are the single source of truth for all file and query operations in the frontend. Before writing any new fetch, Redux read, or file-operation logic, read these files first. Duplicating their functionality elsewhere is a code smell.
 
-- `frontend/lib/api/file-state.ts` - **CORE: Centralized file operations** — the only place file fetching, editing, saving, deleting, folder loading, and query execution logic should live. Key exports: `loadFiles`, `readFiles`, `readFolder`, `editFile`, `publishFile`, `deleteFile`, `getQueryResult` (accepts `{ forceLoad }` to bypass the query cache; calls bounded by `querySemaphore`).
+- `frontend/lib/file-state/file-state.ts` - **CORE: Centralized file operations** — the only place file fetching, editing, saving, deleting, folder loading, and query execution logic should live. Key exports: `loadFiles`, `readFiles`, `readFolder`, `editFile`, `publishFile`, `deleteFile`, `getQueryResult` (accepts `{ forceLoad }` to bypass the query cache; calls bounded by `querySemaphore`).
 - `frontend/lib/hooks/file-state-hooks.ts` - **CORE: React hooks** wrapping `file-state.ts` — the only hooks components should use for file/query data. Key exports: `useFile`, `useFolder`, `useFileByPath`, `useFilesByCriteria`, `useQueryResult` (returns `refetch()` for force-reload / retry).
 
 **FilesAPI dual-implementation pattern:** A shared interface defines the contract for all file CRUD operations. There is a client implementation (HTTP calls) and a server implementation (direct DB access), both exported as `FilesAPI` from their respective modules. `file-state.ts` uses the client `FilesAPI` and adds Redux state management on top. **When adding a new file operation, add it to the interface and implement it in both client and server.** Never bypass `FilesAPI` with raw `fetch` calls.

@@ -11,19 +11,19 @@ import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbedde
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectHomePage, setSidebarPendingMessage, setActiveSidebarSection, setRightSidebarCollapsed } from '@/store/uiSlice';
 import { useClearChat } from './explore/slash-commands';
-import { readFiles } from '@/lib/api/file-state';
-import { compressAugmentedFile } from '@/lib/api/compress-augmented';
+import { readFiles } from '@/lib/file-state/file-state';
+import { compressAugmentedFile } from '@/lib/chat/compress-augmented';
 import { appStateForLlm, type AppState } from '@/lib/appState';
 import { todayISO } from '@/lib/utils/today';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { useContext } from '@/lib/hooks/useContext';
-import { inlineContextDocsText } from '@/lib/sql/schema-filter';
+import { inlineContextDocsText } from '@/lib/sql/context-docs';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { RecentFile } from '@/lib/analytics/file-analytics.types';
 import Markdown from '@/components/Markdown';
-import { useFetch } from '@/lib/api/useFetch';
-import { API } from '@/lib/api/declarations';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
+import { useFetch } from '@/lib/http/useFetch';
+import { API } from '@/lib/http/declarations';
+import { fetchWithCache } from '@/lib/http/fetch-wrapper';
 import type { ConversationSummary } from '@/app/api/conversations/route';
 
 /**

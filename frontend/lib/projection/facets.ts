@@ -25,7 +25,7 @@
  * Pure + dependency-light (only canonical-JSON for stable hashing) so it can be unit-tested
  * in isolation and reused by both the client and headless/server projection paths.
  */
-import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
+import { sortObjectKeysDeep } from '@/lib/chat/file-encoding';
 
 /** Replaces a facet whose value is identical to its previous in-window occurrence. */
 export interface Unchanged {

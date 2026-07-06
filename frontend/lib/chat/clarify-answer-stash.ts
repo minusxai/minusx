@@ -11,7 +11,7 @@
  * also self-expire via TTL. The server log stays the source of truth — replay only happens in the
  * exact window where the log lacks the toolResult, and a committed call is never re-listed as pending.
  */
-import type { UserInputProps, UserInput } from '@/lib/api/user-input-exception';
+import type { UserInputProps, UserInput } from '@/lib/tools/user-input-exception';
 import type { DerivedPendingToolCall } from '@/lib/data/conversation-log';
 
 const PREFIX = 'mx:clarify-answer:';
@@ -105,7 +105,7 @@ export function clearStaleClarifyAnswers(conversationId: number, pendingToolCall
 
 /**
  * Rebuild the choice-prompt props from a ClarifyFrontend tool call's args — mirrors the
- * UserInputException thrown by the ClarifyFrontend handler (lib/api/tool-handlers.ts). Used on cold
+ * UserInputException thrown by the ClarifyFrontend handler (lib/tools/tool-handlers.ts). Used on cold
  * load to seed a `userInputs[]` entry so a reopened Clarify is ANSWERABLE (without this the pending
  * tool has no userInputs and the card renders a dead "Waiting for response…" state).
  */

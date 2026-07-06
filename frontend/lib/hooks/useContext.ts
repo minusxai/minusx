@@ -4,7 +4,8 @@ import { selectContextFromPath } from '@/store/filesSlice';
 import { useFile } from './file-state-hooks';
 import { useConnections } from './useConnections';
 import { ContextContent, ContextInfo, SkillMention } from '@/lib/types';
-import { getWhitelistedSchemaForUser, resolveContextDocs } from '@/lib/sql/schema-filter';
+import { getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
+import { resolveContextDocs } from '@/lib/sql/context-docs';
 import { mergeSkillsByName } from '@/lib/context/context-utils';
 
 let cachedSystemSkills: SkillMention[] | null = null;

@@ -16,7 +16,7 @@ import { DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
 import type { AnalyticsConfig } from '@/lib/analytics/types';
 
 // Import fetch patch to auto-initialize (don't remove - needed for side effect)
-import '@/lib/api/fetch-patch';
+import '@/lib/http/fetch-patch';
 
 interface ProvidersProps {
   children: React.ReactNode;

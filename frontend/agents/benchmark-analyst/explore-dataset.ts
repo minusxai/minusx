@@ -10,7 +10,7 @@ import type { Tool } from '@/orchestrator/llm';
 import type { AssistantMessage, Context, TextContent } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { type BenchmarkAnalystContext, type ConnectionInfo } from './types';
-import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getOrCreateBenchmarkConnector } from './shared-duckdb';
 import { qualifyHandleRefs } from './v2/handle-store';

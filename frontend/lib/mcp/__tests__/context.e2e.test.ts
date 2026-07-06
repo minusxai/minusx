@@ -32,7 +32,7 @@ import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__
 import { DocumentDB } from '@/lib/database/documents-db';
 import { FilesAPI } from '@/lib/data/files.server';
 import { createMcpServer } from '@/lib/mcp/server';
-import { INLINE_ALL_DOCS_THRESHOLD } from '@/lib/sql/schema-filter';
+import { INLINE_ALL_DOCS_THRESHOLD } from '@/lib/sql/context-docs';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ContextContent } from '@/lib/types';
 

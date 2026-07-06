@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { FileType } from '@/lib/types';
-import { deleteFile, duplicateFile } from '@/lib/api/file-state';
+import { deleteFile, duplicateFile } from '@/lib/file-state/file-state';
 import { useAppSelector } from '@/store/hooks';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import MoveFileModal from './MoveFileModal';

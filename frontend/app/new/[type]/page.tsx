@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
 import { Center, Spinner } from '@chakra-ui/react';
 import { FileType, getSupportedFileTypes } from '@/lib/ui/file-metadata';
-import { createDraftFile } from '@/lib/api/file-state';
+import { createDraftFile } from '@/lib/file-state/file-state';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useConfigs } from '@/lib/hooks/useConfigs';

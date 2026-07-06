@@ -10,7 +10,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useContext } from '@/lib/hooks/useContext';
-import { editFile } from '@/lib/api/file-state';
+import { editFile } from '@/lib/file-state/file-state';
 import ReportView from '@/components/views/ReportView';
 import { ReportContent, RunFileContent } from '@/lib/types';
 import type { RunOptions } from '@/components/shared/RunNowHeader';

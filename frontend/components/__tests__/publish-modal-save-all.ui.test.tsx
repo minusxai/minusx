@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   discardAll: vi.fn(),
 }));
 
-vi.mock('@/lib/api/file-state', () => ({
+vi.mock('@/lib/file-state/file-state', () => ({
   publishAll: mocks.publishAll,
   editFile: mocks.editFile,
   discardAll: mocks.discardAll,

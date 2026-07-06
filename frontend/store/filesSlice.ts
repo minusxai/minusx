@@ -5,8 +5,8 @@ import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/a
 import type { RootState } from './store';
 import type { LoadError } from '@/lib/types/errors';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
-import { dbFileToFileState } from '@/lib/api/compress-augmented';
-import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
+import { dbFileToFileState } from '@/lib/chat/compress-augmented';
+import { sortObjectKeysDeep } from '@/lib/chat/file-encoding';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
 // System file types that save in-place and are excluded from bulk Publish.
@@ -91,7 +91,7 @@ function hashString(str: string): number {
 /** Deterministic placeholder ID for a path being loaded (negative, within int4). */
 function pathToVirtualId(path: string): number {
   // Kept within int4 range [-2^31, -1] so it never overflows an `integer` column.
-  // Must match lib/api/file-state.ts:pathToPlaceholderId (same path → same ID).
+  // Must match lib/file-state/file-state.ts:pathToPlaceholderId (same path → same ID).
   return -(1 + (Math.abs(hashString(path)) % 2_000_000_000));
 }
 

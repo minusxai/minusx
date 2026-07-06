@@ -5,8 +5,8 @@ import { Box, VStack, HStack, Text, Spinner, Table, IconButton } from '@chakra-u
 import { LuPlay, LuTrash2 } from 'react-icons/lu';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Tooltip } from '@/components/ui/tooltip';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
-import { API } from '@/lib/api/declarations';
+import { fetchWithCache } from '@/lib/http/fetch-wrapper';
+import { API } from '@/lib/http/declarations';
 
 interface RecordingSummary {
   id: number;

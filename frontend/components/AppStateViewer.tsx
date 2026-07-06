@@ -6,7 +6,7 @@ import { useAppSelector } from '@/store/hooks';
 import Editor from '@monaco-editor/react';
 import { useState } from 'react';
 import { AppState, appStateForLlm, takeAppStateMarkup } from '@/lib/appState';
-import { renderMarkupBlocks } from '@/lib/api/markup-blocks';
+import { renderMarkupBlocks } from '@/lib/chat/markup-blocks';
 
 interface AppStateViewerProps {
   appState: AppState | null | undefined;

@@ -19,7 +19,7 @@ import { selectActiveConversation } from '@/store/chatSlice';
 import { Dialog, Portal, Button, Text, HStack } from '@chakra-ui/react';
 import { preserveParams } from './url-utils';
 import { beginNavigation } from './nav-progress';
-import { clearFileChanges } from '@/lib/api/file-state';
+import { clearFileChanges } from '@/lib/file-state/file-state';
 import { selectDirtyFiles } from '@/store/filesSlice';
 import { selectUnrestrictedMode } from '@/store/uiSlice';
 import { getStore } from '@/store/store';

@@ -9,7 +9,12 @@
  */
 import * as echarts from 'echarts';
 import { aggregateData } from './aggregate-data';
-import { buildChartOption, buildFunnelChartOption, buildPieChartOption, buildRadarChartOption, buildWaterfallChartOption, buildCompactYLabel, type StandardChartType } from './chart-utils';
+import { buildChartOption, type StandardChartType } from './chart-utils';
+import { buildFunnelChartOption } from './chart-builders/funnel';
+import { buildPieChartOption } from './chart-builders/pie';
+import { buildRadarChartOption } from './chart-builders/radar';
+import { buildWaterfallChartOption } from './chart-builders/waterfall';
+import { buildCompactYLabel } from './chart-format';
 import { COLOR_PALETTE } from './echarts-theme';
 import { buildColumnTypesMap } from '@/lib/database/column-types';
 import type { QueryResult } from '@/lib/types';

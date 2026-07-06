@@ -6,7 +6,7 @@ import rrwebPlayer from 'rrweb-player';
 import 'rrweb-player/dist/style.css';
 import { decompressEvents } from '@/lib/recordings-client';
 import { SessionRecordingFileContent } from '@/lib/types';
-import { deleteFile } from '@/lib/api/file-state';
+import { deleteFile } from '@/lib/file-state/file-state';
 
 interface SessionPlayerProps {
   content: SessionRecordingFileContent;

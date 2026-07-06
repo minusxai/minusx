@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Box, Flex, Text, Button, Input, VStack, Icon, Dialog, Portal } from '@chakra-ui/react';
 import { LuDownload, LuUpload, LuCircleCheck, LuCircleX, LuLoader, LuChevronDown, LuChevronRight, LuRotateCcw } from 'react-icons/lu';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
-import { API } from '@/lib/api/declarations';
+import { fetchWithCache } from '@/lib/http/fetch-wrapper';
+import { API } from '@/lib/http/declarations';
 import { MINIMUM_SUPPORTED_DATA_VERSION } from '@/lib/database/constants';
 
 interface ValidationStatus {

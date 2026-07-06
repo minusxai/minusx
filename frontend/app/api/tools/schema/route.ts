@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { withAuth } from '@/lib/api/with-auth';
+import { withAuth } from '@/lib/http/with-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import { ApiErrors } from '@/lib/api/api-responses';
+import { ApiErrors } from '@/lib/http/api-responses';
 import { REGISTRABLES } from '@/lib/chat/orchestration-core.server';
 
 interface RegistrableSchema {

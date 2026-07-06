@@ -8,8 +8,8 @@
  *   limit    - max results to return (default: 20)
  */
 import { NextRequest } from 'next/server';
-import { withAuth } from '@/lib/api/with-auth';
-import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
+import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
 import { JobRunsDB } from '@/lib/database/job-runs-db';
 
 export const dynamic = 'force-dynamic';

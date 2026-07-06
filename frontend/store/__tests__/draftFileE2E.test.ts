@@ -25,7 +25,7 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { createDraftFile, publishAll, dryRunSave } from '@/lib/api/file-state';
+import { createDraftFile, publishAll, dryRunSave } from '@/lib/file-state/file-state';
 import type { Mode } from '@/lib/mode/mode-types';
 import { POST as createFileHandler } from '@/app/api/files/route';
 import { POST as batchSaveHandler } from '@/app/api/files/batch-save/route';

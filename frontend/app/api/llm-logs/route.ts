@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { clearLlmLogsBefore } from '@/lib/analytics/file-analytics.db';
-import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
+import { handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { isAdmin } from '@/lib/auth/role-helpers';
 

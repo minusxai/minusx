@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from '@/lib/api/with-auth';
-import { ApiErrors } from '@/lib/api/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
+import { ApiErrors } from '@/lib/http/api-responses';
 import { IS_DEV } from '@/lib/constants';
 
 /**

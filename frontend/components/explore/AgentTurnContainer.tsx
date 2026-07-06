@@ -23,7 +23,7 @@ import { EditFileDetailCard } from './tools/EditFileDisplay';
 import { ReadFilesDetailCard } from './tools/ReadFilesDisplay';
 import { FuzzyMatchDetailCard } from './tools/FuzzyMatchDisplay';
 import { ExploreDatasetDetailCard } from './tools/ExploreDatasetDisplay';
-import { getToolConfig } from '@/lib/api/tool-config';
+import { getToolConfig } from '@/lib/tools/tool-config';
 import { WebSearchDetailCard, type WebSearchResult } from './tools/WebSearchDisplay';
 import { ToolNames } from '@/lib/types';
 import { immutableSet } from '@/lib/utils/immutable-collections';

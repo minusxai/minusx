@@ -9,7 +9,7 @@
  * longer have). Inline `<Question query=…>` embeds carry no file id, so they are not references.
  */
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
-import { extractReferences } from '@/lib/api/compress-augmented';
+import { extractReferences } from '@/lib/chat/compress-augmented';
 import type { DbFile } from '@/lib/types';
 
 // A story embedding saved questions 3 and 9 in its body, plus an inline (file-less) question.

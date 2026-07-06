@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
-import { withAuth } from '@/lib/api/with-auth';
+import { handleApiError, ApiErrors } from '@/lib/http/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
 import { importGoogleSheetToS3, processFilesFromS3, deleteConnectionFiles } from '@/lib/csv-processor';
 
 export const POST = withAuth(async (request: NextRequest, user) => {

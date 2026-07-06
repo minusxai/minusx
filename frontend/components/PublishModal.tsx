@@ -31,7 +31,7 @@ import { LuSave, LuUndo2, LuX, LuCheck, LuPanelLeftClose, LuPanelLeftOpen, LuCod
 import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileView from '@/components/FileView';
-import { publishAll, discardAll, editFile } from '@/lib/api/file-state';
+import { publishAll, discardAll, editFile } from '@/lib/file-state/file-state';
 import { setFileEditMode } from '@/store/uiSlice';
 import { selectFile, selectEffectiveName } from '@/store/filesSlice';
 import type { FileState } from '@/store/filesSlice';

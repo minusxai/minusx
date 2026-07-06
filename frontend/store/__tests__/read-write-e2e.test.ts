@@ -12,19 +12,19 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase, parseToolJson } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { readFiles, publishFile, editFileStr, editFile } from '@/lib/api/file-state';
+import { readFiles, publishFile, editFileStr, editFile } from '@/lib/file-state/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
-import { compressAugmentedFile, compressQueryResult, APP_STATE_LIMIT_CHARS, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { compressAugmentedFile, compressQueryResult, APP_STATE_LIMIT_CHARS, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 import type { ToolCall, CompressedQueryResult, ExecuteQueryDetails, ToolMessage, AugmentedFile, QueryResult } from '@/lib/types';
 import { contentToDetails } from '@/lib/types';
-import { executeQuery } from '@/lib/api/execute-query.server';
+import { executeQuery } from '@/lib/connections/execute-query.server';
 import type { RootState } from '@/store/store';
 import type { Mode } from '@/lib/mode/mode-types';
 import { POST as queryPostHandler } from '@/app/api/query/route';
 import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 import { GET as fileGetHandler, PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
 import { GET as filesListGetHandler } from '@/app/api/files/route';
-import { readFilesByCriteria } from '@/lib/api/file-state';
+import { readFilesByCriteria } from '@/lib/file-state/file-state';
 import { selectContextFromPath, selectMergedContent } from '@/store/filesSlice';
 import { NextRequest } from 'next/server';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
@@ -546,7 +546,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       // First call - should execute
 
-      const { getQueryResult } = await import('@/lib/api/file-state');
+      const { getQueryResult } = await import('@/lib/file-state/file-state');
       const result1 = await getQueryResult({
         query: testQuery,
         params: testParams,
@@ -1458,7 +1458,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const callsBefore = mockRunQuery.mock.calls.length;
 
       // Call the registered EditFile frontend tool handler
-      const { executeToolCall } = await import('@/lib/api/tool-handlers');
+      const { executeToolCall } = await import('@/lib/tools/tool-handlers');
       const toolCall: ToolCall = {
         id: 'test-edit-defaultvalue',
         type: 'function',
@@ -1494,7 +1494,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       const callsBefore = mockRunQuery.mock.calls.length;
 
-      const { executeToolCall } = await import('@/lib/api/tool-handlers');
+      const { executeToolCall } = await import('@/lib/tools/tool-handlers');
       const toolCall: ToolCall = {
         id: 'test-edit-ephemeral',
         type: 'function',
@@ -1524,7 +1524,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
     it('returns CompressedAugmentedFile with queryResults after auto-execute', async () => {
 
-      const { executeToolCall } = await import('@/lib/api/tool-handlers');
+      const { executeToolCall } = await import('@/lib/tools/tool-handlers');
       const toolCall: ToolCall = {
         id: 'test-edit-response',
         type: 'function',
@@ -1579,7 +1579,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const qFile = await DocumentDB.getById(brokenQuestionId);
       (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [qFile] } });
 
-      const { executeToolCall } = await import('@/lib/api/tool-handlers');
+      const { executeToolCall } = await import('@/lib/tools/tool-handlers');
       const toolCall: ToolCall = {
         id: 'test-edit-broken-param',
         type: 'function',

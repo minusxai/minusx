@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { appendEvents, RRWebEvent } from '@/lib/recordings';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 
 /**
  * POST /api/recordings/[id]/events

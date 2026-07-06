@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 
-vi.mock('@/lib/api/micro-task', () => ({
+vi.mock('@/lib/tools/micro-task', () => ({
   runMicroTaskClient: vi.fn(async () => 'Quarterly Revenue By Region'),
   buildFileMicroInput: vi.fn(() => '{"fileType":"question"}'),
 }));
@@ -19,7 +19,7 @@ vi.mock('@/lib/hooks/file-state-hooks', () => ({
 }));
 
 import SaveFileModal from '@/components/SaveFileModal';
-import { runMicroTaskClient, buildFileMicroInput } from '@/lib/api/micro-task';
+import { runMicroTaskClient, buildFileMicroInput } from '@/lib/tools/micro-task';
 
 describe('SaveFileModal suggest name', () => {
   it('suggests a name from the file being saved and fills the input', async () => {

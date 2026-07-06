@@ -13,7 +13,7 @@ import { FrontendToolException } from './frontend-tool-exception';
 import { registerTool } from './orchestrator';
 import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import { searchFilesInFolder } from '@/lib/search/file-search';
-import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
+import { executeQuery as execQuery } from '@/lib/connections/execute-query.server';
 import { validateQueryTablesLocal } from '@/lib/sql/validate-query-tables';
 import { getVizSettingsWarning } from '@/lib/chart/viz-constraints';
 import { executeFuzzyMatch, type FuzzyMatchToolArgs } from '@/lib/connections/fuzzy-match-tool';

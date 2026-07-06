@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getDocumentationForUser } from '../schema-filter';
+import { getDocumentationForUser } from '../context-docs';
 import type { ContextContent, ContextVersion } from '@/lib/types';
 
 /** Minimal context with one published version carrying docs, annotations, and metrics. */

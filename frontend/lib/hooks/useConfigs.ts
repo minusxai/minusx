@@ -3,7 +3,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { getStore } from '@/store/store';
 import { OrgConfig } from '@/lib/branding/whitelabel';
 import { selectConfig, selectConfigsLoaded, setConfigs } from '@/store/configsSlice';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
+import { fetchWithCache } from '@/lib/http/fetch-wrapper';
 
 /**
  * Fetch the latest config from the server and update Redux.

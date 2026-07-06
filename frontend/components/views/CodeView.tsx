@@ -18,7 +18,7 @@ import TabSwitcher from '../TabSwitcher';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectPersistableContent } from '@/store/filesSlice';
-import { applyJsonContentEdit } from '@/lib/api/file-state';
+import { applyJsonContentEdit } from '@/lib/file-state/file-state';
 import { fileToMarkup } from '@/lib/data/file-markup';
 import type { FileType } from '@/lib/types';
 

@@ -17,7 +17,7 @@ import {
   ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools.server';
 import { LoadContext } from '@/agents/web-analyst/web-tools';
-import { formatContextDocsSection } from '@/lib/sql/schema-filter';
+import { formatContextDocsSection } from '@/lib/sql/context-docs';
 import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
 import type { RemoteAnalystContext, AgentAttachment } from './types';
 import type { AppState } from '@/lib/appState';

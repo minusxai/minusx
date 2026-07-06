@@ -27,7 +27,7 @@ import { useFileToolbarActions, type FileToolbarAction } from '@/components/file
 import { usePresentation } from '@/components/file-toolbar/PresentationContext';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectNotebookCellExecuted, setNotebookCellExecuted } from '@/store/filesSlice';
-import { captureNotebookCellResult, removeNotebookCellResult } from '@/lib/api/file-state';
+import { captureNotebookCellResult, removeNotebookCellResult } from '@/lib/file-state/file-state';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import type {

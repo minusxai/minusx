@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
 import { LuHash, LuCalendar, LuType, LuX, LuSettings2, LuBraces } from 'react-icons/lu'
 import { getColumnType } from '@/lib/database/duckdb'
-import { DATE_FORMAT_OPTIONS } from '@/lib/chart/chart-utils'
+import { DATE_FORMAT_OPTIONS } from '@/lib/chart/chart-format'
 import type { ColumnFormatConfig } from '@/lib/types'
 
 // Shared types

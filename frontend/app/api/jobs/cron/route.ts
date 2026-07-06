@@ -10,8 +10,8 @@
  *   - Any scheduler that can POST to this endpoint
  */
 import { NextRequest } from 'next/server';
-import { withCronAuth } from '@/lib/api/with-auth';
-import { successResponse, handleApiError } from '@/lib/api/api-responses';
+import { withCronAuth } from '@/lib/http/with-auth';
+import { successResponse, handleApiError } from '@/lib/http/api-responses';
 import { JobRunsDB } from '@/lib/database/job-runs-db';
 import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';

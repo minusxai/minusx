@@ -14,7 +14,7 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { buildServerAgentArgs, type BuildServerAgentArgsOptions } from '@/lib/chat/agent-args.server';
 import { runEvalV2 } from '@/lib/chat/run-eval.server';
-import { getAppStateServer } from '@/lib/api/file-state.server';
+import { getAppStateServer } from '@/lib/file-state/file-state.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { EvalAssertionType } from '@/agents/eval/eval-agent';
 import type {

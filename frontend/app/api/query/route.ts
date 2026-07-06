@@ -1,8 +1,8 @@
 import type { QuestionReference, QuestionContent } from '@/lib/types';
 import type { QueryStream } from '@/lib/connections/base';
 import { connectionTypeToDialect } from '@/lib/types';
-import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
-import { withAuth } from '@/lib/api/with-auth';
+import { handleApiError, ApiErrors } from '@/lib/http/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { Readable } from 'stream';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';

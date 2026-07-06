@@ -20,7 +20,7 @@ import {
   loadJobRuns,
   triggerJobRun,
   selectJobRun,
-} from '@/lib/api/job-runs-state';
+} from '@/lib/jobs/job-runs-state';
 import type { JobRun } from '@/lib/types';
 
 export interface UseJobRunsResult {

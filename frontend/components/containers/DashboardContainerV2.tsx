@@ -15,7 +15,7 @@
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, type FileId } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile } from '@/lib/api/file-state';
+import { editFile } from '@/lib/file-state/file-state';
 import DashboardView from '@/components/views/DashboardView';
 import { DocumentContent } from '@/lib/types';
 import { useCallback } from 'react';

@@ -15,7 +15,7 @@ import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
 import type { NodeConnector } from '@/lib/connections/base';
 import { getModel } from '@/orchestrator/llm';
 import type { Api, Model } from '@/orchestrator/llm';
-import { TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { TOOL_MAX_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 import {
   runPromptPassFree,
   type PromptPassEntry,

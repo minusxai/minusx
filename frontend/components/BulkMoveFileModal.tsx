@@ -5,7 +5,7 @@ import { Dialog, Button, VStack, HStack, Text, Box, Portal } from '@chakra-ui/re
 import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { createListCollection } from '@chakra-ui/react';
-import { batchMoveFiles } from '@/lib/api/file-state';
+import { batchMoveFiles } from '@/lib/file-state/file-state';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import { useAppSelector } from '@/store/hooks';

@@ -4,7 +4,8 @@ import { LuArrowRightLeft } from 'react-icons/lu'
 import { useAppSelector } from '@/store/hooks'
 import { ChartHost } from './ChartHost'
 import { useChartContainer } from './useChartContainer'
-import { buildFunnelChartOption, isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
+import { isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
+import { buildFunnelChartOption } from '@/lib/chart/chart-builders/funnel'
 import { downloadChartCsv } from './build-chart-download'
 
 interface FunnelPlotProps extends ChartProps {

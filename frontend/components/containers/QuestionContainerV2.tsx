@@ -17,7 +17,7 @@ import { selectMergedContent, setEphemeral, type FileId } from '@/store/filesSli
 import { clearQueryResult } from '@/store/queryResultsSlice';
 import { selectProposedQuery } from '@/store/uiSlice';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
-import { editFile, getQueryResult } from '@/lib/api/file-state';
+import { editFile, getQueryResult } from '@/lib/file-state/file-state';
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 import { QuestionContent } from '@/lib/types';

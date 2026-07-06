@@ -19,7 +19,7 @@ import { LoadContext } from '@/agents/web-analyst/web-tools';
 import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
 import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
-import { formatContextDocsSection } from '@/lib/sql/schema-filter';
+import { formatContextDocsSection } from '@/lib/sql/context-docs';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { appStateForLlm, type AppState } from '@/lib/appState';
 

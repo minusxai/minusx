@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import type { SlashCommand } from '@/lib/types';
 import type { AppState } from '@/lib/appState';
-import { publishFile } from '@/lib/api/file-state';
+import { publishFile } from '@/lib/file-state/file-state';
 import { toaster } from '@/components/ui/toaster';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { interruptChat, setActiveConversation, selectActiveConversation, selectOptionalConversation } from '@/store/chatSlice';

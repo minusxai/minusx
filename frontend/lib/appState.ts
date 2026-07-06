@@ -6,8 +6,8 @@
 
 import type { FileState } from '@/store/filesSlice';
 import type { CompressedAugmentedFile, CompressedFileState } from '@/lib/types';
-import { stripAugmentedContentForLlm, omitFileStateContent } from '@/lib/api/compress-augmented';
-import { takeAugmentedMarkup, takeFileStateMarkup, type MarkupBlock } from '@/lib/api/markup-blocks';
+import { stripAugmentedContentForLlm, omitFileStateContent } from '@/lib/chat/compress-augmented';
+import { takeAugmentedMarkup, takeFileStateMarkup, type MarkupBlock } from '@/lib/chat/markup-blocks';
 
 /**
  * Folder state (from useFolder / navigationSlice)

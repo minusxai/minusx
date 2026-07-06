@@ -6,8 +6,8 @@
  */
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from '@/lib/api/with-auth';
-import { handleApiError } from '@/lib/api/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
+import { handleApiError } from '@/lib/http/api-responses';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
 interface FeedbackBody {

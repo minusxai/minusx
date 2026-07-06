@@ -4,7 +4,7 @@ import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { renderPrompt } from '@/orchestrator/prompts';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
-import { formatContextDocsSection } from '@/lib/sql/schema-filter';
+import { formatContextDocsSection } from '@/lib/sql/context-docs';
 import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
 
 export const fauxRegistration = registerFauxProvider({

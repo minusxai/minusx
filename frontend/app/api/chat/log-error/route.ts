@@ -8,8 +8,8 @@
  */
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from '@/lib/api/with-auth';
-import { handleApiError } from '@/lib/api/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
+import { handleApiError } from '@/lib/http/api-responses';
 import { appendError } from '@/lib/data/conversations.server';
 import type { ErrorLogEntry } from '@/lib/types';
 

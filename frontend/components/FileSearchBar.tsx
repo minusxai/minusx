@@ -15,8 +15,8 @@ import { LuSearch } from 'react-icons/lu';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import type { SearchResultMetadata } from '@/lib/search/file-search';
-import { useFetchManual } from '@/lib/api/useFetch';
-import { API } from '@/lib/api/declarations';
+import { useFetchManual } from '@/lib/http/useFetch';
+import { API } from '@/lib/http/declarations';
 
 interface FileSearchBarProps {
   onResultClick?: (fileId: number) => void;

@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Box, VStack, HStack, Text, Icon, Spinner } from '@chakra-ui/react';
 import { LuChartBar, LuChevronRight, LuChevronDown, LuColumns3 } from 'react-icons/lu';
 import { FilesAPI } from '@/lib/data/files';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
-import { API } from '@/lib/api/declarations';
+import { fetchWithCache } from '@/lib/http/fetch-wrapper';
+import { API } from '@/lib/http/declarations';
 import { QuestionContent } from '@/lib/types';
 import { extractReferencesFromSQL } from '@/lib/sql/sql-references';
 

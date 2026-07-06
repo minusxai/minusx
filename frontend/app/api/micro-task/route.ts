@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { runMicroTask } from '@/lib/chat/run-micro-task.server';
 import { MICRO_TASKS } from '@/agents/micro/micro-tasks';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 
 /**
  * POST /api/micro-task

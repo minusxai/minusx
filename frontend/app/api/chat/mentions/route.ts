@@ -1,4 +1,4 @@
-import { withAuth } from '@/lib/api/with-auth';
+import { withAuth } from '@/lib/http/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { CompletionsAPI } from '@/lib/data/completions/completions.server';
 import { MentionsOptions } from '@/lib/data/completions/types';

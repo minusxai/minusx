@@ -13,8 +13,8 @@ import { ColorModeSwitch } from '@/components/ui/color-mode';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { OrgConfig } from '@/lib/branding/whitelabel';
 import { OTPInput } from '@/components/auth/OTPInput';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
-import { API } from '@/lib/api/declarations';
+import { fetchWithCache } from '@/lib/http/fetch-wrapper';
+import { API } from '@/lib/http/declarations';
 import {
   validateWorkspaceName,
   validateEmail,

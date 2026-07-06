@@ -32,7 +32,7 @@ export async function register() {
     // Untagged rejections are ignored here (Sentry already captures them).
     // Best-effort: the handler swallows its own errors.
     // eslint-disable-next-line no-restricted-syntax
-    const { logTaggedRejection } = await import('./lib/api/unhandled-rejection-logger');
+    const { logTaggedRejection } = await import('./lib/messaging/unhandled-rejection-logger');
     process.on('unhandledRejection', (reason) => {
       void logTaggedRejection(reason);
     });

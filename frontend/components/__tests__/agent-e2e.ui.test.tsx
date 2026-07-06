@@ -66,7 +66,7 @@ import {
   setUserInputResult,
 } from '@/store/chatSlice';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { publishAll } from '@/lib/api/file-state';
+import { publishAll } from '@/lib/file-state/file-state';
 import type { DashboardContent } from '@/lib/validation/atlas-schemas';
 import type { UserRole } from '@/lib/types';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';

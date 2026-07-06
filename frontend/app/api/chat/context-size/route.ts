@@ -4,7 +4,7 @@ import { estimateNextChatContext } from '@/lib/chat/orchestration-core.server';
 import { getConversation } from '@/lib/data/conversations.server';
 import type { ChatRequest } from '@/lib/chat/chat-types';
 import type { ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 
 interface ContextSizeResponse extends ContextSizeEstimate {
   conversationID: number;

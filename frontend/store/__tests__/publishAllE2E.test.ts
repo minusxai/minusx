@@ -16,7 +16,7 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { publishAll, discardAll } from '@/lib/api/file-state';
+import { publishAll, discardAll } from '@/lib/file-state/file-state';
 import type { Mode } from '@/lib/mode/mode-types';
 import { POST as batchSaveHandler } from '@/app/api/files/batch-save/route';
 import { setupMockFetch } from '@/test/harness/mock-fetch';

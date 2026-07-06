@@ -11,7 +11,7 @@ import { shallowEqual } from 'react-redux';
 import { setFile } from '@/store/filesSlice';
 import { FilesAPI } from '@/lib/data/files';
 import { pushView } from '@/store/uiSlice';
-import { createDraftFile } from '@/lib/api/file-state';
+import { createDraftFile } from '@/lib/file-state/file-state';
 
 interface QuestionBrowserPanelProps {
   folderPath: string;

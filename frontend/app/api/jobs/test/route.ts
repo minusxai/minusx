@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 import { createServerRunner } from '@/lib/evals/server';
 import type { Test, TestRunResult } from '@/lib/types';
 

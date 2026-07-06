@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { budgetAnnotationNotes, backfillAnnotationConnections } from '@/lib/sql/schema-filter';
-import { resolveContextDocs } from '@/lib/sql/schema-filter';
+import { budgetAnnotationNotes, backfillAnnotationConnections } from '@/lib/sql/annotation-notes';
+import { resolveContextDocs } from '@/lib/sql/context-docs';
 import type { ContextContent, DatabaseWithSchema, TableAnnotation } from '@/lib/types';
 
 function annTables(n: number, colsPer: number): TableAnnotation[] {

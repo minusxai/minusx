@@ -1,4 +1,4 @@
-import { withAuth } from '@/lib/api/with-auth';
+import { withAuth } from '@/lib/http/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { FilesAPI } from '@/lib/data/files.server';
 import { connectionTypeToDialect } from '@/lib/types';

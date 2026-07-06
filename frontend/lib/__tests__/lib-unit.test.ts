@@ -27,8 +27,8 @@ import { serializeDatabases, parseDatabasesYaml } from '@/lib/context/context-ut
 import type { DatabaseContext } from '@/lib/types';
 
 import { headers as mockHeadersFn } from 'next/headers';
-import { successResponse, errorResponse, handleApiError } from '@/lib/api/api-responses';
-import { ErrorCodes } from '@/lib/api/api-types';
+import { successResponse, errorResponse, handleApiError } from '@/lib/http/api-responses';
+import { ErrorCodes } from '@/lib/http/api-types';
 
 import { canAccessFile, checkFileAccess } from '@/lib/data/helpers/permissions';
 import type { DbFile } from '@/lib/types';

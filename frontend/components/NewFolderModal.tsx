@@ -6,7 +6,7 @@ import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { createListCollection } from '@chakra-ui/react';
-import { createFolder } from '@/lib/api/file-state';
+import { createFolder } from '@/lib/file-state/file-state';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import { useAppSelector } from '@/store/hooks';

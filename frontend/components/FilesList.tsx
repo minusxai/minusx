@@ -12,7 +12,7 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { generateFileUrl } from '@/lib/slug-utils';
 import { Link } from '@/components/ui/Link';
 import DashboardUsageBadge from './DashboardUsageBadge';
-import { moveFile, deleteFile, duplicateFile } from '@/lib/api/file-state';
+import { moveFile, deleteFile, duplicateFile } from '@/lib/file-state/file-state';
 import BulkMoveFileModal from './BulkMoveFileModal';
 import { canDeleteFileType, canCreateFileType } from '@/lib/auth/access-rules.client';
 

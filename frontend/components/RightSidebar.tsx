@@ -19,7 +19,7 @@ import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-reso
 import type { Mode } from '@/lib/mode/mode-types';
 import { Tooltip } from './ui/tooltip';
 import { useContext } from '@/lib/hooks/useContext';
-import { formatContextDocsSection } from '@/lib/sql/schema-filter';
+import { formatContextDocsSection } from '@/lib/sql/context-docs';
 import { useAppState } from '@/lib/hooks/file-state-hooks';
 import { ContextSelector } from './explore/ContextSelector';
 import { selectActiveConversation, selectConversation } from '@/store/chatSlice';

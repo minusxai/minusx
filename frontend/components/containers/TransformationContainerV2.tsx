@@ -11,7 +11,7 @@ import { selectMergedContent, selectEffectiveName, selectConnectionIds, type Fil
 import { setFiles } from '@/store/filesSlice';
 import { useAppDispatch } from '@/store/hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile } from '@/lib/api/file-state';
+import { editFile } from '@/lib/file-state/file-state';
 import { useJobRuns } from '@/lib/hooks/job-runs-hooks';
 import TransformationView from '@/components/views/TransformationView';
 import type { TransformationContent } from '@/lib/types';

@@ -3,7 +3,8 @@ import { Box } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
 import { ChartHost } from './ChartHost'
 import { useChartContainer } from './useChartContainer'
-import { buildWaterfallChartOption, isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
+import { isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
+import { buildWaterfallChartOption } from '@/lib/chart/chart-builders/waterfall'
 import { downloadChartCsv } from './build-chart-download'
 
 interface WaterfallPlotProps extends ChartProps {

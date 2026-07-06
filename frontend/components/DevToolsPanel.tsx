@@ -6,8 +6,8 @@ import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText }
 import { LuChevronDown, LuChevronRight, LuDownload, LuRefreshCw } from 'react-icons/lu';
 import { AppState } from '@/lib/appState';
 import AppStateViewer from './AppStateViewer';
-import { getRegisteredToolNames, executeToolCall } from '@/lib/api/tool-handlers';
-import { UserInputException, type UserInputProps, type UserInput } from '@/lib/api/user-input-exception';
+import { getRegisteredToolNames, executeToolCall } from '@/lib/tools/tool-handlers';
+import { UserInputException, type UserInputProps, type UserInput } from '@/lib/tools/user-input-exception';
 import { getStore } from '@/store/store';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import type { ToolCall, FileType } from '@/lib/types';

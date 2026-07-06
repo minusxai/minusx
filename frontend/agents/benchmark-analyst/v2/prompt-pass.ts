@@ -9,7 +9,7 @@
 import 'server-only';
 import type { AssistantMessage, Context, TextContent } from '@/orchestrator/llm';
 import type { QueryResult } from '@/lib/connections/base';
-import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 import type { Api, Model } from '@/orchestrator/llm';
 
 /** Stateless LLM-call shape `runPromptPassFree` accepts. The tool-based path

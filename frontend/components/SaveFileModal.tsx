@@ -17,7 +17,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveName, selectMergedContent } from '@/store/filesSlice';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { GenerateButton } from './ui/GenerateButton';
-import { runMicroTaskClient, buildFileMicroInput } from '@/lib/api/micro-task';
+import { runMicroTaskClient, buildFileMicroInput } from '@/lib/tools/micro-task';
 import { hasGeneratableContent } from '@/lib/ui/file-utils';
 import { toaster } from './ui/toaster';
 

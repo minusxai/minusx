@@ -7,8 +7,8 @@
  * (and QA setup) poll this until `ready`.
  */
 import { NextRequest } from 'next/server';
-import { withAuth } from '@/lib/api/with-auth';
-import { successResponse, handleApiError } from '@/lib/api/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
+import { successResponse, handleApiError } from '@/lib/http/api-responses';
 import { getMxfoodSeedStatus } from '@/lib/object-store';
 import { MXFOOD_TABLES } from '@/lib/object-store/mxfood-tables';
 import { isValidMode } from '@/lib/mode/mode-types';

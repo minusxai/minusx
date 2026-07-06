@@ -3,7 +3,7 @@
 import { useSelector } from 'react-redux';
 import { useMemo } from 'react';
 import { Box, GridItem, VStack } from '@chakra-ui/react';
-import { getToolConfig } from '@/lib/api/tool-config';
+import { getToolConfig } from '@/lib/tools/tool-config';
 import type { RootState } from '@/store/store';
 import UserInputComponent from './UserInputComponent';
 import { DisplayProps } from '@/lib/types';

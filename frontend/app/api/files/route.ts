@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { handleApiError } from '@/lib/api/api-responses';
-import { withAuth } from '@/lib/api/with-auth';
+import { handleApiError } from '@/lib/http/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
 import { getFiles, loadFiles, createFile } from '@/lib/data/files.server';
 import { FileType } from '@/lib/types';
 import { CreateFileInput } from '@/lib/data/types';

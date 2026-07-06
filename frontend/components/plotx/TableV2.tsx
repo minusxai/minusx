@@ -3,7 +3,7 @@ import { Box, HStack, Button, Text, VStack, Menu, Portal, Icon, Spinner, Input }
 import { LuChevronDown, LuType, LuHash, LuCalendar, LuBraces, LuColumns3, LuCheck, LuDownload, LuArrowUp, LuArrowDown, LuFilter, LuX, LuArrowUpDown, LuChartColumn, LuSettings2 } from 'react-icons/lu'
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
 import { calculateHistogram } from '@/lib/chart/histogram'
-import { formatNumber, applyPrefixSuffix, formatDateValue } from '@/lib/chart/chart-utils'
+import { formatNumber, applyPrefixSuffix, formatDateValue } from '@/lib/chart/chart-format'
 import { buildConditionalBg, getContrastText } from '@/lib/chart/conditional-format-utils'
 import { FormatPopover } from './AxisComponents'
 import type { ColumnFormatConfig, ConditionalFormatRule } from '@/lib/types'

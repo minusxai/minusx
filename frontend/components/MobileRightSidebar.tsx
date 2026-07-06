@@ -10,7 +10,7 @@ import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
 import AppStateViewer from './AppStateViewer';
 import { useContext } from '@/lib/hooks/useContext';
-import { formatContextDocsSection } from '@/lib/sql/schema-filter';
+import { formatContextDocsSection } from '@/lib/sql/context-docs';
 import { useAppState } from '@/lib/hooks/file-state-hooks';
 import { ContextSelector } from './explore/ContextSelector';
 import { selectActiveConversation } from '@/store/chatSlice';
