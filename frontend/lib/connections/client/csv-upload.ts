@@ -22,11 +22,6 @@ export interface CsvUploadResult {
   config?: CsvConnectionConfig;
 }
 
-export interface CsvDeleteResult {
-  success: boolean;
-  message: string;
-}
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getContentType(file: File): string {

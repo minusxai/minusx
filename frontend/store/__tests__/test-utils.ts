@@ -7,7 +7,6 @@
 
 import { configureStore } from '@reduxjs/toolkit';
 import { join } from 'path';
-import { NextRequest } from 'next/server';
 import { initializeDatabase } from '@/lib/database/import-export';
 import chatReducer from '../chatSlice';
 import uiReducer from '../uiSlice';
@@ -139,21 +138,6 @@ export function setupTestStore() {
  */
 export function getTestDbPath(testName: string): string {
   return join(process.cwd(), 'data', `test_${testName}.db`);
-}
-
-// ============================================================================
-// API Route Testing Helpers
-// ============================================================================
-
-/**
- * Create a NextRequest for testing the /api/chat route handler.
- * Simplifies the creation of test requests.
- */
-export function createNextRequest(body: any) {
-  return new NextRequest('http://localhost:3000/api/chat', {
-    method: 'POST',
-    body: JSON.stringify(body)
-  });
 }
 
 // ============================================================================

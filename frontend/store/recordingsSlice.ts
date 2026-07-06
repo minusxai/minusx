@@ -1,5 +1,4 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { RootState } from './store';
 
 export interface RecordingsState {
   activeRecordingId: number | null; // File ID of active recording
@@ -37,9 +36,5 @@ export const {
   startRecording,
   stopRecording
 } = recordingsSlice.actions;
-
-// Selectors
-export const selectActiveRecordingId = (state: RootState) => state.recordings.activeRecordingId;
-export const selectIsRecording = (state: RootState) => state.recordings.isRecording;
 
 export default recordingsSlice.reducer;

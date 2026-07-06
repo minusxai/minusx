@@ -48,7 +48,6 @@ export function getLighterModel(): Model<Api> { return lighterModel; }
 // specifically cover sample-building flip it back on locally.
 let samplingEnabled = true;
 export function setSamplingEnabled(v: boolean): void { samplingEnabled = v; }
-export function getSamplingEnabled(): boolean { return samplingEnabled; }
 
 export abstract class V2DataTool<P extends TSchema, D = unknown>
   extends MXTool<P, BenchmarkAnalystContext, D>

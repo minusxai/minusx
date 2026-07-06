@@ -246,8 +246,6 @@ export interface ConnectorConfigMap {
   clickhouse: ClickHouseConfig;
 }
 
-export type ConnectorDialect = keyof ConnectorConfigMap;
-
 /**
  * Abstract base class for Node.js database connectors.
  * The async database connector interface.

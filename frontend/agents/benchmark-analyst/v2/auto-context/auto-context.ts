@@ -113,10 +113,6 @@ interface CachedState {
 // eslint-disable-next-line no-restricted-syntax -- process-wide cache; race-locked via in-flight Promise pattern
 const autoContextStore = new Map<string, Promise<CachedState>>();
 
-export function clearAutoContextCache(): void {
-  autoContextStore.clear();
-}
-
 /** Synth assistant turn announcing the AutoContextAgent invocation. The
  *  `userMessage` arg carries the rendered catalog for the agent to read. */
 function buildSynthAssistant(toolCallId: string, userMessage: string): AssistantMessage {

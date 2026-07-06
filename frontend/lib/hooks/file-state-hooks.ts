@@ -358,15 +358,6 @@ export function useFolder(path: string, options: UseFolderOptions = {}): UseFold
 // useQueryResult - Execute queries with TTL caching
 // ============================================================================
 
-/**
- * Query execution parameters
- */
-export interface QueryParams {
-  query: string;
-  params: Record<string, any>;
-  database: string;
-  references?: QuestionReference[];  // Composed questions
-}
 
 /**
  * Result returned by useQueryResult hook
