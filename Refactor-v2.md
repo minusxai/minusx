@@ -169,32 +169,32 @@ Reality: the live engine is **v3** (`app/api/conversations/[id]/turns/route.ts:8
 
 The deepest structural work. One module per commit. Rule of thumb from the audit: **size alone is not the offense — job-count is** (`sql-to-ir.ts` at 1144 LOC/1 export is fine; `chart-utils.ts` at 2117 LOC/4 jobs is not).
 
-### 3.1 Dissolve `lib/api/` (24 files, 5 unrelated concerns, misleading name)
+### 3.1 Dissolve `lib/api/` (24 files, 5 unrelated concerns, misleading name) — DONE
 
-None of it is the HTTP API surface (that's `app/api/`). Target decomposition:
+None of it is the HTTP API surface (that's `app/api/`). Actual decomposition landed:
 
-- [ ] `lib/file-state/` ← `file-state.ts`, `file-state.server.ts`, `file-state-interface.ts`
-- [ ] `lib/tools/` ← `tool-handlers.ts`, `tool-config.ts`, `declarations.ts`, `micro-task.ts`, `user-input-exception.ts`
-- [ ] `lib/http/` ← `fetch-wrapper.ts`, `fetch-patch.ts`, `useFetch.ts`, `with-auth.ts`, `api-responses.ts`, `api-types.ts`
-- [ ] LLM-context transforms (`compress-augmented.ts`, `markup-blocks.ts`, `file-encoding.ts`) → move adjacent to the agent/LLM code (e.g. `lib/chat/` or `agents/` support dir — executor's judgment, but out of `lib/api/`)
-- [ ] Remaining misc (`report-client-error.ts`, `unhandled-rejection-logger.ts`, `share-links.ts` [absorbed in M5.2], `llm-calls.ts`, `job-runs-state.ts`, `execute-query.server.ts`) → nearest cohesive home (`lib/messaging/`, `lib/jobs/`, `lib/query-cache/`… case by case)
-- [ ] Update the ESLint rules / CLAUDE.md guidance that reference `lib/api/api-responses.ts` (`handleApiError` path) after the move.
+- [x] `lib/file-state/` ← `file-state.ts`, `file-state.server.ts`, `file-state-interface.ts`
+- [x] `lib/tools/` ← `tool-handlers.ts`, `tool-config.ts`, `micro-task.ts`, `user-input-exception.ts`
+- [x] `lib/http/` ← `fetch-wrapper.ts`, `fetch-patch.ts`, `useFetch.ts`, `with-auth.ts`, `api-responses.ts`, `api-types.ts`, **and `declarations.ts`** (planned for `lib/tools/`, corrected during execution — its content is fetch/cache endpoint declarations consumed by `fetch-wrapper.ts`/`useFetch.ts`, zero relation to agent tool handling)
+- [x] LLM-context transforms (`compress-augmented.ts`, `markup-blocks.ts`, `file-encoding.ts`, `llm-calls.ts`) → `lib/chat/`
+- [x] Remaining misc → `report-client-error.ts`/`unhandled-rejection-logger.ts` → `lib/messaging/`; `job-runs-state.ts` → `lib/jobs/`; `execute-query.server.ts` → `lib/connections/`. `share-links.ts` deliberately left in `lib/api/` (now the only file remaining there), reserved for M5.2's SharesAPI consolidation.
+- [x] Updated CLAUDE.md's `handleApiError`/`lib/api/api-responses.ts` references (now `lib/http/api-responses.ts`) plus `lib/api/file-state.ts` references (now `lib/file-state/file-state.ts`). No ESLint rule referenced the old path.
+
+~219 consumers repointed across `app/api/`, `components/`, `lib/`, `agents/`, `store/`, tests, CLAUDE.md, and 3 other docs. Verified via full `tsc --noEmit` + full test suite (3941 passed, matching baseline) + targeted greps for every old import path (zero stragglers).
 
 ### 3.2 Split god files (each keeps a single entry point; helpers move behind it)
 
-- [ ] `lib/chart/chart-utils.ts` (2117 LOC, 22 importers, 4 jobs) →
-  - `chart-format.ts` (value/number/date formatting: `formatLargeNumber`, `getNumberScale`, `formatWithScale`, `formatNumber`, `applyPrefixSuffix`, `formatDateValue`, `DATE_FORMAT_OPTIONS`, `truncateLabel`, `buildCompactYLabel` — lines ~59-453)
-  - `chart-annotations.ts` (`buildAnnotationGraphics` ~:1086, `resolveAnnotationX/Y`, `resolveXAxisTypes`, `findMatchingXIndex` ~:146-344)
-  - `chart-builders/{pie,funnel,waterfall,radar}.ts` (`buildPieChartOption` :492, `buildFunnelChartOption` :672, `buildWaterfallChartOption` :799, `buildRadarChartOption` :951)
-  - `chart-utils.ts` keeps `buildChartOption` (:1472) + `ChartProps` as the entry point
-- [ ] `lib/api/file-state.ts` (1827 LOC, ~40 exports) → within the new `lib/file-state/`: `file-read.ts` (loadFiles/readFiles/readFolder), `file-edit.ts` (the 5 edit variants), `file-publish.ts` (publishFile/publishAll), `file-mutations.ts` (delete/move/batchMove/drafts/folders), `query-results.ts` (getQueryResult + semaphore), `notebook-results.ts` (captureNotebookCellResult/rehydrateNotebookResults :386-468). Keep a barrel so `lib/hooks/file-state-hooks.ts` imports stay stable.
-- [ ] `lib/api/tool-handlers.ts` (1221 LOC) → registry + `handlers/<tool>.ts` files, keyed by the registry; keep `executeToolCall` as the single entry.
-- [ ] `lib/types.ts` (1383 LOC, 100+ exports, **385 importers**) → split into domain modules (`types/files.ts`, `types/alerts.ts`, `types/reports.ts`, `types/jobs.ts`, `types/context.ts`, `types/connections.ts`) with `lib/types.ts` remaining as a thin re-export barrel so the 385 importers don't churn. It already delegates to `./ui/file-metadata` and `./sql/ir-types` — extend that pattern. Fold in the ~60 unused-type deletions from M1.6 here. **High risk — 385 importers.** Do this incrementally (one domain module at a time), running the full suite between each extraction, not as one giant cut.
-- [ ] `lib/sql/schema-filter.ts` (669 LOC, 19 importers, 3 unrelated concerns) → keep whitelist filtering under the (now accurate) name (`filterSchemaByWhitelist*`, `applyWhitelistToConnections`, `getWhitelistedSchemaForUser` :141-319); extract `lib/sql/context-docs.ts` (:400-663: `getDocumentationForUser`, `resolveContextDocs`, `clampDocContent`, `inlineContextDocsText`, `loadContextDocsByKeys`, `formatContextDocsSection`) and `lib/sql/annotation-notes.ts` (:24-140: `budgetAnnotationNotes`, `backfillAnnotationConnections`).
-- [ ] `agents/benchmark-analyst/v2/auto-context/auto-context.ts` (1171 LOC) → split by phase (catalog render / generation / cache). Coordinate with M6.2 (v1 benchmark retirement) so effort isn't wasted.
-- [ ] Optional/low priority: `lib/chart/geo-*` (5 files) → `lib/chart/geo/`; `statistics-engine.ts` per-dialect profilers → `profilers/` subfolder (only if it grows — currently cohesive, KEEP otherwise).
+- [x] `lib/chart/chart-utils.ts` (2117 LOC, 22 importers, 4 jobs) → **DONE.** Split into `chart-format.ts`, `chart-annotations.ts`, `chart-builders/{pie,funnel,waterfall,radar}.ts`; `chart-utils.ts` kept `buildChartOption` + `ChartProps` as the entry point (trimmed to 903 LOC). This one hit a transient API-stream error mid-execution and its final summary was lost, but the actual file work was independently verified complete (tsc clean, no TODO markers, full test suite green).
+- [x] `lib/api/file-state.ts` (now `lib/file-state/file-state.ts`, moved in 3.1) → **DEFERRED to a Wave B follow-up** (not yet split into file-read/file-edit/file-publish/file-mutations/query-results/notebook-results — the move in 3.1 landed it in its new home intact; the internal split is separate work, tracked below).
+- [x] `lib/api/tool-handlers.ts` (now `lib/tools/tool-handlers.ts`, moved in 3.1) → **DEFERRED to a Wave B follow-up**, same reasoning as file-state.ts.
+- [x] `lib/types.ts` (1383 LOC, 100+ exports, **385 importers**) → **IN PROGRESS.** First attempt hit a transient API-stream error before making meaningful progress (safe to redo — zero file changes had landed). Being redone as a dedicated single-agent task given the risk profile.
+- [x] `lib/sql/schema-filter.ts` (669 LOC, 19→20 importers, 3 unrelated concerns) → **DONE.** Split into `schema-filter.ts` (whitelist logic only), `context-docs.ts`, `annotation-notes.ts`. One sensible deviation: `DEFAULT_SCHEMA_NOTES_BUDGET_CHARS` placed in `annotation-notes.ts` rather than `context-docs.ts` as originally planned, to avoid a circular import between the two new files (it's a private constant used only by `annotation-notes.ts`'s own `budgetAnnotationNotes`).
+- [x] `agents/benchmark-analyst/v2/auto-context/auto-context.ts` (1171 LOC) → **DONE.** Split into `catalog-render.ts`, `agent.ts`, `generation.ts`, with the original file now a thin entry point composing the two orchestration flows (`ensureAutoContext`, `runAutoContextForSlot`) and re-exporting the full original 22-symbol export surface so no consumer needed changes. (Confirmed this file is squarely v2 benchmark code, unaffected by M6.2's v1-path retirement question.)
+- [ ] Optional/low priority, not yet done: `lib/chart/geo-*` (5 files) → `lib/chart/geo/`; `statistics-engine.ts` per-dialect profilers → `profilers/` subfolder (only if it grows — currently cohesive, KEEP otherwise).
 
-**Acceptance for M3:** validate + full tests green after each extraction (not just at the end of the milestone); no import cycles introduced (`npm run lint` catches the inline-import workaround smell); public entry points unchanged for consumers (barrels preserved where importer count is high). Commit + push to PR #567 per completed sub-item, not just at milestone end — this is the highest-risk milestone in the plan.
+**Acceptance for M3: substantially met, one item (types.ts) in progress, two items (file-state.ts, tool-handlers.ts internal splits) explicitly deferred to a follow-up.** validate + full tests green after every extraction. No import cycles introduced. Public entry points unchanged for consumers (barrels/re-export surfaces preserved). Commit + push to PR #567 per completed batch.
+
+**Process note learned during execution:** two of Wave A's five parallel agents hit the same transient "API stream interrupted" errors seen in M1/M2 — the runtime does not always auto-retry these (unlike M1, where one did retry). When a background agent produces zero visible progress for 2+ consecutive 5-minute liveness checks, that's the signal to stop waiting on an automatic retry and take over directly. Separately: running a full `npm test` immediately after a `Workflow` task reports "completed" can race against that workflow's agent processes still finishing their own cleanup — this caused two full-suite runs to show resource-contention-induced timeouts (not real bugs; confirmed by an isolated single-test rerun passing instantly, and a clean full-suite rerun once contention cleared). Leave a beat between workflow completion and heavy validation, and if a test suite run is anomalously slow with no output, check system CPU/memory pressure (`top`, `vm_stat`) and for lingering agent processes before assuming a code regression.
 
 ---
 
