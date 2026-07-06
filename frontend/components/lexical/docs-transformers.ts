@@ -18,7 +18,7 @@ import type { Klass, LexicalNode } from 'lexical';
 
 import { ImageNode } from './ImageNode';
 import { MetricNode } from './MetricNode';
-import { MentionNode } from '@/components/chat/lexical/MentionNode';
+import { MentionNode } from './MentionNode';
 import { ALL_TRANSFORMERS } from './markdown-transformers';
 import { MENTION } from './mention-transformer';
 import { METRIC } from './metric-transformer';

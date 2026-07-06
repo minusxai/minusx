@@ -37,7 +37,7 @@ export function ensureUniqueTableNames(filenames: string[]): Map<string, string>
 }
 
 /** Regex pattern for valid schema/table names: lowercase letters, digits, underscores. */
-export const NAME_PATTERN = /^[a-z0-9_]+$/;
+const NAME_PATTERN = /^[a-z0-9_]+$/;
 
 /** Validate a schema or table name. Returns an error string or null if valid. */
 export function validateIdentifier(value: string): string | null {

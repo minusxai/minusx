@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 import { createConversation, listConversations, type ConversationCursor } from '@/lib/data/conversations.server';
 import { conversationDisplayName } from '@/lib/conversations-utils';
 

@@ -3,12 +3,12 @@
  * updates persistableChanges and isDirty state
  */
 import { getTestDbPath, waitFor, initTestDatabase, cleanupTestDatabase, parseToolJson } from './test-utils';
-import { editFile, editFileStr, readFiles } from '@/lib/api/file-state';
+import { editFile, editFileStr, readFiles } from '@/lib/file-state/file-state';
 import { selectIsDirty, selectMergedContent, selectFile, selectNotebookCellExecuted, selectPersistableContent } from '@/store/filesSlice';
 import { selectQueryResult } from '@/store/queryResultsSlice';
-import { inlineQuestionToPlaceholder } from '@/lib/data/story-question';
-import { numberToPlaceholder } from '@/lib/data/story-number';
-import { executeToolCall } from '@/lib/api/tool-handlers';
+import { inlineQuestionToPlaceholder } from '@/lib/data/story/story-question';
+import { numberToPlaceholder } from '@/lib/data/story/story-number';
+import { executeToolCall } from '@/lib/tools/tool-handlers';
 import { FilesAPI } from '@/lib/data/files';
 import { QuestionContent, DashboardContent } from '@/lib/types';
 import { configureStore } from '@reduxjs/toolkit';

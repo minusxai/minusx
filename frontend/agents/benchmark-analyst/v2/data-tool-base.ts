@@ -15,7 +15,7 @@ import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
 import type { NodeConnector } from '@/lib/connections/base';
 import { getModel } from '@/orchestrator/llm';
 import type { Api, Model } from '@/orchestrator/llm';
-import { TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { TOOL_MAX_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 import {
   runPromptPassFree,
   type PromptPassEntry,
@@ -48,7 +48,6 @@ export function getLighterModel(): Model<Api> { return lighterModel; }
 // specifically cover sample-building flip it back on locally.
 let samplingEnabled = true;
 export function setSamplingEnabled(v: boolean): void { samplingEnabled = v; }
-export function getSamplingEnabled(): boolean { return samplingEnabled; }
 
 export abstract class V2DataTool<P extends TSchema, D = unknown>
   extends MXTool<P, BenchmarkAnalystContext, D>

@@ -31,16 +31,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## V2 chat: `frontend/orchestrator/` and `frontend/agents/`
+## Chat orchestration: `frontend/orchestrator/` and `frontend/agents/`
 
-These directories hold the in-process TypeScript orchestrator and agent/tool definitions that power **all chat**. They are wired into production via `lib/chat-orchestration-v2.server.ts`, which the chat API routes (`app/api/chat/route.ts`, `app/api/chat/stream/route.ts`) invoke for every request. **This is the only chat engine.** (`lib/chat-orchestration.ts` survives only as a shared request/response *types* module, despite its name.)
+These directories hold the in-process TypeScript orchestrator and agent/tool definitions that power **all chat**. They are wired into production via `lib/chat/orchestration-core.server.ts` (the shared orchestration core — `setupOrchestration`, `recordLlmCalls`, the tool/agent registries), which the chat API routes (`app/api/conversations/[id]/turns/route.ts`, `app/api/conversations/[id]/stream/route.ts`) invoke for every request. **This is the only chat engine.** (`lib/chat/chat-types.ts` survives only as a shared request/response *types* module, despite the `ChatRequest` name.)
 
 **What's where:**
 - `frontend/orchestrator/` — the `Orchestrator` engine plus conversation-log types (`@/orchestrator/types`) and LLM types (`@/orchestrator/llm`).
 - `frontend/agents/` — agent + tool definitions (`analyst/`, `benchmark-analyst/`, `web-analyst/`, ...). Server-only tools live in `*.server.ts` variants; the `Base*` classes (no `server-only` import) are reused by the benchmark CLI.
 - Both trees have their own tests under `__tests__/` (the `orchestrator` Vitest project), plus integration coverage through the chat API routes.
-
-**While the migration is in progress:** when changing shared code in `frontend/lib/`, keep both the v1 and v2 chat paths working.
 
 ---
 
@@ -106,7 +104,7 @@ in-process inside the Next.js app (TypeScript orchestrator under
 `frontend/orchestrator/` + `frontend/agents/`). Analytics queries run
 in the Node.js connectors (`frontend/lib/connections/`).
 
-Chat is served by the Next.js routes `POST /api/chat` and `POST /api/chat/stream`, which run the in-process orchestrator. Tool/skill schemas are served from TypeScript (`GET /api/tools/schema`).
+Chat is served by `POST /api/conversations/[id]/turns` (fires `runConversationTurn` detached — does not block on the LLM call) and `GET /api/conversations/[id]/stream` (resumable SSE via Postgres LISTEN/NOTIFY), both routing through `lib/chat/conversation-turn.server.ts` → the orchestration core. Tool/skill schemas are served from TypeScript (`GET /api/tools/schema`).
 
 **Query execution** runs on the Next.js side: `app/api/query/route.ts` → `lib/connections/run-query.ts` → Node.js connectors in `lib/connections/` (DuckDB, BigQuery, PostgreSQL, SQLite, Athena, Mongo, CSV, Google Sheets).
 
@@ -204,14 +202,14 @@ The configs system provides per-company configuration stored as database documen
 - When loading a dashboard, referenced questions are fetched and included
 - References prevent circular dependencies at save time
 
-**Query Execution Flow**
+**Query Execution Flow** (`lib/query-cache/` — implements `docs/Query Execution, Cache, & Params Arch V2.md`)
 1. User edits SQL → Redux tracks state
 2. Execute → `POST /api/query`; client calls are funneled through `querySemaphore` (caps concurrency at `MAX_CONCURRENT_QUERIES`)
 3. Route applies params (`applyNoneParams`) and derives dialect via the lightweight `ConnectionsAPI.getRawByName` — *not* `FilesAPI.loadFile`, which can trigger schema profiling
-4. Server `queryCache` (TTL `QUERY_CACHE_TTL_MS`, default 60s) serves hits; concurrent identical queries share one run via `queryInflight`
-5. On a miss, `runQuery` (`lib/connections/run-query.ts`) picks the connector via `getNodeConnector`, executes → QueryResult → viz updates
+4. `getCachedJsonlStream` (`lib/query-cache/execute.server.ts`) classifies the cache key (`query_cache` control-plane row) as **fresh** (serve the blob), **stale** (serve the blob + fire-and-forget background revalidation), **expired**, or a **miss** (execute) — per-file SWR windows come from `resolveCachePolicy` (`revalidateMs`/`expiryMs`, `lib/query-cache/policy.server.ts`). Execution is lease-guarded (`claimLease`/`renewLease`/`releaseLease`): concurrent identical requests share one run, and a crashed holder's lease is steal-able rather than blocking waiters forever
+5. On a miss/expired/revalidate, `runQueryStream` (`lib/connections/run-query.ts`) picks the connector via `getNodeConnector`, executes, and the result is gzipped-JSONL-encoded to both the client stream and the object-store blob (`QueryCacheBlobStore`) so the wire format and at-rest format never diverge
 
-`getQueryResult({ forceLoad: true })` / `useQueryResult().refetch()` bypass the cache (powers the retry button).
+Guests of a public story can only execute by file id (`assertGuestQueryAllowed`/`sanitizeGuestParams`, `lib/query-cache/guest-query.server.ts`) — never raw SQL. `getQueryResult({ forceLoad: true })` / `useQueryResult().refetch()` pass `forceRefresh`, which skips the fresh/stale serve and re-executes (still lease-guarded) — powers the retry button.
 
 **Schema Profiling & Statistics Enrichment**
 
@@ -242,7 +240,7 @@ Connection schemas are enriched with column-level metadata (category, null count
   - The typed interface is the single source of truth. Only extract specific keys when the target API requires a different shape (e.g. Mixpanel's `$email` reserved field).
 
 **Component Patterns**
-- **Container/View separation**: Containers (smart) connect to Redux, Views (dumb) are pure presentation
+- **Container/View separation (intended convention, not currently enforced)**: containers (`components/containers/`) should connect to Redux and pass data/callbacks down; views (`components/views/`) should be pure presentation. In practice this is widely violated — 14 view files (including the two most-used, `QuestionViewV2.tsx` and `DashboardView.tsx`) dispatch Redux or read `state.files` directly. A 2026-07 audit decided to enforce the convention going forward, but found none of the 14 files had the component-level test coverage (`*.ui.test.tsx`) needed to safely move their Redux logic up without risking a silent behavior change — so no moves were made; see `Refactor-v2.md` M4.2 for the full list and evidence. **When touching one of these files**: don't assume the convention already holds; if you add new Redux access to a view, that's consistent with the current (unenforced) state, but adding component-level test coverage for the file first, then moving the dispatch into its container, is the preferred fix if you have the room for it.
 - **Composition over inheritance**: Build complex UIs from simple, reusable components
 - **Single responsibility**: Each component should do one thing well
 
@@ -251,11 +249,11 @@ Connection schemas are enriched with column-level metadata (category, null count
 
 ### AI Orchestration & Tool Calling Architecture
 
-The orchestrator (`frontend/orchestrator/`) is a **single-use** engine over an **append-only conversation log** (immutable, forkable, time-travel capable; forks on concurrent edits). Agents dispatch **tool calls**; each goes pending → execution → completed, and a job finishes when no pending tool calls remain. Tools and agents self-register (`V2_REGISTRABLES`); execution streams to the client via Server-Sent Events.
+The orchestrator (`frontend/orchestrator/`) is a **single-use** engine over an **append-only conversation log** (immutable, forkable, time-travel capable; forks on concurrent edits). Agents dispatch **tool calls**; each goes pending → execution → completed, and a job finishes when no pending tool calls remain. Tools and agents self-register (`REGISTRABLES`); execution streams to the client via Server-Sent Events.
 
 **Tools execute in the tier they need:**
 - **Server tools** — run in-process during orchestration; need the document DB / connectors (querying data, searching schema, loading files: `ExecuteQuery`, `SearchDBSchema`, `ReadFiles`, `SearchFiles`).
-- **Frontend-bridged tools** — need Redux/UI state (modifying the current question, editing dashboard layout, navigating); they throw `UserInputException` to pause the run and are executed in the browser via Redux middleware, then resume. Headless runs swap these for server equivalents where possible (`V2_HEADLESS_REGISTRABLES`; e.g. server-side `ReadFiles`).
+- **Frontend-bridged tools** — need Redux/UI state (modifying the current question, editing dashboard layout, navigating); they throw `UserInputException` to pause the run and are executed in the browser via Redux middleware, then resume. Headless runs swap these for server equivalents where possible (`HEADLESS_REGISTRABLES`; e.g. server-side `ReadFiles`).
 
 **Tool call flow:**
 ```
@@ -373,7 +371,7 @@ Update `lib/database/postgres-schema.ts` (PGLite uses this schema), update `lib/
 
 **Always use `handleApiError` in catch blocks** — never return `NextResponse.json({ error }, { status: 500 })` directly:
 ```typescript
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 
 export async function POST(req: NextRequest) {
   try {
@@ -388,14 +386,14 @@ export async function POST(req: NextRequest) {
 ### Client-Side Error Handling
 
 Browser-side complement to `handleApiError`:
-- `lib/utils/error-parser.ts` — `parseErrorMessage()` → `{ title, hint, details?, isNetworkError? }`; flags transport failures (`'failed to fetch'`, etc.) as `isNetworkError` so the UI shows a retryable "Couldn't load results" instead of a SQL error.
+- `components/question/error-parser.ts` — `parseErrorMessage()` → `{ title, hint, details?, isNetworkError? }`; flags transport failures (`'failed to fetch'`, etc.) as `isNetworkError` so the UI shows a retryable "Couldn't load results" instead of a SQL error.
 - `lib/messaging/capture-error.ts` — `captureError()` POSTs to `/api/capture-error` with exponential backoff + jitter and 60s dedup; best-effort, never throws.
 - `lib/utils/semaphore.ts` — `Semaphore` (limit may be a getter for live runtime caps); used as `querySemaphore` in `file-state.ts`.
 
 ### Adding Agent Tools / Agents
 1. Add a tool (`MXTool` subclass with a TypeBox param schema) or agent under `frontend/agents/**`
-2. Register it in `lib/chat-orchestration-v2.server.ts` (`V2_REGISTRABLES`); headless runners use `V2_HEADLESS_REGISTRABLES`
-3. Implement the client/server behavior in `tool-handlers.ts` (frontend bridge) / `tool-handlers.server.ts` (server) as needed
+2. Register it in `lib/chat/orchestration-core.server.ts` (`REGISTRABLES`); headless runners use `HEADLESS_REGISTRABLES`
+3. Implement the behavior: server tools implement it directly in the `MXTool` subclass's `execute()` method; frontend-bridged tools register a handler in `lib/tools/tool-handlers.ts` (the registry barrel), implemented in `lib/tools/handlers/*.ts`
 4. Keep the TypeBox param schema (colocated with the tool) and the handler behavior in sync — the schema is the single source of truth for the args the LLM is told it can pass
 
 ## Important Technical Details
@@ -453,12 +451,12 @@ Browser-side complement to `handleApiError`:
 
 > **CRITICAL — always reuse, never re-implement.** `file-state.ts` and `file-state-hooks.ts` are the single source of truth for all file and query operations in the frontend. Before writing any new fetch, Redux read, or file-operation logic, read these files first. Duplicating their functionality elsewhere is a code smell.
 
-- `frontend/lib/api/file-state.ts` - **CORE: Centralized file operations** — the only place file fetching, editing, saving, deleting, folder loading, and query execution logic should live. Key exports: `loadFiles`, `readFiles`, `readFolder`, `editFile`, `publishFile`, `deleteFile`, `getQueryResult` (accepts `{ forceLoad }` to bypass the query cache; calls bounded by `querySemaphore`).
+- `frontend/lib/file-state/file-state.ts` - **CORE: Centralized file operations** — the only place file fetching, editing, saving, deleting, folder loading, and query execution logic should live. Key exports: `loadFiles`, `readFiles`, `readFolder`, `editFile`, `publishFile`, `deleteFile`, `getQueryResult` (accepts `{ forceLoad }` to bypass the query cache; calls bounded by `querySemaphore`).
 - `frontend/lib/hooks/file-state-hooks.ts` - **CORE: React hooks** wrapping `file-state.ts` — the only hooks components should use for file/query data. Key exports: `useFile`, `useFolder`, `useFileByPath`, `useFilesByCriteria`, `useQueryResult` (returns `refetch()` for force-reload / retry).
 
 **FilesAPI dual-implementation pattern:** A shared interface defines the contract for all file CRUD operations. There is a client implementation (HTTP calls) and a server implementation (direct DB access), both exported as `FilesAPI` from their respective modules. `file-state.ts` uses the client `FilesAPI` and adds Redux state management on top. **When adding a new file operation, add it to the interface and implement it in both client and server.** Never bypass `FilesAPI` with raw `fetch` calls.
 
-> **⚠️ `DocumentDB` should only be used inside the server-side `FilesAPI` implementation.** Do not call `DocumentDB` directly from API routes, tool handlers, job handlers, or anywhere else — go through `FilesAPI` instead. Direct `DocumentDB` usage outside the data layer is a code smell.
+> **⚠️ `DocumentDB` is a shared server-side data primitive for `lib/data/*.server.ts` modules** — not exclusively for the `FilesAPI` implementation (`lib/data/files.server.ts`). Its siblings doing legitimate direct data access for non-file-shaped concerns (`lib/data/connections.server.ts`, `lib/data/configs.server.ts`, `lib/data/heal-stories.server.ts`, and future modules in the same category) may also import it directly, rather than being forced through `FilesAPI` — an interface not designed for their shapes. It is still forbidden everywhere else: do not call `DocumentDB` directly from API routes, tool handlers, job handlers, or anywhere outside `lib/data/*.server.ts` / `lib/database/**` — go through `FilesAPI`, `ConnectionsAPI`, or `ConfigsAPI` instead. Direct `DocumentDB` usage outside the data layer is a code smell. This boundary is enforced by the `no-restricted-imports` rule for `@/lib/database/documents-db` in `frontend/eslint.config.mjs`.
 
 - `frontend/lib/database/documents-db.ts` - Document DB CRUD operations (PGLite or Postgres)
 - `frontend/lib/types.ts` - TypeScript interfaces. Imports shared types from `@/lib/validation/atlas-schemas`; defines frontend-only types and extends the shared ones (e.g. `QuestionContent` adds `queryResultId`)
@@ -469,9 +467,10 @@ Browser-side complement to `handleApiError`:
   - `filesSlice.ts` - File/document state management
   - `chatSlice.ts` - Chat conversation state
   - `queryResultsSlice.ts` - Query results cache
-  - `connectionsSlice.ts` - Database connections
-  - `contextsSlice.ts` - Context files
   - `authSlice.ts` - Authentication state
+  - `configsSlice.ts`, `usersSlice.ts`, `jobRunsSlice.ts`, `navigationSlice.ts`, `recordingsSlice.ts`, `uiSlice.ts` - remaining domain slices (see `store/store.ts` for the full reducer map)
+
+  Connections and contexts are **not** Redux-slice-backed — they're loaded via SSR `preloadedState` + hooks (see "Loading Strategy" above), not a dedicated slice.
 - `frontend/components/containers/` - Smart container components (QuestionContainerV2, DashboardContainerV2)
 - `frontend/components/views/` - View components (QuestionViewV2, DashboardView)
 - `frontend/app/f/[id]/page.tsx` - File detail page route
@@ -485,7 +484,7 @@ Browser-side complement to `handleApiError`:
 ### AI Orchestration & Connectors
 - `frontend/orchestrator/` - the `Orchestrator` engine + conversation-log/LLM types
 - `frontend/agents/` - agents, tools, and skills (e.g. `analyst/`, `web-analyst/`, `slack/`, `report/`, `eval/`)
-- `frontend/lib/chat-orchestration-v2.server.ts` - wires agents/tools into `V2_REGISTRABLES` and runs chat turns
+- `frontend/lib/chat/orchestration-core.server.ts` - wires agents/tools into `REGISTRABLES` and runs chat turns
 - `frontend/lib/connections/` - Node.js query connectors (DuckDB, BigQuery, PostgreSQL, SQLite, Athena, Mongo, CSV, Sheets) — query execution lives here
 
 ### Writing New Tests
@@ -495,9 +494,9 @@ Browser-side complement to `handleApiError`:
 - Use shared test utilities from `store/__tests__/test-utils.ts` (`setupTestDb` + `getTestDbPath`) and `test/harness/mock-fetch.ts` (`setupMockFetch` with the real route handlers)
 - **Automatic tool execution**: observe automatic system behaviors (middleware, listeners) rather than manually simulating them
 
-**Reference patterns:** `lib/integrations/slack/__tests__/slack.e2e.test.ts` (headless v2 orchestration via faux), `store/__tests__/storeE2E.test.ts` (in-process eval agent), and `app/api/chat/__tests__/v2-happy-path.test.ts` (chat route).
+**Reference patterns:** `lib/integrations/slack/__tests__/slack.e2e.test.ts` (headless orchestration via faux), `store/__tests__/storeE2E.test.ts` (in-process eval agent), and `app/api/conversations/[id]/__tests__/stream-turns.test.ts` (end-to-end through the real v3 chat routes — turn POST, resumable stream GET, interrupt — with a faux LLM).
 
-For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention — these run in the jsdom-based `ui` Vitest project (`npm run test:ui`, or `npx vitest run --project=ui <pattern>`). See `components/__tests__/agent-e2e.ui.test.tsx` and `components/__tests__/streaming-render.ui.test.tsx` for the reference pattern (in-process orchestrator + faux LLM, Redux, async agent flow + tool execution, `waitFor` assertions) and `components/__tests__/chat-input.ui.test.tsx` for chat-input interaction patterns.
+For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention — these run in the jsdom-based `ui` Vitest project (`npm run test:ui`, or `npx vitest run --project=ui <pattern>`). See `components/__tests__/agent-e2e.ui.test.tsx` for the reference pattern (in-process orchestrator + faux LLM, Redux, async agent flow + tool execution, `waitFor` assertions) and `components/__tests__/chat-input.ui.test.tsx` for chat-input interaction patterns.
 
 **UI test element queries: `aria-label` ONLY.** Never use `getByRole`, `getByText`, `getByPlaceholderText`, `getByTestId`, or any other query strategy. Every interactive element must be located exclusively via `getByLabelText` / `findByLabelText` (which matches `aria-label`). If an element lacks an `aria-label`, add one to the component — do not work around it with a different query.
 
@@ -507,7 +506,7 @@ For component-level UI interaction tests (React rendering, user events, DOM asse
 
 **Pipeline (no codegen — pure in-process):**
 1. `frontend/lib/validation/atlas-json-schemas.ts` rebuilds the JSON-Schema objects at module load: full `atlasSchema` and the viz-stripped `atlasSchemaNoViz`. TypeBox's `Symbol(Kind)` metadata is dropped via `JSON.parse(JSON.stringify(...))` so Ajv sees a clean object.
-2. Consumers of `atlasSchema` import directly from there: `lib/validation/content-validators.ts` (Ajv compile — `ajv.addSchema(atlasSchema, 'atlas')`) and `lib/data/file-markup.ts` + `lib/data/content-jsx.ts` (use `atlasSchema.$defs` to resolve `$ref`s when converting content ↔ JSX markup). The **EditFile / CreateFile tool descriptions do NOT embed the schema** — per-file-type markup is documented in each type's skill (`skill_questions`, `skill_dashboards`, `skill_reports`, `skill_alerts`, `skill_stories`, `skill_notebooks` in `orchestrator/prompts/prompts.yaml`); the tool description (`agents/web-analyst/web-tools.ts` → `MARKUP_FORMAT`) carries only the generic markup mechanics + a pointer to those skills. `atlasSchemaNoViz` currently has no production consumer (referenced only by schema tests).
+2. Consumers of `atlasSchema` import directly from there: `lib/validation/content-validators.ts` (Ajv compile — `ajv.addSchema(atlasSchema, 'atlas')`) and `lib/data/story/file-markup.ts` + `lib/data/story/content-jsx.ts` (use `atlasSchema.$defs` to resolve `$ref`s when converting content ↔ JSX markup). The **EditFile / CreateFile tool descriptions do NOT embed the schema** — per-file-type markup is documented in each type's skill (`skill_questions`, `skill_dashboards`, `skill_reports`, `skill_alerts`, `skill_stories`, `skill_notebooks` in `orchestrator/prompts/prompts.yaml`); the tool description (`agents/web-analyst/web-tools.ts` → `MARKUP_FORMAT`) carries only the generic markup mechanics + a pointer to those skills.
 3. Types come directly from `Static<typeof …>` — consumers import from `@/lib/validation/atlas-schemas`; `frontend/lib/types.ts` re-exports them and adds frontend-only fields.
 
 **Key rules:**
@@ -518,7 +517,7 @@ For component-level UI interaction tests (React rendering, user events, DOM asse
 
 ## Tool Schemas
 
-Frontend tool arg schemas are TypeBox `Type.Object` definitions colocated with the tool (`frontend/agents/**`). They are the single source of truth for what args the LLM is told it can pass — keep the schema and the `tool-handlers.ts` / `tool-handlers.server.ts` behavior (which produces the return shape) in sync.
+Frontend tool arg schemas are TypeBox `Type.Object` definitions colocated with the tool (`frontend/agents/**`). They are the single source of truth for what args the LLM is told it can pass — keep the schema and the handler behavior (`lib/tools/handlers/*.ts` for frontend-bridged tools; the `MXTool.execute()` method for server tools) in sync.
 
 ## Previous Mistakes
 
@@ -526,7 +525,7 @@ Frontend tool arg schemas are TypeBox `Type.Object` definitions colocated with t
 
 **Schema changes:** Any change to `lib/database/postgres-schema.ts` (used by both PGLite and the Postgres adapter) must be accompanied by the appropriate migration entry.
 
-**Tool Registration:** When a tool spawns another tool (via `FrontendToolException`) or an agent dispatches a sub-agent, the spawned class MUST be in `V2_REGISTRABLES` (`lib/chat-orchestration-v2.server.ts`) — the orchestrator instantiates it from that registry by `schema.name` when resuming / reconstructing a saved conversation log.
+**Tool Registration:** When a tool spawns another tool (via `FrontendToolException`) or an agent dispatches a sub-agent, the spawned class MUST be in `REGISTRABLES` (`lib/chat/orchestration-core.server.ts`) — the orchestrator instantiates it from that registry by `schema.name` when resuming / reconstructing a saved conversation log.
 
 **Debugging Async Orchestration:** Debug multi-tier async execution by adding temporary logging at tier boundaries (orchestrator stream events, tool execution results) to trace data flow through the execution loop.
 

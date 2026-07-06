@@ -291,7 +291,5 @@ export const listAllConnections = ConnectionsAPI.listAll.bind(ConnectionsAPI);
 export const getPersistedConnectionSchema = ConnectionsAPI.getPersistedSchemaByName.bind(ConnectionsAPI);
 export const getConnection = ConnectionsAPI.getByName.bind(ConnectionsAPI);
 export const createConnection = ConnectionsAPI.create.bind(ConnectionsAPI);
-export const updateConnection = ConnectionsAPI.update.bind(ConnectionsAPI);
 export const deleteConnection = ConnectionsAPI.delete.bind(ConnectionsAPI);
-export const testConnection = ConnectionsAPI.test.bind(ConnectionsAPI);
 export const updateCachedSchema = ConnectionsAPI.updateCachedSchema.bind(ConnectionsAPI);

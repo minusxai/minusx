@@ -4,7 +4,7 @@
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import { OnboardingDashboardAgent } from '../onboarding-agents';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
-import { INLINE_ALL_DOCS_THRESHOLD } from '@/lib/sql/schema-filter';
+import { INLINE_ALL_DOCS_THRESHOLD } from '@/lib/sql/context-docs';
 
 function dashboardAgent(overrides: Partial<RemoteAnalystContext> = {}) {
   const orch = new Orchestrator([OnboardingDashboardAgent]);

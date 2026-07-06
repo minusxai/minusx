@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
-import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
-import { withAuth } from '@/lib/api/with-auth';
+import { successResponse, handleApiError, ApiErrors } from '@/lib/http/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
 import { loadFile, saveFile, moveFile, deleteFile, ConflictError } from '@/lib/data/files.server';
 import { validateFileId } from '@/lib/data/helpers/validation';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';

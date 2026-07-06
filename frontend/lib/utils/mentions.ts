@@ -5,7 +5,7 @@ import type { ChatMentionData } from '@/lib/types';
  * mention (mention JSON never nests braces). Kept in sync with the Lexical
  * mention transformer (`components/lexical/mention-transformer.ts`).
  */
-export const MENTION_REGEX = /@(\{.+?\})/;
+const MENTION_REGEX = /@(\{.+?\})/;
 
 export type MentionSegment =
   | { type: 'text'; value: string }

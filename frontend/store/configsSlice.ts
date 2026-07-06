@@ -37,14 +37,10 @@ const configsSlice = createSlice({
       state.config = action.payload.config;
       state.loadedAt = Date.now();
     },
-    clearConfigs(state) {
-      state.config = DEFAULT_CONFIG;  // Reset to defaults, never null
-      state.loadedAt = null;
-    },
   },
 });
 
-export const { setConfigs, clearConfigs } = configsSlice.actions;
+export const { setConfigs } = configsSlice.actions;
 export default configsSlice.reducer;
 
 // Selectors

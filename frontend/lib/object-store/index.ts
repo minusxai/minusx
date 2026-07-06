@@ -104,12 +104,12 @@ export function generateCsvUploadKey(params: {
 }
 
 /** Shared S3 seed path for a single mxfood table. */
-export function getMxfoodSeedKey(tableName: string): string {
+function getMxfoodSeedKey(tableName: string): string {
   return `seeds/mxfood/${tableName}.parquet`;
 }
 
 /** Destination key for a mxfood tutorial table. */
-export function getMxfoodTutorialKey(mode: string, tableName: string): string {
+function getMxfoodTutorialKey(mode: string, tableName: string): string {
   return `csvs/${mode}/mxfood/${tableName}.parquet`;
 }
 
@@ -163,6 +163,3 @@ export async function getMxfoodSeedStatus(
   const present = flags.filter(Boolean).length;
   return { ready: present === tableNames.length, present, total: tableNames.length };
 }
-
-export { S3Adapter };
-export { LocalFsAdapter };

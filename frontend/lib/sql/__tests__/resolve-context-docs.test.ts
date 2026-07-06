@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveContextDocs, formatContextDocsSection, loadContextDocsByKeys, INLINE_ALL_DOCS_THRESHOLD, clampDocContent } from '../schema-filter';
+import { resolveContextDocs, formatContextDocsSection, loadContextDocsByKeys, INLINE_ALL_DOCS_THRESHOLD, clampDocContent } from '../context-docs';
 import { PER_DOC_CONTENT_CHARS } from '@/lib/context/context-budgets';
 import type { ContextContent, ContextVersion, DocEntry, ResolvedContextDocs } from '@/lib/types';
 

@@ -1,6 +1,6 @@
 import 'server-only';
 import * as fs from 'fs';
-import { NodeConnector, SchemaEntry, QueryResult, QueryStream, TestConnectionResult } from './base';
+import { NodeConnector, SchemaEntry, QueryResult, QueryStream } from './base';
 import { resolveDuckDbFilePath } from './duckdb-connector';
 import { withSqliteViaDuckdbConnection, getOrCreateSqliteViaDuckdbInstance } from './sqlite-via-duckdb-registry';
 import { collectDuckDbIndexes } from './duckdb-indexes';
@@ -43,22 +43,13 @@ export class SqliteConnector extends NodeConnector {
     this.absPath = resolveDuckDbFilePath(config.file_path);
   }
 
-  async testConnection(includeSchema = false): Promise<TestConnectionResult> {
+  protected async ping(): Promise<void> {
     if (!fs.existsSync(this.absPath)) {
-      return { success: false, message: `File not found: ${this.absPath}` };
+      throw new Error(`File not found: ${this.absPath}`);
     }
-    try {
-      await withSqliteViaDuckdbConnection(this.absPath, async (conn) => {
-        await conn.run('SELECT 1');
-      });
-      if (includeSchema) {
-        const schemas = await this.getSchema();
-        return { success: true, message: 'Connection successful', schema: { schemas } };
-      }
-      return { success: true, message: 'Connection successful' };
-    } catch (err: any) {
-      return { success: false, message: err?.message || String(err) };
-    }
+    await withSqliteViaDuckdbConnection(this.absPath, async (conn) => {
+      await conn.run('SELECT 1');
+    });
   }
 
   async query(

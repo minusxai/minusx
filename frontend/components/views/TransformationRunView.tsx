@@ -4,7 +4,7 @@ import { Box, Text, VStack, HStack, Badge } from '@chakra-ui/react';
 import { useState } from 'react';
 import { LuChevronDown, LuChevronRight, LuClock, LuTimer, LuFlaskConical } from 'react-icons/lu';
 import type { RunFileContent, TransformationOutput, TransformResult } from '@/lib/types';
-import TestRunResultsList from '@/components/test/TestRunResultsList';
+import TestRunResultsList from '@/components/evals/TestRunResultsList';
 
 /* ------------------------------------------------------------------ */
 /*  Sub-components                                                      */

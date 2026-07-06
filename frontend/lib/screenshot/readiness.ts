@@ -42,7 +42,7 @@ function iframeDocs(root: ParentNode): Document[] {
 }
 
 /** True when the view (or a same-origin iframe within it) shows a busy marker or is still loading. */
-export function isFileViewBusy(view: Element): boolean {
+function isFileViewBusy(view: Element): boolean {
   if (view.querySelector(BUSY_SELECTOR)) return true;
   for (const iframe of Array.from(view.querySelectorAll('iframe'))) {
     let doc: Document | null = null;

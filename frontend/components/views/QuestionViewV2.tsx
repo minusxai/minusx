@@ -26,9 +26,9 @@ import {
   LuGripVertical,
 } from 'react-icons/lu';
 import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType } from '@/lib/types';
-import SqlEditor from '../SqlEditor';
-import ParameterRow from '../ParameterRow';
-import DatabaseSelector from '../DatabaseSelector';
+import SqlEditor from '../query-builder/SqlEditor';
+import ParameterRow from '../params/ParameterRow';
+import DatabaseSelector from '../selectors/DatabaseSelector';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { syncReferencesWithSQL } from '@/lib/sql/sql-references';
 import { useAvailableQuestions } from '@/lib/hooks/useAvailableQuestions';

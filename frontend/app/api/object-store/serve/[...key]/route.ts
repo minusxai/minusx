@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { existsSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 import { LOCAL_UPLOAD_PATH } from '@/lib/config';
 
 const CONTENT_TYPES: Record<string, string> = {

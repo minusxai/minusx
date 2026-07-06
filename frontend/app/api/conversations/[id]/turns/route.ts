@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
-import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
-import { withAuth } from '@/lib/api/with-auth';
+import { successResponse, handleApiError, ApiErrors } from '@/lib/http/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
 import { getConversation, releaseRunLease, acquireRunLease, appendError, getMaxSeq, resetAutoRetries } from '@/lib/data/conversations.server';
 import { notifyStatus } from '@/lib/chat/conversation-stream.server';
 import { runConversationTurn, INSTANCE_ID } from '@/lib/chat/conversation-turn.server';
 import { getModules } from '@/lib/modules/registry';
-import type { ChatRequest } from '@/lib/chat-orchestration';
-import { boundContextAppState } from '@/lib/api/compress-augmented';
+import type { ChatRequest } from '@/lib/chat/chat-types';
+import { boundContextAppState } from '@/lib/chat/compress-augmented';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';

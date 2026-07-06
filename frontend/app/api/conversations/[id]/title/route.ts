@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
-import { withAuth } from '@/lib/api/with-auth';
+import { successResponse, handleApiError, ApiErrors } from '@/lib/http/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
 import { getConversation } from '@/lib/data/conversations.server';
 
 export const dynamic = 'force-dynamic';

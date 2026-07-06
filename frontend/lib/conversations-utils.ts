@@ -115,19 +115,6 @@ export function parsePiConversation(
 }
 
 /**
- * Slugify text for use in filenames (max 50 chars)
- */
-export function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, '') // Remove non-word chars
-    .replace(/\s+/g, '-')      // Spaces to hyphens
-    .replace(/-+/g, '-')       // Collapse multiple hyphens
-    .substring(0, 50);         // Max 50 chars
-}
-
-/**
  * Truncate message for display name (50 chars)
  */
 export function truncateMessageForName(message: string): string {

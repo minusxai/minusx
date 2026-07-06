@@ -11,7 +11,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, type FileId } from '@/store/filesSlice';
 import { selectNotebookActiveCell, setNotebookActiveCell } from '@/store/uiSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, rehydrateNotebookResults } from '@/lib/api/file-state';
+import { editFile, rehydrateNotebookResults } from '@/lib/file-state/file-state';
 import NotebookView from '@/components/views/NotebookView';
 import { NotebookContent } from '@/lib/types';
 import { type FileViewMode } from '@/lib/ui/fileComponents';

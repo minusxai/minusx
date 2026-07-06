@@ -16,7 +16,8 @@
 
 import crypto from 'crypto';
 import { NextRequest } from 'next/server';
-import { POST, processSlackEvent } from '@/app/api/integrations/slack/events/route';
+import { POST } from '@/app/api/integrations/slack/events/route';
+import { processSlackEvent } from '@/lib/integrations/slack/process-event';
 import type { SlackInstallationMatch } from '@/lib/integrations/slack/store';
 import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
 import { fauxRegistration as slackFaux } from '@/agents/slack/slack-agent';

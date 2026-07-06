@@ -7,8 +7,7 @@ import { recordAppEvent } from '@/lib/analytics/app-events.db';
 import { reportErrorToSentry } from './sentry-error-handler';
 
 export { AppEvents } from './events';
-export type { AppEventName, AppEventPayloads } from './events';
-export { appEventRegistry, AppEventRegistry } from './registry';
+export { appEventRegistry } from './registry';
 
 // Register handlers — runs once when this module is first imported.
 // To add a new handler (Slack, Sentry, etc.), add another subscribe() call here.

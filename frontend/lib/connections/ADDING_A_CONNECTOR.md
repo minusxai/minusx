@@ -145,14 +145,18 @@ The literal must be added to **every** enumerated union, or TS errors / the valu
 | `lib/types.ts` | `DatabaseConnection.type` (~884) | add `\| 'newdb'` |
 | `lib/types.ts` | `DatabaseConnectionCreate.type` (~890) | add `\| 'newdb'` |
 | `lib/types.ts` | `ConnectionContent.type` (~951) | add `\| 'newdb'` |
-| `lib/types.ts` | `connectionTypeToDialect()` map (~1350) | add `newdb: '<sqlglot-dialect-name>'` |
-| `lib/utils/connection-dialect.ts` | `switch` (~4) | add `case 'newdb': return '<sqlglot-dialect-name>';` |
+| `lib/types/connections.ts` | `connectionTypeToDialect()` map | add `newdb: '<sqlglot-dialect-name>'` |
 | `lib/data/connections.interface.ts` | `CreateConnectionInput.type` (~84) + update interface (~90) | add `\| 'newdb'` |
 
-> ⚠️ There are **two** `connectionTypeToDialect` functions (`lib/types.ts` and
-> `lib/utils/connection-dialect.ts`) — and they already disagree on Athena (`presto` vs `awsathena`).
-> Update **both**. The dialect string feeds the SQL IR round-trip used by the parameter system
-> (`applyNoneParams` in `app/api/query/route.ts`), so it must be a dialect sqlglot recognizes.
+> ⚠️ `connectionTypeToDialect` (`lib/types/connections.ts`, re-exported from `lib/types.ts`) is the
+> ONE source of truth for the dialect string — a duplicate copy in `lib/utils/connection-dialect.ts`
+> was deleted (M5.4) after it was found to disagree with this one on Athena (`presto` vs `awsathena`)
+> and to have no `sqlite` case at all; `awsathena` doesn't parse (verified against
+> `@polyglot-sql/sdk`'s `getDialects()`), so that copy was silently breaking Athena's GUI-compat check
+> (`useGuiCompat` → `sqlToIR`). The dialect string feeds the SQL IR round-trip used by the parameter
+> system (`applyNoneParams` in `app/api/query/route.ts`) and the GUI-compat check, so it must be a
+> dialect `@polyglot-sql/sdk` recognizes — verify with `getDialects()` if the new engine's dialect
+> string is unusual.
 
 ---
 
@@ -273,8 +277,8 @@ Run: `npm run test:main -- newdb` then `npm run validate`.
 - [ ] `base.ts` — `NewDbConfig` interface + `ConnectorConfigMap` entry
 - [ ] `newdb-connector.ts` — implement `NodeConnector` (`testConnection`/`query`/`getSchema`)
 - [ ] `index.ts` — import, re-export, `getNodeConnector` branch
-- [ ] `lib/types.ts` — 3 unions (884/890/951) + `connectionTypeToDialect`
-- [ ] `lib/utils/connection-dialect.ts` — `case 'newdb'`
+- [ ] `lib/types.ts` — 3 unions (884/890/951)
+- [ ] `lib/types/connections.ts` — `connectionTypeToDialect` map entry
 - [ ] `lib/data/connections.interface.ts` — 2 unions
 - [ ] `lib/data/helpers/connections.ts` — `getSafeConfig` branch (required)
 - [ ] `statistics-engine.ts` — `profileDatabase` case

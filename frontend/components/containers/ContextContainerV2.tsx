@@ -9,7 +9,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectIsDirty, selectEffectiveName, type FileId } from '@/store/filesSlice';
 import { selectFileEditMode, setFileEditMode } from '@/store/uiSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, publishFile, clearFileChanges, reloadFile } from '@/lib/api/file-state';
+import { editFile, publishFile, clearFileChanges, reloadFile } from '@/lib/file-state/file-state';
 import ContextEditorV2 from '@/components/context/ContextEditorV2';
 import { ContextContent, ContextVersion, DocEntry, Whitelist, WhitelistNode, DatabaseContext, WhitelistItem } from '@/lib/types';
 import { useJobRuns } from '@/lib/hooks/job-runs-hooks';

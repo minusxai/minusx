@@ -5,7 +5,7 @@
  * in-process via the TypeScript orchestrator (no conversation file) and returns
  * the generated text. Token usage + the raw response are tracked out-of-band via
  * `recordHeadlessLlmCalls` (tagged by task, no conversationId — see
- * `lib/chat-orchestration-v2.server.ts`).
+ * `lib/chat/orchestration-core.server.ts`).
  */
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';

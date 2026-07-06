@@ -4,7 +4,7 @@ import type { FileState } from './filesSlice';
 import type { AppState } from '@/lib/appState';
 import { isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
-import { compressAugmentedFile, APP_STATE_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { compressAugmentedFile, APP_STATE_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 import { computePathState } from './navigationSlice';
 
 /**

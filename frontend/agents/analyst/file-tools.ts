@@ -2,9 +2,9 @@ import { Type } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { searchFilesInFolder } from '@/lib/search/file-search';
-import { readFilesServer } from '@/lib/api/file-state.server';
-import { TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
-import { takeFilesMarkup, markupTextBlocks } from '@/lib/api/markup-blocks';
+import { readFilesServer } from '@/lib/file-state/file-state.server';
+import { TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/chat/compress-augmented';
+import { takeFilesMarkup, markupTextBlocks } from '@/lib/chat/markup-blocks';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { FileType, ReadFilesResult } from '@/lib/types';
 import type { AnalystAgentContext } from './types';
@@ -41,7 +41,7 @@ async function tryRun<TDetails = Record<string, unknown>>(
 
 // ─── ReadFiles ───────────────────────────────────────────────────────────────
 
-// Params mirror the frontend-bridge ReadFiles (lib/api/tool-handlers.ts) so the model
+// Params mirror the frontend-bridge ReadFiles (lib/tools/tool-handlers.ts) so the model
 // sees one tool regardless of where it executes.
 const ReadFilesParams = Type.Object({
   fileIds: Type.Array(Type.Number(), { description: 'IDs of files to load.' }),

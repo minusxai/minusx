@@ -1,7 +1,7 @@
 /**
  * File State Hooks - Centralized React hooks for file operations
  *
- * All hooks in this file are thin wrappers around functions from @/lib/api/file-state.ts
+ * All hooks in this file are thin wrappers around functions from @/lib/file-state/file-state.ts
  * They handle React-specific concerns (state, effects) while delegating actual work to
  * the centralized file-state module.
  *
@@ -37,7 +37,7 @@ import {
   getQueryResult,
   publishAll,
   discardAll,
-} from '@/lib/api/file-state';
+} from '@/lib/file-state/file-state';
 import {
   selectAugmentedFiles,
   selectAugmentedFolder,
@@ -358,15 +358,6 @@ export function useFolder(path: string, options: UseFolderOptions = {}): UseFold
 // useQueryResult - Execute queries with TTL caching
 // ============================================================================
 
-/**
- * Query execution parameters
- */
-export interface QueryParams {
-  query: string;
-  params: Record<string, any>;
-  database: string;
-  references?: QuestionReference[];  // Composed questions
-}
 
 /**
  * Result returned by useQueryResult hook

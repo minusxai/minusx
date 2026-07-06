@@ -80,7 +80,7 @@ export type DeterministicScorer<TContent = unknown> = (content: TContent, ctx?: 
  * internal `weight` / `assessed` bookkeeping and omits categories the source didn't score —
  * just the overall, grade, and each scored category's findings.
  */
-export interface AgentRubricCategory {
+interface AgentRubricCategory {
   category: RubricCategory;
   score: number;
   findings: RubricFinding[];

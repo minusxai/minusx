@@ -12,9 +12,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from '@/lib/api/with-auth';
+import { withAuth } from '@/lib/http/with-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import { ApiErrors, handleApiError } from '@/lib/api/api-responses';
+import { ApiErrors, handleApiError } from '@/lib/http/api-responses';
 import { getModules } from '@/lib/modules/registry';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { DEFAULT_DB_TYPE } from '@/lib/config';

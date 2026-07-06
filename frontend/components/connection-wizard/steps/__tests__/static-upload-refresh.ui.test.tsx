@@ -12,8 +12,8 @@
 // ─── Hoisted mocks ───────────────────────────────────────────────────────────
 const { STATIC_ID } = vi.hoisted(() => ({ STATIC_ID: 555 }));
 
-vi.mock('@/lib/api/file-state', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api/file-state')>('@/lib/api/file-state');
+vi.mock('@/lib/file-state/file-state', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/file-state/file-state')>('@/lib/file-state/file-state');
   return {
     ...actual,
     editFile: vi.fn(),
@@ -48,7 +48,7 @@ import { makeStore } from '@/store/store';
 import { setUser } from '@/store/authSlice';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import StepStaticUpload from '@/components/connection-wizard/steps/StepStaticUpload';
-import { reloadFile } from '@/lib/api/file-state';
+import { reloadFile } from '@/lib/file-state/file-state';
 
 describe('StepStaticUpload — refresh schema after save', () => {
   let store: ReturnType<typeof makeStore>;

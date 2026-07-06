@@ -17,8 +17,8 @@ vi.mock('@/lib/hooks/useContext', () => ({
 
 // The file is seeded directly into the store; no-op the network load that useFile
 // fires (keep editFile / buildCurrentFileStr real).
-vi.mock('@/lib/api/file-state', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api/file-state')>('@/lib/api/file-state');
+vi.mock('@/lib/file-state/file-state', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/file-state/file-state')>('@/lib/file-state/file-state');
   return { ...actual, loadFiles: vi.fn(async () => []) };
 });
 

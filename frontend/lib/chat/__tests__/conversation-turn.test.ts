@@ -7,7 +7,7 @@ import { createConversation, getConversation, loadMessages } from '@/lib/data/co
 import { subscribe } from '@/lib/chat/conversation-stream.server';
 import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
 import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
-import type { ChatRequest } from '@/lib/chat-orchestration';
+import type { ChatRequest } from '@/lib/chat/chat-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConversationNotify } from '@/lib/data/conversations.types';
 import { getTestDbPath } from '@/store/__tests__/test-utils';

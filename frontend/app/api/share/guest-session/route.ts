@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
+import { handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { resolveShare } from '@/lib/data/files.server';
 import {
   GUEST_COOKIE, GUEST_TTL_SECONDS, createGuestToken, verifyGuestToken,

@@ -71,11 +71,6 @@ export function fetchHandle(handleId: string): QueryResult | undefined {
   return handles.get(handleId);
 }
 
-/** True if `handleId` is a currently-stored handle. */
-export function hasHandle(handleId: string): boolean {
-  return handles.has(handleId);
-}
-
 /** The DuckDB table name for a handle (identical to the handle ID). */
 export function getHandleTable(handleId: string): string | undefined {
   return handles.has(handleId) ? handleId : undefined;

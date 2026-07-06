@@ -3,9 +3,9 @@
  * Returns list of available tables from connection schema
  */
 
-import { withAuth } from '@/lib/api/with-auth';
+import { withAuth } from '@/lib/http/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 import { CompletionsAPI } from '@/lib/data/completions/completions.server';
 import { TableSuggestionsOptions } from '@/lib/data/completions/types';
 

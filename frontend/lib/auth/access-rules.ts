@@ -71,7 +71,7 @@ let cachedRules: RulesConfig | null = null;
  * In development mode, rules are reloaded on every call (no cache)
  * Falls back to safe defaults if file is missing
  */
-export function loadAccessRules(): RulesConfig {
+function loadAccessRules(): RulesConfig {
   // In development, always reload (no cache) for instant updates
   // In production, use cache for performance
   if (cachedRules && !IS_DEV) {
@@ -194,7 +194,7 @@ export function canCreateFileByRole(role: UserRole, fileType: FileType, override
 /**
  * Get creation location restrictions from rules
  */
-export function getCreateLocationRestrictions(): CreateLocationRestriction[] {
+function getCreateLocationRestrictions(): CreateLocationRestriction[] {
   const config = loadAccessRules();
   const rule = config.rules.find((r): r is CreateLocationRestrictionsRule =>
     r.type === 'createLocationRestrictions'
@@ -205,7 +205,7 @@ export function getCreateLocationRestrictions(): CreateLocationRestriction[] {
 /**
  * Get creation blocklist from rules
  */
-export function getCreationBlocklist(): FileType[] {
+function getCreationBlocklist(): FileType[] {
   const config = loadAccessRules();
   const rule = config.rules.find((r): r is CreationBlocklistRule =>
     r.type === 'creationBlocklist'
@@ -216,7 +216,7 @@ export function getCreationBlocklist(): FileType[] {
 /**
  * Get deletion blocklist from rules
  */
-export function getDeletionBlocklist(): FileType[] {
+function getDeletionBlocklist(): FileType[] {
   const config = loadAccessRules();
   const rule = config.rules.find((r): r is DeletionBlocklistRule =>
     r.type === 'deletionBlocklist'
@@ -268,17 +268,3 @@ export function validateFileLocation(type: FileType, path: string, mode: Mode): 
   }
 }
 
-/**
- * Check if a file type should show in the Create menu for a role
- * This is purely for UI filtering - API can still create types not in this list
- * @param overrides - Optional per-org access rules overrides
- */
-export function canShowInCreateMenu(role: UserRole, type: FileType, overrides?: AccessRulesOverride): boolean {
-  const rule = getEffectiveRule(role, overrides);
-
-  if (!rule) return false;
-  if (!rule.createTypes) return false;
-  if (rule.createTypes === '*') return true;
-
-  return rule.createTypes.includes(type);
-}

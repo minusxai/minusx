@@ -4,7 +4,7 @@ import { useEffect, useMemo } from 'react'
 import { Box, HStack, Text, VStack } from '@chakra-ui/react'
 import { LuPlus, LuTrash2 } from 'react-icons/lu'
 import type { ChartAnnotation } from '@/lib/types'
-import { findMatchingXIndex } from '@/lib/chart/chart-utils'
+import { findMatchingXIndex } from '@/lib/chart/chart-annotations'
 
 interface AnnotationEditorProps {
   annotations?: ChartAnnotation[] | null

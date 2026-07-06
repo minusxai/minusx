@@ -30,7 +30,7 @@ export interface SidebarSectionMetadata {
  * Centralized sidebar section metadata
  * Single source of truth for section titles, icons, and colors
  */
-export const SIDEBAR_SECTION_METADATA: Record<SidebarSectionId, Omit<SidebarSectionMetadata, 'id'>> = {
+const SIDEBAR_SECTION_METADATA: Record<SidebarSectionId, Omit<SidebarSectionMetadata, 'id'>> = {
   questions: {
     title: 'Add Questions',
     icon: LuLayoutDashboard,
@@ -85,11 +85,4 @@ export function getSidebarSection(id: SidebarSectionId): SidebarSectionMetadata 
     id,
     ...SIDEBAR_SECTION_METADATA[id],
   };
-}
-
-/**
- * Get multiple sections by IDs (preserves order)
- */
-export function getSidebarSections(ids: SidebarSectionId[]): SidebarSectionMetadata[] {
-  return ids.map(id => getSidebarSection(id));
 }

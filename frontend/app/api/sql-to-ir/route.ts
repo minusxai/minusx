@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 import { parseSqlToIrLocal, UnsupportedSQLError } from '@/lib/sql/sql-to-ir';
 
 export async function POST(request: NextRequest) {

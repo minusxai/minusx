@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef, MutableRefObject } from 'reac
 import { Box, Button, HStack, Input, Text } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, clearFileChanges, createDraftFile, deleteFile } from '@/lib/api/file-state';
+import { editFile, clearFileChanges, createDraftFile, deleteFile } from '@/lib/file-state/file-state';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { selectMergedContent, selectEffectiveName, setEphemeral } from '@/store/filesSlice';
 import { setFileEditMode } from '@/store/uiSlice';

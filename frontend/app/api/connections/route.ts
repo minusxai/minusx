@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { listAllConnections, createConnection } from '@/lib/data/connections.server';
-import { successResponse, handleApiError } from '@/lib/api/api-responses';
+import { successResponse, handleApiError } from '@/lib/http/api-responses';
 import { validateConnectionType } from '@/lib/data/helpers/connections';
-import { withAuth } from '@/lib/api/with-auth';
+import { withAuth } from '@/lib/http/with-auth';
 
 // GET /api/connections - List all connections
 export const GET = withAuth(async (request: NextRequest, user) => {

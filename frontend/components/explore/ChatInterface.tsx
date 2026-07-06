@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
-import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem, Menu, Portal, Input } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuMessageSquare, LuPencil } from 'react-icons/lu';
+import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
+import { LuPlus, LuChevronDown } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem, Attachment, SkillMention } from '@/lib/types';
 import type { ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
@@ -13,13 +13,12 @@ import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector, useAppStore } from '@/store/hooks';
-import { createConversation, sendMessage, retryConversationTurn, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setActiveConversation, setConversationTitle, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
+import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setConversationTitle, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { ConversationsAPI } from '@/lib/data/conversations';
 import { useUseChatV2, isLegacyChatInV2 } from '@/lib/chat-v2/use-chat-v2';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
-import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
 import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setSidebarPendingSlashCommand } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
@@ -29,15 +28,18 @@ import {
   appStateShotKey,
 } from '@/lib/screenshot/app-state-screenshot';
 import ExampleQuestions from './message/ExampleQuestions';
-import FileNotFound from '../FileNotFound';
+import FileNotFound from '../file-browser/FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
 
 import AgentTurnContainer from './AgentTurnContainer';
 import { groupIntoTurns } from './message/groupIntoTurns';
-import { StreamingProgressInline, StreamingProgressSticky } from './tools/StreamingProgress';
+import { StreamingProgressSticky } from './tools/StreamingProgress';
+import StreamingInfoBlock from './StreamingInfoBlock';
+import ChatHeaderBar from './ChatHeaderBar';
+import ContinueChatBanner from './ContinueChatBanner';
+import ChatErrorBanner from './ChatErrorBanner';
 import { selectDatabase } from '@/lib/utils/database-selector';
-import { preserveParams } from '@/lib/navigation/url-utils';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { selectDevMode } from '@/store/uiSlice';
 import { selectDisableAppStateImages } from '@/store/configsSlice';
@@ -64,78 +66,6 @@ interface ChatInterfaceProps {
   readOnly?: boolean;
   /** Custom empty-state prompts (e.g. story-specific questions). Falls back to generic defaults. */
   suggestedPrompts?: string[];
-}
-
-interface StreamingInfoBlockProps {
-  streamingInfo: {
-    thinkingText: string | null;
-    toolCalls: string[];
-    isAnswering: boolean;
-    completedCount: number;
-    totalCount: number;
-    latestAction: string;
-  };
-  viewMode: 'compact' | 'detailed';
-  showThinking: boolean;
-  toggleShowThinking: () => void;
-}
-
-function StreamingInfoBlock({ streamingInfo, viewMode, showThinking, toggleShowThinking }: StreamingInfoBlockProps) {
-  const { thinkingText, toolCalls, isAnswering, completedCount, totalCount, latestAction } = streamingInfo;
-
-  if (isAnswering) return null;
-
-  if (thinkingText && viewMode !== 'compact') {
-    return (
-      <Box my={2}>
-        <HStack
-          gap={1}
-          cursor="pointer"
-          onClick={toggleShowThinking}
-          _hover={{ opacity: 0.8 }}
-          color="fg.subtle"
-          fontSize="sm"
-          overflow="hidden"
-          w="100%"
-        >
-          <Box flexShrink={0}>{showThinking ? <LuChevronDown size={16} /> : <LuChevronRight size={16} />}</Box>
-          {!showThinking && (
-            <Text fontFamily="mono" fontSize="sm" color="fg.subtle" fontStyle="italic" truncate>
-              {thinkingText}
-            </Text>
-          )}
-          {showThinking && (
-            <Text fontFamily="mono" fontSize="sm" color="fg.subtle">Thinking</Text>
-          )}
-        </HStack>
-        {showThinking && (
-          <Box mt={1} pl={5} borderLeft="2px solid" borderColor="border.default">
-            <Text color="fg.subtle" fontSize="sm" fontFamily="mono" fontStyle="italic" whiteSpace="pre-wrap">
-              {thinkingText}
-            </Text>
-          </Box>
-        )}
-      </Box>
-    );
-  }
-
-  if (toolCalls.length > 0) {
-    if (viewMode === 'compact') {
-      return <StreamingProgressInline completedCount={completedCount} totalCount={totalCount} latestAction={latestAction} />;
-    }
-    return (
-      <HStack my={2} gap={2} flexWrap="wrap">
-        {toolCalls.map((tool, i) => (
-          <HStack key={i} px={2.5} py={1} borderRadius="full" borderWidth="1px" borderColor="accent.teal/30" bg="accent.teal/5" gap={1.5}>
-            <Spinner size="xs" color="accent.teal" />
-            <Text color="fg.muted" fontSize="xs" fontFamily="mono">{tool}</Text>
-          </HStack>
-        ))}
-      </HStack>
-    );
-  }
-
-  return null;
 }
 
 export default function ChatInterface({
@@ -333,26 +263,6 @@ export default function ChatInterface({
       .then((t) => { if (t) dispatch(setConversationTitle({ conversationID, title: t })); })
       .catch(() => { /* best-effort: header just stays untitled */ });
   }, [conversationID, conversationTitle, turnFinished, dispatch]);
-
-  // Inline rename of the conversation title (the ▾ menu → Rename).
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState('');
-  const startRename = useCallback(() => {
-    setRenameValue(conversationTitle ?? '');
-    setIsRenaming(true);
-  }, [conversationTitle]);
-  const submitRename = useCallback(async () => {
-    setIsRenaming(false);
-    const next = renameValue.trim();
-    if (!next || !conversationID || conversationID <= 0 || next === conversationTitle) return;
-    dispatch(setConversationTitle({ conversationID, title: next })); // optimistic
-    try {
-      await ConversationsAPI.rename(conversationID, next);
-    } catch (err) {
-      console.error('[ChatInterface] rename failed:', err);
-      toaster.create({ title: "Couldn't rename the conversation", type: 'error' });
-    }
-  }, [renameValue, conversationID, conversationTitle, dispatch]);
 
   // Pre-create a conversation on explore page mount so sends go directly to the existing path
   useEffect(() => {
@@ -938,177 +848,26 @@ export default function ChatInterface({
   }, [conversationID, isNewConversation, providedConversationId, container, router, conversation, allMessages.length]);
 
 
-  // Handler for setting conversation as active
-  const handleSetAsActive = () => {
-    if (conversationID) {
-      dispatch(setActiveConversation(conversationID));
-    }
-  };
-
-  // Determine if current conversation is active
+  // Determine if current conversation is active (passed to ChatHeaderBar, which owns the
+  // "Set as Active" button + dispatch).
   const isConversationActive = conversation?.active === true;
-
-  // "Set as Active" button (only shown for non-active conversations)
-  const setAsActiveButton = providedConversationId && !isConversationActive && conversation && (
-    <Tooltip content="Make this conversation active in sidechat" positioning={{ placement: 'bottom' }}>
-      <Button
-        onClick={handleSetAsActive}
-        size="xs"
-        variant="outline"
-        borderColor="border.emphasized"
-        color="fg.muted"
-        _hover={{ bg: 'bg.muted', borderColor: 'accent.teal', color: 'accent.teal' }}
-      >
-        <Icon as={LuPin} boxSize={4} mr={1} />
-        Set as Active
-      </Button>
-    </Tooltip>
-  );
-
-  // New Chat button component (reused in both banner and standalone)
-  const newChatButton = allMessages.length > 0 && (
-    <Button
-      onClick={handleNewChat}
-      size="xs"
-      bg="accent.teal"
-      color="white"
-      _hover={{ bg: 'accent.teal', opacity: 0.9 }}
-    >
-      {isExplorePage ? (
-        <><Icon as={LuPlus} boxSize={4} mr={1} />New Chat</>
-      ) : (
-        <Tooltip content="Clear Chat" positioning={{ placement: 'left' }}><LuRefreshCw /></Tooltip>
-      )}
-    </Button>
-  );
 
   return (
     <VStack gap={0} align="stretch" height="100%" overflow="hidden">
       {/* Action Buttons Bar (only show when there are messages, hidden in readOnly) */}
       {!readOnly && allMessages.length > 0 && (
-        <Box
-          position="sticky"
-          top={0}
-          bg="bg.canvas"
-          pt={3}
-          pb={2}
-          zIndex={10}
-          display="flex"
-          justifyContent="center"
-        >
-          <Box width="100%" display="flex" justifyContent="space-between" alignItems="center" px={5}>
-            <HStack gap={2}>
-            {container === 'sidebar' && (
-              <Tooltip content="Open in explore" positioning={{ placement: 'bottom' }}>
-                <Button
-                  onClick={() => {
-                    const path = conversationID && conversationID > 0
-                      ? `/explore/${conversationID}`
-                      : '/explore';
-                    navigate(preserveParams(path));
-                  }}
-                  size="xs"
-                  variant="outline"
-                  borderColor="border.muted"
-                  color="fg.subtle"
-                  _hover={{ color: 'accent.teal', borderColor: 'accent.teal' }}
-                >
-                  <LuExpand />
-                </Button>
-              </Tooltip>
-            )}
-            {conversationID && conversationID > 0 && (
-              isRenaming ? (
-                <Input
-                  aria-label="Conversation title"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={submitRename}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); submitRename(); }
-                    else if (e.key === 'Escape') { e.preventDefault(); setIsRenaming(false); }
-                  }}
-                  autoFocus
-                  size="xs"
-                  fontFamily="mono"
-                  fontWeight="700"
-                  variant="flushed"
-                  maxW="360px"
-                  h="26px"
-                />
-              ) : (
-                <Menu.Root>
-                  <Menu.Trigger asChild>
-                    <HStack
-                      as="button"
-                      aria-label="Conversation title menu"
-                      gap={1}
-                      px={1.5}
-                      h="26px"
-                      borderRadius="sm"
-                      color="fg.default"
-                      _hover={{ bg: 'bg.muted' }}
-                      maxW="380px"
-                      minW={0}
-                    >
-                      <Tooltip content={conversationTitle || 'Untitled chat'} positioning={{ placement: 'bottom' }}>
-                        <Text fontSize="sm" fontFamily="mono" fontWeight="700" truncate maxW="120px">
-                          {conversationTitle || 'Untitled chat'}
-                        </Text>
-                      </Tooltip>
-                      <Icon as={LuChevronDown} boxSize={3.5} color="fg.muted" flexShrink={0} />
-                    </HStack>
-                  </Menu.Trigger>
-                  <Portal>
-                    <Menu.Positioner>
-                      <Menu.Content minW="160px" bg="bg.surface" borderColor="border.default" shadow="lg" p={1}>
-                        <Menu.Item
-                          value="rename"
-                          aria-label="Rename conversation"
-                          cursor="pointer"
-                          borderRadius="sm"
-                          px={3}
-                          py={2}
-                          _hover={{ bg: 'bg.muted' }}
-                          onClick={startRename}
-                        >
-                          <HStack gap={2}>
-                            <Icon as={LuPencil} boxSize={4} />
-                            <span>Rename</span>
-                          </HStack>
-                        </Menu.Item>
-                      </Menu.Content>
-                    </Menu.Positioner>
-                  </Portal>
-                </Menu.Root>
-              )
-            )}
-            {/* ViewModeToggle removed — always use compact */}
-            </HStack>
-            <HStack gap={2}>
-              {setAsActiveButton}
-              {newChatButton}
-              <Tooltip content="Copy link" positioning={{ placement: 'bottom' }}>
-                <Button
-                  onClick={() => {
-                    const path = conversationID && conversationID > 0
-                      ? `/explore/${conversationID}`
-                      : window.location.pathname + window.location.search;
-                    const url = window.location.origin + preserveParams(path);
-                    navigator.clipboard.writeText(url);
-                    toaster.create({ title: 'Link copied to clipboard', type: 'success' });
-                  }}
-                  size="xs"
-                  bg="accent.teal"
-                  color="white"
-                  _hover={{ bg: 'accent.teal', opacity: 0.9 }}
-                >
-                  <LuShare2 />
-                </Button>
-              </Tooltip>
-            </HStack>
-          </Box>
-        </Box>
+        <ChatHeaderBar
+          container={container}
+          conversationID={conversationID}
+          providedConversationId={providedConversationId}
+          hasConversation={!!conversation}
+          isConversationActive={isConversationActive}
+          conversationTitle={conversationTitle}
+          hasMessages={allMessages.length > 0}
+          isExplorePage={isExplorePage}
+          navigate={navigate}
+          handleNewChat={handleNewChat}
+        />
       )}
 
       {userIsAdmin && devMode && <ToolDebugBar messages={allMessages} />}
@@ -1212,31 +971,17 @@ export default function ChatInterface({
           {/* Error Display. Terminal errors (context-length, auth, malformed) can't be retried — an
               identical re-run re-fails — so we steer to a fresh chat instead of "Try again". Transient
               (and local/load) errors offer a clean replay of the failed turn (no "Continue" bubble). */}
-          {error && (() => {
-            const message = isTerminalError
-              ? "This conversation can't continue — it may have grown too long or hit a limit. Start a new chat to keep going."
-              : (devMode ? (typeof error === 'string' ? error : error?.message || 'An error occurred') : 'An error occurred');
-            return (
-              <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
-                <GridItem colSpan={colSpan} colStart={colStart}>
-                  <Box p={3} bg="accent.danger/10" border="1px solid" borderColor="accent.danger/20" borderRadius="md">
-                    <Text color="accent.danger" fontSize="sm" fontFamily="mono">{message}</Text>
-                    {isTerminalError ? (
-                      <Button mt={2} size="xs" variant="outline" colorPalette="red" aria-label="Start a new chat"
-                        onClick={handleNewChat}>
-                        <Icon as={LuPlus} boxSize={4} mr={1} />Start a new chat
-                      </Button>
-                    ) : conversationID ? (
-                      <Button mt={2} size="xs" variant="outline" colorPalette="red" aria-label="Try again"
-                        onClick={() => dispatch(retryConversationTurn({ conversationID }))}>
-                        Try again
-                      </Button>
-                    ) : null}
-                  </Box>
-                </GridItem>
-              </Grid>
-            );
-          })()}
+          {error && (
+            <ChatErrorBanner
+              error={error}
+              isTerminalError={isTerminalError}
+              devMode={devMode}
+              colSpan={colSpan}
+              colStart={colStart}
+              conversationID={conversationID}
+              handleNewChat={handleNewChat}
+            />
+          )}
 
             </VStack>
           </Box>
@@ -1277,71 +1022,13 @@ export default function ChatInterface({
 
       {/* Continue chat confirmation banner for conversations from other pages */}
       {needsContinueConfirmation && parentPageInfo && (
-        <Box
-          position="sticky"
-          bottom={0}
-          bg="bg.canvas"
-          pt={3}
-          pb={{ base: 1, md: 3 }}
-          px={4}
-          zIndex={10}
-        >
-          <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
-            <GridItem colSpan={colSpan} colStart={colStart}>
-              <Box
-                bg="bg.muted"
-                borderWidth="1px"
-                borderColor="border.default"
-                borderRadius="lg"
-                px={4}
-                py={3}
-              >
-                <VStack align="center" gap={2}>
-                  <VStack align="center" gap={0.5}>
-                    <Text fontSize="sm" color="fg.default" fontFamily="mono" fontWeight="500">
-                      This conversation started on{' '}
-                      {parentPageInfo.type === 'slack' ? (
-                        <Text as="span" color="accent.teal">Slack</Text>
-                      ) : parentPageInfo.id > 0 ? (
-                        <Text
-                          as="span"
-                          color="accent.teal"
-                          cursor="pointer"
-                          _hover={{ textDecoration: 'underline' }}
-                          onClick={() => navigate(`/f/${parentPageInfo.id}`)}
-                        >
-                          {parentPageInfo.name}
-                        </Text>
-                      ) : (
-                        <>a{' '}
-                          <Text
-                            as="span"
-                            color="accent.teal"
-                            cursor="pointer"
-                            _hover={{ textDecoration: 'underline' }}
-                            onClick={() => navigate(`/new/${parentPageInfo.type}`)}
-                          >
-                            new {parentPageInfo.type} page
-                          </Text>
-                        </>
-                      )}
-                    </Text>
-                  </VStack>
-                  <Button
-                    size="sm"
-                    bg="accent.teal"
-                    color="white"
-                    _hover={{ opacity: 0.9 }}
-                    onClick={() => setContinueChatConfirmed(true)}
-                  >
-                    <Icon as={LuMessageSquare} boxSize={4} mr={1} />
-                    Continue chat here
-                  </Button>
-                </VStack>
-              </Box>
-            </GridItem>
-          </Grid>
-        </Box>
+        <ContinueChatBanner
+          parentPageInfo={parentPageInfo}
+          navigate={navigate}
+          colSpan={colSpan}
+          colStart={colStart}
+          onConfirm={() => setContinueChatConfirmed(true)}
+        />
       )}
 
       {/* Sticky streaming progress badge above input */}

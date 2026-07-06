@@ -18,6 +18,17 @@ import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 export type WhitelistSchema = Array<{ schema: string; tables: Array<{ table: string }> }>;
 
 /**
+ * Flatten a resolved whitelist into the flat {schema, table, columns} shape
+ * expected by the QUERY_EXECUTED analytics event's `schemaContext` field.
+ * `columns` is always empty — the whitelist only tracks table-level grants.
+ */
+export function whitelistToSchemaContext(
+  whitelist: WhitelistSchema,
+): Array<{ schema: string; table: string; columns: string[] }> {
+  return whitelist.flatMap((w) => w.tables.map((t) => ({ schema: w.schema, table: t.table, columns: [] })));
+}
+
+/**
  * Resolve the whitelist for `lookupPath` + `connectionName` server-side.
  *
  * Finds the nearest ancestor context file for `lookupPath` (same algorithm as

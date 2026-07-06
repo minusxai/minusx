@@ -93,19 +93,6 @@ export const HIDDEN_SYSTEM_FOLDERS = [
 ] as const;
 
 /**
- * Get mode-specific system folders
- */
-export function getSystemFolders(mode: Mode) {
-  return {
-    database: resolvePath(mode, SYSTEM_FOLDERS.database),
-    configs: resolvePath(mode, SYSTEM_FOLDERS.configs),
-    logs: resolvePath(mode, SYSTEM_FOLDERS.logs),
-    logsConversations: resolvePath(mode, SYSTEM_FOLDERS.logsConversations),
-    recordings: resolvePath(mode, SYSTEM_FOLDERS.recordings),
-  };
-}
-
-/**
  * Check if a physical path is a hidden system folder
  * @param physicalPath - Full path with mode prefix (e.g., '/org/database')
  * @param mode - Current mode
@@ -171,7 +158,7 @@ export function isFileTypeAllowedInPath(fileType: string, physicalPath: string, 
 /**
  * Get mode root folder
  */
-export function getModeRoot(mode: Mode): string {
+function getModeRoot(mode: Mode): string {
   return `/${mode}`;
 }
 

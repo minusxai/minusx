@@ -6,7 +6,7 @@ import { LuCheck, LuX, LuBookOpen } from 'react-icons/lu';
 import { DisplayProps, contentToDetails } from '@/lib/types';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import type { FileType } from '@/lib/ui/file-metadata';
-import { embeddedQuestionCount } from '@/lib/data/story-question';
+import { embeddedQuestionCount } from '@/lib/data/story/story-question';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useAppSelector } from '@/store/hooks';

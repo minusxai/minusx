@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { withAuth } from '@/lib/api/with-auth';
+import { withAuth } from '@/lib/http/with-auth';
 import { listSkills } from '@/orchestrator/prompts';
 
 export interface SystemSkillCatalogItem {

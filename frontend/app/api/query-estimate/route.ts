@@ -1,6 +1,6 @@
 import 'server-only';
-import { successResponse, handleApiError } from '@/lib/api/api-responses';
-import { withAuth } from '@/lib/api/with-auth';
+import { successResponse, handleApiError } from '@/lib/http/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
 import { NextRequest } from 'next/server';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { getModules } from '@/lib/modules/registry';

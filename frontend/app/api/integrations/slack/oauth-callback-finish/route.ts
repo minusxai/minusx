@@ -1,7 +1,7 @@
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from '@/lib/api/with-auth';
-import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
+import { handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { isSlackOAuthConfigured, SLACK_BOT_SCOPES } from '@/lib/integrations/slack/config';
 import { verifyState } from '@/lib/integrations/slack/oauth-state';

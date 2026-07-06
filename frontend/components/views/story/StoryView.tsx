@@ -11,7 +11,7 @@ import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 import { useAppSelector } from '@/store/hooks';
 import { selectFile } from '@/store/filesSlice';
 import { selectFileEditMode } from '@/store/uiSlice';
-import { applyStoryHtmlEdit } from '@/lib/api/file-state';
+import { applyStoryHtmlEdit } from '@/lib/file-state/file-state';
 import { STORY_W } from './ScaledStoryFrame';
 
 // Max on-screen width of the reading column. Stories render FLUID (no transform

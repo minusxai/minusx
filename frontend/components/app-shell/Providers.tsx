@@ -1,0 +1,87 @@
+'use client';
+
+import { ChakraProvider } from '@chakra-ui/react';
+import { SessionProvider } from 'next-auth/react';
+import { system } from '@/lib/ui/theme';
+import { AuthProvider } from './AuthProvider';
+import ReduxProvider from './ReduxProvider';
+import { DataLoader } from './DataLoader';
+import { ColorModeSync } from './ColorModeSync';
+import { NavigationSync } from './NavigationSync';
+import { NavigationGuardProvider } from '@/lib/navigation/NavigationGuardProvider';
+import { AnalyticsProvider } from './AnalyticsProvider';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import type { OrgConfig } from '@/lib/branding/whitelabel';
+import { DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
+import type { AnalyticsConfig } from '@/lib/analytics/types';
+
+// Import fetch patch to auto-initialize (don't remove - needed for side effect)
+import '@/lib/http/fetch-patch';
+
+interface ProvidersProps {
+  children: React.ReactNode;
+  initialData?: {
+    user: EffectiveUser | null;
+    config: OrgConfig;  // Always present (from SSR or defaults)
+    analyticsConfig?: AnalyticsConfig;
+    disableAppStateImages?: boolean;  // Server runtime env flag (DISABLE_APP_STATE_IMAGES)
+    maxConcurrentQueries?: number;    // Server runtime env (MAX_CONCURRENT_QUERIES)
+    queryTimeoutMs?: number;          // Server runtime env (QUERY_TIMEOUT_MS)
+    creditsEnabled?: boolean;         // Server runtime env (CREDITS_ENABLED)
+    e2eEnabled?: boolean;             // QA runtime E2E opt-in (?e2e=<secret>)
+  };
+}
+
+export function Providers({ children, initialData }: ProvidersProps) {
+
+  // Transform initial data to preloaded Redux state
+  const preloadedState = {
+    // Configs (ALWAYS present - from SSR or defaults)
+    configs: {
+      config: initialData?.config || DEFAULT_CONFIG,
+      // eslint-disable-next-line react-hooks/purity
+      loadedAt: initialData?.config ? Date.now() : null,
+      disableAppStateImages: initialData?.disableAppStateImages ?? false,
+      maxConcurrentQueries: initialData?.maxConcurrentQueries ?? 10,
+      queryTimeoutMs: initialData?.queryTimeoutMs ?? 120_000,
+      creditsEnabled: initialData?.creditsEnabled ?? false,
+    },
+
+    // Auth (if user present)
+    ...(initialData?.user && {
+      auth: {
+        user: {
+          id: initialData.user.userId,
+          email: initialData.user.email,
+          name: initialData.user.name,
+          role: initialData.user.role,
+          home_folder: initialData.user.home_folder,
+          mode: initialData.user.mode,
+          view: initialData.user.view,
+        },
+        loading: false,
+      }
+    }),
+
+    // Contexts and connections are now loaded client-side via hooks
+  };
+
+  return (
+    <ReduxProvider preloadedState={preloadedState} e2eEnabled={initialData?.e2eEnabled}>
+      <SessionProvider refetchOnWindowFocus={false}>
+        <ChakraProvider value={system}>
+          <AuthProvider>
+            <AnalyticsProvider config={initialData?.analyticsConfig}>
+              <ColorModeSync />
+              <NavigationSync />
+              <DataLoader />
+              <NavigationGuardProvider>
+                {children}
+              </NavigationGuardProvider>
+            </AnalyticsProvider>
+          </AuthProvider>
+        </ChakraProvider>
+      </SessionProvider>
+    </ReduxProvider>
+  );
+}

@@ -21,7 +21,7 @@ import 'server-only';
 import type { Readable } from 'stream';
 import { drainQueryStream, drainQueryStreamBounded, type QueryResult, type QueryStream, type BoundedDrainOptions } from '@/lib/connections/base';
 import { getQueryHash, hashContent } from '@/lib/utils/query-hash';
-import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
+import { sortObjectKeysDeep } from '@/lib/chat/file-encoding';
 import { createQueryCacheBlobStore, blobRefForKey } from './blob-store';
 import { resultToJsonlStream, queryStreamToJsonl } from './jsonl-stream.server';
 import { classifyCacheRow } from './swr';

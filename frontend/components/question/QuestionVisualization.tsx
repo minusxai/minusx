@@ -10,7 +10,7 @@ import { LuRocket, LuWrench, LuSettings, LuCode, LuRefreshCw, LuCloudOff } from 
 import { Tooltip } from '@/components/ui/tooltip';
 import { TableV2 } from '@/components/plotx/TableV2';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
-import { parseErrorMessage } from '@/lib/utils/error-parser';
+import { parseErrorMessage } from '@/components/question/error-parser';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
 import { memo, useState, useEffect, useRef } from 'react';
 import isEqual from 'lodash/isEqual';

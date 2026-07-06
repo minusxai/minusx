@@ -4,7 +4,7 @@ import { IconType } from 'react-icons';
 /**
  * File type categories
  */
-export type FileCategory = 'analytics' | 'engineering' | 'management' | 'folder' | 'misc';
+type FileCategory = 'analytics' | 'engineering' | 'management' | 'folder' | 'misc';
 
 /**
  * File type metadata structure
@@ -217,7 +217,6 @@ export const SUPPORTED_FILE_TYPES = Object.entries(FILE_TYPE_METADATA)
   .filter(([_, meta]) => meta.supported)
   .map(([type]) => type as FileType);
 
-export type SupportedFileType = typeof SUPPORTED_FILE_TYPES[number];
 
 /**
  * Resolve the effective set of supported file types, applying an optional
@@ -243,61 +242,24 @@ export function isFileTypeSupported(type: FileType, override?: FileType[]): bool
  * Analytics file types (derived from metadata where category === 'analytics')
  * Used for QuestionContainer type in types.ts
  */
-export const ANALYTICS_FILE_TYPES = Object.entries(FILE_TYPE_METADATA)
+const ANALYTICS_FILE_TYPES = Object.entries(FILE_TYPE_METADATA)
   .filter(([_, meta]) => meta.category === 'analytics')
   .map(([type]) => type as FileType);
 
 export type AnalyticsFileType = typeof ANALYTICS_FILE_TYPES[number];
-
-export const ANALYTICS_DOC_TYPES = Object.entries(FILE_TYPE_METADATA)
-  .filter(([_, meta]) => meta.category === 'analytics' && meta.label !== 'Question')
-  .map(([type]) => type as FileType);
-
-export type AnalyticsDocumentType = typeof ANALYTICS_DOC_TYPES[number];
-
-/**
- * Engineering file types (derived from metadata where category === 'engineering')
- */
-export const ENGINEERING_FILE_TYPES = Object.entries(FILE_TYPE_METADATA)
-  .filter(([_, meta]) => meta.category === 'engineering')
-  .map(([type]) => type as FileType);
-
-export type EngineeringFileType = typeof ENGINEERING_FILE_TYPES[number];
-
-
-/**
- * Engineering file types (derived from metadata where category === 'engineering')
- */
-export const MANAGEMENT_FILE_TYPES = Object.entries(FILE_TYPE_METADATA)
-  .filter(([_, meta]) => meta.category === 'management')
-  .map(([type]) => type as FileType);
-
-export type ManagementFileType = typeof MANAGEMENT_FILE_TYPES[number];
-
 
 /**
  * System file types that require in-place save and cannot participate in bulk Publish.
  * These files save immediately when the user clicks Save, and the in-app nav guard
  * shows a Save/Discard/Cancel modal when navigating away with unsaved changes.
  */
-export const SYSTEM_FILE_TYPES: FileType[] = ['connection', 'config', 'styles', 'context'];
+const SYSTEM_FILE_TYPES: FileType[] = ['connection', 'config', 'styles', 'context'];
 
 /**
  * Returns true if the given file type is a system file (connection, config, styles, context).
  * System files save in-place and are excluded from the bulk Publish workflow.
  */
 export const isSystemFileType = (type: FileType): boolean => SYSTEM_FILE_TYPES.includes(type);
-
-/**
- * Category labels for display
- */
-export const CATEGORY_LABELS: Record<FileCategory, string> = {
-  'analytics': 'Analytics',
-  'engineering': 'Engineering',
-  'management': 'Management',
-  'folder': 'Folder',
-  'misc': 'Miscellaneous'
-} as const;
 
 /**
  * Get metadata for a file type

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLlmCallStats, getLlmLog } from '@/lib/analytics/file-analytics.db';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 
 /**
  * Debug UI data source for one LLM call. Reads the per-call stats

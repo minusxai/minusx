@@ -1,7 +1,7 @@
 import { createListenerMiddleware } from '@reduxjs/toolkit';
 import type { RootState } from './store';
 import { setNavigation, selectPathState } from './navigationSlice';
-import { readFiles, readFolder } from '@/lib/api/file-state';
+import { readFiles, readFolder } from '@/lib/file-state/file-state';
 
 export const navigationListenerMiddleware = createListenerMiddleware();
 

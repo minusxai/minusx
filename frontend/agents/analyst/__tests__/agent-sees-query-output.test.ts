@@ -16,11 +16,11 @@ vi.mock('@/lib/connections/run-query', () => ({
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { FilesAPI } from '@/lib/data/files.server';
-import { readFilesServer } from '@/lib/api/file-state.server';
-import { TOOL_DEFAULT_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { readFilesServer } from '@/lib/file-state/file-state.server';
+import { TOOL_DEFAULT_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 import { getQueryHash } from '@/lib/utils/query-hash';
-import { numberToPlaceholder } from '@/lib/data/story-number';
-import { inlineQuestionToPlaceholder } from '@/lib/data/story-question';
+import { numberToPlaceholder } from '@/lib/data/story/story-number';
+import { inlineQuestionToPlaceholder } from '@/lib/data/story/story-question';
 import { initTestDatabase, cleanupTestDatabase, getTestDbPath } from '@/store/__tests__/test-utils';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 

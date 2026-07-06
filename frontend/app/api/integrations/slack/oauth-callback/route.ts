@@ -1,6 +1,6 @@
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
-import { ApiErrors } from '@/lib/api/api-responses';
+import { ApiErrors } from '@/lib/http/api-responses';
 import { isSlackOAuthConfigured } from '@/lib/integrations/slack/config';
 import { verifyState } from '@/lib/integrations/slack/oauth-state';
 import { getModules } from '@/lib/modules/registry';

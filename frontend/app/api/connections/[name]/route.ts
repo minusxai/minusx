@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getConnection, deleteConnection } from '@/lib/data/connections.server';
-import { successResponse, handleApiError } from '@/lib/api/api-responses';
-import { withAuth } from '@/lib/api/with-auth';
+import { successResponse, handleApiError } from '@/lib/http/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
 
 interface RouteParams {
   params: Promise<{ name: string }>;

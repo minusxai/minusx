@@ -1,6 +1,6 @@
-import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
+import { runAgentTestSpec, type TestSpec } from '@/orchestrator/__tests__/support/test-spec-runner';
 import {
-  AnalystAgent,
+  RemoteAnalystAgent,
   ExecuteQuery,
   ListDBConnections,
   SearchDBSchema,
@@ -22,7 +22,7 @@ vi.mock('@/lib/connections/load-schema', () => ({
   loadConnectionSchema: vi.fn(async () => []),
 }));
 
-const registrables = [ListDBConnections, SearchDBSchema, ExecuteQuery, AnalystAgent];
+const registrables = [ListDBConnections, SearchDBSchema, ExecuteQuery, RemoteAnalystAgent];
 
 describe.each(specs as TestSpec[])('faux spec: $name', (spec) => {
   it('passes all assertions', async () => {

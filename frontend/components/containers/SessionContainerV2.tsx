@@ -3,7 +3,7 @@
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { Box, Spinner, Text } from '@chakra-ui/react';
-import SessionPlayer from '@/components/SessionPlayer';
+import SessionPlayer from '@/components/dev/SessionPlayer';
 import { SessionRecordingFileContent } from '@/lib/types';
 import { FileComponentProps } from '@/lib/ui/fileComponents';
 

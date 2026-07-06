@@ -9,7 +9,7 @@ import { selectFileEditMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 import type { JobRun, QuestionContent, Test, Transform, TransformationContent } from '@/lib/types';
-import TestList from '@/components/test/TestList';
+import TestList from '@/components/evals/TestList';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';

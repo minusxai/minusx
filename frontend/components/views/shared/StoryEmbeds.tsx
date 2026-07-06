@@ -25,8 +25,8 @@ import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbedde
 import EmbeddedQuestionContainer from '@/components/containers/EmbeddedQuestionContainer';
 import StoryParamControl from '@/components/views/story/StoryParamControl';
 import InlineNumber from '@/components/views/story/InlineNumber';
-import { storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story-params';
-import type { InlineNumberEmbed } from '@/lib/data/story-number';
+import { storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story/story-params';
+import type { InlineNumberEmbed } from '@/lib/data/story/story-number';
 import type { QuestionContent } from '@/lib/types';
 import type { NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
 

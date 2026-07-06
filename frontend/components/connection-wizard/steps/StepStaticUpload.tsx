@@ -7,7 +7,7 @@ import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
 import { useAppSelector } from '@/store/hooks';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { useFileByPath, useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, publishFile, reloadFile } from '@/lib/api/file-state';
+import { editFile, publishFile, reloadFile } from '@/lib/file-state/file-state';
 import { StaticConnectionConfig } from '@/components/views/connection-configs';
 import type { ConnectionContent, CsvFileInfo } from '@/lib/types';
 

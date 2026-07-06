@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { withAuth } from '@/lib/api/with-auth';
-import { ApiErrors, handleApiError, successResponse } from '@/lib/api/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
+import { ApiErrors, handleApiError, successResponse } from '@/lib/http/api-responses';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { getSlackCapabilities, SLACK_BOT_SCOPES } from '@/lib/integrations/slack/config';
 import { slackAuthTest } from '@/lib/integrations/slack/api';

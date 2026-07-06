@@ -2,7 +2,7 @@ import React from 'react'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/helpers/render-with-providers'
-import ParameterInput from '@/components/ParameterInput'
+import ParameterInput from '@/components/params/ParameterInput'
 import type { QuestionParameter } from '@/lib/types'
 
 // SourceConfigPopover + source widgets reach for file-state hooks; stub them so

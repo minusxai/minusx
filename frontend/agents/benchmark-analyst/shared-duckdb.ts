@@ -20,6 +20,10 @@
 
 import 'server-only';
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
+// Sanctioned bypass of the `lib/connections` public barrel (which exports only
+// `getNodeConnector`/`NodeConnector`): the benchmark harness needs DuckDB-specific
+// internals (file-path resolution, index/timeout helpers, the base class to
+// subclass) that intentionally aren't part of that public surface.
 import { resolveDuckDbFilePath } from '@/lib/connections/duckdb-connector';
 import { getNodeConnector } from '@/lib/connections';
 import { collectDuckDbIndexes } from '@/lib/connections/duckdb-indexes';
@@ -427,7 +431,11 @@ class BenchmarkSharedDuckdbConnector extends NodeConnector {
     super(name, {});
   }
 
-  async testConnection(includeSchema = false): Promise<TestConnectionResult> {
+  // Not one of the 8 production connectors that share NodeConnector's
+  // `testConnection` template (this predates it and lives outside
+  // lib/connections/) — kept as its own override; `ping()` below still
+  // exists to satisfy the abstract contract.
+  override async testConnection(includeSchema = false): Promise<TestConnectionResult> {
     try {
       await this.shared.query(this.internalName, 'SELECT 1');
       if (includeSchema) {
@@ -439,6 +447,10 @@ class BenchmarkSharedDuckdbConnector extends NodeConnector {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, message: msg };
     }
+  }
+
+  protected async ping(): Promise<void> {
+    await this.shared.query(this.internalName, 'SELECT 1');
   }
 
   async query(
@@ -497,7 +509,7 @@ export interface BenchmarkConnectorOptions {
  * No ATTACH, no file_path, no datasetKey namespacing — it's just a thin
  * BenchmarkSharedDuckdbConnector pointing at `memory`.
  */
-export const SCRATCH_CONNECTION_NAME = '_scratch';
+const SCRATCH_CONNECTION_NAME = '_scratch';
 
 export async function getOrCreateBenchmarkConnector(
   name: string,

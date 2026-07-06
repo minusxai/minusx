@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { FilesAPI } from '@/lib/data/files.server';
-import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
-import { withAuth } from '@/lib/api/with-auth';
+import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
 import { UserFacingError } from '@/lib/errors';
 
 export const POST = withAuth(async (request: NextRequest, user) => {

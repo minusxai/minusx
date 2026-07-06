@@ -6,7 +6,6 @@
  * agent-facing contract: it must advertise the FLUID responsive rules and the <Question> embeds.
  */
 import { validateFileState } from '@/lib/validation/content-validators';
-import { atlasSchemaNoViz } from '@/lib/validation/atlas-json-schemas';
 
 const baseStory = { description: null, story: null };
 
@@ -51,16 +50,5 @@ describe('StoryContent schema', () => {
       type: 'story',
       content: { ...baseStory, story: [{ html: '<h1>nope</h1>' }] },
     })).not.toBeNull();
-  });
-
-  it('advertises the fluid/responsive + live-number embed contract in the agent-facing schema', () => {
-    const serialized = JSON.stringify(atlasSchemaNoViz);
-    expect(serialized).toContain('AtlasStoryFile');
-    expect(serialized).toContain('FLUID RESPONSIVE');
-    expect(serialized).toContain('container-type:inline-size');
-    expect(serialized).toContain('@container');
-    // New embed model: <Question> (saved + inline) and never-hand-typed live numbers.
-    expect(serialized).toContain('<Question');
-    expect(serialized).toContain('NUMBERS ARE ALWAYS LIVE');
   });
 });

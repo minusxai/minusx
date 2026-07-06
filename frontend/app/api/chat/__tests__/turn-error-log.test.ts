@@ -19,7 +19,7 @@ import { fauxRegistration as onboardingFaux } from '@/agents/onboarding/onboardi
 import { POST as logErrorHandler } from '@/app/api/chat/log-error/route';
 import { runConversationTurn } from '@/lib/chat/conversation-turn.server';
 import { createConversation, loadErrors } from '@/lib/data/conversations.server';
-import type { ChatRequest } from '@/lib/chat-orchestration';
+import type { ChatRequest } from '@/lib/chat/chat-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -189,7 +189,7 @@ describe('v3 turn — errors mirrored to the conversation error stream', () => {
   });
 
   it('Cycle 5: logTaggedRejection appends source:"unhandled" when the error carries a conversationId tag', async () => {
-    const { logTaggedRejection } = await import('@/lib/api/unhandled-rejection-logger');
+    const { logTaggedRejection } = await import('@/lib/messaging/unhandled-rejection-logger');
     const conversationID = await newConversation('cycle 5 unhandled rejection');
 
     const tagged = Object.assign(new Error('background task crashed: foo is undefined'), { conversationId: conversationID });
@@ -202,7 +202,7 @@ describe('v3 turn — errors mirrored to the conversation error stream', () => {
   });
 
   it('Cycle 5: logTaggedRejection is a no-op when the error has no conversationId tag', async () => {
-    const { logTaggedRejection } = await import('@/lib/api/unhandled-rejection-logger');
+    const { logTaggedRejection } = await import('@/lib/messaging/unhandled-rejection-logger');
     const conversationID = await newConversation('cycle 5 untagged rejection');
 
     await logTaggedRejection(new Error('untagged'));

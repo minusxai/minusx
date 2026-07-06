@@ -10,7 +10,7 @@ const h = vi.hoisted(() => {
   return { executeToolCall, releaseGate: () => gate.resolve() };
 });
 
-vi.mock('@/lib/api/tool-handlers', async (orig) => ({
+vi.mock('@/lib/tools/tool-handlers', async (orig) => ({
   ...(await orig() as Record<string, unknown>),
   executeToolCall: h.executeToolCall,
 }));

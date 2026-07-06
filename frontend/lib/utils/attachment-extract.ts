@@ -7,12 +7,12 @@
 // This is NOT a circular-dependency workaround — that is the reason the ESLint rule
 // exists. This is a deliberate, targeted code-split for an infrequently-used feature.
 
-export const MAX_PDF_PAGES = 10;
+const MAX_PDF_PAGES = 10;
 const MAX_WORDS = 5000; // Word limit for DOCX/TXT documents
 
 export const SUPPORTED_DOC_EXTENSIONS = '.pdf,.docx,.txt';
 
-export async function extractTextFromPDF(
+async function extractTextFromPDF(
   file: File,
   maxPages: number = MAX_PDF_PAGES
 ): Promise<{ text: string; totalPages: number }> {
@@ -54,7 +54,7 @@ function countWords(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
-export async function extractTextFromDocx(
+async function extractTextFromDocx(
   file: File,
   maxWords: number = MAX_WORDS
 ): Promise<{ text: string; wordCount: number }> {
@@ -75,7 +75,7 @@ export async function extractTextFromDocx(
   return { text: result.value, wordCount };
 }
 
-export async function extractTextFromTxt(
+async function extractTextFromTxt(
   file: File,
   maxWords: number = MAX_WORDS
 ): Promise<{ text: string; wordCount: number }> {

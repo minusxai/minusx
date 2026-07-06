@@ -7,7 +7,6 @@ import { QuestionContent, QueryResult, DisplayProps, ExecuteQueryDetails, conten
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 
 
-export const EXECUTE_SQL_MAX_COLS = 12;
 const EXECUTE_SQL_COLLAPSED_COLS = 12; // Narrower when collapsed
 const EXECUTE_SQL_COLLAPSED_COLS_COMPACT = 12; // Compact: 4 tools per row
 

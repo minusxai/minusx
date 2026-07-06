@@ -3,20 +3,6 @@
  * Supports substituting variables like {{USER_NUMBER}} and {{AUTH_OTP}}
  */
 
-export const TEMPLATE_VARIABLES = {
-  USER_NUMBER: '{{USER_NUMBER}}',
-  AUTH_OTP: '{{AUTH_OTP}}',
-  EMAIL_TO: '{{EMAIL_TO}}',
-  EMAIL_SUBJECT: '{{EMAIL_SUBJECT}}',
-  EMAIL_BODY: '{{EMAIL_BODY}}',
-  PHONE_ALERT_TO: '{{PHONE_ALERT_TO}}',
-  PHONE_ALERT_BODY: '{{PHONE_ALERT_BODY}}',
-  PHONE_ALERT_TITLE: '{{PHONE_ALERT_TITLE}}',
-  PHONE_ALERT_DESC: '{{PHONE_ALERT_DESC}}',
-  PHONE_ALERT_LINK: '{{PHONE_ALERT_LINK}}',
-  PHONE_ALERT_SUMMARY: '{{PHONE_ALERT_SUMMARY}}',
-} as const;
-
 /**
  * Substitute template variables in a string
  * @param template - String containing template variables (e.g., "OTP: {{AUTH_OTP}}")
@@ -35,25 +21,3 @@ export function substituteVariables(
   return result;
 }
 
-/**
- * Validate that a webhook config doesn't use undefined template variables
- * @param config - Webhook configuration object
- * @returns Array of undefined variable names (empty if all valid)
- */
-export function validateTemplateVariables(config: any): string[] {
-  const configStr = JSON.stringify(config);
-  const templateRegex = /{{([A-Z_]+)}}/g;
-  const matches = configStr.matchAll(templateRegex);
-
-  const undefinedVars: string[] = [];
-  const validVars = Object.keys(TEMPLATE_VARIABLES);
-
-  for (const match of matches) {
-    const varName = match[1];
-    if (!validVars.includes(varName)) {
-      undefinedVars.push(varName);
-    }
-  }
-
-  return [...new Set(undefinedVars)];  // Remove duplicates
-}

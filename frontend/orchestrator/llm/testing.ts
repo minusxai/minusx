@@ -33,13 +33,9 @@ export const fauxToolCall = piFauxToolCall;
 export {
   respondTo,
   fauxMatcher,
-  findResponse,
   lastUserText,
   lastToolName,
-  UnexpectedFauxLLMError,
-  AmbiguousFauxLLMError,
   type FauxMatch,
-  type FauxResponseValue,
 } from './faux-matcher';
 
 /**

@@ -20,6 +20,7 @@ describe('QueryStream contract', () => {
   it('base connector: default queryStream() wraps query() (materialized fallback)', async () => {
     // A connector that ONLY implements query() — inherits the default streaming wrapper.
     class MaterializedConnector extends NodeConnector {
+      async ping(): Promise<void> { /* not exercised by this test */ }
       async testConnection(): Promise<TestConnectionResult> { return { success: true, message: 'ok' }; }
       async query(): Promise<QueryResult> { return RESULT; }
       async getSchema(): Promise<SchemaEntry[]> { return []; }
@@ -33,6 +34,7 @@ describe('QueryStream contract', () => {
   it('streaming connector: queryStream() yields lazily; query() drains it (no double impl)', async () => {
     let rowsPulled = 0;
     class StreamingConnector extends NodeConnector {
+      async ping(): Promise<void> { /* not exercised by this test */ }
       async testConnection(): Promise<TestConnectionResult> { return { success: true, message: 'ok' }; }
       async getSchema(): Promise<SchemaEntry[]> { return []; }
       override async queryStream(): Promise<QueryStream> {

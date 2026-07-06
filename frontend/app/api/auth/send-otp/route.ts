@@ -13,7 +13,7 @@ import { generateOTP, hashOTP, createOTPToken } from '@/lib/auth/otp-utils';
 import { getConfigsForMode } from '@/lib/data/configs.server';
 import { executeWebhook, sendEmailViaWebhook } from '@/lib/messaging/webhook-executor';
 import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
-import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
+import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
 import { UserState } from '@/lib/types';
 import { buildOTPEmailHtml } from '@/lib/messaging/otp-email-html';
 import { IS_DEV } from '@/lib/constants';

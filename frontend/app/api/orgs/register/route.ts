@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getModules } from '@/lib/modules/registry';
-import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
+import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
 import { ENABLE_ORG_CREATION } from '@/lib/config';
 import {
   validateWorkspaceName,

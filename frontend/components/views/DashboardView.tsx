@@ -5,18 +5,18 @@ import { DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, Que
 import { getAssetLayoutKey, getLayoutableAssets, getLayoutSignature, computeDashboardLayouts } from './dashboard-assets';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
-import ParameterRow from '../ParameterRow';
+import ParameterRow from '../params/ParameterRow';
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { DashboardEmptyState } from '@/components/views/shared/empty-states';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent } from '@/store/filesSlice';
-import { editFile } from '@/lib/api/file-state';
+import { editFile } from '@/lib/file-state/file-state';
 import { pushView, selectFileEditMode } from '@/store/uiSlice';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
-import { QuestionBrowserPanel } from '../QuestionBrowserPanel';
+import { QuestionBrowserPanel } from '../question/QuestionBrowserPanel';
 import { useDashboardPublishHighlights, type PublishHighlight } from '@/lib/context/dashboard-publish-highlights';
 
 const EMPTY_PARAMS: Record<string, any> = {};

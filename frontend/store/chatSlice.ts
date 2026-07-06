@@ -1,6 +1,6 @@
 import { createSlice, createSelector, PayloadAction } from '@reduxjs/toolkit';
 import type { RootState } from './store';
-import type { UserInput } from '@/lib/api/user-input-exception';
+import type { UserInput } from '@/lib/tools/user-input-exception';
 import type { MessageDebugInfo, ErrorLogEntry } from '@/lib/types';
 import type { AppState } from '@/lib/appState';
 import { classifyErrorRetryability, type ErrorRetryability } from '@/lib/chat/error-retryability';

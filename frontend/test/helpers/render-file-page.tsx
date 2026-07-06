@@ -18,7 +18,7 @@
 import React from 'react';
 import { Box } from '@chakra-ui/react';
 import { renderWithProviders } from './render-with-providers';
-import ViewStackOverlay from '@/components/ViewStack';
+import ViewStackOverlay from '@/components/file-browser/ViewStack';
 import { makeStore } from '@/store/store';
 
 type TestStore = ReturnType<typeof makeStore>;

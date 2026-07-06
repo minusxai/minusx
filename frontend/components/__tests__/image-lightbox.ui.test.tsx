@@ -7,7 +7,7 @@ import { screen, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { makeStore } from '@/store/store';
 import { openImageLightbox } from '@/store/uiSlice';
-import ImageLightbox from '@/components/ImageLightbox';
+import ImageLightbox from '@/components/ui/ImageLightbox';
 
 function openWith(url: string) {
   const store = makeStore();

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import { successResponse, handleApiError } from '@/lib/api/api-responses';
+import { successResponse, handleApiError } from '@/lib/http/api-responses';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
 /**

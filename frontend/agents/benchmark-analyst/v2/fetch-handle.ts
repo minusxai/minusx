@@ -7,7 +7,7 @@ import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import type { BenchmarkAnalystContext } from '../types';
 import { fetchHandle } from './handle-store';
 import { computeResultStats } from './result-stats';
-import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 
 const FetchHandleParams = Type.Object({
   handle: Type.String({ description: 'The handle ID returned from a previous query (e.g. "handle_abc123")' }),

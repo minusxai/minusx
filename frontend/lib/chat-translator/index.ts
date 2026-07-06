@@ -2,7 +2,6 @@
 //
 // One module, three exports:
 //   piLogToLegacy           orchestrator ConversationLog            → ConversationLogEntry[]      (forward; file reads + done frame)
-//   piStreamEventToLegacy   StreamEvent                      → legacy SSE payload | null   (per-event mid-stream)
 //   legacyToolResultToPi    CompletedToolCallResult      → ToolResultMessage           (reverse; orchestrator resume)
 //
 // Lives at the backend boundary so the frontend never sees orchestrator log shape.
@@ -12,7 +11,6 @@ import type {
   ConversationLog,
   ConversationLogEntry as PiLogEntry,
   AgentInvocation,
-  StreamEvent,
 } from '@/orchestrator/types';
 import type { AssistantMessage, ToolResultMessage, ToolCall as PiToolCall, TextContent, ThinkingContent, ImageContent } from '@/orchestrator/llm';
 import { imageContentFromUrl } from '@/lib/projection/image-validate';
@@ -23,7 +21,7 @@ import type {
   TaskDebugEntry,
   ToolCallDetails,
 } from '@/lib/types';
-import type { CompletedToolCallResult } from '@/lib/chat-orchestration';
+import type { CompletedToolCallResult } from '@/lib/chat/chat-types';
 
 // ─── shared private helpers ─────────────────────────────────────────
 
@@ -461,63 +459,6 @@ export function legacyLogToPi(legacyLog: LegacyLogEntry[]): ConversationLog {
   }
 
   return out;
-}
-
-// ─── piStreamEventToLegacy: streaming ────────────────────────────────
-
-interface LegacyStreamingEvent {
-  type: 'StreamedContent' | 'StreamedThinking' | 'ToolCreated' | 'ToolCompleted';
-  payload: { chunk: string } | { id: string; type: 'function'; function: { name: string; arguments: Record<string, unknown> } } | CompletedToolCallResult;
-  conversationID: number;
-}
-
-/**
- * Per-event SSE translation. Returns null for orchestrator events that have no
- * legacy counterpart; the caller should skip those (they're internal
- * signals like text_start/end).
- */
-export function piStreamEventToLegacy(
-  event: StreamEvent,
-  conversationID: number,
-): LegacyStreamingEvent | null {
-  const type = (event as { type?: string }).type;
-
-  if (type === 'text_delta') {
-    const ev = event as Extract<StreamEvent, { type: 'text_delta' }>;
-    return {
-      type: 'StreamedContent',
-      payload: { chunk: ev.delta },
-      conversationID,
-    };
-  }
-
-  if (type === 'thinking_delta') {
-    const ev = event as Extract<StreamEvent, { type: 'thinking_delta' }>;
-    return {
-      type: 'StreamedThinking',
-      payload: { chunk: ev.delta },
-      conversationID,
-    };
-  }
-
-  if (type === 'toolcall_end') {
-    const ev = event as Extract<StreamEvent, { type: 'toolcall_end' }>;
-    return {
-      type: 'ToolCreated',
-      payload: {
-        id: ev.toolCall.id,
-        type: 'function',
-        function: {
-          name: v2ToV1ToolName(ev.toolCall.name),
-          arguments: (ev.toolCall.arguments ?? {}) as Record<string, unknown>,
-        },
-      },
-      conversationID,
-    };
-  }
-
-  // Internal/structural events that legacy doesn't model — skip.
-  return null;
 }
 
 // NOTE: the read-path down-translation (`translateConversationForFrontend`) has been retired.

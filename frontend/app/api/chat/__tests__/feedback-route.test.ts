@@ -18,7 +18,7 @@ const MOCK_USER = {
   home_folder: '/org',
   mode: 'org' as const,
 };
-vi.mock('@/lib/api/with-auth', () => ({
+vi.mock('@/lib/http/with-auth', () => ({
   withAuth: (handler: (req: any, user: any) => Promise<any>) =>
     async (request: any) => handler(request, MOCK_USER),
 }));

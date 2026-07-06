@@ -1,7 +1,7 @@
 import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react'
 import { LuTrendingUp, LuTrendingDown, LuMinus } from 'react-icons/lu'
 import { CHART_COLORS } from '@/lib/chart/echarts-theme'
-import { formatNumber, formatDateValue, applyPrefixSuffix } from '@/lib/chart/chart-utils'
+import { formatNumber, formatDateValue, applyPrefixSuffix } from '@/lib/chart/chart-format'
 import { computeTrendComparison } from '@/lib/chart/trend-utils'
 import { useRef, useState, useEffect } from 'react'
 import type { ColumnFormatConfig, TrendCompareMode } from '@/lib/types'

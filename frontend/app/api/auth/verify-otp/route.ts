@@ -6,7 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { verifyOTPToken, validateOTP, createVerifiedToken } from '@/lib/auth/otp-utils';
-import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
+import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
 
 export async function POST(request: NextRequest) {
   try {

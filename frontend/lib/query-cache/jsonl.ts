@@ -35,12 +35,6 @@ export function decodeJsonl(text: string): QueryResult {
   return { columns: header.columns, types: header.types, finalQuery: header.finalQuery, rows };
 }
 
-/** Just the header line of a JSONL string (columns/types/finalQuery/rowCount). */
-export function decodeJsonlHeader(text: string): JsonlHeader {
-  const nl = text.indexOf('\n');
-  return JSON.parse(nl === -1 ? text : text.slice(0, nl)) as JsonlHeader;
-}
-
 export interface BoundedDecode {
   columns: string[];
   types: string[];

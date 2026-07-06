@@ -29,7 +29,7 @@ export const SEVERITY_DEDUCTION: Record<RubricSeverity, number> = {
 };
 
 /** Fixed category order (priority waterfall) — every report emits all three. */
-export const CATEGORIES: readonly RubricCategory[] = ['correctness', 'clarity', 'aesthetics'];
+const CATEGORIES: readonly RubricCategory[] = ['correctness', 'clarity', 'aesthetics'];
 
 /** Per-type category weights (each row sums to 1). */
 export const CATEGORY_WEIGHTS: Record<RubricFileType, Record<RubricCategory, number>> = {
@@ -39,8 +39,8 @@ export const CATEGORY_WEIGHTS: Record<RubricFileType, Record<RubricCategory, num
   context:   { correctness: 0.5,  clarity: 0.5,  aesthetics: 0 }, // a knowledge file — no aesthetics
 };
 
-export const GRADE_GOOD_MIN = 4;
-export const GRADE_FAIR_MIN = 2.5;
+const GRADE_GOOD_MIN = 4;
+const GRADE_FAIR_MIN = 2.5;
 
 /** Round to the nearest 0.5 and clamp into [0, 5]. */
 function toScore(raw: number): number {

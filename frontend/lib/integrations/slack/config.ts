@@ -15,7 +15,7 @@ export const SLACK_BOT_SCOPES = [
   'users:read.email',
 ] as const;
 
-export function isPublicSlackBaseUrl(url: string | null): boolean {
+function isPublicSlackBaseUrl(url: string | null): boolean {
   if (!url) {
     return false;
   }
@@ -33,7 +33,7 @@ export function isPublicSlackBaseUrl(url: string | null): boolean {
   }
 }
 
-export function getSlackBaseUrl(baseUrlOverride?: string | null): string | null {
+function getSlackBaseUrl(baseUrlOverride?: string | null): string | null {
   const override = baseUrlOverride?.trim() || null;
   if (override) {
     return override;

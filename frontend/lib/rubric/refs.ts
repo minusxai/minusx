@@ -4,7 +4,7 @@
  * badge (resolves types from Redux) and the server scorers (resolve via loadFile) need the same id
  * list, so it lives here as one pure function to keep them from drifting.
  */
-import { extractSavedQuestionIds } from '@/lib/data/story-question';
+import { extractSavedQuestionIds } from '@/lib/data/story/story-question';
 import type { DashboardContent, StoryContent } from '@/lib/types';
 import type { DeterministicContext } from './types';
 

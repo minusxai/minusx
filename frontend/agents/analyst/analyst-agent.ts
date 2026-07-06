@@ -17,7 +17,7 @@ import {
   ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools.server';
 import { LoadContext } from '@/agents/web-analyst/web-tools';
-import { formatContextDocsSection } from '@/lib/sql/schema-filter';
+import { formatContextDocsSection } from '@/lib/sql/context-docs';
 import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
 import type { RemoteAnalystContext, AgentAttachment } from './types';
 import type { AppState } from '@/lib/appState';
@@ -30,7 +30,7 @@ export {
   SearchDBSchema,
   ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools.server';
-export type { AnalystAgentContext, ConnectionInfo, RemoteAnalystContext } from './types';
+export type { RemoteAnalystContext } from './types';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-analyst-api',
@@ -96,7 +96,8 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       // "Default Context Docs", then the lazy-loadable catalog (title + description,
       // fetched on demand via LoadContext) under "Context Library". Built by the
       // shared formatter so the prompt and the docs sidebar render identically.
-      // (Resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration.)
+      // (Resolved server-side via lib/chat/conversation-turn.server.ts → setupOrchestration
+      // in lib/chat/orchestration-core.server.ts.)
       context: formatContextDocsSection(this.context.resolvedContextDocs ?? { docs: [] }),
       // LoadSkill catalog: skills available to fetch on demand (system + user,
       // minus already-preloaded).
@@ -176,7 +177,3 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     return projectMessages(msgs);
   }
 }
-
-// Backward-compat alias. Pre-existing call sites (faux specs with
-// `agent: 'AnalystAgent'`, slack tests, file-tools tests, etc.) keep working.
-export const AnalystAgent = RemoteAnalystAgent;

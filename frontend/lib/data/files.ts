@@ -1,6 +1,6 @@
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { IFilesDataLayer } from './files.interface';
-import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchSaveFileInput, BatchSaveFileResult, DryRunSaveResult, MoveFileInput, MoveFileResult, DeleteFileResult } from './types';
+import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchSaveFileInput, BatchSaveFileResult, DryRunSaveResult, MoveFileInput, MoveFileResult, DeleteFileResult, GetRubricOptions, GetRubricResult } from './types';
 import { FileExistsError, AccessPermissionError, FileNotFoundError, SerializedError, deserializeError } from '@/lib/errors';
 import { BaseFileContent, DbFile, FileType } from '@/lib/types';
 
@@ -274,6 +274,29 @@ class FilesDataLayerClient implements IFilesDataLayer {
     return json.data as MoveFileResult[];
   }
 
+  /**
+   * Get the combined health rubric (deterministic + optional LLM visual judge) for a file.
+   * Client-only — not part of IFilesDataLayer: the server computes rubrics directly via
+   * scoreFile/scoreFileDeterministicResolved rather than through this data layer, so there is
+   * no matching server-side implementation to keep in sync.
+   */
+  async getRubric(id: number, options: GetRubricOptions = {}): Promise<GetRubricResult> {
+    const res = await fetch(`${API_BASE}/api/files/${id}/rubric`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || errorData.message || errorData.error || `Failed to get rubric for file ${id}: ${res.statusText}`;
+      throw new Error(errorMessage);
+    }
+
+    const json = await res.json();
+    return json.data as GetRubricResult;
+  }
+
 }
 
 // Export singleton instance - PREFER using this
@@ -281,9 +304,4 @@ export const FilesAPI = new FilesDataLayerClient();
 
 // Deprecated: Export individual functions for backward compatibility
 // TODO Phase 3: Remove these and use FilesAPI namespace everywhere
-export const loadFile = FilesAPI.loadFile.bind(FilesAPI);
-export const loadFiles = FilesAPI.loadFiles.bind(FilesAPI);
 export const getFiles = FilesAPI.getFiles.bind(FilesAPI);
-export const createFile = FilesAPI.createFile.bind(FilesAPI);
-export const saveFile = FilesAPI.saveFile.bind(FilesAPI);
-export const getTemplate = FilesAPI.getTemplate.bind(FilesAPI);

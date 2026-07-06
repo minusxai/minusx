@@ -6,14 +6,8 @@ export { QueryBuilder } from './QueryBuilder';
 export { QueryBuilderRoot } from './QueryBuilderRoot';
 export { CompoundQueryBuilder } from './CompoundQueryBuilder';
 export { QueryModeSelector, type QueryTab } from './QueryModeSelector';
-export { TableSelector } from './TableSelector';
-export { ColumnSelector } from './ColumnSelector';
 export { JoinBuilder } from './JoinBuilder';
-export { FilterBuilder } from './FilterBuilder';
-export { GroupByBuilder } from './GroupByBuilder';
 export { OrderByBuilder } from './OrderByBuilder';
-export { LimitInput } from './LimitInput';
-export { SqlPreview } from './SqlPreview';
 
 
 export { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';

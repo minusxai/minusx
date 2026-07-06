@@ -12,7 +12,7 @@ import { setUser } from '@/store/authSlice';
 import { setColorMode } from '@/store/uiSlice';
 import { selectMergedContent } from '@/store/filesSlice';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
-import { compressAugmentedFile, APP_STATE_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { compressAugmentedFile, APP_STATE_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import StoryView from '@/components/views/story/StoryView';

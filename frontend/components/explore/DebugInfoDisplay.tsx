@@ -9,7 +9,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectDevMode } from '@/store/uiSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import { getLLMLogStats, type LLMLogStats } from '@/lib/api/llm-calls';
+import { getLLMLogStats, type LLMLogStats } from '@/lib/chat/llm-calls';
 
 interface DebugInfoDisplayProps {
   debugInfo: MessageDebugInfo;

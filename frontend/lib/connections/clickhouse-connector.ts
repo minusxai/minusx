@@ -1,8 +1,9 @@
 import 'server-only';
-import type { QueryResult, QueryStream, SchemaEntry, TestConnectionResult } from './base';
-import { NodeConnector as NodeConnectorBase } from './base';
+import type { QueryResult, QueryStream, SchemaEntry } from './base';
+import { NodeConnector as NodeConnectorBase, groupColumnsIntoSchemaEntries } from './base';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 import { getOrCreateClickHouseClient } from './clickhouse-registry';
+import { rewriteNamedParams } from './named-to-positional';
 
 // ClickHouse exposes a parameterised-query syntax `{name:Type}` paired with a
 // `query_params` map (see `namedToClickHouse`). The type annotation is required,
@@ -18,16 +19,15 @@ function inferClickHouseType(value: string | number): string {
  * inlined as the literal `NULL` (the parameter system strips None-valued
  * filters upstream, so a surviving `:name` with no value means "no value").
  *
- * `(?<!:)` negative lookbehind: the second `:` of a `::Type` cast
- * (`'2021'::Date`, which ClickHouse supports) is not a placeholder.
+ * Matching grammar (incl. the `::Type` cast lookbehind) lives in the shared
+ * `rewriteNamedParams` — this only supplies ClickHouse's own replacement form.
  */
 function namedToClickHouse(
   sql: string,
   params?: Record<string, string | number>,
 ): { sql: string; query_params: Record<string, unknown> } {
   const query_params: Record<string, unknown> = {};
-  const out = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key: string) => {
-    const value = params?.[key];
+  const out = rewriteNamedParams(sql, params, (key, value) => {
     if (value == null) return 'NULL';
     query_params[key] = value;
     return `{${key}:${inferClickHouseType(value)}}`;
@@ -53,22 +53,13 @@ const SINGLE_DATABASE_SQL = `
 `;
 
 export class ClickHouseConnector extends NodeConnectorBase {
-  async testConnection(includeSchema = false): Promise<TestConnectionResult> {
-    try {
-      const client = getOrCreateClickHouseClient(this.config);
-      // A real query validates reachability AND credentials. `client.ping()`
-      // hits the unauthenticated /ping endpoint, so it would pass even with
-      // bad credentials — use SELECT 1 instead.
-      const rs = await client.query({ query: 'SELECT 1', format: 'JSON' });
-      await rs.json();
-      if (includeSchema) {
-        const schemas = await this.getSchema();
-        return { success: true, message: 'Connection successful', schema: { schemas } };
-      }
-      return { success: true, message: 'Connection successful' };
-    } catch (err: any) {
-      return { success: false, message: err?.message ?? String(err) };
-    }
+  protected async ping(): Promise<void> {
+    const client = getOrCreateClickHouseClient(this.config);
+    // A real query validates reachability AND credentials. `client.ping()`
+    // hits the unauthenticated /ping endpoint, so it would pass even with
+    // bad credentials — use SELECT 1 instead.
+    const rs = await client.query({ query: 'SELECT 1', format: 'JSON' });
+    await rs.json();
   }
 
   async query(
@@ -161,19 +152,12 @@ export class ClickHouseConnector extends NodeConnectorBase {
     };
     const rows = json.data ?? [];
 
-    // database → table → columns
-    const schemaMap = new Map<string, Map<string, Array<{ name: string; type: string }>>>();
-    for (const row of rows) {
-      if (!schemaMap.has(row.database)) schemaMap.set(row.database, new Map());
-      const tableMap = schemaMap.get(row.database)!;
-      if (!tableMap.has(row.table)) tableMap.set(row.table, []);
-      tableMap.get(row.table)!.push({ name: row.name, type: row.type });
-    }
-
-    // No secondary-index concept in ClickHouse → leave indexes undefined.
-    return Array.from(schemaMap.entries()).map(([schema, tableMap]) => ({
-      schema,
-      tables: Array.from(tableMap.entries()).map(([table, columns]) => ({ table, columns })),
-    }));
+    // database → table → columns. No secondary-index concept in ClickHouse
+    // → leave indexes undefined.
+    return groupColumnsIntoSchemaEntries(rows, {
+      schema: (row) => row.database,
+      table: (row) => row.table,
+      columns: (row) => [{ name: row.name, type: row.type }],
+    });
   }
 }

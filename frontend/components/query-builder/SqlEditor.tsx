@@ -1,0 +1,820 @@
+'use client';
+
+import dynamic from 'next/dynamic';
+import { useAppSelector } from '@/store/hooks';
+import { Box, HStack } from '@chakra-ui/react';
+import { format } from 'sql-formatter';
+import { useRef, useEffect, useState, useMemo } from 'react';
+import { DatabaseWithSchema } from '@/lib/types';
+import { useConfigs } from '@/lib/hooks/useConfigs';
+import EditWithAgentPopover from '@/components/EditWithAgentPopover';
+import { computeMonacoPopoverPosition, type MonacoPopoverPosition } from '@/lib/chat/edit-with-agent';
+import { ResolvedReference } from '@/lib/sql/query-composer';
+import { CompletionsAPI } from '@/lib/data/completions/completions';
+import SqlDiffEditor from './SqlDiffEditor';
+import SqlEditorToolbar from './SqlEditorToolbar';
+import SqlEditorResizeHandle from './SqlEditorResizeHandle';
+
+// PERFORMANCE EXCEPTION — monaco-editor (~73 MB of JS) is lazy-loaded via next/dynamic
+// rather than imported statically. Monaco is browser-only (ssr: false is correct) and is
+// only needed on question/editor pages. A static import pulled the entire 73 MB package
+// into the Turbopack dev cache for every page in the app, slowing every unrelated page's
+// first compile. next/dynamic is the documented Next.js pattern for this exact scenario.
+// This is NOT a circular-dependency workaround — that is the sole reason the rule exists.
+// Kept to a single targeted declaration (SqlDiffEditor.tsx has the sibling DiffEditor
+// declaration); do not expand this block.
+/* eslint-disable no-restricted-syntax */
+const Editor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
+/* eslint-enable no-restricted-syntax */
+
+/**
+ * Promise-aware debounce for async functions
+ * Lodash debounce doesn't return Promises, so we wrap it
+ * All pending promises resolve with the same result when the debounced function executes
+ */
+function debouncePromise<T extends (...args: any[]) => Promise<any>>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => Promise<ReturnType<T>> {
+  let timeout: NodeJS.Timeout | null = null;
+  let pendingResolvers: Array<{ resolve: (value: any) => void; reject: (error: any) => void }> = [];
+
+  return function (...args: Parameters<T>) {
+    return new Promise<ReturnType<T>>((resolve, reject) => {
+      // Add this promise to the pending list
+      pendingResolvers.push({ resolve, reject });
+
+      // Clear previous timeout
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+
+      // Set new timeout
+      timeout = setTimeout(async () => {
+
+        const currentResolvers = pendingResolvers;
+        pendingResolvers = [];
+
+        try {
+          const result = await func(...args);
+          // Resolve all pending promises with the same result
+          currentResolvers.forEach(r => r.resolve(result));
+        } catch (error) {
+          // Reject all pending promises with the same error
+          currentResolvers.forEach(r => r.reject(error));
+        }
+      }, wait);
+    });
+  };
+}
+
+/**
+ * Autocomplete implementation:
+ * - @references: Frontend (requires DB query)
+ * - Everything else: API-based (backend parses with sqlglot)
+ */
+
+// Custom styles for Monaco autocomplete dropdown and @reference highlighting
+const monacoSuggestStyles = `
+  .monaco-editor .suggest-widget {
+    border-radius: 8px !important;
+  }
+  .monaco-editor .reference-highlight {
+    color: #1abc9c !important;
+    font-weight: 600;
+  }
+  .monaco-editor .reference-unresolved {
+    text-decoration: underline wavy #e74c3c;
+    text-underline-offset: 3px;
+  }
+  .monaco-editor .schema-table-highlight {
+    color: #c0392b !important;
+    font-weight: 500;
+  }
+  .monaco-editor .schema-column-highlight {
+    color: #f39c12 !important;
+  }
+  .monaco-editor .schema-schema-highlight {
+    color: #9b59b6 !important;
+    font-weight: 500;
+  }
+`;
+
+/**
+ * Reference option for autocomplete
+ */
+export interface ReferenceOption {
+  id: number;
+  name: string;
+  alias: string;  // Pre-generated alias (e.g., "43_revenue_by_month")
+}
+
+interface SqlEditorProps {
+  value: string;
+  onChange?: (value: string) => void;
+  onRun?: () => void;
+  readOnly?: boolean;
+  showFormatButton?: boolean;
+  showRunButton?: boolean;
+  isRunning?: boolean;
+  proposedValue?: string;  // When set, shows diff editor (current vs proposed)
+  availableReferences?: ReferenceOption[];  // Questions available for @reference autocomplete
+  validReferenceAliases?: string[];  // Aliases that are currently valid (resolved) - for error squiggles
+  schemaData?: DatabaseWithSchema[];  // Database schema for table/column autocomplete
+  resolvedReferences?: ResolvedReference[];  // Already loaded references for API autocomplete
+  databaseName?: string;  // Database name for API autocomplete
+  connectionType?: string;  // Connection type for dialect-aware autocomplete
+  fillHeight?: boolean;  // When true, fills parent container height instead of fixed pixel height
+  editWithAgent?: { fileName: string; filePath?: string; questionId?: number };  // Enables the "Interact with {agentName}" selection pill
+}
+
+export default function SqlEditor({
+  value,
+  onChange,
+  onRun,
+  readOnly = false,
+  showFormatButton = true,
+  showRunButton = false,
+  isRunning = false,
+  proposedValue,
+  availableReferences = [],
+  validReferenceAliases = [],
+  schemaData = [],
+  resolvedReferences = [],
+  databaseName,
+  connectionType,
+  fillHeight = false,
+  editWithAgent,
+}: SqlEditorProps) {
+  const colorMode = useAppSelector((state) => state.ui.colorMode);
+  const editorTheme = colorMode === 'dark' ? 'vs-dark' : 'vs-light';
+  const onRunRef = useRef(onRun);
+  const editorRef = useRef<any>(null);
+  const monacoRef = useRef<any>(null);
+  const completionProviderRef = useRef<any>(null);
+  const availableReferencesRef = useRef(availableReferences);
+  const requestIdRef = useRef(0); // Track request IDs to ignore stale responses
+  const [height, setHeight] = useState(200); // Height in pixels
+  const [isResizing, setIsResizing] = useState(false);
+  const startYRef = useRef(0);
+  const startHeightRef = useRef(0);
+  const { config } = useConfigs();
+  const agentName = config.branding.agentName;
+  const validationRequestIdRef = useRef(0);
+  const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const databaseNameRef = useRef(databaseName);
+  const connectionTypeRef = useRef(connectionType);
+  // "Interact with {agentName}" selection pill (gate the once-registered listeners on the latest prop).
+  const editWithAgentRef = useRef(editWithAgent);
+  const [editSel, setEditSel] = useState<MonacoPopoverPosition | null>(null);
+
+
+  // Keep the ref updated with the latest onRun callback
+  useEffect(() => {
+    onRunRef.current = onRun;
+  }, [onRun]);
+
+  // Keep availableReferences ref updated
+  useEffect(() => {
+    availableReferencesRef.current = availableReferences;
+  }, [availableReferences]);
+
+  // Keep validReferenceAliases ref updated for decoration
+  const validReferenceAliasesRef = useRef(validReferenceAliases);
+  useEffect(() => {
+    validReferenceAliasesRef.current = validReferenceAliases;
+  }, [validReferenceAliases]);
+
+  // Keep schemaData ref updated for schema completions
+  const schemaDataRef = useRef(schemaData);
+  useEffect(() => {
+    schemaDataRef.current = schemaData;
+  }, [schemaData]);
+
+  // Keep databaseName ref updated
+  useEffect(() => {
+    databaseNameRef.current = databaseName;
+  }, [databaseName]);
+
+  // Keep connectionType ref updated
+  useEffect(() => {
+    editWithAgentRef.current = editWithAgent;
+  }, [editWithAgent]);
+
+  useEffect(() => {
+    connectionTypeRef.current = connectionType;
+  }, [connectionType]);
+
+  // Debounced SQL validation function
+  const triggerValidation = (editor: any, monaco: any) => {
+    if (validationTimeoutRef.current) {
+      clearTimeout(validationTimeoutRef.current);
+    }
+    validationTimeoutRef.current = setTimeout(async () => {
+      const model = editor.getModel();
+      if (!model || readOnly) return;
+
+      const query = model.getValue().trim();
+      if (!query) {
+        monaco.editor.setModelMarkers(model, 'sql-validation', []);
+        return;
+      }
+
+      validationRequestIdRef.current += 1;
+      const requestId = validationRequestIdRef.current;
+
+      const result = await CompletionsAPI.validateSql(query, databaseNameRef.current);
+
+      // Staleness check
+      if (requestId !== validationRequestIdRef.current) return;
+
+      if (result.valid) {
+        monaco.editor.setModelMarkers(model, 'sql-validation', []);
+      } else {
+        const markers = result.errors.map((err) => ({
+          startLineNumber: err.line,
+          startColumn: err.col,
+          endLineNumber: err.line,
+          endColumn: err.end_col,
+          message: err.message,
+          severity: monaco.MarkerSeverity.Error,
+        }));
+        monaco.editor.setModelMarkers(model, 'sql-validation', markers);
+      }
+    }, 800);
+  };
+
+  // Debounced API autocomplete fetch with staleness checking (promise-aware)
+  const debouncedFetchCompletions = useMemo(
+    () => debouncePromise(async (query: string, cursorOffset: number, context: any, requestId: number) => {
+      try {
+        const result = await CompletionsAPI.getSqlCompletions({
+          query,
+          cursorOffset,
+          context
+        });
+
+        return { ...result, requestId };
+      } catch (error) {
+        console.error('Autocomplete error:', error);
+        return { suggestions: [], requestId };
+      }
+    }, 200),  // 200ms debounce
+    []
+  );
+
+  // Map API completion kind to Monaco kind
+  const mapKindToMonaco = (kind: string, monaco: any) => {
+    const kindMap: Record<string, any> = {
+      'column': monaco.languages.CompletionItemKind.Field,
+      'table': monaco.languages.CompletionItemKind.Class,
+      'schema': monaco.languages.CompletionItemKind.Module,
+      'cte': monaco.languages.CompletionItemKind.Variable,
+      'keyword': monaco.languages.CompletionItemKind.Keyword,
+      'reference': monaco.languages.CompletionItemKind.Reference
+    };
+    return kindMap[kind] || monaco.languages.CompletionItemKind.Text;
+  };
+
+  // Function to register completion provider (called from onMount and when readOnly changes)
+  const registerCompletionProvider = (monaco: any) => {
+    if (!monaco || readOnly) {
+      return;
+    }
+
+    // Dispose previous provider if exists
+    if (completionProviderRef.current) {
+      completionProviderRef.current.dispose();
+    }
+
+    // Register completion provider for SQL language
+    completionProviderRef.current = monaco.languages.registerCompletionItemProvider('sql', {
+      triggerCharacters: ['@', '.', ' ', ','],
+      provideCompletionItems: async (model: any, position: any) => {
+        // Get text before cursor on current line
+        const textUntilPosition = model.getValueInRange({
+          startLineNumber: position.lineNumber,
+          startColumn: 1,
+          endLineNumber: position.lineNumber,
+          endColumn: position.column
+        });
+
+        // Get full SQL text for alias extraction
+        const fullText = model.getValue();
+        const currentSchemaData = schemaDataRef.current;
+        const currentRefs = availableReferencesRef.current;
+
+        // 1. Check for @reference completion first (always use frontend logic)
+        const atMatch = textUntilPosition.match(/@(\w*)$/);
+        if (atMatch) {
+          const atIndex = textUntilPosition.lastIndexOf('@');
+          const range = {
+            startLineNumber: position.lineNumber,
+            startColumn: atIndex + 1,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column
+          };
+
+          const suggestions = currentRefs.map((ref: ReferenceOption, index: number) => ({
+            label: ref.name,
+            kind: monaco.languages.CompletionItemKind.Value,
+            detail: `@${ref.alias}`,
+            documentation: `Insert reference to question #${ref.id}`,
+            insertText: `@${ref.alias}`,
+            filterText: '@' + ref.name,
+            range: range,
+            sortText: String(index).padStart(5, '0'),
+          }));
+
+          return { suggestions };
+        }
+
+        // Skip schema completions if no schema data available
+        if (!currentSchemaData || currentSchemaData.length === 0) {
+          return { suggestions: [] };
+        }
+
+        // API-BASED AUTOCOMPLETE (backend parses with sqlglot)
+        try {
+          // Increment request ID to track this request
+          requestIdRef.current += 1;
+          const currentRequestId = requestIdRef.current;
+
+          // Calculate full cursor offset (not just on current line)
+          const textUntilCursor = model.getValueInRange({
+            startLineNumber: 1,
+            startColumn: 1,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column
+          });
+
+          const data = await debouncedFetchCompletions(
+            fullText,
+            textUntilCursor.length,
+            {
+              type: 'sql_editor',
+              schemaData: currentSchemaData,
+              resolvedReferences: resolvedReferences,
+              databaseName: databaseNameRef.current,
+              connectionType: connectionTypeRef.current,
+            },
+            currentRequestId
+          );
+
+          // Ignore stale responses (user has moved cursor or typed more)
+          if (data.requestId !== requestIdRef.current) {
+            return { suggestions: [] };
+          }
+
+          // Convert API suggestions to Monaco format
+          const suggestions = data.suggestions.map((item: any) => {
+            const wordMatch = textUntilPosition.match(/(\w*)$/);
+            const partial = wordMatch ? wordMatch[1] : '';
+
+            // When insert_text starts with ', ' the autocomplete provider detected a
+            // "trailing space after column in a list clause" situation.  We must
+            // expand the range one character back to consume that trailing space so
+            // the result is "…col, next" instead of "…col , next".
+            const commaPrefix = (item.insert_text as string).startsWith(', ');
+
+            return {
+              label: {
+                label: item.label,
+                detail: item.detail,
+                description: item.documentation
+              },
+              kind: mapKindToMonaco(item.kind, monaco),
+              insertText: item.insert_text,
+              sortText: item.sort_text,
+              range: {
+                startLineNumber: position.lineNumber,
+                startColumn: position.column - partial.length - (commaPrefix ? 1 : 0),
+                endLineNumber: position.lineNumber,
+                endColumn: position.column
+              }
+            };
+          });
+
+          return { suggestions };
+        } catch (error) {
+          console.error('API autocomplete error:', error);
+          return { suggestions: [] };
+        }
+      }
+    });
+  };
+
+  // Re-register when readOnly changes
+  useEffect(() => {
+    if (monacoRef.current) {
+      registerCompletionProvider(monacoRef.current);
+    }
+
+    return () => {
+      if (completionProviderRef.current) {
+        completionProviderRef.current.dispose();
+        completionProviderRef.current = null;
+      }
+    };
+  }, [readOnly]);
+
+  // Cleanup validation timeout and markers on unmount
+  useEffect(() => {
+    return () => {
+      if (validationTimeoutRef.current) {
+        clearTimeout(validationTimeoutRef.current);
+      }
+      // Clear markers
+      if (editorRef.current && monacoRef.current) {
+        const model = editorRef.current.getModel();
+        if (model) {
+          monacoRef.current.editor.setModelMarkers(model, 'sql-validation', []);
+        }
+      }
+    };
+  }, []);
+
+  const handleChange = (value: string | undefined) => {
+    if (onChange && value !== undefined) {
+      onChange(value);
+    }
+  };
+
+  const handleFormat = () => {
+    try {
+      if (!editorRef.current) return;
+
+      const currentValue = editorRef.current.getValue();
+      const formatted = format(currentValue, {
+        language: 'sql',
+        tabWidth: 2,
+        keywordCase: 'upper',
+        linesBetweenQueries: 1,
+        indentStyle: 'standard',
+        logicalOperatorNewline: 'before',
+        expressionWidth: 80,
+      });
+
+      // Update editor value and trigger onChange
+      editorRef.current.setValue(formatted);
+      if (onChange) {
+        onChange(formatted);
+      }
+    } catch (error) {
+      console.error('Failed to format SQL:', error);
+    }
+  };
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    startYRef.current = e.clientY;
+    startHeightRef.current = height;
+  };
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientY - startYRef.current;
+      const newHeight = Math.max(150, Math.min(300, startHeightRef.current + delta));
+      setHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  return (
+    <>
+      {/* Inject Monaco suggest widget styles */}
+      <style>{monacoSuggestStyles}</style>
+      <Box
+        border="1px solid"
+        borderColor="border.default"
+        borderRadius="md"
+        overflow="hidden"
+        bg="bg.subtle"
+        pr={2}
+        position="relative"
+        height={fillHeight ? '100%' : undefined}
+        display={fillHeight ? 'flex' : undefined}
+        flexDirection={fillHeight ? 'column' : undefined}
+      >
+      <HStack align="stretch" gap={2} flex={fillHeight ? 1 : undefined} height={fillHeight ? '100%' : undefined}>
+        <Box
+          flex={1}
+          borderColor="border.default"
+          overflow="hidden"
+          height={fillHeight ? '100%' : undefined}
+          bg="bg.canvas"
+        >
+          {proposedValue ? (
+            // Diff mode: show current vs proposed
+            <SqlDiffEditor
+              value={value}
+              proposedValue={proposedValue}
+              editorTheme={editorTheme}
+              colorMode={colorMode}
+              fillHeight={fillHeight}
+              height={height}
+            />
+          ) : (
+            // Normal edit mode
+            <Editor
+              height={fillHeight ? '100%' : `${height}px`}
+              defaultLanguage="sql"
+              value={value}
+              onChange={handleChange}
+              theme={editorTheme}
+              loading={<Box p={4} color="fg.muted" fontFamily="mono" fontSize="sm">Loading editor...</Box>}
+              onMount={(editor, monaco) => {
+                editorRef.current = editor;
+                monacoRef.current = monaco;
+
+                // Register @ completion provider now that Monaco is ready
+                registerCompletionProvider(monaco);
+
+                // Listen for insert-at-cursor events from sidebar components
+                const handleEditorInsert = (e: Event) => {
+                  const text = (e as CustomEvent<{ text: string }>).detail?.text;
+                  if (text && !readOnly) {
+                    editor.focus();
+                    editor.trigger('sidebar', 'type', { text });
+                  }
+                };
+                window.addEventListener('atlas:editor-insert', handleEditorInsert);
+                editor.onDidDispose(() => {
+                  window.removeEventListener('atlas:editor-insert', handleEditorInsert);
+                });
+
+                // "Interact with {agentName}" pill: reveal only once a selection
+                // gesture finishes (mouse-up / shift key-up), so it doesn't follow
+                // the cursor mid-drag. Hide while selecting, on collapse, and on scroll.
+                editor.onMouseUp(() => {
+                  if (editWithAgentRef.current) setEditSel(computeMonacoPopoverPosition(editor));
+                });
+                editor.onKeyUp((e: { shiftKey?: boolean }) => {
+                  if (editWithAgentRef.current && e.shiftKey) setEditSel(computeMonacoPopoverPosition(editor));
+                });
+                editor.onDidChangeCursorSelection(() => {
+                  if (!editWithAgentRef.current) return;
+                  const sel = editor.getSelection();
+                  if (!sel || sel.isEmpty()) setEditSel(null); // hide only; don't reposition mid-drag
+                });
+                editor.onDidScrollChange(() => {
+                  if (editWithAgentRef.current) setEditSel(null);
+                });
+
+                // Manually trigger suggestions when @ is typed
+                editor.onKeyUp(() => {
+                  // Check if @ was typed by looking at the character before cursor
+                  const position = editor.getPosition();
+                  if (position) {
+                    const lineContent = editor.getModel()?.getLineContent(position.lineNumber) || '';
+                    const charBefore = lineContent[position.column - 2];
+                    if (charBefore === '@') {
+                      setTimeout(() => {
+                        editor.trigger('keyboard', 'editor.action.triggerSuggest', {});
+                      }, 10);
+                    }
+                  }
+                });
+
+                // Define custom theme
+                monaco.editor.defineTheme('custom-theme', {
+                  base: colorMode === 'dark' ? 'vs-dark' : 'vs',
+                  inherit: true,
+                  rules: [],
+                  colors: {
+                    'editor.background': colorMode === 'dark' ? '#161b22' : '#ffffff',
+                  }
+                });
+                monaco.editor.setTheme('custom-theme');
+
+                // Function to highlight @references and schema elements in the editor
+                let decorations: string[] = [];
+                const updateDecorations = () => {
+                  const model = editor.getModel();
+                  if (!model) return;
+
+                  const text = model.getValue();
+                  const validAliases = validReferenceAliasesRef.current;
+                  const availableRefs = availableReferencesRef.current;
+                  const currentSchema = schemaDataRef.current;
+                  const newDecorations: any[] = [];
+
+                  // Match all @word patterns (potential references)
+                  const refRegex = /@(\w+)/g;
+                  let match;
+
+                  while ((match = refRegex.exec(text)) !== null) {
+                    const alias = match[1];  // The part after @
+                    const startPos = model.getPositionAt(match.index);
+                    const endPos = model.getPositionAt(match.index + match[0].length);
+                    const range = new monaco.Range(startPos.lineNumber, startPos.column, endPos.lineNumber, endPos.column);
+
+                    // Check if already in valid references (synced)
+                    const isValidSynced = validAliases.includes(alias);
+
+                    // Check if alias matches format and ID exists in available questions
+                    // This handles the case where user just selected from autocomplete but sync hasn't run yet
+                    const idMatch = alias.match(/_(\d+)$/);
+                    const isValidPending = idMatch && availableRefs.some(r => r.id === parseInt(idMatch[1], 10));
+
+                    if (isValidSynced || isValidPending) {
+                      // Valid reference - teal highlight
+                      newDecorations.push({
+                        range,
+                        options: {
+                          inlineClassName: 'reference-highlight'
+                        }
+                      });
+                    } else {
+                      // Unresolved reference - red squiggle (CSS only, no tooltip)
+                      newDecorations.push({
+                        range,
+                        options: {
+                          inlineClassName: 'reference-unresolved'
+                        }
+                      });
+                    }
+                  }
+
+                  // Highlight schema elements (tables, columns, schemas) if schema data available
+                  if (currentSchema && currentSchema.length > 0) {
+                    // Build sets for quick lookup
+                    const tableNames = new Set<string>();
+                    const columnNames = new Set<string>();
+                    const schemaNames = new Set<string>();
+
+                    // Schemas can be bounded to a names-only table-of-contents (no `columns`) for large
+                    // connections, so guard every level — a missing `columns`/`tables`/`schemas` must
+                    // not throw "not iterable" (Sentry 7584797922).
+                    for (const db of currentSchema) {
+                      for (const schema of db.schemas ?? []) {
+                        schemaNames.add(schema.schema.toLowerCase());
+                        for (const table of schema.tables ?? []) {
+                          tableNames.add(table.table.toLowerCase());
+                          for (const col of table.columns ?? []) {
+                            columnNames.add(col.name.toLowerCase());
+                          }
+                        }
+                      }
+                    }
+
+                    // Match all word tokens (excluding those starting with @)
+                    const wordRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
+                    while ((match = wordRegex.exec(text)) !== null) {
+                      const word = match[1];
+                      const lowerWord = word.toLowerCase();
+
+                      // Skip if it's part of an @reference
+                      const charBefore = match.index > 0 ? text[match.index - 1] : '';
+                      if (charBefore === '@') continue;
+
+                      // Skip SQL keywords
+                      const sqlKeywords = new Set(['select', 'from', 'where', 'join', 'on', 'and', 'or', 'not', 'in', 'as', 'order', 'by', 'group', 'having', 'limit', 'offset', 'inner', 'left', 'right', 'outer', 'cross', 'union', 'all', 'distinct', 'case', 'when', 'then', 'else', 'end', 'null', 'true', 'false', 'is', 'like', 'between', 'exists', 'insert', 'into', 'values', 'update', 'set', 'delete', 'create', 'table', 'drop', 'alter', 'index', 'view', 'with', 'asc', 'desc', 'count', 'sum', 'avg', 'min', 'max', 'coalesce', 'cast', 'nullif']);
+                      if (sqlKeywords.has(lowerWord)) continue;
+
+                      const startPos = model.getPositionAt(match.index);
+                      const endPos = model.getPositionAt(match.index + word.length);
+                      const range = new monaco.Range(startPos.lineNumber, startPos.column, endPos.lineNumber, endPos.column);
+
+                      // Check if it's a schema name (highest priority since it's most specific context)
+                      if (schemaNames.has(lowerWord)) {
+                        newDecorations.push({
+                          range,
+                          options: {
+                            inlineClassName: 'schema-schema-highlight'
+                          }
+                        });
+                      }
+                      // Check if it's a table name
+                      else if (tableNames.has(lowerWord)) {
+                        newDecorations.push({
+                          range,
+                          options: {
+                            inlineClassName: 'schema-table-highlight'
+                          }
+                        });
+                      }
+                      // Check if it's a column name
+                      else if (columnNames.has(lowerWord)) {
+                        newDecorations.push({
+                          range,
+                          options: {
+                            inlineClassName: 'schema-column-highlight'
+                          }
+                        });
+                      }
+                    }
+                  }
+
+                  decorations = editor.deltaDecorations(decorations, newDecorations);
+                };
+
+                // Update decorations on content change (debounced for performance)
+                let decorationTimeout: NodeJS.Timeout | null = null;
+                editor.onDidChangeModelContent(() => {
+                  if (decorationTimeout) clearTimeout(decorationTimeout);
+                  decorationTimeout = setTimeout(updateDecorations, 150);
+                  // Trigger SQL validation
+                  triggerValidation(editor, monaco);
+                });
+
+                // Initial decoration
+                updateDecorations();
+
+                // Initial SQL validation
+                triggerValidation(editor, monaco);
+
+                if (onRun && !readOnly) {
+                  editor.addCommand(
+                    monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+                    () => {
+                      onRunRef.current?.();
+                    }
+                  );
+                }
+
+                // Unbind Cmd+K so it propagates to app's search bar
+                // Monaco uses Cmd+K as a chord prefix, which blocks the app shortcut
+                monaco.editor.addKeybindingRules([
+                  {
+                    keybinding: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
+                    command: null,  // Removes the built-in binding
+                  }
+                ]);
+              }}
+              options={{
+                readOnly,
+                // Names Monaco's internal textarea so it's reachable via getByLabel.
+                ariaLabel: 'SQL editor',
+                fontFamily: 'var(--font-jetbrains-mono)',
+                lineNumbers: 'on',
+                folding: true,
+                lineDecorationsWidth: 10,
+                lineNumbersMinChars: 3,
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                wrappingIndent: 'indent',
+                automaticLayout: true,
+                tabSize: 2,
+                fixedOverflowWidgets: true,
+                // Enable autocomplete suggestions
+                suggestOnTriggerCharacters: true,
+                quickSuggestions: true,
+                suggest: {
+                  showReferences: true,
+                  filterGraceful: true,
+                },
+                formatOnPaste: false,
+                formatOnType: false,
+                padding: {
+                  top: 12,
+                  bottom: 12,
+                },
+                placeholder: `Write your SQL query here, or just ask ${agentName}!`,
+              }}
+            />
+          )}
+          {editWithAgent && editSel && (
+            <EditWithAgentPopover
+              position={{ x: editSel.x, y: editSel.y }}
+              selectedText={editSel.text}
+              source={{ editorKind: 'sql', fileName: editWithAgent.fileName, filePath: editWithAgent.filePath, fileId: editWithAgent.questionId, lineRange: editSel.lineRange }}
+              onClose={() => setEditSel(null)}
+            />
+          )}
+        </Box>
+
+        <SqlEditorToolbar
+          readOnly={readOnly}
+          showFormatButton={showFormatButton}
+          showRunButton={showRunButton}
+          onFormat={handleFormat}
+          onRun={onRun}
+          isRunning={isRunning}
+        />
+      </HStack>
+
+      {/* Resize handle - only show when not in fillHeight mode */}
+      <SqlEditorResizeHandle
+        fillHeight={fillHeight}
+        isResizing={isResizing}
+        onResizeStart={handleResizeStart}
+      />
+    </Box>
+    </>
+  );
+}

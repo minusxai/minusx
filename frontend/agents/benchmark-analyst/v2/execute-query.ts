@@ -15,7 +15,7 @@ import {
 } from './query-refs';
 import { type PromptPassEntry } from './prompt-pass';
 import { V2DataTool, getLighterModel } from './data-tool-base';
-import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { clampQueryTimeoutSeconds } from '../db-tools';
 import type { ResultEntry } from '../result-shapes';

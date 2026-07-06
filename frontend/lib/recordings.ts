@@ -13,7 +13,7 @@ export type RRWebEvent = any; // rrweb event type (imported from rrweb on client
 /**
  * Compress events array to gzipped base64 string
  */
-export function compressEvents(events: RRWebEvent[]): string {
+function compressEvents(events: RRWebEvent[]): string {
   const jsonStr = JSON.stringify(events);
   const uncompressed = Buffer.from(jsonStr, 'utf-8');
   const compressed = pako.gzip(uncompressed);
@@ -23,7 +23,7 @@ export function compressEvents(events: RRWebEvent[]): string {
 /**
  * Decompress gzipped base64 string to events array
  */
-export function decompressEvents(compressed: string): RRWebEvent[] {
+function decompressEvents(compressed: string): RRWebEvent[] {
   const buffer = Buffer.from(compressed, 'base64');
   const decompressed = pako.ungzip(buffer, { to: 'string' });
   return JSON.parse(decompressed);
@@ -32,7 +32,7 @@ export function decompressEvents(compressed: string): RRWebEvent[] {
 /**
  * Calculate size of events array in bytes
  */
-export function calculateEventSize(events: RRWebEvent[]): number {
+function calculateEventSize(events: RRWebEvent[]): number {
   return Buffer.from(JSON.stringify(events), 'utf-8').length;
 }
 
@@ -178,26 +178,3 @@ export async function stopRecording(
   return { duration };
 }
 
-/**
- * Get recording file
- */
-export async function getRecording(
-  fileId: number,
-  user: EffectiveUser
-): Promise<SessionRecordingFileContent> {
-  const fileResult = await FilesAPI.loadFile(fileId, user);
-  return fileResult.data.content as unknown as SessionRecordingFileContent;
-}
-
-/**
- * Check if size limit reached (30 min or 50MB uncompressed)
- */
-export function isSizeLimitReached(
-  duration: number,
-  uncompressedSize: number
-): boolean {
-  const MAX_DURATION_SECONDS = 30 * 60; // 30 minutes
-  const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
-
-  return duration >= MAX_DURATION_SECONDS || uncompressedSize >= MAX_SIZE_BYTES;
-}

@@ -13,7 +13,7 @@ import type { Tool } from '@/orchestrator/llm';
 import { runQueryStream } from '@/lib/connections/run-query';
 import { getCachedResultBounded } from '@/lib/query-cache/execute.server';
 import { resolveCachePolicy } from '@/lib/query-cache/policy.server';
-import { AGENT_DRAIN_MAX_BYTES, AGENT_DRAIN_MAX_ROWS } from '@/lib/api/compress-augmented';
+import { AGENT_DRAIN_MAX_BYTES, AGENT_DRAIN_MAX_ROWS } from '@/lib/chat/compress-augmented';
 import { loadConnectionSchema } from '@/lib/connections/load-schema';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { QueryResult, SchemaEntry } from '@/lib/connections/base';

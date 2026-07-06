@@ -6,8 +6,7 @@
  * source of truth + agent-facing contract.
  */
 import { validateFileState } from '@/lib/validation/content-validators';
-import { atlasSchemaNoViz } from '@/lib/validation/atlas-json-schemas';
-import { getTemplateDefaults } from '@/lib/data/template-defaults';
+import { getTemplateDefaults } from '@/lib/data/story/template-defaults';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 
 const sqlCell = {
@@ -87,9 +86,5 @@ describe('NotebookContent schema', () => {
     };
     expect(validateFileState({ type: 'notebook', content })).toBeNull();
     expect(extractReferencesFromContent(content as any, 'notebook').sort()).toEqual([7, 9]);
-  });
-
-  it('advertises AtlasNotebookFile in the agent-facing schema', () => {
-    expect(JSON.stringify(atlasSchemaNoViz)).toContain('AtlasNotebookFile');
   });
 });

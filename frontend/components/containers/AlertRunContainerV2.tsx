@@ -10,15 +10,15 @@ import { Box, Text, VStack, HStack, Badge, Separator, Button } from '@chakra-ui/
 import { useState, useCallback } from 'react';
 import { LuChevronDown, LuChevronRight, LuClock, LuTimer, LuHash } from 'react-icons/lu';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, publishFile } from '@/lib/api/file-state';
+import { editFile, publishFile } from '@/lib/file-state/file-state';
 import type { AlertContent, AlertOutput, AlertRunContent, MessageAttemptLog, RunFileContent, RunMessageRecord, TestRunResult } from '@/lib/types';
-import TestRunResultsList from '@/components/test/TestRunResultsList';
+import TestRunResultsList from '@/components/evals/TestRunResultsList';
 import type { FileId } from '@/store/filesSlice';
 import type { FileViewMode } from '@/lib/ui/fileComponents';
 import { LuBell, LuCirclePause, LuExternalLink, LuMail, LuMessageCircle, LuSettings } from 'react-icons/lu';
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
-import DatePicker from '@/components/DatePicker';
+import DatePicker from '@/components/selectors/DatePicker';
 
 /* ------------------------------------------------------------------ */
 /*  Shared sub-components                                              */
@@ -200,7 +200,7 @@ function TimingChip({ icon, label, value, color }: { icon: React.ReactNode; labe
 /*  AlertRunView — reusable presentation component                     */
 /* ------------------------------------------------------------------ */
 
-export interface AlertRunViewProps {
+interface AlertRunViewProps {
   status: ExecutionStatus;
   alertId?: number;
   alertName?: string;
@@ -224,7 +224,7 @@ export interface AlertRunViewProps {
   onSnooze?: (value: string) => void;
 }
 
-export function AlertRunView({
+function AlertRunView({
   status,
   alertId,
   alertName,

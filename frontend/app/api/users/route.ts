@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { auth } from '@/auth';
 import { UserDB } from '@/lib/database/user-db';
 import { hashPassword } from '@/lib/auth/password-utils';
-import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
+import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 

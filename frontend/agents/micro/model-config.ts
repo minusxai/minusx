@@ -15,7 +15,7 @@ import { E2E_MODE } from '@/lib/constants';
  * Example:
  *   { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" }
  */
-export interface MicroModelConfig {
+interface MicroModelConfig {
   provider: string;
   model: string;
   options?: Record<string, unknown>;
@@ -46,7 +46,7 @@ function isTestEnv(): boolean {
  *   - otherwise `null` (test environments only — lets MicroAgent use its faux
  *     registration via {@link getMicroModelOrTestFallback}).
  */
-export function getMicroModelConfig(): MicroModelConfig | null {
+function getMicroModelConfig(): MicroModelConfig | null {
   // E2E builds force every agent onto its faux provider (via /api/test/faux).
   if (E2E_MODE) return null;
   // eslint-disable-next-line no-restricted-syntax -- micro model config is intentionally standalone; reads its own scoped env var directly
@@ -57,7 +57,7 @@ export function getMicroModelConfig(): MicroModelConfig | null {
 }
 
 /** Typed Model from the effective config, or `null` in test envs with no env set. */
-export function getMicroModel(): Model<Api> | null {
+function getMicroModel(): Model<Api> | null {
   const cfg = getMicroModelConfig();
   if (!cfg) return null;
   return getModel(cfg.provider, cfg.model);

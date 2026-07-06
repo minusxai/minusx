@@ -18,8 +18,7 @@ import { AGENT_IMAGE_JPEG_QUALITY, CHART_WATERMARK_PADDING_PX, CHART_WATERMARK_L
 import type { QueryResult } from '@/lib/types';
 import type { VizSettings } from '@/lib/validation/atlas-schemas';
 
-export type { RenderChartOptions } from './render-chart-svg';
-export { renderChartToSvg, RENDERABLE_CHART_TYPES } from './render-chart-svg';
+export { renderChartToSvg } from './render-chart-svg';
 
 // ── Font-aware SVG → PNG conversion ──────────────────────────────────────────
 

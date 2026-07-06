@@ -1,6 +1,6 @@
 # Query Execution, Cache, & Params Arch V2
 
-Status: **design** (not yet implemented). Supersedes the in-process `queryCache`/`queryInflight` maps in `app/api/query/route.ts`.
+Status: **IMPLEMENTED** (`lib/query-cache/`, PR #535; hardened further in #541 and #562). Replaced the in-process `queryCache`/`queryInflight` maps that used to live in `app/api/query/route.ts`.
 
 ## Goals
 

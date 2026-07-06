@@ -1,6 +1,6 @@
 import { BaseFileContent, FileType } from '@/lib/types';
-import { extractSavedQuestionIds } from '@/lib/data/story-question';
-import { extractNumberQuestionIds } from '@/lib/data/story-number';
+import { extractSavedQuestionIds } from '@/lib/data/story/story-question';
+import { extractNumberQuestionIds } from '@/lib/data/story/story-number';
 
 /**
  * CLIENT-SIDE: Extract reference IDs from content for caching in references column

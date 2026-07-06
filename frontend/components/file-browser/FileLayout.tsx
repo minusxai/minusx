@@ -1,0 +1,194 @@
+'use client';
+
+/**
+ * FileLayout Component - Phase 1: Simplified Pure Layout
+ *
+ * This component is now a pure layout container:
+ * - Handles breadcrumb rendering
+ * - Manages right sidebar
+ * - Sets page type in Redux
+ * - Delegates all file-type-specific rendering to children
+ *
+ * The 70-line if-else chain has been removed and replaced with
+ * the fileComponents mapping system used by FileView.
+ */
+import { Box, VStack, Flex, useBreakpointValue } from '@chakra-ui/react';
+import Breadcrumb from './Breadcrumb';
+import RightSidebar, { RightSidebarProps } from '../app-shell/RightSidebar';
+import MobileRightSidebar from '../app-shell/MobileRightSidebar';
+import FloatingChatWrapper from '../app-shell/FloatingChatWrapper';
+import { ReactNode } from 'react';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { DbFile } from '@/lib/types';
+import { selectEffectiveName } from '@/store/filesSlice';
+import { useFile, useFolder, useAppState } from '@/lib/hooks/file-state-hooks';
+import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
+import { selectViewStackDepth, selectFileEditMode } from '@/store/uiSlice';
+import { getEditModeBanner } from '@/lib/ui/file-utils';
+import { selectView } from '@/store/authSlice';
+import { viewAtLeast } from '@/lib/view/view-types';
+import ViewStackOverlay from './ViewStack';
+import { useConfigs } from '@/lib/hooks/useConfigs';
+
+/**
+ * FileLayout Props - Phase 1: Simplified to use children only
+ */
+interface FileLayoutProps {
+  filePath: string;
+  fileName: string;
+  fileType: DbFile['type'];
+  fileId?: number;
+  children: ReactNode;
+  rightSidebar: RightSidebarProps;
+  sourceDashboardId?: number;
+}
+
+export default function FileLayout(props: FileLayoutProps) {
+  const { filePath, fileName, fileType, fileId, rightSidebar, sourceDashboardId } = props;
+  const user = useAppSelector(state => state.auth.user);
+  const view = useAppSelector(selectView);
+  const hideTopChrome = viewAtLeast(view, 'file');       // hide breadcrumb
+  const hideRightSidebar = viewAtLeast(view, 'contentonly');
+  // Files with a distinct edit state (dashboard, story) get a colored breadcrumb
+  // banner while editing — see `getEditModeBanner` for the eligible types.
+  const isEditing = useAppSelector(state =>
+    fileId ? selectFileEditMode(state, fileId) : false
+  );
+  const editBanner = getEditModeBanner(fileType, isEditing);
+
+  // Load source dashboard name if navigated from a dashboard via URL param
+  useFile(sourceDashboardId);
+  const sourceDashboardName = useAppSelector(state =>
+    sourceDashboardId ? selectEffectiveName(state, sourceDashboardId) : undefined
+  );
+
+  // Determine if we're on mobile or desktop (true = mobile, false = desktop)
+  const isMobile = useBreakpointValue({ base: true, md: false }, { ssr: false });
+
+  // Fetch sibling files from parent folder
+  const { files: siblingFiles } = useFolder(filePath);
+
+  // Get org config from Redux
+  const { config } = useConfigs();
+
+  // Build breadcrumb from file path
+  // Example: /org/team/Sales => Home > org > team > Sales (filename)
+  const pathParts = filePath.split('/').filter(Boolean);
+
+  const breadcrumbItems: Array<{ label: string; href?: string }> = [
+    { label: 'Home', href: '/' }
+  ];
+
+  // Build intermediate path segments
+  const currentMode = user?.mode || 'org';
+  let accumulatedPath = '';
+  for (let i = 0; i < pathParts.length; i++) {
+    accumulatedPath += '/' + pathParts[i];
+    breadcrumbItems.push({
+      label: pathParts[i] === currentMode ? config.branding.displayName : decodeURIComponent(pathParts[i]),
+      href: `/p${accumulatedPath}`
+    });
+  }
+
+  // If navigated from a dashboard, add it to the breadcrumb trail
+  if (sourceDashboardId && sourceDashboardName) {
+    breadcrumbItems.push({ label: sourceDashboardName, href: `/f/${sourceDashboardId}` });
+  }
+
+  // Add filename as final item (no href) - show type-based placeholder for untitled files
+  const fileMetadata = getFileTypeMetadata(fileType as any);
+  breadcrumbItems.push({ label: fileName || `New ${fileMetadata.label}` });
+
+  // Phase 1: Always use children prop
+  // Type-based rendering is now handled by FileView component via fileComponents mapping
+  const content = props.children;
+  const shouldShowRightSidebar = fileType === 'question' || fileType === 'dashboard' || fileType === 'story' || fileType === 'notebook' || fileType === 'report' || fileType === 'alert' || fileType === 'context';
+  // view=contentonly hides the right sidebar, so the floating chat bar (which opens
+  // into it) is dead weight — drop it (and its bottom padding) too.
+  const shouldShowFloatingChat = shouldShowRightSidebar && !hideRightSidebar;
+  const metadata = getFileTypeMetadata(fileType);
+  const dispatch = useAppDispatch();
+  const viewStackDepth = useAppSelector(selectViewStackDepth);
+
+  // Get current app state for database name (for question pages)
+  const { appState, loading: appStateLoading } = useAppState();
+  const appStateDatabaseName = appState?.type === 'file' && appState.state.fileState.type === 'question'
+    ? (appState.state.fileState.content as any)?.connection_name
+    : undefined;
+  
+//   useEffect(() => {
+//       dispatch(setLeftSidebarCollapsed(fileType !== 'folder')); // Ensure left sidebar is closed for file pages
+//   }, [dispatch]);
+
+  return (
+    <Box display="flex" h="100vh" bg="bg.canvas" overflow="hidden">
+      <VStack flex="1" minW="0" position="relative" align="stretch" overflow="hidden" minHeight="0">
+        {/* Dim base content when a stack layer is active */}
+        <Box
+          flex="1"
+          minHeight="0"
+          display="flex"
+          flexDirection="column"
+          overflow="hidden"
+          opacity={viewStackDepth > 0 ? 0.3 : 1}
+          transition="opacity 0.2s ease"
+          pointerEvents={viewStackDepth > 0 ? 'none' : 'auto'}
+        >
+          <VStack maxW="100%" flex="1" mx="0"
+              px={{ base: 4, md: 8, lg: 12 }}
+              pt={{ base: 3, md: 4, lg: 5 }}
+              pb={shouldShowFloatingChat ? { base: '60px', md: '60px' } : { base: 4, md: 6, lg: 8 }}
+              align="stretch" overflow={metadata.h === '100vh' ? 'hidden' : 'auto'} minHeight="0">
+            {!hideTopChrome && (
+              <Flex justify="space-between" align="center" gap={4}>
+                <Box flex="1" minW={0}>
+                  <Breadcrumb
+                    items={breadcrumbItems}
+                    siblingFiles={fileId ? siblingFiles : undefined}
+                    currentFileId={fileId}
+                    bannerColor={editBanner?.color}
+                    bannerLabel={editBanner?.label}
+                  />
+                </Box>
+              </Flex>
+            )}
+            {content}
+          </VStack>
+        </Box>
+
+        {/* Chat bars live OUTSIDE the dimmed box so they remain accessible when the
+            ViewStack overlay is active. The floating chat has z-index:1000 which beats the
+            overlay's z-index:50 in this shared stacking context. */}
+        {/* Floating search bar — shown on pages with right sidebar chat */}
+        {shouldShowFloatingChat && rightSidebar && rightSidebar.showChat && (
+          <FloatingChatWrapper
+            filePath={rightSidebar.filePath}
+            databaseName={appStateDatabaseName}
+            selectedContextPath={rightSidebar.selectedContextPath}
+            contextVersion={rightSidebar.contextVersion}
+            onContextChange={rightSidebar.onContextChange}
+            appState={appState}
+          />
+        )}
+
+        {/* Content stack — absolute overlay, clipped to this VStack */}
+        <ViewStackOverlay />
+      </VStack>
+      {shouldShowRightSidebar && rightSidebar && !hideRightSidebar && (
+        <>
+          {/* Conditionally render based on device - not just hide with CSS */}
+          {isMobile === false && (
+            <RightSidebar
+              {...rightSidebar}
+            />
+          )}
+          {isMobile === true && (
+            <MobileRightSidebar
+              {...rightSidebar}
+            />
+          )}
+        </>
+      )}
+    </Box>
+  );
+}

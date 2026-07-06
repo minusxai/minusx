@@ -2,7 +2,7 @@
  * Error codes for data loading operations
  * Maps to common HTTP status codes and client-side errors
  */
-export type ErrorCode =
+type ErrorCode =
   | 'NOT_FOUND'      // 404 - Resource doesn't exist
   | 'FORBIDDEN'      // 403 - No permission to access
   | 'UNAUTHORIZED'   // 401 - Not authenticated
@@ -29,7 +29,7 @@ export interface LoadError {
 /**
  * Create a LoadError from an HTTP response
  */
-export function createLoadErrorFromResponse(status: number, message?: string): LoadError {
+function createLoadErrorFromResponse(status: number, message?: string): LoadError {
   let code: ErrorCode;
 
   switch (status) {
@@ -118,11 +118,4 @@ function getDefaultErrorMessage(code: ErrorCode): string {
     case 'UNKNOWN':
       return 'An unexpected error occurred';
   }
-}
-
-/**
- * Check if an error is retryable
- */
-export function isRetryableError(error: LoadError): boolean {
-  return error.code === 'NETWORK_ERROR' || error.code === 'SERVER_ERROR';
 }

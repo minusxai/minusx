@@ -44,7 +44,7 @@ export interface FileComponentProps {
  * Phase 1: Only question, dashboard, presentation
  * Phase 2: Add dataset, context, users, connector, etc.
  */
-export const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileComponentProps>>> = {
+const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileComponentProps>>> = {
   question: QuestionContainerV2,
   dashboard: DashboardContainerV2,
   notebook: NotebookContainerV2,

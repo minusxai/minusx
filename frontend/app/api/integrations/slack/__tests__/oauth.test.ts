@@ -54,7 +54,7 @@ vi.mock('@/lib/auth/role-helpers', () => ({
 const { mockUser } = vi.hoisted(() => ({
   mockUser: { value: { email: 'admin@acme.com', role: 'admin', mode: 'org' as const, userId: 1, home_folder: '/org' } },
 }));
-vi.mock('@/lib/api/with-auth', () => ({
+vi.mock('@/lib/http/with-auth', () => ({
   withAuth: (handler: (req: any, user: any) => Promise<any>) => async (request: any) =>
     handler(request, mockUser.value),
 }));

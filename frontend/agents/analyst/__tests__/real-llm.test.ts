@@ -8,9 +8,9 @@
 // Wire-up uses STUB sources for now — replace with real adapters when available.
 
 import 'dotenv/config';
-import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
+import { runAgentTestSpec, type TestSpec } from '@/orchestrator/__tests__/support/test-spec-runner';
 import {
-  AnalystAgent,
+  RemoteAnalystAgent,
   ExecuteQuery,
   ListDBConnections,
   SearchDBSchema,
@@ -53,7 +53,7 @@ vi.mock('@/lib/connections/run-query', () => ({
 const RUN_REAL = process.env.RUN_REAL_LLM === '1';
 const itIfReal = RUN_REAL ? it : it.skip;
 
-const registrables = [ListDBConnections, SearchDBSchema, ExecuteQuery, AnalystAgent];
+const registrables = [ListDBConnections, SearchDBSchema, ExecuteQuery, RemoteAnalystAgent];
 
 describe.each(specs as TestSpec[])('real-llm spec: $name', (spec) => {
   itIfReal(

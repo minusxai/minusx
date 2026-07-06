@@ -1,6 +1,6 @@
 import { parseJsx } from '@/lib/jsx';
 import type { JsxNode } from '@/lib/jsx';
-import { buildStoryJsx } from '@/lib/data/story-v2';
+import { buildStoryJsx } from '@/lib/data/story/story-v2';
 import type { StoryContent } from '@/lib/types';
 import type { DeterministicContext, RubricFinding } from '../types';
 import { immutableSet } from '@/lib/utils/immutable-collections';

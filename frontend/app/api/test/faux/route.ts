@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { E2E_MODE } from '@/lib/constants';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 import { configureFauxFromDTO, type FauxMatchDTO } from '@/lib/test/faux-llm-channel.server';
 
 export async function POST(req: NextRequest) {

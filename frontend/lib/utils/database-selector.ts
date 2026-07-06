@@ -74,36 +74,3 @@ export function selectDatabase(
   return databaseNames[0];
 }
 
-/**
- * Get the first database name from a list (legacy helper)
- *
- * This is a convenience wrapper around selectDatabase for cases where
- * you just want the first database without any preference logic.
- *
- * @param databases - Array of available databases
- * @returns First database name, or empty string if no databases available
- */
-export function getFirstDatabase(
-  databases: Array<DatabaseLike> | undefined
-): string {
-  return selectDatabase(databases, null);
-}
-
-/**
- * Validate if a database name exists in the available databases
- *
- * @param databases - Array of available databases
- * @param databaseName - Database name to validate
- * @returns true if database exists, false otherwise
- */
-export function isDatabaseAvailable(
-  databases: Array<DatabaseLike> | undefined,
-  databaseName: string | null | undefined
-): boolean {
-  if (!databases || !databaseName) {
-    return false;
-  }
-
-  const databaseNames = databases.map(extractDatabaseName).filter(Boolean);
-  return databaseNames.includes(databaseName);
-}

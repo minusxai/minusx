@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Box, Text, VStack, HStack, Button, Input, Span } from '@chakra-ui/react';
 import { LuDownload, LuLink, LuTable, LuCheck } from 'react-icons/lu';
 import { CsvFileInfo } from '@/lib/types';
-import { importGoogleSheets } from '@/lib/backend/google-sheets';
+import { importGoogleSheets } from '@/lib/connections/client/google-sheets';
 import { BaseConfigProps } from './types';
 
 interface GoogleSheetsConfigProps extends BaseConfigProps {

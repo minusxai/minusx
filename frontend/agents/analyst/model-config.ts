@@ -70,7 +70,7 @@ export function getAnalystModelConfig(): AnalystModelConfig | null {
  * Returns a typed Model from the effective config, or `null` in test
  * environments when no `ANALYST_AGENT_MODEL_CONFIG` is set.
  */
-export function getAnalystModel(): Model<Api> | null {
+function getAnalystModel(): Model<Api> | null {
   const cfg = getAnalystModelConfig();
   if (!cfg) return null;
   return getModel(cfg.provider, cfg.model);

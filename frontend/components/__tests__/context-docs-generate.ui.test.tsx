@@ -14,10 +14,10 @@ vi.mock('@/components/lexical/LexicalTextEditor', () => {
 });
 vi.mock('@monaco-editor/react', () => ({ DiffEditor: () => null }));
 vi.mock('@/lib/object-store/client', () => ({ uploadFile: vi.fn() }));
-vi.mock('@/lib/api/micro-task', () => ({ runMicroTaskClient: vi.fn(async () => 'Generated Value') }));
+vi.mock('@/lib/tools/micro-task', () => ({ runMicroTaskClient: vi.fn(async () => 'Generated Value') }));
 
 import ContextDocsEditor from '@/components/context/ContextDocsEditor';
-import { runMicroTaskClient } from '@/lib/api/micro-task';
+import { runMicroTaskClient } from '@/lib/tools/micro-task';
 import type { DocEntry } from '@/lib/types';
 
 describe('ContextDocsEditor generate buttons', () => {

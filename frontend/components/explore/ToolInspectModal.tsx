@@ -17,7 +17,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { LuRotateCcw } from 'react-icons/lu';
 import Editor from '@monaco-editor/react';
 import type { ToolCall, ToolMessage } from '@/lib/types';
-import { isFrontendTool, executeToolCall } from '@/lib/api/tool-handlers';
+import { isFrontendTool, executeToolCall } from '@/lib/tools/tool-handlers';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 
 interface ToolInspectModalProps {

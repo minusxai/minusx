@@ -41,11 +41,6 @@ export async function assertRedux(
     .toBe(true);
 }
 
-/** Click a control located by its aria-label. */
-export async function clickByLabel(page: Page, label: string): Promise<void> {
-  await page.getByLabel(label).click();
-}
-
 /**
  * Type a message into the side chat input and send it.
  * The composable building block from the design (`...enterSideChatMessage(msg)`).

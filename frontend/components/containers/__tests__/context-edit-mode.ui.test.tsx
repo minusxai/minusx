@@ -30,8 +30,8 @@ vi.mock('@/lib/navigation/use-navigation', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
 }));
 // Keep file-state network calls inert; useFile reads the seeded store directly.
-vi.mock('@/lib/api/file-state', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/api/file-state')>()),
+vi.mock('@/lib/file-state/file-state', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/file-state/file-state')>()),
   loadFiles: vi.fn(async () => {}),
   reloadFile: vi.fn(async () => {}),
   publishFile: vi.fn(async () => ({ id: FILE_ID, name: 'ctx', path: '/org/ctx' })),

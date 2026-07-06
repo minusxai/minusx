@@ -12,7 +12,7 @@ import { IS_DEV } from '@/lib/constants';
 export const RESERVED_NAMES = ['static'];
 
 /** Connection types only available in development (NODE_ENV !== 'production'). */
-export const DEV_ONLY_CONNECTION_TYPES = ['duckdb', 'sqlite'];
+const DEV_ONLY_CONNECTION_TYPES = ['duckdb', 'sqlite'];
 
 /**
  * Reject dev-only connection types in production.

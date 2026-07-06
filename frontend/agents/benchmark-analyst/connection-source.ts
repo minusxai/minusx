@@ -1,6 +1,6 @@
 // Benchmark connection JSON normalisers. Used by the CLI runner
-// (`benchmarks/runner.ts`) and the v=2 chat continuation path
-// (`lib/chat-orchestration-v2.server.ts`) to load
+// (`benchmarks/runner.ts`) and the chat continuation path
+// (`lib/chat/orchestration-core.server.ts`) to load
 // `<dataset>_connections.json` / `meta.benchmark_connections` /
 // `BENCHMARK_CONNECTIONS_CONFIG` blobs into `ConnectionInfo[]` for
 // `BenchmarkAnalystContext.connections`.

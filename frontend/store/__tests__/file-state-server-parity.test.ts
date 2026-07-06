@@ -40,17 +40,18 @@ import type { Mode } from '@/lib/mode/mode-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
-import { getWhitelistedSchemaForUser, resolveContextDocs } from '@/lib/sql/schema-filter';
+import { getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
+import { resolveContextDocs } from '@/lib/sql/context-docs';
 import { resolveHomeFolderSync, resolvePath } from '@/lib/mode/path-resolver';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import {
   readFiles,
   editFileStr,
   publishFile,
-} from '@/lib/api/file-state';
+} from '@/lib/file-state/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
-import { compressAugmentedFile } from '@/lib/api/compress-augmented';
-import { readFilesServer, getAppStateServer } from '@/lib/api/file-state.server';
+import { compressAugmentedFile } from '@/lib/chat/compress-augmented';
+import { readFilesServer, getAppStateServer } from '@/lib/file-state/file-state.server';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 import { GET as fileGetHandler, PATCH as filePatchHandler } from '@/app/api/files/[id]/route';

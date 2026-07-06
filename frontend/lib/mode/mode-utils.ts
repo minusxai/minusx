@@ -6,17 +6,6 @@
 import { Mode, DEFAULT_MODE, isValidMode } from './mode-types';
 
 /**
- * Extract mode parameter from URL (server-side)
- */
-export function getModeFromUrl(url: URL): Mode {
-  const modeParam = url.searchParams.get('mode');
-  if (modeParam && isValidMode(modeParam)) {
-    return modeParam;
-  }
-  return DEFAULT_MODE;
-}
-
-/**
  * Preserve mode parameter from current URL to target URL (client-side)
  */
 export function preserveModeParam(targetUrl: string): string {

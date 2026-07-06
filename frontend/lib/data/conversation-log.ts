@@ -8,6 +8,7 @@
  */
 import type { ConversationLog, ConversationLogEntry } from '@/orchestrator/types';
 import type { MessageKind } from './conversations.types';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 
 /** Classify a pi entry: root/sub-agent invocation (`type:'toolCall'`) vs assistant/toolResult. */
 export function entryKind(entry: ConversationLogEntry): MessageKind {
@@ -86,7 +87,7 @@ export interface DerivedPendingToolCall {
  * Everything except a pending Clarify therefore loads as interrupted (FINISHED) — no phantom Stop
  * button on old chats — instead of a run that spins forever.
  */
-export const COLD_REOPEN_RESUMABLE_TOOLS: ReadonlySet<string> = new Set(['ClarifyFrontend']);
+const COLD_REOPEN_RESUMABLE_TOOLS: ReadonlySet<string> = immutableSet(['ClarifyFrontend']);
 
 export function isColdReopenResumable(pending: ReadonlyArray<DerivedPendingToolCall>): boolean {
   return pending.some((p) => COLD_REOPEN_RESUMABLE_TOOLS.has(p.name));

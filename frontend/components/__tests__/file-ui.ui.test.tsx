@@ -5,8 +5,8 @@ const { mockReplaceFileState, mockRouterPush } = vi.hoisted(() => ({
   mockReplaceFileState: vi.fn().mockResolvedValue({ success: true }),
   mockRouterPush: vi.fn(),
 }));
-vi.mock('@/lib/api/file-state', async () => ({
-  ...(await vi.importActual<typeof import('@/lib/api/file-state')>('@/lib/api/file-state')),
+vi.mock('@/lib/file-state/file-state', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/file-state/file-state')>('@/lib/file-state/file-state')),
   replaceFileState: (...args: unknown[]) => mockReplaceFileState(...args),
 }));
 
@@ -29,12 +29,12 @@ vi.mock('@/lib/navigation/use-navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock('@/components/Sidebar', () => ({
+vi.mock('@/components/app-shell/Sidebar', () => ({
   __esModule: true,
   default: () => null,
 }));
 
-vi.mock('@/components/MobileBottomNav', () => ({
+vi.mock('@/components/app-shell/MobileBottomNav', () => ({
   __esModule: true,
   default: () => null,
 }));
@@ -79,13 +79,13 @@ import * as storeModule from '@/store/store';
 import { setFile, setFiles } from '@/store/filesSlice';
 import { pushView } from '@/store/uiSlice';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
-import { encodeFileStr } from '@/lib/api/file-encoding';
+import { encodeFileStr } from '@/lib/chat/file-encoding';
 import type { DbFile, ToolCall, ToolMessage, CompletedToolCall, EditFileDetails } from '@/lib/types';
 
 import EditFileDisplay from '@/components/explore/tools/EditFileDisplay';
-import FilesList from '@/components/FilesList';
-import ViewStackOverlay from '@/components/ViewStack';
-import LayoutWrapper from '@/components/LayoutWrapper';
+import FilesList from '@/components/file-browser/FilesList';
+import ViewStackOverlay from '@/components/file-browser/ViewStack';
+import LayoutWrapper from '@/components/app-shell/LayoutWrapper';
 import ChatInterface from '@/components/explore/ChatInterface';
 
 // ─── EditFileDisplay restore buttons ─────────────────────────────────────────

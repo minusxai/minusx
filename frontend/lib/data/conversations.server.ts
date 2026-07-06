@@ -228,7 +228,7 @@ export async function setRunStatus(id: number, status: RunStatus): Promise<void>
 
 /** Lease TTL: a 'running' conversation whose heartbeat is older than this is considered orphaned
  *  (the server that owned the turn died). */
-export const RUN_LEASE_TTL_MS = 90_000;
+const RUN_LEASE_TTL_MS = 90_000;
 
 /** Claim the active turn: status running + owner + heartbeat now + the seq it started at. */
 export async function acquireRunLease(id: number, owner: string, startedSeq: number): Promise<void> {

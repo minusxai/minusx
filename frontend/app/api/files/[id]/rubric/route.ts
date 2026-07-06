@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
-import { withAuth } from '@/lib/api/with-auth';
+import { successResponse, handleApiError, ApiErrors } from '@/lib/http/api-responses';
+import { withAuth } from '@/lib/http/with-auth';
 import { loadFile } from '@/lib/data/files.server';
 import { validateFileId } from '@/lib/data/helpers/validation';
 import { isRubricFileType } from '@/lib/rubric/registry';

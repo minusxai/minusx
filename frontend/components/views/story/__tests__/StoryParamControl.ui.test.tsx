@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import StoryParamControl from '../StoryParamControl';
-import type { StoryParam } from '@/lib/data/story-params';
+import type { StoryParam } from '@/lib/data/story/story-params';
 
 const city: StoryParam = { name: 'city', type: 'text', nullable: true };
 

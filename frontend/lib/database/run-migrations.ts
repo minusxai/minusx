@@ -1,5 +1,5 @@
 import { exportDatabase, atomicImport } from './import-export';
-import { getDataVersion } from './config-db';
+import { getDataVersion } from './config-store';
 import { applyMigrations } from './migrations';
 import { LATEST_DATA_VERSION } from './constants';
 import { UserDB } from './user-db';

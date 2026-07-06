@@ -9,7 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { makeStore } from '@/store/store';
 import { setFile, setEdit, clearEdits, selectDirtyFiles } from '@/store/filesSlice';
-import PublishModal from '@/components/PublishModal';
+import PublishModal from '@/components/modals/PublishModal';
 
 // editFile is a no-op spy; publishAll's implementation is wired per-test (below)
 // so it can clean the saved files out of the real Redux dirty list.
@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   discardAll: vi.fn(),
 }));
 
-vi.mock('@/lib/api/file-state', () => ({
+vi.mock('@/lib/file-state/file-state', () => ({
   publishAll: mocks.publishAll,
   editFile: mocks.editFile,
   discardAll: mocks.discardAll,
@@ -35,13 +35,13 @@ vi.mock('@/lib/hooks/file-state-hooks', async (orig) => ({
 // The preview pane mounts a full FileView — stub it; this test is about Save All.
 // (Stubbing FileView also cuts the heavy file-component tree that causes the
 // global ui-setup to stub PublishModal itself — which we override below.)
-vi.mock('@/components/FileView', () => ({ default: () => <div /> }));
+vi.mock('@/components/file-browser/FileView', () => ({ default: () => <div /> }));
 
 // The shared ui setup stubs PublishModal (it transitively imports the whole
 // file-component tree). Override that here to exercise the REAL component — the
 // FileView stub above keeps the import graph light.
-vi.mock('@/components/PublishModal', async (importActual) => {
-  const actual = await importActual<typeof import('@/components/PublishModal')>();
+vi.mock('@/components/modals/PublishModal', async (importActual) => {
+  const actual = await importActual<typeof import('@/components/modals/PublishModal')>();
   return { __esModule: true, default: actual.default };
 });
 

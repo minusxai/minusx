@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { FilesAPI } from '@/lib/data/files.server';
 import { assertGuestQueryAllowed, GuestQueryDeniedError } from '../guest-query.server';
-import { inlineQuestionToPlaceholder } from '@/lib/data/story-question';
+import { inlineQuestionToPlaceholder } from '@/lib/data/story/story-question';
 import { initTestDatabase, cleanupTestDatabase, getTestDbPath } from '@/store/__tests__/test-utils';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 

@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Box, Button, HStack, Input, Text, VStack, Badge } from '@chakra-ui/react';
 import { LuBot, LuTrash2, LuExternalLink, LuShieldCheck, LuCopy, LuCheck, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { useConfigs, reloadConfigs } from '@/lib/hooks/useConfigs';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
+import { fetchWithCache } from '@/lib/http/fetch-wrapper';
 import { toaster } from '@/components/ui/toaster';
 import { IS_DEV } from '@/lib/constants';
 import type { SlackBotConfig } from '@/lib/types';

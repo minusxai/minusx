@@ -13,13 +13,13 @@ import { aggregateData } from '@/lib/chart/aggregate-data'
 import { buildColumnTypesMap } from '@/lib/database/column-types'
 import {
   buildChartOption,
-  buildPieChartOption,
-  buildFunnelChartOption,
-  buildRadarChartOption,
-  buildWaterfallChartOption,
-  buildCompactYLabel,
   type StandardChartType,
 } from '@/lib/chart/chart-utils'
+import { buildPieChartOption } from '@/lib/chart/chart-builders/pie'
+import { buildFunnelChartOption } from '@/lib/chart/chart-builders/funnel'
+import { buildRadarChartOption } from '@/lib/chart/chart-builders/radar'
+import { buildWaterfallChartOption } from '@/lib/chart/chart-builders/waterfall'
+import { buildCompactYLabel } from '@/lib/chart/chart-format'
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import { toJpegObjectUrl } from '@/lib/chart/render-chart-client'
 import { getChartHeight } from '@/lib/chart/render-chart-svg'

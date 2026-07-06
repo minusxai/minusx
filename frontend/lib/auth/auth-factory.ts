@@ -15,7 +15,7 @@ import type { JWT } from 'next-auth/jwt';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { isModulesRegistered, getModules } from '@/lib/modules/registry';
 import type { AuthConfigOptions } from '@/lib/auth/auth-config-options';
-export type { AuthUserRow, AuthConfigOptions } from '@/lib/auth/auth-config-options';
+export type { AuthConfigOptions } from '@/lib/auth/auth-config-options';
 
 // Fields set explicitly on the JWT — extra fields from mapAuthorizeResult are copied automatically
 const BASE_USER_KEYS = immutableSet(['id', 'userId', 'email', 'name', 'role', 'home_folder']);

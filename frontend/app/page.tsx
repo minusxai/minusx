@@ -12,14 +12,14 @@ import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useConfigs } from '@/lib/hooks/useConfigs';
-import { FeedSummary, RecentQuestions, RecentDashboards, RecentStories, RecentConversations, SuggestedQuestions, HomeFolderFiles } from '@/components/RecentFilesSection';
-import Breadcrumb from '@/components/Breadcrumb';
-import FloatingChatWrapper from '@/components/FloatingChatWrapper';
-import RightSidebar from '@/components/RightSidebar';
-import MobileRightSidebar from '@/components/MobileRightSidebar';
+import { FeedSummary, RecentQuestions, RecentDashboards, RecentStories, RecentConversations, SuggestedQuestions, HomeFolderFiles } from '@/components/file-browser/RecentFilesSection';
+import Breadcrumb from '@/components/file-browser/Breadcrumb';
+import FloatingChatWrapper from '@/components/app-shell/FloatingChatWrapper';
+import RightSidebar from '@/components/app-shell/RightSidebar';
+import MobileRightSidebar from '@/components/app-shell/MobileRightSidebar';
 import { LuFolder, LuHistory, LuBookOpen, LuArrowRight, LuPlay } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
-import UpdateBanner from '@/components/UpdateBanner';
+import UpdateBanner from '@/components/banners/UpdateBanner';
 
 function QuickLink({ href, icon, label, color }: { href: string; icon: React.ElementType; label: string; color: string }) {
   return (

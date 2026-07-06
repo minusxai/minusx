@@ -1,4 +1,4 @@
-import type { LLMCallDetail } from '@/lib/chat-orchestration';
+import type { LLMCallDetail } from '@/lib/chat/chat-types';
 
 export const AppEvents = {
   FILE_CREATED:             'file:created',

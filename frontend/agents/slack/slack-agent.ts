@@ -4,7 +4,7 @@ import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { renderPrompt } from '@/orchestrator/prompts';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
-import { formatContextDocsSection } from '@/lib/sql/schema-filter';
+import { formatContextDocsSection } from '@/lib/sql/context-docs';
 import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
 
 export const fauxRegistration = registerFauxProvider({
@@ -30,7 +30,7 @@ export class SlackAgent extends RemoteAnalystAgent {
   protected getSystemPrompt(): string {
     // Impersonate the invoking user: their allowed viz types, role, whitelisted
     // schema, context docs, connection, and home folder all flow from the context
-    // the headless runner resolved for that user (see run-orchestration-v2.server).
+    // the headless runner resolved for that user (see run-orchestration.server).
     const ctx = this.context;
     const base = renderPrompt('default.system', {
       agent_name: 'SlackAgent',

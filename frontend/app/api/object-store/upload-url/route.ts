@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/http/api-responses';
 import { createObjectStore, generateUploadKey, generateCsvUploadKey } from '@/lib/object-store';
 import { signStorageToken } from '@/lib/object-store/key-token';
 import { USE_BASE64_UPLOADS } from '@/lib/config';

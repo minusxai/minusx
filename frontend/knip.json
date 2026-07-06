@@ -1,0 +1,19 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "next": true,
+  "entry": [
+    "test/e2e/*.setup.ts",
+    "test/qa/*.setup.ts",
+    "benchmarks/dataanalystbench.ts",
+    "scripts/*.ts",
+    "scripts/*.mjs",
+    "lib/__checks__/*.ts"
+  ],
+  "project": [
+    "**/*.{ts,tsx}"
+  ],
+  "ignore": [
+    ".next/**",
+    "public/**"
+  ]
+}

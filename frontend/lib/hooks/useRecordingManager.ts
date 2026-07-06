@@ -7,8 +7,8 @@ import {
   startRecording as startRecordingAction,
   stopRecording as stopRecordingAction
 } from '@/store/recordingsSlice';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
-import { API } from '@/lib/api/declarations';
+import { fetchWithCache } from '@/lib/http/fetch-wrapper';
+import { API } from '@/lib/http/declarations';
 
 const FLUSH_INTERVAL = 5000; // 5 seconds
 const MAX_BUFFER_SIZE = 100; // Events

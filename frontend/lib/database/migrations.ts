@@ -7,10 +7,10 @@ import { InitData, OrgData } from './import-export';
 import { LATEST_DATA_VERSION, LATEST_SCHEMA_VERSION, MINIMUM_SUPPORTED_DATA_VERSION } from './constants';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import workspaceTemplate from './workspace-template.json';
-import { remapStoryQuestionIds } from '@/lib/data/story-question';
+import { remapStoryQuestionIds } from '@/lib/data/story/story-question';
 
-export type DataMigration = (data: InitData) => InitData;
-export type SchemaMigration = null;  // Null means "recreate DB with new schema"
+type DataMigration = (data: InitData) => InitData;
+type SchemaMigration = null;  // Null means "recreate DB with new schema"
 
 export interface MigrationEntry {
   dataVersion?: number;      // Target data version (if data format changes)

@@ -8,7 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { makeStore } from '@/store/store';
 import { setFile, setEdit } from '@/store/filesSlice';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
-import { FileHealthBadge } from '@/components/FileHealthPanel';
+import { FileHealthBadge } from '@/components/file-browser/FileHealthPanel';
 import type { DbFile } from '@/lib/types';
 
 // The visual-review capture needs a real DOM element + rasterizer, which jsdom lacks — stub the

@@ -24,7 +24,7 @@ function jsonSafeReplacer(_: string, v: unknown): unknown {
 }
 
 /** Per-row JSON-safe normalization — same semantics as the connectors' makeJsonSafe. */
-export function jsonSafeRow(row: Record<string, unknown>): Record<string, unknown> {
+function jsonSafeRow(row: Record<string, unknown>): Record<string, unknown> {
   return JSON.parse(JSON.stringify(row, jsonSafeReplacer));
 }
 

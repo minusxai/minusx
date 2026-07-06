@@ -21,7 +21,7 @@ import { scoreFileLLM, combineReports } from './llm/score-llm.server';
  * fire — making the SAME deterministic report differ from the client's. Best-effort: a missing /
  * inaccessible referenced file is skipped, never throws.
  */
-export async function resolveVizTypeCtx(
+async function resolveVizTypeCtx(
   fileType: RubricFileType,
   content: unknown,
   user: EffectiveUser,

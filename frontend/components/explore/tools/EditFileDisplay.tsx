@@ -10,9 +10,9 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useAppSelector } from '@/store/hooks';
 import { Tooltip } from '@/components/ui/tooltip';
-import { decodeFileStr } from '@/lib/api/file-encoding';
-import { replaceFileState } from '@/lib/api/file-state';
-import { embeddedQuestionCount } from '@/lib/data/story-question';
+import { decodeFileStr } from '@/lib/chat/file-encoding';
+import { replaceFileState } from '@/lib/file-state/file-state';
+import { embeddedQuestionCount } from '@/lib/data/story/story-question';
 import { type DetailCardProps, parseToolArgs, parseToolContent, isToolSuccess } from './DetailCarousel';
 
 // ─── Detail card for AgentTurnContainer carousel ──────────────────

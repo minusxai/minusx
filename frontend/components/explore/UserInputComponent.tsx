@@ -6,11 +6,11 @@ import {
   Box, HStack, VStack, Text, Button, Input, Textarea, Icon
 } from '@chakra-ui/react';
 import { LuBadgeInfo } from 'react-icons/lu';
-import { UserInput } from '@/lib/api/user-input-exception';
+import { UserInput } from '@/lib/tools/user-input-exception';
 import { setUserInputResult } from '@/store/chatSlice';
 import { stashClarifyAnswer } from '@/lib/chat/clarify-answer-stash';
 import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
-import PublishModal from '@/components/PublishModal';
+import PublishModal from '@/components/modals/PublishModal';
 
 function PublishUserInputRenderer({
   fileCount,

@@ -29,7 +29,7 @@ export function parseFrameAncestors(raw: string | undefined): string {
   return v.replace(/[\s,]+/g, ' ').trim();
 }
 
-export interface EmbedCookieOption {
+interface EmbedCookieOption {
   name: string;
   options: { httpOnly?: boolean; sameSite: 'none'; path: string; secure: true };
 }

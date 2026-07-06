@@ -9,7 +9,7 @@ import { EChart } from './EChart'
 // real DOM nodes Playwright can assert on (Tests/QA/Evals Arch V2). To make SVG
 // the production default later, change this to a literal 'svg' — large-data
 // charts would then need a per-chart canvas override.
-export const DEFAULT_CHART_SETTINGS = {
+const DEFAULT_CHART_SETTINGS = {
   useCoarsePointer: true,
   renderer: (E2E_MODE ? 'svg' : 'canvas') as 'svg' | 'canvas',
 }

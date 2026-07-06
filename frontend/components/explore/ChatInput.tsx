@@ -10,7 +10,7 @@ import { selectCompanyName } from '@/store/authSlice';
 import { addInputHistoryEntry, selectChatInputHistory } from '@/store/chatSlice';
 import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments, selectPendingUploads, removePendingUpload } from '@/store/uiSlice';
 import RegionCaptureButton from '@/components/screenshot/RegionCaptureButton';
-import DatabaseSelector from '@/components/DatabaseSelector';
+import DatabaseSelector from '@/components/selectors/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';

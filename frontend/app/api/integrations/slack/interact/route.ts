@@ -3,7 +3,7 @@ import { postSlackMessage, verifySlackRequestSignature } from '@/lib/integration
 import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
 import { findSlackInstallationByTeam } from '@/lib/integrations/slack/store';
 import { resolveThreadTs, type SlackInteractionPayload } from '@/lib/integrations/slack/interactions';
-import { processSlackEvent, type SlackEventEnvelope } from '../events/route';
+import { processSlackEvent, type SlackEventEnvelope } from '@/lib/integrations/slack/process-event';
 
 export const runtime = 'nodejs';
 

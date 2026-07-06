@@ -6,7 +6,7 @@
 import { DbRow } from './documents-db';
 import { User } from './user-db';
 import { DbFile } from '../types';
-import { getDataVersion } from './config-db';
+import { getDataVersion } from './config-store';
 import { LATEST_DATA_VERSION, LATEST_SCHEMA_VERSION } from './constants';
 import { hashPassword } from '../auth/password-utils';
 import workspaceTemplate from './workspace-template.json';
@@ -90,7 +90,7 @@ export async function exportDatabase(_dbPath: string = ''): Promise<InitData> {
  * Import data to database.
  * dbPath is accepted for API compat but ignored.
  */
-export async function importToDatabase(_dbPath: string, initData: InitData): Promise<void> {
+async function importToDatabase(_dbPath: string, initData: InitData): Promise<void> {
   const { users, documents } = resolveFlatData(initData);
   const db = getModules().db;
 

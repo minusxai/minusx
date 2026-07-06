@@ -268,10 +268,10 @@ there and both the prompt (`formatChecklist`) and the parsing update automatical
 ## Consumption — the 3-piece architecture
 
 1. **Deterministic fn (piece 1)** — `scoreFileDeterministic`, auto-injected into the file the
-   agent sees at `compressFileState` (`lib/api/compress-augmented.ts`), covering every
+   agent sees at `compressFileState` (`lib/chat/compress-augmented.ts`), covering every
    read / edit / create. Cheap + pure, safe every time.
 2. **LLM fn (piece 2)** — `scoreFileLLM`, same contract. Attached to the **Screenshot tool**: after
-   the `Screenshot` frontend handler (`lib/api/tool-handlers.ts`) captures + uploads the shot, it
+   the `Screenshot` frontend handler (`lib/tools/tool-handlers.ts`) captures + uploads the shot, it
    POSTs the URL to the rubric route and appends the **combined** report to the tool result — so
    every screenshot carries the file's full health (best-effort; a rubric failure never blocks
    the shot).
@@ -283,7 +283,7 @@ there and both the prompt (`formatChecklist`) and the parsing update automatical
      `AUTO_RUN_VISUAL_REVIEW` flag in that file opts into auto-running the combined on open.
    - **Agent** — `CheckFileHealth(fileId, { llmJudge?, screenshotUrl? })`
      (`agents/analyst/health-tools.ts`), a manual re-check tool (e.g. after an edit); with
-     `llmJudge` it calls `scoreFile`. Registered on `WebAnalystAgent` + `V2_REGISTRABLES`.
+     `llmJudge` it calls `scoreFile`. Registered on `WebAnalystAgent` + `REGISTRABLES`.
    - **API** — `GET /api/files/[id]/rubric` (deterministic) / `POST { screenshot | screenshotUrl }`
      (→ `scoreFile`), modeled on `app/api/files/[id]/preview/route.ts`.
 

@@ -15,7 +15,7 @@ import {
   resetFaux,
   setFauxTargets,
 } from '@/lib/test/faux-llm-channel.server';
-import type { ChatRequest } from '@/lib/chat-orchestration';
+import type { ChatRequest } from '@/lib/chat/chat-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 const TEST_DB_PATH = getTestDbPath('faux_channel');

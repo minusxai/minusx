@@ -14,12 +14,12 @@
 import { useState } from 'react';
 import { Box, HStack } from '@chakra-ui/react';
 import { LuBraces, LuCode } from 'react-icons/lu';
-import TabSwitcher from '../TabSwitcher';
+import TabSwitcher from '../selectors/TabSwitcher';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectPersistableContent } from '@/store/filesSlice';
-import { applyJsonContentEdit } from '@/lib/api/file-state';
-import { fileToMarkup } from '@/lib/data/file-markup';
+import { applyJsonContentEdit } from '@/lib/file-state/file-state';
+import { fileToMarkup } from '@/lib/data/story/file-markup';
 import type { FileType } from '@/lib/types';
 
 interface CodeViewProps {

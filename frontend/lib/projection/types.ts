@@ -41,7 +41,7 @@ export interface FileData {
 }
 
 /** The agent's edit surface — JSX markup. Rendered OUTSIDE the JSON as a `<file_markup>` block. */
-export interface MarkupFacet {
+interface MarkupFacet {
   markup: string;
 }
 
@@ -51,7 +51,7 @@ export interface MarkupFacet {
  * `queryResultId|updatedAt|vizSettings|titleOverride|colorMode`) used to dedup the image
  * across turns — an unchanged `key` means "same picture", so no new block is emitted.
  */
-export interface ImageFacet {
+interface ImageFacet {
   key: string;
   image: ImageContent;
 }
@@ -61,7 +61,7 @@ export interface ImageFacet {
  * (and decide whether to fetch the rows via ReadFiles) without shipping the rows every turn.
  * Extensible: future per-column stats (min/max/avg/nulls — see `statistics-engine.ts`).
  */
-export interface QueryResultSummary {
+interface QueryResultSummary {
   columns: string[];
   types: string[];
   totalRows: number;
@@ -72,7 +72,7 @@ export interface QueryResultSummary {
  * result, present when the agent needs exact values (ReadFiles/ExecuteQuery). Rendered OUTSIDE
  * the JSON as a raw block (escaped markdown in a JSON string is unreadable).
  */
-export interface QueryResultData {
+interface QueryResultData {
   markdown: string;
   /** Rows actually present in `markdown` (≤ totalRows). */
   shownRows: number;
@@ -139,7 +139,7 @@ export interface ProjectedFileJson {
  * dozens of referenced questions doesn't re-emit dozens of all-`unchanged` objects each turn. Reuse
  * what you already saw earlier for this `queryResultId`.
  */
-export interface UnchangedQueryResultJson {
+interface UnchangedQueryResultJson {
   queryResultId: string;
   unchanged: true;
 }
@@ -169,7 +169,7 @@ export interface ProjectedFilesJson {
 // ─────────────────────────────── Out-of-JSON blocks ───────────────────────────────
 
 /** Kinds of raw text blocks emitted alongside the JSON (heavy/opaque facets pulled out). */
-export type ProjectionTextBlockKind = 'markup' | 'querydata';
+type ProjectionTextBlockKind = 'markup' | 'querydata';
 
 /**
  * A raw text block emitted next to the projected JSON — real newlines/quotes, never a JSON

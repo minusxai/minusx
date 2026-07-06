@@ -7,7 +7,7 @@
 // so it can be unit-tested directly.
 import type { AppState } from '@/lib/appState';
 import { appStateForLlm, takeAppStateMarkup } from '@/lib/appState';
-import { renderMarkupBlock } from '@/lib/api/markup-blocks';
+import { renderMarkupBlock } from '@/lib/chat/markup-blocks';
 import type { Attachment, CompressedFileState } from '@/lib/types';
 
 export type InspectPart =

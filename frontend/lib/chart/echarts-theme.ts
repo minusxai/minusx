@@ -77,9 +77,6 @@ export const COLOR_PALETTE = [
   CHART_COLORS.steel,       // 24. Steel
 ]
 
-// Ordered keys for UI display
-export const CHART_COLOR_KEYS = Object.keys(CHART_COLORS) as (keyof typeof CHART_COLORS)[]
-
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 
 // Resolve a stored series-color value to a hex string. A value is either a known
@@ -292,7 +289,7 @@ const getAxisDefaults = (colorMode: 'light' | 'dark') => {
  * Format tooltip values to 2 decimal places
  * Use this in tooltip.valueFormatter for all charts
  */
-export const formatTooltipValue = (value: any): string => {
+const formatTooltipValue = (value: any): string => {
   if (typeof value === 'number') {
     return value.toLocaleString('en-US', {
       minimumFractionDigits: 2,

@@ -5,7 +5,7 @@
  * `SingleValueConfig` only decorates it (label, prefix/suffix, typography). It can never
  * substitute a hand-written number; an absent value renders as an em-dash, undecorated.
  */
-import { formatLargeNumber } from './chart-utils';
+import { formatLargeNumber } from './chart-format';
 import type { SingleValueConfig } from '@/lib/validation/atlas-schemas';
 
 export interface SingleValueItem {

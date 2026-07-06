@@ -8,7 +8,7 @@ import { NextRequest } from 'next/server';
 import { UserDB } from '@/lib/database/user-db';
 import { verifyPassword } from '@/lib/auth/password-utils';
 import { UserState } from '@/lib/types';
-import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
+import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
 import { IS_DEV } from '@/lib/constants';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { ADMIN_PWD } from '@/lib/config';

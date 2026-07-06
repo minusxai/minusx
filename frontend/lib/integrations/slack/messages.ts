@@ -185,12 +185,6 @@ export function extractSlackReply(log: ConversationLogEntry[]): SlackReply | nul
   return null;
 }
 
-/** @deprecated Use extractSlackReply instead */
-export function extractSlackReplyFromLog(log: ConversationLogEntry[]): string | null {
-  const reply = extractSlackReply(log);
-  return reply?.text ?? null;
-}
-
 // ── Block Kit builder ────────────────────────────────────────────────────────
 
 interface SlackReplyBlocksOptions {

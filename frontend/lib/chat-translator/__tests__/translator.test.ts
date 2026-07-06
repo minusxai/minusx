@@ -2,7 +2,6 @@
 //
 // One module, three exports:
 //   piLogToLegacy     orchestrator ConversationLog        → ConversationLogEntry[]   (forward; file reads + done frame)
-//   piStreamEventToLegacy  StreamEvent             → legacy SSE payload | null (per-event mid-stream)
 //   legacyToolResultToPi   CompletedToolCallResult → ToolResultMessage     (reverse; orchestrator resume)
 
 import { describe, it, expect } from 'vitest';
@@ -10,7 +9,6 @@ import type {
   ConversationLog,
   ConversationLogEntry as PiLogEntry,
   AgentInvocation,
-  StreamEvent,
 } from '@/orchestrator/types';
 import type { AssistantMessage, ToolResultMessage, ToolCall as PiToolCall, TextContent, ThinkingContent, ImageContent } from '@/orchestrator/llm';
 import type {
@@ -19,10 +17,9 @@ import type {
   TaskResultEntry,
   TaskDebugEntry,
 } from '@/lib/types';
-import type { CompletedToolCallResult } from '@/lib/chat-orchestration';
+import type { CompletedToolCallResult } from '@/lib/chat/chat-types';
 import {
   piLogToLegacy,
-  piStreamEventToLegacy,
   legacyToolResultToPi,
 } from '../index';
 
@@ -512,130 +509,6 @@ describe('piLogToLegacy — forward translation', () => {
   });
 });
 
-// ─── piStreamEventToLegacy: streaming ────────────────────────────────
-
-describe('piStreamEventToLegacy — per-event SSE translation', () => {
-  const CONVERSATION_ID = 555;
-
-  function partial(parent_id: string): AssistantMessage {
-    return {
-      role: 'assistant',
-      content: [],
-      api: 'anthropic-messages',
-      provider: 'anthropic',
-      model: 'claude-test',
-      usage: EMPTY_USAGE,
-      stopReason: 'stop',
-      timestamp: 0,
-    };
-    void parent_id;
-  }
-
-  it('text_delta → StreamedContent { chunk: delta }', () => {
-    const ev: StreamEvent = {
-      type: 'text_delta',
-      contentIndex: 0,
-      delta: 'Hello',
-      partial: partial('p'),
-      parent_id: 'p',
-    } as StreamEvent;
-    const out = piStreamEventToLegacy(ev, CONVERSATION_ID);
-    expect(out).toEqual({
-      type: 'StreamedContent',
-      payload: { chunk: 'Hello' },
-      conversationID: CONVERSATION_ID,
-    });
-  });
-
-  it('thinking_delta → StreamedThinking { chunk: delta }', () => {
-    const ev: StreamEvent = {
-      type: 'thinking_delta',
-      contentIndex: 0,
-      delta: 'pondering',
-      partial: partial('p'),
-      parent_id: 'p',
-    } as StreamEvent;
-    const out = piStreamEventToLegacy(ev, CONVERSATION_ID);
-    expect(out).toEqual({
-      type: 'StreamedThinking',
-      payload: { chunk: 'pondering' },
-      conversationID: CONVERSATION_ID,
-    });
-  });
-
-  it('toolcall_end → ToolCreated with legacy ToolCall shape', () => {
-    const ev: StreamEvent = {
-      type: 'toolcall_end',
-      contentIndex: 1,
-      toolCall: {
-        type: 'toolCall',
-        id: 'tc1',
-        name: 'EditFile',
-        arguments: { path: '/x', diff: 'y' },
-      },
-      partial: partial('p'),
-      parent_id: 'p',
-    } as StreamEvent;
-    const out = piStreamEventToLegacy(ev, CONVERSATION_ID);
-    expect(out).toEqual({
-      type: 'ToolCreated',
-      payload: {
-        id: 'tc1',
-        type: 'function',
-        function: {
-          name: 'EditFile',
-          arguments: { path: '/x', diff: 'y' },
-        },
-      },
-      conversationID: CONVERSATION_ID,
-    });
-  });
-
-  it.each([
-    'start',
-    'text_start',
-    'text_end',
-    'thinking_start',
-    'thinking_end',
-    'toolcall_start',
-    'toolcall_delta',
-    'done',
-    'error',
-  ])('%s event → null (no legacy counterpart, caller skips)', (eventType) => {
-    const ev = {
-      type: eventType,
-      contentIndex: 0,
-      partial: partial('p'),
-      parent_id: 'p',
-      // toolcall_delta needs a delta; fill it harmlessly
-      delta: '',
-      // toolcall_end needs toolCall; fill it harmlessly
-      toolCall: { type: 'toolCall', id: 'x', name: 'y', arguments: {} },
-      content: '',
-      reason: 'stop',
-      message: partial('p'),
-      error: partial('p'),
-    } as unknown as StreamEvent;
-    const out = piStreamEventToLegacy(ev, CONVERSATION_ID);
-    // Filter the tested type back from the it.each so toolcall_end (which IS translated) doesn't conflict here.
-    if (eventType === 'toolcall_end') return;
-    expect(out).toBeNull();
-  });
-
-  it('PendingToolEvent → null (deferred to final done frame)', () => {
-    const ev: StreamEvent = {
-      type: 'pending',
-      id: 'tc1',
-      name: 'EditFile',
-      parameters: { path: '/x' },
-      context: {},
-      parent_id: 'p',
-    } as StreamEvent;
-    const out = piStreamEventToLegacy(ev, CONVERSATION_ID);
-    expect(out).toBeNull();
-  });
-});
-
 // ─── legacyToolResultToPi: reverse for resume ────────────────────────
 
 describe('legacyToolResultToPi — reverse mapping for orchestrator resume', () => {
@@ -957,163 +830,3 @@ describe('piLogToLegacy — v=1 format compatibility', () => {
   });
 });
 
-// ─── piStreamEventToLegacy: streaming wire-format ──────────────────
-//
-// The frontend's `addStreamingMessage` reducer consumes each frame and
-// updates Redux state mid-turn. These tests pin the exact shape it expects:
-//
-//   • text_delta → StreamedContent — accreted into a synthetic TalkToUser
-//     CompletedToolCall in `streamedCompletedToolCalls`.
-//   • thinking_delta → StreamedThinking — accumulated into
-//     `conv.streamedThinking` (string), surfaced in StreamingInfoBlock.
-//   • toolcall_end → ToolCreated — currently ignored by the reducer but
-//     wire-format must still match the legacy ToolCall shape.
-//   • Pure-text events (text_start/end, thinking_start/end, etc.) → null.
-//
-// Format mismatches between v=1 and v=2 here would manifest as thinking
-// rendering inline in the answer instead of in the "Show Thinking" panel,
-// or tool calls not appearing in the streaming progress badge — exactly
-// the rendering issues the user observed.
-
-describe('piStreamEventToLegacy — wire format and frontend compatibility', () => {
-  const CID = 555;
-
-  function partial(): AssistantMessage {
-    return {
-      role: 'assistant',
-      content: [],
-      api: 'anthropic-messages',
-      provider: 'anthropic',
-      model: 'claude-test',
-      usage: EMPTY_USAGE,
-      stopReason: 'stop',
-      timestamp: 0,
-    };
-  }
-
-  it('thinking delta → StreamedThinking; text delta → StreamedContent (separated, NOT merged)', () => {
-    // Most important property: thinking and text deltas use DIFFERENT legacy
-    // event types, so the frontend's reducer routes thinking into
-    // streamedThinking (Show-Thinking panel) and text into the answer body.
-    const tdelta: StreamEvent = {
-      type: 'text_delta',
-      contentIndex: 1,
-      delta: 'Hello',
-      partial: partial(),
-      parent_id: 'p',
-    } as StreamEvent;
-    const thdelta: StreamEvent = {
-      type: 'thinking_delta',
-      contentIndex: 0,
-      delta: 'pondering',
-      partial: partial(),
-      parent_id: 'p',
-    } as StreamEvent;
-
-    const t = piStreamEventToLegacy(tdelta, CID);
-    const th = piStreamEventToLegacy(thdelta, CID);
-    expect(t?.type).toBe('StreamedContent');
-    expect(th?.type).toBe('StreamedThinking');
-    expect(t?.type).not.toBe(th?.type);
-  });
-
-  it('text_delta payload is exactly { chunk: delta } (no extra fields)', () => {
-    const ev: StreamEvent = {
-      type: 'text_delta',
-      contentIndex: 0,
-      delta: 'world',
-      partial: partial(),
-      parent_id: 'p',
-    } as StreamEvent;
-    const out = piStreamEventToLegacy(ev, CID);
-    expect(out?.payload).toEqual({ chunk: 'world' });
-  });
-
-  it('thinking_delta payload is exactly { chunk: delta } (no extra fields)', () => {
-    const ev: StreamEvent = {
-      type: 'thinking_delta',
-      contentIndex: 0,
-      delta: 'still pondering',
-      partial: partial(),
-      parent_id: 'p',
-    } as StreamEvent;
-    const out = piStreamEventToLegacy(ev, CID);
-    expect(out?.payload).toEqual({ chunk: 'still pondering' });
-  });
-
-  it('toolcall_end emits ToolCreated with legacy ToolCall shape (id, type:function, function:{name,arguments})', () => {
-    const ev: StreamEvent = {
-      type: 'toolcall_end',
-      contentIndex: 1,
-      toolCall: {
-        type: 'toolCall',
-        id: 'tc-stream-1',
-        name: 'EditFile',
-        arguments: { path: '/x', diff: 'y' },
-      },
-      partial: partial(),
-      parent_id: 'p',
-    } as StreamEvent;
-    const out = piStreamEventToLegacy(ev, CID);
-    expect(out?.type).toBe('ToolCreated');
-    expect(out?.payload).toEqual({
-      id: 'tc-stream-1',
-      type: 'function',
-      function: {
-        name: 'EditFile',
-        arguments: { path: '/x', diff: 'y' },
-      },
-    });
-  });
-
-  it('every legacy frame carries conversationID', () => {
-    const ev: StreamEvent = {
-      type: 'text_delta',
-      contentIndex: 0,
-      delta: 'x',
-      partial: partial(),
-      parent_id: 'p',
-    } as StreamEvent;
-    const out = piStreamEventToLegacy(ev, CID);
-    expect(out?.conversationID).toBe(CID);
-  });
-
-  it('text_start/end + thinking_start/end + toolcall_start/delta → null (no legacy counterpart, caller skips)', () => {
-    const types = ['text_start', 'text_end', 'thinking_start', 'thinking_end', 'toolcall_start', 'toolcall_delta'];
-    for (const type of types) {
-      const ev = {
-        type,
-        contentIndex: 0,
-        partial: partial(),
-        parent_id: 'p',
-        delta: '',
-      } as unknown as StreamEvent;
-      expect(piStreamEventToLegacy(ev, CID)).toBeNull();
-    }
-  });
-
-  it('stream of [thinking_delta, thinking_delta, text_delta, text_delta] produces 4 frames in order', () => {
-    // Simulates a real turn where the model thinks first, then answers.
-    const events: StreamEvent[] = [
-      { type: 'thinking_delta', contentIndex: 0, delta: 'pon', partial: partial(), parent_id: 'p' } as StreamEvent,
-      { type: 'thinking_delta', contentIndex: 0, delta: 'dering', partial: partial(), parent_id: 'p' } as StreamEvent,
-      { type: 'text_delta', contentIndex: 1, delta: 'Done', partial: partial(), parent_id: 'p' } as StreamEvent,
-      { type: 'text_delta', contentIndex: 1, delta: '!', partial: partial(), parent_id: 'p' } as StreamEvent,
-    ];
-    const frames = events
-      .map((e) => piStreamEventToLegacy(e, CID))
-      .filter((f): f is NonNullable<typeof f> => f !== null);
-    expect(frames.map((f) => f.type)).toEqual([
-      'StreamedThinking',
-      'StreamedThinking',
-      'StreamedContent',
-      'StreamedContent',
-    ]);
-    expect(frames.map((f) => (f.payload as { chunk: string }).chunk)).toEqual([
-      'pon',
-      'dering',
-      'Done',
-      '!',
-    ]);
-  });
-});

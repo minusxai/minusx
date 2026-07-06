@@ -43,10 +43,10 @@ const UNCHANGED: BlockFacetSignal = { state: 'unchanged' };
  * needs a recognizable echo of what actually ran. Over the limit we keep the head (the SELECT / shape)
  * and the tail (ORDER BY / LIMIT) and elide the middle, with an explicit marker of how much was cut.
  */
-export const FINAL_QUERY_MAX = 1000;
-export const FINAL_QUERY_HEAD = 500;
-export const FINAL_QUERY_TAIL = 500;
-export function truncateFinalQuery(sql: string): string {
+const FINAL_QUERY_MAX = 1000;
+const FINAL_QUERY_HEAD = 500;
+const FINAL_QUERY_TAIL = 500;
+function truncateFinalQuery(sql: string): string {
   if (sql.length <= FINAL_QUERY_MAX) return sql;
   const elided = sql.length - FINAL_QUERY_HEAD - FINAL_QUERY_TAIL;
   return `${sql.slice(0, FINAL_QUERY_HEAD)} … [${elided} chars truncated] … ${sql.slice(-FINAL_QUERY_TAIL)}`;

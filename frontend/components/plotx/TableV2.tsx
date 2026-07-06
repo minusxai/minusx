@@ -1,15 +1,14 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Box, HStack, Button, Text, VStack, Menu, Portal, Icon, Spinner, Input } from '@chakra-ui/react'
-import { LuChevronDown, LuType, LuHash, LuCalendar, LuBraces, LuColumns3, LuCheck, LuDownload, LuArrowUp, LuArrowDown, LuFilter, LuX, LuArrowUpDown, LuChartColumn, LuSettings2 } from 'react-icons/lu'
+import { Box, Text } from '@chakra-ui/react'
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
 import { calculateHistogram } from '@/lib/chart/histogram'
-import { formatNumber, applyPrefixSuffix, formatDateValue } from '@/lib/chart/chart-utils'
-import { buildConditionalBg, getContrastText } from '@/lib/chart/conditional-format-utils'
-import { FormatPopover } from './AxisComponents'
+import { formatNumber, applyPrefixSuffix, formatDateValue } from '@/lib/chart/chart-format'
+import { buildConditionalBg } from '@/lib/chart/conditional-format-utils'
 import type { ColumnFormatConfig, ConditionalFormatRule } from '@/lib/types'
-import { MiniHistogram } from './MiniHistogram'
-import { MiniBarChart } from './MiniBarChart'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
+import { TableHeaderCell } from './TableHeaderCell'
+import { TableBody } from './TableBody'
+import { TableBottomBar } from './TableBottomBar'
 import {
   useReactTable,
   getCoreRowModel,
@@ -23,6 +22,13 @@ import {
   type ColumnSizingState,
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import {
+  type ColumnType,
+  formatValue,
+  NUMBER_FORMAT,
+  ROW_HEIGHT,
+  isFacetedFilter,
+} from './table-v2-utils'
 
 interface TableProps {
   columns: string[]
@@ -50,76 +56,6 @@ interface TableProps {
   /** Conditional background-color rules. Applied to cells/rows/columns when their condition matches. */
   conditionalFormats?: ConditionalFormatRule[]
 }
-
-type ColumnType = 'text' | 'number' | 'date' | 'json'
-
-// Reusable format options — created once, not per call
-const NUMBER_FORMAT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })
-const DATE_FORMAT = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-
-const formatValue = (value: any, type: ColumnType): string => {
-  if (value == null) {
-    return '-'
-  }
-  switch (type) {
-    case 'number':
-      if (typeof value === 'number') {
-        return NUMBER_FORMAT.format(value)
-      }
-      return String(value)
-    case 'date':
-      if (value instanceof Date) {
-        return DATE_FORMAT.format(value)
-      }
-      return String(value)
-    case 'json':
-      if (typeof value === 'object') {
-        return JSON.stringify(value)
-      }
-      return String(value)
-    case 'text':
-    default:
-      if (typeof value === 'object') {
-        return JSON.stringify(value)
-      }
-      return String(value)
-  }
-}
-
-const getTypeIcon = (type: ColumnType) => {
-  switch (type) {
-    case 'number': return LuHash
-    case 'date': return LuCalendar
-    case 'json': return LuBraces
-    case 'text':
-    default: return LuType
-  }
-}
-
-const getTypeColor = (type: ColumnType) => {
-  switch (type) {
-    case 'number': return '#2980b9'
-    case 'date': return '#9b59b6'
-    case 'json': return '#1abc9c'
-    case 'text':
-    default: return '#f39c12'
-  }
-}
-
-const ROW_HEIGHT = 41
-// Max unique values to show checkbox picker; above this only the search bar is shown.
-// Uses the greater of this floor or 50% of total rows.
-const FACET_PICKER_MAX_UNIQUE = 500
-const FACET_PICKER_RATIO = 0.5
-
-// Filter value: text search OR a set of selected values
-interface FacetedFilterValue {
-  search: string
-  selected: string[] // stored as array for serialization; treated as set
-}
-
-const isFacetedFilter = (v: unknown): v is FacetedFilterValue =>
-  v != null && typeof v === 'object' && 'search' in v
 
 export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick, initialColumnSizing, wrapColumns, renderCell, initialSorting, enableDrilldown = true, columnFormats, onColumnFormatsChange, conditionalFormats }: TableProps) => {
   const [sorting, setSorting] = useState<SortingState>(initialSorting ?? [])
@@ -427,579 +363,69 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
             {/* Header */}
             <Box as="thead" position="sticky" top={0} zIndex={2} bg="bg.muted">
               <Box as="tr">
-                {visibleHeaders.map((header, displayIndex) => {
-                  const colIndex = colNames.indexOf(header.id)
-                  const colType = columnTypes[colIndex]
-                  const isSorted = header.column.getIsSorted()
-                  const rawFilter = header.column.getFilterValue()
-                  const facetedFilter: FacetedFilterValue = isFacetedFilter(rawFilter)
-                    ? rawFilter
-                    : { search: '', selected: [] }
-                  const hasActiveFilter = facetedFilter.search !== '' || facetedFilter.selected.length > 0
-
-                  return (
-                    <Box
-                      as="th"
-                      key={header.id}
-                      textAlign="left"
-                      py={3}
-                      px={4}
-                      fontFamily="heading"
-                      fontWeight="700"
-                      fontSize="xs"
-                      color="fg.default"
-                      borderRight="1px solid"
-                      borderRightColor="border.default"
-                      borderBottom={(hasActiveFilter || isSorted) ? '2px solid' : '1px solid'}
-                      borderBottomColor={(hasActiveFilter || isSorted) ? 'accent.teal' : 'border.default'}
-                      bg={(hasActiveFilter || isSorted) ? 'accent.teal/5' : undefined}
-                      width={header.getSize()}
-                      minW="100px"
-                      _last={{ borderRight: 'none' }}
-                      position="relative"
-                      verticalAlign="top"
-                    >
-                      {/* Resize handle */}
-                      <Box
-                        position="absolute"
-                        right={0}
-                        top={0}
-                        bottom={0}
-                        w="4px"
-                        cursor="col-resize"
-                        userSelect="none"
-                        touchAction="none"
-                        opacity={header.column.getIsResizing() ? 1 : 0}
-                        _hover={{ opacity: 1 }}
-                        bg="accent.teal"
-                        zIndex={3}
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                      />
-                      <VStack align="start" gap={1}>
-                        {/* Column name + sort + filter controls */}
-                        <HStack gap={1} justify="start" overflow="hidden" w="100%">
-                          <Box
-                            as={getTypeIcon(colType)}
-                            fontSize="11px"
-                            color={getTypeColor(colType)}
-                            flexShrink={0}
-                          />
-                          <Text
-                            aria-label={`Column header ${getDisplayName(header.id)}`}
-                            textTransform="uppercase"
-                            letterSpacing="0.05em"
-                            truncate
-                            flex="1"
-                            cursor="pointer"
-                            onClick={header.column.getToggleSortingHandler()}
-                            _hover={{ color: 'accent.teal' }}
-                          >
-                            {getDisplayName(header.id)}
-                          </Text>
-                          <HStack gap={0.5} flexShrink={0}>
-                            {/* Sort indicator / toggle */}
-                            <Box
-                              as="button"
-                              onClick={header.column.getToggleSortingHandler()}
-                              cursor="pointer"
-                              display="flex"
-                              alignItems="center"
-                              justifyContent="center"
-                              w={4} h={4}
-                              borderRadius="sm"
-                              bg={isSorted ? 'accent.teal' : undefined}
-                              opacity={isSorted ? 1 : 0.5}
-                              _hover={{ opacity: 1, bg: isSorted ? 'accent.teal' : 'bg.subtle' }}
-                              transition="all 0.15s"
-                            >
-                              {isSorted === 'asc' ? (
-                                <Icon as={LuArrowUp} boxSize={2.5} color="white" />
-                              ) : isSorted === 'desc' ? (
-                                <Icon as={LuArrowDown} boxSize={2.5} color="white" />
-                              ) : (
-                                <Icon as={LuArrowUpDown} boxSize={2.5} color="fg.muted" />
-                              )}
-                            </Box>
-                            {/* Filter toggle */}
-                            {colType !== 'json' && (
-                              <Box
-                                as="button"
-                                data-filter-anchor={header.id}
-                                onClick={() => setActiveFilterCol(prev => prev === header.id ? null : header.id)}
-                                cursor="pointer"
-                                display="flex"
-                                alignItems="center"
-                                justifyContent="center"
-                                w={4} h={4}
-                                borderRadius="sm"
-                                bg={hasActiveFilter ? 'accent.teal' : undefined}
-                                opacity={hasActiveFilter ? 1 : 0.5}
-                                _hover={{ opacity: 1, bg: hasActiveFilter ? 'accent.teal' : 'bg.subtle' }}
-                                transition="all 0.15s"
-                              >
-                                <Icon as={LuFilter} boxSize={2.5} color={hasActiveFilter ? 'white' : 'fg.muted'} />
-                              </Box>
-                            )}
-                            {/* Rename / format toggle — only when editable */}
-                            {onColumnFormatsChange && (() => {
-                              const hasFormat = !!columnFormats?.[header.id]
-                              return (
-                                <Box
-                                  as="button"
-                                  data-format-anchor={header.id}
-                                  aria-label={`Format column ${header.id}`}
-                                  onClick={() => setActiveFormatCol(prev => prev === header.id ? null : header.id)}
-                                  cursor="pointer"
-                                  display="flex"
-                                  alignItems="center"
-                                  justifyContent="center"
-                                  w={4} h={4}
-                                  borderRadius="sm"
-                                  bg={hasFormat ? 'accent.teal' : undefined}
-                                  opacity={hasFormat ? 1 : 0.5}
-                                  _hover={{ opacity: 1, bg: hasFormat ? 'accent.teal' : 'bg.subtle' }}
-                                  transition="all 0.15s"
-                                >
-                                  <Icon as={LuSettings2} boxSize={2.5} color={hasFormat ? 'white' : 'fg.muted'} />
-                                </Box>
-                              )
-                            })()}
-                          </HStack>
-                        </HStack>
-
-                        {/* Faceted filter popover — rendered via Portal */}
-                        {activeFilterCol === header.id && (
-                          <Portal>
-                            <Box
-                              position="fixed"
-                              top={0} left={0} right={0} bottom={0}
-                              zIndex={99}
-                              onClick={() => setActiveFilterCol(null)}
-                            />
-                            <Box
-                              position="absolute"
-                              zIndex={100}
-                              bg="bg.surface"
-                              border="1px solid"
-                              borderColor="border.default"
-                              borderRadius="md"
-                              shadow="lg"
-                              p={2}
-                              w="220px"
-                              ref={(el: HTMLDivElement | null) => {
-                                if (!el) return
-                                // Position below the filter icon
-                                const th = el.closest('body')?.querySelector(`th [data-filter-anchor="${header.id}"]`)
-                                if (!th) return
-                                const rect = (th as HTMLElement).getBoundingClientRect()
-                                el.style.top = `${rect.bottom + 4}px`
-                                el.style.left = `${Math.max(8, rect.left - 180)}px`
-                                el.style.position = 'fixed'
-                              }}
-                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                            >
-                              <VStack gap={1.5} align="stretch">
-                                <HStack gap={1}>
-                                  <Input
-                                    size="xs"
-                                    placeholder="Search values..."
-                                    value={facetedFilter.search}
-                                    onChange={(e) => {
-                                      const search = e.target.value
-                                      header.column.setFilterValue(
-                                        search || facetedFilter.selected.length > 0
-                                          ? { search, selected: facetedFilter.selected }
-                                          : undefined
-                                      )
-                                    }}
-                                    fontFamily="mono"
-                                    fontSize="xs"
-                                    autoFocus
-                                    bg="bg.surface"
-                                    borderColor="border.default"
-                                    _focus={{ borderColor: 'accent.teal', boxShadow: 'none' }}
-                                  />
-                                  {hasActiveFilter && (
-                                    <Box
-                                      as="button"
-                                      onClick={() => {
-                                        header.column.setFilterValue(undefined)
-                                        setActiveFilterCol(null)
-                                      }}
-                                      cursor="pointer"
-                                      display="flex"
-                                      alignItems="center"
-                                      flexShrink={0}
-                                    >
-                                      <Icon as={LuX} boxSize={3} color="fg.subtle" />
-                                    </Box>
-                                  )}
-                                </HStack>
-                                {columnUniqueValues[header.id] && columnUniqueValues[header.id].length <= Math.max(FACET_PICKER_MAX_UNIQUE, rows.length * FACET_PICKER_RATIO) && (
-                                  <Box maxH="200px" overflowY="auto" css={{
-                                    '&::-webkit-scrollbar': { width: '4px' },
-                                    '&::-webkit-scrollbar-thumb': { background: '#16a085', borderRadius: '2px' },
-                                  }}>
-                                    {columnUniqueValues[header.id]
-                                      .filter(({ value }) =>
-                                        !facetedFilter.search || value.toLowerCase().includes(facetedFilter.search.toLowerCase())
-                                      )
-                                      .slice(0, 50)
-                                      .map(({ value, count }) => {
-                                        const isSelected = facetedFilter.selected.includes(value)
-                                        return (
-                                          <HStack
-                                            key={value}
-                                            gap={1.5}
-                                            px={1.5}
-                                            py={1}
-                                            cursor="pointer"
-                                            borderRadius="sm"
-                                            bg={isSelected ? 'accent.teal/10' : undefined}
-                                            _hover={{ bg: isSelected ? 'accent.teal/15' : 'bg.subtle' }}
-                                            onClick={() => {
-                                              const next = isSelected
-                                                ? facetedFilter.selected.filter(v => v !== value)
-                                                : [...facetedFilter.selected, value]
-                                              header.column.setFilterValue(
-                                                next.length > 0 || facetedFilter.search
-                                                  ? { search: facetedFilter.search, selected: next }
-                                                  : undefined
-                                              )
-                                            }}
-                                          >
-                                            <Box
-                                              w={3} h={3} borderRadius="sm" flexShrink={0}
-                                              border="1px solid"
-                                              borderColor={isSelected ? 'accent.teal' : 'border.default'}
-                                              bg={isSelected ? 'accent.teal' : 'transparent'}
-                                              display="flex" alignItems="center" justifyContent="center"
-                                            >
-                                              {isSelected && <Icon as={LuCheck} boxSize={2} color="white" />}
-                                            </Box>
-                                            <Text fontSize="xs" fontFamily="mono" truncate flex="1" color="fg.default">
-                                              {value}
-                                            </Text>
-                                            <Text fontSize="xs" fontFamily="mono" color="fg.subtle" flexShrink={0}>
-                                              {count}
-                                            </Text>
-                                          </HStack>
-                                        )
-                                      })}
-                                  </Box>
-                                )}
-                                {facetedFilter.selected.length > 0 && (
-                                  <Text fontSize="2xs" color="accent.teal" fontFamily="mono" textAlign="center">
-                                    {facetedFilter.selected.length} selected
-                                  </Text>
-                                )}
-                              </VStack>
-                            </Box>
-                          </Portal>
-                        )}
-
-                        {/* Rename / format popover — rendered via Portal */}
-                        {activeFormatCol === header.id && onColumnFormatsChange && (
-                          <Portal>
-                            <Box
-                              position="fixed"
-                              top={0} left={0} right={0} bottom={0}
-                              zIndex={99}
-                              onClick={() => setActiveFormatCol(null)}
-                            />
-                            <Box
-                              position="absolute"
-                              zIndex={100}
-                              bg="bg.panel"
-                              border="1px solid"
-                              borderColor="border.muted"
-                              borderRadius="md"
-                              shadow="lg"
-                              ref={(el: HTMLDivElement | null) => {
-                                if (!el) return
-                                const anchor = el.closest('body')?.querySelector(`th [data-format-anchor="${header.id}"]`)
-                                if (!anchor) return
-                                const rect = (anchor as HTMLElement).getBoundingClientRect()
-                                el.style.top = `${rect.bottom + 4}px`
-                                el.style.left = `${Math.max(8, rect.left - 150)}px`
-                                el.style.position = 'fixed'
-                              }}
-                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                            >
-                              <FormatPopover
-                                type={colType}
-                                column={header.id}
-                                formatConfig={columnFormats?.[header.id] ?? {}}
-                                onChange={(cfg) => handleFormatChange(header.id, cfg)}
-                              />
-                            </Box>
-                          </Portal>
-                        )}
-
-                        {/* Stats area — only rendered when toggled on */}
-                        {showStats && (
-                          <Box h="100px" w="100%" overflow="hidden">
-                            {colType === 'json' ? (
-                              <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" fontWeight="400">
-                                stats n/a
-                              </Text>
-                            ) : (
-                              <>
-                                {loadingStats && !stats && (
-                                  <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center">
-                                    <Spinner size="sm" color="fg.subtle" />
-                                  </Box>
-                                )}
-                                {(() => {
-                                  const colStats = stats?.[header.id]
-                                  if (!colStats) return null
-                                  return (
-                                    <>
-                                      <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" fontWeight="400">
-                                        {colStats.type === 'number' && (
-                                          <>avg: {colStats.avg.toLocaleString('en-US', { maximumFractionDigits: 0 })}</>
-                                        )}
-                                        {colStats.type === 'date' && (
-                                          <>{colStats.unique} unique</>
-                                        )}
-                                        {colStats.type === 'text' && (
-                                          <>{colStats.unique} unique</>
-                                        )}
-                                      </Text>
-                                      {colStats.type === 'text' && colStats.topValues.length > 0 && (
-                                        <Box mt={1} w="100%">
-                                          <MiniBarChart
-                                            data={colStats.topValues}
-                                            totalUnique={colStats.unique}
-                                            color={getTypeColor(colType)}
-                                            height={75}
-                                          />
-                                        </Box>
-                                      )}
-                                      {(colStats.type === 'number' || colStats.type === 'date') && histograms[header.id] && (
-                                        <Box mt={1} w="100%">
-                                          <MiniHistogram
-                                            data={histograms[header.id]}
-                                            color={getTypeColor(colType)}
-                                            height={30}
-                                            isDate={colStats.type === 'date'}
-                                            isFirstColumn={displayIndex === 0}
-                                            isLastColumn={displayIndex === visibleHeaders.length - 1}
-                                          />
-                                        </Box>
-                                      )}
-                                    </>
-                                  )
-                                })()}
-                              </>
-                            )}
-                          </Box>
-                        )}
-                      </VStack>
-                    </Box>
-                  )
-                })}
+                {visibleHeaders.map((header, displayIndex) => (
+                  <TableHeaderCell
+                    key={header.id}
+                    header={header}
+                    colNames={colNames}
+                    columnTypes={columnTypes}
+                    displayIndex={displayIndex}
+                    totalHeaders={visibleHeaders.length}
+                    getDisplayName={getDisplayName}
+                    columnFormats={columnFormats}
+                    onColumnFormatsChange={onColumnFormatsChange}
+                    handleFormatChange={handleFormatChange}
+                    activeFilterCol={activeFilterCol}
+                    setActiveFilterCol={setActiveFilterCol}
+                    activeFormatCol={activeFormatCol}
+                    setActiveFormatCol={setActiveFormatCol}
+                    columnUniqueValues={columnUniqueValues}
+                    rowsLength={rows.length}
+                    showStats={showStats}
+                    stats={stats}
+                    loadingStats={loadingStats}
+                    histograms={histograms}
+                  />
+                ))}
               </Box>
             </Box>
 
             {/* Virtualized Body — native elements + event delegation for performance */}
-            <tbody onClick={enableDrilldown ? handleBodyClick : undefined}>
-              {virtualItems.length > 0 && virtualItems[0].start > 0 && (
-                <tr><td style={{ height: virtualItems[0].start, padding: 0 }} /></tr>
-              )}
-              {virtualItems.map((virtualRow) => {
-                const row = tableRows[virtualRow.index]
-                const original = row.original
-                const lastColIdx = visibleColIds.length - 1
-                return (
-                  <tr
-                    key={row.id}
-                    data-row-idx={virtualRow.index}
-                    className="table-v2-row"
-                    style={{
-                      height: wrapColumns?.size ? undefined : ROW_HEIGHT,
-                      background: virtualRow.index % 2 === 1 ? 'var(--chakra-colors-bg-emphasized)' : undefined,
-                      cursor: onRowClick ? 'pointer' : undefined,
-                    }}
-                    onClick={onRowClick ? () => onRowClick(original, virtualRow.index) : undefined}
-                  >
-                    {visibleColIds.map((colId, cellIdx) => {
-                      const shouldWrap = wrapColumns?.has(colId)
-                      const cellBg = getCellBg(original, colId)
-                      return (
-                        <td
-                          key={colId}
-                          data-col-id={colId}
-                          className="table-v2-cell"
-                          style={{
-                            width: colSizes[colId],
-                            borderRight: cellIdx < lastColIdx ? '1px solid var(--chakra-colors-border-muted)' : undefined,
-                            ...(cellBg ? { backgroundColor: cellBg, color: getContrastText(cellBg) } : undefined),
-                            ...(shouldWrap ? { whiteSpace: 'normal', wordBreak: 'break-word' } : undefined),
-                          }}
-                        >
-                          {renderCell?.(colId, original[colId], original) ?? formatCell(colId, original[colId], columnTypes[colIndexMap[colId]])}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                )
-              })}
-              {virtualItems.length > 0 && rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end > 0 && (
-                <tr><td style={{ height: rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end, padding: 0 }} /></tr>
-              )}
-            </tbody>
+            <TableBody
+              enableDrilldown={enableDrilldown}
+              handleBodyClick={handleBodyClick}
+              virtualItems={virtualItems}
+              totalSize={rowVirtualizer.getTotalSize()}
+              tableRows={tableRows}
+              visibleColIds={visibleColIds}
+              colSizes={colSizes}
+              wrapColumns={wrapColumns}
+              onRowClick={onRowClick}
+              getCellBg={getCellBg}
+              renderCell={renderCell}
+              formatCell={formatCell}
+              columnTypes={columnTypes}
+              colIndexMap={colIndexMap}
+            />
           </Box>
         </Box>
       )}
 
       {/* Bottom Bar */}
-      <HStack justify="space-between" align="center" mt={2} px={2} flexShrink={0}>
-        {/* Left: Stats, Columns, Filters */}
-        <HStack gap={3}>
-          <Button
-            size="2xs"
-            variant={showStats ? 'solid' : 'outline'}
-            bg={showStats ? 'accent.teal' : 'bg.muted'}
-            color={showStats ? 'white' : undefined}
-            borderColor={showStats ? 'accent.teal' : 'border.default'}
-            _hover={{ bg: showStats ? 'accent.teal/80' : 'bg.subtle', borderColor: 'border.emphasized' }}
-            onClick={() => setShowStats(prev => !prev)}
-          >
-            <Icon as={LuChartColumn} boxSize={3} />
-            Stats
-          </Button>
-          <Menu.Root closeOnSelect={false}>
-            <Menu.Trigger asChild>
-              <Button
-                size="2xs"
-                variant="outline"
-                bg="bg.muted"
-                borderColor="border.default"
-                _hover={{ bg: 'bg.subtle', borderColor: 'border.emphasized' }}
-              >
-                <Icon as={LuColumns3} boxSize={3} />
-                {visibleColumnCount}/{colNames.length} Columns
-                <Icon as={LuChevronDown} boxSize={3} color="fg.muted" />
-              </Button>
-            </Menu.Trigger>
-            <Portal>
-              <Menu.Positioner>
-                <Menu.Content
-                  minW="200px"
-                  maxH="300px"
-                  overflowY="auto"
-                  bg="bg.surface"
-                  borderColor="border.default"
-                  shadow="lg"
-                  p={1}
-                >
-                  <Menu.Item
-                    value="toggle-all"
-                    cursor="pointer"
-                    borderRadius="sm"
-                    px={3}
-                    py={2}
-                    _hover={{ bg: 'bg.muted' }}
-                    onClick={() => {
-                      const allVisible = colNames.every(c => columnVisibility[c] !== false)
-                      if (allVisible) {
-                        const hidden: VisibilityState = {}
-                        colNames.forEach(c => { hidden[c] = false })
-                        setColumnVisibility(hidden)
-                      } else {
-                        setColumnVisibility({})
-                      }
-                    }}
-                  >
-                    <HStack gap={2} w="100%">
-                      <Box w={4} h={4} display="flex" alignItems="center" justifyContent="center">
-                        {colNames.every(c => columnVisibility[c] !== false) && (
-                          <Icon as={LuCheck} boxSize={4} color="accent.teal" />
-                        )}
-                      </Box>
-                      <Text fontSize="xs" fontWeight="600">
-                        {colNames.every(c => columnVisibility[c] !== false) ? 'Hide All' : 'Show All'}
-                      </Text>
-                    </HStack>
-                  </Menu.Item>
-                  <Box h="1px" bg="border.default" my={1} />
-                  {colNames.map((column, index) => (
-                    <Menu.Item
-                      key={column}
-                      value={column}
-                      cursor="pointer"
-                      borderRadius="sm"
-                      px={3}
-                      py={1.5}
-                      _hover={{ bg: 'bg.muted' }}
-                      onClick={() => {
-                        setColumnVisibility(prev => ({
-                          ...prev,
-                          [column]: prev[column] === false ? true : false,
-                        }))
-                      }}
-                    >
-                      <HStack gap={2} w="100%">
-                        <Box w={4} h={4} display="flex" alignItems="center" justifyContent="center">
-                          {columnVisibility[column] !== false && (
-                            <Icon as={LuCheck} boxSize={4} color="accent.teal" />
-                          )}
-                        </Box>
-                        <Box
-                          as={getTypeIcon(columnTypes[index])}
-                          fontSize="11px"
-                          color={getTypeColor(columnTypes[index])}
-                        />
-                        <Text fontSize="xs" fontFamily="mono" truncate>
-                          {column}
-                        </Text>
-                      </HStack>
-                    </Menu.Item>
-                  ))}
-                </Menu.Content>
-              </Menu.Positioner>
-            </Portal>
-          </Menu.Root>
-          {columnFilters.length > 0 && (
-            <Button
-              size="xs"
-              variant="ghost"
-              color="accent.teal"
-              onClick={() => {
-                setColumnFilters([])
-                setActiveFilterCol(null)
-              }}
-            >
-              <Icon as={LuX} boxSize={3} />
-              Clear {columnFilters.length} filter{columnFilters.length > 1 ? 's' : ''}
-            </Button>
-          )}
-        </HStack>
-
-        {/* Right: Row count, CSV */}
-        <HStack gap={3}>
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-            {tableRows.length !== rows.length
-              ? `${tableRows.length} filtered of ${rows.length} rows`
-              : `${rows.length} rows`
-            }
-          </Text>
-          <Button
-            size="2xs"
-            variant="outline"
-            bg="bg.muted"
-            borderColor="border.default"
-            _hover={{ bg: 'bg.subtle', borderColor: 'border.emphasized' }}
-            onClick={downloadCsv}
-            data-dev-hide-in-capture="true"
-          >
-            <Icon as={LuDownload} boxSize={3} />
-            CSV
-          </Button>
-        </HStack>
-      </HStack>
+      <TableBottomBar
+        colNames={colNames}
+        columnTypes={columnTypes}
+        columnVisibility={columnVisibility}
+        setColumnVisibility={setColumnVisibility}
+        columnFilters={columnFilters}
+        setColumnFilters={setColumnFilters}
+        setActiveFilterCol={setActiveFilterCol}
+        showStats={showStats}
+        setShowStats={setShowStats}
+        filteredRowCount={tableRows.length}
+        totalRowCount={rows.length}
+        downloadCsv={downloadCsv}
+      />
       <DrillDownCard drillDown={drillDown} onClose={closeDrillDown} sql={sql} databaseName={databaseName} />
     </Box>
   )

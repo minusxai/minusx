@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Icon, Text } from '@chakra-ui/react';
 import type { ChatMentionData } from '@/lib/types';
 import { ACCENT_HEX } from '@/lib/ui/file-metadata';
-import { getMentionChipMetadata } from './lexical/MentionNode';
+import { getMentionChipMetadata } from '../lexical/MentionNode';
 
 const COLOR_MAP: Record<string, string> = {
   'accent.primary': ACCENT_HEX.primary,

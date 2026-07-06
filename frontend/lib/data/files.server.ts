@@ -23,11 +23,10 @@ import {
   DeleteFileResult
 } from './types';
 import { canAccessFile } from './helpers/permissions';
-import { createShareLink, decodeShareLink, isLiveShareNonce, type ShareRecord } from '@/lib/auth/share-tokens';
 import { extractReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
-import { getTemplateDefaults } from '@/lib/data/template-defaults';
+import { getTemplateDefaults } from '@/lib/data/story/template-defaults';
 import { validateFileStateServer } from '@/lib/validation/content-validators.server';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
 import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType, canCreateFileByRole } from '@/lib/auth/access-rules';
@@ -44,6 +43,7 @@ import { selectDatabase } from '@/lib/utils/database-selector';
 import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { hashContent } from '@/lib/utils/query-hash';
+import { SharesAPI } from '@/lib/data/shares/shares.server';
 
 /**
  * Resolves direct child IDs for a folder path.
@@ -993,109 +993,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
   ): Promise<boolean> {
     return DocumentDB.appendJsonArray(id, entries, expectedLength, arrayPath, metaPath);
   }
-
-  async updateNamePath(id: number, name: string, path: string, _user: EffectiveUser): Promise<void> {
-    return DocumentDB.updateNamePath(id, name, path);
-  }
-
-  async renameAndMove(id: number, name: string, path: string, _user: EffectiveUser): Promise<void> {
-    return DocumentDB.renameAndMove(id, name, path);
-  }
-
-  /**
-   * Load the file behind a share-management operation and enforce the share guards:
-   * admin role, regular access, and `story` type (shares are story-only in v1).
-   */
-  private async _loadStoryForShareAdmin(fileId: number, user: EffectiveUser): Promise<DbFile> {
-    const file = await DocumentDB.getById(fileId);
-    if (!file) throw new FileNotFoundError(fileId);
-    if (!isAdmin(user.role)) {
-      throw new AccessPermissionError('Only admins can manage share links');
-    }
-    const overrides = await this._getOverrides(user);
-    if (!canAccessFile(file, user, overrides)) {
-      throw new AccessPermissionError('You do not have permission to access this file');
-    }
-    if (file.type !== 'story') {
-      throw new UserFacingError('Only stories can be shared publicly');
-    }
-    return file;
-  }
-
-  private _readShares(file: DbFile): ShareRecord[] {
-    const shares = (file.meta as { shares?: ShareRecord[] } | null)?.shares;
-    return Array.isArray(shares) ? shares : [];
-  }
-
-  private async _writeShares(file: DbFile, shares: ShareRecord[]): Promise<void> {
-    await DocumentDB.updateMeta(file.id, { ...(file.meta ?? {}), shares });
-  }
-
-  /**
-   * Resolve a public `shareableId` to its story file, acting as the share authority
-   * (no user — the signed token + live nonce ARE the authorization). Returns null for
-   * any invalid / tampered / revoked / non-story share. Used by the guest-session mint
-   * route and the public `/l/<id>` page.
-   */
-  async resolveShare(shareableId: string): Promise<{ file: DbFile; nonce: string } | null> {
-    const decoded = decodeShareLink(shareableId);
-    if (!decoded) return null;
-    const file = await DocumentDB.findByShareNonce(decoded.nonce);
-    if (!file || file.type !== 'story') return null;
-    if (!isLiveShareNonce(decoded.nonce, this._readShares(file))) return null;
-    return { file, nonce: decoded.nonce };
-  }
-
-  /** List the share records for a story (admin-only). */
-  async getShares(fileId: number, user: EffectiveUser): Promise<ShareRecord[]> {
-    const file = await this._loadStoryForShareAdmin(fileId, user);
-    return this._readShares(file);
-  }
-
-  /** Mint a new public share link for a story and persist its record (admin-only). */
-  async addShare(
-    fileId: number,
-    user: EffectiveUser,
-    label?: string,
-  ): Promise<{ shareableId: string; record: ShareRecord }> {
-    const file = await this._loadStoryForShareAdmin(fileId, user);
-    const { shareableId, record } = createShareLink(file.name, user.userId, label);
-    await this._writeShares(file, [...this._readShares(file), record]);
-    return { shareableId, record };
-  }
-
-  /** Soft-revoke a share link by nonce (admin-only). Returns true if a live link was revoked. */
-  async revokeShare(fileId: number, user: EffectiveUser, nonce: string): Promise<boolean> {
-    const file = await this._loadStoryForShareAdmin(fileId, user);
-    const shares = this._readShares(file);
-    let revoked = false;
-    const next = shares.map((s) => {
-      if (s.nonce === nonce && !s.revoked) {
-        revoked = true;
-        return { ...s, revoked: true };
-      }
-      return s;
-    });
-    if (revoked) await this._writeShares(file, next);
-    return revoked;
-  }
-
-  /**
-   * Persist the object-store KEY of a story's composed OG share card on `meta.preview`
-   * (a derived artifact, like `meta.shares` — kept out of the agent-authored content). The
-   * public `/l/<id>/opengraph-image` route reads the bytes back by this key. Any user who
-   * can access the story may set it (it's a render of what they already see).
-   */
-  async setStoryPreview(fileId: number, user: EffectiveUser, key: string): Promise<void> {
-    const file = await DocumentDB.getById(fileId);
-    if (!file) throw new FileNotFoundError(fileId);
-    const overrides = await this._getOverrides(user);
-    if (!canAccessFile(file, user, overrides)) {
-      throw new AccessPermissionError('You do not have permission to access this file');
-    }
-    if (file.type !== 'story') throw new UserFacingError('Only stories have preview images');
-    await DocumentDB.updateMeta(fileId, { ...(file.meta ?? {}), preview: { key, version: file.updated_at } });
-  }
 }
 
 // Export singleton instance - PREFER using this
@@ -1114,8 +1011,11 @@ export const batchSaveFiles = FilesAPI.batchSaveFiles.bind(FilesAPI);
 export const moveFile = FilesAPI.moveFile.bind(FilesAPI);
 export const batchMoveFiles = FilesAPI.batchMoveFiles.bind(FilesAPI);
 export const deleteFile = FilesAPI.deleteFile.bind(FilesAPI);
-export const resolveShare = FilesAPI.resolveShare.bind(FilesAPI);
-export const setStoryPreview = FilesAPI.setStoryPreview.bind(FilesAPI);
-export const getShares = FilesAPI.getShares.bind(FilesAPI);
-export const addShare = FilesAPI.addShare.bind(FilesAPI);
-export const revokeShare = FilesAPI.revokeShare.bind(FilesAPI);
+
+// Deprecated: shares moved to lib/data/shares/ (SharesAPI). These wrappers preserve the old
+// call signatures for existing callers (see lib/data/shares/shares.server.ts for the real logic).
+export const resolveShare = SharesAPI.resolveShare.bind(SharesAPI);
+export const setStoryPreview = SharesAPI.setStoryPreview.bind(SharesAPI);
+export const getShares = (fileId: number, user: EffectiveUser) => SharesAPI.listShares(fileId, user);
+export const addShare = (fileId: number, user: EffectiveUser, label?: string) => SharesAPI.createShare(fileId, user, label);
+export const revokeShare = (fileId: number, user: EffectiveUser, nonce: string) => SharesAPI.revokeShare(fileId, nonce, user);

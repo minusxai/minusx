@@ -23,7 +23,7 @@ vi.mock('@/store/store', () => ({
   getStore: () => testStore,
 }));
 
-import { captureNotebookCellResult, rehydrateNotebookResults, removeNotebookCellResult } from '@/lib/api/file-state';
+import { captureNotebookCellResult, rehydrateNotebookResults, removeNotebookCellResult } from '@/lib/file-state/file-state';
 
 function setupStore() {
   return configureStore({

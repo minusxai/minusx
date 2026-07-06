@@ -144,7 +144,7 @@ export function StoryCoverCard(props: { coverUrl: string; title: string; tone: C
 }
 
 /** Generic branded card: d2 hero + centered wordmark (black, for the light hero) + tagline. */
-export function GenericCard(props: { assets: CardAssets }): React.ReactElement {
+function GenericCard(props: { assets: CardAssets }): React.ReactElement {
   const logoW = 450;
   const logoH = Math.round((logoW * 180) / 820);
   return (

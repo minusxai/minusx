@@ -33,7 +33,7 @@ vi.mock('@/lib/hooks/useConversationsList', () => ({
 
 // Type-only import at runtime; mock to avoid loading the server route module.
 vi.mock('@/app/api/conversations/route', () => ({}));
-vi.mock('@/components/Breadcrumb', () => ({ __esModule: true, default: () => null }));
+vi.mock('@/components/file-browser/Breadcrumb', () => ({ __esModule: true, default: () => null }));
 
 import ConversationsPage from '@/app/conversations/page';
 
