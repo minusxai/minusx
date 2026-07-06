@@ -429,13 +429,13 @@ GitHub's CodeQL check on PR #567 flags 3 "new" alerts. All three are **confirmed
 
 ## Post-#567 addendum (2026-07-06) — doc drift found after "complete", and confirmed next-PR scope
 
-PR #567 itself is unchanged in scope; small doc-accuracy fixes landed on the same branch (see commits `f0416002`, `c519feb4`). Two follow-up PRs are now confirmed (owner, 2026-07-06) for after #567 merges — recorded here as scoping; neither has been started.
+PR #567 itself is unchanged in scope; small doc-accuracy fixes landed on the same branch (see commits `f0416002`, `c519feb4`). **One follow-up PR is confirmed (owner, 2026-07-06)** for after #567 merges, covering both items below. Recorded here as scoping; not started.
 
 **Doc fix (done):** CLAUDE.md's "Query Execution Flow" section still described the in-process `queryCache`/`queryInflight` maps in `app/api/query/route.ts`. That system was already replaced by the durable, SWR/lease-based `lib/query-cache/` module (shipped in PR #535, hardened in #541 and #562) — predates this refactor, missed by M8 because M8 only walked this PR's own diff against the last sync point, not the full range since `docs/DOCS_SYNC.md` was last honest. CLAUDE.md and the design doc's own status header (`docs/Query Execution, Cache, & Params Arch V2.md`) are now reconciled to the shipped state.
 
-**Recommended as two separate PRs** (owner asked "wdyt" re: bundling both into one — recommendation given, not yet finalized): the chat migration is a real behavior change to a live external integration (Slack), the view/coverage work is mechanical and touches disjoint files — no shared blast radius, and splitting keeps each independently reviewable/bisectable/revertable. They can run in parallel.
+## Next PR (single PR, confirmed) — both scopes below, one branch, one PR
 
-### Next PR A — finish the chat v2→v3 migration (Slack), then delete all v2 chat code + docs
+### Part 1 — finish the chat v2→v3 migration (Slack), then delete all v2 chat code + docs
 
 **Scope is narrower than `docs/chat-architecture-v3.md` currently claims — verify, don't trust the doc.** That doc says v2 is intentionally retained for three consumers (Slack, benchmark import, connection-wizard onboarding). Re-checked directly against current `main`:
 - **Benchmark import is already v3** — `app/api/benchmark/import/route.ts` persists directly via `createConversation`/`appendMessages` ("Persist a benchmark run's orchestrator conversation log as a v3 conversation"). No v2 involvement.
@@ -448,6 +448,6 @@ So `docs/chat-architecture-v3.md`'s v2-retention rationale is itself now stale f
 
 **Suggested execution (Blue→Red→Blue):** extend the existing `lib/integrations/slack/__tests__/slack.e2e.test.ts` (+ `slack-unit.test.ts`, `interactions.test.ts`) to assert v3 persistence (conversations/messages rows) instead of/alongside today's v2-file assertions — confirm they fail red against the current v2-backed implementation — then migrate `process-event.ts` to create/continue a v3 conversation via the same turn runner the browser uses, instead of `runChatOrchestrationV2` — then delete `runChatOrchestrationV2`, `lib/chat/run-orchestration.server.ts` (or whatever of it is left once the function is gone), and any v2-only helpers that become unreachable (re-run `npm run knip` to find them, per the M1/Final-validation triage method) — then update `docs/chat-architecture-v3.md`'s status and CLAUDE.md's chat section to say v2 is fully gone.
 
-### Next PR B — unblock M4.2 (container/view) for `QuestionViewV2`/`DashboardView`
+### Part 2 — unblock M4.2 (container/view) for `QuestionViewV2`/`DashboardView`
 
 Re-verified directly (not just recalled from the M4.2 write-up above): `QuestionViewV2.tsx` (986 lines) has **zero** test files referencing it anywhere in the repo; `DashboardView.tsx` (604 lines) has exactly one hit, a comment in `story-view.ui.test.tsx` ("hosts the JSON view... like DashboardView") — not an actual test of its behavior. Both call `useDispatch`/`useSelector` directly (7 and 9 call sites respectively), the exact dispatch surface M4.2 wanted moved into their containers. The correct next step is Blue→Red→Blue as the project always requires: author `*.ui.test.tsx` coverage for the current behavior first (blue), then move the Redux access into the container and confirm the same tests still pass, then add the `views↛Redux` ESLint guard M4.2 explicitly deferred. This is real, well-scoped follow-up work, not a redo of M4.2 — it's the coverage gap M4.2 identified, finally closed.
