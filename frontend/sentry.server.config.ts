@@ -4,10 +4,19 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { IS_DEV, SEND_ERRORS_IN_DEV } from "@/lib/constants";
+import { parseTelemetryDisabled, shouldInitSentry } from "@/lib/telemetry";
 
 // Skip Sentry init in dev (unless explicitly opted in via NEXT_PUBLIC_SEND_ERRORS_IN_DEV=true).
 // Matches the client config so dev runs aren't instrumented at all.
-if (!IS_DEV || SEND_ERRORS_IN_DEV) {
+// MX_DISABLE_TELEMETRY disables Sentry entirely (self-hosted opt-out); read
+// directly because this file runs at instrumentation time, outside the app
+// module graph — same pattern as instrumentation.ts.
+if (shouldInitSentry({
+  isDev: IS_DEV,
+  sendErrorsInDev: SEND_ERRORS_IN_DEV,
+  // eslint-disable-next-line no-restricted-syntax
+  telemetryDisabled: parseTelemetryDisabled(process.env.MX_DISABLE_TELEMETRY),
+})) {
   Sentry.init({
     dsn: "https://4b0f002a96f1fe28a5a32b705ec67b92@o4511451869544448.ingest.us.sentry.io/4511451905785856",
 

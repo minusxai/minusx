@@ -12,6 +12,10 @@
     "data",
     "knowledge-base",
     "proactive",
-    "integrations"
+    "integrations",
+    "---Operations---",
+    "self-hosting",
+    "---Internals---",
+    "architecture"
   ]
 }

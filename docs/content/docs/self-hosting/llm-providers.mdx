@@ -1,0 +1,76 @@
+---
+title: LLM Providers
+description: Configuring which model powers the agent — providers, keys, and exactly what the model sees
+---
+
+MinusX brings its own agent but not its own model: you point it at an LLM provider with **your API key**, and all LLM traffic goes directly from your deployment to that provider. There is no MinusX-operated proxy in the path.
+
+---
+
+## Quick start
+
+The default provider is Anthropic. Set the key and you're done:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+## Choosing a different provider or model
+
+Two runtime environment variables control which models the agents use, both JSON:
+
+- `ANALYST_AGENT_MODEL_CONFIG` — the main analyst agent (chat, SQL, dashboards)
+- `MICRO_AGENT_MODEL_CONFIG` — small single-turn helpers (titles, summaries)
+
+```bash
+# Shape: { "provider": string, "model": string, "options"?: object }
+ANALYST_AGENT_MODEL_CONFIG={"provider":"anthropic","model":"claude-sonnet-4-6","options":{"reasoning":"low"}}
+MICRO_AGENT_MODEL_CONFIG={"provider":"anthropic","model":"claude-haiku-4-5-20251001"}
+```
+
+`options` is passed through to the model call unchanged — use it for provider/model options like reasoning effort, temperature, or max tokens.
+
+<Callout type="info">
+The heavier analyst model drives answer quality far more than any other setting. Use a strong frontier model for `ANALYST_AGENT_MODEL_CONFIG`; the micro agent can be a small, cheap model.
+</Callout>
+
+## Supported providers
+
+Model routing is backed by the [pi-ai](https://github.com/badlogic/pi-mono) registry. Each provider reads its standard key from the environment at call time:
+
+| Provider (`provider` value) | API key env var |
+|---|---|
+| `anthropic` | `ANTHROPIC_API_KEY` |
+| `openai` | `OPENAI_API_KEY` |
+| `google` | `GEMINI_API_KEY` |
+| `google-vertex` | `GOOGLE_APPLICATION_CREDENTIALS` (+ project/location vars) |
+| `amazon-bedrock` | standard AWS credential chain |
+| `azure-openai-responses` | `AZURE_OPENAI_API_KEY` |
+| `openrouter` | `OPENROUTER_API_KEY` |
+| `groq` | `GROQ_API_KEY` |
+| `mistral` | `MISTRAL_API_KEY` |
+| `deepseek` | `DEEPSEEK_API_KEY` |
+| `xai` | `XAI_API_KEY` |
+| `cerebras` | `CEREBRAS_API_KEY` |
+| `fireworks` | `FIREWORKS_API_KEY` |
+| `moonshotai` | `MOONSHOT_API_KEY` |
+| `zai` | `ZAI_API_KEY` |
+| `huggingface` | `HF_TOKEN` |
+| `cloudflare-ai-gateway` / `vercel-ai-gateway` | `CLOUDFLARE_API_KEY` / `AI_GATEWAY_API_KEY` |
+
+OpenRouter is the widest single door — one key routes to hundreds of models across vendors.
+
+<Callout type="warn">
+**Local / custom OpenAI-compatible endpoints (Ollama, vLLM, llama.cpp) are not yet supported.** The provider must be one of the registry entries above; there is currently no way to point the agent at an arbitrary base URL. This is a known gap.
+</Callout>
+
+## What the model sees
+
+Requests to your configured provider contain:
+
+- **Schema metadata** for connections the active context whitelists (table/column names, column statistics) — not row data, except query results the agent explicitly reads while answering
+- **Knowledge Base content** you've written (definitions, quirks, documentation)
+- **Conversation content** — messages, and query results returned by the agent's tools
+- Chart images rendered for the conversation, where applicable
+
+Your warehouse **credentials** are never part of an LLM request. If your provider agreement matters here (retention, training), that's between you and the provider — MinusX doesn't sit in the path and cannot see this traffic.

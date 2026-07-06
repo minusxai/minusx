@@ -1,0 +1,31 @@
+name: Deploy Docs
+
+# Docs-site deploys live in the (private) deploys repo — this workflow just pokes
+# it when docs/ changes on main, via repository_dispatch. Requires the
+# DEPLOYS_DISPATCH_TOKEN secret (a PAT with repo scope on the deploys repo);
+# when the secret is absent the job no-ops, and the deploys repo's cron still
+# picks the change up on its own schedule.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+
+jobs:
+  trigger-docs-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch deploy-docs to the deploys repo
+        env:
+          DEPLOYS_DISPATCH_TOKEN: ${{ secrets.DEPLOYS_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$DEPLOYS_DISPATCH_TOKEN" ]; then
+            echo "DEPLOYS_DISPATCH_TOKEN not configured — skipping instant deploy (cron in the deploys repo will pick this up)."
+            exit 0
+          fi
+          curl -sf -X POST \
+            -H "Authorization: Bearer $DEPLOYS_DISPATCH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/minusxai/deploys/dispatches \
+            -d '{"event_type":"deploy-docs"}'

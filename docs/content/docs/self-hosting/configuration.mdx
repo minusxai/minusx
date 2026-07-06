@@ -1,0 +1,134 @@
+---
+title: Configuration Reference
+description: Every environment variable a MinusX deployment reads — defaults, scope, and when you need it
+---
+
+All configuration is via environment variables, read from `frontend/.env` (which both `docker compose` and the installer pass through via `env_file`). Almost everything is **runtime** — set it, restart the container, done. The handful of build-time variables that require a rebuild are listed [at the bottom](#build-time-variables).
+
+---
+
+## Required
+
+| Variable | Purpose |
+|---|---|
+| `NEXTAUTH_SECRET` | Session/JWT signing secret. Generate with `openssl rand -base64 32`. |
+| `ANTHROPIC_API_KEY` | API key for the default LLM provider. Using a different provider? See [LLM Providers](/docs/self-hosting/llm-providers). |
+
+## Document database
+
+MinusX stores documents (questions, dashboards, users, …) in an embedded Postgres-compatible database by default; point it at external Postgres for hosted/multi-node setups.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DB_TYPE` | `pglite` | `pglite` (embedded, zero-config) or `postgres` (external). |
+| `DATABASE_URL` | — | Postgres connection string; required when `DB_TYPE=postgres`. |
+| `PGLITE_DATA_DIR` | derived | On-disk directory for PGLite data (the Docker image sets `/app/data/pglite`). |
+| `POSTGRES_SCHEMA` | `public` | Schema to use in external Postgres. |
+
+## LLM & agent
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ANALYST_AGENT_MODEL_CONFIG` | Anthropic Sonnet | JSON `{provider, model, options?}` for the main agent — see [LLM Providers](/docs/self-hosting/llm-providers). |
+| `MICRO_AGENT_MODEL_CONFIG` | Anthropic Haiku | Same shape, for small single-turn helper tasks. |
+| `MAX_LLM_CONCURRENCY` | unlimited | Cap on concurrent in-flight LLM requests. |
+| `BOOT_WARM_CHAT` | `true` | Warm the chat runtime at boot so the first message isn't a cold start. `false` to disable. |
+
+## Telemetry
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MX_DISABLE_TELEMETRY` | unset | `1`/`true` disables all outbound telemetry (crash reporting + analytics). Full details: [Telemetry & Privacy](/docs/self-hosting/telemetry). |
+| `ANALYTICS_CONFIG` | unset | JSON product-analytics config; overrides any default baked into the image. `{"enabled":false}` disables analytics only. |
+| `EVENTS_FORWARD_RULES` | unset | Opt-in JSON map `{"<event regex>": "<webhook url>"}` forwarding app events to your webhooks (e.g. errors → your Slack). |
+
+## Paths & data
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `BASE_DUCKDB_DATA_PATH` | `.` (image: `/app`) | Base directory for resolving relative DuckDB file paths. |
+| `ANALYTICS_DB_DIR` | derived | Directory for the internal usage-analytics DuckDB store. |
+| `LOCAL_UPLOAD_PATH` | `<base>/data/uploads` | Filesystem directory for uploaded files. |
+| `MXFOOD_DUCKDB_URL` | GitHub release URL | Where the tutorial sample dataset is downloaded from (point at a mirror for airgapped installs). |
+
+## Object storage (optional)
+
+Used for uploads and query-result blobs when configured; without it, uploads use the local filesystem.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OBJECT_STORE_ENDPOINT` | — | S3-compatible endpoint URL. |
+| `OBJECT_STORE_BUCKET` | — | Bucket name. |
+| `OBJECT_STORE_REGION` | `us-east-1` | Region. |
+| `OBJECT_STORE_ACCESS_KEY_ID` / `OBJECT_STORE_SECRET_ACCESS_KEY` | — | Credentials. |
+| `OBJECT_STORE_PUBLIC_URL` | — | Public base URL for stored objects. |
+| `USE_BASE64_UPLOADS` | `false` | Store uploads inline as base64 instead of the object store. |
+
+## Query execution & caching
+
+Defaults are sensible; tune only under real load.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MAX_CONCURRENT_QUERIES` | `10` | Cap on concurrent client query executions. |
+| `QUERY_TIMEOUT_MS` | `120000` | Client-side wall-clock cap per query (0 disables). |
+| `QUERY_SERVER_TIMEOUT_MS` | `180000` | Server-side backstop per query execution (0 disables). |
+| `QUERY_CACHE_REVALIDATE_MS` | `1200000` (20 min) | Serve-stale-while-revalidating window for cached results. |
+| `QUERY_CACHE_EXPIRY_MS` | `3600000` (60 min) | Hard expiry for cached results. |
+| `QUERY_CACHE_LEASE_MS` | `120000` | Execution lease TTL (dedupes concurrent identical queries). |
+
+## Auth & access
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AUTH_URL` | `http://localhost:3000` | Canonical base URL for auth callbacks — set to your public URL behind a proxy. |
+| `ADMIN_PWD` | — | Optional admin password gate. |
+| `ENABLE_ORG_CREATION` | `true` | `false` blocks creating new organizations (single-tenant lockdown). |
+| `EMBED_ALLOWED_ORIGINS` | — | Origin allowlist for iframe embedding (`*` = any); enables the required cookie/CSP settings. |
+| `SHARE_GUEST_CHAT_ENABLED` | `false` | Allow anonymous guest chat on publicly shared stories. |
+| `CRON_SECRET` | — | Bearer secret authorizing scheduled-job endpoints (reports/alerts triggered by an external cron). |
+
+## Slack integration (optional)
+
+| Variable | Purpose |
+|---|---|
+| `SLACK_SIGNING_SECRET` | Verifies Slack request signatures. |
+| `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` | Slack OAuth app credentials. |
+| `DEFAULT_EMAIL_WEBHOOK` | Fallback webhook for email-style notifications. |
+
+## Credits & usage limits (optional)
+
+Off by default; for deployments that meter LLM usage per role.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CREDITS_ENABLED` | `false` | Show credits usage UI. |
+| `ENFORCE_CREDIT_LIMITS` | `false` | Enforce (block) rather than just track. |
+| `CREDIT_CONFIG` / `CREDIT_ALLOWANCES` / `CREDIT_RESET_ALLOWANCES` | defaults | JSON budget/allowance overrides per role. |
+| `CREDIT_BILLING_CYCLE` / `CREDIT_RESET_CYCLE` | defaults | Cycle windows. |
+
+## Advanced
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CUSTOM_MODULE` | — | Load a custom instrumentation module at boot (deployment-specific extensions). |
+| `LANDING_HTML` | — | Replace the landing page with custom HTML. |
+| `DEFAULT_DB_TYPE` | `duckdb` | Default dialect preselected for new data connections. |
+| `E2E_RUNTIME_SECRET` | — | Test-harness opt-in; leave unset in production. |
+
+<Callout type="info">
+Variables prefixed `DAB_*`, `QA_*`, and `E2E_*` belong to the benchmark and test harnesses — they have no effect on a normal deployment and are intentionally undocumented here.
+</Callout>
+
+---
+
+## Build-time variables
+
+Everything above is read at container runtime. These are the exceptions — inlined into the JavaScript bundle at `npm run build`, so changing them on a **prebuilt image has no effect**; you'd need to build from source:
+
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG` | Default analytics config baked into official images. Runtime `ANALYTICS_CONFIG` / `MX_DISABLE_TELEMETRY` always override it. |
+| `NEXT_PUBLIC_DISABLE_UPDATE_BANNER` | Hide the update banner. |
+| `NEXT_PUBLIC_SEND_ERRORS_IN_DEV` | Initialize crash reporting even in dev builds. |
+| `GIT_COMMIT_SHA` | Commit SHA shown in the UI (set by CI). |

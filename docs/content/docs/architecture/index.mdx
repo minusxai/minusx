@@ -1,0 +1,79 @@
+---
+title: Architecture Overview
+description: How MinusX is built — one Next.js app, an in-process agent orchestrator, and two data planes
+---
+
+MinusX is a single Next.js application. There is no separate backend service: the web UI, the REST API, the AI agent orchestrator, and the analytics query connectors all run in one process. This page is the system at a glance; the deeper pages cover [chat orchestration](/docs/architecture/chat-orchestration) and [query execution](/docs/architecture/query-execution).
+
+---
+
+## One process, no backend service
+
+Everything is served by the Next.js app:
+
+| Concern | Where it lives |
+|---|---|
+| Web UI | Next.js App Router pages (React 19, Redux) |
+| REST API | Next.js API routes (`app/api/**`) |
+| AI agents & tools | In-process TypeScript orchestrator (`frontend/orchestrator/` + `frontend/agents/`) |
+| Analytics queries | Node.js connectors (`frontend/lib/connections/`) |
+| Document storage | PGLite (embedded) or Postgres |
+
+The agent orchestrator is not a sidecar or a separate service that the app calls over HTTP — it's TypeScript code invoked directly by the chat API routes. LLM calls, the conversation log, and tool execution all happen inside the same process that serves the UI.
+
+---
+
+## Two data planes
+
+MinusX keeps two deliberately separate kinds of data:
+
+**Document DB** — questions, dashboards, notebooks, connections, contexts, users, folders, and configuration. Stored in an embedded Postgres-compatible database (PGLite) for the open-source/self-hosted build, or an external Postgres (`DATABASE_URL`) for hosted deployments. Same schema, same SQL, two backends.
+
+**Analytics data** — your actual data warehouse. Queries execute through Node.js connectors, one per engine:
+
+- DuckDB (the default local analytics database)
+- BigQuery
+- PostgreSQL
+- SQLite
+- Athena
+- MongoDB
+- ClickHouse
+- CSV files
+- Google Sheets
+
+Your warehouse data never passes through the document DB; the document DB never stores query results (results are cached separately — see [Query Execution & Caching](/docs/architecture/query-execution)).
+
+---
+
+## Everything is a file
+
+Questions, dashboards, notebooks, reports, connections, and contexts are all **documents in a file tree**. Each file has an integer ID, a display path (e.g. `/org/Revenue-Summary`), a type, and JSON content. Files are accessed by ID (`/f/{id}` routes); the path is organizational.
+
+This matters for the agent: the AI works on the **same surface as the human**. When the agent creates a dashboard, it writes the same document a person would save from the UI. When it answers a question about an existing report, it reads that file with the same read path the UI uses. There is no shadow representation of your workspace for the AI — tools like `ReadFiles`, `SearchFiles`, `CreateFile`, and `EditFile` operate directly on the file tree.
+
+Files can reference other files (a dashboard holds references to its questions), with one level of resolution and circular references rejected at save time.
+
+---
+
+## Mode-based isolation
+
+The file system supports isolated modes. The default mode is `org` (production files, rooted at `/org/...`); `tutorial` mode (`/tutorial/...`) holds an isolated onboarding workspace with sample data. Every file operation — documents, conversations, query cache keys — is scoped by mode, so tutorial experiments can never touch production files. Mode propagates from a URL parameter through middleware to every request, following the same pattern as user impersonation.
+
+---
+
+## Permissions
+
+Access control is enforced at three layers, so a bug in one layer doesn't become a data leak:
+
+1. **Data layer** — the server-side file API checks permissions before any read or write.
+2. **API routes** — every request resolves an effective user and authorizes against it.
+3. **UI** — controls are hidden or disabled when the user lacks the permission.
+
+Non-admin users are restricted to their home folder subtree (hierarchical); role-based rules define which file types each role may view, create, edit, and delete. Admins can additionally impersonate other users for debugging (`?as_user=`), which flows through the same three layers.
+
+---
+
+## Going deeper
+
+- **[Chat & Agent Orchestration](/docs/architecture/chat-orchestration)** — the append-only conversation log, the orchestrator engine, server vs. frontend-bridged tools, and resumable streaming.
+- **[Query Execution & Caching](/docs/architecture/query-execution)** — the streaming JSONL query path, the stale-while-revalidate cache, execution leases, parameters, and guest access.

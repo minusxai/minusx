@@ -1,0 +1,51 @@
+---
+title: Telemetry & Privacy
+description: Exactly what MinusX reports outside your deployment, and the one flag that turns all of it off
+---
+
+This page is the complete inventory of everything a self-hosted MinusX deployment can send outside your infrastructure, what each channel contains, its default state, and how to turn it off.
+
+## The kill-switch
+
+One environment variable disables everything on this page:
+
+```bash
+MX_DISABLE_TELEMETRY=1
+```
+
+It is a **runtime** variable — set it in `frontend/.env` (the installer's env file) or pass `-e MX_DISABLE_TELEMETRY=1` to `docker run`. No rebuild is needed; restart the container and every channel below is off.
+
+---
+
+## Channel inventory
+
+| Channel | Default | Contains | Off switch |
+|---------|---------|----------|-----------|
+| Crash & error reporting (Sentry) | **On** in production builds | Error stack traces, request metadata (including IP addresses), logs, performance traces | `MX_DISABLE_TELEMETRY=1` |
+| Product analytics (Mixpanel) | Off in source builds; **may be on in official prebuilt images** (see below) | Usage events (page views, feature usage), user identity (email, role) | `MX_DISABLE_TELEMETRY=1`, or `ANALYTICS_CONFIG='{"enabled":false}'` for analytics only |
+| App-event webhooks | Off | Whatever events your rules match | Opt-in only — exists solely if you set `EVENTS_FORWARD_RULES` |
+| LLM requests | On (required for the agent) | Schema metadata, Knowledge Base context, conversation content — sent to the provider **you** configure with **your** key | Not telemetry — see [LLM Providers](/docs/self-hosting/llm-providers) |
+
+### Crash & error reporting
+
+Production builds initialize [Sentry](https://sentry.io) on the server, edge, and browser runtimes, pointed at a MinusX-operated Sentry project (the DSN is hardcoded in `sentry.server.config.ts`, `sentry.edge.config.ts`, and `instrumentation-client.ts` — you can read exactly what is configured). This is how crashes in self-hosted deployments get noticed and fixed without users having to file issues. It includes `sendDefaultPii`, so request metadata such as IP addresses is attached to reports.
+
+`MX_DISABLE_TELEMETRY=1` disables all three runtimes. The browser bundle can't read runtime environment variables (they're inlined at build time), so the server stamps an opt-out attribute on the HTML document during rendering and the client checks it before initializing — meaning the flag works on prebuilt images without a rebuild.
+
+### Product analytics
+
+Analytics is provider-based (`noop` or Mixpanel) and controlled by `ANALYTICS_CONFIG` (JSON, runtime). If you build from source and never set it, analytics is a no-op.
+
+<Callout type="warn">
+Official prebuilt images may include a default analytics configuration baked in at build time (`NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG`). Your runtime settings always win: `MX_DISABLE_TELEMETRY=1` disables it, and setting `ANALYTICS_CONFIG` overrides the baked default entirely.
+</Callout>
+
+### App-event webhooks
+
+`EVENTS_FORWARD_RULES` lets you forward matching app events (errors, shares, …) to webhooks you choose — e.g. your own Slack. It is unset by default: nothing is forwarded anywhere unless you configure it. All events are always recorded in your local `app_events` table regardless.
+
+---
+
+## Verifying
+
+Everything above is auditable in the source: the Sentry init files sit at the repo root of `frontend/`, the kill-switch logic is `frontend/lib/telemetry.ts`, and analytics wiring is `frontend/lib/analytics/`. If you find a channel not documented on this page, that's a bug — please [open an issue](https://github.com/minusxai/minusx/issues).
