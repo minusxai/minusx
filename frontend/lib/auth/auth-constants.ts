@@ -9,9 +9,3 @@
  * When incremented, all tokens with lower versions will be rejected
  */
 export const CURRENT_TOKEN_VERSION = 2;
-
-/**
- * Token refresh threshold in seconds
- * Tokens older than this will be automatically refreshed
- */
-export const TOKEN_REFRESH_THRESHOLD = 60 * 60; // 1 hour
