@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Box, Text, VStack, HStack, Button, Input } from '@chakra-ui/react';
 import { LuUpload, LuX, LuFile, LuCheck } from 'react-icons/lu';
 import { CsvFileInfo } from '@/lib/types';
-import { uploadCsvFilesS3, FileWithSchema } from '@/lib/backend/csv-upload';
+import { uploadCsvFilesS3, FileWithSchema } from '@/lib/connections/client/csv-upload';
 import { BaseConfigProps } from './types';
 
 interface CsvConfigProps extends BaseConfigProps {

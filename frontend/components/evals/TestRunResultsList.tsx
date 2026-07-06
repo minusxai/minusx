@@ -3,7 +3,7 @@
 import { Box, Text, VStack, HStack } from '@chakra-ui/react';
 import { useState } from 'react';
 import type { TestRunResult } from '@/lib/types';
-import type { CompletedToolCallResult } from '@/lib/chat-orchestration';
+import type { CompletedToolCallResult } from '@/lib/chat/chat-types';
 import TestResultBadge from './TestResultBadge';
 import { LuChevronDown, LuChevronRight, LuWrench, LuCheck } from 'react-icons/lu';
 

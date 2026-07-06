@@ -10,7 +10,7 @@
  * operators; `!=` and `contains` are handled locally so the shared function stays
  * untouched.
  */
-import { compareValues } from '@/lib/tests/index'
+import { compareValues } from '@/lib/evals/index'
 import type { ColumnType } from '@/lib/database/column-types'
 import type { ConditionalFormatRule } from '@/lib/types'
 import type { TestOperator } from '@/lib/types'

@@ -3,8 +3,8 @@
  *
  * Defines the TestRunner interface and shared comparison utilities.
  * Two implementations:
- *   - lib/tests/server.ts  — server-side (used by transformation-handler.ts)
- *   - lib/tests/client.ts  — client-side (used by UI for inline test runs)
+ *   - lib/evals/server.ts  — server-side (used by transformation-handler.ts)
+ *   - lib/evals/client.ts  — client-side (used by UI for inline test runs)
  */
 import type { Test, TestRunResult, TestAnswerType, TestOperator } from '@/lib/types';
 
@@ -12,7 +12,7 @@ export type { Test, TestRunResult };
 
 /**
  * Shared interface for running a Test. Implemented by both the server runner
- * (lib/tests/server.ts) and the client runner (lib/tests/client.ts).
+ * (lib/evals/server.ts) and the client runner (lib/evals/client.ts).
  */
 export interface TestRunner {
   execute(test: Test): Promise<TestRunResult>;

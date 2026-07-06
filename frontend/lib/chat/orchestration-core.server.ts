@@ -1,9 +1,9 @@
 // Shared chat orchestration core — builds the orchestrator from a saved pi log
 // (`setupOrchestration`), records LLM calls (`recordLlmCalls`), estimates next-turn
-// context size (`estimateNextChatContextV2`), and exposes the tool/agent registries
-// (`V2_REGISTRABLES` / `V2_HEADLESS_REGISTRABLES`). Consumed by the v3 turn runner
+// context size (`estimateNextChatContext`), and exposes the tool/agent registries
+// (`REGISTRABLES` / `HEADLESS_REGISTRABLES`). Consumed by the v3 turn runner
 // (`lib/chat/conversation-turn.server.ts`) and the headless runner
-// (`lib/chat/run-orchestration-v2.server.ts`). Translates a legacy ChatRequest into an
+// (`lib/chat/run-orchestration.server.ts`). Translates a legacy ChatRequest into an
 // orchestrator message/resume via `lib/chat-translator`.
 
 import 'server-only';
@@ -65,12 +65,12 @@ import { UNKNOWN_TRIGGER } from '@/lib/analytics/credits.types';
 import { buildLlmCallDetail } from '@/lib/chat/headless-llm-tracking.server';
 import { setLlmCallRecorder } from '@/orchestrator/llm';
 import type { AssistantMessage } from '@/orchestrator/llm';
-import type { LLMCallDetail } from '@/lib/chat-orchestration';
+import type { LLMCallDetail } from '@/lib/chat/chat-types';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type {
   ChatRequest,
   CompletedToolCallResult,
-} from '@/lib/chat-orchestration';
+} from '@/lib/chat/chat-types';
 import { estimateContextSize, type ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
 
 
@@ -90,7 +90,7 @@ setLlmCallRecorder({
 });
 
 /**
- * Default v=2 registrables. The DB tools here (`ExecuteQuery`,
+ * Default registrables for production chat. The DB tools here (`ExecuteQuery`,
  * `SearchDBSchema`) are the *production* variants — `ExecuteQuery.run()`
  * routes via `runQuery` → `ConnectionsAPI.getRawByName`, and
  * `SearchDBSchema.run()` routes via `loadConnectionSchema` →
@@ -100,7 +100,7 @@ setLlmCallRecorder({
  * `schema.name`, different `run()`, registers from
  * `ctx.connections[*].config`.
  */
-export const V2_REGISTRABLES: RegistrableClass[] = [
+export const REGISTRABLES: RegistrableClass[] = [
   SearchDBSchema,
   ExecuteQuery,
   FuzzyMatch,
@@ -116,7 +116,7 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   LoadSkill,
   LoadContext,
   WebAnalystAgent,
-  // Slack chat runs the v2 orchestrator headlessly (see runChatOrchestrationV2).
+  // Slack chat runs the orchestrator headlessly (see runChatOrchestrationV2).
   // SlackAgent extends RemoteAnalystAgent and advertises ListDBConnections (which
   // WebAnalystAgent drops), so both must be registered for the orchestrator to
   // instantiate them on a new turn or when reconstructing a saved Slack log.
@@ -130,7 +130,7 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   // Lets the orchestrator resume / reconstruct benchmark conversations
   // (root invocation name is `'BenchmarkAnalystAgent'` for single-agent
   // benchmark runs, or `'DoubleCheckBenchmarkAgent'` for cross-check runs)
-  // in v=2 chat. `CheckEquivalence` is the judge tool dispatched by the
+  // in chat. `CheckEquivalence` is the judge tool dispatched by the
   // DoubleCheck controller.
   BenchmarkAnalystAgent,
   DoubleCheckBenchmarkAgent,
@@ -152,7 +152,7 @@ const BENCHMARK_TOOL_SWAPS: Record<string, RegistrableClass> = {
 };
 
 /**
- * Headless (clientless) tool swaps. `V2_REGISTRABLES` registers the WebAnalystAgent
+ * Headless (clientless) tool swaps. `REGISTRABLES` registers the WebAnalystAgent
  * `ReadFiles` — a frontend-bridge variant that throws `UserInputException` so the
  * browser can read in-flight Redux state. There is no browser in the headless path
  * (Slack / reports / eval), so that variant hangs as a dangling pending tool and
@@ -211,17 +211,17 @@ function withSwaps(
 
 /**
  * Registrables for headless (clientless) orchestration — Slack, reports, eval,
- * feed-summary. Identical to `V2_REGISTRABLES` except frontend-bridge tools that
+ * feed-summary. Identical to `REGISTRABLES` except frontend-bridge tools that
  * require a browser are swapped for server-side equivalents (see
- * `HEADLESS_TOOL_SWAPS`). Use this instead of `V2_REGISTRABLES` in any runner
+ * `HEADLESS_TOOL_SWAPS`). Use this instead of `REGISTRABLES` in any runner
  * that has no client to bridge tool calls back to.
  */
-export const V2_HEADLESS_REGISTRABLES: RegistrableClass[] = withSwaps(
-  V2_REGISTRABLES,
+export const HEADLESS_REGISTRABLES: RegistrableClass[] = withSwaps(
+  REGISTRABLES,
   HEADLESS_TOOL_SWAPS,
 );
 
-/** Subset of legacy ChatResponse the v=2 path produces. */
+/** Subset of legacy ChatResponse the chat orchestration path produces. */
 export interface OrchestrationSetup {
   conversationId: number;
   expectedLogIndex: number;
@@ -401,8 +401,8 @@ export async function setupOrchestration(
   const registrables = isV2Bench
     ? V2_BENCHMARK_REGISTRABLES
     : isBenchmarkRoot
-      ? withSwaps(V2_REGISTRABLES, BENCHMARK_TOOL_SWAPS)
-      : V2_REGISTRABLES;
+      ? withSwaps(REGISTRABLES, BENCHMARK_TOOL_SWAPS)
+      : REGISTRABLES;
   const orch = new Orchestrator(registrables, [...savedLog]);
   // Enforce per-user credit limits deep at the LLM call site (no-op unless
   // ENFORCE_CREDIT_LIMITS). Covers every agent/sub-agent/resume hop in this run.
@@ -514,7 +514,7 @@ export async function setupOrchestration(
   };
 }
 
-export async function estimateNextChatContextV2(
+export async function estimateNextChatContext(
   body: ChatRequest,
   user: EffectiveUser,
   conversationId: number,

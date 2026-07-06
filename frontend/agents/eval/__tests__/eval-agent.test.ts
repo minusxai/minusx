@@ -9,7 +9,7 @@ vi.mock('@/lib/connections/load-schema', () => ({ loadConnectionSchema: vi.fn(as
 
 import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
 import { fauxRegistration as evalFaux } from '@/agents/eval/eval-agent';
-import { runEvalV2 } from '@/lib/chat/run-eval-v2.server';
+import { runEvalV2 } from '@/lib/chat/run-eval.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 const USER: EffectiveUser = {

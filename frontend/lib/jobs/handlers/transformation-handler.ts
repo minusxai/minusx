@@ -3,7 +3,7 @@ import { resolveBaseUrl, resolveEmailAddresses } from '@/lib/jobs/job-utils';
 import { FilesAPI } from '@/lib/data/files.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { runQuery } from '@/lib/connections/run-query';
-import { createServerRunner } from '@/lib/tests/server';
+import { createServerRunner } from '@/lib/evals/server';
 import type { JobHandler } from '../job-registry';
 import type {
   JobHandlerResult,

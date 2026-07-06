@@ -3,7 +3,7 @@
 import { Box, Text, VStack, HStack, Badge } from '@chakra-ui/react';
 import { LuClock } from 'react-icons/lu';
 import type { ContextOutput, RunFileContent } from '@/lib/types';
-import TestRunResultsList from '@/components/test/TestRunResultsList';
+import TestRunResultsList from '@/components/evals/TestRunResultsList';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import type { FileId } from '@/store/filesSlice';
 

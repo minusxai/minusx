@@ -5,7 +5,7 @@
  * No run file is created — results are returned inline for immediate UI feedback.
  *
  * Usage:
- *   import { createClientRunner } from '@/lib/tests/client';
+ *   import { createClientRunner } from '@/lib/evals/client';
  *   const runner = createClientRunner();
  *   const result = await runner.execute(test);
  */

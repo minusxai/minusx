@@ -96,7 +96,8 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       // "Default Context Docs", then the lazy-loadable catalog (title + description,
       // fetched on demand via LoadContext) under "Context Library". Built by the
       // shared formatter so the prompt and the docs sidebar render identically.
-      // (Resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration.)
+      // (Resolved server-side via lib/chat/conversation-turn.server.ts → setupOrchestration
+      // in lib/chat/orchestration-core.server.ts.)
       context: formatContextDocsSection(this.context.resolvedContextDocs ?? { docs: [] }),
       // LoadSkill catalog: skills available to fetch on demand (system + user,
       // minus already-preloaded).

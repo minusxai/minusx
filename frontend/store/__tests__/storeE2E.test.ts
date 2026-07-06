@@ -20,7 +20,7 @@ import {
   compareValues,
   extractCellValue,
   resolveRowIndex,
-} from '@/lib/tests/index';
+} from '@/lib/evals/index';
 import { runEval, buildQueryTest, buildLlmTest, expectResult, queryRows } from '@/test/flows/node';
 import { getModules } from '@/lib/modules/registry';
 

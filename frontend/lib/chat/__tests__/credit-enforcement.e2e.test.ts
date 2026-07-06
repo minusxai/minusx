@@ -28,7 +28,7 @@ import { getModules } from '@/lib/modules/registry';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { ChatRequest } from '@/lib/chat-orchestration';
+import type { ChatRequest } from '@/lib/chat/chat-types';
 
 setupTestDb(getTestDbPath('credit_enforcement'));
 

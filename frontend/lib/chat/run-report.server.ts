@@ -10,7 +10,7 @@
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { RegistrableClass } from '@/orchestrator/types';
-import { V2_HEADLESS_REGISTRABLES } from '@/lib/chat-orchestration-v2.server';
+import { HEADLESS_REGISTRABLES } from '@/lib/chat/orchestration-core.server';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { ReportAgent, type ReportAgentContext } from '@/agents/report/report-agent';
 import type { ReportRunContent } from '@/lib/types';
@@ -24,7 +24,7 @@ import type { ReportRunContent } from '@/lib/types';
  * runs to completion server-side.
  */
 const REPORT_REGISTRABLES: RegistrableClass[] = [
-  ...V2_HEADLESS_REGISTRABLES,
+  ...HEADLESS_REGISTRABLES,
   ReportAgent,
   RemoteAnalystAgent,
 ];

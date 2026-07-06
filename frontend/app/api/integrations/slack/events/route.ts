@@ -2,7 +2,7 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { getModules } from '@/lib/modules/registry';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { getUserEffectiveUser } from '@/lib/auth/auth-helpers';
-import { runChatOrchestrationV2 } from '@/lib/chat/run-orchestration-v2.server';
+import { runChatOrchestrationV2 } from '@/lib/chat/run-orchestration.server';
 import { checkCreditGate } from '@/lib/analytics/credit-usage.server';
 import { SlackAgent } from '@/agents/slack/slack-agent';
 import { addReaction, getConversationHistory, getSlackUserEmail, postSlackMessage, publishHomeView, removeReaction, uploadSlackFile, verifySlackRequestSignature } from '@/lib/integrations/slack/api';

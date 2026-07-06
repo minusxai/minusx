@@ -12,7 +12,7 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { exportDatabase } from '@/lib/database/import-export';
 import { validateInitData } from '@/lib/database/validation';
-import { getDataVersion, getSchemaVersion } from '@/lib/database/config-db';
+import { getDataVersion, getSchemaVersion } from '@/lib/database/config-store';
 import { getTargetVersions } from '@/lib/database/migrations';
 
 export const GET = withAuth(async (request: NextRequest, user) => {

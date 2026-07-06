@@ -14,8 +14,8 @@ import { selectFileEditMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 import AlertRunContainerV2 from '@/components/containers/AlertRunContainerV2';
-import TestList from '@/components/test/TestList';
-import SimpleSelect from '@/components/test/SimpleSelect';
+import TestList from '@/components/evals/TestList';
+import SimpleSelect from '@/components/evals/SimpleSelect';
 
 interface AlertViewProps {
   alert: AlertContent;

@@ -1,5 +1,5 @@
 // runReportV2 — exercises the real headless report runner end-to-end with the
-// production registrables (V2_REGISTRABLES + ReportAgent + RemoteAnalystAgent),
+// production registrables (REGISTRABLES + ReportAgent + RemoteAnalystAgent),
 // proving the wiring resolves. No DB or backend: faux LLMs + stubbed runQuery.
 
 vi.mock('@/lib/connections/run-query', () => ({
@@ -13,7 +13,7 @@ vi.mock('@/lib/connections/load-schema', () => ({
 
 import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { fauxRegistration as analystFaux } from '@/agents/analyst/analyst-agent';
-import { runReportV2 } from '@/lib/chat/run-report-v2.server';
+import { runReportV2 } from '@/lib/chat/run-report.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 const USER: EffectiveUser = {

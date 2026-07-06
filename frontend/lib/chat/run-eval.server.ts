@@ -2,7 +2,7 @@
  * Headless v=2 eval execution.
  *
  * Runs the in-process `EvalAnalystAgent` and returns the
- * agent's submitted answer. Used by the eval harness (`lib/tests/server.ts`).
+ * agent's submitted answer. Used by the eval harness (`lib/evals/server.ts`).
  */
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';

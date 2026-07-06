@@ -4,7 +4,7 @@ import { resolveBaseUrl } from '@/lib/jobs/job-utils';
 import { buildAlertEmailHtml } from '@/lib/messaging/alert-email-html';
 import { getConfigsForMode } from '@/lib/data/configs.server';
 import { UserDB } from '@/lib/database/user-db';
-import { createServerRunner } from '@/lib/tests/server';
+import { createServerRunner } from '@/lib/evals/server';
 import type { AlertContent, AlertOutput, DeliveredRecipient, JobHandlerResult, JobRunnerInput, TestRunResult } from '@/lib/types';
 import type { JobHandler } from '../job-registry';
 

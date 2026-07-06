@@ -5,7 +5,7 @@
  * Has direct access to the database and file system.
  *
  * Usage:
- *   import { createServerRunner } from '@/lib/tests/server';
+ *   import { createServerRunner } from '@/lib/evals/server';
  *   const runner = createServerRunner(user, defaultConnectionId);
  *   const result = await runner.execute(test);
  */
@@ -13,7 +13,7 @@ import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { buildServerAgentArgs, type BuildServerAgentArgsOptions } from '@/lib/chat/agent-args.server';
-import { runEvalV2 } from '@/lib/chat/run-eval-v2.server';
+import { runEvalV2 } from '@/lib/chat/run-eval.server';
 import { getAppStateServer } from '@/lib/api/file-state.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { EvalAssertionType } from '@/agents/eval/eval-agent';

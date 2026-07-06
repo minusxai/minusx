@@ -9,10 +9,10 @@
  *   - mirrors tool/run errors to the error stream (kind='error' rows), records LLM usage, sets run_status
  *
  * The client never receives output from here — it reads the resumable GET …/stream. This fn just
- * produces durable rows + wakeups. See docs/chat-architecture-v3.md §7.
+ * produces durable rows + wakeups. See repo-root docs/chat-architecture-v3.md §7.
  */
-import { setupOrchestration, recordLlmCalls } from '@/lib/chat-orchestration-v2.server';
-import type { ChatRequest } from '@/lib/chat-orchestration';
+import { setupOrchestration, recordLlmCalls } from '@/lib/chat/orchestration-core.server';
+import type { ChatRequest } from '@/lib/chat/chat-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConversationLog, PendingToolCall } from '@/orchestrator/types';
 import {

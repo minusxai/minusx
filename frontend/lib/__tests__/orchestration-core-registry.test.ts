@@ -1,4 +1,4 @@
-// V2_REGISTRABLES exposes every agent/tool class the orchestrator may need
+// REGISTRABLES exposes every agent/tool class the orchestrator may need
 // to instantiate from a saved log's root invocation `name`. Benchmark
 // conversation files (saved by `npm run benchmark:dab`) have a root
 // `name: 'BenchmarkAnalystAgent'`; if the class isn't in the registry,
@@ -9,16 +9,16 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  V2_REGISTRABLES,
+  REGISTRABLES,
   getRootAgentName,
   buildBenchmarkContextFromSavedLog,
   isV2BenchmarkConversation,
-} from '@/lib/chat-orchestration-v2.server';
+} from '@/lib/chat/orchestration-core.server';
 import type { ConversationLog } from '@/orchestrator/types';
 
-describe('V2_REGISTRABLES', () => {
-  it('includes BenchmarkAnalystAgent so saved benchmark logs can be resumed in v=2 chat', () => {
-    const found = V2_REGISTRABLES.find((r) => r.schema?.name === 'BenchmarkAnalystAgent');
+describe('REGISTRABLES', () => {
+  it('includes BenchmarkAnalystAgent so saved benchmark logs can be resumed in chat', () => {
+    const found = REGISTRABLES.find((r) => r.schema?.name === 'BenchmarkAnalystAgent');
     expect(found).toBeDefined();
   });
 });
@@ -201,11 +201,11 @@ describe('isV2BenchmarkConversation', () => {
   });
 });
 
-describe('V2_REGISTRABLES V2 benchmark coverage', () => {
+describe('REGISTRABLES V2 benchmark coverage', () => {
   it('registers every V2 entry point so saved V2 logs can be resumed', () => {
-    const names = V2_REGISTRABLES.map((r) => r.schema?.name);
+    const names = REGISTRABLES.map((r) => r.schema?.name);
     // V2 chat continuation uses a different set (V2_BENCHMARK_REGISTRABLES);
-    // V2_REGISTRABLES is the production+V1-benchmark base. This test just
+    // REGISTRABLES is the production+V1-benchmark base. This test just
     // pins the public surface for older logs.
     expect(names).toContain('BenchmarkAnalystAgent');
     expect(names).toContain('DoubleCheckBenchmarkAgent');

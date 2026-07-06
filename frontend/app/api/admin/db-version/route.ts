@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/api/with-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { ApiErrors, handleApiError } from '@/lib/api/api-responses';
-import { getDataVersion } from '@/lib/database/config-db';
+import { getDataVersion } from '@/lib/database/config-store';
 
 export const GET = withAuth(async (request, user) => {
   // Check admin permission

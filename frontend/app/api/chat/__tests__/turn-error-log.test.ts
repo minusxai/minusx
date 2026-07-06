@@ -19,7 +19,7 @@ import { fauxRegistration as onboardingFaux } from '@/agents/onboarding/onboardi
 import { POST as logErrorHandler } from '@/app/api/chat/log-error/route';
 import { runConversationTurn } from '@/lib/chat/conversation-turn.server';
 import { createConversation, loadErrors } from '@/lib/data/conversations.server';
-import type { ChatRequest } from '@/lib/chat-orchestration';
+import type { ChatRequest } from '@/lib/chat/chat-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';

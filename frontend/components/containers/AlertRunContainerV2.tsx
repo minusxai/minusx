@@ -12,7 +12,7 @@ import { LuChevronDown, LuChevronRight, LuClock, LuTimer, LuHash } from 'react-i
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile } from '@/lib/api/file-state';
 import type { AlertContent, AlertOutput, AlertRunContent, MessageAttemptLog, RunFileContent, RunMessageRecord, TestRunResult } from '@/lib/types';
-import TestRunResultsList from '@/components/test/TestRunResultsList';
+import TestRunResultsList from '@/components/evals/TestRunResultsList';
 import type { FileId } from '@/store/filesSlice';
 import type { FileViewMode } from '@/lib/ui/fileComponents';
 import { LuBell, LuCirclePause, LuExternalLink, LuMail, LuMessageCircle, LuSettings } from 'react-icons/lu';

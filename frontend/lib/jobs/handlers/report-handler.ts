@@ -1,7 +1,7 @@
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
-import { runReportV2 } from '@/lib/chat/run-report-v2.server';
+import { runReportV2 } from '@/lib/chat/run-report.server';
 import { resolveBaseUrl, resolveEmailAddresses } from '@/lib/jobs/job-utils';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { ReportAgentContext } from '@/agents/report/report-agent';

@@ -7,7 +7,7 @@
  * lost while nobody listens is harmless because correctness comes from the cursor + SELECT.
  *
  * One LISTEN per conversation channel is shared by all in-process subscribers (fan-out via a local
- * Set, bounded by live connections). See docs/chat-architecture-v3.md §7.
+ * Set, bounded by live connections). See repo-root docs/chat-architecture-v3.md §7.
  */
 import { getModules } from '@/lib/modules/registry';
 import type { ConversationNotify, RunStatus } from '@/lib/data/conversations.types';
@@ -42,7 +42,7 @@ interface ChannelSub {
 // Intentionally process-global: the per-conversation LISTEN fan-out registry. Keyed by the
 // fully-resolved channel string (incl. any namespace) so ids that repeat across scopes
 // never collide on one registry entry. Bounded by live SSE connections and
-// fully rebuildable (the DB is the source of truth) — see docs/chat-architecture-v3.md §7.
+// fully rebuildable (the DB is the source of truth) — see repo-root docs/chat-architecture-v3.md §7.
 // eslint-disable-next-line no-restricted-syntax
 const channels = new Map<string, ChannelSub>();
 

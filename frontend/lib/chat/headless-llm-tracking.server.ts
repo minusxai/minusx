@@ -1,7 +1,7 @@
 /**
  * Out-of-band LLM-usage tracking for HEADLESS runs (micro-tasks, eval, feed-summary) — no
- * conversation row. Extracted from `chat-orchestration-v2.server.ts` so lightweight callers
- * (e.g. `runMicroTask`) can record usage WITHOUT importing the full V2 registrables hub, which
+ * conversation row. Extracted from `orchestration-core.server.ts` so lightweight callers
+ * (e.g. `runMicroTask`) can record usage WITHOUT importing the full registrables hub, which
  * would create an import cycle (registrables → tools → judge → runMicroTask → tracking).
  *
  * The conversation-bound recorder (`recordLlmCalls`) still lives in the big file and reuses
@@ -10,7 +10,7 @@
 import 'server-only';
 import type { ConversationLogEntry as PiLogEntry } from '@/orchestrator/types';
 import type { AssistantMessage } from '@/orchestrator/llm';
-import type { LLMCallDetail } from '@/lib/chat-orchestration';
+import type { LLMCallDetail } from '@/lib/chat/chat-types';
 import { recordLlmResponse, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';

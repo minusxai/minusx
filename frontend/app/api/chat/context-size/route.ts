@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import { estimateNextChatContextV2 } from '@/lib/chat-orchestration-v2.server';
+import { estimateNextChatContext } from '@/lib/chat/orchestration-core.server';
 import { getConversation } from '@/lib/data/conversations.server';
-import type { ChatRequest } from '@/lib/chat-orchestration';
+import type { ChatRequest } from '@/lib/chat/chat-types';
 import type { ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
 import { handleApiError } from '@/lib/api/api-responses';
 
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const estimate = await estimateNextChatContextV2(body, user, body.conversationID);
+    const estimate = await estimateNextChatContext(body, user, body.conversationID);
     return NextResponse.json({ conversationID: body.conversationID, ...estimate } as ContextSizeResponse);
   } catch (error: unknown) {
     console.error('Context size API error:', error);

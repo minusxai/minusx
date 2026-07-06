@@ -5,7 +5,7 @@ import { getConversation, releaseRunLease, acquireRunLease, appendError, getMaxS
 import { notifyStatus } from '@/lib/chat/conversation-stream.server';
 import { runConversationTurn, INSTANCE_ID } from '@/lib/chat/conversation-turn.server';
 import { getModules } from '@/lib/modules/registry';
-import type { ChatRequest } from '@/lib/chat-orchestration';
+import type { ChatRequest } from '@/lib/chat/chat-types';
 import { boundContextAppState } from '@/lib/api/compress-augmented';
 
 export const dynamic = 'force-dynamic';

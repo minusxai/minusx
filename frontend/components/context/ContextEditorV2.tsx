@@ -16,7 +16,7 @@ import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
-import TestList from '../test/TestList';
+import TestList from '../evals/TestList';
 import ContextRunView from '../views/ContextRunView';
 import type { JobRun } from '@/lib/types';
 import { serializeDatabases, parseDatabasesYaml, canDeleteVersion, countResolvedWhitelist, findDocsMissingMeta } from '@/lib/context/context-utils';

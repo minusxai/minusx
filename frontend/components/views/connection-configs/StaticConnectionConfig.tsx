@@ -51,8 +51,8 @@ import {
   LuDatabase,
 } from 'react-icons/lu';
 import { CsvFileInfo, JobSchedule } from '@/lib/types';
-import { uploadCsvFilesS3, FileWithSchema } from '@/lib/backend/csv-upload';
-import { importGoogleSheets, reimportGoogleSheets } from '@/lib/backend/google-sheets';
+import { uploadCsvFilesS3, FileWithSchema } from '@/lib/connections/client/csv-upload';
+import { importGoogleSheets, reimportGoogleSheets } from '@/lib/connections/client/google-sheets';
 import { mergeReimportedSheetFiles } from '@/lib/data/helpers/sheet-reimport';
 import { sanitizeTableName, validateIdentifier } from '@/lib/csv-utils';
 import { BaseConfigProps } from './types';

@@ -6,7 +6,7 @@ import {
 import { useState, useCallback } from 'react';
 import { LuPlus, LuTrash2, LuChevronDown, LuChevronRight, LuPlay } from 'react-icons/lu';
 import type { Test, TestRunResult } from '@/lib/types';
-import { createClientRunner } from '@/lib/tests/client';
+import { createClientRunner } from '@/lib/evals/client';
 import TestEditor, { makeDefaultTest } from './TestEditor';
 import TestResultBadge from './TestResultBadge';
 import TestRunResultsList from './TestRunResultsList';

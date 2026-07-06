@@ -31,9 +31,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## V2 chat: `frontend/orchestrator/` and `frontend/agents/`
+## Chat orchestration: `frontend/orchestrator/` and `frontend/agents/`
 
-These directories hold the in-process TypeScript orchestrator and agent/tool definitions that power **all chat**. They are wired into production via `lib/chat-orchestration-v2.server.ts`, which the chat API routes (`app/api/chat/route.ts`, `app/api/chat/stream/route.ts`) invoke for every request. **This is the only chat engine.** (`lib/chat-orchestration.ts` survives only as a shared request/response *types* module, despite its name.)
+These directories hold the in-process TypeScript orchestrator and agent/tool definitions that power **all chat**. They are wired into production via `lib/chat/orchestration-core.server.ts` (the shared orchestration core — `setupOrchestration`, `recordLlmCalls`, the tool/agent registries), which the chat API routes (`app/api/conversations/[id]/turns/route.ts`, `app/api/conversations/[id]/stream/route.ts`) invoke for every request. **This is the only chat engine.** (`lib/chat/chat-types.ts` survives only as a shared request/response *types* module, despite the `ChatRequest` name.)
 
 **What's where:**
 - `frontend/orchestrator/` — the `Orchestrator` engine plus conversation-log types (`@/orchestrator/types`) and LLM types (`@/orchestrator/llm`).
@@ -251,11 +251,11 @@ Connection schemas are enriched with column-level metadata (category, null count
 
 ### AI Orchestration & Tool Calling Architecture
 
-The orchestrator (`frontend/orchestrator/`) is a **single-use** engine over an **append-only conversation log** (immutable, forkable, time-travel capable; forks on concurrent edits). Agents dispatch **tool calls**; each goes pending → execution → completed, and a job finishes when no pending tool calls remain. Tools and agents self-register (`V2_REGISTRABLES`); execution streams to the client via Server-Sent Events.
+The orchestrator (`frontend/orchestrator/`) is a **single-use** engine over an **append-only conversation log** (immutable, forkable, time-travel capable; forks on concurrent edits). Agents dispatch **tool calls**; each goes pending → execution → completed, and a job finishes when no pending tool calls remain. Tools and agents self-register (`REGISTRABLES`); execution streams to the client via Server-Sent Events.
 
 **Tools execute in the tier they need:**
 - **Server tools** — run in-process during orchestration; need the document DB / connectors (querying data, searching schema, loading files: `ExecuteQuery`, `SearchDBSchema`, `ReadFiles`, `SearchFiles`).
-- **Frontend-bridged tools** — need Redux/UI state (modifying the current question, editing dashboard layout, navigating); they throw `UserInputException` to pause the run and are executed in the browser via Redux middleware, then resume. Headless runs swap these for server equivalents where possible (`V2_HEADLESS_REGISTRABLES`; e.g. server-side `ReadFiles`).
+- **Frontend-bridged tools** — need Redux/UI state (modifying the current question, editing dashboard layout, navigating); they throw `UserInputException` to pause the run and are executed in the browser via Redux middleware, then resume. Headless runs swap these for server equivalents where possible (`HEADLESS_REGISTRABLES`; e.g. server-side `ReadFiles`).
 
 **Tool call flow:**
 ```
@@ -394,7 +394,7 @@ Browser-side complement to `handleApiError`:
 
 ### Adding Agent Tools / Agents
 1. Add a tool (`MXTool` subclass with a TypeBox param schema) or agent under `frontend/agents/**`
-2. Register it in `lib/chat-orchestration-v2.server.ts` (`V2_REGISTRABLES`); headless runners use `V2_HEADLESS_REGISTRABLES`
+2. Register it in `lib/chat/orchestration-core.server.ts` (`REGISTRABLES`); headless runners use `HEADLESS_REGISTRABLES`
 3. Implement the client/server behavior in `tool-handlers.ts` (frontend bridge) / `tool-handlers.server.ts` (server) as needed
 4. Keep the TypeBox param schema (colocated with the tool) and the handler behavior in sync — the schema is the single source of truth for the args the LLM is told it can pass
 
@@ -485,7 +485,7 @@ Browser-side complement to `handleApiError`:
 ### AI Orchestration & Connectors
 - `frontend/orchestrator/` - the `Orchestrator` engine + conversation-log/LLM types
 - `frontend/agents/` - agents, tools, and skills (e.g. `analyst/`, `web-analyst/`, `slack/`, `report/`, `eval/`)
-- `frontend/lib/chat-orchestration-v2.server.ts` - wires agents/tools into `V2_REGISTRABLES` and runs chat turns
+- `frontend/lib/chat/orchestration-core.server.ts` - wires agents/tools into `REGISTRABLES` and runs chat turns
 - `frontend/lib/connections/` - Node.js query connectors (DuckDB, BigQuery, PostgreSQL, SQLite, Athena, Mongo, CSV, Sheets) — query execution lives here
 
 ### Writing New Tests
@@ -526,7 +526,7 @@ Frontend tool arg schemas are TypeBox `Type.Object` definitions colocated with t
 
 **Schema changes:** Any change to `lib/database/postgres-schema.ts` (used by both PGLite and the Postgres adapter) must be accompanied by the appropriate migration entry.
 
-**Tool Registration:** When a tool spawns another tool (via `FrontendToolException`) or an agent dispatches a sub-agent, the spawned class MUST be in `V2_REGISTRABLES` (`lib/chat-orchestration-v2.server.ts`) — the orchestrator instantiates it from that registry by `schema.name` when resuming / reconstructing a saved conversation log.
+**Tool Registration:** When a tool spawns another tool (via `FrontendToolException`) or an agent dispatches a sub-agent, the spawned class MUST be in `REGISTRABLES` (`lib/chat/orchestration-core.server.ts`) — the orchestrator instantiates it from that registry by `schema.name` when resuming / reconstructing a saved conversation log.
 
 **Debugging Async Orchestration:** Debug multi-tier async execution by adding temporary logging at tier boundaries (orchestrator stream events, tool execution results) to trace data flow through the execution loop.
 

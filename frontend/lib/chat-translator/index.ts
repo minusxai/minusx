@@ -21,7 +21,7 @@ import type {
   TaskDebugEntry,
   ToolCallDetails,
 } from '@/lib/types';
-import type { CompletedToolCallResult } from '@/lib/chat-orchestration';
+import type { CompletedToolCallResult } from '@/lib/chat/chat-types';
 
 // ─── shared private helpers ─────────────────────────────────────────
 

@@ -14,7 +14,7 @@
 > Deleting v2 (`/api/chat/*` routes, run-registry, `runChatTurnV2`/`runChatTurnStreamV2`, the v2
 > chat-listener branches) is a clean follow-up that first requires migrating those headless flows to
 > write the v3 store. The shared orchestration core (`setupOrchestration`, `recordLlmCalls`,
-> `estimateNextChatContextV2`) stays — v3 depends on it. The browser read path is already v3-first
+> `estimateNextChatContext`) stays — v3 depends on it. The browser read path is already v3-first
 > (`useConversation` tries `/api/conversations/:id`, falls back to the v2 file), so a v2-file Slack
 > thread still loads + continues correctly today.
 
@@ -298,7 +298,7 @@ The only orchestrator change is **where it reads/writes the log**:
 
 - **Load** (`setupOrchestration`): `SELECT content FROM messages WHERE conversation_id=:id ORDER BY seq` → `ConversationLog`. (Was: `file.content.log`.)
 - **Append** (per finalized entry, *incrementally* — not once at turn end): `INSERT` one `messages` row at `seq=prev+1` + `NOTIFY`. Incremental commit is what makes a crash leave a consistent partial log.
-- **Reconstruction** (resume/fork) is unchanged: it still rebuilds agents/tools from `V2_REGISTRABLES` by `schema.name`, threading on `parent_id`. It just gets the array from rows instead of a JSON blob.
+- **Reconstruction** (resume/fork) is unchanged: it still rebuilds agents/tools from `REGISTRABLES` by `schema.name`, threading on `parent_id`. It just gets the array from rows instead of a JSON blob.
 - **Fork on conflict** maps to a `UNIQUE(conversation_id, seq)` violation → new `conversations` row with `forked_from`, seeded by copying rows `0..seq` (existing semantics).
 
 ---

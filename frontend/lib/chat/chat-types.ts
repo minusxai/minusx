@@ -1,7 +1,7 @@
 /**
  * Shared chat request/response types — the request (`ChatRequest`) and the
  * completed-tool-call / LLM-call payloads that the chat API routes and the
- * orchestrator translator (`chat-orchestration-v2.server.ts`) produce.
+ * orchestrator translator (`lib/chat/orchestration-core.server.ts`) produce.
  */
 
 import { CompletedToolCall } from '@/lib/types';
@@ -23,7 +23,7 @@ export interface ChatRequest {
     };
     // NOTE: schema is NOT sent from the client — the server resolves it from the
     // connection_id pointer (context whitelist, or the connection's persisted
-    // schema as a fallback) in buildServerAgentArgs. See chat-orchestration-v2.server.ts.
+    // schema as a fallback) in buildServerAgentArgs. See lib/chat/orchestration-core.server.ts.
     context?: string;
     app_state?: any;
     page_type?: string;

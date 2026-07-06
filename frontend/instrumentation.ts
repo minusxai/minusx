@@ -48,9 +48,9 @@ export async function register() {
         try {
           const t0 = Date.now();
           // Pulls in the orchestrator engine, every agent/tool, and pi-ai, and
-          // runs V2 registrable registration — the bulk of the first-request cost.
+          // runs registrable registration — the bulk of the first-request cost.
           // eslint-disable-next-line no-restricted-syntax
-          await import('./lib/chat-orchestration-v2.server');
+          await import('./lib/chat/orchestration-core.server');
           console.log(`[boot-warm] chat runtime warmed in ${Date.now() - t0}ms`);
         } catch (e) {
           console.warn('[boot-warm] chat runtime warm skipped (non-fatal):', e);

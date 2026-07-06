@@ -13,7 +13,7 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { exportDatabase, atomicImport } from '@/lib/database/import-export';
 import { validateInitData } from '@/lib/database/validation';
-import { getDataVersion, getSchemaVersion, setDataVersion, setSchemaVersion } from '@/lib/database/config-db';
+import { getDataVersion, getSchemaVersion, setDataVersion, setSchemaVersion } from '@/lib/database/config-store';
 import { applyMigrations, getTargetVersions, needsSchemaMigration, MIGRATIONS } from '@/lib/database/migrations';
 import { LATEST_SCHEMA_VERSION } from '@/lib/database/constants';
 

@@ -17,7 +17,7 @@ import type {
   TaskResultEntry,
   TaskDebugEntry,
 } from '@/lib/types';
-import type { CompletedToolCallResult } from '@/lib/chat-orchestration';
+import type { CompletedToolCallResult } from '@/lib/chat/chat-types';
 import {
   piLogToLegacy,
   legacyToolResultToPi,

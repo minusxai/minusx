@@ -16,7 +16,7 @@ import {
   InitData,
 } from '@/lib/database/import-export';
 import { validateInitData } from '@/lib/database/validation';
-import { getDataVersion } from '@/lib/database/config-db';
+import { getDataVersion } from '@/lib/database/config-store';
 import { applyMigrations } from '@/lib/database/migrations';
 import { MINIMUM_SUPPORTED_DATA_VERSION } from '@/lib/database/constants';
 import { gunzip } from 'zlib';

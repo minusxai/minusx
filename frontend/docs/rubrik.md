@@ -283,7 +283,7 @@ there and both the prompt (`formatChecklist`) and the parsing update automatical
      `AUTO_RUN_VISUAL_REVIEW` flag in that file opts into auto-running the combined on open.
    - **Agent** — `CheckFileHealth(fileId, { llmJudge?, screenshotUrl? })`
      (`agents/analyst/health-tools.ts`), a manual re-check tool (e.g. after an edit); with
-     `llmJudge` it calls `scoreFile`. Registered on `WebAnalystAgent` + `V2_REGISTRABLES`.
+     `llmJudge` it calls `scoreFile`. Registered on `WebAnalystAgent` + `REGISTRABLES`.
    - **API** — `GET /api/files/[id]/rubric` (deterministic) / `POST { screenshot | screenshotUrl }`
      (→ `scoreFile`), modeled on `app/api/files/[id]/preview/route.ts`.
 

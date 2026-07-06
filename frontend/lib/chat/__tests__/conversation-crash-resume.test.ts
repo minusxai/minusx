@@ -10,7 +10,7 @@ import {
 import { getModules } from '@/lib/modules/registry';
 import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
 import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
-import type { ChatRequest } from '@/lib/chat-orchestration';
+import type { ChatRequest } from '@/lib/chat/chat-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';

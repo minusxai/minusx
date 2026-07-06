@@ -15,7 +15,7 @@
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { ConversationLog, RegistrableClass } from '@/orchestrator/types';
-import { V2_HEADLESS_REGISTRABLES, recordLlmCalls } from '@/lib/chat-orchestration-v2.server';
+import { HEADLESS_REGISTRABLES, recordLlmCalls } from '@/lib/chat/orchestration-core.server';
 import { creditEnforcer } from '@/lib/analytics/credit-usage.server';
 import { piLogToLegacy } from '@/lib/chat-translator';
 import { loadLog, appendMessages } from '@/lib/data/conversations.server';
@@ -138,7 +138,7 @@ export async function runChatOrchestrationV2({
   const expectedLogIndex = savedLog.length;
 
   const ctx = await buildAnalystContext(agent_args, user);
-  const registrables: RegistrableClass[] = [...V2_HEADLESS_REGISTRABLES];
+  const registrables: RegistrableClass[] = [...HEADLESS_REGISTRABLES];
   const orch = new Orchestrator(registrables, [...savedLog]);
   // Enforce per-user credit limits deep at the LLM call site (no-op unless enforced).
   orch.beforeLlmCall = creditEnforcer(user);
