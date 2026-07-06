@@ -1,5 +1,5 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   $getRoot,
   $getSelection,
@@ -16,12 +16,22 @@ import {
   KEY_ESCAPE_COMMAND,
 } from 'lexical';
 import { $createMentionNode, MentionData } from './MentionNode';
-import { Box, HStack, VStack, Text, Icon, Portal } from '@chakra-ui/react';
+import { Box, HStack, VStack, Text, Portal } from '@chakra-ui/react';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { MentionItem } from '@/lib/data/completions/types';
-import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, COLUMN_MENTION_METADATA, METRIC_MENTION_METADATA, ACCENT_HEX } from '@/lib/ui/file-metadata';
 import type { DatabaseWithSchema, MetricDef, SkillMention, SlashCommand } from '@/lib/types';
-import { LuTerminal, LuChevronRight } from 'react-icons/lu';
+import {
+  MentionOption,
+  MentionTrigger,
+  SubItem,
+  ColumnInfo,
+  isSlashCommand,
+  getFilteredMentions,
+  getDropdownTitle,
+  getSubmenuItems,
+} from './mentions-plugin-utils';
+import { MentionRow } from './MentionRow';
+import { MentionSubmenu } from './MentionSubmenu';
 
 interface MentionsPluginProps {
   databaseName?: string;
@@ -37,137 +47,6 @@ interface MentionsPluginProps {
    * of anchoring above the input box.
    */
   anchorToCaret?: boolean;
-}
-
-type MentionOption = MentionItem | SkillMention | SlashCommand;
-type MentionTrigger = 'all' | 'questions' | 'skills' | 'commands';
-
-// Map semantic token to hex value
-const colorMap: Record<string, string> = {
-  'accent.primary': ACCENT_HEX.primary,
-  'accent.danger': ACCENT_HEX.danger,
-  'accent.secondary': ACCENT_HEX.secondary,
-  'accent.success': ACCENT_HEX.success,
-  'accent.warning': ACCENT_HEX.warning,
-  'accent.teal': ACCENT_HEX.teal,
-  'accent.info': ACCENT_HEX.info,
-  'accent.cyan': ACCENT_HEX.cyan,
-  'accent.muted': ACCENT_HEX.muted,
-};
-
-function isSlashCommand(option: MentionOption): option is SlashCommand {
-  return option.type === 'command';
-}
-
-// Get badge info (color, label, icon) for a mention type
-function getMentionBadgeInfo(option: MentionOption) {
-  if (isSlashCommand(option)) {
-    return {
-      label: 'CMD',
-      icon: LuTerminal,
-      color: ACCENT_HEX.info,
-    };
-  }
-
-  if (option.type === 'skill') {
-    return {
-      label: 'SKILL',
-      icon: null,
-      color: ACCENT_HEX.teal,
-    };
-  }
-
-  const type = option.type;
-  if (type === 'table') {
-    return {
-      label: TABLE_MENTION_METADATA.label,
-      icon: TABLE_MENTION_METADATA.icon,
-      color: TABLE_MENTION_METADATA.color,
-    };
-  }
-
-  const metadata = FILE_TYPE_METADATA[type];
-  return {
-    label: metadata.label.toUpperCase(),
-    icon: metadata.icon,
-    color: colorMap[metadata.color] || ACCENT_HEX.muted,
-  };
-}
-
-function getFilteredMentions(mentions: MentionOption[], mentionType: MentionTrigger) {
-  const filtered = mentions.filter(m => mentionType === 'questions' ? m.type !== 'table' : true);
-  // Sort skills: user skills first, then system
-  if (mentionType === 'skills') {
-    filtered.sort((a, b) => {
-      const aSource = a.type === 'skill' ? a.source : 'system';
-      const bSource = b.type === 'skill' ? b.source : 'system';
-      if (aSource === bSource) return 0;
-      return aSource === 'user' ? -1 : 1;
-    });
-  }
-  return filtered;
-}
-
-function getDropdownTitle(mentionType: MentionTrigger) {
-  if (mentionType === 'commands') return 'Commands';
-  if (mentionType === 'skills') return 'Skills';
-  if (mentionType === 'questions') return 'Questions';
-  return 'Tables, Questions & Dashboards';
-}
-
-interface ColumnInfo { name: string; type: string }
-
-/** Look up a table's columns from the whitelisted schemas (client-side, no API). */
-function getTableColumns(
-  whitelistedSchemas: DatabaseWithSchema[] | undefined,
-  schema: string | undefined,
-  table: string,
-): ColumnInfo[] {
-  if (!whitelistedSchemas) return [];
-  for (const db of whitelistedSchemas) {
-    for (const s of db.schemas) {
-      if (schema && s.schema !== schema) continue;
-      for (const t of s.tables) {
-        if (t.table === table) return t.columns ?? [];
-      }
-    }
-  }
-  return [];
-}
-
-/** Metrics attached to a given table. */
-function getTableMetrics(metrics: MetricDef[] | undefined, schema: string | undefined, table: string): MetricDef[] {
-  if (!metrics) return [];
-  return metrics.filter((m) => m.table === table && (!schema || !m.schema || m.schema === schema));
-}
-
-type SubItem = { kind: 'metric'; metric: MetricDef } | { kind: 'column'; column: ColumnInfo };
-
-/** The combined drill-down items for a table: its metrics first, then its columns. */
-function getSubmenuItems(
-  table: MentionItem,
-  whitelistedSchemas: DatabaseWithSchema[] | undefined,
-  metrics: MetricDef[] | undefined,
-): SubItem[] {
-  const ms: SubItem[] = getTableMetrics(metrics, table.schema, table.name).map((m) => ({ kind: 'metric', metric: m }));
-  const cs: SubItem[] = getTableColumns(whitelistedSchemas, table.schema, table.name).map((c) => ({ kind: 'column', column: c }));
-  return [...ms, ...cs];
-}
-
-function getMentionPrimaryText(mention: MentionOption) {
-  if (isSlashCommand(mention)) return mention.label;
-  return 'display_text' in mention ? mention.display_text : mention.name;
-}
-
-function getMentionMetaText(mention: MentionOption) {
-  if (isSlashCommand(mention)) return mention.description;
-  if (mention.type === 'table' && 'schema' in mention && mention.schema) {
-    return mention.schema;
-  }
-  if (mention.type === 'skill') {
-    return mention.description;
-  }
-  return undefined;
 }
 
 export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkills = [], availableCommands = [], onCommandExecute, metrics, anchorToCaret = false }: MentionsPluginProps) {
@@ -618,103 +497,35 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
                   && (index === 0 || (prevMention && !isSlashCommand(prevMention) && prevMention.type === 'skill' && prevMention.source === 'user'));
 
                 return (
-                <React.Fragment key={uniqueKey}>
-                {isUserSkillHeader && (
-                  <Box px={3} py={1.5} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted">
-                    <Text fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.02em">
-                      Your skills
-                    </Text>
-                  </Box>
-                )}
-                {isSystemSkillHeader && (
-                  <Box px={3} py={1.5} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted">
-                    <Text fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.02em">
-                      System
-                    </Text>
-                  </Box>
-                )}
-                <Box
-                  key={uniqueKey}
-                  ref={index === selectedIndex ? selectedItemRef : null}
-                  px={3}
-                  py={2.5}
-                  cursor={isSlashCommand(mention) && mention.disabled ? 'not-allowed' : 'pointer'}
-                  opacity={isSlashCommand(mention) && mention.disabled ? 0.4 : 1}
-                  bg={index === selectedIndex ? 'bg.muted' : 'transparent'}
-                  borderBottom="1px solid"
-                  borderColor="border.muted"
-                  _last={{ borderBottom: 'none' }}
-                  _hover={isSlashCommand(mention) && mention.disabled ? {} : { bg: 'bg.muted' }}
-                  onMouseEnter={() => { setSelectedIndex(index); setInSubmenu(false); }}
-                  onClick={() => {
-                    if (mentionType === 'commands' && isSlashCommand(mention)) {
-                      if (!mention.disabled && onCommandExecute) {
-                        editor.update(() => {
-                          const root = $getRoot();
-                          root.clear();
-                          root.append($createParagraphNode());
-                        });
-                        setShowDropdown(false);
-                        setQuery('');
-                        onCommandExecute(mention);
+                  <MentionRow
+                    key={uniqueKey}
+                    mention={mention}
+                    index={index}
+                    isSelected={index === selectedIndex}
+                    selectedItemRef={selectedItemRef}
+                    isUserSkillHeader={isUserSkillHeader}
+                    isSystemSkillHeader={isSystemSkillHeader}
+                    whitelistedSchemas={whitelistedSchemas}
+                    metrics={metrics}
+                    onHover={(hoverIndex) => { setSelectedIndex(hoverIndex); setInSubmenu(false); }}
+                    onSelect={(selectedMention) => {
+                      if (mentionType === 'commands' && isSlashCommand(selectedMention)) {
+                        if (!selectedMention.disabled && onCommandExecute) {
+                          editor.update(() => {
+                            const root = $getRoot();
+                            root.clear();
+                            root.append($createParagraphNode());
+                          });
+                          setShowDropdown(false);
+                          setQuery('');
+                          onCommandExecute(selectedMention);
+                        }
+                        return;
                       }
-                      return;
-                    }
-                    const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
-                    insertMention(mention, triggerLength);
-                  }}
-                >
-                  {(() => {
-                    const badgeInfo = getMentionBadgeInfo(mention);
-                    const primary = getMentionPrimaryText(mention);
-                    const meta = getMentionMetaText(mention);
-                    return (
-                      <HStack gap={2.5} align="start" minW={0}>
-                        <Box
-                          as="span"
-                          display="inline-flex"
-                          alignItems="center"
-                          justifyContent="center"
-                          minW="54px"
-                          h="20px"
-                          px={1.5}
-                          bg={`color-mix(in srgb, ${badgeInfo.color} 12%, transparent)`}
-                          color={badgeInfo.color}
-                          borderRadius="full"
-                          fontSize="2xs"
-                          fontWeight="700"
-                          flexShrink={0}
-                          gap={1}
-                        >
-                          {badgeInfo.icon && <Icon as={badgeInfo.icon} boxSize={3} />}
-                          {badgeInfo.label}
-                        </Box>
-                        <VStack gap={0.5} align="stretch" minW={0} flex={1}>
-                          <HStack gap={1.5} minW={0} align="baseline">
-                            <Text fontSize="sm" fontWeight="650" color="fg.default" truncate>
-                              {primary}
-                            </Text>
-                            {!isSlashCommand(mention) && mention.type === 'table' && meta && (
-                              <Text fontSize="xs" color="fg.subtle" flexShrink={0}>
-                                {meta}
-                              </Text>
-                            )}
-                          </HStack>
-                          {(isSlashCommand(mention) || (!isSlashCommand(mention) && mention.type === 'skill')) && meta && (
-                            <Text fontSize="xs" color="fg.muted" lineClamp={2}>
-                              {meta}
-                            </Text>
-                          )}
-                        </VStack>
-                        {!isSlashCommand(mention) && mention.type === 'table'
-                          && getSubmenuItems(mention as MentionItem, whitelistedSchemas, metrics).length > 0 && (
-                          <Icon as={LuChevronRight} boxSize={3.5} color="fg.subtle" flexShrink={0} alignSelf="center" />
-                        )}
-                      </HStack>
-                    );
-                  })()}
-                </Box>
-                </React.Fragment>
+                      const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
+                      insertMention(selectedMention, triggerLength);
+                    }}
+                  />
                 );
               })}
             </VStack>
@@ -723,76 +534,17 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
 
         {/* Drill-down submenu (metrics + columns) for the highlighted table */}
         {showSubmenu && activeTable && (
-          <Box
-            minW="210px"
-            maxW="300px"
-            bg="bg.panel"
-            border="1px solid"
-            borderColor={inSubmenu ? 'accent.secondary' : 'border.default'}
-            borderRadius="lg"
-            boxShadow="lg"
-            maxH="360px"
-            overflow="hidden"
-            fontFamily="mono"
-          >
-            <Box px={3} py={2} borderBottom="1px solid" borderColor="border.muted" bg="bg.subtle">
-              <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0" truncate>
-                {activeTable.name}
-              </Text>
-            </Box>
-            <Box maxH="312px" overflowY="auto">
-              <VStack align="stretch" gap={0}>
-                {activeItems.map((item, i) => {
-                  const prevKind = i > 0 ? activeItems[i - 1].kind : null;
-                  const showHeader = prevKind !== item.kind;
-                  const isMetric = item.kind === 'metric';
-                  const label = isMetric ? item.metric.name : item.column.name;
-                  return (
-                    <React.Fragment key={`${item.kind}-${label}-${i}`}>
-                      {showHeader && (
-                        <Box px={3} py={1} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted">
-                          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.02em">
-                            {isMetric ? 'Metrics' : 'Columns'}
-                          </Text>
-                        </Box>
-                      )}
-                      <HStack
-                        aria-label={`Insert ${item.kind} ${label}`}
-                        px={3}
-                        py={2}
-                        gap={2}
-                        justify="space-between"
-                        cursor="pointer"
-                        bg={inSubmenu && i === columnIndex ? 'bg.muted' : 'transparent'}
-                        _hover={{ bg: 'bg.muted' }}
-                        borderBottom="1px solid"
-                        borderColor="border.muted"
-                        _last={{ borderBottom: 'none' }}
-                        onMouseEnter={() => { setInSubmenu(true); setColumnIndex(i); }}
-                        onClick={() => {
-                          const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
-                          insertSubItem(item, activeTable, triggerLength);
-                        }}
-                      >
-                        <HStack gap={1.5} minW={0}>
-                          <Icon
-                            as={isMetric ? METRIC_MENTION_METADATA.icon : COLUMN_MENTION_METADATA.icon}
-                            boxSize={3}
-                            color={isMetric ? METRIC_MENTION_METADATA.color : COLUMN_MENTION_METADATA.color}
-                            flexShrink={0}
-                          />
-                          <Text fontSize="sm" fontWeight="600" color="fg.default" truncate>{label}</Text>
-                        </HStack>
-                        <Text fontSize="2xs" color="fg.subtle" flexShrink={0}>
-                          {isMetric ? 'metric' : item.column.type}
-                        </Text>
-                      </HStack>
-                    </React.Fragment>
-                  );
-                })}
-              </VStack>
-            </Box>
-          </Box>
+          <MentionSubmenu
+            table={activeTable}
+            items={activeItems}
+            inSubmenu={inSubmenu}
+            columnIndex={columnIndex}
+            onHoverItem={(i) => { setInSubmenu(true); setColumnIndex(i); }}
+            onSelectItem={(item) => {
+              const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
+              insertSubItem(item, activeTable, triggerLength);
+            }}
+          />
         )}
         </Box>
       </Portal>

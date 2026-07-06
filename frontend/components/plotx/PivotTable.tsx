@@ -1,15 +1,15 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import { Box, Table as ChakraTable, Icon } from '@chakra-ui/react'
-import { Tooltip } from '@/components/ui/tooltip'
-import { LuChevronUp, LuChevronRight, LuSquareFunction } from 'react-icons/lu'
+import { Box, Table as ChakraTable } from '@chakra-ui/react'
 import { formatLargeNumber, formatNumber, formatDateValue, applyPrefixSuffix } from '@/lib/chart/chart-format'
 import type { PivotData, FormulaResults } from '@/lib/chart/pivot-utils'
 import { useAppSelector } from '@/store/hooks'
 import type { ColumnFormatConfig } from '@/lib/types'
-
-type HeatmapScale = 'red-yellow-green' | 'green' | 'blue'
+import { getPivotCellBg, type HeatmapScale } from './PivotTableHeatmap'
+import { PivotTableTooltipContent } from './PivotTableTooltip'
+import { PivotTableHeader } from './PivotTableHeader'
+import { PivotTableBody, makeGroupKey } from './PivotTableBody'
 
 interface PivotTableProps {
   pivotData: PivotData
@@ -42,8 +42,6 @@ interface HeaderCell {
   rowSpan?: number
   isFormula?: boolean
 }
-
-const makeGroupKey = (values: string[]) => values.join('|||')
 
 export const PivotTable = ({
   pivotData,
@@ -132,84 +130,7 @@ export const PivotTable = ({
   }, [cells, cellPresent])
 
   const getCellBg = useCallback((value: number, present = true): string | undefined => {
-    if (!showHeatmap) return undefined
-    if (!present) return absentBg
-    if (maxValue === minValue) return 'accent.teal/75'
-    const normalized = (value - minValue) / (maxValue - minValue)
-    const alpha = compact ? 0.85 : 0.55
-    let r: number, g: number, b: number
-
-    if (heatmapScale === 'green') {
-      if (isDark) {
-        // Dark mode green: near-black → #0e4429 → #26a641 → #4aea64
-        if (normalized < 0.33) {
-          const t = normalized / 0.33
-          r = Math.round(5 + 9 * t); g = Math.round(10 + 58 * t); b = Math.round(5 + 36 * t)
-        } else if (normalized < 0.66) {
-          const t = (normalized - 0.33) / 0.33
-          r = Math.round(0 + 38 * t); g = Math.round(109 + 57 * t); b = Math.round(50 + 15 * t)
-        } else {
-          const t = (normalized - 0.66) / 0.34
-          r = Math.round(38 + 36 * t); g = Math.round(166 + 68 * t); b = Math.round(65 + 35 * t)
-        }
-      } else {
-        // GitHub light mode green: #ebedf0 → #9be9a8 → #40c463 → #30a14e → #216e39
-        if (normalized < 0.25) {
-          const t = normalized / 0.25
-          r = Math.round(235 - t * 80); g = Math.round(237 - t * 4); b = Math.round(240 - t * 72)
-        } else if (normalized < 0.5) {
-          const t = (normalized - 0.25) / 0.25
-          r = Math.round(155 - t * 91); g = Math.round(233 - t * 37); b = Math.round(168 - t * 69)
-        } else if (normalized < 0.75) {
-          const t = (normalized - 0.5) / 0.25
-          r = Math.round(64 - t * 16); g = Math.round(196 - t * 35); b = Math.round(99 - t * 21)
-        } else {
-          const t = (normalized - 0.75) / 0.25
-          r = Math.round(48 - t * 15); g = Math.round(161 - t * 51); b = Math.round(78 - t * 21)
-        }
-      }
-    } else if (heatmapScale === 'blue') {
-      if (isDark) {
-        // Dark mode blue: #0a1929 → #0d47a1 → #2196f3 → #6ec6ff
-        if (normalized < 0.33) {
-          const t = normalized / 0.33
-          r = Math.round(10 + 3 * t); g = Math.round(25 + 46 * t); b = Math.round(41 + 120 * t)
-        } else if (normalized < 0.66) {
-          const t = (normalized - 0.33) / 0.33
-          r = Math.round(13 + 20 * t); g = Math.round(71 + 79 * t); b = Math.round(161 + 82 * t)
-        } else {
-          const t = (normalized - 0.66) / 0.34
-          r = Math.round(33 + 77 * t); g = Math.round(150 + 48 * t); b = Math.round(243 + 12 * t)
-        }
-      } else {
-        // Light mode blue: #eef3ff → #a8c8f0 → #5a9bd5 → #2a6cb8
-        if (normalized < 0.33) {
-          const t = normalized / 0.33
-          r = Math.round(238 - t * 70); g = Math.round(243 - t * 43); b = Math.round(255 - t * 15)
-        } else if (normalized < 0.66) {
-          const t = (normalized - 0.33) / 0.33
-          r = Math.round(168 - t * 78); g = Math.round(200 - t * 45); b = Math.round(240 - t * 27)
-        } else {
-          const t = (normalized - 0.66) / 0.34
-          r = Math.round(90 - t * 48); g = Math.round(155 - t * 47); b = Math.round(213 - t * 29)
-        }
-      }
-    } else {
-      // red-yellow-green (default)
-      if (normalized < 0.5) {
-        const t = normalized / 0.5
-        r = Math.round(200 + t * 10)
-        g = Math.round(60 + t * 120)
-        b = 60
-      } else {
-        const t = (normalized - 0.5) / 0.5
-        r = Math.round(210 - t * 165)
-        g = Math.round(180 - t * 20)
-        b = Math.round(60 + t * 80)
-      }
-    }
-
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+    return getPivotCellBg({ value, minValue, maxValue, showHeatmap, compact, heatmapScale, isDark, absentBg, present })
   }, [showHeatmap, minValue, maxValue, compact, heatmapScale, isDark, absentBg])
 
   // Column entries: interleave regular data columns with formula columns
@@ -638,33 +559,23 @@ export const PivotTable = ({
 
   // Compact mode: build tooltip content for a cell given row/col context
   const buildTooltipContent = useCallback((value: number, rowIndex: number, cellIndex: number, valueIndex?: number, present = true): React.ReactNode => {
-    const dims: { label: string; value: string }[] = []
-    if (rowDimNames && rowHeaders[rowIndex]) {
-      rowDimNames.forEach((dimName, i) => {
-        if (i < rowHeaders[rowIndex].length) dims.push({ label: dimName, value: fmtHeader(rowHeaders[rowIndex][i], rowDimNames?.[i]) })
-      })
-    }
-    const colKeyIndex = Math.floor(cellIndex / numValues)
-    if (colDimNames && columnHeaders[colKeyIndex]) {
-      colDimNames.forEach((dimName, i) => {
-        if (i < columnHeaders[colKeyIndex].length) dims.push({ label: dimName, value: fmtHeader(columnHeaders[colKeyIndex][i], colDimNames?.[i]) })
-      })
-    }
-    const formattedValue = present ? fmt(value, valueIndex) : 'No data'
-    const cellBg = getCellBg(value, present)
     return (
-      <Box fontFamily="mono" fontSize="xs">
-        {dims.length > 0 && (
-          <Box fontWeight="600" mb={1}>
-            {dims.map(d => d.value).join(' · ')}
-          </Box>
-        )}
-        <Box display="flex" alignItems="center" gap={2}>
-          <Box w="10px" h="10px" borderRadius="full" flexShrink={0} bg={cellBg ?? 'fg.subtle'} />
-          <Box color="fg.muted">{valueLabels[valueIndex ?? 0] || 'Value'}</Box>
-          <Box fontWeight="700" ml="auto" color={present ? undefined : 'fg.subtle'}>{formattedValue}</Box>
-        </Box>
-      </Box>
+      <PivotTableTooltipContent
+        value={value}
+        rowIndex={rowIndex}
+        cellIndex={cellIndex}
+        valueIndex={valueIndex}
+        present={present}
+        rowHeaders={rowHeaders}
+        columnHeaders={columnHeaders}
+        rowDimNames={rowDimNames}
+        colDimNames={colDimNames}
+        numValues={numValues}
+        valueLabels={valueLabels}
+        fmtHeader={fmtHeader}
+        fmt={fmt}
+        getCellBg={getCellBg}
+      />
     )
   }, [rowHeaders, columnHeaders, rowDimNames, colDimNames, numValues, fmtHeader, fmt, getCellBg, valueLabels])
 
@@ -686,146 +597,10 @@ export const PivotTable = ({
     )
   }
 
-  // Styling helpers
-  const getSubtotalBg = (level: number) => level === 0 ? 'accent.teal/20' : 'accent.teal/12'
-  const getSubtotalBorderTop = (level: number) => level === 0 ? '1px solid' : '1px solid'
-  const getSubtotalBorderColor = (level: number) => level === 0 ? 'border.subtle' : 'border.muted'
-
   const colFormulas = formulaResults?.columnFormulas ?? []
   const hasColFormulas = colFormulas.length > 0
   const getLeftOffset = (dimIdx: number) => dimIdx * ROW_DIM_COL_W
   const isLastDim = (_dimIdx: number) => false  // Always show right border on all dimension columns
-
-  // Helper: render cells for a row using columnEntries
-  const renderDataCells = (rowIndex: number) => {
-    return columnEntries.map((entry, i) => {
-      if (entry.type === 'data') {
-        const value = cells[rowIndex][entry.cellIndex]
-        const present = isPresent(rowIndex, entry.cellIndex)
-        const cellContent = compact ? null : (present ? fmt(value, entry.cellIndex % numValues) : '')
-        const cell = (
-          <ChakraTable.Cell
-            key={`col-${i}`}
-            textAlign="right"
-            fontFamily="mono"
-            fontSize={compact ? '2xs' : 'sm'}
-            bg={getCellBg(value, present)}
-            cursor="pointer"
-            onClick={(e) => handlePivotCellClick(rowIndex, entry.cellIndex, e)}
-            _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}
-            {...(compact ? { p: 0, w: `${COMPACT_CELL_SIZE}px`, minW: `${COMPACT_CELL_SIZE}px`, maxW: `${COMPACT_CELL_SIZE}px`, h: `${COMPACT_CELL_SIZE}px` } : {})}
-          >
-            {cellContent}
-          </ChakraTable.Cell>
-        )
-        if (compact) {
-          return (
-            <Tooltip key={`col-${i}`} content={buildTooltipContent(value, rowIndex, entry.cellIndex, entry.cellIndex % numValues, present)} positioning={{ placement: 'top' }} contentProps={tooltipContentProps}>
-              {cell}
-            </Tooltip>
-          )
-        }
-        return cell
-      }
-      // formula-col
-      const val = colFormulas[entry.formulaIdx].rowValues[rowIndex][entry.valueIdx]
-      return (
-        <ChakraTable.Cell
-          key={`col-${i}`}
-          textAlign="right"
-          fontFamily="mono"
-          fontSize={compact ? '2xs' : 'sm'}
-          bg="accent.secondary/12"
-          fontStyle="italic"
-          {...(compact ? { p: 0, w: `${COMPACT_CELL_SIZE}px`, minW: `${COMPACT_CELL_SIZE}px`, maxW: `${COMPACT_CELL_SIZE}px`, h: `${COMPACT_CELL_SIZE}px` } : {})}
-        >
-          {compact ? null : fmt(val, entry.valueIdx)}
-        </ChakraTable.Cell>
-      )
-    })
-  }
-
-  const renderSubtotalCells = (dr: Extract<DisplayRow, { type: 'subtotal' }>) => {
-    const subtotalBg = getSubtotalBg(dr.level)
-    const borderTop = getSubtotalBorderTop(dr.level)
-    const borderTopColor = getSubtotalBorderColor(dr.level)
-    const groupKey = makeGroupKey(dr.groupValues)
-
-    return columnEntries.map((entry, i) => {
-      if (entry.type === 'data') {
-        return (
-          <ChakraTable.Cell
-            key={`col-${i}`}
-            textAlign="right"
-            fontFamily="mono"
-            fontSize="sm"
-            fontWeight="600"
-            bg={subtotalBg}
-            color="fg.default"
-            borderTop={borderTop}
-            borderBottom={dr.level === 0 ? '1px solid' : undefined}
-            borderColor={borderTopColor}
-          >
-            {fmt(dr.cells[entry.cellIndex], entry.cellIndex % numValues)}
-          </ChakraTable.Cell>
-        )
-      }
-      // formula-col in subtotal row
-      const vals = colFormulas[entry.formulaIdx].subtotalValues.get(groupKey)
-      const val = vals?.[entry.valueIdx]
-      return (
-        <ChakraTable.Cell
-          key={`col-${i}`}
-          textAlign="right"
-          fontFamily="mono"
-          fontSize="sm"
-          fontWeight="600"
-          bg="accent.secondary/12"
-          fontStyle="italic"
-          color="fg.default"
-          borderTop={borderTop}
-          borderBottom={dr.level === 0 ? '1px solid' : undefined}
-          borderColor={borderTopColor}
-        >
-          {val !== undefined ? fmt(val, entry.valueIdx) : '\u2014'}
-        </ChakraTable.Cell>
-      )
-    })
-  }
-
-  const renderFormulaRowCells = (dr: Extract<DisplayRow, { type: 'formula-row' }>) => {
-    return columnEntries.map((entry, i) => {
-      if (entry.type === 'data') {
-        return (
-          <ChakraTable.Cell
-            key={`col-${i}`}
-            textAlign="right"
-            fontFamily="mono"
-            fontSize="sm"
-            fontWeight="600"
-            fontStyle="italic"
-            color="fg.default"
-            bg="accent.secondary/8"
-          >
-            {fmt(dr.cells[entry.cellIndex], entry.cellIndex % numValues)}
-          </ChakraTable.Cell>
-        )
-      }
-      // formula-col in formula-row: show dash
-      return (
-        <ChakraTable.Cell
-          key={`col-${i}`}
-          textAlign="center"
-          fontFamily="mono"
-          fontSize="sm"
-          color="fg.subtle"
-          bg="accent.secondary/8"
-        >
-          {'\u2014'}
-        </ChakraTable.Cell>
-      )
-    })
-  }
 
   const numHeaderRows = augmentedColHeaderRows.length
 
@@ -843,395 +618,50 @@ export const PivotTable = ({
       }}
     >
       <ChakraTable.Root size="sm" css={{ borderCollapse: 'separate', borderSpacing: compact ? '3px' : 0, ...(compact ? { '& td, & th': { borderBottom: 'none', borderRadius: '3px' } } : { '& td, & th': { borderBottom: '1px solid', borderColor: 'var(--chakra-colors-fg-subtle)' } }) }}>
-        <ChakraTable.Header position="sticky" top={0} zIndex={5} bg={headerBg}>
-          {/* Column header rows */}
-          {augmentedColHeaderRows.map((headerRow, rowIdx) => (
-            <ChakraTable.Row key={rowIdx} bg={headerBg}>
-              {/* Row dimension name headers */}
-              {rowIdx === 0 && numRowDims > 0 && (
-                Array.from({ length: numRowDims }, (_, dimIdx) => (
-                  <ChakraTable.ColumnHeader
-                    key={`dim-${dimIdx}`}
-                    rowSpan={numHeaderRows}
-                    fontWeight="700"
-                    fontSize={compact ? '2xs' : 'xs'}
-                    fontFamily={compact ? 'mono' : undefined}
-                    textTransform="uppercase"
-                    letterSpacing={compact ? undefined : '0.05em'}
-                    color="fg.muted"
-                    borderRight={isLastDim(dimIdx) ? undefined : '1px solid'}
-                    borderColor="border.muted"
+        <PivotTableHeader
+          augmentedColHeaderRows={augmentedColHeaderRows}
+          numRowDims={numRowDims}
+          numHeaderRows={numHeaderRows}
+          rowDimNames={rowDimNames}
+          showRowTotals={showRowTotals}
+          compact={compact}
+          headerBg={headerBg}
+          getLeftOffset={getLeftOffset}
+          isLastDim={isLastDim}
+          ROW_DIM_COL_W={ROW_DIM_COL_W}
+          COMPACT_CELL_SIZE={COMPACT_CELL_SIZE}
+          valueLabels={valueLabels}
+        />
 
-                    position="sticky"
-                    left={`${getLeftOffset(dimIdx)}px`}
-                    bg={headerBg}
-                    zIndex={4}
-                    w={`${ROW_DIM_COL_W}px`}
-                    minW={`${ROW_DIM_COL_W}px`}
-                    maxW={`${ROW_DIM_COL_W}px`}
-                    {...(compact ? { p: '1px 4px' } : {})}
-                  >
-                    {rowDimNames?.[dimIdx] || ''}
-                  </ChakraTable.ColumnHeader>
-                ))
-              )}
-
-              {/* Column headers at this level */}
-              {headerRow.map((hdr, colIdx) => (
-                <ChakraTable.ColumnHeader
-                  key={colIdx}
-                  colSpan={hdr.colSpan}
-                  rowSpan={hdr.rowSpan}
-                  fontWeight="700"
-                  fontSize={compact ? '2xs' : 'xs'}
-                  textTransform="uppercase"
-                  letterSpacing={compact ? undefined : '0.05em'}
-                  color={hdr.isFormula ? 'accent.secondary' : compact ? 'fg.default' : 'fg.muted'}
-                  textAlign="center"
-                  minW={compact ? `${COMPACT_CELL_SIZE}px` : '80px'}
-                  borderBottom={rowIdx < numHeaderRows - 1 ? '1px solid' : undefined}
-                  borderColor="border.muted"
-                  zIndex={3}
-                  bg={hdr.isFormula ? 'accent.secondary/12' : 'bg.muted'}
-                  fontStyle={hdr.isFormula ? 'italic' : undefined}
-                  {...(compact ? { px: 0, py: '4px', w: `${COMPACT_CELL_SIZE}px` } : {})}
-                >
-                  {compact ? (
-                    <Box display="flex" justifyContent="center" w="100%">
-                      <Box
-                        css={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
-                        transform="rotate(180deg)"
-                        fontSize="2xs"
-                        fontFamily="mono"
-                        whiteSpace="nowrap"
-                        lineHeight={1}
-                      >
-                        {hdr.label}
-                      </Box>
-                    </Box>
-                  ) : hdr.isFormula ? (
-                    <Box display="inline-flex" alignItems="center" gap={1} justifyContent="center">
-                      <Icon fontSize="md" color="accent.secondary">
-                        <LuSquareFunction />
-                      </Icon>
-
-                      {hdr.label}
-                    </Box>
-                  ) : hdr.label}
-                </ChakraTable.ColumnHeader>
-              ))}
-
-              {/* Row total header */}
-              {showRowTotals && rowIdx === 0 && (
-                <ChakraTable.ColumnHeader
-                  rowSpan={numHeaderRows}
-                  fontWeight="700"
-                  fontSize="xs"
-                  textTransform="uppercase"
-                  letterSpacing="0.05em"
-                  color="fg.muted"
-                  textAlign="right"
-                  borderLeft="2px solid"
-                  borderColor="border.default"
-                  minW="80px"
-                  bg="accent.teal/20"
-                  zIndex={3}
-                >
-                  Total
-                </ChakraTable.ColumnHeader>
-              )}
-            </ChakraTable.Row>
-          ))}
-
-          {/* If no column dimensions, still show a header row with value labels */}
-          {augmentedColHeaderRows.length === 0 && (
-            <ChakraTable.Row bg={headerBg}>
-              {numRowDims > 0 && (
-                Array.from({ length: numRowDims }, (_, dimIdx) => (
-                  <ChakraTable.ColumnHeader
-                    key={`dim-${dimIdx}`}
-                    fontWeight="700"
-                    fontSize="xs"
-                    textTransform="uppercase"
-                    letterSpacing="0.05em"
-                    color="fg.muted"
-                    borderRight={isLastDim(dimIdx) ? undefined : '1px solid'}
-                    borderColor="border.muted"
-
-                    position="sticky"
-                    left={`${getLeftOffset(dimIdx)}px`}
-                    bg={headerBg}
-                    zIndex={4}
-                    w={`${ROW_DIM_COL_W}px`}
-                    minW={`${ROW_DIM_COL_W}px`}
-                    maxW={`${ROW_DIM_COL_W}px`}
-                  >
-                    {rowDimNames?.[dimIdx] || ''}
-                  </ChakraTable.ColumnHeader>
-                ))
-              )}
-              {valueLabels.map((vl, i) => (
-                <ChakraTable.ColumnHeader
-                  key={i}
-                  fontWeight="700"
-                  fontSize="xs"
-                  textTransform="uppercase"
-                  letterSpacing="0.05em"
-                  color="fg.muted"
-                  textAlign="right"
-                  minW="80px"
-                  zIndex={3}
-                  bg={headerBg}
-                >
-                  {vl}
-                </ChakraTable.ColumnHeader>
-              ))}
-              {showRowTotals && (
-                <ChakraTable.ColumnHeader
-                  fontWeight="700"
-                  fontSize="xs"
-                  textTransform="uppercase"
-                  letterSpacing="0.05em"
-                  color="fg.muted"
-                  textAlign="right"
-                  borderLeft="2px solid"
-                  borderColor="border.default"
-                  minW="80px"
-                  bg="accent.teal/20"
-                  zIndex={3}
-                >
-                  Total
-                </ChakraTable.ColumnHeader>
-              )}
-            </ChakraTable.Row>
-          )}
-        </ChakraTable.Header>
-
-        <ChakraTable.Body>
-          {/* Data + subtotal + formula rows */}
-          {visibleRows.map((displayRow, displayIndex) => {
-            // Formula row
-            if (displayRow.type === 'formula-row') {
-              const formulaDimLevel = displayRow.dimensionLevel ?? 0
-              // Sub-level formulas: parent cells are covered by rowSpan, so only render from dimensionLevel onward
-              // Top-level formulas: span all row dim columns
-              const isSubLevel = formulaDimLevel > 0 && numRowDims > 1
-              const headerColSpan = isSubLevel ? Math.max(1, numRowDims - formulaDimLevel) : (numRowDims || 1)
-
-              return (
-                <ChakraTable.Row key={`formula-${displayIndex}`}>
-                  <ChakraTable.Cell
-                    colSpan={headerColSpan}
-                    fontWeight="600"
-                    fontSize="sm"
-                    fontStyle="italic"
-                    color="accent.secondary"
-                    css={{ background: 'linear-gradient(var(--chakra-colors-accent-secondary/.12), var(--chakra-colors-accent-secondary/.12)), var(--chakra-colors-bg-muted)' }}
-                    borderRight="1px solid"
-                    borderColor="fg.muted"
-
-                    position="sticky"
-                    left={isSubLevel ? `${getLeftOffset(formulaDimLevel)}px` : 0}
-                    zIndex={2}
-                  >
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <Icon fontSize="sm" color="accent.secondary" flexShrink={0}>
-                        <LuSquareFunction />
-                      </Icon>
-                      {displayRow.name}
-                    </Box>
-                  </ChakraTable.Cell>
-
-                  {hasColFormulas ? renderFormulaRowCells(displayRow) : (
-                    displayRow.cells.map((value, colIndex) => (
-                      <ChakraTable.Cell
-                        key={colIndex}
-                        textAlign="right"
-                        fontFamily="mono"
-                        fontSize="sm"
-                        fontWeight="600"
-                        fontStyle="italic"
-                        color="fg.default"
-                        bg="accent.secondary/8"
-                      >
-                        {fmt(value, colIndex % numValues)}
-                      </ChakraTable.Cell>
-                    ))
-                  )}
-
-                  {showRowTotals && (
-                    <ChakraTable.Cell
-                      textAlign="right"
-                      fontFamily="mono"
-                      fontSize="sm"
-                      fontWeight="700"
-                      fontStyle="italic"
-                      borderLeft="2px solid"
-                      borderColor="border.default"
-                      bg="accent.secondary/12"
-                      color="accent.secondary"
-                    >
-                      {fmt(displayRow.rowTotal)}
-                    </ChakraTable.Cell>
-                  )}
-                </ChakraTable.Row>
-              )
-            }
-
-            // Subtotal row
-            if (displayRow.type === 'subtotal') {
-              const S = displayRow.level
-              const subtotalBg = getSubtotalBg(S)
-              const borderTop = getSubtotalBorderTop(S)
-              const borderTopColor = getSubtotalBorderColor(S)
-              const groupKey = makeGroupKey(displayRow.groupValues)
-              const collapsed = collapsedGroups.has(groupKey)
-
-              return (
-                <ChakraTable.Row key={`subtotal-${displayIndex}`}>
-                  <ChakraTable.Cell
-                    colSpan={numRowDims - S}
-                    fontWeight="700"
-                    fontSize="xs"
-                    textTransform="uppercase"
-                    letterSpacing="0.05em"
-                    color="fg.default"
-                    borderTop={borderTop}
-                    borderBottom={S === 0 ? '1px solid' : undefined}
-                    borderColor={borderTopColor}
-
-                    position="sticky"
-                    left={`${getLeftOffset(S)}px`}
-                    bg={headerBg}
-                    zIndex={2}
-                    cursor="pointer"
-                    onClick={() => toggleGroup(groupKey)}
-                    _hover={{ opacity: 0.8 }}
-                  >
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <Box as={collapsed ? LuChevronRight : LuChevronUp} fontSize="sm" flexShrink={0} />
-                      {displayRow.label}
-                    </Box>
-                  </ChakraTable.Cell>
-
-                  {hasColFormulas ? renderSubtotalCells(displayRow) : (
-                    displayRow.cells.map((value, colIndex) => (
-                      <ChakraTable.Cell
-                        key={colIndex}
-                        textAlign="right"
-                        fontFamily="mono"
-                        fontSize="sm"
-                        fontWeight="600"
-                        bg={subtotalBg}
-                        color="fg.default"
-                        borderTop={borderTop}
-                        borderBottom={S === 0 ? '1px solid' : undefined}
-                        borderColor={borderTopColor}
-                      >
-                        {fmt(value, colIndex % numValues)}
-                      </ChakraTable.Cell>
-                    ))
-                  )}
-
-                  {showRowTotals && (
-                    <ChakraTable.Cell
-                      textAlign="right"
-                      fontFamily="mono"
-                      fontSize="sm"
-                      fontWeight="700"
-                      borderLeft="2px solid"
-                      borderTop={borderTop}
-                      borderBottom={S === 0 ? '1px solid' : undefined}
-                      borderColor={borderTopColor}
-                      bg={S === 0 ? 'accent.teal/40' : 'accent.teal/30'}
-                      color="fg.default"
-                    >
-                      {fmt(displayRow.rowTotal)}
-                    </ChakraTable.Cell>
-                  )}
-                </ChakraTable.Row>
-              )
-            }
-
-            // Data row
-            const rowIndex = displayRow.rowIndex
-            return (
-              <ChakraTable.Row key={`data-${displayIndex}`} _hover={{ bg: 'bg.muted' }}>
-                {/* Row dimension headers */}
-                {rowSpans[displayIndex]?.map((spanInfo, dimIdx) =>
-                  spanInfo.show ? (
-                    <ChakraTable.Cell
-                      key={`dim-${dimIdx}`}
-                      rowSpan={spanInfo.rowSpan}
-                      fontWeight="600"
-                      fontSize={compact ? '2xs' : 'sm'}
-                      fontFamily={compact ? 'mono' : undefined}
-                      borderRight={isLastDim(dimIdx) ? undefined : '1px solid'}
-                      borderColor="border.muted"
-
-                      position="sticky"
-                      left={`${getLeftOffset(dimIdx)}px`}
-                      bg={headerBg}
-                      zIndex={2}
-                      verticalAlign="top"
-                      w={`${ROW_DIM_COL_W}px`}
-                      minW={`${ROW_DIM_COL_W}px`}
-                      maxW={`${ROW_DIM_COL_W}px`}
-                      {...(compact ? { p: '1px 4px', whiteSpace: 'nowrap', h: `${COMPACT_CELL_SIZE}px` } : {})}
-                    >
-                      {fmtHeader(rowHeaders[rowIndex][dimIdx], rowDimNames?.[dimIdx])}
-                    </ChakraTable.Cell>
-                  ) : null
-                )}
-
-                {/* Data cells (interleaved with formula columns if applicable) */}
-                {hasColFormulas ? renderDataCells(rowIndex) : (
-                  cells[rowIndex].map((value, colIndex) => {
-                    const present = isPresent(rowIndex, colIndex)
-                    const cell = (
-                      <ChakraTable.Cell
-                        key={colIndex}
-                        textAlign="right"
-                        fontFamily="mono"
-                        fontSize={compact ? '2xs' : 'sm'}
-                        bg={getCellBg(value, present)}
-                        cursor="pointer"
-                        onClick={(e) => handlePivotCellClick(rowIndex, colIndex, e)}
-                        _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}
-                        {...(compact ? { p: 0, w: `${COMPACT_CELL_SIZE}px`, minW: `${COMPACT_CELL_SIZE}px`, maxW: `${COMPACT_CELL_SIZE}px`, h: `${COMPACT_CELL_SIZE}px` } : {})}
-                      >
-                        {compact ? null : (present ? fmt(value, colIndex % numValues) : '')}
-                      </ChakraTable.Cell>
-                    )
-                    if (compact) {
-                      return (
-                        <Tooltip key={colIndex} content={buildTooltipContent(value, rowIndex, colIndex, colIndex % numValues, present)} positioning={{ placement: 'top' }} contentProps={tooltipContentProps}>
-                          {cell}
-                        </Tooltip>
-                      )
-                    }
-                    return cell
-                  })
-                )}
-
-                {/* Row total */}
-                {showRowTotals && (
-                  <ChakraTable.Cell
-                    textAlign="right"
-                    fontFamily="mono"
-                    fontSize={compact ? '2xs' : 'sm'}
-                    borderLeft="1px solid"
-                    borderColor="border.default"
-                    bg="accent.teal/5"
-                    color="fg.subtle"
-                  >
-                    {fmt(rowTotals[rowIndex])}
-                  </ChakraTable.Cell>
-                )}
-              </ChakraTable.Row>
-            )
-          })}
-        </ChakraTable.Body>
+        <PivotTableBody
+          visibleRows={visibleRows}
+          rowSpans={rowSpans}
+          numRowDims={numRowDims}
+          hasColFormulas={hasColFormulas}
+          showRowTotals={showRowTotals}
+          compact={compact}
+          columnEntries={columnEntries}
+          colFormulas={colFormulas}
+          cells={cells}
+          rowTotals={rowTotals}
+          rowHeaders={rowHeaders}
+          rowDimNames={rowDimNames}
+          numValues={numValues}
+          fmt={fmt}
+          fmtHeader={fmtHeader}
+          getCellBg={getCellBg}
+          isPresent={isPresent}
+          handlePivotCellClick={handlePivotCellClick}
+          buildTooltipContent={buildTooltipContent}
+          collapsedGroups={collapsedGroups}
+          toggleGroup={toggleGroup}
+          headerBg={headerBg}
+          getLeftOffset={getLeftOffset}
+          isLastDim={isLastDim}
+          ROW_DIM_COL_W={ROW_DIM_COL_W}
+          COMPACT_CELL_SIZE={COMPACT_CELL_SIZE}
+          tooltipContentProps={tooltipContentProps}
+        />
       </ChakraTable.Root>
     </Box>
   )

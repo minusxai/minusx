@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { Box, VStack, HStack, Text, Heading, Button, Collapsible, Icon, Progress } from '@chakra-ui/react';
-import { LuSparkles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
-import SchemaTreeView, { type WhitelistItem, type SchemaTreeItem } from '@/components/schema-browser/SchemaTreeView';
-import { pulseKeyframes, sparkleKeyframes, cursorBlinkKeyframes } from '@/lib/ui/animations';
+import { Box, VStack, HStack, Text } from '@chakra-ui/react';
+import { LuSparkles } from 'react-icons/lu';
+import type { WhitelistItem, SchemaTreeItem } from '@/components/schema-browser/SchemaTreeView';
+import { pulseKeyframes, sparkleKeyframes } from '@/lib/ui/animations';
 import type { ConnectionWithSchema } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
@@ -17,12 +17,11 @@ import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile } from '@/lib/chat/compress-augmented';
 import { mergeWhitelist } from '@/lib/context/context-utils';
 import { resolvePath } from '@/lib/mode/path-resolver';
-import ContextDocsEditor from '@/components/context/ContextDocsEditor';
-import ChatInterface from '@/components/explore/ChatInterface';
 import type { ContextContent, Whitelist, WhitelistNode, DocEntry } from '@/lib/types';
-import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
-import { useConfigs } from '@/lib/hooks/useConfigs';
+import { useAgentProgress } from '../useAgentProgress';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
+import StepContextTablesStep from './StepContextTablesStep';
+import StepContextDocsStep from './StepContextDocsStep';
 
 const TYPEWRITER_SPEED = 35;
 
@@ -45,116 +44,6 @@ interface StepContextProps {
   connections?: Record<string, ConnectionWithSchema>;
   /** Whether connections are still loading. */
   connectionsLoading?: boolean;
-}
-
-/** Collapsible agent trace — auto-opens when first rendered */
-function AgentFeedCollapsible({ connectionName, contextPath, isRunning }: { connectionName: string; contextPath: string; isRunning: boolean }) {
-  const { config } = useConfigs();
-  const agentName = config.branding.agentName;
-  const [isOpen, setIsOpen] = useState(true);
-  const wasRunningRef = useRef(isRunning);
-  useEffect(() => {
-    // Auto-close when agent transitions from running → done
-    if (wasRunningRef.current && !isRunning) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsOpen(false);
-    }
-    wasRunningRef.current = isRunning;
-  }, [isRunning]);
-  return (
-    <Collapsible.Root open={isOpen} onOpenChange={(e) => setIsOpen(e.open)}>
-      <Collapsible.Trigger asChild>
-        <HStack
-          cursor="pointer"
-          px={3}
-          py={2}
-          bg="bg.muted"
-          borderRadius="lg"
-          _hover={{ bg: 'bg.emphasis' }}
-          gap={2}
-          justify={"space-between"}
-        >
-          <HStack>
-          <Icon as={LuSparkles} boxSize={3.5} color="accent.teal" />
-          <Text fontSize="sm" fontFamily="mono" fontWeight="500" color="accent.teal">
-            {isOpen ? `Hide ${agentName} agent trace` : `See ${agentName} agent in action`}
-          </Text>
-          </HStack>
-          <HStack>
-          {isRunning && (
-            <Text fontSize="xs" fontFamily="mono" color="fg.subtle" flex={1}>
-              Exploring tables & writing first draft (~30s)
-            </Text>
-          )}
-          {!isRunning && (
-            <Text fontSize="xs" fontFamily="mono" color="accent.teal" flex={1}>
-              Done!
-            </Text>
-          )}
-          {!isRunning && !isOpen && <Box flex={1} />}
-          <Icon
-            as={isOpen ? LuChevronDown : LuChevronRight}
-            boxSize={4}
-            color="fg.subtle"
-          />
-          </HStack>
-        </HStack>
-      </Collapsible.Trigger>
-      <Collapsible.Content>
-        <Box
-          border="1px solid"
-          borderColor="border.default"
-          borderRadius="lg"
-          overflow="hidden"
-          h="350px"
-          mt={2}
-        >
-          <ChatInterface
-            contextPath={contextPath}
-            databaseName={connectionName}
-            container="sidebar"
-            readOnly
-          />
-        </Box>
-      </Collapsible.Content>
-    </Collapsible.Root>
-  );
-}
-
-const SAVE_TAU = 9; // ~80% at 15s
-
-function SaveProgressBar() {
-  const progress = useAgentProgress(true, false, SAVE_TAU);
-  return (
-    <VStack gap={2} align="stretch" pt={2}>
-      <style>{`@keyframes saveShimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }`}</style>
-      <Text fontSize="xs" fontFamily="mono" color="accent.teal">
-        {getProgressMessage(progress, [
-          [0, 'Saving context...'],
-          [30, 'Building knowledge base...'],
-          [60, 'Syncing schema metadata...'],
-          [80, 'Almost there...'],
-        ])}
-      </Text>
-      <Progress.Root size="sm" value={progress} colorPalette="teal">
-        <Progress.Track borderRadius="full" overflow="hidden">
-          <Progress.Range
-            style={{ transition: 'width 0.4s ease-out' }}
-            css={{
-              position: 'relative',
-              '&::after': {
-                content: '""',
-                position: 'absolute',
-                inset: 0,
-                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
-                animation: 'saveShimmer 1.5s ease-in-out infinite',
-              },
-            }}
-          />
-        </Progress.Track>
-      </Progress.Root>
-    </VStack>
-  );
 }
 
 export default function StepContext({
@@ -544,294 +433,45 @@ export default function StepContext({
   /* ─── Sub-step 1: Select Tables ─── */
   if (subStep === 'tables') {
     return (
-      <VStack gap={6} align="stretch" minH="400px">
-        {greeting && <style>{cursorBlinkKeyframes}</style>}
-
-        {/* Header */}
-        <Box>
-          {greeting ? (
-            <Heading
-              fontSize={{ base: 'xl', md: '2xl' }}
-              fontFamily="mono"
-              fontWeight="400"
-              mb={1}
-              letterSpacing="-0.02em"
-            >
-              {displayedText}
-              {!typingDone && (
-                <Box
-                  as="span"
-                  display="inline-block"
-                  w="2px"
-                  h="1em"
-                  bg="accent.teal"
-                  ml="2px"
-                  verticalAlign="text-bottom"
-                  css={{ animation: 'cursorBlink 0.8s step-end infinite' }}
-                />
-              )}
-            </Heading>
-          ) : (
-            <Heading size="md" fontFamily="mono" fontWeight="500" mb={1}>
-              Select tables
-            </Heading>
-          )}
-          <Text color="fg.muted" fontSize="sm">
-            {totalTables > 0
-              ? <>We&apos;ve auto-selected {totalTables === 1 ? '' : 'all '}<Text as="span" color="accent.teal" fontWeight="600">{totalTables} {totalTables === 1 ? 'table' : 'tables'}</Text>. Deselect anything you don&apos;t need (you can always edit this later).</>
-              : 'No tables found for this connection.'
-            }
-          </Text>
-        </Box>
-
-        {/* Tables */}
-        {schemas.length > 0 && (
-          <Box
-            border="1px solid"
-            borderColor="border.default"
-            borderRadius="lg"
-            p={4}
-            maxH="400px"
-            overflowY="auto"
-          >
-            <HStack gap={2} mb={3}>
-              <Text fontSize="sm" fontWeight="600">Tables</Text>
-              <Text fontSize="xs" fontFamily="mono" color="fg.subtle">
-                {whitelistedCount}/{totalTables} selected
-              </Text>
-            </HStack>
-            <SchemaTreeView
-              schemas={schemas}
-              selectable
-              whitelist={effectiveWhitelist}
-              onWhitelistChange={handleWhitelistChange}
-              showColumns={true}
-              connectionName={connectionName}
-              defaultExpandedSchemas
-            />
-          </Box>
-        )}
-
-        {schemas.length === 0 && (
-          <Box p={4} bg="bg.muted" borderRadius="lg">
-            <Text color="fg.muted" fontSize="sm">
-              No schema found for this connection. You can still add context in the next step.
-            </Text>
-          </Box>
-        )}
-
-        {/* Spacer pushes button to bottom */}
-        <Box flex={1} />
-
-        {/* Actions */}
-        <HStack justify="flex-end" gap={3}>
-          <Button
-            aria-label="Continue to documentation"
-            variant="outline"
-            size="sm"
-            fontFamily="mono"
-            onClick={() => setSubStep('docs')}
-          >
-            Next &rarr;
-          </Button>
-        </HStack>
-      </VStack>
+      <StepContextTablesStep
+        greeting={greeting}
+        displayedText={displayedText}
+        typingDone={typingDone}
+        totalTables={totalTables}
+        schemas={schemas}
+        whitelistedCount={whitelistedCount}
+        effectiveWhitelist={effectiveWhitelist}
+        onWhitelistChange={handleWhitelistChange}
+        connectionName={connectionName}
+        onNext={() => setSubStep('docs')}
+      />
     );
   }
 
   /* ─── Sub-step 2: Add Data Context (text + agent) ─── */
   return (
-    <VStack gap={6} align="stretch">
-      <style>{cursorBlinkKeyframes}</style>
-
-      {/* Header */}
-      <Box>
-        <Heading size="md" fontFamily="mono" fontWeight="500" mb={1}>
-          Auto Documentation
-        </Heading>
-        <Text color="fg.muted" fontSize="sm">
-          Documentation is where you describe your dataset, key metrics, and any other info the agent should know when querying this data.
-        </Text>
-      </Box>
-
-      {/* Docs — hidden while agent is actively writing into an empty context */}
-      {(!isAgentRunning || docContent.trim()) && <Box>
-        <Text fontSize="sm" fontWeight="600" mb={2}>
-          {hadExistingDocs ? 'Current Docs' : showAgentFeed ? 'Auto-generated context' : 'Data context'}
-          <Text as="span" fontSize="xs" color="fg.subtle" ml={2}>
-            {(hadExistingDocs || showAgentFeed) ? '(editable)' : '(optional, markdown)'}
-          </Text>
-        </Text>
-        <ContextDocsEditor
-          docs={allDocs.length ? allDocs : [{ content: '' }]}
-          onDocsChange={handleDocsChange}
-          editorHeight="250px"
-          entryLabel="Doc"
-          showAddButton={false}
-          showHelperText={false}
-          showEmptyWarning={false}
-          showDraftToggle={true}
-          showAlwaysIncludeToggle={false}
-          showChildPaths={false}
-          showTitleDescription={true}
-          expandedIndices={expandedDocIndices}
-          onExpandedChange={setExpandedDocIndices}
-        />
-      </Box>}
-
-      {/* Structured-knowledge summary — metrics/annotations live in the Databases
-          tab, not the docs editor above, so surface them here so they're visible. */}
-      {(knowledgeCounts.metrics > 0 || knowledgeCounts.annotations > 0) && (
-        <HStack
-          gap={2}
-          fontSize="xs"
-          color="fg.muted"
-          bg="bg.muted"
-          borderRadius="md"
-          px={3}
-          py={2}
-          flexWrap="wrap"
-          aria-label="Added metrics and annotations summary"
-        >
-          <Icon as={LuSparkles} color="accent.teal" boxSize={3.5} />
-          <Text>
-            Also added
-            {knowledgeCounts.metrics > 0 && <Text as="span" fontWeight="600" color="fg.default"> {knowledgeCounts.metrics} metric{knowledgeCounts.metrics === 1 ? '' : 's'}</Text>}
-            {knowledgeCounts.metrics > 0 && knowledgeCounts.annotations > 0 && ' and'}
-            {knowledgeCounts.annotations > 0 && <Text as="span" fontWeight="600" color="fg.default"> {knowledgeCounts.annotations} annotation{knowledgeCounts.annotations === 1 ? '' : 's'}</Text>}
-            .
-          </Text>
-        </HStack>
-      )}
-
-      {/* Error */}
-      {error && (
-        <Text color="accent.danger" fontSize="sm">{error}</Text>
-      )}
-
-      {/* Progress bar + skip escape hatch */}
-      <style>{`@keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }`}</style>
-      {isAgentRunning && (
-        <VStack gap={2} align="stretch" pt={2}>
-          <Text fontSize="xs" fontFamily="mono" color="accent.teal">
-            {getProgressMessage(agentProgress, [
-              [0, 'Exploring your tables...'],
-              [25, 'Reading column definitions...'],
-              [50, 'Writing data documentation...'],
-              [80, 'Finishing up...'],
-              [100, 'Done!'],
-            ])}
-          </Text>
-          <Progress.Root size="sm" value={agentProgress} flex={1} colorPalette="teal">
-            <Progress.Track borderRadius="full" overflow="hidden">
-              <Progress.Range
-                style={{ transition: 'width 0.4s ease-out' }}
-                css={{
-                  position: 'relative',
-                  '&::after': {
-                    content: '""',
-                    position: 'absolute',
-                    inset: 0,
-                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
-                    animation: 'shimmer 1.5s ease-in-out infinite',
-                  },
-                }}
-              />
-            </Progress.Track>
-          </Progress.Root>
-          <HStack justify="flex-end">
-            <Text
-              as="button"
-              fontSize="xs"
-              color="fg.subtle"
-              fontFamily="mono"
-              cursor="pointer"
-              _hover={{ color: 'fg.muted', textDecoration: 'underline' }}
-              onClick={handleSkip}
-            >
-              Skip & figure out later
-            </Text>
-          </HStack>
-        </VStack>
-      )}
-
-      {/* Save progress bar */}
-      {saving && (
-        <SaveProgressBar />
-      )}
-
-      {/* Actions — hidden while agent is running or saving */}
-      {!isAgentRunning && !saving && (
-        <HStack justify="space-between" gap={3} pt={2}>
-          <Button
-            variant="ghost"
-            size="sm"
-            fontFamily="mono"
-            onClick={() => setSubStep('tables')}
-          >
-            &larr; Back to tables
-          </Button>
-          <HStack gap={3}>
-            {!showAgentFeed && (
-              <Button
-                bg="accent.teal"
-                color="white"
-                _hover={{ opacity: 0.9 }}
-                size="sm"
-                fontFamily="mono"
-                onClick={handleAgentDescribe}
-                disabled={saving}
-              >
-                <LuSparkles size={14} />
-                Let the agent figure it out
-              </Button>
-            )}
-            <Button
-              aria-label="Save context and continue"
-              {...(showAgentFeed
-                ? { bg: 'accent.teal', color: 'white', _hover: { opacity: 0.9 } }
-                : { variant: 'outline' as const }
-              )}
-              size="sm"
-              fontFamily="mono"
-              onClick={handleSave}
-              disabled={saving}
-            >
-              {showAgentFeed ? 'Save & Continue' : 'Skip & Continue'}
-            </Button>
-          </HStack>
-        </HStack>
-      )}
-
-      {/* Agent activity feed */}
-      {showAgentFeed && (
-        <AgentFeedCollapsible connectionName={connectionName} contextPath={contextPath} isRunning={isAgentRunning} />
-      )}
-
-      {/* Debug: appState */}
-      {showDebug && realFileId && (
-        <Collapsible.Root>
-          <Collapsible.Trigger asChild>
-            <HStack cursor="pointer" px={3} py={1.5} bg="bg.muted" borderRadius="md" gap={2}>
-              <Text fontSize="xs" fontFamily="mono" color="fg.subtle">Debug: App State</Text>
-              <Icon as={LuChevronRight} boxSize={3} color="fg.subtle" css={{ '[data-state=open] &': { transform: 'rotate(90deg)' }, transition: 'transform 0.15s' }} />
-            </HStack>
-          </Collapsible.Trigger>
-          <Collapsible.Content>
-            <Box mt={1} p={3} bg="bg.muted" borderRadius="md" maxH="200px" overflowY="auto">
-              <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
-                {JSON.stringify(
-                  (() => {
-                    const [aug] = selectAugmentedFiles(reduxState, [realFileId]);
-                    return aug ? { type: 'file', state: compressAugmentedFile(aug) } : null;
-                  })(),
-                  null, 2
-                )}
-              </Text>
-            </Box>
-          </Collapsible.Content>
-        </Collapsible.Root>
-      )}
-    </VStack>
+    <StepContextDocsStep
+      isAgentRunning={isAgentRunning}
+      docContent={docContent}
+      hadExistingDocs={hadExistingDocs}
+      showAgentFeed={showAgentFeed}
+      allDocs={allDocs}
+      onDocsChange={handleDocsChange}
+      expandedDocIndices={expandedDocIndices}
+      onExpandedChange={setExpandedDocIndices}
+      knowledgeCounts={knowledgeCounts}
+      error={error}
+      agentProgress={agentProgress}
+      onSkip={handleSkip}
+      saving={saving}
+      onBack={() => setSubStep('tables')}
+      onAgentDescribe={handleAgentDescribe}
+      onSave={handleSave}
+      connectionName={connectionName}
+      contextPath={contextPath}
+      showDebug={showDebug}
+      realFileId={realFileId}
+      reduxState={reduxState}
+    />
   );
 }

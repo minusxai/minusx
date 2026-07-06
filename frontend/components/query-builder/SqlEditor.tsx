@@ -2,9 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useAppSelector } from '@/store/hooks';
-import { Box, IconButton, VStack, HStack } from '@chakra-ui/react';
-import { LuAlignLeft, LuPlay } from 'react-icons/lu';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Box, HStack } from '@chakra-ui/react';
 import { format } from 'sql-formatter';
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { DatabaseWithSchema } from '@/lib/types';
@@ -13,6 +11,9 @@ import EditWithAgentPopover from '@/components/EditWithAgentPopover';
 import { computeMonacoPopoverPosition, type MonacoPopoverPosition } from '@/lib/chat/edit-with-agent';
 import { ResolvedReference } from '@/lib/sql/query-composer';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
+import SqlDiffEditor from './SqlDiffEditor';
+import SqlEditorToolbar from './SqlEditorToolbar';
+import SqlEditorResizeHandle from './SqlEditorResizeHandle';
 
 // PERFORMANCE EXCEPTION — monaco-editor (~73 MB of JS) is lazy-loaded via next/dynamic
 // rather than imported statically. Monaco is browser-only (ssr: false is correct) and is
@@ -20,13 +21,10 @@ import { CompletionsAPI } from '@/lib/data/completions/completions';
 // into the Turbopack dev cache for every page in the app, slowing every unrelated page's
 // first compile. next/dynamic is the documented Next.js pattern for this exact scenario.
 // This is NOT a circular-dependency workaround — that is the sole reason the rule exists.
-// Kept to two targeted declarations; do not expand this block.
+// Kept to a single targeted declaration (SqlDiffEditor.tsx has the sibling DiffEditor
+// declaration); do not expand this block.
 /* eslint-disable no-restricted-syntax */
 const Editor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
-const DiffEditor = dynamic(
-  () => import('@monaco-editor/react').then(mod => ({ default: mod.DiffEditor })),
-  { ssr: false }
-);
 /* eslint-enable no-restricted-syntax */
 
 /**
@@ -522,39 +520,13 @@ export default function SqlEditor({
         >
           {proposedValue ? (
             // Diff mode: show current vs proposed
-            <DiffEditor
-              height={fillHeight ? '100%' : `${height}px`}
-              language="sql"
-              original={value}
-              modified={proposedValue}
-              theme={editorTheme}
-              keepCurrentOriginalModel
-              keepCurrentModifiedModel
-              onMount={(_editor, monaco) => {
-                // Define custom theme
-                monaco.editor.defineTheme('custom-theme', {
-                  base: colorMode === 'dark' ? 'vs-dark' : 'vs',
-                  inherit: true,
-                  rules: [],
-                  colors: {
-                    'editor.background': colorMode === 'dark' ? '#161b22' : '#ffffff',
-                  }
-                });
-                monaco.editor.setTheme('custom-theme');
-              }}
-              options={{
-                readOnly: true,  // Diff view is always read-only
-                fontFamily: 'var(--font-jetbrains-mono)',
-                lineNumbers: 'on',
-                scrollBeyondLastLine: false,
-                wordWrap: 'on',
-                automaticLayout: true,
-                renderSideBySide: true,  // Side-by-side diff view
-                padding: {
-                  top: 12,
-                  bottom: 12,
-                },
-              }}
+            <SqlDiffEditor
+              value={value}
+              proposedValue={proposedValue}
+              editorTheme={editorTheme}
+              colorMode={colorMode}
+              fillHeight={fillHeight}
+              height={height}
             />
           ) : (
             // Normal edit mode
@@ -826,90 +798,22 @@ export default function SqlEditor({
           )}
         </Box>
 
-        {!readOnly && (showFormatButton || showRunButton) && (
-          <VStack gap={2} justify="flex-start" py={2}>
-            {showFormatButton && (
-              <Tooltip content="Format SQL" positioning={{ placement: 'left' }}>
-                <IconButton
-                  onClick={handleFormat}
-                  aria-label="Format SQL"
-                  size="sm"
-                  variant="ghost"
-                  color="accent.teal"
-                  _hover={{ bg: 'accent.teal', color: 'white' }}
-                >
-                  <LuAlignLeft />
-                </IconButton>
-              </Tooltip>
-            )}
-            {showRunButton && onRun && (
-              <Tooltip content="Run Query (Cmd+Enter)" positioning={{ placement: 'left' }}>
-                <IconButton
-                  onClick={onRun}
-                  aria-label="Run query"
-                  size="sm"
-                  colorPalette="teal"
-                  loading={isRunning}
-                >
-                  <LuPlay fill="white" />
-                </IconButton>
-              </Tooltip>
-            )}
-          </VStack>
-        )}
+        <SqlEditorToolbar
+          readOnly={readOnly}
+          showFormatButton={showFormatButton}
+          showRunButton={showRunButton}
+          onFormat={handleFormat}
+          onRun={onRun}
+          isRunning={isRunning}
+        />
       </HStack>
 
       {/* Resize handle - only show when not in fillHeight mode */}
-      {!fillHeight && (
-        <Box
-          position="absolute"
-          bottom="0"
-          left="0"
-          right="0"
-          height="8px"
-          cursor="ns-resize"
-          onMouseDown={handleResizeStart}
-          bg="transparent"
-          _hover={{
-            bg: isResizing ? 'accent.teal' : 'border.emphasized',
-          }}
-          transition="background 0.2s"
-          zIndex={10}
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-        >
-          {/* Resize indicator dots */}
-          <Box
-            display="flex"
-            gap="4px"
-            alignItems="center"
-            py="2px"
-          >
-            <Box
-              width="3px"
-              height="3px"
-              borderRadius="full"
-              bg={isResizing ? 'white' : 'border.emphasized'}
-              transition="background 0.2s"
-            />
-            <Box
-              width="3px"
-              height="3px"
-              borderRadius="full"
-              bg={isResizing ? 'white' : 'border.emphasized'}
-              transition="background 0.2s"
-            />
-            <Box
-              width="3px"
-              height="3px"
-              borderRadius="full"
-              bg={isResizing ? 'white' : 'border.emphasized'}
-              transition="background 0.2s"
-            />
-          </Box>
-        </Box>
-      )}
+      <SqlEditorResizeHandle
+        fillHeight={fillHeight}
+        isResizing={isResizing}
+        onResizeStart={handleResizeStart}
+      />
     </Box>
     </>
   );

@@ -1,0 +1,230 @@
+'use client';
+
+import { useState, useCallback } from 'react';
+import { Box, HStack, Text, Icon, Button, Menu, Portal, Input } from '@chakra-ui/react';
+import { LuPlus, LuChevronDown, LuRefreshCw, LuPin, LuShare2, LuExpand, LuPencil } from 'react-icons/lu';
+import { Tooltip } from '@/components/ui/tooltip';
+import { toaster } from '@/components/ui/toaster';
+import { useAppDispatch } from '@/store/hooks';
+import { setActiveConversation, setConversationTitle } from '@/store/chatSlice';
+import { ConversationsAPI } from '@/lib/data/conversations';
+import { preserveParams } from '@/lib/navigation/url-utils';
+
+interface ChatHeaderBarProps {
+  container: 'page' | 'sidebar';
+  conversationID: number | undefined;
+  providedConversationId: number | undefined;
+  hasConversation: boolean;
+  isConversationActive: boolean;
+  conversationTitle: string | null;
+  hasMessages: boolean;
+  isExplorePage: boolean;
+  navigate: (href: string) => void;
+  handleNewChat: () => void;
+}
+
+// Action Buttons Bar: conversation title (with inline rename), "Set as Active",
+// "New Chat", "Copy link", and (in sidebar) "Open in explore". Extracted wholesale
+// from ChatInterface — the rename state/handlers and the "Set as Active" dispatch
+// are local to this bar and move with it.
+export default function ChatHeaderBar({
+  container,
+  conversationID,
+  providedConversationId,
+  hasConversation,
+  isConversationActive,
+  conversationTitle,
+  hasMessages,
+  isExplorePage,
+  navigate,
+  handleNewChat,
+}: ChatHeaderBarProps) {
+  const dispatch = useAppDispatch();
+
+  // Inline rename of the conversation title (the ▾ menu → Rename).
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const startRename = useCallback(() => {
+    setRenameValue(conversationTitle ?? '');
+    setIsRenaming(true);
+  }, [conversationTitle]);
+  const submitRename = useCallback(async () => {
+    setIsRenaming(false);
+    const next = renameValue.trim();
+    if (!next || !conversationID || conversationID <= 0 || next === conversationTitle) return;
+    dispatch(setConversationTitle({ conversationID, title: next })); // optimistic
+    try {
+      await ConversationsAPI.rename(conversationID, next);
+    } catch (err) {
+      console.error('[ChatInterface] rename failed:', err);
+      toaster.create({ title: "Couldn't rename the conversation", type: 'error' });
+    }
+  }, [renameValue, conversationID, conversationTitle, dispatch]);
+
+  // Handler for setting conversation as active
+  const handleSetAsActive = () => {
+    if (conversationID) {
+      dispatch(setActiveConversation(conversationID));
+    }
+  };
+
+  // "Set as Active" button (only shown for non-active conversations)
+  const setAsActiveButton = providedConversationId && !isConversationActive && hasConversation && (
+    <Tooltip content="Make this conversation active in sidechat" positioning={{ placement: 'bottom' }}>
+      <Button
+        onClick={handleSetAsActive}
+        size="xs"
+        variant="outline"
+        borderColor="border.emphasized"
+        color="fg.muted"
+        _hover={{ bg: 'bg.muted', borderColor: 'accent.teal', color: 'accent.teal' }}
+      >
+        <Icon as={LuPin} boxSize={4} mr={1} />
+        Set as Active
+      </Button>
+    </Tooltip>
+  );
+
+  // New Chat button component (reused in both banner and standalone)
+  const newChatButton = hasMessages && (
+    <Button
+      onClick={handleNewChat}
+      size="xs"
+      bg="accent.teal"
+      color="white"
+      _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+    >
+      {isExplorePage ? (
+        <><Icon as={LuPlus} boxSize={4} mr={1} />New Chat</>
+      ) : (
+        <Tooltip content="Clear Chat" positioning={{ placement: 'left' }}><LuRefreshCw /></Tooltip>
+      )}
+    </Button>
+  );
+
+  return (
+    <Box
+      position="sticky"
+      top={0}
+      bg="bg.canvas"
+      pt={3}
+      pb={2}
+      zIndex={10}
+      display="flex"
+      justifyContent="center"
+    >
+      <Box width="100%" display="flex" justifyContent="space-between" alignItems="center" px={5}>
+        <HStack gap={2}>
+        {container === 'sidebar' && (
+          <Tooltip content="Open in explore" positioning={{ placement: 'bottom' }}>
+            <Button
+              onClick={() => {
+                const path = conversationID && conversationID > 0
+                  ? `/explore/${conversationID}`
+                  : '/explore';
+                navigate(preserveParams(path));
+              }}
+              size="xs"
+              variant="outline"
+              borderColor="border.muted"
+              color="fg.subtle"
+              _hover={{ color: 'accent.teal', borderColor: 'accent.teal' }}
+            >
+              <LuExpand />
+            </Button>
+          </Tooltip>
+        )}
+        {conversationID && conversationID > 0 && (
+          isRenaming ? (
+            <Input
+              aria-label="Conversation title"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={submitRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); submitRename(); }
+                else if (e.key === 'Escape') { e.preventDefault(); setIsRenaming(false); }
+              }}
+              autoFocus
+              size="xs"
+              fontFamily="mono"
+              fontWeight="700"
+              variant="flushed"
+              maxW="360px"
+              h="26px"
+            />
+          ) : (
+            <Menu.Root>
+              <Menu.Trigger asChild>
+                <HStack
+                  as="button"
+                  aria-label="Conversation title menu"
+                  gap={1}
+                  px={1.5}
+                  h="26px"
+                  borderRadius="sm"
+                  color="fg.default"
+                  _hover={{ bg: 'bg.muted' }}
+                  maxW="380px"
+                  minW={0}
+                >
+                  <Tooltip content={conversationTitle || 'Untitled chat'} positioning={{ placement: 'bottom' }}>
+                    <Text fontSize="sm" fontFamily="mono" fontWeight="700" truncate maxW="120px">
+                      {conversationTitle || 'Untitled chat'}
+                    </Text>
+                  </Tooltip>
+                  <Icon as={LuChevronDown} boxSize={3.5} color="fg.muted" flexShrink={0} />
+                </HStack>
+              </Menu.Trigger>
+              <Portal>
+                <Menu.Positioner>
+                  <Menu.Content minW="160px" bg="bg.surface" borderColor="border.default" shadow="lg" p={1}>
+                    <Menu.Item
+                      value="rename"
+                      aria-label="Rename conversation"
+                      cursor="pointer"
+                      borderRadius="sm"
+                      px={3}
+                      py={2}
+                      _hover={{ bg: 'bg.muted' }}
+                      onClick={startRename}
+                    >
+                      <HStack gap={2}>
+                        <Icon as={LuPencil} boxSize={4} />
+                        <span>Rename</span>
+                      </HStack>
+                    </Menu.Item>
+                  </Menu.Content>
+                </Menu.Positioner>
+              </Portal>
+            </Menu.Root>
+          )
+        )}
+        {/* ViewModeToggle removed — always use compact */}
+        </HStack>
+        <HStack gap={2}>
+          {setAsActiveButton}
+          {newChatButton}
+          <Tooltip content="Copy link" positioning={{ placement: 'bottom' }}>
+            <Button
+              onClick={() => {
+                const path = conversationID && conversationID > 0
+                  ? `/explore/${conversationID}`
+                  : window.location.pathname + window.location.search;
+                const url = window.location.origin + preserveParams(path);
+                navigator.clipboard.writeText(url);
+                toaster.create({ title: 'Link copied to clipboard', type: 'success' });
+              }}
+              size="xs"
+              bg="accent.teal"
+              color="white"
+              _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+            >
+              <LuShare2 />
+            </Button>
+          </Tooltip>
+        </HStack>
+      </Box>
+    </Box>
+  );
+}

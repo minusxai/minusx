@@ -6,8 +6,12 @@ import { LuDownload, LuUpload, LuCircleCheck, LuCircleX, LuLoader, LuChevronDown
 import { fetchWithCache } from '@/lib/http/fetch-wrapper';
 import { API } from '@/lib/http/declarations';
 import { MINIMUM_SUPPORTED_DATA_VERSION } from '@/lib/database/constants';
+import ValidationStatusDisplay from './ValidationStatusDisplay';
+import MigrationStatusDisplay from './MigrationStatusDisplay';
+import BackfillConversationsSection from './BackfillConversationsSection';
+import ClearLlmLogsSection from './ClearLlmLogsSection';
 
-interface ValidationStatus {
+export interface ValidationStatus {
   valid: boolean;
   errors: string[];
   warnings: string[];
@@ -25,7 +29,7 @@ interface VersionInfo {
   upToDate: boolean;
 }
 
-interface MigrationResult {
+export interface MigrationResult {
   success: boolean;
   message?: string;
   migrations: string[];
@@ -53,54 +57,6 @@ export default function DataManagementSection() {
   const [uploadedData, setUploadedData] = useState<any>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [showUploadedData, setShowUploadedData] = useState(false);
-  const [isClearingLogs, setIsClearingLogs] = useState(false);
-  const [clearLogsBefore, setClearLogsBefore] = useState('');
-  const [clearLogsStatus, setClearLogsStatus] = useState<{ success: boolean; message: string } | null>(null);
-  const [isBackfilling, setIsBackfilling] = useState(false);
-  const [backfillReport, setBackfillReport] = useState<{ found: number; migrated: number; skipped: number; emptyLog: number; failed: number; dry: boolean } | null>(null);
-  const [backfillError, setBackfillError] = useState<string | null>(null);
-
-  // One-time backfill of pre-v3 conversation files into the v3 tables (admin-only API).
-  const handleBackfillV3 = async (dry: boolean) => {
-    setIsBackfilling(true);
-    setBackfillReport(null);
-    setBackfillError(null);
-    try {
-      const res = await fetch(`/api/admin/migrate-conversations-v3${dry ? '?dry=1' : ''}`, { method: 'POST' });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setBackfillError(json?.error?.message || `Backfill failed (HTTP ${res.status})`);
-        return;
-      }
-      setBackfillReport(json.data ?? json);
-    } catch {
-      setBackfillError('Failed to run backfill');
-    } finally {
-      setIsBackfilling(false);
-    }
-  };
-
-  const handleClearLogs = async (scope: 'all' | 'before') => {
-    if (scope === 'before' && !clearLogsBefore) return;
-    setIsClearingLogs(true);
-    setClearLogsStatus(null);
-    try {
-      const qs = scope === 'before'
-        ? `?before=${encodeURIComponent(new Date(clearLogsBefore).toISOString())}`
-        : '';
-      const res = await fetch(`/api/llm-logs${qs}`, { method: 'DELETE' });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setClearLogsStatus({ success: true, message: `Cleared ${data.removed ?? 0} log(s)` });
-      } else {
-        setClearLogsStatus({ success: false, message: data?.error?.message || 'Failed to clear logs' });
-      }
-    } catch {
-      setClearLogsStatus({ success: false, message: 'Failed to clear logs' });
-    } finally {
-      setIsClearingLogs(false);
-    }
-  };
 
   // Fetch current database version on mount
   useEffect(() => {
@@ -409,117 +365,6 @@ export default function DataManagementSection() {
     }
   };
 
-  const renderStatusWithErrors = (
-    status: ValidationStatus | null,
-    type: 'export' | 'validate' | 'import'
-  ) => {
-    if (!status) return null;
-
-    return (
-      <Box mt={2}>
-        <Flex
-          align="center"
-          gap={2}
-          cursor={status.errors.length > 0 ? 'pointer' : 'default'}
-          onClick={() => status.errors.length > 0 && setExpandedErrors(expandedErrors === type ? null : type)}
-        >
-          <Text fontSize="xs" color={status.valid ? 'accent.teal' : 'accent.danger'} fontFamily="mono">
-            {status.valid
-              ? (status.warnings.length > 0 ? status.warnings[0] : '✓ Valid')
-              : `✗ ${status.errors.length} error${status.errors.length > 1 ? 's' : ''}`}
-          </Text>
-          {status.errors.length > 0 && (
-            <Icon fontSize="sm" color="fg.muted">
-              {expandedErrors === type ? <LuChevronDown /> : <LuChevronRight />}
-            </Icon>
-          )}
-        </Flex>
-
-        {status.errors.length > 0 && expandedErrors === type && (
-          <Box mt={2} p={2} bg="accent.danger/10" borderRadius="md" borderWidth="1px" borderColor="accent.danger/30">
-            <VStack align="stretch" gap={1}>
-              {status.errors.map((error, idx) => (
-                <Text key={idx} fontSize="xs" color="accent.danger" fontFamily="mono">
-                  • {error}
-                </Text>
-              ))}
-            </VStack>
-          </Box>
-        )}
-      </Box>
-    );
-  };
-
-  const renderMigrationStatus = (result: MigrationResult | null) => {
-    if (!result) return null;
-
-    return (
-      <Box mt={2}>
-        <Flex
-          align="center"
-          gap={2}
-          cursor={result.errors && result.errors.length > 0 ? 'pointer' : 'default'}
-          onClick={() => result.errors && result.errors.length > 0 && setExpandedErrors(expandedErrors === 'migrate' ? null : 'migrate')}
-        >
-          <Text fontSize="xs" color={result.success ? 'accent.teal' : 'accent.danger'} fontFamily="mono">
-            {result.success
-              ? (result.migrations.length > 0
-                  ? `✓ ${result.migrations.length} migration${result.migrations.length > 1 ? 's' : ''} applied`
-                  : result.message || '✓ Database is up to date')
-              : `✗ ${result.errors?.length || 0} error${(result.errors?.length || 0) > 1 ? 's' : ''}`}
-          </Text>
-          {result.errors && result.errors.length > 0 && (
-            <Icon fontSize="sm" color="fg.muted">
-              {expandedErrors === 'migrate' ? <LuChevronDown /> : <LuChevronRight />}
-            </Icon>
-          )}
-        </Flex>
-
-        {/* Show applied migrations */}
-        {result.success && result.migrations.length > 0 && (
-          <Box mt={2} p={2} bg="accent.teal/10" borderRadius="md" borderWidth="1px" borderColor="accent.teal/30">
-            <VStack align="stretch" gap={1}>
-              {result.migrations.map((migration, idx) => (
-                <Text key={idx} fontSize="xs" color="accent.teal" fontFamily="mono">
-                  ✓ {migration}
-                </Text>
-              ))}
-            </VStack>
-          </Box>
-        )}
-
-        {/* Show errors */}
-        {result.errors && result.errors.length > 0 && expandedErrors === 'migrate' && (
-          <Box mt={2} p={2} bg="accent.danger/10" borderRadius="md" borderWidth="1px" borderColor="accent.danger/30">
-            <VStack align="stretch" gap={1}>
-              {result.errors.map((error, idx) => (
-                <Text key={idx} fontSize="xs" color="accent.danger" fontFamily="mono">
-                  • {error}
-                </Text>
-              ))}
-            </VStack>
-          </Box>
-        )}
-
-        {/* Show validation results if present */}
-        {result.validation && result.validation.errors.length > 0 && (
-          <Box mt={2} p={2} bg="orange.50" borderRadius="md" borderWidth="1px" borderColor="orange.200">
-            <Text fontSize="xs" fontWeight="medium" color="orange.900" fontFamily="mono" mb={1}>
-              Validation Issues:
-            </Text>
-            <VStack align="stretch" gap={1}>
-              {result.validation.errors.map((error, idx) => (
-                <Text key={idx} fontSize="xs" color="orange.900" fontFamily="mono">
-                  • {error}
-                </Text>
-              ))}
-            </VStack>
-          </Box>
-        )}
-      </Box>
-    );
-  };
-
   return (
     <Box>
       <VStack align="stretch" gap={0} divideY="1px">
@@ -556,7 +401,7 @@ export default function DataManagementSection() {
           <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={exportStatus ? 2 : 0}>
             Export your workspace data to compressed JSON file (.json.gz)
           </Text>
-          {renderStatusWithErrors(exportStatus, 'export')}
+          <ValidationStatusDisplay status={exportStatus} type="export" expandedErrors={expandedErrors} setExpandedErrors={setExpandedErrors} />
         </Box>
 
         {/* Validate */}
@@ -618,7 +463,7 @@ export default function DataManagementSection() {
             </Box>
           )}
 
-          {renderStatusWithErrors(validateStatus, 'validate')}
+          <ValidationStatusDisplay status={validateStatus} type="validate" expandedErrors={expandedErrors} setExpandedErrors={setExpandedErrors} />
         </Box>
 
         {/* Migrate */}
@@ -658,7 +503,7 @@ export default function DataManagementSection() {
               ? 'Export and re-import data without migrations (useful for testing or fixing data issues)'
               : 'Apply pending database migrations'}
           </Text>
-          {renderMigrationStatus(migrateStatus)}
+          <MigrationStatusDisplay result={migrateStatus} expandedErrors={expandedErrors} setExpandedErrors={setExpandedErrors} />
         </Box>
 
         {/* Import */}
@@ -721,7 +566,7 @@ export default function DataManagementSection() {
               </Text>
             )}
           </VStack>
-          {renderStatusWithErrors(importStatus, 'import')}
+          <ValidationStatusDisplay status={importStatus} type="import" expandedErrors={expandedErrors} setExpandedErrors={setExpandedErrors} />
 
           {/* Show uploaded data preview */}
           {uploadedData && (
@@ -765,52 +610,7 @@ export default function DataManagementSection() {
         </Box>
 
         {/* Backfill old conversations → v3 */}
-        <Box py={4} px={4}>
-          <Flex justify="space-between" align="center" mb={backfillReport || backfillError ? 2 : 0}>
-            <Text fontSize="sm" fontWeight="medium" fontFamily="mono">
-              Backfill Conversations to v3
-            </Text>
-            <Flex gap={2}>
-              <Button
-                size="sm"
-                variant="outline"
-                fontFamily="mono"
-                aria-label="Dry-run conversation backfill"
-                onClick={() => handleBackfillV3(true)}
-                disabled={isBackfilling}
-              >
-                {isBackfilling ? (
-                  <><Icon fontSize="md" mr={1}><LuLoader className="animate-spin" /></Icon>Working...</>
-                ) : 'Dry run'}
-              </Button>
-              <Button
-                size="sm"
-                bg="accent.teal"
-                color="white"
-                fontFamily="mono"
-                aria-label="Run conversation backfill"
-                onClick={() => handleBackfillV3(false)}
-                disabled={isBackfilling}
-              >
-                Run backfill
-              </Button>
-            </Flex>
-          </Flex>
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={backfillReport || backfillError ? 2 : 0}>
-            One-time: port pre-v3 conversation files into the v3 tables so old chats appear in history. Idempotent and non-destructive (source files are untouched) — safe to re-run. Dry run reports counts without writing.
-          </Text>
-          {backfillError && (
-            <Text fontSize="xs" color="accent.danger" fontFamily="mono">✗ {backfillError}</Text>
-          )}
-          {backfillReport && (
-            <Box mt={2} p={2} bg="bg.muted" borderRadius="md" borderWidth="1px" borderColor="border">
-              <Text fontSize="xs" fontFamily="mono" color={backfillReport.failed > 0 ? 'accent.danger' : 'accent.teal'}>
-                {backfillReport.dry ? 'Dry run · ' : '✓ '}
-                found {backfillReport.found} · migrated {backfillReport.migrated} · skipped {backfillReport.skipped} · empty {backfillReport.emptyLog} · failed {backfillReport.failed}
-              </Text>
-            </Box>
-          )}
-        </Box>
+        <BackfillConversationsSection />
 
         {/* Reset Tutorial */}
         <Box py={4} px={4}>
@@ -854,56 +654,7 @@ export default function DataManagementSection() {
         </Box>
 
         {/* Clear LLM Logs (raw request/response blobs only — stats are kept) */}
-        <Box py={4} px={4}>
-          <Text fontSize="sm" fontWeight="medium" fontFamily="mono" mb={1}>
-            LLM Debug Logs
-          </Text>
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={2}>
-            Clear stored raw request/response logs used by the chat debug view. Usage stats are kept.
-          </Text>
-          <Flex gap={2} align="center" wrap="wrap">
-            <Input
-              type="date"
-              size="sm"
-              maxW="180px"
-              fontFamily="mono"
-              aria-label="Clear LLM logs before date"
-              value={clearLogsBefore}
-              onChange={(e) => setClearLogsBefore(e.target.value)}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              fontFamily="mono"
-              aria-label="Clear LLM logs before date"
-              disabled={isClearingLogs || !clearLogsBefore}
-              onClick={() => handleClearLogs('before')}
-            >
-              Clear before date
-            </Button>
-            <Button
-              size="sm"
-              colorPalette="red"
-              variant="outline"
-              fontFamily="mono"
-              aria-label="Clear all LLM logs"
-              disabled={isClearingLogs}
-              onClick={() => handleClearLogs('all')}
-            >
-              {isClearingLogs ? (
-                <>
-                  <Icon fontSize="md" mr={1}><LuLoader className="animate-spin" /></Icon>
-                  Clearing...
-                </>
-              ) : 'Clear all logs'}
-            </Button>
-          </Flex>
-          {clearLogsStatus && (
-            <Text mt={2} fontSize="xs" color={clearLogsStatus.success ? 'accent.teal' : 'accent.danger'} fontFamily="mono">
-              {clearLogsStatus.success ? `✓ ${clearLogsStatus.message}` : `✗ ${clearLogsStatus.message}`}
-            </Text>
-          )}
-        </Box>
+        <ClearLlmLogsSection />
 
       </VStack>
 

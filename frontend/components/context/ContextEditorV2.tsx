@@ -6,26 +6,21 @@
  * All changes go through onChange immediately
  */
 
-import { Box, VStack, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
-import { memo, useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Box, VStack, HStack, Text, Badge, Tabs } from '@chakra-ui/react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from '@/lib/navigation/use-navigation';
-import { LuBookOpen, LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight } from 'react-icons/lu';
-import type { ContextContent, ContextVersion, PublishedVersions, DocEntry, Test, SkillEntry } from '@/lib/types';
-import { SchedulePicker } from '@/components/shared/SchedulePicker';
-import { DeliveryCard } from '@/components/shared/DeliveryPicker';
+import { LuCircleAlert } from 'react-icons/lu';
+import type { ContextContent, ContextVersion, PublishedVersions, DocEntry, SkillEntry } from '@/lib/types';
 import { StatusBanner } from '@/components/shared/StatusBanner';
-import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
-import TestList from '../evals/TestList';
-import ContextRunView from '../views/ContextRunView';
+import type { RunOptions } from '@/components/shared/RunNowHeader';
 import type { JobRun } from '@/lib/types';
-import { serializeDatabases, parseDatabasesYaml, canDeleteVersion, countResolvedWhitelist, findDocsMissingMeta } from '@/lib/context/context-utils';
-import SchemaTreeView, { type WhitelistItem } from '../schema-browser/SchemaTreeView';
+import { serializeDatabases, parseDatabasesYaml, findDocsMissingMeta } from '@/lib/context/context-utils';
+import type { WhitelistItem } from '../schema-browser/SchemaTreeView';
 import ContextDocsEditor from './ContextDocsEditor';
 import { isDocContentOverLimit } from '@/lib/context/context-budgets';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
 import { anyDocMetaIncomplete } from '@/lib/context/doc-validation';
-import { Checkbox } from '@/components/ui/checkbox';
 import Editor from '@monaco-editor/react';
 import DocumentHeader from '../file-browser/DocumentHeader';
 import { FileHealthBadge } from '../file-browser/FileHealthPanel';
@@ -36,6 +31,10 @@ import { selectConnectionsLoading } from '@/store/filesSlice';
 import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { useContext as useKnowledgeContext } from '@/lib/hooks/useContext';
+import { ContextVersionManager } from './ContextVersionManager';
+import { DatabasesTabContent } from './DatabasesTabContent';
+import { SkillsTabContent } from './SkillsTabContent';
+import { EvalsTabContent } from './EvalsTabContent';
 
 type DatabaseSelection = {
   databaseName: string;
@@ -78,173 +77,6 @@ interface ContextEditorV2Props {
 }
 
 const MONACO_READ_ONLY_MESSAGE = { value: 'Switch to edit mode to make changes.' };
-
-interface SkillEditorCardProps {
-  skill: SkillEntry;
-  index: number;
-  canManageSkills: boolean;
-  colorMode: string;
-  siblingNames: Set<string>;
-  systemSkillNames: Set<string>;
-  onUpdate: (index: number, updates: Partial<SkillEntry>) => void;
-  onDelete: (index: number) => void;
-}
-
-const SkillEditorCard = memo(function SkillEditorCard({
-  skill,
-  index,
-  canManageSkills,
-  colorMode,
-  siblingNames,
-  systemSkillNames,
-  onUpdate,
-  onDelete,
-}: SkillEditorCardProps) {
-  const [expanded, setExpanded] = useState(false);
-  // Reset draft when skill prop changes externally — use a serialized key to detect changes
-  const skillKey = `${skill.name}\0${skill.description}\0${skill.content}`;
-  const [prevSkillKey, setPrevSkillKey] = useState(skillKey);
-  const [draft, setDraft] = useState({
-    name: skill.name,
-    description: skill.description,
-    content: skill.content,
-  });
-
-  if (prevSkillKey !== skillKey) {
-    setPrevSkillKey(skillKey);
-    setDraft({ name: skill.name, description: skill.description, content: skill.content });
-  }
-
-  useEffect(() => {
-    if (
-      draft.name === skill.name &&
-      draft.description === skill.description &&
-      draft.content === skill.content
-    ) {
-      return;
-    }
-    const timeout = window.setTimeout(() => {
-      onUpdate(index, draft);
-    }, 300);
-    return () => window.clearTimeout(timeout);
-  }, [draft, index, onUpdate, skill.content, skill.description, skill.name]);
-
-  const flushDraft = useCallback(() => {
-    if (
-      draft.name !== skill.name ||
-      draft.description !== skill.description ||
-      draft.content !== skill.content
-    ) {
-      onUpdate(index, draft);
-    }
-  }, [draft, index, onUpdate, skill.content, skill.description, skill.name]);
-
-  const normalizedName = draft.name.trim().toLowerCase();
-  const duplicateName = siblingNames.has(normalizedName);
-  const systemCollision = systemSkillNames.has(normalizedName);
-  const invalidName = !/^[a-z0-9_]+$/.test(draft.name.trim()) || duplicateName || systemCollision;
-
-  return (
-    <Collapsible.Root open={expanded} onOpenChange={(e) => setExpanded(e.open)}>
-      <Box border="1px solid" borderColor={invalidName ? 'accent.danger' : 'border.muted'} borderRadius="md" overflow="hidden">
-        <Collapsible.Trigger asChild>
-          <HStack
-            px={3}
-            py={2.5}
-            justify="space-between"
-            align="center"
-            cursor="pointer"
-            bg="bg.surface"
-            _hover={{ bg: 'bg.muted' }}
-          >
-            <HStack gap={2} minW={0} flex={1}>
-              <Icon as={expanded ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" flexShrink={0} />
-              <Badge size="sm" colorPalette={skill.enabled ? 'green' : 'gray'} variant="subtle" flexShrink={0}>
-                {skill.enabled ? 'Enabled' : 'Disabled'}
-              </Badge>
-              <Text fontSize="sm" fontFamily="mono" fontWeight="700" color="fg.default" truncate maxW="260px">
-                {draft.name || 'unnamed_skill'}
-              </Text>
-              <Text fontSize="sm" color="fg.muted" truncate flex={1}>
-                {draft.description || 'No description'}
-              </Text>
-              {invalidName && (
-                <Text fontSize="xs" color="accent.danger" flexShrink={0}>
-                  {duplicateName ? 'Duplicate name' : systemCollision ? 'Conflicts with system skill' : 'Invalid name'}
-                </Text>
-              )}
-            </HStack>
-            {canManageSkills && (
-              <HStack gap={2} onClick={(event) => event.stopPropagation()} flexShrink={0}>
-                <Switch.Root
-                  size="sm"
-                  checked={skill.enabled}
-                  onCheckedChange={(e) => onUpdate(index, { enabled: e.checked })}
-                  colorPalette="green"
-                >
-                  <Switch.HiddenInput />
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                </Switch.Root>
-                <Button size="xs" variant="ghost" colorPalette="red" onClick={() => onDelete(index)}>
-                  <LuTrash2 />
-                </Button>
-              </HStack>
-            )}
-          </HStack>
-        </Collapsible.Trigger>
-        <Collapsible.Content>
-          <VStack align="stretch" gap={3} p={3} borderTop="1px solid" borderColor="border.muted">
-            <HStack gap={3} align="start">
-              <Field.Root flex={1} invalid={invalidName}>
-                <Field.Label>Name</Field.Label>
-                <Input
-                  value={draft.name}
-                  disabled={!canManageSkills}
-                  onChange={(e) => setDraft(prev => ({ ...prev, name: e.target.value }))}
-                  onBlur={flushDraft}
-                  fontFamily="mono"
-                />
-              </Field.Root>
-              <Field.Root flex={2}>
-                <Field.Label>Description</Field.Label>
-                <Input
-                  value={draft.description}
-                  disabled={!canManageSkills}
-                  onChange={(e) => setDraft(prev => ({ ...prev, description: e.target.value }))}
-                  onBlur={flushDraft}
-                />
-              </Field.Root>
-            </HStack>
-
-            <Box border="1px solid" borderColor="border.default" borderRadius="md" overflow="hidden">
-              <Editor
-                height="220px"
-                language="markdown"
-                value={draft.content}
-                onChange={(value) => setDraft(prev => ({ ...prev, content: value || '' }))}
-                onMount={(editor) => editor.onDidBlurEditorText(flushDraft)}
-                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                options={{
-                  readOnly: !canManageSkills,
-                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
-                  minimap: { enabled: false },
-                  wordWrap: 'on',
-                  lineNumbers: 'off',
-                  fontSize: 13,
-                  fontFamily: 'JetBrains Mono, monospace',
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                }}
-              />
-            </Box>
-          </VStack>
-        </Collapsible.Content>
-      </Box>
-    </Collapsible.Root>
-  );
-});
 
 export default function ContextEditorV2({
   content,
@@ -308,12 +140,6 @@ export default function ContextEditorV2({
   // but no actual entry changed (Immer-induced on unrelated slice writes).
   const filesState = useAppSelector(state => state.files.files, shallowEqual); // Moved here for consistent hooks order
 
-  // Version management state
-  const [isCreateVersionOpen, setIsCreateVersionOpen] = useState(false);
-  const [newVersionDescription, setNewVersionDescription] = useState('');
-  const [isDeleteVersionOpen, setIsDeleteVersionOpen] = useState(false);
-  const [versionToDelete, setVersionToDelete] = useState<number | null>(null);
-  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
   const [userSkillsOpen, setUserSkillsOpen] = useState(true);
   const [systemSkillsOpen, setSystemSkillsOpen] = useState(false);
   const contextDir = useMemo(() => file?.path.substring(0, file.path.lastIndexOf('/')) || '/', [file?.path]);
@@ -452,31 +278,6 @@ export default function ContextEditorV2({
     // Don't parse immediately, wait for tab switch or save
   };
 
-  // Handle whitelist change - pure controlled
-  const handleWhitelistChange = (databaseName: string, newWhitelist: WhitelistItem[]) => {
-    // When databases === '*', synthesize a full whitelist for all connections as the starting point
-    // so that modifying one connection doesn't implicitly exclude all others.
-    const databases: DatabaseSelection[] = content.databases === '*'
-      ? availableDatabases.map(db => ({
-          databaseName: db.databaseName,
-          whitelist: db.schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
-        }))
-      : (content.databases || []);
-    const dbIndex = databases.findIndex((db: DatabaseSelection) => db.databaseName === databaseName);
-
-    if (dbIndex >= 0) {
-      // Update existing database
-      const newDatabases = [...databases];
-      newDatabases[dbIndex] = { ...newDatabases[dbIndex], whitelist: newWhitelist };
-      onChange({ databases: newDatabases });
-    } else {
-      // Add new database if it doesn't exist yet
-      onChange({
-        databases: [...databases, { databaseName, whitelist: newWhitelist }]
-      });
-    }
-  };
-
   // Save handler - delegate to container
   const handleSave = async () => {
     let docsForSave: (DocEntry | string)[] = content.docs || [];
@@ -521,59 +322,6 @@ export default function ContextEditorV2({
     }
   };
 
-  // Count whitelisted items, resolved against the live schema so deleted
-  // datasets don't inflate the count. The agent sees `fullSchema`, so we count
-  // against that ('*' = everything currently available).
-  const resolvedCounts = content.databases === '*'
-    ? {
-        databases: availableDatabases.length,
-        items: availableDatabases.reduce((sum: number, db) => sum + db.schemas.reduce((s: number, sc) => s + sc.tables.length, 0), 0),
-      }
-    : countResolvedWhitelist(content.databases || [], content.fullSchema || []);
-  const totalWhitelisted = resolvedCounts.items;
-
-  // Version management helpers
-  const getVersionLabel = (version: ContextVersion) => {
-    const labels: string[] = [`Version ${version.version}`];
-
-    if (publishedStatus.all === version.version) {
-      labels.push('Published');
-    }
-
-    return labels.join(' • ');
-  };
-
-  const handleCreateVersionClick = () => {
-    setNewVersionDescription('');
-    setIsCreateVersionOpen(true);
-  };
-
-  const handleCreateVersionConfirm = () => {
-    if (onCreateVersion) {
-      onCreateVersion(newVersionDescription);
-    }
-    setIsCreateVersionOpen(false);
-  };
-
-  const handleDeleteVersionClick = (version: number) => {
-    if (!canDeleteVersion(content, version)) {
-      setDeleteErrorMessage('Cannot delete this version: it is either the only version or is currently published.');
-      return;
-    }
-
-    setVersionToDelete(version);
-    setIsDeleteVersionOpen(true);
-  };
-
-  const handleDeleteVersionConfirm = () => {
-    if (versionToDelete !== null && onDeleteVersion) {
-      onDeleteVersion(versionToDelete);
-    }
-    setIsDeleteVersionOpen(false);
-    setVersionToDelete(null);
-  };
-
-  const evalsSelectedRun = runs.find(r => r.id === selectedRunId) ?? runs[0] ?? null;
   const canManageSkills = editMode && canEdit(user?.role || 'viewer');
   const systemSkillNames = new Set(systemSkills.map(skill => skill.name.toLowerCase()));
 
@@ -657,195 +405,19 @@ export default function ContextEditorV2({
         />
       </Box>
 
-      {/* Version Management (Admin Only, behind debug toggle) */}
-      {showDebug && isAdmin && allVersions.length > 0 && (
-        <HStack justify="space-between" px={3} py={2} bg="bg.muted" borderRadius="md">
-          <HStack gap={3}>
-            <Text fontSize="sm" fontWeight="600" color="fg.muted">
-              Version:
-            </Text>
-            <Menu.Root>
-              <Menu.Trigger asChild>
-                <Button size="xs" variant="outline">
-                  {getVersionLabel(allVersions.find(v => v.version === currentVersion)!)}
-                  <LuChevronDown />
-                </Button>
-              </Menu.Trigger>
-              <Portal>
-                <Menu.Positioner>
-                  <Menu.Content>
-                    {allVersions.map(version => (
-                      <Menu.Item
-                        key={version.version}
-                        value={version.version.toString()}
-                        onClick={() => onSwitchVersion?.(version.version)}
-                      >
-                        <HStack justify="space-between" width="100%">
-                          <Text>{getVersionLabel(version)}</Text>
-                          {publishedStatus.all === version.version && (
-                            <Badge size="xs" colorPalette="green">
-                              <LuCircleCheck /> Published
-                            </Badge>
-                          )}
-                        </HStack>
-                      </Menu.Item>
-                    ))}
-                  </Menu.Content>
-                </Menu.Positioner>
-              </Portal>
-            </Menu.Root>
-            {allVersions.find(v => v.version === currentVersion)?.description && (
-              <Text fontSize="xs" color="fg.muted">
-                — {allVersions.find(v => v.version === currentVersion)!.description}
-              </Text>
-            )}
-          </HStack>
-
-          {/* Version Actions */}
-          <HStack gap={2}>
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={handleCreateVersionClick}
-            >
-              <LuPlus />
-              New Version
-            </Button>
-
-            {/* Show publish button if not already published */}
-            {publishedStatus.all !== currentVersion && (
-              <Button
-                size="xs"
-                variant="outline"
-                disabled={isDirty}
-                onClick={onPublishVersion}
-              >
-                <LuGlobe />
-                Publish
-              </Button>
-            )}
-
-            {allVersions.length > 1 && canDeleteVersion(content, currentVersion) && (
-              <Button
-                size="xs"
-                variant="outline"
-                colorPalette="red"
-                onClick={() => handleDeleteVersionClick(currentVersion)}
-              >
-                <LuTrash2 />
-              </Button>
-            )}
-          </HStack>
-        </HStack>
-      )}
-
-      {/* Create Version Dialog */}
-      <Dialog.Root open={isCreateVersionOpen} onOpenChange={(e: { open: boolean }) => setIsCreateVersionOpen(e.open)}>
-        <Portal>
-          <Dialog.Backdrop />
-          <Dialog.Positioner>
-            <Dialog.Content
-              maxW="500px"
-              bg="bg.surface"
-              borderRadius="lg"
-              border="1px solid"
-              borderColor="border.default"
-            >
-              <Dialog.Header px={6} py={4} borderBottom="1px solid" borderColor="border.default">
-                <Dialog.Title fontWeight="700" fontSize="xl">Create New Version</Dialog.Title>
-              </Dialog.Header>
-              <Dialog.Body px={6} py={5}>
-                <Field.Root>
-                  <Field.Label>Description (optional)</Field.Label>
-                  <Input
-                    value={newVersionDescription}
-                    onChange={(e) => setNewVersionDescription(e.target.value)}
-                    placeholder="e.g., Added marketing tables"
-                  />
-                </Field.Root>
-              </Dialog.Body>
-              <Dialog.Footer px={6} py={4} gap={3} borderTop="1px solid" borderColor="border.default" justifyContent="flex-end">
-                <Dialog.ActionTrigger asChild>
-                  <Button variant="outline" onClick={() => setIsCreateVersionOpen(false)}>
-                    Cancel
-                  </Button>
-                </Dialog.ActionTrigger>
-                <Button bg="accent.cyan" color="white" onClick={handleCreateVersionConfirm}>
-                  Create Version
-                </Button>
-              </Dialog.Footer>
-              <Dialog.CloseTrigger />
-            </Dialog.Content>
-          </Dialog.Positioner>
-        </Portal>
-      </Dialog.Root>
-
-      {/* Delete Version Confirmation Dialog */}
-      <Dialog.Root open={isDeleteVersionOpen} onOpenChange={(e: { open: boolean }) => setIsDeleteVersionOpen(e.open)}>
-        <Portal>
-          <Dialog.Backdrop />
-          <Dialog.Positioner>
-            <Dialog.Content
-              maxW="500px"
-              bg="bg.surface"
-              borderRadius="lg"
-              border="1px solid"
-              borderColor="border.default"
-            >
-              <Dialog.Header px={6} py={4} borderBottom="1px solid" borderColor="border.default">
-                <Dialog.Title fontWeight="700" fontSize="xl">Delete Version</Dialog.Title>
-              </Dialog.Header>
-              <Dialog.Body px={6} py={5}>
-                <Text fontSize="sm" lineHeight="1.6">
-                  Are you sure you want to delete <Text as="span" fontWeight="600" fontFamily="mono">Version {versionToDelete}</Text>? This action cannot be undone.
-                </Text>
-              </Dialog.Body>
-              <Dialog.Footer px={6} py={4} gap={3} borderTop="1px solid" borderColor="border.default" justifyContent="flex-end">
-                <Dialog.ActionTrigger asChild>
-                  <Button variant="outline" onClick={() => setIsDeleteVersionOpen(false)}>
-                    Cancel
-                  </Button>
-                </Dialog.ActionTrigger>
-                <Button bg="accent.danger" color="white" onClick={handleDeleteVersionConfirm}>
-                  Delete Version
-                </Button>
-              </Dialog.Footer>
-              <Dialog.CloseTrigger />
-            </Dialog.Content>
-          </Dialog.Positioner>
-        </Portal>
-      </Dialog.Root>
-
-      {/* Delete Error Dialog */}
-      <Dialog.Root open={deleteErrorMessage !== null} onOpenChange={(e: { open: boolean }) => !e.open && setDeleteErrorMessage(null)}>
-        <Portal>
-          <Dialog.Backdrop />
-          <Dialog.Positioner>
-            <Dialog.Content
-              maxW="500px"
-              bg="bg.surface"
-              borderRadius="lg"
-              border="1px solid"
-              borderColor="border.default"
-            >
-              <Dialog.Header px={6} py={4} borderBottom="1px solid" borderColor="border.default">
-                <Dialog.Title fontWeight="700" fontSize="xl">Cannot Delete Version</Dialog.Title>
-              </Dialog.Header>
-              <Dialog.Body px={6} py={5}>
-                <Text fontSize="sm" lineHeight="1.6">
-                  {deleteErrorMessage}
-                </Text>
-              </Dialog.Body>
-              <Dialog.Footer px={6} py={4} gap={3} borderTop="1px solid" borderColor="border.default" justifyContent="flex-end">
-                <Button variant="outline" onClick={() => setDeleteErrorMessage(null)}>
-                  OK
-                </Button>
-              </Dialog.Footer>
-              <Dialog.CloseTrigger />
-            </Dialog.Content>
-          </Dialog.Positioner>
-        </Portal>
-      </Dialog.Root>
+      <ContextVersionManager
+        content={content}
+        showDebug={showDebug}
+        isAdmin={isAdmin}
+        currentVersion={currentVersion}
+        allVersions={allVersions}
+        publishedStatus={publishedStatus}
+        isDirty={isDirty}
+        onSwitchVersion={onSwitchVersion}
+        onCreateVersion={onCreateVersion}
+        onPublishVersion={onPublishVersion}
+        onDeleteVersion={onDeleteVersion}
+      />
 
       {/* Error Display */}
       {error && (
@@ -943,292 +515,21 @@ export default function ContextEditorV2({
         </Tabs.List>
 
         {/* Tables Tab */}
-        <Tabs.Content value="databases">
-          {/* Only mount the heavy schema tree when this tab is active — Chakra keeps
-              all panels mounted, so without this gate SchemaTreeView re-renders on
-              every keystroke while editing docs (visible typing lag). */}
-          {topTab === 'databases' && (<>
-          {activeTab === 'picker' ? (
-            <VStack gap={6} align="stretch">
-              {/* Database Sections */}
-              <Box>
-                {!isLoading && availableDatabases.length > 0 && (
-                  <HStack justify="space-between" mb={2}>
-                    <HStack
-                      gap={1.5}
-                      px={2.5}
-                      py={1}
-                      bg={content.databases === '*' ? 'accent.teal/10' : 'bg.muted'}
-                      borderRadius="full"
-                    >
-                      <Icon as={LuGlobe} boxSize={3} color={content.databases === '*' ? 'accent.teal' : 'fg.muted'} />
-                      <Text fontSize="xs" fontWeight="600" fontFamily="mono" color={content.databases === '*' ? 'accent.teal' : 'fg.muted'}>
-                        {content.databases === '*' ? 'All databases selected — includes future connections' : 'Custom selection'}
-                      </Text>
-                    </HStack>
-                    {content.databases === '*' ? (
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => {
-                          const explicitDbs: DatabaseSelection[] = availableDatabases.map(db => ({
-                            databaseName: db.databaseName,
-                            whitelist: db.schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
-                          }));
-                          onChange({ databases: explicitDbs });
-                        }}
-                        fontFamily="mono"
-                      >
-                        Edit selection
-                      </Button>
-                    ) : (
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => onChange({ databases: '*' })}
-                        fontFamily="mono"
-                      >
-                        Wildcard — select all
-                      </Button>
-                    )}
-                  </HStack>
-                )}
-                {!isLoading && availableDatabases.length > 0 && totalWhitelisted === 0 && (
-                  <Box
-                    p={3}
-                    mb={3}
-                    bg="accent.warning/10"
-                    borderLeft="3px solid"
-                    borderColor="accent.warning"
-                    borderRadius="md"
-                  >
-                    <HStack gap={2}>
-                      <LuCircleAlert color="var(--chakra-colors-accent-warning)" />
-                      <Text color="accent.warning" fontSize="sm">
-                        No schemas or tables whitelisted. Select at least one below.
-                      </Text>
-                    </HStack>
-                  </Box>
-                )}
-                {isLoading ? (
-                  <Box p={8} textAlign="center">
-                    <Text color="fg.muted">Loading context...</Text>
-                  </Box>
-                ) : availableDatabases.length === 0 ? (
-                  <Box p={8} textAlign="center">
-                    <Text color="fg.muted">No schemas available from parent context</Text>
-                  </Box>
-                ) : (
-                  <VStack gap={4} align="stretch">
-                    {availableDatabases.map((database) => {
-                      const isConnectionWildcard = content.databases === '*';
-                      // When databases === '*', pass empty whitelist and let connectionWhitelisted prop handle visuals
-                      const whitelist: WhitelistItem[] = isConnectionWildcard
-                        ? []
-                        : ((content.databases || []) as DatabaseSelection[]).find(
-                            (db: DatabaseSelection) => db.databaseName === database.databaseName
-                          )?.whitelist || [];
-
-                      const isExpanded = expandedDatabases.has(database.databaseName);
-                      const whitelistedSchemas = whitelist.filter(w => w.type === 'schema');
-                      const whitelistedTables = whitelist.filter(w => w.type === 'table');
-                      const totalTables = database.schemas.reduce((sum, s) => sum + s.tables.length, 0);
-                      const tablesFromSchemas = database.schemas
-                        .filter(s => whitelistedSchemas.some(ws => ws.name === s.schema))
-                        .reduce((sum, s) => sum + s.tables.length, 0);
-                      // When wildcarded, all tables are effectively included
-                      const effectiveTableCount = isConnectionWildcard ? totalTables : tablesFromSchemas + whitelistedTables.length;
-                      const hasAny = effectiveTableCount > 0;
-
-                      // Connection-level checkbox state
-                      const connectionCheckboxState: { checked: boolean; indeterminate: boolean } = (() => {
-                        if (isConnectionWildcard) return { checked: true, indeterminate: false };
-                        if (whitelist.length === 0) return { checked: false, indeterminate: false };
-                        const isFullyCovered = database.schemas.every(s =>
-                          whitelistedSchemas.some(ws => ws.name === s.schema) ||
-                          s.tables.every(t => whitelistedTables.some(wt => wt.name === t.table && wt.schema === s.schema))
-                        );
-                        if (isFullyCovered) return { checked: true, indeterminate: false };
-                        return { checked: false, indeterminate: true };
-                      })();
-
-                      return (
-                        <Box
-                          key={database.databaseName}
-                          border="1px solid"
-                          borderColor="border.default"
-                          borderRadius="md"
-                          overflow="hidden"
-                          bg="bg.surface"
-                        >
-                          <Collapsible.Root open={isExpanded} onOpenChange={() => toggleDatabase(database.databaseName)}>
-                            <Collapsible.Trigger asChild>
-                              <Box
-                                px={4}
-                                py={3}
-                                bg="bg.muted"
-                                cursor="pointer"
-                                _hover={{ bg: 'bg.emphasized' }}
-                                {...(isExpanded ? { borderBottom: '1px solid', borderColor: 'border.default' } : {})}
-                              >
-                                <HStack gap={2}>
-                                  <Box
-                                    position="relative"
-                                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); }}
-                                  >
-                                    <Checkbox
-                                      checked={connectionCheckboxState.checked}
-                                      onCheckedChange={() => {
-                                        if (connectionCheckboxState.checked || connectionCheckboxState.indeterminate) {
-                                          handleWhitelistChange(database.databaseName, []);
-                                        } else {
-                                          handleWhitelistChange(database.databaseName, database.schemas.map(s => ({ type: 'schema' as const, name: s.schema })));
-                                        }
-                                      }}
-                                    />
-                                    {connectionCheckboxState.indeterminate && (
-                                      <Box
-                                        position="absolute"
-                                        top="50%"
-                                        left="50%"
-                                        transform="translate(-50%, -50%)"
-                                        width="8px"
-                                        height="2px"
-                                        bg="accent.teal"
-                                        borderRadius="sm"
-                                        pointerEvents="none"
-                                      />
-                                    )}
-                                  </Box>
-                                  <Icon
-                                    as={isExpanded ? LuChevronDown : LuChevronRight}
-                                    boxSize={4}
-                                    color="fg.muted"
-                                  />
-                                  <Text
-                                    fontSize="md"
-                                    fontWeight="700"
-                                    color="fg.default"
-                                    fontFamily="mono"
-                                  >
-                                    {database.databaseName}
-                                  </Text>
-                                  {isConnectionWildcard && (
-                                    <Box
-                                      px={2}
-                                      py={0.5}
-                                      bg="accent.teal/15"
-                                      borderRadius="sm"
-                                      border="1px solid"
-                                      borderColor="accent.teal/30"
-                                    >
-                                      <Text fontSize="2xs" fontWeight="700" color="accent.teal" fontFamily="mono">
-                                        all schemas
-                                      </Text>
-                                    </Box>
-                                  )}
-                                  <Box
-                                    px={2}
-                                    py={0.5}
-                                    bg={hasAny ? 'accent.cyan/15' : 'bg.canvas'}
-                                    borderRadius="sm"
-                                    border="1px solid"
-                                    borderColor={hasAny ? 'accent.cyan/30' : 'border.muted'}
-                                  >
-                                    <Text
-                                      fontSize="2xs"
-                                      fontWeight="700"
-                                      color={hasAny ? 'accent.cyan' : 'fg.subtle'}
-                                      fontFamily="mono"
-                                    >
-                                      {effectiveTableCount}/{totalTables} {totalTables === 1 ? 'table' : 'tables'}
-                                    </Text>
-                                  </Box>
-                                </HStack>
-                              </Box>
-                            </Collapsible.Trigger>
-                            <Collapsible.Content>
-                              <Box p={4}>
-                                <SchemaTreeView
-                                  schemas={database.schemas}
-                                  selectable={true}
-                                  whitelist={whitelist}
-                                  onWhitelistChange={(newWhitelist) =>
-                                    handleWhitelistChange(database.databaseName, newWhitelist)
-                                  }
-                                  showColumns={true}
-                                  showStats={true}
-                                  showPathFilter={true}
-                                  availableChildPaths={availableChildPaths}
-                                  connectionWhitelisted={isConnectionWildcard}
-                                  connectionName={database.databaseName}
-                                  annotations={content.annotations || []}
-                                  onAnnotationsChange={editMode ? (next) => onChange({ annotations: next }) : undefined}
-                                  inheritedAnnotations={content.fullAnnotations}
-                                  metrics={content.metrics || []}
-                                  onMetricsChange={editMode ? (next) => onChange({ metrics: next }) : undefined}
-                                  inheritedMetrics={content.fullMetrics}
-                                />
-                              </Box>
-                            </Collapsible.Content>
-                          </Collapsible.Root>
-                        </Box>
-                      );
-                    })}
-                  </VStack>
-                )}
-              </Box>
-
-            </VStack>
-          ) : (
-            <Box
-              border="1px solid"
-              borderColor="border.default"
-              borderRadius="md"
-              overflow="hidden"
-              minH="600px"
-            >
-              <Editor
-                height="600px"
-                language="yaml"
-                value={yamlText}
-                onChange={(value) => handleYamlChange(value || '')}
-	                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-	                options={{
-	                  readOnly: !editMode,
-	                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
-	                  minimap: { enabled: false },
-	                  wordWrap: 'on',
-                  lineNumbers: 'on',
-                  fontSize: 14,
-                  fontFamily: 'var(--font-jetbrains-mono)',
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  tabSize: 2,
-                }}
-              />
-            </Box>
-          )}
-          {/* Stats Footer */}
-          {!isLoading && totalWhitelisted > 0 && (
-            <Box
-              p={3}
-              bg="bg.surface"
-              borderRadius="md"
-              border="1px solid"
-              borderColor="border.default"
-            >
-              <HStack gap={2} fontSize="sm" color="fg.muted">
-                <LuCircleCheck color="var(--chakra-colors-accent-success)" />
-                <Text>
-                  <strong>{resolvedCounts.databases}</strong> databases configured with{' '}
-                  <strong>{totalWhitelisted}</strong> total whitelisted items
-                </Text>
-              </HStack>
-            </Box>
-          )}
-          </>)}
-        </Tabs.Content>
+        <DatabasesTabContent
+          isActive={topTab === 'databases'}
+          activeTab={activeTab}
+          colorMode={colorMode}
+          editMode={editMode}
+          isLoading={isLoading}
+          availableDatabases={availableDatabases}
+          content={content}
+          onChange={onChange}
+          availableChildPaths={availableChildPaths}
+          expandedDatabases={expandedDatabases}
+          toggleDatabase={toggleDatabase}
+          yamlText={yamlText}
+          onYamlChange={handleYamlChange}
+        />
 
         {/* Docs Tab */}
         <Tabs.Content value="docs">
@@ -1273,229 +574,37 @@ export default function ContextEditorV2({
           )}
         </Tabs.Content>
 
+        {/* Skills Tab */}
+        <SkillsTabContent
+          activeTab={activeTab}
+          colorMode={colorMode}
+          content={content}
+          onChange={onChange}
+          canManageSkills={canManageSkills}
+          systemSkills={systemSkills}
+          systemSkillNames={systemSkillNames}
+          userSkillsOpen={userSkillsOpen}
+          onUserSkillsOpenChange={setUserSkillsOpen}
+          systemSkillsOpen={systemSkillsOpen}
+          onSystemSkillsOpenChange={setSystemSkillsOpen}
+          onAddSkill={handleAddSkill}
+          onUpdateSkill={handleUpdateSkill}
+          onDeleteSkill={handleDeleteSkill}
+        />
+
         {/* Evals Tab */}
-        <Tabs.Content value="skills">
-          {activeTab === 'picker' ? (
-            <VStack gap={4} align="stretch">
-              <Collapsible.Root open={userSkillsOpen} onOpenChange={(e) => setUserSkillsOpen(e.open)}>
-                <Box border="1px solid" borderColor="border.muted" borderRadius="md" p={3}>
-                  <Collapsible.Trigger asChild>
-                    <HStack mb={userSkillsOpen ? 3 : 0} justify="space-between" cursor="pointer">
-                      <HStack gap={2}>
-                        <Icon as={userSkillsOpen ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" />
-                        <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">User Skills</Text>
-                        <Badge size="xs" colorPalette="teal" variant="subtle">{content.skills?.length ?? 0}</Badge>
-                      </HStack>
-                      {canManageSkills && (
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleAddSkill();
-                          }}
-                        >
-                          <LuPlus />
-                          Add skill
-                        </Button>
-                      )}
-                    </HStack>
-                  </Collapsible.Trigger>
-                  <Collapsible.Content>
-                    <VStack align="stretch" gap={3}>
-                      {(content.skills || []).map((skill, index) => {
-                        const siblingNames = new Set((content.skills || [])
-                          .filter((_, otherIndex) => otherIndex !== index)
-                          .map(other => other.name.trim().toLowerCase()));
-                        return (
-                          <SkillEditorCard
-                            key={`skill-${index}`}
-                            skill={skill}
-                            index={index}
-                            canManageSkills={canManageSkills}
-                            colorMode={colorMode}
-                            siblingNames={siblingNames}
-                            systemSkillNames={systemSkillNames}
-                            onUpdate={handleUpdateSkill}
-                            onDelete={handleDeleteSkill}
-                          />
-                        );
-                      })}
-                      {(content.skills || []).length === 0 && (
-                        <Text fontSize="sm" color="fg.muted">
-                          No user-defined skills yet.
-                        </Text>
-                      )}
-                    </VStack>
-                  </Collapsible.Content>
-                </Box>
-              </Collapsible.Root>
-
-              <Collapsible.Root open={systemSkillsOpen} onOpenChange={(e) => setSystemSkillsOpen(e.open)}>
-                <Box border="1px solid" borderColor="border.muted" borderRadius="md" p={3}>
-                  <Collapsible.Trigger asChild>
-                    <HStack mb={systemSkillsOpen ? 3 : 0} justify="space-between" cursor="pointer">
-                      <HStack gap={2}>
-                        <Icon as={systemSkillsOpen ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" />
-                        <Icon as={LuBookOpen} boxSize={4} color="fg.muted" />
-                        <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">System Skills</Text>
-                        <Badge size="xs" colorPalette="gray" variant="subtle">{systemSkills.length}</Badge>
-                      </HStack>
-                      <Badge size="xs" colorPalette="gray" variant="subtle">Read only</Badge>
-                    </HStack>
-                  </Collapsible.Trigger>
-                  <Collapsible.Content>
-                    <VStack align="stretch" gap={2}>
-                      {systemSkills.map(skill => (
-                        <Box key={skill.name} p={3} border="1px solid" borderColor="border.muted" borderRadius="md" bg="bg.subtle">
-                          <Text fontSize="sm" fontFamily="mono" fontWeight="700" color="fg.default">{skill.name}</Text>
-                          <Text fontSize="xs" color="fg.muted" mt={1}>{skill.description}</Text>
-                        </Box>
-                      ))}
-                      {systemSkills.length === 0 && (
-                        <Text fontSize="sm" color="fg.muted">System skills are not loaded yet.</Text>
-                      )}
-                    </VStack>
-                  </Collapsible.Content>
-                </Box>
-              </Collapsible.Root>
-            </VStack>
-          ) : (
-            <Box
-              border="1px solid"
-              borderColor="border.default"
-              borderRadius="md"
-              overflow="hidden"
-              minH="600px"
-            >
-              <Editor
-                height="600px"
-                language="json"
-                value={JSON.stringify(content.skills || [], null, 2)}
-                onChange={(value) => {
-                  try {
-                    const parsed = JSON.parse(value || '[]');
-                    if (Array.isArray(parsed)) onChange({ skills: parsed });
-                  } catch { /* ignore parse errors while typing */ }
-                }}
-                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                options={{
-	                  readOnly: !canManageSkills,
-	                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
-	                  minimap: { enabled: false },
-                  wordWrap: 'on',
-                  lineNumbers: 'on',
-                  fontSize: 14,
-                  fontFamily: 'JetBrains Mono, monospace',
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  tabSize: 2,
-                }}
-              />
-            </Box>
-          )}
-        </Tabs.Content>
-
-        <Tabs.Content value="evals">
-          {activeTab === 'picker' ? (
-            <Box display="flex" flexDirection="row" gap={4} alignItems="stretch" minH="400px">
-              {/* Left Panel: Evals list */}
-              <Box
-                flex={1}
-                overflow="auto"
-                border="1px solid"
-                borderColor="border.muted"
-                borderRadius="md"
-                p={3}
-              >
-                <HStack mb={3} justify="space-between">
-                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Evals</Text>
-                </HStack>
-                <TestList
-                  tests={content.evals || []}
-                  onChange={(evals: Test[]) => onChange({ evals })}
-                  editMode={editMode}
-                  forcedType="llm"
-                  alwaysShowAdd
-                  addLabel="Add eval"
-                />
-
-                <SchedulePicker
-                  schedule={{ cron: content.schedule?.cron || '0 9 * * 1', timezone: content.schedule?.timezone || 'America/New_York' }}
-                  onChange={(s) => onChange({ schedule: s })}
-                  editMode={editMode}
-                />
-
-                <DeliveryCard
-                  recipients={content.recipients || []}
-                  onChange={(recipients) => onChange({ recipients })}
-                  disabled={!editMode}
-                />
-              </Box>
-
-              {/* Right Panel: Run history */}
-              <Box
-                flex={1}
-                overflow="auto"
-                border="1px solid"
-                borderColor="border.muted"
-                borderRadius="md"
-                p={3}
-              >
-                <RunNowHeader
-                  title="Run History"
-                  runs={runs ?? []}
-                  selectedRunId={selectedRunId}
-                  onSelectRun={onSelectRun}
-                  isRunning={!!isRunning}
-                  disabled={!content.evals?.length}
-                  onRunNow={(opts) => onRunAll?.(opts)}
-                  buttonLabel="Run all"
-                />
-                {evalsSelectedRun?.output_file_id ? (
-                  <ContextRunView fileId={evalsSelectedRun.output_file_id} />
-                ) : runs.length === 0 ? (
-                  <Text fontSize="sm" color="fg.muted">No runs yet. Click &quot;Run all&quot; to evaluate.</Text>
-                ) : (
-                  <Text fontSize="sm" color="fg.muted">Run in progress...</Text>
-                )}
-              </Box>
-            </Box>
-          ) : (
-            <Box
-              border="1px solid"
-              borderColor="border.default"
-              borderRadius="md"
-              overflow="hidden"
-              minH="600px"
-            >
-              <Editor
-                height="600px"
-                language="json"
-                value={JSON.stringify(content.evals || [], null, 2)}
-                onChange={(value) => {
-                  try {
-                    const parsed = JSON.parse(value || '[]');
-                    if (Array.isArray(parsed)) onChange({ evals: parsed });
-                  } catch { /* ignore parse errors while typing */ }
-                }}
-	                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-	                options={{
-	                  readOnly: !editMode,
-	                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
-	                  minimap: { enabled: false },
-                  wordWrap: 'on',
-                  lineNumbers: 'on',
-                  fontSize: 14,
-                  fontFamily: 'var(--font-jetbrains-mono)',
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  tabSize: 2,
-                }}
-              />
-            </Box>
-          )}
-        </Tabs.Content>
+        <EvalsTabContent
+          activeTab={activeTab}
+          colorMode={colorMode}
+          editMode={editMode}
+          content={content}
+          onChange={onChange}
+          runs={runs}
+          isRunning={isRunning}
+          selectedRunId={selectedRunId}
+          onRunAll={onRunAll}
+          onSelectRun={onSelectRun}
+        />
       </Tabs.Root>
       )}
     </VStack>

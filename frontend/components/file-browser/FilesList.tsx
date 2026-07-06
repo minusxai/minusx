@@ -2,19 +2,18 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Box, HStack, Text, Icon, VStack, Flex, SimpleGrid, Button, Dialog, Portal, CloseButton } from '@chakra-ui/react';
-import { LuFiles, LuChevronDown, LuChevronRight, LuCopy, LuTrash2, LuFolderInput } from 'react-icons/lu';
+import { LuFiles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { DbFile } from '@/lib/types';
-import { FILE_TYPE_METADATA, getFileTypeMetadata } from '@/lib/ui/file-metadata';
-import { RESERVED_NAMES } from '@/lib/data/helpers/connections';
-import FileActionMenu from './FileActionMenu';
-import { Checkbox } from '@/components/ui/checkbox';
+import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useRouter } from '@/lib/navigation/use-navigation';
-import { generateFileUrl } from '@/lib/slug-utils';
-import { Link } from '@/components/ui/Link';
-import DashboardUsageBadge from '../banners/DashboardUsageBadge';
 import { moveFile, deleteFile, duplicateFile } from '@/lib/file-state/file-state';
 import BulkMoveFileModal from '../modals/BulkMoveFileModal';
 import { canDeleteFileType, canCreateFileType } from '@/lib/auth/access-rules.client';
+import FilesListToolbar from './FilesListToolbar';
+import BulkActionBar from './BulkActionBar';
+import FileListRow from './FileListRow';
+import FileGridCard from './FileGridCard';
+import FloatingDragGhost from './FloatingDragGhost';
 
 interface FilesListProps {
   files: DbFile[];
@@ -325,194 +324,29 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
     <Box minH="500px">
       {/* Toolbar: Filter + View Toggle */}
       {showToolbar && (
-      <HStack justify="space-between" mb={3}>
-        {/* Filter Chips */}
-        <HStack gap={1.5} flexWrap="wrap">
-          <Button
-            size="2xs"
-            variant={selectedTypes.length === 0 ? 'solid' : 'outline'}
-            bg={selectedTypes.length === 0 ? 'accent.teal' : 'transparent'}
-            color={selectedTypes.length === 0 ? 'white' : 'fg.muted'}
-            borderColor={selectedTypes.length === 0 ? 'accent.teal' : 'border.default'}
-            _hover={{ bg: selectedTypes.length === 0 ? 'accent.teal' : 'bg.muted' }}
-            fontWeight="500"
-            fontSize="xs"
-            borderRadius="md"
-            px={2}
-            onClick={() => setSelectedTypes([])}
-          >
-            All
-          </Button>
-          {filterTypes.map((type) => {
-            const typeColor = FILE_TYPE_METADATA[type].color;
-            const active = isTypeSelected(type);
-            return (
-              <Button
-                key={type}
-                size="2xs"
-                variant={active ? 'solid' : 'outline'}
-                bg={active ? typeColor : 'transparent'}
-                color={active ? 'white' : 'fg.muted'}
-                borderColor={active ? typeColor : 'border.default'}
-                _hover={{ bg: active ? typeColor : 'bg.muted' }}
-                fontSize="2xs"
-                borderRadius="md"
-                px={2}
-                gap={1.5}
-                onClick={() => toggleType(type)}
-              >
-                <Icon as={FILE_TYPE_METADATA[type].icon} boxSize={3.5} />
-                {FILE_TYPE_METADATA[type].label}
-              </Button>
-            );
-          })}
-        </HStack>
-
-        {/* View Toggle */}
-        {/* <HStack gap={2} flexShrink={0}>
-          <HStack
-            gap={0.5}
-            bg="bg.surface"
-            borderRadius="md"
-            p={0.5}
-            border="1px solid"
-            borderColor="border.default"
-          >
-            <Tooltip content="List view" positioning={{ placement: 'bottom' }}>
-              <IconButton
-                variant="ghost"
-                size="sm"
-                aria-label="List view"
-                onClick={() => setViewMode('list')}
-                bg={viewMode === 'list' ? 'accent.teal' : 'transparent'}
-                color={viewMode === 'list' ? 'white' : 'fg.default'}
-                _hover={{ bg: viewMode === 'list' ? 'accent.teal' : 'bg.muted' }}
-                borderRadius="sm"
-              >
-                <LuList />
-              </IconButton>
-            </Tooltip>
-            <Tooltip content="Grid view" positioning={{ placement: 'bottom' }}>
-              <IconButton
-                variant="ghost"
-                size="sm"
-                aria-label="Grid view"
-                onClick={() => setViewMode('grid')}
-                bg={viewMode === 'grid' ? 'accent.teal' : 'transparent'}
-                color={viewMode === 'grid' ? 'white' : 'fg.default'}
-                _hover={{ bg: viewMode === 'grid' ? 'accent.teal' : 'bg.muted' }}
-                borderRadius="sm"
-              >
-                <LuLayoutGrid />
-              </IconButton>
-            </Tooltip>
-          </HStack>
-        </HStack> */}
-      </HStack>
+        <FilesListToolbar
+          filterTypes={filterTypes}
+          selectedTypes={selectedTypes}
+          toggleType={toggleType}
+          isTypeSelected={isTypeSelected}
+          clearTypes={() => setSelectedTypes([])}
+        />
       )}
 
       {/* Bulk Action Bar */}
       {selectionMode && (
-        <HStack
-          px={4}
-          py={2}
-          mb={2}
-          bg="accent.teal/10"
-          borderRadius="md"
-          border="1px solid"
-          borderColor="accent.teal/30"
-          justify="space-between"
-        >
-          <HStack gap={2}>
-            <Checkbox
-              size="sm"
-              checked={filteredFiles.length > 0 && selectedFileIds.size === filteredFiles.length}
-              onCheckedChange={() => toggleSelectAll()}
-              aria-label="Select all"
-            />
-            <Text fontSize="sm" fontWeight="500" color="fg.default" aria-label="Selection status">
-              {selectedFileIds.size} file{selectedFileIds.size !== 1 ? 's' : ''} selected
-            </Text>
-          </HStack>
-          <HStack gap={1.5}>
-            {/* Neutral actions — Duplicate & Move share one identical chip treatment */}
-            <Button
-              size="xs"
-              h={7}
-              px={3}
-              gap={1.5}
-              variant="outline"
-              bg="bg.surface"
-              borderColor="border.emphasized"
-              color="fg.default"
-              fontFamily="mono"
-              fontWeight="500"
-              _hover={{ bg: 'bg.muted' }}
-              onClick={handleBulkDuplicate}
-              loading={bulkBusy}
-              disabled={duplicableSelected.length === 0}
-              aria-label="Duplicate"
-            >
-              <Icon as={LuCopy} boxSize={3.5} />
-              Duplicate
-            </Button>
-            <Button
-              size="xs"
-              h={7}
-              px={3}
-              gap={1.5}
-              variant="outline"
-              bg="bg.surface"
-              borderColor="border.emphasized"
-              color="fg.default"
-              fontFamily="mono"
-              fontWeight="500"
-              _hover={{ bg: 'bg.muted' }}
-              onClick={() => setShowBulkMoveModal(true)}
-              disabled={selectedFileIds.size === 0}
-              aria-label="Move"
-            >
-              <Icon as={LuFolderInput} boxSize={3.5} />
-              Move
-            </Button>
-            {/* Destructive action — same chip shape, red accent only */}
-            <Button
-              size="xs"
-              h={7}
-              px={3}
-              gap={1.5}
-              variant="outline"
-              bg="bg.surface"
-              borderColor="fg.error/30"
-              color="fg.error"
-              fontFamily="mono"
-              fontWeight="500"
-              _hover={{ bg: 'fg.error/10', borderColor: 'fg.error/50' }}
-              onClick={() => setShowBulkDeleteDialog(true)}
-              disabled={deletableSelected.length === 0}
-              aria-label="Delete"
-            >
-              <Icon as={LuTrash2} boxSize={3.5} />
-              Delete
-            </Button>
-            {/* Divider sets the dismissive action apart from the operations */}
-            <Box w="1px" h={4} bg="border.emphasized" mx={1} />
-            <Button
-              size="xs"
-              h={7}
-              px={3}
-              variant="ghost"
-              color="fg.muted"
-              fontFamily="mono"
-              fontWeight="500"
-              _hover={{ bg: 'bg.muted', color: 'fg.default' }}
-              onClick={exitSelectionMode}
-              aria-label="Cancel selection"
-            >
-              Cancel
-            </Button>
-          </HStack>
-        </HStack>
+        <BulkActionBar
+          filteredFilesCount={filteredFiles.length}
+          selectedCount={selectedFileIds.size}
+          onToggleSelectAll={toggleSelectAll}
+          onBulkDuplicate={handleBulkDuplicate}
+          bulkBusy={bulkBusy}
+          duplicableCount={duplicableSelected.length}
+          onMoveClick={() => setShowBulkMoveModal(true)}
+          onDeleteClick={() => setShowBulkDeleteDialog(true)}
+          deletableCount={deletableSelected.length}
+          onCancel={exitSelectionMode}
+        />
       )}
 
       {/* Grouped sections */}
@@ -627,258 +461,51 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                   viewMode === 'list' ? (
                     <VStack gap={0} align="stretch">
                       {section.files.map((file) => (
-                        <Box
+                        <FileListRow
                           key={file.id}
-                          position="relative"
-                          role="group"
-                          onDragOver={(e) => !selectionMode && handleDragOver(e, file)}
-                          onDragEnter={(e) => !selectionMode && handleDragEnter(e, file)}
-                          onDragLeave={() => !selectionMode && handleDragLeave()}
-                          onDrop={(e) => !selectionMode && handleDrop(e, file)}
-                        >
-                          <Link
-                            href={file.type === 'folder' ? `/p${file.path}` : `/f/${generateFileUrl(file.id, file.name)}`}
-                            prefetch={!selectionMode}
-                            style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
-                            draggable={!selectionMode && file.type !== 'folder'}
-                            onDragStart={(e) => !selectionMode && handleDragStart(e, file)}
-                            onDrag={(e) => !selectionMode && handleDrag(e)}
-                            onDragEnd={() => !selectionMode && handleDragEnd()}
-                            onClick={(e) => {
-                              if (selectionMode) {
-                                e.preventDefault();
-                                toggleFileSelection(file.id);
-                              } else if (draggedFileId) {
-                                e.preventDefault();
-                              }
-                            }}
-                          >
-                            <Box
-                              as="div"
-                              opacity={draggedFileId === file.id ? 0 : 1}
-                            >
-                            <HStack
-                              px={4}
-                              py={3}
-                              h="52px"
-                              borderBottom="1px solid"
-                              borderColor="border.muted"
-                              bg={selectionMode && selectedFileIds.has(file.id) ? 'accent.teal/10' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/10' : 'transparent'}
-                              borderWidth={dropTargetId === file.id && file.type === 'folder' ? '2px' : '0'}
-                              borderStyle={dropTargetId === file.id && file.type === 'folder' ? 'dashed' : 'solid'}
-                              _hover={{
-                                bg: selectionMode ? 'accent.teal/5' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/20' : 'bg.surface',
-                              }}
-                              cursor="pointer"
-                              _active={{
-                                cursor: 'pointer',
-                              }}
-                              transition="all 0.15s"
-                              aria-label={file.name}
-                            >
-                              {/* Checkbox in selection mode */}
-                              {selectionMode && (
-                                <Box flexShrink={0} display="flex" alignItems="center" alignSelf="center" onClick={(e) => e.stopPropagation()}>
-                                  <Checkbox
-                                    size="sm"
-                                    checked={selectedFileIds.has(file.id)}
-                                    onCheckedChange={() => toggleFileSelection(file.id)}
-                                    aria-label={`Select ${file.name}`}
-                                  />
-                                </Box>
-                              )}
-                              {/* Icon + Name */}
-                              <HStack flex="1" gap={3} minW={0}>
-                                <Icon
-                                  as={getFileTypeMetadata(file.type).icon}
-                                  boxSize={5}
-                                  color={getFileTypeMetadata(file.type).color}
-                                  flexShrink={0}
-                                />
-                                <Text
-                                  fontWeight="500"
-                                  fontSize="sm"
-                                  color="fg.default"
-                                  truncate
-                                  lineClamp={1}
-                                  fontFamily="mono"
-                                >
-                                  {file.name}
-                                </Text>
-                                {file.type === 'question' && (
-                                  <DashboardUsageBadge dashboards={dashboardsByQuestionId.get(file.id)} />
-                                )}
-                              </HStack>
-
-                              {/* Type Label — hide when section already indicates the type */}
-                              {section.key === '_other' && (
-                              <Box w="120px" display={{ base: 'none', md: 'block' }}>
-                                <Text
-                                  fontSize="xs"
-                                  color="fg.muted"
-                                  fontFamily="mono"
-                                  fontWeight="500"
-                                >
-                                  {getFileTypeMetadata(file.type).label}
-                                </Text>
-                              </Box>
-                              )}
-
-                              {/* Modified Date */}
-                              <Box w="140px" display={{ base: 'none', lg: 'block' }}>
-                                <Text
-                                  fontSize="xs"
-                                  color="fg.muted"
-                                  fontFamily="mono"
-                                >
-                                  {new Date(file.updated_at).toLocaleDateString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    year: 'numeric'
-                                  })}
-                                </Text>
-                              </Box>
-
-                              {/* Actions placeholder */}
-                              <Box w="40px" />
-                            </HStack>
-                            </Box>
-                          </Link>
-
-                          {/* Action Menu */}
-                          <Box
-                            position="absolute"
-                            right={2}
-                            top="50%"
-                            transform="translateY(-50%)"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                            }}
-                          >
-                            <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="sm" onSelect={enterSelectionWithFile} canDelete={file.type === 'context' ? (contextCountByFolder.get(file.path.substring(0, file.path.lastIndexOf('/')) || '/') ?? 0) > 1 : file.type === 'connection' && RESERVED_NAMES.includes(file.name) ? false : undefined} />
-                          </Box>
-                        </Box>
+                          file={file}
+                          sectionKey={section.key}
+                          selectionMode={selectionMode}
+                          selectedFileIds={selectedFileIds}
+                          draggedFileId={draggedFileId}
+                          dropTargetId={dropTargetId}
+                          dashboardsByQuestionId={dashboardsByQuestionId}
+                          contextCountByFolder={contextCountByFolder}
+                          toggleFileSelection={toggleFileSelection}
+                          enterSelectionWithFile={enterSelectionWithFile}
+                          handleDragStart={handleDragStart}
+                          handleDrag={handleDrag}
+                          handleDragEnd={handleDragEnd}
+                          handleDragOver={handleDragOver}
+                          handleDragEnter={handleDragEnter}
+                          handleDragLeave={handleDragLeave}
+                          handleDrop={handleDrop}
+                        />
                       ))}
                     </VStack>
                   ) : (
                     /* Grid View for this section */
                     <SimpleGrid columns={{ base: 2, sm: 4, md: 6, lg: 8 }} gap={4} px={2} pt={3} pb={2}>
                       {section.files.map((file) => (
-                        <Box
+                        <FileGridCard
                           key={file.id}
-                          position="relative"
-                          role="group"
-                          onDragOver={(e) => !selectionMode && handleDragOver(e, file)}
-                          onDragEnter={(e) => !selectionMode && handleDragEnter(e, file)}
-                          onDragLeave={() => !selectionMode && handleDragLeave()}
-                          onDrop={(e) => !selectionMode && handleDrop(e, file)}
-                        >
-                          <Link
-                            href={file.type === 'folder' ? `/p${file.path}` : `/f/${generateFileUrl(file.id, file.name)}`}
-                            prefetch={!selectionMode}
-                            style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
-                            draggable={!selectionMode && file.type !== 'folder'}
-                            onDragStart={(e) => !selectionMode && handleDragStart(e, file)}
-                            onDrag={(e) => !selectionMode && handleDrag(e)}
-                            onDragEnd={() => !selectionMode && handleDragEnd()}
-                            onClick={(e) => {
-                              if (selectionMode) {
-                                e.preventDefault();
-                                toggleFileSelection(file.id);
-                              } else if (draggedFileId) {
-                                e.preventDefault();
-                              }
-                            }}
-                          >
-                            <Box
-                              as="div"
-                              opacity={draggedFileId === file.id ? 0 : 1}
-                            >
-                            <VStack
-                              p={4}
-                              bg={selectionMode && selectedFileIds.has(file.id) ? 'accent.teal/10' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/10' : 'bg.surface'}
-                              borderRadius="md"
-                              border="2px"
-                              borderStyle={dropTargetId === file.id && file.type === 'folder' ? 'dashed' : 'solid'}
-                              borderColor={selectionMode && selectedFileIds.has(file.id) ? 'accent.teal' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal' : 'border.default'}
-                              _hover={{
-                                bg: selectionMode ? 'accent.teal/5' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/20' : 'bg.elevated',
-                                borderColor: selectionMode && selectedFileIds.has(file.id) ? 'accent.teal' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal' : getFileTypeMetadata(file.type).color,
-                              }}
-                              cursor="pointer"
-                              _active={{
-                                cursor: 'pointer',
-                              }}
-                              transition="all 0.15s"
-                              align="center"
-                              gap={3}
-                              h="120px"
-                              justify="center"
-                            >
-                              {/* File Icon */}
-                              <Icon
-                                as={getFileTypeMetadata(file.type).icon}
-                                boxSize={8}
-                                color={getFileTypeMetadata(file.type).color}
-                              />
-
-                              {/* File Name */}
-                              <VStack gap={0.5} w="100%" align="center" minW={0}>
-                                <Text
-                                  fontWeight="500"
-                                  fontSize="sm"
-                                  textAlign="center"
-                                  w="100%"
-                                  color="fg.default"
-                                  overflow="hidden"
-                                  textOverflow="ellipsis"
-                                  whiteSpace="nowrap"
-                                  fontFamily={"mono"}
-                                >
-                                  {file.name}
-                                </Text>
-                                {file.type === 'question' && (
-                                  <DashboardUsageBadge dashboards={dashboardsByQuestionId.get(file.id)} compact />
-                                )}
-                              </VStack>
-                            </VStack>
-                            </Box>
-                          </Link>
-
-                          {/* Checkbox overlay in selection mode */}
-                          {selectionMode && (
-                            <Box
-                              position="absolute"
-                              left={1}
-                              top={1}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                              }}
-                            >
-                              <Checkbox
-                                size="sm"
-                                checked={selectedFileIds.has(file.id)}
-                                onCheckedChange={() => toggleFileSelection(file.id)}
-                                aria-label={`Select ${file.name}`}
-                              />
-                            </Box>
-                          )}
-
-                          {/* Action Menu */}
-                          {!selectionMode && (
-                          <Box
-                            position="absolute"
-                            right={1}
-                            top={1}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                            }}
-                          >
-                            <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="xs" onSelect={enterSelectionWithFile} canDelete={file.type === 'context' ? (contextCountByFolder.get(file.path.substring(0, file.path.lastIndexOf('/')) || '/') ?? 0) > 1 : file.type === 'connection' && RESERVED_NAMES.includes(file.name) ? false : undefined} />
-                          </Box>
-                          )}
-                        </Box>
+                          file={file}
+                          selectionMode={selectionMode}
+                          selectedFileIds={selectedFileIds}
+                          draggedFileId={draggedFileId}
+                          dropTargetId={dropTargetId}
+                          dashboardsByQuestionId={dashboardsByQuestionId}
+                          contextCountByFolder={contextCountByFolder}
+                          toggleFileSelection={toggleFileSelection}
+                          enterSelectionWithFile={enterSelectionWithFile}
+                          handleDragStart={handleDragStart}
+                          handleDrag={handleDrag}
+                          handleDragEnd={handleDragEnd}
+                          handleDragOver={handleDragOver}
+                          handleDragEnter={handleDragEnter}
+                          handleDragLeave={handleDragLeave}
+                          handleDrop={handleDrop}
+                        />
                       ))}
                     </SimpleGrid>
                   )
@@ -890,102 +517,12 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
       )}
 
       {/* Floating Dragged Element */}
-      {draggedFileId && dragPosition && (() => {
-        const draggedFile = files.find(f => f.id === draggedFileId);
-        if (!draggedFile) return null;
-        const metadata = getFileTypeMetadata(draggedFile.type);
-
-        return (
-          <Box
-            position="fixed"
-            left={`${dragPosition.x}px`}
-            top={`${dragPosition.y}px`}
-            transform="translate(-50%, -50%)"
-            pointerEvents="none"
-            zIndex={9999}
-            transition="none"
-          >
-            {viewMode === 'list' ? (
-              <HStack
-                px={4}
-                py={3}
-                h="52px"
-                bg="bg.surface"
-                borderRadius="md"
-                border="2px solid"
-                borderColor="accent.teal"
-                shadow="xl"
-                minW="300px"
-                gap={3}
-              >
-                <Icon
-                  as={metadata.icon}
-                  boxSize={5}
-                  color={metadata.color}
-                  flexShrink={0}
-                />
-                <Text
-                  fontWeight="500"
-                  fontSize="sm"
-                  color="fg.default"
-                  fontFamily="mono"
-                  overflow="hidden"
-                  textOverflow="ellipsis"
-                  whiteSpace="nowrap"
-                >
-                  {draggedFile.name}
-                </Text>
-              </HStack>
-            ) : (
-              <VStack
-                p={4}
-                bg="bg.surface"
-                borderRadius="md"
-                border="2px solid"
-                borderColor="accent.teal"
-                shadow="xl"
-                align="center"
-                gap={3}
-                h="120px"
-                w="180px"
-                justify="center"
-              >
-                <Icon
-                  as={metadata.icon}
-                  boxSize={8}
-                  color={metadata.color}
-                />
-                <VStack gap={0.5} w="100%" align="center" minW={0}>
-                  <Text
-                    fontWeight="500"
-                    fontSize="sm"
-                    textAlign="center"
-                    w="100%"
-                    color="fg.default"
-                    overflow="hidden"
-                    textOverflow="ellipsis"
-                    whiteSpace="nowrap"
-                    fontFamily="mono"
-                  >
-                    {draggedFile.name}
-                  </Text>
-                  <Text
-                    fontSize="2xs"
-                    color="fg.muted"
-                    fontFamily="mono"
-                    fontWeight="500"
-                    textTransform="uppercase"
-                    letterSpacing="0.05em"
-                    whiteSpace="nowrap"
-                  >
-                    {metadata.label}
-                  </Text>
-                </VStack>
-              </VStack>
-            )}
-          </Box>
-        );
-      })()}
+      <FloatingDragGhost
+        files={files}
+        draggedFileId={draggedFileId}
+        dragPosition={dragPosition}
+        viewMode={viewMode}
+      />
 
       {/* Bulk Move Modal */}
       <BulkMoveFileModal
