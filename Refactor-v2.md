@@ -35,14 +35,24 @@ Make dead-code detection repeatable so later milestones can verify "zero regress
   - Playwright setups: `test/e2e/auth.setup.ts`, `test/qa/auth.setup.ts`, `test/qa/reset.setup.ts`
   - npm-script entries: `benchmarks/dataanalystbench.ts` (via `benchmark:dab`), everything under `scripts/`
   - `lib/__checks__/config-constants-no-overlap.ts` **[VERIFY-FIRST]** — determine whether this is a compile-time-only check (if so, register as entry; if truly orphaned, delete it in M1)
-- [ ] Add an npm script `"knip": "knip --no-config-hints"` and record the baseline count of findings in this doc when M1 completes.
+- [x] Add an npm script `"knip": "knip --no-config-hints"` and record the baseline count of findings in this doc when M1 completes.
 - [ ] (Optional) Add knip to CI as non-blocking reporting.
 
 **Baseline results (2026-07-06, before any content change):**
 - `npm run validate`: clean after `npm install` synced stale `node_modules` (pre-existing gap: `@types/jsdom` was declared in `package.json` but not installed locally — not a code bug, just a local env sync issue, fixed by `npm install`).
 - `npm test`: **green** — 379 test files passed, 2 skipped (381 total); 4000 tests passed, 5 skipped (4005 total). Duration 83.79s.
-- `npm run test:e2e`: _pending_
-- `npm run test:qa`: _pending_
+- `npm run test:e2e`: **green** — 2 passed (setup + `chat-stream-reconnect.spec.ts`). (Faux-LLM "No more faux responses queued" lines in the log are expected noise from a micro-task exhausting its queued responses, not a test failure.)
+- `npm run test:qa`: _pending, running_
+
+**Knip baseline (post-config, 2026-07-06):** `knip.json` added, registering the false-positive entries the manual audit found (Playwright setups, `benchmarks/dataanalystbench.ts`, `scripts/*`, `lib/__checks__/*`). With those registered, the true count is:
+- Unused files: **1** (`lib/auth/guest-rate-limit.ts` — matches the M1.2 VERIFY-FIRST item, now confirmed as the sole remaining orphan)
+- Unused devDependencies: **2** (`tailwindcss`, `yaml-loader` — `tailwindcss` is a new finding beyond the original manual audit; **[VERIFY-FIRST]** before removing, since Next.js/PostCSS tooling can use it without a knip-visible import)
+- Unlisted dependencies: **22** (all `@lexical/*` — same underlying gap the manual audit found, just itemized per line instead of per package)
+- Unused exports: **325** (bigger than the manual audit's 128 — the manual list undercounted; this knip run is now the authoritative source for M1.6, superseding the hand-curated list there)
+- Unused exported types: **205** (vs. manual audit's 72; same reason)
+- Duplicate exports: **1** (`RemoteAnalystAgent`/`AnalystAgent` — matches the manual finding)
+
+Full dump saved to session scratchpad (`knip-m0-baseline.txt`) as the M1.6 work queue's ground truth; M1.6's hand-curated groupings below remain a useful starting checklist but are not exhaustive — re-run `npm run knip` after M1 and sweep whatever it still reports.
 
 ---
 
