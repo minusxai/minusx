@@ -2,6 +2,7 @@
   "title": "Self-Hosting",
   "pages": [
     "index",
+    "installation",
     "configuration",
     "llm-providers",
     "telemetry"
