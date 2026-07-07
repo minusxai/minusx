@@ -39,6 +39,12 @@ vi.mock('@/components/views/story/InlineNumber', () => ({
     React.createElement('span', { 'aria-label': `inline number ${embed.id ?? 'query'}` }, embed.prefix ?? ''),
 }));
 
+// StoryEmptyState (rendered when the story has no content) calls useConfigs() for the
+// branding agentName. Mocked so its fire-and-forget /api/configs fetch never runs in jsdom.
+vi.mock('@/lib/hooks/useConfigs', () => ({
+  useConfigs: () => ({ config: { branding: { agentName: 'MinusX' } }, loading: false }),
+}));
+
 import StoryView from '@/components/views/story/StoryView';
 
 // Real-world Google Fonts @import — note the SEMICOLONS inside the URL

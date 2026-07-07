@@ -106,6 +106,13 @@ vi.mock('react-grid-layout', () => {
   };
 });
 
+// DashboardEmptyState (rendered when the dashboard has no questions/text blocks) calls
+// useConfigs() for the branding agentName. Mocked so its fire-and-forget /api/configs fetch
+// never runs in jsdom.
+vi.mock('@/lib/hooks/useConfigs', () => ({
+  useConfigs: () => ({ config: { branding: { agentName: 'MinusX' } }, loading: false }),
+}));
+
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
 const DASH_ID = 100;

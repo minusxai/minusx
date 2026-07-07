@@ -48,6 +48,12 @@ vi.mock('@/lib/hooks/useConnections', () => ({
   useConnections: () => ({ connections: {}, loading: false, error: null }),
 }));
 
+// NotebookEmptyState (rendered when the notebook has no cells) calls useConfigs() for the
+// branding agentName. Mocked so its fire-and-forget /api/configs fetch never runs in jsdom.
+vi.mock('@/lib/hooks/useConfigs', () => ({
+  useConfigs: () => ({ config: { branding: { agentName: 'MinusX' } }, loading: false }),
+}));
+
 const NOTEBOOK_ID = 600;
 const CELL_ID = 'cell-1';
 

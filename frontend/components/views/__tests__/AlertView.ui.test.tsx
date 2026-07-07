@@ -53,6 +53,12 @@ vi.mock('@/lib/hooks/useUsers', () => ({
   useUsers: () => ({ users: [], loading: false }),
 }));
 
+// AlertHistoryEmptyState (rendered when there are no runs) calls useConfigs() for the
+// branding agentName. Mocked so its fire-and-forget /api/configs fetch never runs in jsdom.
+vi.mock('@/lib/hooks/useConfigs', () => ({
+  useConfigs: () => ({ config: { branding: { agentName: 'MinusX' } }, loading: false }),
+}));
+
 const ALERT_ID = 300;
 
 function makeTest(): Test {
