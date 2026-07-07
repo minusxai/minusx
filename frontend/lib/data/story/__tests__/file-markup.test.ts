@@ -48,6 +48,28 @@ describe('fileToMarkup / markupToContent — story (jsx field inline)', () => {
       expect(back.content.story).toContain('data-question-id="1022"'); // parsed back to HTML
     }
   });
+
+  it('round-trips a stored body poisoned with raw braces/escaped-JSON prose (the edit-lockout repro)', () => {
+    // Regression: a story whose stored HTML carries `{\"color\": \"pink\"}`-style prose made the
+    // serialized markup unparseable ("Expecting Unicode escape sequence \uXXXX" at a fixed
+    // position), so EVERY EditFile on the file failed and no change could ever be saved.
+    const poisonedBodies = [
+      '<div class="story"><p>set {\\"color\\": \\"pink\\"}</p></div>',
+      '<div class="story"><p>growth {net} was 4%</p></div>',
+      '<div class="story"><p>{"a": 1}</p></div>',
+    ];
+    for (const story of poisonedBodies) {
+      const markup = fileToMarkup('story', { story });
+      const back = markupToContent('story', markup);
+      expect(back.ok, `round-trip failed for ${story}: ${!back.ok ? back.error : ''}`).toBe(true);
+      if (!back.ok) continue;
+      // Healed body is stable: a second round-trip through the edit surface is a fixpoint.
+      const markup2 = fileToMarkup('story', { story: back.content.story as string });
+      const back2 = markupToContent('story', markup2);
+      expect(back2.ok).toBe(true);
+      if (back2.ok) expect(back2.content.story).toBe(back.content.story);
+    }
+  });
 });
 
 describe('markupToContent — story authored WITHOUT the <story> wrapper (CreateFile scaffold shape)', () => {
