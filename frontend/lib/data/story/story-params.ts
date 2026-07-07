@@ -85,12 +85,13 @@ export function paramToPlaceholder(p: StoryParam): string {
   return `<div ${a.join(' ')}></div>`;
 }
 
-/** StoryParam → the `<Param/>` jsx the agent reads/edits (part of the param ⇄ jsx codec). */
+/** StoryParam → the `<Param/>` jsx the agent reads/edits (part of the param ⇄ jsx codec).
+ *  String attrs are entity-escaped (escAttr) so a quote in a name/column can't break the parse. */
 export function paramToJsx(p: StoryParam): string {
-  const a = [`name="${p.name}"`, `type="${p.type}"`, `nullable={${p.nullable}}`];
+  const a = [`name="${escAttr(p.name)}"`, `type="${p.type}"`, `nullable={${p.nullable}}`];
   if (p.source) {
     a.push(`id={${p.source.questionId}}`);
-    if (p.source.column !== p.name) a.push(`column="${p.source.column}"`);
+    if (p.source.column !== p.name) a.push(`column="${escAttr(p.source.column)}"`);
   }
   if (p.style) a.push(`style={${JSON.stringify(p.style)}}`);
   if (p.labelStyle) a.push(`labelStyle={${JSON.stringify(p.labelStyle)}}`);

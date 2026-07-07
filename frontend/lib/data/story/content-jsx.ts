@@ -140,9 +140,10 @@ function coerceUnionScalar(text: string, branches: JsonSchema[]): unknown {
 const pad = (d: number) => '  '.repeat(d);
 const isJsxField = (s: JsonSchema): boolean => !!s && s.format === 'jsx';
 
-/** A string element body: raw template-literal child when it contains jsx-significant chars. */
+/** A string element body: raw template-literal child when it contains jsx-significant chars.
+ *  `}` is in the set: a bare `}` in JSXText position fails the parse just like `{`. */
 function strChild(s: string): string {
-  if (/[<>&{`\n]/.test(s)) {
+  if (/[<>&{}`\n]/.test(s)) {
     return `{\`${s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${')}\`}`;
   }
   return s;

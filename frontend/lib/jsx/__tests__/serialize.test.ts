@@ -38,4 +38,35 @@ describe('serializeJsx', () => {
     const { out } = reparse(src);
     expect(out).toBe(src);
   });
+
+  it('round-trips an attribute value containing double quotes (quoted font-family)', () => {
+    // The parser decodes `&quot;` in attribute strings to real `"`. Serializing that value with
+    // JSON escapes (`\"`) is WRONG: JSX attribute strings don't process backslash escapes, so the
+    // attribute terminates early and acorn fails with "Expecting Unicode escape sequence \uXXXX" —
+    // permanently locking the file out of every edit. Quotes must re-emit as entities.
+    const src = '<span style="font-family: &quot;Inter Display&quot;, serif; font-size: 12px">x</span>';
+    const { out, nodesB } = reparse(src);
+    expect(out).not.toContain('\\"'); // never JSON escapes in a JSX attribute
+    const el = nodesB.find((n) => n.type === 'element');
+    const attr = el && el.type === 'element' ? el.attributes.find((a) => a.name === 'style') : undefined;
+    expect(attr && attr.value.static && attr.value.json).toBe('font-family: "Inter Display", serif; font-size: 12px');
+  });
+
+  it('round-trips text containing a bare > (acorn-jsx rejects raw > in JSXText)', () => {
+    const src = '<p>uptime &gt;99% this year</p>';
+    const { out, nodesB } = reparse(src);
+    expect(out).toContain('&gt;'); // re-escaped, never a raw > in text position
+    const el = nodesB.find((n) => n.type === 'element');
+    const child = el && el.type === 'element' ? el.children[0] : undefined;
+    expect(child && child.type === 'text' && child.value).toBe('uptime >99% this year');
+  });
+
+  it('round-trips attribute values containing & and backslash literally', () => {
+    const src = '<a title="R&amp;D \\ special">x</a>';
+    const { out, nodesB } = reparse(src);
+    const el = nodesB.find((n) => n.type === 'element');
+    const attr = el && el.type === 'element' ? el.attributes.find((a) => a.name === 'title') : undefined;
+    expect(attr && attr.value.static && attr.value.json).toBe('R&D \\ special');
+    expect(out).toContain('&amp;'); // `&` re-escaped so it can't re-decode differently
+  });
 });

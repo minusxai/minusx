@@ -20,6 +20,7 @@
 import { parseJsx } from '@/lib/jsx';
 import type { JsxNode } from '@/lib/jsx';
 import type { StoryContent } from '@/lib/types';
+import { escAttr } from './html-attr';
 import { paramFromJsxAttrs, paramToPlaceholder, placeholdersToParamJsx } from './story-params';
 import { inlineQuestionFromJsxAttrs, inlineQuestionToPlaceholder, placeholdersToInlineQuestionJsx } from './story-question';
 import { numberFromJsxAttrs, numberToPlaceholder, placeholdersToNumberJsx } from './story-number';
@@ -56,7 +57,8 @@ export function parseStoryJsx(jsx: string): ParseStoryResult {
  * round-trip stable.
  */
 function escapeHtmlText(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\{/g, '&#123;').replace(/\}/g, '&#125;');
 }
 
 function nodeToHtml(node: JsxNode, assets: number[], rawStrings = false): string {
@@ -122,16 +124,19 @@ function attrToHtml(a: { name: string; value: { static: boolean; json?: unknown 
   const v = a.value.json;
   if (v === true) return name;
   if (v === false || v === null || v === undefined) return '';
-  if (typeof v === 'string' || typeof v === 'number') return `${name}="${String(v).replace(/"/g, '&quot;')}"`;
+  // Full entity escape (not just `"`): a raw `<`/`>` inside a stored attribute value breaks the
+  // tag-boundary regexes/walkers over the stored HTML (and the jsx re-emit), so all four ride
+  // as entities — the same set escAttr uses for the placeholder payload attributes.
+  if (typeof v === 'string' || typeof v === 'number') return `${name}="${escAttr(String(v))}"`;
   return ''; // object/array attribute values aren't meaningful in plain HTML
 }
 
 /**
- * Escape stray `{`/`}` in the TEXT spans of stored HTML — outside tags and outside `<style>`
- * blocks (whose CSS braces must stay raw for the template-literal wrap below). New writes
- * already store braces as entities ({@link escapeHtmlText}); this pass HEALS documents written
- * before that fix: one raw brace in prose re-emits as a JSX expression opener, the whole file
- * stops parsing, and every subsequent edit fails at the same position forever.
+ * Escape stray `{`/`}`/`>` in the TEXT spans of stored HTML — outside tags and outside `<style>`
+ * blocks (whose CSS must stay raw for the template-literal wrap below). New writes already
+ * store these as entities ({@link escapeHtmlText}); this pass HEALS documents written before
+ * that fix: one raw brace (JSX expression opener) or bare `>` ("Unexpected token `>`") in prose
+ * makes the whole file unparseable, and every subsequent edit fails at the same position forever.
  */
 function escapeBracesInText(html: string): string {
   let out = '';
@@ -148,7 +153,7 @@ function escapeBracesInText(html: string): string {
     }
     const next = html.indexOf('<', i);
     const stop = next === -1 ? html.length : next;
-    out += html.slice(i, stop).replace(/\{/g, '&#123;').replace(/\}/g, '&#125;');
+    out += html.slice(i, stop).replace(/\{/g, '&#123;').replace(/\}/g, '&#125;').replace(/>/g, '&gt;');
     i = stop;
   }
   return out;

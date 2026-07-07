@@ -12,10 +12,22 @@
  */
 import type { JsxNode, JsxElement, JsxAttribute } from './types';
 
+/**
+ * Attribute-string escaping — the inverse of the parser's entity decoding, like {@link escapeText}
+ * but for the attribute-value position. JSX attribute strings do NOT process backslash escapes, so
+ * emitting a value with JSON.stringify (`style="font-family: \"X\""`) terminates the attribute at
+ * the first `\"` and the stray `\` fails the whole-document parse ("Expecting Unicode escape
+ * sequence \uXXXX") — locking the file out of every subsequent edit. Entities are what acorn-jsx
+ * actually decodes in attribute values, so they round-trip exactly.
+ */
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function attrToSource(a: JsxAttribute): string {
   if (!a.value.static) return a.value.source ? `${a.name}={${a.value.source}}` : a.name;
   const json = a.value.json;
-  if (typeof json === 'string') return `${a.name}=${JSON.stringify(json)}`;
+  if (typeof json === 'string') return `${a.name}="${escapeAttr(json)}"`;
   if (json === true) return a.name; // boolean shorthand
   return `${a.name}={${JSON.stringify(json)}}`;
 }
@@ -34,6 +46,7 @@ function escapeText(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;') // acorn-jsx rejects a raw `>` in JSXText ("Unexpected token `>`")
     .replace(/\{/g, '&#123;')
     .replace(/\}/g, '&#125;');
 }
