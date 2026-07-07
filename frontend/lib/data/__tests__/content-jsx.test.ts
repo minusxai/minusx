@@ -167,6 +167,36 @@ describe('content ⇄ jsx — real QuestionContent (raw SQL leaf, nested viz)', 
       expect(v.vizSettings).toMatchObject({ type: 'bar', xCols: ['m'], yCols: ['r'] });
     }
   });
+
+  it('round-trips the expanded styleConfig — curated levers + both escape hatches', () => {
+    const value = {
+      description: null,
+      query: 'SELECT 1 AS n',
+      connection_name: 'duckdb',
+      vizSettings: {
+        type: 'bar',
+        xCols: ['n'],
+        yCols: ['n'],
+        styleConfig: {
+          background: '#101822',
+          textColor: '#f7f0df',
+          legend: { show: true, position: 'bottom' },
+          table: { headerBg: '#1a2b4a', rowStripe: true },
+          echartsOverrides: { grid: { left: 8 }, series: [{ symbol: 'none' }] },
+          cssOverrides: 'td { font-variant-numeric: tabular-nums; }',
+        },
+      },
+      parameters: [],
+    };
+    const { jsx, back } = roundtrip(value, qSchema);
+    expect(jsx).toContain('<styleConfig>');
+    expect(jsx).toContain('<legend>');
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      const v = back.value as typeof value;
+      expect(v.vizSettings.styleConfig).toEqual(value.vizSettings.styleConfig);
+    }
+  });
 });
 
 describe('jsxToContent — loose top-level body markup (agent omitted the <story> wrapper)', () => {

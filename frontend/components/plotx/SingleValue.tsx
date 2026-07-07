@@ -65,6 +65,7 @@ export const SingleValue = ({ values, config }: SingleValueProps) => {
               {/* Label (hidden when the agent overrides it to an empty string) */}
               {d.label !== '' && (
                 <Text
+                  className="mx-sv-label"
                   fontSize={isSmall ? 'xs' : 'sm'}
                   fontWeight="700"
                   color="fg.muted"
@@ -81,6 +82,7 @@ export const SingleValue = ({ values, config }: SingleValueProps) => {
 
               {/* Value — always the live number; config only styles it */}
               <Text
+                className="mx-sv-value"
                 aria-label={`single value ${item.name}`}
                 fontSize={isSmall ? '4xl' : '6xl'}
                 fontWeight="800"

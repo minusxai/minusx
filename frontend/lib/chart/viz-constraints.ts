@@ -1,5 +1,6 @@
 import type { VisualizationType, VizSettings } from '@/lib/validation/atlas-schemas'
 import { getColumnType } from '@/lib/database/column-types'
+import { VIZ_CAPABILITIES } from './viz-capabilities'
 
 export interface ConstraintResult {
   error: string | null
@@ -97,12 +98,38 @@ export function getVizConstraintError(
  * chart RENDERER enforces but is invisible without column types. When omitted,
  * only structural constraints (column counts) are validated.
  */
+/**
+ * Registry-driven applicability check: warns when an escape hatch or style group is set on a
+ * viz type whose renderer ignores it — so the agent learns immediately instead of believing
+ * the styling landed. Deliberately limited to the NEW style fields (echartsOverrides,
+ * cssOverrides, table): stale type-specific config groups (pivotConfig on a bar, …) are
+ * intentionally preserved by the UI when switching viz types and must not warn.
+ */
+function getStyleLeverWarning(vizSettings: VizSettings): string | null {
+  const cap = VIZ_CAPABILITIES[vizSettings.type]
+  const styleConfig = vizSettings.styleConfig
+  if (!cap || !styleConfig) return null
+  if (styleConfig.echartsOverrides && Object.keys(styleConfig.echartsOverrides).length > 0 && !cap.levers.echartsOverrides) {
+    return `styleConfig.echartsOverrides is ignored for '${vizSettings.type}' (${cap.renderer} renderer, not ECharts) — use styleConfig.cssOverrides for DOM-rendered types.`
+  }
+  if (styleConfig.cssOverrides && !cap.levers.cssOverrides) {
+    return `styleConfig.cssOverrides is ignored for '${vizSettings.type}' (canvas-rendered by ECharts, CSS can't reach it) — use styleConfig.echartsOverrides instead.`
+  }
+  if (styleConfig.table && !cap.levers.styleConfig.includes('table')) {
+    return `styleConfig.table is ignored for '${vizSettings.type}' — it only applies to the 'table' and 'pivot' viz types.`
+  }
+  return null
+}
+
 export function getVizSettingsWarning(
   vizSettings: VizSettings | undefined | null,
   columns?: string[],
   types?: string[],
 ): string | null {
-  if (!vizSettings || vizSettings.type === 'table') return null
+  if (!vizSettings) return null
+  const styleWarning = getStyleLeverWarning(vizSettings)
+  if (styleWarning) return styleWarning
+  if (vizSettings.type === 'table') return null
   const xCols = vizSettings.xCols ?? []
   const yCols = vizSettings.yCols ?? []
   const xColTypes =

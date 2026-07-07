@@ -4,7 +4,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName } from '@/store/filesSlice';
-import { QuestionContent, QuestionParameter } from '@/lib/types';
+import { QuestionContent, QuestionParameter, EmbedVizStyles, StoryChartTheme } from '@/lib/types';
+import { resolveEffectiveVizSettings } from '@/lib/chart/viz-style-merge';
 import EmbeddedQuestionContainer from './EmbeddedQuestionContainer';
 import { Box, Spinner, Text, HStack, IconButton, Menu, Portal, Icon } from '@chakra-ui/react';
 import { Link } from '@/components/ui/Link';
@@ -25,6 +26,8 @@ interface SmartEmbeddedQuestionContainerProps {
   readOnly?: boolean;  // Public read-only view (e.g. shared story): no actions menu, plain title (no auth-gated link)
   enableDrilldown?: boolean;  // Click-to-drill-down on data points (off for story embeds, on for dashboards)
   showActionsMenu?: boolean;  // Show the "..." (Explain/Edit/Remove) header menu. Default true (dashboards); stories pass their edit-mode flag so the menu only appears while editing.
+  embedStyles?: EmbedVizStyles;  // Presentation-only vizSettings override from a story <Question styles={{…}}> embed. Render-time merge; the question file is never touched.
+  chartTheme?: StoryChartTheme;  // Story-wide chart theme, applied as defaults beneath the question's own vizSettings (theme < question < embedStyles).
 }
 
 function SmartEmbeddedQuestionContainerInner({
@@ -40,6 +43,8 @@ function SmartEmbeddedQuestionContainerInner({
   readOnly = false,
   enableDrilldown = true,
   showActionsMenu = true,
+  embedStyles,
+  chartTheme,
 }: SmartEmbeddedQuestionContainerProps) {
   const { explainQuestion } = useExplainQuestion();
 
@@ -72,6 +77,12 @@ function SmartEmbeddedQuestionContainerInner({
 
   // Use effective name so pending renames are reflected immediately in the dashboard card
   const effectiveName = useAppSelector(state => selectEffectiveName(state, questionId));
+
+  // Story style cascade: chartTheme < question vizSettings < embedStyles — render-time only.
+  const effectiveContent = useMemo(() => {
+    if (!mergedContent || (!embedStyles && !chartTheme)) return mergedContent;
+    return { ...mergedContent, vizSettings: resolveEffectiveVizSettings(mergedContent.vizSettings, chartTheme, embedStyles) };
+  }, [mergedContent, embedStyles, chartTheme]);
 
   // Build question URL with optional dashboard context and param values
   const questionHref = useMemo(() => {
@@ -235,7 +246,7 @@ function SmartEmbeddedQuestionContainerInner({
       )}
       {bodyReady ? (
         <EmbeddedQuestionContainer
-          question={mergedContent}
+          question={effectiveContent ?? mergedContent}
           questionId={questionId}
           filePath={file?.path}
           externalParameters={parametersToUse}
@@ -306,8 +317,11 @@ function SmartEmbeddedQuestionContainerInner({
 // Custom comparator: skip re-render when only unstable callback refs change (onEdit/onRemove
 // are inline arrow functions in DashboardView's questionGridItems useMemo, so they're always
 // new references when hoveredParamKey changes — ignoring them prevents 77-render cascades).
+const jsonEq = (a: unknown, b: unknown) => a === b || JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const SmartEmbeddedQuestionContainer = React.memo(SmartEmbeddedQuestionContainerInner, (prev, next) =>
   prev.questionId === next.questionId &&
+  jsonEq(prev.embedStyles, next.embedStyles) &&
+  jsonEq(prev.chartTheme, next.chartTheme) &&
   prev.externalParameters === next.externalParameters &&
   prev.externalParamValues === next.externalParamValues &&
   prev.showTitle === next.showTitle &&

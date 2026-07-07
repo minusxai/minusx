@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, HStack, Text, VStack } from '@chakra-ui/react'
 import { LuPalette, LuPipette } from 'react-icons/lu'
 import { CHART_COLORS, COLOR_PALETTE, resolveSeriesColor } from '@/lib/chart/echarts-theme'
+import { VIZ_CAPABILITIES, type StyleConfigKey } from '@/lib/chart/viz-capabilities'
 import { useConfigs } from '@/lib/hooks/useConfigs'
 import type { VisualizationStyleConfig, VisualizationType } from '@/lib/types'
 
@@ -84,8 +85,9 @@ export const SeriesColorInput = ({ value, onCommit, label }: { value: string; on
   )
 }
 
-const ChoicePill = ({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) => (
+const ChoicePill = ({ selected, onClick, children, label }: { selected: boolean; onClick: () => void; children: React.ReactNode; label?: string }) => (
   <Box
+    aria-label={label}
     px={2}
     py={0.5}
     borderRadius="sm"
@@ -112,6 +114,11 @@ const hasStyleConfig = (config?: VisualizationStyleConfig) =>
     || config.markerSize != null
     || config.stacked != null
     || config.showDataLabels != null
+    || config.background != null
+    || config.legend != null
+    || config.textColor != null
+    || config.titleColor != null
+    || config.smooth != null
   )
 
 export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange, displayMode = 'auto' }: StyleConfigPopoverProps) => {
@@ -127,11 +134,19 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
     return p && p.length > 0 ? p : COLOR_PALETTE
   }, [config.chartColorPalette])
 
-  const supportsMarkerSize = chartType === 'scatter' || chartType === 'line' || chartType === 'combo'
-  const supportsStacking = chartType === 'bar' || chartType === 'row' || chartType === 'area' || chartType === 'combo'
+  // Section visibility comes from the capability registry — the same source that drives
+  // the agent's styling docs, so the human UI and the LLM never disagree on what applies.
+  const levers = VIZ_CAPABILITIES[chartType]?.levers.styleConfig ?? []
+  const supports = (key: StyleConfigKey) => levers.includes(key)
+  const supportsMarkerSize = supports('markerSize')
+  const supportsStacking = supports('stacked')
+  const supportsSmooth = supports('smooth')
   const seriesCount = useMemo(() => Math.min(Math.max(numSeries, 1), palette.length), [numSeries, palette.length])
   const selectedOpacity = styleConfig?.opacity == null ? 1 : styleConfig.opacity
   const isStacked = styleConfig?.stacked ?? true
+  const legendShown = styleConfig?.legend?.show !== false
+  const legendPosition = styleConfig?.legend?.position ?? 'top'
+  const isSmooth = styleConfig?.smooth ?? true
 
   useEffect(() => {
     if (!showPopover) return
@@ -167,14 +182,21 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
   }, [displayMode])
 
   const emitConfig = (next: VisualizationStyleConfig) => {
-    const normalized: VisualizationStyleConfig = {}
-    if (next.colors && Object.keys(next.colors).length > 0) normalized.colors = next.colors
-    if (next.opacity === 1) normalized.opacity = null
-    else if (next.opacity != null) normalized.opacity = next.opacity
-    if (next.markerSize != null) normalized.markerSize = next.markerSize
-    if (next.stacked != null) normalized.stacked = next.stacked
-    if (next.showDataLabels != null) normalized.showDataLabels = next.showDataLabels
-    if (next.dataLabelColor != null) normalized.dataLabelColor = next.dataLabelColor
+    // Start from EVERYTHING in `next` (callers spread the current config in) so keys this
+    // popover doesn't edit — table, echartsOverrides, cssOverrides, future fields — are
+    // preserved, then normalize the edited keys: null/default values are dropped.
+    const normalized: VisualizationStyleConfig = { ...next }
+    if (!normalized.colors || Object.keys(normalized.colors).length === 0) delete normalized.colors
+    if (normalized.opacity == null || normalized.opacity === 1) delete normalized.opacity
+    if (normalized.markerSize == null) delete normalized.markerSize
+    if (normalized.stacked == null) delete normalized.stacked
+    if (normalized.showDataLabels == null) delete normalized.showDataLabels
+    if (normalized.dataLabelColor == null) delete normalized.dataLabelColor
+    if (normalized.background == null) delete normalized.background
+    if (normalized.textColor == null) delete normalized.textColor
+    if (normalized.titleColor == null) delete normalized.titleColor
+    if (normalized.smooth == null) delete normalized.smooth
+    if (!normalized.legend || (normalized.legend.show == null && normalized.legend.position == null)) delete normalized.legend
     onChange(normalized)
   }
 
@@ -293,6 +315,97 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
               Separate
             </ChoicePill>
           </HStack>
+        </Box>
+      )}
+
+      {supportsSmooth && (
+        <Box>
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+            Smoothing
+          </Text>
+          <HStack gap={1} flexWrap="wrap">
+            <ChoicePill label="Line smoothing on" selected={isSmooth} onClick={() => emitConfig({ ...(styleConfig ?? {}), smooth: null })}>
+              Smooth
+            </ChoicePill>
+            <ChoicePill label="Line smoothing off" selected={!isSmooth} onClick={() => emitConfig({ ...(styleConfig ?? {}), smooth: false })}>
+              Straight
+            </ChoicePill>
+          </HStack>
+        </Box>
+      )}
+
+      {supports('legend') && (
+        <Box>
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+            Legend
+          </Text>
+          <HStack gap={1} flexWrap="wrap">
+            <ChoicePill label="Legend on" selected={legendShown} onClick={() => emitConfig({ ...(styleConfig ?? {}), legend: { ...styleConfig?.legend, show: true } })}>
+              On
+            </ChoicePill>
+            <ChoicePill label="Legend off" selected={!legendShown} onClick={() => emitConfig({ ...(styleConfig ?? {}), legend: { ...styleConfig?.legend, show: false } })}>
+              Off
+            </ChoicePill>
+            {legendShown && (['top', 'bottom', 'left', 'right'] as const).map(position => (
+              <ChoicePill
+                key={position}
+                label={`Legend position ${position}`}
+                selected={legendPosition === position}
+                onClick={() => emitConfig({ ...(styleConfig ?? {}), legend: { ...styleConfig?.legend, position } })}
+              >
+                {position}
+              </ChoicePill>
+            ))}
+          </HStack>
+        </Box>
+      )}
+
+      {supports('background') && (
+        <Box>
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+            Chart Colors
+          </Text>
+          <VStack align="stretch" gap={1.5}>
+            <HStack justify="space-between">
+              <Text fontSize="xs" fontFamily="mono" color="fg.subtle">Background</Text>
+              <HStack gap={1.5}>
+                <SeriesColorInput
+                  label="Chart background color"
+                  value={styleConfig?.background || '#ffffff'}
+                  onCommit={(hex) => emitConfig({ ...(styleConfig ?? {}), background: hex })}
+                />
+                <ChoicePill label="Chart background auto" selected={styleConfig?.background == null} onClick={() => emitConfig({ ...(styleConfig ?? {}), background: null })}>
+                  auto
+                </ChoicePill>
+              </HStack>
+            </HStack>
+            <HStack justify="space-between">
+              <Text fontSize="xs" fontFamily="mono" color="fg.subtle">Text</Text>
+              <HStack gap={1.5}>
+                <SeriesColorInput
+                  label="Chart text color"
+                  value={styleConfig?.textColor || '#888888'}
+                  onCommit={(hex) => emitConfig({ ...(styleConfig ?? {}), textColor: hex })}
+                />
+                <ChoicePill label="Chart text color auto" selected={styleConfig?.textColor == null} onClick={() => emitConfig({ ...(styleConfig ?? {}), textColor: null })}>
+                  auto
+                </ChoicePill>
+              </HStack>
+            </HStack>
+            <HStack justify="space-between">
+              <Text fontSize="xs" fontFamily="mono" color="fg.subtle">Title</Text>
+              <HStack gap={1.5}>
+                <SeriesColorInput
+                  label="Chart title color"
+                  value={styleConfig?.titleColor || '#888888'}
+                  onCommit={(hex) => emitConfig({ ...(styleConfig ?? {}), titleColor: hex })}
+                />
+                <ChoicePill label="Chart title color auto" selected={styleConfig?.titleColor == null} onClick={() => emitConfig({ ...(styleConfig ?? {}), titleColor: null })}>
+                  auto
+                </ChoicePill>
+              </HStack>
+            </HStack>
+          </VStack>
         </Box>
       )}
 

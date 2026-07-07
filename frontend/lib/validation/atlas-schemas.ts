@@ -158,6 +158,22 @@ export const ConditionalFormatRule = Type.Object({
 }, { title: 'ConditionalFormatRule' });
 export type ConditionalFormatRule = Static<typeof ConditionalFormatRule>;
 
+export const LegendStyleConfig = Type.Object({
+  show: Nullable(Type.Boolean({ description: 'show/hide the legend (default: shown when there are multiple series)' })),
+  position: Nullable(StringEnum(['top', 'bottom', 'left', 'right'], "legend placement (default 'top')")),
+}, { title: 'LegendStyleConfig' });
+export type LegendStyleConfig = Static<typeof LegendStyleConfig>;
+
+export const TableStyleConfig = Type.Object({
+  headerBg: Nullable(Type.String({ description: "header row background as a CSS color, e.g. '#1a2b4a'" })),
+  headerTextColor: Nullable(Type.String({ description: 'header text CSS color' })),
+  rowStripe: Nullable(Type.Boolean({ description: 'zebra-stripe body rows (conditional-format colors still win on matching cells)' })),
+  stripeBg: Nullable(Type.String({ description: 'CSS color for the striped rows (default: a subtle theme tint)' })),
+  borderColor: Nullable(Type.String({ description: 'cell border CSS color' })),
+  cellFontSize: Nullable(Type.Integer({ description: 'body cell font size in px (10–20)' })),
+}, { title: 'TableStyleConfig' });
+export type TableStyleConfig = Static<typeof TableStyleConfig>;
+
 export const VisualizationStyleConfig = Type.Object({
   colors: Nullable(Type.Record(Type.String(), Type.String(), { description: "color overrides mapping series index to color key (e.g. {'0': 'danger', '2': 'warning'})." })),
   opacity: Nullable(Type.Number({ description: 'series opacity from 0.1 to 1.0' })),
@@ -165,6 +181,22 @@ export const VisualizationStyleConfig = Type.Object({
   stacked: Nullable(Type.Boolean({ description: 'whether bar and area series should be stacked. Defaults to true for those chart types.' })),
   showDataLabels: Nullable(Type.Boolean({ description: 'show numeric value labels on each data point. Defaults to false.' })),
   dataLabelColor: Nullable(Type.String({ description: "color for the data value labels as a hex string, e.g. '#ffffff'. Defaults to black on bars and the series color otherwise. Only relevant when showDataLabels is true." })),
+  background: Nullable(Type.String({ description: "chart background as a CSS color (default transparent — the chart inherits its card). When setting a background, ALWAYS also set textColor so labels stay readable in both color modes." })),
+  legend: NullableD(LegendStyleConfig, 'legend visibility and placement'),
+  textColor: Nullable(Type.String({ description: 'CSS color for axis labels and legend text (overrides the theme default)' })),
+  titleColor: Nullable(Type.String({ description: 'CSS color for the chart title' })),
+  smooth: Nullable(Type.Boolean({ description: 'line smoothing for line/area/combo line series (default true)' })),
+  table: NullableD(TableStyleConfig, "table presentation (header colors, striping, borders, cell font size). Only used when type is 'table' or 'pivot'."),
+  echartsOverrides: Nullable(Type.Record(Type.String(), Type.Unknown(), { description:
+    'ESCAPE HATCH: a raw ECharts option fragment deep-merged LAST into the final chart option, after theming and ' +
+    'every curated lever. ECharts-rendered types only (ignored for table/pivot/geo/trend/single_value). Objects ' +
+    'deep-merge; ARRAYS REPLACE WHOLESALE (to touch one series you must re-specify the whole series array). ' +
+    'Not editable in the UI and may break silently if the renderer changes — prefer a curated lever whenever one exists.' })),
+  cssOverrides: Nullable(Type.String({ description:
+    'ESCAPE HATCH for DOM-rendered types (table, pivot, trend, single_value, geo): raw CSS scoped to the viz root ' +
+    'via native CSS nesting — write bare selectors like `thead th { … }` or `td { … }`; they apply only inside this ' +
+    'visualization. Ignored for canvas (ECharts) chart types — use echartsOverrides there. Not editable in the UI; ' +
+    'prefer a curated lever (e.g. styleConfig.table) whenever one exists.' })),
 }, { title: 'VisualizationStyleConfig' });
 export type VisualizationStyleConfig = Static<typeof VisualizationStyleConfig>;
 
@@ -214,6 +246,30 @@ export const VizSettings = Type.Object({
   singleValueConfig: NullableD(SingleValueConfig, "single-value (big number) styling — label, prefix/suffix, font size/color/weight, alignment. The number stays live; these only decorate it. Only used when type is 'single_value'."),
 }, { title: 'VizSettings' });
 export type VizSettings = Static<typeof VizSettings>;
+
+// Story-wide chart theme — DEFAULTS applied beneath every embedded question's own vizSettings
+// (precedence: chartTheme < question vizSettings < embed styles prop). Render-time only; never
+// written into the embedded question files.
+export const StoryChartTheme = Type.Object({
+  palette: Nullable(Type.Array(Type.String(), { description: 'series color palette (CSS color list) replacing the default palette for every embedded chart, index-ordered. A question\'s own per-index color override still wins at that index.' })),
+  background: Nullable(Type.String({ description: 'default chart background CSS color for all embeds' })),
+  legend: NullableD(LegendStyleConfig, 'default legend visibility/placement for all embeds'),
+  textColor: Nullable(Type.String({ description: 'default axis-label/legend text color for all embeds' })),
+  titleColor: Nullable(Type.String({ description: 'default chart-title color for all embeds' })),
+}, { title: 'StoryChartTheme' });
+export type StoryChartTheme = Static<typeof StoryChartTheme>;
+
+// The presentation-only subset a saved `<Question id={N} styles={{…}}/>` story embed may
+// override — restyles the chart in place WITHOUT touching the saved question file. Deliberately
+// excludes type/columns/query-shaped fields: an embed is always "the same chart, restyled".
+export const EmbedVizStyles = Type.Object({
+  styleConfig: NullableD(VisualizationStyleConfig, "style overrides deep-merged over the saved question's styleConfig"),
+  axisConfig: NullableD(AxisConfig, 'axis overrides (scale, min/max, y title)'),
+  columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description: 'per-column format overrides, merged per column' })),
+  conditionalFormats: Nullable(Type.Array(ConditionalFormatRule, { description: 'conditional format rules — REPLACES the saved rules wholesale when set' })),
+  singleValueConfig: NullableD(SingleValueConfig, 'single-value styling overrides'),
+}, { title: 'EmbedVizStyles' });
+export type EmbedVizStyles = Static<typeof EmbedVizStyles>;
 
 // ============================================================================
 // Question Content
@@ -390,6 +446,11 @@ export const StoryContent = Type.Object({
     'Current/default values for the story\'s shared params (declared via <Param name=…> in the body). ' +
     'Keyed by param name; flows down to every embedded question, like a dashboard. Readers change them at ' +
     'runtime; the values here are the defaults.' })),
+  chartTheme: NullableD(StoryChartTheme,
+    'Story-wide chart theme: palette, chart background, legend defaults, text/title colors applied as DEFAULTS ' +
+    'beneath every embedded question\'s own vizSettings (precedence: chartTheme < question vizSettings < embed ' +
+    'styles prop). Set this ONCE from the story\'s design tokens to keep all charts harmonious instead of styling ' +
+    'each embed; use a per-embed styles={{…}} prop only for deviations. Never mutates the saved question files.'),
 }, { title: 'StoryContent' });
 export type StoryContent = Static<typeof StoryContent>;
 

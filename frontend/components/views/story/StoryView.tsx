@@ -122,6 +122,7 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
             readOnly={readOnly}
             filePath={storyPath}
             paramValues={content.parameterValues ?? undefined}
+            chartTheme={content.chartTheme ?? undefined}
             onEditNumber={setNumberEdit}
             onChange={onStoryChange}
             selectionSource={selectionSource}

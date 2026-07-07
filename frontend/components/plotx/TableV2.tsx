@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react'
 import { Box, HStack, Button, Text, VStack, Menu, Portal, Icon, Spinner, Input } from '@chakra-ui/react'
 import { LuChevronDown, LuType, LuHash, LuCalendar, LuBraces, LuColumns3, LuCheck, LuDownload, LuArrowUp, LuArrowDown, LuFilter, LuX, LuArrowUpDown, LuChartColumn, LuSettings2 } from 'react-icons/lu'
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
@@ -6,7 +6,7 @@ import { calculateHistogram } from '@/lib/chart/histogram'
 import { formatNumber, applyPrefixSuffix, formatDateValue } from '@/lib/chart/chart-utils'
 import { buildConditionalBg, getContrastText } from '@/lib/chart/conditional-format-utils'
 import { FormatPopover } from './AxisComponents'
-import type { ColumnFormatConfig, ConditionalFormatRule } from '@/lib/types'
+import type { ColumnFormatConfig, ConditionalFormatRule, TableStyleConfig } from '@/lib/types'
 import { MiniHistogram } from './MiniHistogram'
 import { MiniBarChart } from './MiniBarChart'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
@@ -49,6 +49,8 @@ interface TableProps {
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
   /** Conditional background-color rules. Applied to cells/rows/columns when their condition matches. */
   conditionalFormats?: ConditionalFormatRule[]
+  /** Table presentation (header colors, striping, borders, cell font size) from styleConfig.table. */
+  tableStyle?: TableStyleConfig
 }
 
 type ColumnType = 'text' | 'number' | 'date' | 'json'
@@ -121,7 +123,7 @@ interface FacetedFilterValue {
 const isFacetedFilter = (v: unknown): v is FacetedFilterValue =>
   v != null && typeof v === 'object' && 'search' in v
 
-export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick, initialColumnSizing, wrapColumns, renderCell, initialSorting, enableDrilldown = true, columnFormats, onColumnFormatsChange, conditionalFormats }: TableProps) => {
+export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick, initialColumnSizing, wrapColumns, renderCell, initialSorting, enableDrilldown = true, columnFormats, onColumnFormatsChange, conditionalFormats, tableStyle }: TableProps) => {
   const [sorting, setSorting] = useState<SortingState>(initialSorting ?? [])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -375,8 +377,19 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
 
   const visibleHeaders = table.getHeaderGroups()[0].headers.filter(h => h.column.getIsVisible())
 
+  // Inline lever styles from styleConfig.table — inline so they win over the theme classes.
+  const headerCellStyle: CSSProperties | undefined = (tableStyle?.headerBg || tableStyle?.headerTextColor)
+    ? {
+        ...(tableStyle.headerBg ? { background: tableStyle.headerBg } : {}),
+        ...(tableStyle.headerTextColor ? { color: tableStyle.headerTextColor } : {}),
+      }
+    : undefined
+  const stripeEnabled = tableStyle?.rowStripe ?? true
+  const stripeBg = tableStyle?.stripeBg ?? 'var(--chakra-colors-bg-emphasized)'
+  const cellBorderColor = tableStyle?.borderColor ?? 'var(--chakra-colors-border-muted)'
+
   return (
-    <Box ref={containerRef} height="100%" display="flex" flexDirection="column">
+    <Box ref={containerRef} aria-label="Results table" height="100%" display="flex" flexDirection="column">
       {visibleColumnCount === 0 ? (
         <Box flex="1" display="flex" alignItems="center" justifyContent="center">
           <Text fontSize="sm" color="fg.muted">
@@ -458,6 +471,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                       _last={{ borderRight: 'none' }}
                       position="relative"
                       verticalAlign="top"
+                      style={headerCellStyle}
                     >
                       {/* Resize handle */}
                       <Box
@@ -819,7 +833,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                     className="table-v2-row"
                     style={{
                       height: wrapColumns?.size ? undefined : ROW_HEIGHT,
-                      background: virtualRow.index % 2 === 1 ? 'var(--chakra-colors-bg-emphasized)' : undefined,
+                      background: stripeEnabled && virtualRow.index % 2 === 1 ? stripeBg : undefined,
                       cursor: onRowClick ? 'pointer' : undefined,
                     }}
                     onClick={onRowClick ? () => onRowClick(original, virtualRow.index) : undefined}
@@ -834,7 +848,8 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                           className="table-v2-cell"
                           style={{
                             width: colSizes[colId],
-                            borderRight: cellIdx < lastColIdx ? '1px solid var(--chakra-colors-border-muted)' : undefined,
+                            borderRight: cellIdx < lastColIdx ? `1px solid ${cellBorderColor}` : undefined,
+                            ...(tableStyle?.cellFontSize ? { fontSize: `${tableStyle.cellFontSize}px` } : undefined),
                             ...(cellBg ? { backgroundColor: cellBg, color: getContrastText(cellBg) } : undefined),
                             ...(shouldWrap ? { whiteSpace: 'normal', wordBreak: 'break-word' } : undefined),
                           }}

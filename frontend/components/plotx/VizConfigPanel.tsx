@@ -14,6 +14,8 @@ import { TrendAxisBuilder } from './TrendAxisBuilder'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { resolveColumnType } from './AxisComponents'
 import { StyleConfigPopover } from './StyleConfigPopover'
+import { TableStylePanel } from './TableStylePanel'
+import { VizOverridesPanel } from './VizOverridesPanel'
 import { AnnotationEditor } from './AnnotationEditor'
 import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, TrendConfig, VisualizationType } from '@/lib/types'
 import type { GeoConfig } from '@/lib/types'
@@ -260,20 +262,29 @@ export const VizConfigPanel = ({
     ]
   }, [xAxisColumns, yAxisColumns, yRightColumns, isDualAxis, tooltipColumns, handleDropXPrimary, handleDropSplitBy, handleDropY, handleDropYRight, handleDropTooltip, removeFromXPrimary, removeFromSplitBy, removeFromY, removeFromYRight, removeFromTooltip])
 
+  // Escape-hatch editor (echartsOverrides / cssOverrides) — appended to every branch so
+  // agent-written overrides are always inspectable and clearable by a human.
+  const overridesPanel = onStyleConfigChange ? (
+    <VizOverridesPanel chartType={chartType} styleConfig={styleConfig} onChange={onStyleConfigChange} />
+  ) : null
+
   // Trend: own axis builder
   if (chartType === 'trend') {
     return (
-      <TrendAxisBuilder
-        columns={columns}
-        types={types}
-        xAxisColumns={xAxisColumns}
-        yAxisColumns={yAxisColumns}
-        onAxisChange={(x, y) => onAxisChange?.(x, y)}
-        columnFormats={columnFormats}
-        onColumnFormatChange={handleColumnFormatChange}
-        trendConfig={trendConfig}
-        onTrendConfigChange={onTrendConfigChange}
-      />
+      <Box display="flex" flexDirection="column" gap={2} width="100%">
+        <TrendAxisBuilder
+          columns={columns}
+          types={types}
+          xAxisColumns={xAxisColumns}
+          yAxisColumns={yAxisColumns}
+          onAxisChange={(x, y) => onAxisChange?.(x, y)}
+          columnFormats={columnFormats}
+          onColumnFormatChange={handleColumnFormatChange}
+          trendConfig={trendConfig}
+          onTrendConfigChange={onTrendConfigChange}
+        />
+        {overridesPanel}
+      </Box>
     )
   }
 
@@ -287,46 +298,58 @@ export const VizConfigPanel = ({
       onRemove: (col) => onAxisChange?.([], yAxisColumns.filter(c => c !== col)),
     }]
     return (
-      <AxisBuilder
-        columns={columns}
-        types={types}
-        zones={singleValueZones}
-        columnFormats={columnFormats}
-        onColumnFormatChange={handleColumnFormatChange}
-        chartType={chartType}
-        borderless
-      />
+      <Box display="flex" flexDirection="column" gap={2} width="100%">
+        <AxisBuilder
+          columns={columns}
+          types={types}
+          zones={singleValueZones}
+          columnFormats={columnFormats}
+          onColumnFormatChange={handleColumnFormatChange}
+          chartType={chartType}
+          borderless
+        />
+        {overridesPanel}
+      </Box>
     )
   }
 
   // Geo: own axis builder
   if (chartType === 'geo') {
     return (
-      <GeoAxisBuilder
-        columns={columns}
-        types={types}
-        geoConfig={initialGeoConfig}
-        onGeoConfigChange={(config) => onGeoConfigChange?.(config)}
-        tooltipCols={tooltipColumns}
-        onTooltipColsChange={onTooltipColsChange}
-        colorOverrides={styleConfig?.colors ?? {}}
-        onColorOverridesChange={(colors) => onStyleConfigChange?.({ ...styleConfig, colors })}
-        getMapView={getMapView ?? (() => null)}
-      />
+      <Box display="flex" flexDirection="column" gap={2} width="100%">
+        <GeoAxisBuilder
+          columns={columns}
+          types={types}
+          geoConfig={initialGeoConfig}
+          onGeoConfigChange={(config) => onGeoConfigChange?.(config)}
+          tooltipCols={tooltipColumns}
+          onTooltipColsChange={onTooltipColsChange}
+          colorOverrides={styleConfig?.colors ?? {}}
+          onColorOverridesChange={(colors) => onStyleConfigChange?.({ ...styleConfig, colors })}
+          getMapView={getMapView ?? (() => null)}
+        />
+        {overridesPanel}
+      </Box>
     )
   }
 
-  // Pivot: own axis builder
+  // Pivot: own axis builder (+ table presentation panel)
   if (chartType === 'pivot') {
     return (
-      <PivotAxisBuilder
-        columns={columns}
-        types={types}
-        pivotConfig={initialPivotConfig}
-        onPivotConfigChange={(config) => onPivotConfigChange?.(config)}
-        columnFormats={columnFormats}
-        onColumnFormatChange={handleColumnFormatChange}
-      />
+      <Box display="flex" flexDirection="column" gap={2} width="100%">
+        <PivotAxisBuilder
+          columns={columns}
+          types={types}
+          pivotConfig={initialPivotConfig}
+          onPivotConfigChange={(config) => onPivotConfigChange?.(config)}
+          columnFormats={columnFormats}
+          onColumnFormatChange={handleColumnFormatChange}
+        />
+        {onStyleConfigChange && (
+          <TableStylePanel styleConfig={styleConfig} onChange={onStyleConfigChange} />
+        )}
+        {overridesPanel}
+      </Box>
     )
   }
 
@@ -362,6 +385,7 @@ export const VizConfigPanel = ({
           />
         ) : undefined}
       />
+      {overridesPanel}
     </Box>
   )
 }

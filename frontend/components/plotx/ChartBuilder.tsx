@@ -10,6 +10,7 @@ import { ScatterPlot } from './ScatterPlot'
 import { FunnelPlot } from './FunnelPlot'
 import { PiePlot } from './PiePlot'
 import { PivotTable } from './PivotTable'
+import { VizCssScope } from './VizCssScope'
 import { SingleValue } from './SingleValue'
 import { TrendPlot } from './TrendPlot'
 import { WaterfallPlot } from './WaterfallPlot'
@@ -427,14 +428,16 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           {constraintError ? (
             <ChartError message={constraintError} variant={constraint.variant} />
           ) : hasData ? (
-            <TrendPlot
-              series={aggregatedData.series}
-              xAxisData={aggregatedData.xAxisData}
-              columnFormats={columnFormats}
-              yAxisColumns={yAxisColumns}
-              xAxisColumns={xAxisColumns}
-              compareMode={trendConfig?.compareMode ?? 'last'}
-            />
+            <VizCssScope css={styleConfig?.cssOverrides} vizType="trend">
+              <TrendPlot
+                series={aggregatedData.series}
+                xAxisData={aggregatedData.xAxisData}
+                columnFormats={columnFormats}
+                yAxisColumns={yAxisColumns}
+                xAxisColumns={xAxisColumns}
+                compareMode={trendConfig?.compareMode ?? 'last'}
+              />
+            </VizCssScope>
           ) : (
             <ChartError variant="info" title="No data to display" message="Drag metric columns to see trend values" />
           )}
@@ -450,13 +453,15 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
       <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
         <Box flex="1" overflow="hidden" display="flex" minHeight="0" alignItems="center" justifyContent="center">
           {hasData ? (
-            <SingleValue
-              values={yAxisColumns.map(col => ({
-                name: columnFormats[col]?.alias || col,
-                value: rows[0]?.[col] ?? null,
-              }))}
-              config={singleValueConfig}
-            />
+            <VizCssScope css={styleConfig?.cssOverrides} vizType="single_value">
+              <SingleValue
+                values={yAxisColumns.map(col => ({
+                  name: columnFormats[col]?.alias || col,
+                  value: rows[0]?.[col] ?? null,
+                }))}
+                config={singleValueConfig}
+              />
+            </VizCssScope>
           ) : (
             <ChartError variant="info" title="No data to display" message="Drag metric columns to see values" />
           )}
@@ -480,15 +485,17 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     return (
       <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
         <Box flex="1" overflow="hidden" display="flex" minHeight="0">
-          <GeoPlot
-            rows={rows}
-            columns={columns}
-            geoConfig={initialGeoConfig ?? { subType: 'choropleth' } as GeoConfig}
-            tooltipCols={tooltipColumns}
-            markerColor={colorPalette[0]}
-            columnFormats={columnFormats}
-            onMapReady={(getView) => { onMapReady?.(getView) }}
-          />
+          <VizCssScope css={styleConfig?.cssOverrides} vizType="geo">
+            <GeoPlot
+              rows={rows}
+              columns={columns}
+              geoConfig={initialGeoConfig ?? { subType: 'choropleth' } as GeoConfig}
+              tooltipCols={tooltipColumns}
+              markerColor={colorPalette[0]}
+              columnFormats={columnFormats}
+              onMapReady={(getView) => { onMapReady?.(getView) }}
+            />
+          </VizCssScope>
         </Box>
       </Box>
     )
@@ -505,20 +512,23 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
         {/* Pivot Table */}
         <Box flex="1" overflow="hidden" display="flex" minHeight="0">
           {pivotHasData ? (
-            <PivotTable
-              pivotData={pivotData!}
-              showRowTotals={pivotConfig?.showRowTotals !== false}
-              showColTotals={pivotConfig?.showColumnTotals !== false}
-              showHeatmap={pivotConfig?.showHeatmap !== false}
-              compact={pivotConfig?.compact === true}
-              heatmapScale={(pivotConfig?.heatmapScale as 'red-yellow-green' | 'green' | 'blue') ?? 'red-yellow-green'}
-              rowDimNames={pivotConfig?.rows.map(col => columnFormats[col]?.alias || col)}
-              colDimNames={pivotConfig?.columns.map(col => columnFormats[col]?.alias || col)}
-              formulaResults={formulaResults}
-              onCellClick={enableDrilldown ? handlePivotCellClick : undefined}
-              columnFormats={columnFormats}
-              valueColumns={pivotConfig?.values.map(v => v.column)}
-            />
+            <VizCssScope css={styleConfig?.cssOverrides} vizType="pivot">
+              <PivotTable
+                pivotData={pivotData!}
+                showRowTotals={pivotConfig?.showRowTotals !== false}
+                showColTotals={pivotConfig?.showColumnTotals !== false}
+                showHeatmap={pivotConfig?.showHeatmap !== false}
+                compact={pivotConfig?.compact === true}
+                heatmapScale={(pivotConfig?.heatmapScale as 'red-yellow-green' | 'green' | 'blue') ?? 'red-yellow-green'}
+                rowDimNames={pivotConfig?.rows.map(col => columnFormats[col]?.alias || col)}
+                colDimNames={pivotConfig?.columns.map(col => columnFormats[col]?.alias || col)}
+                formulaResults={formulaResults}
+                onCellClick={enableDrilldown ? handlePivotCellClick : undefined}
+                columnFormats={columnFormats}
+                valueColumns={pivotConfig?.values.map(v => v.column)}
+                tableStyle={styleConfig?.table ?? undefined}
+              />
+            </VizCssScope>
           ) : (
             <ChartError
               variant="info"

@@ -15,6 +15,8 @@ import StorySelectionPopover from '@/components/views/story/StorySelectionPopove
 import { paramFromPlaceholderEl, type StoryParam } from '@/lib/data/story-params';
 import { inlineQuestionFromEl, inlineEmbedToQuestionContent } from '@/lib/data/story-question';
 import { numberFromEl } from '@/lib/data/story-number';
+import { embedStylesFromEl } from '@/lib/data/story-embed-styles';
+import type { StoryChartTheme } from '@/lib/types';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 import { useAppSelector } from '@/store/hooks';
 
@@ -49,6 +51,8 @@ interface AgentHtmlProps {
   onChange?: (story: string) => void;
   /** Path of the file being rendered — forwarded to embeds' /api/query so share guests pass the embed allowlist. */
   filePath?: string;
+  /** Story-wide chart theme (content.chartTheme) applied as defaults beneath every embed's vizSettings. */
+  chartTheme?: StoryChartTheme | null;
 }
 
 export interface NumberQueryEditRequest {
@@ -82,7 +86,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource, onChange, filePath },
+  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource, onChange, filePath, chartTheme },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -162,7 +166,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       const questionId = parseInt(el.getAttribute('data-question-id') || '', 10);
       if (Number.isNaN(questionId)) return;
       sizeEmbedEl(el);
-      found.push({ el, questionId });
+      found.push({ el, questionId, styles: embedStylesFromEl(el) });
     });
     const inlineFound: InlineChartTarget[] = [];
     doc.querySelectorAll<HTMLElement>('[data-question-inline]').forEach(el => {
@@ -259,9 +263,10 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         onParamValuesChange={onParamValuesChange}
         onEditNumber={onEditNumber}
         storyPath={filePath}
+        chartTheme={chartTheme}
       />,
     );
-  }, [targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, filePath]);
+  }, [targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, filePath, chartTheme]);
 
   // Keep the iframe's color-mode class in sync without rebuilding the whole document.
   useEffect(() => {

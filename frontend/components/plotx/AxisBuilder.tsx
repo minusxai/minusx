@@ -4,7 +4,8 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { Box, HStack, VStack, Text, Switch } from '@chakra-ui/react'
 import { LuChevronDown, LuChevronRight, LuLayoutGrid, LuSettings2 } from 'react-icons/lu'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
-import type { ColumnFormatConfig, AxisConfig } from '@/lib/types'
+import { VIZ_CAPABILITIES } from '@/lib/chart/viz-capabilities'
+import type { ColumnFormatConfig, AxisConfig, VisualizationType } from '@/lib/types'
 
 export interface AxisZone {
   label: string
@@ -14,34 +15,9 @@ export interface AxisZone {
   onRemove: (column: string) => void
 }
 
-/**
- * Declares which settings panels are visible for a given chart type.
- * AxisBuilder reads this config instead of checking chartType with ad-hoc conditionals.
- */
-/**
- * Declares which settings panels are visible for each ECharts-based chart type.
- * Non-ECharts types (geo, pivot, trend) have their own axis builders and are not listed here.
- */
-interface ChartSettingsConfig {
-  xAxisSettings: boolean
-  yAxisSettings: boolean
-  style: boolean
-  annotations: boolean
-}
-
-const CHART_SETTINGS: Record<string, ChartSettingsConfig> = {
-  line:      { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: true  },
-  bar:       { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: true  },
-  area:      { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: true  },
-  scatter:   { xAxisSettings: true,  yAxisSettings: true,  style: true,  annotations: true  },
-  funnel:    { xAxisSettings: false, yAxisSettings: false, style: true,  annotations: false },
-  pie:       { xAxisSettings: false, yAxisSettings: false, style: true,  annotations: false },
-  waterfall: { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: false },
-  combo:     { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: false },
-  radar:     { xAxisSettings: false, yAxisSettings: false, style: true,  annotations: false },
-}
-
-const DEFAULT_SETTINGS: ChartSettingsConfig = { xAxisSettings: false, yAxisSettings: true, style: true, annotations: false }
+// Settings-panel visibility per chart type comes from the shared VIZ_CAPABILITIES
+// registry — the same source that drives the agent's styling docs and viz warnings.
+const DEFAULT_PANELS = { xAxisSettings: false, yAxisSettings: true, style: true, annotations: false, tableStyle: false }
 
 interface AxisBuilderProps {
   columns: string[]
@@ -273,7 +249,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
     setSelectedColumnForMobile(null)
   }, [draggedColumn, selectedColumnForMobile, dragSourceZone])
 
-  const cfg = CHART_SETTINGS[chartType ?? ''] ?? DEFAULT_SETTINGS
+  const cfg = VIZ_CAPABILITIES[chartType as VisualizationType]?.panels ?? DEFAULT_PANELS
   const showXAxisSettings = cfg.xAxisSettings && !!onAxisConfigChange
   const showYAxisSettings = cfg.yAxisSettings && !!onAxisConfigChange
   const showStylePanel = cfg.style && !!stylePanel

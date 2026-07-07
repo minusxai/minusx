@@ -27,10 +27,11 @@ import StoryParamControl from '@/components/views/story/StoryParamControl';
 import InlineNumber from '@/components/views/story/InlineNumber';
 import { storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story-params';
 import type { InlineNumberEmbed } from '@/lib/data/story-number';
-import type { QuestionContent } from '@/lib/types';
+import { resolveEffectiveVizSettings } from '@/lib/chart/viz-style-merge';
+import type { EmbedVizStyles, QuestionContent, StoryChartTheme } from '@/lib/types';
 import type { NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
 
-export interface ChartTarget { el: HTMLElement; questionId: number; }
+export interface ChartTarget { el: HTMLElement; questionId: number; styles?: EmbedVizStyles | null; }
 export interface NumberTarget { el: HTMLElement; embed: InlineNumberEmbed; }
 export interface InlineChartTarget { el: HTMLElement; content: QuestionContent; bare?: boolean; }
 export interface ParamTarget { el: HTMLElement; param: StoryParam; }
@@ -50,10 +51,12 @@ export interface StoryEmbedsProps {
   onEditNumber?: (req: NumberQueryEditRequest) => void;
   /** Path of the hosting story — forwarded to embeds' /api/query so guests pass the embed allowlist. */
   storyPath?: string;
+  /** Story-wide chart theme — defaults beneath each embed's own vizSettings (theme < question < embed styles). */
+  chartTheme?: StoryChartTheme | null;
 }
 
 export default function StoryEmbeds({
-  doc, targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, storyPath,
+  doc, targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, storyPath, chartTheme,
 }: StoryEmbedsProps) {
   // Shared param context (reader's current values), seeded once from the story defaults. StoryEmbeds
   // remounts (with the iframe) when the story content changes, re-seeding.
@@ -84,6 +87,8 @@ export default function StoryEmbeds({
                 enableDrilldown={false}
                 externalParameters={extParams}
                 externalParamValues={extValues}
+                embedStyles={t.styles ?? undefined}
+                chartTheme={chartTheme ?? undefined}
               />
             </Box>,
             t.el,
@@ -98,7 +103,7 @@ export default function StoryEmbeds({
               flexDirection="column"
             >
               <EmbeddedQuestionContainer
-                question={t.content}
+                question={chartTheme ? { ...t.content, vizSettings: resolveEffectiveVizSettings(t.content.vizSettings, chartTheme) } : t.content}
                 questionId={0}
                 externalParameters={extParams}
                 externalParamValues={extValues}

@@ -1,4 +1,6 @@
 import type { EChartsOption } from 'echarts'
+import { deepMerge } from '@/lib/utils/deep-merge'
+import type { VisualizationStyleConfig } from '@/lib/validation/atlas-schemas'
 
 /**
  * MinusX BI ECharts Theme
@@ -430,4 +432,76 @@ export function withMinusXTheme(options: EChartsOption, colorMode: 'light' | 'da
   }
 
   return mergedOptions
+}
+
+export interface FinalizeChartOptions {
+  colorMode?: 'light' | 'dark'
+  palette?: string[]
+  styleConfig?: VisualizationStyleConfig | null
+}
+
+// Apply a curated lever to every axis in a single-or-array axis option.
+const forEachAxis = (axis: unknown, apply: (a: Record<string, any>) => void): void => {
+  if (!axis) return
+  for (const a of Array.isArray(axis) ? axis : [axis]) apply(a as Record<string, any>)
+}
+
+/**
+ * The single funnel every chart option passes through on its way to ECharts:
+ *
+ *   theme (withMinusXTheme) → curated style levers → styleConfig.echartsOverrides (LAST)
+ *
+ * Curated levers: `background`, `legend` (show/position), `textColor` (axis labels + legend),
+ * `titleColor`, `smooth` (line-type series). `echartsOverrides` is the agent's escape hatch —
+ * deep-merged after everything else so it wins over both the theme and the levers (objects
+ * merge, arrays replace wholesale).
+ */
+export function finalizeChartOption(baseOption: EChartsOption, opts: FinalizeChartOptions = {}): EChartsOption {
+  const { colorMode = 'dark', palette, styleConfig } = opts
+  const option = withMinusXTheme(baseOption, colorMode, palette) as Record<string, any>
+
+  if (styleConfig) {
+    if (styleConfig.background != null) option.backgroundColor = styleConfig.background
+
+    if (styleConfig.legend) {
+      const legend: Record<string, any> = { ...(Array.isArray(option.legend) ? option.legend[0] : option.legend) }
+      if (styleConfig.legend.show != null) legend.show = styleConfig.legend.show
+      const position = styleConfig.legend.position
+      if (position) {
+        delete legend.top; delete legend.bottom; delete legend.left; delete legend.right
+        if (position === 'top') Object.assign(legend, { top: 10, left: 'center', orient: 'horizontal' })
+        else if (position === 'bottom') Object.assign(legend, { bottom: 10, left: 'center', orient: 'horizontal' })
+        else if (position === 'left') Object.assign(legend, { left: 10, top: 'middle', orient: 'vertical' })
+        else Object.assign(legend, { right: 10, top: 'middle', orient: 'vertical' })
+      }
+      option.legend = legend
+    }
+
+    if (styleConfig.textColor != null) {
+      const color = styleConfig.textColor
+      forEachAxis(option.xAxis, a => { a.axisLabel = { ...a.axisLabel, color } })
+      forEachAxis(option.yAxis, a => { a.axisLabel = { ...a.axisLabel, color } })
+      if (option.legend) {
+        const legend = Array.isArray(option.legend) ? option.legend[0] : option.legend
+        legend.textStyle = { ...legend.textStyle, color }
+      }
+    }
+
+    if (styleConfig.titleColor != null && option.title) {
+      const title = Array.isArray(option.title) ? option.title[0] : option.title
+      title.textStyle = { ...title.textStyle, color: styleConfig.titleColor }
+    }
+
+    if (styleConfig.smooth != null && option.series) {
+      for (const s of Array.isArray(option.series) ? option.series : [option.series]) {
+        if ((s as Record<string, any>).type === 'line') (s as Record<string, any>).smooth = styleConfig.smooth
+      }
+    }
+
+    if (styleConfig.echartsOverrides && Object.keys(styleConfig.echartsOverrides).length > 0) {
+      return deepMerge(option, styleConfig.echartsOverrides as Partial<typeof option>) as EChartsOption
+    }
+  }
+
+  return option as EChartsOption
 }

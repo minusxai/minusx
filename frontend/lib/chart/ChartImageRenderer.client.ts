@@ -20,7 +20,7 @@ import {
   buildCompactYLabel,
   type StandardChartType,
 } from '@/lib/chart/chart-utils'
-import { COLOR_PALETTE } from '@/lib/chart/echarts-theme'
+import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
 import { toJpegObjectUrl } from '@/lib/chart/render-chart-client'
 import { getChartHeight } from '@/lib/chart/render-chart-svg'
 import { AGENT_IMAGE_PIXEL_RATIO } from '@/lib/screenshot/constants'
@@ -60,6 +60,7 @@ function buildEChartsOption(
   const chartTitle = titleOverride || autoTitle
   const xAxisLabel = xCols.length > 0 ? xCols[0] : undefined
   const yAxisLabel = yCols.length > 0 ? buildCompactYLabel(yCols) : undefined
+  const styleConfig = vizSettings.styleConfig ?? undefined
   const sharedArgs = {
     xAxisData: aggregated.xAxisData,
     series: aggregated.series,
@@ -67,7 +68,8 @@ function buildEChartsOption(
     xAxisColumns: xCols,
     yAxisColumns: yCols,
     chartTitle,
-    colorPalette: COLOR_PALETTE,
+    colorPalette: getEffectiveColorPalette(styleConfig?.colors),
+    styleConfig,
     columnFormats: vizSettings.columnFormats ?? undefined,
     columnTypes,
   }
@@ -80,6 +82,8 @@ function buildEChartsOption(
   return buildChartOption({
     ...sharedArgs,
     chartType: chartType as StandardChartType,
+    axisConfig: vizSettings.axisConfig ?? undefined,
+    yRightCols: vizSettings.yRightCols ?? undefined,
     containerWidth: width,
     containerHeight: height,
     xAxisLabel,
@@ -103,7 +107,12 @@ async function renderSingleChartToDataUrl(
   document.body.appendChild(container)
 
   try {
-    const bgColor = colorMode === 'dark' ? '#161b22' : '#ffffff'
+    // A styled background (styleConfig.background / echartsOverrides) must survive into the
+    // image, or the agent's feedback lies about its own styling; only force opacity otherwise.
+    const styledBg = (option as Record<string, unknown>).backgroundColor
+    const bgColor = styledBg && styledBg !== 'transparent'
+      ? String(styledBg)
+      : colorMode === 'dark' ? '#161b22' : '#ffffff'
     const chart = echarts.init(container, null, { renderer: 'canvas', width, height })
     chart.setOption({ ...option, animation: false, backgroundColor: bgColor })
     const dataUrl = chart.getDataURL({ type: 'png', pixelRatio: AGENT_IMAGE_PIXEL_RATIO, backgroundColor: bgColor, excludeComponents: ['toolbox'] })

@@ -238,7 +238,7 @@ templates:
       {schema_question}
       ```
       - A question's saved parameter default values live in `<parameterValues>` (a compact JSON object), not on the `<parameters>` items.
-      - **VizSettings**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`, `combo`, `waterfall`, `trend`, `single_value`. The full viz schema — combo / dual-axis (`yRightCols` + `axisConfig.dualAxis`), pivot (`pivotConfig`), geo (`geoConfig`), trend, waterfall, single_value (`singleValueConfig`) — is in the **visualizations** instructions preloaded below; consult it before authoring any non-basic chart.
+      - **VizSettings**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`, `combo`, `waterfall`, `trend`, `single_value`. The full viz schema — combo / dual-axis (`yRightCols` + `axisConfig.dualAxis`), pivot (`pivotConfig`), geo (`geoConfig`), trend, waterfall, single_value (`singleValueConfig`) — is in the **visualizations** instructions preloaded below; consult it before authoring any non-basic chart. Its **Styling** section documents every presentation lever (`styleConfig` background/legend/text colors/table styling, per-type applicability, escape hatches) — consult it before any styling/theming request.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
       - **References**: `@alias` syntax for composed questions. Use `LoadSkill("composed_questions")` for details.
 
@@ -471,7 +471,7 @@ templates:
       - **Removing a parameter**: reverse order in the array — (1) update `query`, (2) update `parameters`.
       - **Never** match query + parameters in one oldMatch — they are separate elements in the markup; match each independently.
   skill_visualizations:
-    description: VizSettings types (line, bar, row, area, scatter, funnel, pie, radar, pivot, geo, combo, waterfall, trend, single_value), xCols/yCols config, combo / dual-axis charts (yRightCols + axisConfig.dualAxis), pivot table pivotConfig, geo map geoConfig. Basic vizSettings are covered in the questions skill, but Load this skill for combo / dual-axis charts and other complex visualizations and options.
+    description: VizSettings types (line, bar, row, area, scatter, funnel, pie, radar, pivot, geo, combo, waterfall, trend, single_value), xCols/yCols config, combo / dual-axis charts (yRightCols + axisConfig.dualAxis), pivot table pivotConfig, geo map geoConfig, and the full STYLING surface (styleConfig levers — background/legend/text colors/table styling — plus the echartsOverrides/cssOverrides escape hatches and the story chartTheme cascade). Basic vizSettings are covered in the questions skill, but Load this skill for combo / dual-axis charts, styling/theming work, and other complex visualizations and options.
     content: |
       ## Visualizations
 
@@ -580,6 +580,32 @@ templates:
       **Shared options** (all sub-types):
       - `showTiles`: `true`/`false` — show OpenStreetMap tile layer (default: false)
       - `mapName`: optional for non-choropleth — adds country/state outlines as background
+
+      ### Styling
+
+      All presentation levers live in `vizSettings.styleConfig` (plus `columnFormats`, `conditionalFormats`, `axisConfig`, `singleValueConfig`). The schemas below are generated LIVE from code — they are the single source of truth; never invent fields:
+
+      ```json
+      {schema_viz_styles}
+      ```
+
+      **Curated levers** (prefer these — humans can edit them in the UI too):
+      - `background` — chart background CSS color (default transparent, inherits the card). When you set a background, ALWAYS set `textColor` too so labels stay readable in both color modes.
+      - `legend` — `{"show": false}` hides it; `position` is `top`/`bottom`/`left`/`right`.
+      - `textColor` / `titleColor` — axis-label+legend text / chart title colors.
+      - `smooth` — line smoothing for line/area/combo (default true).
+      - `table` — table/pivot presentation: `headerBg`, `headerTextColor`, `rowStripe`, `stripeBg`, `borderColor`, `cellFontSize`.
+      - Plus the existing `colors` (per-series index → palette key or hex), `opacity`, `markerSize`, `stacked`, `showDataLabels`, `dataLabelColor`.
+
+      **Escape hatches** (agent-only, not editable in the UI — use ONLY when no curated lever exists):
+      - `echartsOverrides` — raw ECharts option fragment, deep-merged LAST into the final option (after theming and every curated lever), so it wins over everything. ECharts-rendered types only. Objects deep-merge; ARRAYS REPLACE WHOLESALE (to touch one series you must re-specify the whole series array). May break silently if the renderer changes — prefer curated levers.
+      - `cssOverrides` — raw CSS string for DOM-rendered types (table, pivot, trend, single_value, geo), scoped to this one visualization. Write bare selectors (`thead th { … }`, `td { … }`); see the per-type CSS hooks below.
+
+      **Which levers apply to which type** (generated live from the capability registry):
+
+      {viz_capabilities}
+
+      **Styling cascade in stories** — precedence: story chartTheme < question vizSettings < embed styles prop. Set `content.chartTheme` ONCE (palette/background/textColor/legend) to harmonize every embedded chart with the story's design tokens; use a per-embed `styles={{…}}` prop (an `EmbedVizStyles` presentation-only subset) only for deviations. Both are render-time merges — the saved question files are NEVER modified. See the stories skill for the embed syntax.
   skill_composed_questions:
     description: Composed Questions (Question References) — @alias syntax for referencing other questions as CTEs in SQL. Read this skill for guidelines on how to use question references in your SQL queries, or if the SQL you are looking at contains question references(@alias)
     content: |
@@ -963,8 +989,20 @@ templates:
       Rules for every embed:
       - Explicit px `height` (`height="430px"`) so layout holds through hydration. Missing height defaults to 430px, percentages do not resolve, and anything below 340px is clamped UP. Width is 100%. Vary height with the beat: compact single_value cards ~180 to 260px, tall main-evidence charts 400 to 460px.
       - All bar/line/scatter/area plots need to be at least 50% of the width, or they look awful.
-      - Style the *container* around the embed (framing, borders, shadows, full-bleed), never a chart's internals; for a single_value, `singleValueConfig` IS the styling.
+      - Container CSS handles the *framing* (borders, shadows, full-bleed, spacing); chart *internals* are styled through the platform levers below — never by fighting the embed with CSS from outside.
       - A saved embed hydrates with a slim title bar carrying the question name (~40px, do not repeat it in your caption). An inline embed has no title bar, so caption it yourself if needed.
+
+      ### Chart theming (make every chart belong to YOUR design)
+
+      Platform charts default to the app theme — inside a designed story that reads as a foreign widget. Two levers, both render-time only (the saved question files are NEVER modified):
+
+      1. **`chartTheme` content field (set it on nearly every story)** — story-wide defaults for all embedded charts: `palette` (hex list, index-ordered), `background`, `textColor`, `titleColor`, `legend`. Derive it from the story's own design tokens so every chart is harmonious with one declaration:
+      ```
+      <chartTheme><palette><item>#0f4c81</item><item>#e8a33d</item></palette><background>#fdfaf3</background><textColor>#2b2b2b</textColor></chartTheme>
+      ```
+      2. **Per-embed `styles` prop (deviations only)** — a presentation-only override on a saved embed, deep-merged over the question's own settings: `<Question id={142} height="430px" styles={{styleConfig:{background:"#101822", textColor:"#f7f0df", legend:{show:false}}, columnFormats:{revenue:{prefix:"$"}}}} />`. It accepts the EmbedVizStyles subset (`styleConfig`, `axisConfig`, `columnFormats`, `conditionalFormats`, `singleValueConfig`) — it can restyle the chart but never change what it plots (no type/columns/query).
+
+      Precedence: `chartTheme` < question's own vizSettings < embed `styles`. The full style surface (curated levers, `styleConfig.table` for tables, and the `echartsOverrides`/`cssOverrides` escape hatches) is documented in the **visualizations** skill — consult its Styling section before fine-tuning. For a single_value, `singleValueConfig` IS the styling. LITERAL CSS colors only (hex/rgb), never theme tokens. When a `chartTheme`/`styles` sets a `background`, ALWAYS pair it with `textColor` — and still set the story `colorMode` for the card chrome.
 
       ### Reader filters (`<Param>`), optional
 

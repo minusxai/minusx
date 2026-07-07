@@ -10,7 +10,7 @@
 import * as echarts from 'echarts';
 import { aggregateData } from './aggregate-data';
 import { buildChartOption, buildFunnelChartOption, buildPieChartOption, buildRadarChartOption, buildWaterfallChartOption, buildCompactYLabel, type StandardChartType } from './chart-utils';
-import { COLOR_PALETTE } from './echarts-theme';
+import { getEffectiveColorPalette } from './echarts-theme';
 import { buildColumnTypesMap } from '@/lib/database/column-types';
 import type { QueryResult } from '@/lib/types';
 import type { VizSettings } from '@/lib/validation/atlas-schemas';
@@ -85,7 +85,12 @@ function stripToolbox(option: echarts.EChartsOption): echarts.EChartsOption {
   return rest as echarts.EChartsOption;
 }
 
+// Images need an opaque background (charts render transparent for the app card) — but a
+// background the user styled (styleConfig.background / echartsOverrides) must win, or the
+// feedback image lies about the styling.
 function forceBackground(option: echarts.EChartsOption, colorMode: 'light' | 'dark'): echarts.EChartsOption {
+  const existing = (option as Record<string, unknown>).backgroundColor;
+  if (existing && existing !== 'transparent') return option;
   return { ...option, backgroundColor: BG_COLORS[colorMode] };
 }
 
@@ -135,6 +140,8 @@ export function renderChartToSvg(
   }
 
   const chartTitle = titleOverride || buildChartTitle(xCols, yCols);
+  const styleConfig = vizSettings.styleConfig ?? undefined;
+  const colorPalette = getEffectiveColorPalette(styleConfig?.colors);
   const xAxisLabel = xCols.length > 0 ? xCols[0] : undefined;
   const yAxisLabel = yCols.length > 0 ? buildCompactYLabel(yCols) : undefined;
 
@@ -148,7 +155,8 @@ export function renderChartToSvg(
       xAxisColumns: xCols,
       yAxisColumns: yCols,
       chartTitle,
-      colorPalette: COLOR_PALETTE,
+      colorPalette,
+      styleConfig,
       columnFormats: vizSettings.columnFormats ?? undefined,
     });
   } else if (chartType === 'funnel') {
@@ -159,7 +167,8 @@ export function renderChartToSvg(
       xAxisColumns: xCols,
       yAxisColumns: yCols,
       chartTitle,
-      colorPalette: COLOR_PALETTE,
+      colorPalette,
+      styleConfig,
       columnFormats: vizSettings.columnFormats ?? undefined,
     });
   } else if (chartType === 'waterfall') {
@@ -170,7 +179,8 @@ export function renderChartToSvg(
       xAxisColumns: xCols,
       yAxisColumns: yCols,
       chartTitle,
-      colorPalette: COLOR_PALETTE,
+      colorPalette,
+      styleConfig,
       columnFormats: vizSettings.columnFormats ?? undefined,
     });
   } else if (chartType === 'radar') {
@@ -181,7 +191,8 @@ export function renderChartToSvg(
       xAxisColumns: xCols,
       yAxisColumns: yCols,
       chartTitle,
-      colorPalette: COLOR_PALETTE,
+      colorPalette,
+      styleConfig,
       columnFormats: vizSettings.columnFormats ?? undefined,
     });
   } else {
@@ -190,7 +201,10 @@ export function renderChartToSvg(
       series: aggregated.series,
       chartType: chartType as StandardChartType,
       colorMode,
-      colorPalette: COLOR_PALETTE,
+      colorPalette,
+      styleConfig,
+      axisConfig: vizSettings.axisConfig ?? undefined,
+      yRightCols: vizSettings.yRightCols ?? undefined,
       containerWidth: width,
       containerHeight: height,
       xAxisColumns: xCols,

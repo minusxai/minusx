@@ -9,6 +9,7 @@ import { Box, HStack, VStack, Text, Spinner, Button } from '@chakra-ui/react';
 import { LuRocket, LuWrench, LuSettings, LuCode, LuRefreshCw, LuCloudOff } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { TableV2 } from '@/components/plotx/TableV2';
+import { VizCssScope } from '@/components/plotx/VizCssScope';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/lib/utils/error-parser';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
@@ -434,7 +435,9 @@ function QuestionVisualizationInner({
                 )}
                 {currentState?.vizSettings?.type === 'table' && (
                   <Box flex="1" minHeight="0" overflow="hidden" display="flex" width={"100%"} alignItems={"stretch"} flexDirection={"column"}>
-                    <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.connection_name} enableDrilldown={config.enableDrilldown !== false} columnFormats={currentState.vizSettings?.columnFormats ?? undefined} onColumnFormatsChange={config.editable ? onColumnFormatsChange : undefined} conditionalFormats={currentState.vizSettings?.conditionalFormats ?? undefined} />
+                    <VizCssScope css={currentState.vizSettings?.styleConfig?.cssOverrides} vizType="table">
+                      <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.connection_name} enableDrilldown={config.enableDrilldown !== false} columnFormats={currentState.vizSettings?.columnFormats ?? undefined} onColumnFormatsChange={config.editable ? onColumnFormatsChange : undefined} conditionalFormats={currentState.vizSettings?.conditionalFormats ?? undefined} tableStyle={currentState.vizSettings?.styleConfig?.table ?? undefined} />
+                    </VizCssScope>
                   </Box>
                 )}
                 {(currentState?.vizSettings?.type === 'line' ||

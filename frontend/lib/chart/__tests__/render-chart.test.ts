@@ -118,6 +118,38 @@ describe('renderChartToSvg', () => {
     });
   });
 
+  // The feedback-image parity guarantee: what the agent styles is what the re-rendered
+  // image shows. styleConfig (curated levers + echartsOverrides) must reach the SVG.
+  describe('styleConfig parity', () => {
+    const styled = (styleConfig: VizSettings['styleConfig']) =>
+      renderChartToSvg(SAMPLE_QUERY_RESULT, {
+        type: 'bar',
+        xCols: ['month'],
+        yCols: ['revenue', 'cost'],
+        styleConfig,
+      }, { titleOverride: 'T', colorMode: 'light' });
+
+    it('renders styleConfig.background as the SVG background fill', () => {
+      expect(styled({ background: '#101822' })).toContain('#101822');
+    });
+
+    it('hides the legend when styleConfig.legend.show=false', () => {
+      const withLegend = styled(null);
+      const withoutLegend = styled({ legend: { show: false } });
+      // 'cost' appears only as a legend entry (title is overridden to 'T')
+      expect(withLegend).toContain('cost');
+      expect(withoutLegend).not.toContain('cost');
+    });
+
+    it('honors per-series color overrides (existing lever, previously dropped)', () => {
+      expect(styled({ colors: { '0': '#ab34cd' } })).toContain('#ab34cd');
+    });
+
+    it('applies echartsOverrides last — even over the forced image background', () => {
+      expect(styled({ echartsOverrides: { backgroundColor: '#123456' } })).toContain('#123456');
+    });
+  });
+
   describe('unsupported types', () => {
     it('returns null for table type', () => {
       const vizSettings: VizSettings = {

@@ -47,6 +47,8 @@ import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '../query-bui
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
+import { TableStylePanel } from '../plotx/TableStylePanel';
+import { VizOverridesPanel } from '../plotx/VizOverridesPanel';
 import { FilesAPI } from '@/lib/data/files';
 import { useGuiCompat } from '@/lib/hooks/use-gui-compat';
 
@@ -715,11 +717,26 @@ export default function QuestionViewV2({
                       orientation="grouped"
                     />
                     {content.vizSettings?.type === 'table' && (
-                      <TableConditionalFormatPanel
-                        columns={queryData.columns}
-                        rules={content.vizSettings?.conditionalFormats ?? undefined}
-                        onChange={handleConditionalFormatsChange}
-                      />
+                      <>
+                        <TableConditionalFormatPanel
+                          columns={queryData.columns}
+                          rules={content.vizSettings?.conditionalFormats ?? undefined}
+                          onChange={handleConditionalFormatsChange}
+                        />
+                        <Box mt={2}>
+                          <TableStylePanel
+                            styleConfig={content.vizSettings?.styleConfig ?? undefined}
+                            onChange={handleStyleConfigChange}
+                          />
+                        </Box>
+                        <Box mt={2}>
+                          <VizOverridesPanel
+                            chartType="table"
+                            styleConfig={content.vizSettings?.styleConfig ?? undefined}
+                            onChange={handleStyleConfigChange}
+                          />
+                        </Box>
+                      </>
                     )}
                     {content.vizSettings?.type && content.vizSettings.type !== 'table' && (
                       <VizConfigPanel

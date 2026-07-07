@@ -1091,6 +1091,37 @@ describe('CreateFile tool - content validation', () => {
     expect(parsed.success).toBe(true);
     expect(parsed.vizWarning).toBeUndefined();
   });
+
+  it('returns vizWarning when echartsOverrides is set on a table viz (registry-driven)', async () => {
+    const result = await executeToolCall(
+      makeToolCall({
+        file_type: 'question',
+        name: 'Overridden Table',
+        content: {
+          vizSettings: { type: 'table', styleConfig: { echartsOverrides: { grid: { left: 8 } } } },
+        },
+      }),
+    );
+    const parsed = parseToolJson(result.content);
+    expect(parsed.success).toBe(true);
+    expect(parsed.vizWarning).toMatch(/echartsOverrides/);
+    expect(parsed.vizWarning).toMatch(/cssOverrides/);
+  });
+
+  it('does not return vizWarning for a styled table (curated table levers apply)', async () => {
+    const result = await executeToolCall(
+      makeToolCall({
+        file_type: 'question',
+        name: 'Styled Table',
+        content: {
+          vizSettings: { type: 'table', styleConfig: { table: { headerBg: '#1a2b4a' }, cssOverrides: 'td { font-variant-numeric: tabular-nums; }' } },
+        },
+      }),
+    );
+    const parsed = parseToolJson(result.content);
+    expect(parsed.success).toBe(true);
+    expect(parsed.vizWarning).toBeUndefined();
+  });
 });
 
 describe('EditFile - Context post-edit guard', () => {

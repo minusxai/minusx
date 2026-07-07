@@ -103,6 +103,7 @@ export const TrendPlot = ({ series, xAxisData, columnFormats, yAxisColumns, xAxi
             >
               {/* Label */}
               <Text
+                className="mx-trend-label"
                 aria-label={`trend label ${s.name}`}
                 fontSize={isSmall ? '2xs' : 'xs'}
                 fontWeight="700"
@@ -117,6 +118,7 @@ export const TrendPlot = ({ series, xAxisData, columnFormats, yAxisColumns, xAxi
 
               {/* Current Value */}
               <Text
+                className="mx-trend-value"
                 fontSize={isSmall ? '3xl' : '5xl'}
                 fontWeight="800"
                 color={color}
@@ -131,7 +133,7 @@ export const TrendPlot = ({ series, xAxisData, columnFormats, yAxisColumns, xAxi
               {/* Trend Indicator */}
               {percentChange !== null ? (
                 <VStack gap={0} align="center">
-                  <HStack gap={isSmall ? 1 : 2} align="center">
+                  <HStack className="mx-trend-delta" gap={isSmall ? 1 : 2} align="center">
                     <Icon
                       as={isIncrease ? LuTrendingUp : isDecrease ? LuTrendingDown : LuMinus}
                       boxSize={isSmall ? 5 : 6}

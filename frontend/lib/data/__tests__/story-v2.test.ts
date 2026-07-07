@@ -83,6 +83,74 @@ describe('parseStoryJsx — inline <Number>', () => {
   });
 });
 
+describe('parseStoryJsx — saved <Question styles={{…}}>', () => {
+  it('persists the presentation-only styles as a data-question-styles attr (with height intact)', () => {
+    const jsx = '<div><Question id={7} height="420px" styles={{styleConfig:{background:"#101822",textColor:"#f7f0df"}}} /></div>';
+    const r = parseStoryJsx(jsx);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.html).toContain('data-question-id="7"');
+      expect(r.value.html).toContain('height:420px');
+      expect(r.value.html).toContain('data-question-styles=');
+      expect(r.value.html).toContain('#101822');
+    }
+  });
+
+  it('drops non-presentation keys (type/xCols/query) from the styles payload', () => {
+    const jsx = '<div><Question id={7} styles={{type:"pie", xCols:["hacked"], styleConfig:{background:"#101822"}}} /></div>';
+    const r = parseStoryJsx(jsx);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.html).not.toContain('pie');
+      expect(r.value.html).not.toContain('hacked');
+      expect(r.value.html).toContain('#101822');
+    }
+  });
+
+  it('a styles-free embed carries no styles attribute (unchanged behavior)', () => {
+    const r = parseStoryJsx('<div><Question id={7} /></div>');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.html).not.toContain('data-question-styles');
+  });
+});
+
+describe('buildStoryJsx — saved-embed round-trip (styles + height survive the agent edit cycle)', () => {
+  it('round-trips styles and height through jsx → html → jsx → identical html', () => {
+    const jsx = '<div><Question id={7} height="420px" styles={{styleConfig:{background:"#101822"}}} /></div>';
+    const r1 = parseStoryJsx(jsx);
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    const rebuilt = buildStoryJsx({ description: null, story: r1.value.html });
+    // The rebuilt jsx must re-emit BOTH attrs — losing them means the agent's next
+    // EditFile silently strips its own styling.
+    expect(rebuilt).toContain('id={7}');
+    expect(rebuilt).toContain('height="420px"');
+    expect(rebuilt).toContain('styles={');
+    expect(validateJsxSource(rebuilt, ['Question'])).toEqual([]);
+    const r2 = parseStoryJsx(rebuilt);
+    expect(r2.ok).toBe(true);
+    if (r2.ok) expect(r2.value.html).toBe(r1.value.html);
+  });
+
+  it('round-trips the height-only embed (fixes the historical height drop)', () => {
+    const r1 = parseStoryJsx('<div><Question id={7} height="200px" /></div>');
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    const rebuilt = buildStoryJsx({ description: null, story: r1.value.html });
+    expect(rebuilt).toContain('height="200px"');
+    const r2 = parseStoryJsx(rebuilt);
+    expect(r2.ok).toBe(true);
+    if (r2.ok) expect(r2.value.html).toBe(r1.value.html);
+  });
+
+  it('a malformed stored styles attribute is dropped, not crashed on', () => {
+    const html = '<div data-question-id="7" data-question-styles="{not json" style="width:100%;height:430px"></div>';
+    const rebuilt = buildStoryJsx({ description: null, story: html });
+    expect(rebuilt).toContain('id={7}');
+    expect(rebuilt).not.toContain('styles={');
+  });
+});
+
 describe('buildStoryJsx', () => {
   it('round-trips an agent-authored story (jsx → content → jsx → same html)', () => {
     const jsx = '<div class="story"><style>{`.s{color:blue}`}</style><h2>T</h2><Question id={42} /></div>';

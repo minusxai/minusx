@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, type CSSProperties } from 'react'
 import { Box, Table as ChakraTable, Icon } from '@chakra-ui/react'
 import { Tooltip } from '@/components/ui/tooltip'
 import { LuChevronUp, LuChevronRight, LuSquareFunction } from 'react-icons/lu'
 import { formatLargeNumber, formatNumber, formatDateValue, applyPrefixSuffix } from '@/lib/chart/chart-utils'
 import type { PivotData, FormulaResults } from '@/lib/chart/pivot-utils'
 import { useAppSelector } from '@/store/hooks'
-import type { ColumnFormatConfig } from '@/lib/types'
+import type { ColumnFormatConfig, TableStyleConfig } from '@/lib/types'
 
 type HeatmapScale = 'red-yellow-green' | 'green' | 'blue'
 
@@ -25,6 +25,8 @@ interface PivotTableProps {
   onCellClick?: (filters: Record<string, string>, valueLabel: string, event: React.MouseEvent) => void
   columnFormats?: Record<string, ColumnFormatConfig>
   valueColumns?: string[]  // Actual column names for each value (maps value index → column name)
+  /** Table presentation (header colors, borders, cell font size) from styleConfig.table. */
+  tableStyle?: TableStyleConfig
 }
 
 type DisplayRow =
@@ -59,6 +61,7 @@ export const PivotTable = ({
   onCellClick,
   columnFormats,
   valueColumns,
+  tableStyle,
 }: PivotTableProps) => {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const isDark = colorMode === 'dark'
@@ -670,7 +673,17 @@ export const PivotTable = ({
 
   // Compact mode sizing
   const COMPACT_CELL_SIZE = 18
-  const headerBg = 'bg.muted'
+  const headerBg = tableStyle?.headerBg ?? 'bg.muted'
+  // Inline lever styles from styleConfig.table — inline so they win over the theme classes.
+  const headerCellStyle: CSSProperties | undefined = (tableStyle?.headerBg || tableStyle?.headerTextColor)
+    ? {
+        ...(tableStyle.headerBg ? { background: tableStyle.headerBg } : {}),
+        ...(tableStyle.headerTextColor ? { color: tableStyle.headerTextColor } : {}),
+      }
+    : undefined
+  const cellStyle: CSSProperties | undefined = tableStyle?.cellFontSize
+    ? { fontSize: `${tableStyle.cellFontSize}px` }
+    : undefined
 
   // Fixed width for frozen row-dimension columns so sticky left offsets align
   const ROW_DIM_COL_W = 120
@@ -705,6 +718,7 @@ export const PivotTable = ({
         const cellContent = compact ? null : (present ? fmt(value, entry.cellIndex % numValues) : '')
         const cell = (
           <ChakraTable.Cell
+            style={cellStyle}
             key={`col-${i}`}
             textAlign="right"
             fontFamily="mono"
@@ -731,6 +745,7 @@ export const PivotTable = ({
       const val = colFormulas[entry.formulaIdx].rowValues[rowIndex][entry.valueIdx]
       return (
         <ChakraTable.Cell
+          style={cellStyle}
           key={`col-${i}`}
           textAlign="right"
           fontFamily="mono"
@@ -755,6 +770,7 @@ export const PivotTable = ({
       if (entry.type === 'data') {
         return (
           <ChakraTable.Cell
+            style={cellStyle}
             key={`col-${i}`}
             textAlign="right"
             fontFamily="mono"
@@ -775,6 +791,7 @@ export const PivotTable = ({
       const val = vals?.[entry.valueIdx]
       return (
         <ChakraTable.Cell
+          style={cellStyle}
           key={`col-${i}`}
           textAlign="right"
           fontFamily="mono"
@@ -798,6 +815,7 @@ export const PivotTable = ({
       if (entry.type === 'data') {
         return (
           <ChakraTable.Cell
+            style={cellStyle}
             key={`col-${i}`}
             textAlign="right"
             fontFamily="mono"
@@ -814,6 +832,7 @@ export const PivotTable = ({
       // formula-col in formula-row: show dash
       return (
         <ChakraTable.Cell
+          style={cellStyle}
           key={`col-${i}`}
           textAlign="center"
           fontFamily="mono"
@@ -842,7 +861,7 @@ export const PivotTable = ({
         '&::-webkit-scrollbar-thumb:hover': { background: 'var(--chakra-colors-fg-muted)' },
       }}
     >
-      <ChakraTable.Root size="sm" css={{ borderCollapse: 'separate', borderSpacing: compact ? '3px' : 0, ...(compact ? { '& td, & th': { borderBottom: 'none', borderRadius: '3px' } } : { '& td, & th': { borderBottom: '1px solid', borderColor: 'var(--chakra-colors-fg-subtle)' } }) }}>
+      <ChakraTable.Root size="sm" aria-label="Pivot table" css={{ borderCollapse: 'separate', borderSpacing: compact ? '3px' : 0, ...(compact ? { '& td, & th': { borderBottom: 'none', borderRadius: '3px' } } : { '& td, & th': { borderBottom: '1px solid', borderColor: tableStyle?.borderColor ?? 'var(--chakra-colors-fg-subtle)' } }) }}>
         <ChakraTable.Header position="sticky" top={0} zIndex={5} bg={headerBg}>
           {/* Column header rows */}
           {augmentedColHeaderRows.map((headerRow, rowIdx) => (
@@ -851,6 +870,7 @@ export const PivotTable = ({
               {rowIdx === 0 && numRowDims > 0 && (
                 Array.from({ length: numRowDims }, (_, dimIdx) => (
                   <ChakraTable.ColumnHeader
+                    style={headerCellStyle}
                     key={`dim-${dimIdx}`}
                     rowSpan={numHeaderRows}
                     fontWeight="700"
@@ -879,6 +899,7 @@ export const PivotTable = ({
               {/* Column headers at this level */}
               {headerRow.map((hdr, colIdx) => (
                 <ChakraTable.ColumnHeader
+                  style={headerCellStyle}
                   key={colIdx}
                   colSpan={hdr.colSpan}
                   rowSpan={hdr.rowSpan}
@@ -924,6 +945,7 @@ export const PivotTable = ({
               {/* Row total header */}
               {showRowTotals && rowIdx === 0 && (
                 <ChakraTable.ColumnHeader
+                  style={headerCellStyle}
                   rowSpan={numHeaderRows}
                   fontWeight="700"
                   fontSize="xs"
@@ -949,6 +971,7 @@ export const PivotTable = ({
               {numRowDims > 0 && (
                 Array.from({ length: numRowDims }, (_, dimIdx) => (
                   <ChakraTable.ColumnHeader
+                    style={headerCellStyle}
                     key={`dim-${dimIdx}`}
                     fontWeight="700"
                     fontSize="xs"
@@ -972,6 +995,7 @@ export const PivotTable = ({
               )}
               {valueLabels.map((vl, i) => (
                 <ChakraTable.ColumnHeader
+                  style={headerCellStyle}
                   key={i}
                   fontWeight="700"
                   fontSize="xs"
@@ -988,6 +1012,7 @@ export const PivotTable = ({
               ))}
               {showRowTotals && (
                 <ChakraTable.ColumnHeader
+                  style={headerCellStyle}
                   fontWeight="700"
                   fontSize="xs"
                   textTransform="uppercase"
@@ -1021,6 +1046,7 @@ export const PivotTable = ({
               return (
                 <ChakraTable.Row key={`formula-${displayIndex}`}>
                   <ChakraTable.Cell
+                    style={cellStyle}
                     colSpan={headerColSpan}
                     fontWeight="600"
                     fontSize="sm"
@@ -1045,6 +1071,7 @@ export const PivotTable = ({
                   {hasColFormulas ? renderFormulaRowCells(displayRow) : (
                     displayRow.cells.map((value, colIndex) => (
                       <ChakraTable.Cell
+                        style={cellStyle}
                         key={colIndex}
                         textAlign="right"
                         fontFamily="mono"
@@ -1061,6 +1088,7 @@ export const PivotTable = ({
 
                   {showRowTotals && (
                     <ChakraTable.Cell
+                      style={cellStyle}
                       textAlign="right"
                       fontFamily="mono"
                       fontSize="sm"
@@ -1090,6 +1118,7 @@ export const PivotTable = ({
               return (
                 <ChakraTable.Row key={`subtotal-${displayIndex}`}>
                   <ChakraTable.Cell
+                    style={cellStyle}
                     colSpan={numRowDims - S}
                     fontWeight="700"
                     fontSize="xs"
@@ -1117,6 +1146,7 @@ export const PivotTable = ({
                   {hasColFormulas ? renderSubtotalCells(displayRow) : (
                     displayRow.cells.map((value, colIndex) => (
                       <ChakraTable.Cell
+                        style={cellStyle}
                         key={colIndex}
                         textAlign="right"
                         fontFamily="mono"
@@ -1135,6 +1165,7 @@ export const PivotTable = ({
 
                   {showRowTotals && (
                     <ChakraTable.Cell
+                      style={cellStyle}
                       textAlign="right"
                       fontFamily="mono"
                       fontSize="sm"
@@ -1161,6 +1192,7 @@ export const PivotTable = ({
                 {rowSpans[displayIndex]?.map((spanInfo, dimIdx) =>
                   spanInfo.show ? (
                     <ChakraTable.Cell
+                      style={cellStyle}
                       key={`dim-${dimIdx}`}
                       rowSpan={spanInfo.rowSpan}
                       fontWeight="600"
@@ -1190,6 +1222,7 @@ export const PivotTable = ({
                     const present = isPresent(rowIndex, colIndex)
                     const cell = (
                       <ChakraTable.Cell
+                        style={cellStyle}
                         key={colIndex}
                         textAlign="right"
                         fontFamily="mono"
@@ -1217,6 +1250,7 @@ export const PivotTable = ({
                 {/* Row total */}
                 {showRowTotals && (
                   <ChakraTable.Cell
+                    style={cellStyle}
                     textAlign="right"
                     fontFamily="mono"
                     fontSize={compact ? '2xs' : 'sm'}

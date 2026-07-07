@@ -1,6 +1,6 @@
 import type { EChartsOption } from 'echarts'
 import type { EChartsType } from 'echarts/core'
-import { withMinusXTheme, getChartFontFamily } from './echarts-theme'
+import { finalizeChartOption, getChartFontFamily } from './echarts-theme'
 import type { ColumnType } from '@/lib/database/column-types'
 import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types'
 import type { OrgBranding } from '@/lib/branding/whitelabel'
@@ -666,7 +666,7 @@ export const buildPieChartOption = ({
     series: pieSeries,
   }
 
-  return withMinusXTheme(baseOption, colorMode, colorPalette)
+  return finalizeChartOption(baseOption, { colorMode, palette: colorPalette, styleConfig })
 }
 
 export const buildFunnelChartOption = ({
@@ -793,7 +793,7 @@ export const buildFunnelChartOption = ({
     ],
   }
 
-  return withMinusXTheme(baseOption, colorMode, colorPalette)
+  return finalizeChartOption(baseOption, { colorMode, palette: colorPalette, styleConfig })
 }
 
 export const buildWaterfallChartOption = ({
@@ -945,7 +945,7 @@ export const buildWaterfallChartOption = ({
     legend: { show: false },
   }
 
-  return withMinusXTheme(baseOption, colorMode, colorPalette)
+  return finalizeChartOption(baseOption, { colorMode, palette: colorPalette, styleConfig })
 }
 
 export const buildRadarChartOption = ({
@@ -1080,7 +1080,7 @@ export const buildRadarChartOption = ({
     ],
   }
 
-  return withMinusXTheme(baseOption, colorMode, colorPalette)
+  return finalizeChartOption(baseOption, { colorMode, palette: colorPalette, styleConfig })
 }
 
 export const buildAnnotationGraphics = ({
@@ -2113,5 +2113,5 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     baseOption.yAxis = categoryAxis as any
   }
 
-  return withMinusXTheme({ ...baseOption, ...additionalOptions, color: palette }, colorMode, palette)
+  return finalizeChartOption({ ...baseOption, ...additionalOptions, color: palette }, { colorMode, palette, styleConfig })
 }
