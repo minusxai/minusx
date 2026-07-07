@@ -96,7 +96,9 @@ run_with_spinner() {
 get_env_val() {
   local file="$1" key="$2"
   if [ -f "$file" ]; then
-    grep -E "^${key}=" "$file" | head -1 | cut -d'=' -f2-
+    # `|| true`: a missing key must return empty, not kill the script —
+    # grep exits 1 on no match and we run under `set -euo pipefail`.
+    grep -E "^${key}=" "$file" | head -1 | cut -d'=' -f2- || true
   fi
 }
 
@@ -178,12 +180,16 @@ ANTHROPIC_API_KEY=$(get_env_val frontend/.env ANTHROPIC_API_KEY)
 ANALYST_MODEL_CONFIG=$(get_env_val frontend/.env ANALYST_AGENT_MODEL_CONFIG)
 if [ -n "$ANALYST_MODEL_CONFIG" ]; then
   success "Custom model config detected (ANALYST_AGENT_MODEL_CONFIG) — skipping Anthropic key"
-elif [ -z "$ANTHROPIC_API_KEY" ]; then
+elif [ -n "$ANTHROPIC_API_KEY" ]; then
+  success "API key already configured"
+else
   printf "\n  ${SPARKLE} ${BOLD}Anthropic API Key${RESET} ${GRAY}(default LLM provider)${RESET}\n"
   printf "  ${GRAY}Get one at ${RESET}${BOLD}https://console.anthropic.com${RESET}\n"
   printf "  ${GRAY}Press Enter to skip if you'll use another provider or a local model.${RESET}\n\n"
   printf "  ${ARROW} Enter your key: "
-  read -r ANTHROPIC_API_KEY </dev/tty
+  # `|| true`: headless runs (CI, ssh without a tty) have no /dev/tty — treat
+  # that as a skip instead of dying under `set -e`.
+  read -r ANTHROPIC_API_KEY </dev/tty 2>/dev/null || ANTHROPIC_API_KEY=""
   echo ""
   if [ -z "$ANTHROPIC_API_KEY" ]; then
     warn "No LLM configured yet — the agent won't work until you set ANTHROPIC_API_KEY"
@@ -193,8 +199,6 @@ elif [ -z "$ANTHROPIC_API_KEY" ]; then
     set_env_val frontend/.env ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
     success "API key saved"
   fi
-else
-  success "API key already configured"
 fi
 
 # NEXTAUTH_SECRET
