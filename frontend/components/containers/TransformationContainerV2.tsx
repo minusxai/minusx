@@ -86,7 +86,6 @@ export default function TransformationContainerV2({ fileId }: TransformationCont
     <TransformationView
       transformation={mergedContent}
       transformationName={effectiveName}
-      fileId={fileId}
       isRunning={isRunning}
       schemaRefreshing={schemaRefreshing}
       runs={runs}

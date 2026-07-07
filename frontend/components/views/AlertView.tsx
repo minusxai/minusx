@@ -17,7 +17,6 @@ import SimpleSelect from '@/components/evals/SimpleSelect';
 interface AlertViewProps {
   alert: AlertContent;
   alertName: string;
-  fileId: number;
   isRunning: boolean;
   runs?: JobRun[];
   selectedRunId?: number | null;
@@ -31,7 +30,6 @@ interface AlertViewProps {
 export default function AlertView({
   alert,
   alertName,
-  fileId,
   isRunning,
   runs = [],
   selectedRunId,

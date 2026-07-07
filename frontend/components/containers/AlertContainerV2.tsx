@@ -47,7 +47,6 @@ export default function AlertContainerV2({ fileId }: AlertContainerV2Props) {
     <AlertView
       alert={mergedContent}
       alertName={effectiveName}
-      fileId={fileId}
       isRunning={isRunning}
       runs={runs}
       selectedRunId={selectedRunId}

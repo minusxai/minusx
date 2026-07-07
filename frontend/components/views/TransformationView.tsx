@@ -16,7 +16,6 @@ import TransformationRunContainerV2 from '@/components/containers/Transformation
 interface TransformationViewProps {
   transformation: TransformationContent;
   transformationName: string;
-  fileId: number;
   isRunning: boolean;
   schemaRefreshing?: boolean;
   runs?: JobRun[];
@@ -322,7 +321,6 @@ function TransformRow({ transform, index, questions, dbSchemaMap, editMode, onCh
 export default function TransformationView({
   transformation,
   transformationName: _transformationName,
-  fileId,
   isRunning,
   schemaRefreshing = false,
   runs = [],
