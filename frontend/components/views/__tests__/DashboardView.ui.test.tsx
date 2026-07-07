@@ -1,7 +1,7 @@
 /**
  * DashboardView — characterizes CURRENT (pre-move) Redux behavior ahead of the
- * Container/View discipline move (CLAUDE.md "Refactoring — Blue -> Red -> Blue",
- * Refactor-v2.md M4.2). DashboardView.tsx currently calls useAppDispatch/
+ * Container/View discipline move (CLAUDE.md "Refactoring — Blue -> Red -> Blue").
+ * DashboardView.tsx currently calls useAppDispatch/
  * useAppSelector directly at 8 sites (grep-verified): selectFileEditMode,
  * selectIsDirty, selectMergedContent (dashboard-level parameterValues),
  * ephemeralChanges.lastExecuted.params, questionContents (per-question

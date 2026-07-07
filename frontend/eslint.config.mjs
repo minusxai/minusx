@@ -41,7 +41,7 @@ const RESTRICT_PI_AI = {
     "and import Type/TSchema/Static directly from 'typebox'.",
 };
 
-// Container/View convention (CLAUDE.md "Component Patterns", Refactor-v2.md M4.2):
+// Container/View convention (CLAUDE.md "Component Patterns"):
 // views must be pure presentation, containers own Redux. Widen the file list here
 // only as each view is actually migrated, never all at once.
 //
@@ -283,7 +283,7 @@ const eslintConfig = defineConfig([
       "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI] }],
     },
   },
-  // Container/View convention (CLAUDE.md, Refactor-v2.md M4.2) — these views were
+  // Container/View convention (CLAUDE.md "Component Patterns") — these views were
   // migrated to pure presentation; guard against regression. See RESTRICT_VIEW_REDUX.
   {
     files: [

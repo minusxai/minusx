@@ -1,7 +1,7 @@
 /**
  * ConnectionFormV2 — characterizes CURRENT (pre-move) Redux behavior ahead of
  * the Container/View discipline move (CLAUDE.md "Refactoring — Blue -> Red ->
- * Blue", Refactor-v2.md M4.2). ConnectionFormV2.tsx currently calls
+ * Blue"). ConnectionFormV2.tsx currently calls
  * useAppSelector directly at 4 sites (grep-verified): state.ui.colorMode,
  * state.auth.user?.mode (userMode), state.ui.devMode (showJson),
  * state.auth.user?.home_folder (homeFolder).
@@ -24,7 +24,7 @@
  * (The former 5th call site, state.auth.user?.id / userId, only fed the
  * "Quick Actions" sidebar's whitelist-toggle/add-context handlers, whose only
  * call sites were commented-out JSX. Both the handlers and the sidebar were
- * deleted as dead code in the post-M4.2 audit — see Refactor-v2.md.)
+ * deleted as dead code in the post-M4.2 audit.)
  *
  * @/lib/hooks/useContext is mocked wholesale (repo convention).
  * All element queries by aria-label only (CLAUDE.md convention).

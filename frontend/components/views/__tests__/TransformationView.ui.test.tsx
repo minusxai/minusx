@@ -1,7 +1,7 @@
 /**
  * TransformationView — characterizes CURRENT (pre-move) Redux behavior ahead of
  * the Container/View discipline move (CLAUDE.md "Refactoring — Blue -> Red ->
- * Blue", Refactor-v2.md M4.2). TransformationView.tsx currently calls
+ * Blue"). TransformationView.tsx currently calls
  * useAppSelector directly at 4 sites (grep-verified, all read-only):
  * selectFileEditMode (editMode), selectIsDirty (isDirty), state.files.files
  * (all files, shallowEqual, filtered down to `questions`), and
