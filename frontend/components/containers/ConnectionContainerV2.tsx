@@ -63,7 +63,6 @@ export default function ConnectionContainerV2({
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const showJson = useAppSelector((state) => state.ui.devMode);
   const homeFolder = useAppSelector((state) => state.auth.user?.home_folder) || '';
-  const userId = useAppSelector((state) => state.auth.user?.id);
 
   // Merge content with persistableChanges
   const currentContent = file ? {
@@ -176,7 +175,6 @@ export default function ConnectionContainerV2({
       userMode={userMode}
       showJson={showJson}
       homeFolder={homeFolder}
-      userId={userId}
     />
   );
 }

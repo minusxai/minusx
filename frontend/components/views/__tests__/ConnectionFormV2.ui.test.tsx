@@ -2,28 +2,29 @@
  * ConnectionFormV2 — characterizes CURRENT (pre-move) Redux behavior ahead of
  * the Container/View discipline move (CLAUDE.md "Refactoring — Blue -> Red ->
  * Blue", Refactor-v2.md M4.2). ConnectionFormV2.tsx currently calls
- * useAppSelector directly at 5 sites (grep-verified): state.ui.colorMode,
+ * useAppSelector directly at 4 sites (grep-verified): state.ui.colorMode,
  * state.auth.user?.mode (userMode), state.ui.devMode (showJson),
- * state.auth.user?.home_folder (homeFolder), state.auth.user?.id (userId).
+ * state.auth.user?.home_folder (homeFolder).
  *
  * Mounted via ConnectionContainerV2 (NOT ConnectionFormV2 directly).
  *
  * Per-selector testability (checked against the "can this go RED" bar):
- *  - showJson is the only one of the 5 with a LIVE, observable DOM effect
+ *  - showJson is the only one of the 4 with a LIVE, observable DOM effect
  *    right now: it gates the Form/JSON View TabSwitcher (only shown in the
  *    Settings section). Real characterization test below.
  *  - colorMode only feeds the globally-mocked Monaco `theme` prop (no
  *    observable jsdom effect — Monaco is a plain textarea in tests).
  *  - homeFolder only feeds `useContext(homePath)`, which every test mocks
  *    wholesale (repo convention), so the argument value is never observed.
- *  - userId only feeds `handleWhitelistToggle`/`handleAddContext`, whose only
- *    call sites (the "Quick Actions" sidebar JSX) are currently commented out
- *    in ConnectionFormV2.tsx (dead code, not a live UI surface) — there is
- *    nothing to observe today.
- *  These three are moved as plumbing (matching the container's existing
+ *  These two are moved as plumbing (matching the container's existing
  *  `state.auth.user?.mode` fallback pattern) and are NOT independently
- *  tested here; verify visually (dark-mode Monaco, whitelist toggle if it's
- *  ever un-commented) in a browser pass instead of forcing a fake jsdom signal.
+ *  tested here; verify visually (dark-mode Monaco) in a browser pass instead
+ *  of forcing a fake jsdom signal.
+ *
+ * (The former 5th call site, state.auth.user?.id / userId, only fed the
+ * "Quick Actions" sidebar's whitelist-toggle/add-context handlers, whose only
+ * call sites were commented-out JSX. Both the handlers and the sidebar were
+ * deleted as dead code in the post-M4.2 audit — see Refactor-v2.md.)
  *
  * @/lib/hooks/useContext is mocked wholesale (repo convention).
  * All element queries by aria-label only (CLAUDE.md convention).

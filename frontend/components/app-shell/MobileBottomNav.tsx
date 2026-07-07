@@ -57,9 +57,6 @@ export default function MobileBottomNav() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNewFileOpen, setIsNewFileOpen] = useState(false);
 
-  // Show plus button only on folder paths (/, /p/...) not on file pages (/f/...)
-//   const showPlusButton = pathname === '/' || pathname.startsWith('/p/');
-
   // Get user mode for mode-aware navigation
   const mode = effectiveUser?.mode || 'org';
 
@@ -105,35 +102,6 @@ export default function MobileBottomNav() {
           ))}
         </Flex>
       </Box>
-
-      {/* Floating Action Button (FAB) for New */}
-      {/* Temporarily disabled to show bottom bar version */}
-      {/* {showPlusButton && (
-        <Box
-          position="fixed"
-          top="16px"
-          right="16px"
-          display={{ base: 'block', md: 'none' }} // Only show on mobile
-          zIndex={101}
-        >
-          <Flex
-            bg="accent.teal"
-            borderRadius="full"
-            boxSize="48px"
-            align="center"
-            justify="center"
-            shadow="lg"
-            cursor="pointer"
-            color="white"
-            _hover={{ transform: 'scale(1.05)' }}
-            _active={{ transform: 'scale(0.95)' }}
-            transition="transform 0.2s"
-            onClick={() => setIsNewFileOpen(true)}
-          >
-            <Icon as={LuPlus} boxSize={7} />
-          </Flex>
-        </Box>
-      )} */}
 
       {/* Hamburger Menu Dialog */}
       <Dialog.Root
