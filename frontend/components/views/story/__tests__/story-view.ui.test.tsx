@@ -39,6 +39,12 @@ vi.mock('@/components/views/story/InlineNumber', () => ({
     React.createElement('span', { 'aria-label': `inline number ${embed.id ?? 'query'}` }, embed.prefix ?? ''),
 }));
 
+// StoryEmptyState (rendered when the story has no content) calls useConfigs() for the
+// branding agentName. Mocked so its fire-and-forget /api/configs fetch never runs in jsdom.
+vi.mock('@/lib/hooks/useConfigs', () => ({
+  useConfigs: () => ({ config: { branding: { agentName: 'MinusX' } }, loading: false }),
+}));
+
 import StoryView from '@/components/views/story/StoryView';
 
 // Real-world Google Fonts @import — note the SEMICOLONS inside the URL
@@ -60,6 +66,11 @@ const content: StoryContent = {
 
 const emptyContent: StoryContent = { description: null, story: null };
 
+// M4.2: headerEditMode/storyPath/storyName/colorMode are now sourced by the container
+// (StoryContainerV2/SharePageClient) and passed down as props. These defaults match what a
+// container would compute for a plain render with no fileId / no edit-mode dispatch.
+const NOEDIT_PROPS = { headerEditMode: false, storyPath: undefined, storyName: undefined, colorMode: 'dark' as const };
+
 /** The story renders inside a same-origin iframe (its contentDocument). */
 function storyRoot(): HTMLElement {
   const iframe = screen.getByLabelText('Story document') as HTMLIFrameElement;
@@ -68,12 +79,12 @@ function storyRoot(): HTMLElement {
 
 describe('StoryView', () => {
   it('shows the empty state when there is no story', () => {
-    renderWithProviders(<StoryView content={emptyContent} />);
+    renderWithProviders(<StoryView content={emptyContent} {...NOEDIT_PROPS} />);
     expect(screen.getByLabelText('No story')).toBeInTheDocument();
   });
 
   it('renders the story HTML inside the story shadow root', async () => {
-    renderWithProviders(<StoryView content={content} />);
+    renderWithProviders(<StoryView content={content} {...NOEDIT_PROPS} />);
     expect(screen.getByLabelText('Story page')).toBeInTheDocument();
     await waitFor(() => {
       expect(storyRoot().textContent).toContain('The year demand went vertical');
@@ -82,7 +93,7 @@ describe('StoryView', () => {
   });
 
   it('preserves agent <style> blocks inside the shadow root', async () => {
-    renderWithProviders(<StoryView content={content} />);
+    renderWithProviders(<StoryView content={content} {...NOEDIT_PROPS} />);
     await waitFor(() => {
       const styles = Array.from(storyRoot().querySelectorAll('style'));
       expect(styles.some(s => s.textContent?.includes('.hs h1'))).toBe(true);
@@ -94,7 +105,7 @@ describe('StoryView', () => {
     // in place. The complete import — including the part after the in-URL semicolons — must survive
     // intact. (For CAPTURE, the import is separately resolved to real @font-face in the top
     // document.head — see resolve-story-fonts; that path is network-driven and unit-tested there.)
-    renderWithProviders(<StoryView content={content} />);
+    renderWithProviders(<StoryView content={content} {...NOEDIT_PROPS} />);
     await waitFor(() => {
       const storyStyle = Array.from(storyRoot().querySelectorAll('style'))
         .find(s => s.textContent?.includes('.hs h1'));
@@ -104,7 +115,7 @@ describe('StoryView', () => {
   });
 
   it('hydrates chart placeholders with live embedded questions', async () => {
-    renderWithProviders(<StoryView content={content} />);
+    renderWithProviders(<StoryView content={content} {...NOEDIT_PROPS} />);
     await waitFor(() => {
       expect(within(storyRoot() as unknown as HTMLElement).getByLabelText('Embedded question 14')).toBeTruthy();
     });
@@ -114,7 +125,7 @@ describe('StoryView', () => {
     const inlineStory =
       '<div class="hs"><h2>Live KPI</h2>' +
       '<div data-question-inline="{&quot;query&quot;:&quot;SELECT SUM(mrr) AS mrr FROM metrics&quot;,&quot;connection_name&quot;:&quot;duckdb&quot;,&quot;vizSettings&quot;:{&quot;type&quot;:&quot;single_value&quot;}}" style="width:100%;height:200px"></div></div>';
-    renderWithProviders(<StoryView content={{ description: null, story: inlineStory }} />);
+    renderWithProviders(<StoryView content={{ description: null, story: inlineStory }} {...NOEDIT_PROPS} />);
     await waitFor(() => {
       const el = within(storyRoot() as unknown as HTMLElement).getByLabelText('Inline question single_value');
       expect(el.textContent).toContain('SELECT SUM(mrr) AS mrr FROM metrics');
@@ -124,7 +135,7 @@ describe('StoryView', () => {
   it('sizes an inline single_value embed COMPACT — honors a small height, no 340px chart floor', async () => {
     const story =
       '<div class="hs"><div data-question-inline="{&quot;query&quot;:&quot;SELECT 1&quot;,&quot;connection_name&quot;:&quot;duckdb&quot;,&quot;vizSettings&quot;:{&quot;type&quot;:&quot;single_value&quot;}}" style="width:100%;height:90px"></div></div>';
-    renderWithProviders(<StoryView content={{ description: null, story }} />);
+    renderWithProviders(<StoryView content={{ description: null, story }} {...NOEDIT_PROPS} />);
     await waitFor(() => {
       const div = storyRoot().querySelector('[data-question-inline]') as HTMLElement;
       expect(div?.style.height).toBe('90px'); // honored, NOT clamped up to 340px
@@ -134,7 +145,7 @@ describe('StoryView', () => {
   it('still applies the 340px chart floor to a NON-single_value inline embed', async () => {
     const story =
       '<div class="hs"><div data-question-inline="{&quot;query&quot;:&quot;SELECT 1&quot;,&quot;connection_name&quot;:&quot;duckdb&quot;,&quot;vizSettings&quot;:{&quot;type&quot;:&quot;table&quot;}}" style="width:100%;height:90px"></div></div>';
-    renderWithProviders(<StoryView content={{ description: null, story }} />);
+    renderWithProviders(<StoryView content={{ description: null, story }} {...NOEDIT_PROPS} />);
     await waitFor(() => {
       const div = storyRoot().querySelector('[data-question-inline]') as HTMLElement;
       expect(div?.style.height).toBe('340px'); // clamped up to the chart floor
@@ -144,7 +155,7 @@ describe('StoryView', () => {
   it('marks the story with data-file-id so FileView capture (Dev Tools "Download Image") finds it', async () => {
     // Regression: stories rendered without data-file-id, so useScreenshot.captureFileView threw
     // "FileView with id N not found" (questions/dashboards set it on their content region).
-    renderWithProviders(<StoryView content={content} fileId={1029} />);
+    renderWithProviders(<StoryView content={content} fileId={1029} {...NOEDIT_PROPS} />);
     await waitFor(() => {
       expect(document.querySelector('[data-file-id="1029"]')).toBeTruthy();
     });
@@ -152,7 +163,7 @@ describe('StoryView', () => {
 
   it('hydrates a <Number> placeholder into an INLINE figure span (not a chart card)', async () => {
     const story = '<div class="hs"><p>Latest MRR is <span data-number-inline="{&quot;id&quot;:1026,&quot;prefix&quot;:&quot;$&quot;}"></span>.</p></div>';
-    renderWithProviders(<StoryView content={{ description: null, story }} />);
+    renderWithProviders(<StoryView content={{ description: null, story }} {...NOEDIT_PROPS} />);
     await waitFor(() => {
       const el = within(storyRoot() as unknown as HTMLElement).getByLabelText('inline number 1026');
       expect(el.tagName).toBe('SPAN'); // inline in the prose, not a block embed
@@ -165,10 +176,10 @@ describe('StoryView', () => {
     // the portal-host removal). So this is a smoke check that a content change cleanly shows the new
     // story; the crash fix (keying AgentHtml on a content hash → REMOUNT instead of resetting
     // innerHTML under live portals) is verified in the browser.
-    const { rerender } = renderWithProviders(<StoryView content={content} fileId={1} />);
+    const { rerender } = renderWithProviders(<StoryView content={content} fileId={1} {...NOEDIT_PROPS} />);
     await waitFor(() => expect(storyRoot().textContent).toContain('The year demand went vertical'));
     const next: StoryContent = { ...content, story: STORY.replace('The year demand went vertical', 'A brand-new headline') };
-    expect(() => rerender(<StoryView content={next} fileId={1} />)).not.toThrow();
+    expect(() => rerender(<StoryView content={next} fileId={1} {...NOEDIT_PROPS} />)).not.toThrow();
     await waitFor(() => expect(storyRoot().textContent).toContain('A brand-new headline'));
   });
 
@@ -179,11 +190,11 @@ describe('StoryView', () => {
     // that content — the story has to render, not stay blank until Save+refresh.
     const store = makeStore();
     store.dispatch(setFileEditMode({ fileId: 7, editMode: true }));
-    const { rerender } = renderWithProviders(<StoryView content={emptyContent} fileId={7} />, { store });
+    const { rerender } = renderWithProviders(<StoryView content={emptyContent} fileId={7} headerEditMode storyPath={undefined} storyName={undefined} colorMode="dark" />, { store });
     // Fresh empty draft in edit mode → empty state (no story yet).
     expect(screen.getByLabelText('No story')).toBeInTheDocument();
     // Agent's EditFile lands: content.story is now populated (still in edit mode).
-    rerender(<StoryView content={content} fileId={7} />);
+    rerender(<StoryView content={content} fileId={7} headerEditMode storyPath={undefined} storyName={undefined} colorMode="dark" />);
     await waitFor(() => {
       expect(storyRoot().textContent).toContain('The year demand went vertical');
       expect(storyRoot().textContent).toContain('Narrative paragraph.');
@@ -204,7 +215,7 @@ describe('StoryView', () => {
       version: 1, last_edit_id: null, created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z',
     } as never));
     store.dispatch(setFileEditMode({ fileId: 7, editMode: true }));
-    renderWithProviders(<StoryView content={content} fileId={7} />, { store });
+    renderWithProviders(<StoryView content={content} fileId={7} headerEditMode storyPath="/org/x1y2z3" storyName="" colorMode="dark" />, { store });
     await waitFor(() => expect(storyRoot().textContent).toContain('The year demand went vertical'));
 
     // Simulate the mid-hydration moment: the DOM is partial (headline gone) when focusout fires.
@@ -222,7 +233,7 @@ describe('StoryView', () => {
       version: 1, last_edit_id: null, created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z',
     } as never));
     store.dispatch(setFileEditMode({ fileId: 8, editMode: true }));
-    renderWithProviders(<StoryView content={content} fileId={8} />, { store });
+    renderWithProviders(<StoryView content={content} fileId={8} headerEditMode storyPath="/org/x1y2z4" storyName="" colorMode="dark" />, { store });
     await waitFor(() => expect(storyRoot().textContent).toContain('The year demand went vertical'));
 
     const h1 = storyRoot().querySelector('h1')!;
@@ -238,7 +249,7 @@ describe('StoryView', () => {
   it('fluid shim caps INLINE embeds too (data-question-inline / data-number-inline), not just saved embeds', async () => {
     // Regression: the fluid shim only capped [data-question-id], so an inline chart embed authored
     // wider than the viewport (e.g. width:1100px) overflowed the canvas and got cut off (measured live).
-    renderWithProviders(<StoryView content={content} />);
+    renderWithProviders(<StoryView content={content} {...NOEDIT_PROPS} />);
     await waitFor(() => {
       const shim = storyRoot().querySelector('[data-mx-fluid-shim]');
       expect(shim).toBeTruthy();
@@ -251,7 +262,7 @@ describe('StoryView', () => {
 
   it('sanitizes hostile HTML', async () => {
     renderWithProviders(
-      <StoryView content={{ ...emptyContent, story: '<script>window.__pwned = true;</script><div onclick="alert(1)">Safe</div>' }} />
+      <StoryView content={{ ...emptyContent, story: '<script>window.__pwned = true;</script><div onclick="alert(1)">Safe</div>' }} {...NOEDIT_PROPS} />
     );
     await waitFor(() => {
       expect(storyRoot().textContent).toContain('Safe');
@@ -261,10 +272,33 @@ describe('StoryView', () => {
     expect((window as any).__pwned).toBeUndefined();
   });
 
+  // colorMode (M4.2): sourced by the container (StoryContainerV2/SharePageClient) and threaded
+  // as a prop through StoryView -> AgentHtml, which toggles a dark/light class on the iframe's
+  // own contentDocument (colorMode-token CSS keys off html.dark/html.light).
+  describe('colorMode', () => {
+    it('applies the dark class to the iframe document when colorMode is dark', async () => {
+      renderWithProviders(<StoryView content={content} {...NOEDIT_PROPS} colorMode="dark" />);
+      await waitFor(() => {
+        const iframe = screen.getByLabelText('Story document') as HTMLIFrameElement;
+        expect(iframe.contentDocument!.documentElement.classList.contains('dark')).toBe(true);
+        expect(iframe.contentDocument!.documentElement.classList.contains('light')).toBe(false);
+      });
+    });
+
+    it('applies the light class to the iframe document when colorMode is light', async () => {
+      renderWithProviders(<StoryView content={content} {...NOEDIT_PROPS} colorMode="light" />);
+      await waitFor(() => {
+        const iframe = screen.getByLabelText('Story document') as HTMLIFrameElement;
+        expect(iframe.contentDocument!.documentElement.classList.contains('light')).toBe(true);
+        expect(iframe.contentDocument!.documentElement.classList.contains('dark')).toBe(false);
+      });
+    });
+  });
+
   // The JSON/XML "Code view" moved out of StoryView into the shared CodeView
   // (rendered centrally by FileView) — see components/views/__tests__/code-view.ui.test.tsx.
   it('renders the story visual canvas (never a code editor)', () => {
-    renderWithProviders(<StoryView content={content} />);
+    renderWithProviders(<StoryView content={content} {...NOEDIT_PROPS} />);
     expect(screen.getByLabelText('Story page')).toBeInTheDocument();
     expect(screen.queryByLabelText('JSON editor')).not.toBeInTheDocument();
   });

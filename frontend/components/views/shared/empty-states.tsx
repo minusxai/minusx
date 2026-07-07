@@ -17,8 +17,7 @@ import {
   LuSparkles,
 } from 'react-icons/lu';
 
-import { useAppSelector } from '@/store/hooks';
-import { selectBranding } from '@/store/configsSlice';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 
 /**
  * Shared "new / empty file" hero used by Story, Question and Dashboard views. Each blank file is
@@ -244,7 +243,8 @@ function HeroTile({ accent, badge, children, compact = false, height }: { accent
 }
 
 function useAgentName() {
-  return useAppSelector(selectBranding)?.agentName ?? 'the agent';
+  const { config } = useConfigs();
+  return config.branding?.agentName ?? 'the agent';
 }
 
 /* ---------------------------------- Story ---------------------------------- */

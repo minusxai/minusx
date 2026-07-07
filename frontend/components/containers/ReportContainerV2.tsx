@@ -7,7 +7,8 @@
  */
 import { Box } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
-import { selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
+import { selectMergedContent, selectEffectiveName, selectIsDirty, type FileId } from '@/store/filesSlice';
+import { selectFileEditMode } from '@/store/uiSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useContext } from '@/lib/hooks/useContext';
 import { editFile } from '@/lib/file-state/file-state';
@@ -29,6 +30,8 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
   const fileLoading = !file || file.loading;
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) || '';
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as ReportContent | undefined;
+  const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
+  const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Context databases for the report's path — powers @-mention of tables/columns
   // in the instructions editor (questions/dashboards come from the server).
@@ -71,6 +74,8 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
       runFileContent={runFileContent}
       runFileId={runFileId}
       whitelistedSchemas={databases}
+      editMode={editMode}
+      isDirty={isDirty}
       onChange={handleChange}
       onRunNow={handleRunNow}
       onSelectRun={handleSelectRun}

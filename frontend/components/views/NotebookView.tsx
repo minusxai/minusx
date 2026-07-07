@@ -25,8 +25,6 @@ import CellInsertZone from './notebook/CellInsertZone';
 import { NotebookEmptyState } from '@/components/views/shared/empty-states';
 import { useFileToolbarActions, type FileToolbarAction } from '@/components/file-toolbar/FileToolbarContext';
 import { usePresentation } from '@/components/file-toolbar/PresentationContext';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectNotebookCellExecuted, setNotebookCellExecuted } from '@/store/filesSlice';
 import { captureNotebookCellResult, removeNotebookCellResult } from '@/lib/file-state/file-state';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { selectDatabase } from '@/lib/utils/database-selector';
@@ -44,6 +42,12 @@ interface NotebookViewProps {
   /** Id of the cell the user is currently working on (highlighted + sent to the agent). */
   activeCellId?: string;
   onActivateCell?: (cellId: string) => void;
+  /** Redux-backed per-cell "last run" snapshots (selectNotebookCellExecuted), sourced by the
+   *  container when fileId is real. Undefined when the view is used without a fileId (drafts/tests). */
+  reduxExecuted?: Record<string, Executed>;
+  /** Persist a cell's executed snapshot to Redux (setNotebookCellExecuted), called by the
+   *  container. Only invoked when fileId is defined. */
+  onReduxExecutedChange?: (cellId: string, executed: Executed) => void;
 }
 
 const newId = (): string => crypto.randomUUID();
@@ -85,6 +89,7 @@ const EMPTY_EXECUTED: Record<string, Executed> = {};
 
 export default function NotebookView({
   content, onChange, readOnly = false, filePath, fileId, activeCellId, onActivateCell,
+  reduxExecuted, onReduxExecutedChange,
 }: NotebookViewProps) {
   const cells = content.cells ?? [];
 
@@ -147,19 +152,15 @@ export default function NotebookView({
   // when the notebook is a real file — so the agent's EditFile can drive a cell's
   // result, and so results survive the edit↔present remount (a separate subtree).
   // Without a fileId (e.g. unit tests / draft preview) we fall back to local state.
-  const dispatch = useAppDispatch();
-  const reduxExecuted = useAppSelector(state =>
-    fileId !== undefined ? selectNotebookCellExecuted(state, fileId) : undefined
-  );
   const [localExecuted, setLocalExecuted] = useState<Record<string, Executed>>({});
   const executedById = (fileId !== undefined ? reduxExecuted : localExecuted) ?? EMPTY_EXECUTED;
   const setCellExecuted = useCallback((id: string, e: Executed) => {
-    if (fileId !== undefined) {
-      dispatch(setNotebookCellExecuted({ fileId, cellId: id, executed: e }));
+    if (fileId !== undefined && onReduxExecutedChange) {
+      onReduxExecutedChange(id, e);
     } else {
       setLocalExecuted(prev => ({ ...prev, [id]: e }));
     }
-  }, [dispatch, fileId]);
+  }, [fileId, onReduxExecutedChange]);
 
   // Cache a cell's freshly-run result into the notebook content so it survives a
   // reload (real, editable notebooks only — drafts/read-only don't persist).

@@ -41,11 +41,23 @@ const RESTRICT_PI_AI = {
     "and import Type/TSchema/Static directly from 'typebox'.",
 };
 
-// Container/View convention (CLAUDE.md "Component Patterns", Refactor-v2.md M4.2):
-// views must be pure presentation, containers own Redux. Scoped to just the 2 files
-// that have been migrated so far (QuestionViewV2, DashboardView) — 9 other
-// components/views/** files still violate this and aren't part of this pass; widen
-// the file list here only as each one is actually migrated, never all at once.
+// Container/View convention (CLAUDE.md "Component Patterns"):
+// views must be pure presentation, containers own Redux. Widen the file list here
+// only as each view is actually migrated, never all at once.
+//
+// Deliberate exceptions, NOT in this list:
+// - components/views/story/InlineNumber.tsx: its SavedNumber sub-component reads Redux
+//   directly (selectMergedContent), but it's a structural peer of
+//   SmartEmbeddedQuestionContainer/EmbeddedQuestionContainer — all three are dynamically
+//   instantiated leaves inside StoryEmbeds' nested iframe React root, not file-level views
+//   with a stable parent that could source the value via props. Moving it would just
+//   rename the hook call, not remove it.
+// - components/views/shared/StoryEmbeds.tsx: imports react-redux's Provider to RE-PROVIDE
+//   the store to that same nested root (iframe DOM events don't bubble to the parent
+//   document, so a nested root needs its own provider tree) — required architecture, not
+//   a view reading Redux state. RESTRICT_VIEW_REDUX blocks the whole `react-redux` import,
+//   which can't distinguish "re-providing the store" from "reading it", so this file would
+//   false-positive if added.
 const RESTRICT_VIEW_REDUX = [
   {
     name: "@/store/hooks",
@@ -271,12 +283,20 @@ const eslintConfig = defineConfig([
       "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI] }],
     },
   },
-  // Container/View convention (CLAUDE.md, Refactor-v2.md M4.2) — these 2 views were
+  // Container/View convention (CLAUDE.md "Component Patterns") — these views were
   // migrated to pure presentation; guard against regression. See RESTRICT_VIEW_REDUX.
   {
     files: [
       "components/views/QuestionViewV2.tsx",
       "components/views/DashboardView.tsx",
+      "components/views/ConnectionFormV2.tsx",
+      "components/views/TransformationView.tsx",
+      "components/views/AlertView.tsx",
+      "components/views/ReportView.tsx",
+      "components/views/CodeView.tsx",
+      "components/views/NotebookView.tsx",
+      "components/views/story/StoryView.tsx",
+      "components/views/shared/AgentHtml.tsx",
     ],
     rules: {
       "no-restricted-imports": [

@@ -155,7 +155,7 @@ export async function runForOrg(now: Date): Promise<CronScanResult> {
           // 'pending' forever. That's a real latent bug — fixing it is a
           // production delivery-behavior change that needs explicit product
           // sign-off, not something to ship as a side effect of a code-dedup
-          // refactor. See Refactor-v2.md M5.5 for the flagged follow-up.
+          // refactor. Needs a dedicated follow-up PR before removing this skip.
           await deliverMessages(messages, config, { send: true, skipTypes: ['slack_alert'] });
           await FilesAPI.saveFile(runFileId, runFileName, runFilePath, { ...successContent, messages }, [jobFile.id], jobUser);
         }

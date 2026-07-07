@@ -337,10 +337,13 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
 function SharedStory({ fileId }: { fileId: number }) {
   const { fileState: file } = useFile(fileId) ?? {};
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as StoryContent | undefined;
+  const colorMode = useAppSelector(state => state.ui.colorMode);
 
   const ready = useMemo(() => Boolean(file && !file.loading && mergedContent), [file, mergedContent]);
   if (!ready || !mergedContent) {
     return <Center h="60vh"><Spinner size="lg" /></Center>;
   }
-  return <StoryView content={mergedContent} readOnly />;
+  // fileId is intentionally NOT forwarded to StoryView here (read-only share render, no editing) —
+  // headerEditMode/storyPath/storyName mirror what StoryView would compute with no fileId.
+  return <StoryView content={mergedContent} readOnly headerEditMode={false} storyPath={undefined} storyName={undefined} colorMode={colorMode} />;
 }

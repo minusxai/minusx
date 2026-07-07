@@ -16,6 +16,7 @@ import { useMemo, useState } from 'react';
 import { LuGlobe } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent } from '@/store/filesSlice';
+import { selectFileEditMode } from '@/store/uiSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { useFile } from '@/lib/hooks/file-state-hooks';
@@ -30,6 +31,8 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
   const numericId = typeof fileId === 'number' ? fileId : undefined;
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as StoryContent | undefined;
   const effectiveUser = useAppSelector(selectEffectiveUser);
+  const headerEditMode = useAppSelector(state => (numericId !== undefined ? selectFileEditMode(state, numericId) : false));
+  const colorMode = useAppSelector(state => state.ui.colorMode);
 
   // Publishing is admin-only; published via a toolbar action + the ShareModal.
   const canShare = numericId !== undefined && isAdmin(effectiveUser?.role || 'viewer');
@@ -46,7 +49,14 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
 
   return (
     <>
-      <StoryView content={mergedContent} fileId={numericId} />
+      <StoryView
+        content={mergedContent}
+        fileId={numericId}
+        headerEditMode={headerEditMode}
+        storyPath={numericId !== undefined ? file.path : undefined}
+        storyName={numericId !== undefined ? file.name : undefined}
+        colorMode={colorMode}
+      />
       {canShare && numericId !== undefined && (
         <ShareModal fileId={numericId} fileName={file.name} isOpen={shareOpen} onClose={() => setShareOpen(false)} />
       )}

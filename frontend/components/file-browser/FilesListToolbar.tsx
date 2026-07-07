@@ -58,47 +58,6 @@ export default function FilesListToolbar({ filterTypes, selectedTypes, toggleTyp
           );
         })}
       </HStack>
-
-      {/* View Toggle */}
-      {/* <HStack gap={2} flexShrink={0}>
-        <HStack
-          gap={0.5}
-          bg="bg.surface"
-          borderRadius="md"
-          p={0.5}
-          border="1px solid"
-          borderColor="border.default"
-        >
-          <Tooltip content="List view" positioning={{ placement: 'bottom' }}>
-            <IconButton
-              variant="ghost"
-              size="sm"
-              aria-label="List view"
-              onClick={() => setViewMode('list')}
-              bg={viewMode === 'list' ? 'accent.teal' : 'transparent'}
-              color={viewMode === 'list' ? 'white' : 'fg.default'}
-              _hover={{ bg: viewMode === 'list' ? 'accent.teal' : 'bg.muted' }}
-              borderRadius="sm"
-            >
-              <LuList />
-            </IconButton>
-          </Tooltip>
-          <Tooltip content="Grid view" positioning={{ placement: 'bottom' }}>
-            <IconButton
-              variant="ghost"
-              size="sm"
-              aria-label="Grid view"
-              onClick={() => setViewMode('grid')}
-              bg={viewMode === 'grid' ? 'accent.teal' : 'transparent'}
-              color={viewMode === 'grid' ? 'white' : 'fg.default'}
-              _hover={{ bg: viewMode === 'grid' ? 'accent.teal' : 'bg.muted' }}
-              borderRadius="sm"
-            >
-              <LuLayoutGrid />
-            </IconButton>
-          </Tooltip>
-        </HStack>
-      </HStack> */}
     </HStack>
   );
 }

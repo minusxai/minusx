@@ -4,15 +4,31 @@
  * sub-toggle switches between them. All element queries by aria-label per repo
  * convention (the Monaco mock labels the editor textarea "<LANG> editor"; the
  * sub-toggle buttons are labelled "JSON" / "XML").
+ *
+ * As of M4.2, CodeView no longer reads Redux itself — `persistableContent`/
+ * `mergedContent` are sourced by the caller (ContextEditorV2 / FileView) and
+ * passed as props. Tests still dispatch `setFile` into a real store (so
+ * `applyJsonContentEdit`, which writes via `getStore()` directly, has
+ * somewhere real to write), but now also compute those two props from the
+ * same store state via the real selectors — exercising the exact production
+ * derivation instead of hand-rolling it.
  */
 import { screen, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
-import { setFile } from '@/store/filesSlice';
+import { setFile, selectPersistableContent, selectMergedContent } from '@/store/filesSlice';
 import CodeView from '@/components/views/CodeView';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
 
 const FILE_ID = 4242;
+
+function contentProps(store: ReturnType<typeof storeModule.makeStore>, fileId: number) {
+  const state = store.getState();
+  return {
+    persistableContent: selectPersistableContent(state, fileId),
+    mergedContent: selectMergedContent(state, fileId),
+  };
+}
 
 function makeQuestionDbFile() {
   return {
@@ -74,7 +90,7 @@ describe('CodeView', () => {
 
   it('defaults to the JSON tab and shows the file content as JSON', () => {
     const store = setup();
-    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" editable />, { store });
+    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" {...contentProps(store, FILE_ID)} editable />, { store });
 
     const json = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
     expect(json.value).toContain('SELECT 1');
@@ -85,7 +101,7 @@ describe('CodeView', () => {
 
   it('shows the read-only agent XML markup when the XML sub-toggle is clicked', () => {
     const store = setup();
-    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" editable />, { store });
+    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" {...contentProps(store, FILE_ID)} editable />, { store });
 
     fireEvent.click(screen.getByLabelText('XML'));
 
@@ -98,7 +114,7 @@ describe('CodeView', () => {
 
   it('JSON tab is read-only when not editable', () => {
     const store = setup();
-    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" editable={false} />, { store });
+    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" {...contentProps(store, FILE_ID)} editable={false} />, { store });
 
     const json = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
     expect(json.readOnly).toBe(true);
@@ -106,7 +122,7 @@ describe('CodeView', () => {
 
   it('returns to JSON content after toggling JSON -> XML -> JSON', () => {
     const store = setup();
-    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" editable />, { store });
+    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" {...contentProps(store, FILE_ID)} editable />, { store });
 
     fireEvent.click(screen.getByLabelText('XML'));
     expect((screen.getByLabelText('XML editor') as HTMLTextAreaElement).value).toContain('<query');
@@ -120,7 +136,7 @@ describe('CodeView', () => {
 
   it('JSON tab is editable when editable', () => {
     const store = setup();
-    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" editable />, { store });
+    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" {...contentProps(store, FILE_ID)} editable />, { store });
 
     const json = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
     expect(json.readOnly).toBe(false);
@@ -130,7 +146,7 @@ describe('CodeView', () => {
     const store = setupContext();
     const omit = ['fullSchema', 'parentSchema', 'fullDocs'];
     renderWithProviders(
-      <CodeView fileId={CTX_ID} fileType="context" editable omitKeys={omit} xmlContentTransform={shapeContextForAgent} />, { store },
+      <CodeView fileId={CTX_ID} fileType="context" {...contentProps(store, CTX_ID)} editable omitKeys={omit} xmlContentTransform={shapeContextForAgent} />, { store },
     );
 
     // JSON tab: the real saved file, minus the loader-computed keys.
@@ -165,7 +181,7 @@ describe('CodeView', () => {
     }));
 
     renderWithProviders(
-      <CodeView fileId={CTX_ID} fileType="context" omitKeys={['fullSchema', 'parentSchema', 'fullDocs']} xmlContentTransform={shapeContextForAgent} />,
+      <CodeView fileId={CTX_ID} fileType="context" {...contentProps(store, CTX_ID)} omitKeys={['fullSchema', 'parentSchema', 'fullDocs']} xmlContentTransform={shapeContextForAgent} />,
       { store },
     );
 
@@ -196,7 +212,7 @@ describe('CodeView', () => {
     const store = setupContext();
     const omit = ['fullSchema', 'parentSchema', 'fullDocs'];
     renderWithProviders(
-      <CodeView fileId={CTX_ID} fileType="context" editable omitKeys={omit} />, { store },
+      <CodeView fileId={CTX_ID} fileType="context" {...contentProps(store, CTX_ID)} editable omitKeys={omit} />, { store },
     );
 
     // Edit the trimmed JSON (no derived fields present) and confirm they survive on the file.

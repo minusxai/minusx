@@ -9,9 +9,6 @@ import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
 import { AlertHistoryEmptyState } from '@/components/views/shared/empty-states';
-import { useAppSelector } from '@/store/hooks';
-import { selectFileEditMode } from '@/store/uiSlice';
-import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 import AlertRunContainerV2 from '@/components/containers/AlertRunContainerV2';
 import TestList from '@/components/evals/TestList';
@@ -20,11 +17,11 @@ import SimpleSelect from '@/components/evals/SimpleSelect';
 interface AlertViewProps {
   alert: AlertContent;
   alertName: string;
-  fileId: number;
   isRunning: boolean;
   runs?: JobRun[];
   selectedRunId?: number | null;
-
+  editMode: boolean;
+  isDirty: boolean;
   onChange: (updates: Partial<AlertContent>) => void;
   onRunNow: (opts: RunOptions) => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
@@ -33,17 +30,15 @@ interface AlertViewProps {
 export default function AlertView({
   alert,
   alertName,
-  fileId,
   isRunning,
   runs = [],
   selectedRunId,
+  editMode,
+  isDirty,
   onChange,
   onRunNow,
   onSelectRun
 }: AlertViewProps) {
-  const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
-  const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
-
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(50);
   const [isResizing, setIsResizing] = useState(false);

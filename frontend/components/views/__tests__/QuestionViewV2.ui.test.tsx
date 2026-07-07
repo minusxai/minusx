@@ -62,6 +62,12 @@ vi.mock('@/lib/hooks/use-gui-compat', () => ({
   useGuiCompat: () => ({ canUseGUI: true, guiError: null }),
 }));
 
+// QuestionEmptyState (rendered when the question has no query) calls useConfigs() for the
+// branding agentName. Mocked so its fire-and-forget /api/configs fetch never runs in jsdom.
+vi.mock('@/lib/hooks/useConfigs', () => ({
+  useConfigs: () => ({ config: { branding: { agentName: 'MinusX' } }, loading: false }),
+}));
+
 import QuestionContainerV2 from '@/components/containers/QuestionContainerV2';
 
 const FILE_ID = 4242;

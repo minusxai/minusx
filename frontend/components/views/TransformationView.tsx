@@ -3,29 +3,29 @@
 import { Box, Text, VStack, HStack, Input, Button, Portal, Combobox } from '@chakra-ui/react';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { LuArrowRightLeft, LuPlus, LuTrash2, LuGripVertical } from 'react-icons/lu';
-import { useAppSelector } from '@/store/hooks';
-import { shallowEqual } from 'react-redux';
-import { selectFileEditMode } from '@/store/uiSlice';
-import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
-import type { JobRun, QuestionContent, Test, Transform, TransformationContent } from '@/lib/types';
+import type { DatabaseWithSchema, JobRun, QuestionContent, Test, Transform, TransformationContent } from '@/lib/types';
 import TestList from '@/components/evals/TestList';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
-import { useContext } from '@/lib/hooks/useContext';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import TransformationRunContainerV2 from '@/components/containers/TransformationRunContainerV2';
 
 interface TransformationViewProps {
   transformation: TransformationContent;
   transformationName: string;
-  fileId: number;
   isRunning: boolean;
   schemaRefreshing?: boolean;
   runs?: JobRun[];
   selectedRunId?: number | null;
+  editMode: boolean;
+  isDirty: boolean;
+  /** All question-type files, for the per-transform question picker (container-derived, M4.2). */
+  questions: { id: number; name: string }[];
+  /** Context databases for the transformation's path — powers the per-transform schema dropdown. */
+  databases?: DatabaseWithSchema[];
   onChange: (updates: Partial<TransformationContent>) => void;
   onRunNow: (opts: RunOptions) => Promise<void>;
   onTestOnly: (opts: RunOptions) => Promise<void>;
@@ -243,7 +243,7 @@ function TransformRow({ transform, index, questions, dbSchemaMap, editMode, onCh
                 onSelect={(id) => onChange({ question: id })}
               />
             ) : (
-              <Text fontSize="xs" color="fg.default" fontWeight="500">
+              <Text aria-label="Selected question" fontSize="xs" color="fg.default" fontWeight="500">
                 {selectedQuestion?.name || (transform.question ? `Question #${transform.question}` : 'No question selected')}
               </Text>
             )}
@@ -321,19 +321,19 @@ function TransformRow({ transform, index, questions, dbSchemaMap, editMode, onCh
 export default function TransformationView({
   transformation,
   transformationName: _transformationName,
-  fileId,
   isRunning,
   schemaRefreshing = false,
   runs = [],
   selectedRunId,
+  editMode,
+  isDirty,
+  questions,
+  databases,
   onChange,
   onRunNow,
   onTestOnly,
   onSelectRun,
 }: TransformationViewProps) {
-  const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
-  const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
-
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(50);
   const [isResizing, setIsResizing] = useState(false);
@@ -396,18 +396,7 @@ export default function TransformationView({
     };
   }, [isResizing, handleResizeMove, handleResizeEnd]);
 
-  // shallowEqual: avoid re-rendering when Immer rotates the bag ref but no
-  // entry changed.
-  const files = useAppSelector(state => state.files.files, shallowEqual);
-  const filePath = useAppSelector(state => state.files.files[fileId]?.path) ?? '';
-
-  const questions = useMemo(() =>
-    Object.values(files).filter(f => f.type === 'question' && f.id > 0),
-    [files]
-  );
-
   // Use context (same source as RightSidebar) to get schemas per database
-  const { databases } = useContext(filePath);
   const dbSchemaMap = useMemo(() => {
     const result: Record<string, string[]> = {};
     for (const db of databases ?? []) {
@@ -513,6 +502,7 @@ export default function TransformationView({
 
               {editMode && (
                 <Button
+                  aria-label="Add transform"
                   variant="outline"
                   size="sm"
                   onClick={handleAddTransform}
@@ -631,7 +621,7 @@ export default function TransformationView({
                   </VStack>
                 )
               ) : runs.length === 0 ? (
-                <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
+                <VStack aria-label="No transformation runs" gap={4} align="center" justify="center" h="100%" color="fg.muted">
                   <LuArrowRightLeft size={48} opacity={0.3} />
                   <Text fontSize="sm">
                     {isDirty

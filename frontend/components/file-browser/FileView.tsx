@@ -14,7 +14,7 @@ import { Box, Spinner, Text } from '@chakra-ui/react';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { getFileComponent, hasFileComponent } from '@/lib/ui/fileComponents';
 import { isSystemFileType, type FileType } from '@/lib/ui/file-metadata';
-import { type FileId } from '@/store/filesSlice';
+import { type FileId, selectPersistableContent, selectMergedContent } from '@/store/filesSlice';
 import { useAppSelector } from '@/store/hooks';
 import { selectView } from '@/store/authSlice';
 import { selectFileViewMode } from '@/store/uiSlice';
@@ -41,6 +41,9 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
   const hideHeader = hideHeaderProp || viewAtLeast(view, 'content');
   // The admin "Code view" (JSON + agent XML) is selected centrally here, not per file view.
   const viewMode = useAppSelector(state => selectFileViewMode(state, typeof fileId === 'number' ? fileId : undefined));
+  // Sourced here (rather than inside CodeView) per Container/View discipline (M4.2).
+  const codeViewPersistableContent = useAppSelector(state => selectPersistableContent(state, fileId as number));
+  const codeViewMergedContent = useAppSelector(state => selectMergedContent(state, fileId as number));
 
   // Loading state
   if (!file || file.loading) {
@@ -155,7 +158,13 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
           </Box>
         )}
         {showCodeView ? (
-          <CodeView fileId={fileId as number} fileType={file.type as FileType} editable={codeEditable} />
+          <CodeView
+            fileId={fileId as number}
+            fileType={file.type as FileType}
+            persistableContent={codeViewPersistableContent}
+            mergedContent={codeViewMergedContent}
+            editable={codeEditable}
+          />
         ) : (
           /* eslint-disable-next-line react-hooks/static-components */
           <Component

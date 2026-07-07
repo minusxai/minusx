@@ -15,7 +15,7 @@
  * - Domain-specific logic (connection testing, JSON parsing)
  * - Calling onChange for content updates
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Box,
@@ -29,20 +29,16 @@ import {
 } from '@chakra-ui/react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { LuTriangleAlert, LuFileJson2, LuEye, LuSave, LuTable, LuSettings, LuArrowLeft, LuCircleAlert, LuCheck } from 'react-icons/lu';
-import { ConnectionContent, ContextContent, DatabaseContext } from '@/lib/types';
+import { ConnectionContent } from '@/lib/types';
 import { testConnection } from '@/lib/connections/client/connection-test';
 import TabSwitcher from '../selectors/TabSwitcher';
 import Editor from '@monaco-editor/react';
-import { useAppSelector } from '@/store/hooks';
 import { resolvePath } from '@/lib/mode/path-resolver';
-import { useFileByPath, useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, publishFile } from '@/lib/file-state/file-state';
-import { convertDatabaseContextToWhitelist } from '@/lib/context/context-utils';
-import { getPublishedVersion } from '@/lib/context/context-utils';
+import type { Mode } from '@/lib/mode/mode-types';
+import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import ConnectionTablesBrowser from '../schema-browser/ConnectionTablesBrowser';
 import StaticTablesBrowser from '../schema-browser/StaticTablesBrowser';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
-import { inlineContextDocsText } from '@/lib/sql/context-docs';
 import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig, DuckDBConfig, SqliteConfig, ClickHouseConfig } from './connection-configs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { CONNECTION_TYPES } from '@/lib/ui/connection-type-options';
@@ -87,6 +83,10 @@ interface ConnectionFormV2Props {
   onStaticSelect?: (tab: 'csv' | 'sheets') => void;
   /** Skip the type selection step and go straight to configure (type already set on content). */
   skipTypeSelection?: boolean;
+  colorMode: 'light' | 'dark';
+  userMode: Mode;
+  showJson: boolean;
+  homeFolder: string;
 }
 
 export default function ConnectionFormV2({
@@ -107,133 +107,21 @@ export default function ConnectionFormV2({
   wizardMode = false,
   onStaticSelect,
   skipTypeSelection = false,
+  colorMode,
+  userMode,
+  showJson,
+  homeFolder,
 }: ConnectionFormV2Props) {
   const router = useRouter();
-  const colorMode = useAppSelector((state) => state.ui.colorMode);
-  const userMode = useAppSelector((state) => state.auth.user?.mode) || 'org';
-  const showJson = useAppSelector((state) => state.ui.devMode);
   const staticConnectionPath = resolvePath(userMode, '/database/static');
   const { file: staticConnectionFile, loading: staticConnectionLoading } = useFileByPath(staticConnectionPath);
-  const homeFolder = useAppSelector((state) => state.auth.user?.home_folder) || '';
   const homePath = resolvePath(userMode, homeFolder || '/');
-  const { databases: contextDatabases, contextDocs: resolvedContextDocs, hasContext, contextId } = useContextHook(homePath, undefined, true);
-  const contextDocs = resolvedContextDocs ? inlineContextDocsText(resolvedContextDocs) : '';
+  const { databases: contextDatabases, hasContext } = useContextHook(homePath, undefined, true);
   // Check whitelist status for this specific connection: 'full' | 'partial' | 'none'
   const whitelistedDb = hasContext ? contextDatabases.find(db => db.databaseName === fileName) : undefined;
-  const whitelistStatus: 'full' | 'partial' | 'none' = (() => {
-    if (!whitelistedDb) return 'none';
-    // Count total tables in the connection's full schema
-    const totalTables = (content.schema?.schemas || []).reduce((sum, s) => sum + (s.tables?.length || 0), 0);
-    // Count whitelisted tables
-    const whitelistedTables = whitelistedDb.schemas.reduce((sum, s) => sum + (s.tables?.length || 0), 0);
-    if (totalTables === 0 || whitelistedTables >= totalTables) return 'full';
-    return 'partial';
-  })();
-  // Load context file content for whitelist toggle
-  const contextFileState = useFile(contextId, { skip: !contextId })?.fileState;
-  const contextContent = contextFileState?.content as ContextContent | undefined;
-  const userId = useAppSelector((state) => state.auth.user?.id);
-  const [whitelistToggling, setWhitelistToggling] = useState(false);
-
-  const handleWhitelistToggle = useCallback(async () => {
-    if (!contextId || !contextContent?.versions || !userId) return;
-    setWhitelistToggling(true);
-    try {
-      const publishedVersion = getPublishedVersion(contextContent);
-      const versionContent = contextContent.versions.find(v => v.version === publishedVersion);
-      if (!versionContent) return;
-
-      // Get current databases in editor format
-      // parentSchema has all available connections (what the context CAN whitelist)
-      const availableDbs = contextContent.parentSchema || contextContent.fullSchema || [];
-
-      // Convert current whitelist to DatabaseContext[] for editing
-      const currentDatabases: DatabaseContext[] = availableDbs.map(db => {
-        // Find what's currently whitelisted for this db
-        const whitelistedInContext = contextDatabases.find(cd => cd.databaseName === db.databaseName);
-        if (whitelistedInContext && whitelistedInContext.schemas.length > 0) {
-          return {
-            databaseName: db.databaseName,
-            whitelist: whitelistedInContext.schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
-          };
-        }
-        return { databaseName: db.databaseName, whitelist: [] };
-      });
-
-      // Toggle this connection
-      const dbIndex = currentDatabases.findIndex(db => db.databaseName === fileName);
-      const shouldWhitelist = whitelistStatus === 'none';
-
-      if (dbIndex >= 0) {
-        currentDatabases[dbIndex] = {
-          ...currentDatabases[dbIndex],
-          whitelist: shouldWhitelist
-            ? (availableDbs.find(db => db.databaseName === fileName)?.schemas || []).map(s => ({ type: 'schema' as const, name: s.schema }))
-            : [],
-        };
-      } else if (shouldWhitelist) {
-        const dbSchemas = availableDbs.find(db => db.databaseName === fileName)?.schemas || [];
-        currentDatabases.push({
-          databaseName: fileName,
-          whitelist: dbSchemas.map(s => ({ type: 'schema' as const, name: s.schema })),
-        });
-      }
-
-      // Convert to storage format and update version
-      const newWhitelist = convertDatabaseContextToWhitelist(currentDatabases);
-      const updatedVersions = contextContent.versions.map(v => {
-        if (v.version === publishedVersion) {
-          return { ...v, whitelist: newWhitelist, lastEditedAt: new Date().toISOString(), lastEditedBy: userId };
-        }
-        return v;
-      });
-
-      // Edit and publish
-      editFile({ fileId: contextId, changes: { content: { ...contextContent, versions: updatedVersions } as ContextContent } });
-      await publishFile({ fileId: contextId });
-    } catch (error) {
-      console.error('Failed to toggle whitelist:', error);
-    } finally {
-      setWhitelistToggling(false);
-    }
-  }, [contextId, contextContent, userId, contextDatabases, fileName, whitelistStatus]);
-
-  // Add context doc handler
-  const [contextInput, setContextInput] = useState('');
-  const [contextAdding, setContextAdding] = useState(false);
-  const [contextAdded, setContextAdded] = useState(false);
-  const [contextExpanded, setContextExpanded] = useState(false);
 
   // Enriched schema viewer (dev mode only)
   const [schemaJsonExpanded, setSchemaJsonExpanded] = useState(false);
-
-  const handleAddContext = useCallback(async () => {
-    if (!contextId || !contextContent?.versions || !userId || !contextInput.trim()) return;
-    setContextAdding(true);
-    try {
-      const publishedVersion = getPublishedVersion(contextContent);
-      const updatedVersions = contextContent.versions.map(v => {
-        if (v.version === publishedVersion) {
-          return {
-            ...v,
-            docs: [...(v.docs || []), { content: contextInput.trim() }],
-            lastEditedAt: new Date().toISOString(),
-            lastEditedBy: userId,
-          };
-        }
-        return v;
-      });
-
-      editFile({ fileId: contextId, changes: { content: { ...contextContent, versions: updatedVersions } as ContextContent } });
-      await publishFile({ fileId: contextId });
-      setContextInput('');
-      setContextAdded(true);
-    } catch (error) {
-      console.error('Failed to add context:', error);
-    } finally {
-      setContextAdding(false);
-    }
-  }, [contextId, contextContent, userId, contextInput]);
 
   const [redirectingToStatic, setRedirectingToStatic] = useState<false | 'csv' | 'sheets'>(false);
 
@@ -908,185 +796,6 @@ export default function ConnectionFormV2({
               </Box>
             </VStack>
 
-            {/* Right: Quick Actions — hide for static (context is per-dataset) and duckdb */}
-            {/* {content.type !== 'duckdb' && !isStaticConnection && (
-              <Box
-                w="300px"
-                flexShrink={0}
-                borderRadius="lg"
-                border="1px solid"
-                borderColor="border.default"
-                bg="bg.surface"
-                p={4}
-              >
-                <Text fontSize="sm" fontWeight="700" mb={3} fontFamily="mono">
-                  Quick Actions
-                </Text>
-                <VStack align="stretch" gap={1}>
-                  <HStack
-                    gap={2.5}
-                    px={3}
-                    py={2}
-                    borderRadius="md"
-                    justify="space-between"
-                  >
-                    <VStack align="start" gap={0}>
-                      <Text fontSize="xs" fontWeight="600" fontFamily="mono">
-                        Whitelist Tables
-                      </Text>
-                      <Text fontSize="2xs" color="fg.muted" fontFamily="mono">
-                        {whitelistStatus === 'full' ? 'All tables in knowledge base' : whitelistStatus === 'partial' ? 'Some tables selected' : 'Currently not in knowledge base'}
-                      </Text>
-                      {contextId && (
-                        <Link href={`/f/${contextId}?tab=databases`} target="_blank">
-                          <Text fontSize="2xs" color="fg.muted" fontFamily="mono" lineHeight="1" _hover={{ color: 'accent.teal' }}>
-                            See all table selections →
-                          </Text>
-                        </Link>
-                      )}
-                    </VStack>
-                    <Switch.Root
-                      checked={whitelistStatus !== 'none'}
-                      onCheckedChange={() => handleWhitelistToggle()}
-                      disabled={whitelistToggling || !contextId}
-                      size="sm"
-                      colorPalette="teal"
-                    >
-                      <Switch.HiddenInput />
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
-                    </Switch.Root>
-                  </HStack>
-
-                  <VStack align="stretch" gap={0} px={3} py={2}>
-                    {contextAdded ? (
-                      <>
-                        <HStack gap={2.5}>
-                          <LuCheck size={14} color="var(--chakra-colors-accent-teal)" />
-                          <Text fontSize="xs" fontWeight="600" fontFamily="mono" color="accent.teal">
-                            Context Saved
-                          </Text>
-                        </HStack>
-                        {contextId && (
-                          <Link href={`/f/${contextId}?tab=docs`} target="_blank">
-                            <Text fontSize="2xs" color="fg.muted" fontFamily="mono" _hover={{ color: 'accent.teal' }} mt={1} ml={6}>
-                              See full knowledge base →
-                            </Text>
-                          </Link>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <HStack justify="space-between">
-                          <VStack align="start" gap={0}>
-                            <Text fontSize="xs" fontWeight="600" fontFamily="mono">
-                              Add Context
-                            </Text>
-                            {contextDocs && contextId && (
-                              <Link href={`/f/${contextId}?tab=docs`} target="_blank">
-                                <Text fontSize="2xs" color="fg.muted" fontFamily="mono" _hover={{ color: 'accent.teal' }}>
-                                  See existing docs →
-                                </Text>
-                              </Link>
-                            )}
-                          </VStack>
-                          <Button
-                            size="2xs"
-                            variant="outline"
-                            onClick={() => setContextExpanded(!contextExpanded)}
-                            fontSize="2xs"
-                            fontFamily="mono"
-                          >
-                            {contextExpanded ? 'Hide' : 'Add'}
-                          </Button>
-                        </HStack>
-                        {contextExpanded && (
-                          <VStack align="stretch" gap={1.5} mt={2}>
-                            <Box position="relative">
-                              <Textarea
-                                value={contextInput}
-                                onChange={(e) => setContextInput(e.target.value)}
-                                placeholder={`Describe the ${fileName} dataset...`}
-                                fontFamily="mono"
-                                fontSize="2xs"
-                                minH="50px"
-                                resize="vertical"
-                                pr="36px"
-                              />
-                              <Box position="absolute" bottom="8px" right="8px">
-                                <Button
-                                  size="2xs"
-                                  bg="accent.teal"
-                                  color="white"
-                                  onClick={handleAddContext}
-                                  loading={contextAdding}
-                                  disabled={!contextInput.trim() || !contextId}
-                                  borderRadius="full"
-                                  p={0}
-                                  minW="24px"
-                                  h="24px"
-                                >
-                                  <LuPlus size={12} />
-                                </Button>
-                              </Box>
-                            </Box>
-                          </VStack>
-                        )}
-                      </>
-                    )}
-                  </VStack>
-
-                  <Box h="1px" bg="border.default" my={2} />
-
-                  <Link href={`/new/question?databaseName=${encodeURIComponent(fileName)}`}>
-                    <HStack
-                      gap={2.5}
-                      px={3}
-                      py={2}
-                      borderRadius="md"
-                      _hover={{ bg: 'bg.muted' }}
-                      transition="all 0.15s"
-                      cursor="pointer"
-                    >
-                      <LuPlus size={14} color="var(--chakra-colors-accent-teal)" />
-                      <Text fontSize="xs" fontWeight="600" fontFamily="mono">New Question</Text>
-                    </HStack>
-                  </Link>
-
-                  <Link href={`/new/dashboard`}>
-                    <HStack
-                      gap={2.5}
-                      px={3}
-                      py={2}
-                      borderRadius="md"
-                      _hover={{ bg: 'bg.muted' }}
-                      transition="all 0.15s"
-                      cursor="pointer"
-                    >
-                      <LuLayoutDashboard size={14} color="var(--chakra-colors-accent-teal)" />
-                      <Text fontSize="xs" fontWeight="600" fontFamily="mono">New Dashboard</Text>
-                    </HStack>
-                  </Link>
-
-                  <Link href={`/explore`}>
-                    <HStack
-                      gap={2.5}
-                      px={3}
-                      py={2}
-                      borderRadius="md"
-                      _hover={{ bg: 'bg.muted' }}
-                      transition="all 0.15s"
-                      cursor="pointer"
-                    >
-                      <LuCompass size={14} color="var(--chakra-colors-accent-teal)" />
-                      <Text fontSize="xs" fontWeight="600" fontFamily="mono">Explore</Text>
-                    </HStack>
-                  </Link>
-
-                </VStack>
-              </Box>
-            )} */}
           </HStack>
 
           {/* Enriched Schema JSON (dev mode only) */}
