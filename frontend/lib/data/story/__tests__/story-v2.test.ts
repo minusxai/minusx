@@ -111,6 +111,55 @@ describe('buildStoryJsx', () => {
     expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html); // stable round-trip
   });
 
+  it('round-trips prose containing { and } (entity-escaped in the stored HTML, stable thereafter)', () => {
+    // A raw `{` in stored prose re-emits as a JSX expression opener, making the whole file
+    // unparseable — every subsequent edit fails ("Expecting Unicode escape sequence \uXXXX"
+    // when the brace is followed by a backslash). Braces must ride as entities, like < and &.
+    const jsx = '<div class="story"><p>config is &#123;"color": "pink"&#125; today</p></div>';
+    const parsed = parseStoryJsx(jsx);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.html).toContain('&#123;"color": "pink"&#125;'); // stored HTML keeps entities
+    expect(parsed.value.html).not.toMatch(/<p>[^<]*\{/); // never a raw brace in prose
+    const rebuilt = buildStoryJsx({ story: parsed.value.html, assets: [] } as never);
+    expect(validateJsxSource(rebuilt, ['Question'])).toEqual([]);
+    const reparsed = parseStoryJsx(rebuilt);
+    expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html);
+  });
+
+  it('entity-escapes braces in prose authored as a {`…`} template child (while <style> CSS stays raw)', () => {
+    const jsx = '<div class="story"><style>{`.s{color:red}`}</style><p>{`literal {json} and 5 < 6`}</p></div>';
+    const parsed = parseStoryJsx(jsx);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.html).toContain('<style>.s{color:red}</style>'); // CSS braces untouched
+    expect(parsed.value.html).toContain('literal &#123;json&#125; and 5 &lt; 6'); // prose escaped
+    const rebuilt = buildStoryJsx({ story: parsed.value.html, assets: [] } as never);
+    expect(validateJsxSource(rebuilt, ['Question'])).toEqual([]);
+    const reparsed = parseStoryJsx(rebuilt);
+    expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html);
+  });
+
+  it('HEALS stored HTML already poisoned with raw braces in prose (the \\uXXXX edit-lockout)', () => {
+    // Pre-fix documents can carry raw `{`/`}` in prose text. buildStoryJsx must escape them on
+    // re-emit so the file becomes editable again, instead of failing every edit forever.
+    const poisoned = '<div class="story"><style>.s{color:red}</style><p>set {\\"color\\": \\"pink\\"} now</p><p>growth {net} was 4%</p><Question id={0} /><div data-question-id="7" style="width:100%;height:430px"></div></div>'
+      .replace('<Question id={0} />', ''); // stored HTML never contains components — only placeholders
+    const rebuilt = buildStoryJsx({ story: poisoned, assets: [] } as never);
+    expect(validateJsxSource(rebuilt, ['Question'])).toEqual([]); // parses again
+    expect(rebuilt).toContain('<Question id={7} />'); // placeholder conversion still works
+    expect(rebuilt).toContain('{`.s{color:red}`}'); // CSS template wrap still works
+    const reparsed = parseStoryJsx(rebuilt);
+    expect(reparsed.ok).toBe(true);
+    if (!reparsed.ok) return;
+    // Healed content preserved (braces now as entities — render-identical in HTML).
+    expect(reparsed.value.html).toContain('set &#123;\\"color\\": \\"pink\\"&#125; now');
+    expect(reparsed.value.html).toContain('growth &#123;net&#125; was 4%');
+    // Stable from here on: a second round-trip is a fixpoint.
+    const again = parseStoryJsx(buildStoryJsx({ story: reparsed.value.html, assets: [] } as never));
+    expect(again.ok && again.value.html).toBe(reparsed.value.html);
+  });
+
   it('round-trips a story with an INLINE question (multi-line SQL with <, >, : kept raw)', () => {
     const jsx = '<div class="story"><Question query={`SELECT *\nFROM t\nWHERE rev > 100 AND a < 5 AND m = :month`} connection="duckdb" viz={{type:"single_value",yCols:["rev"]}} params={[{name:"month",type:"date",label:null,source:null}]} height="180px" /></div>';
     const parsed = parseStoryJsx(jsx);

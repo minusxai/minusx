@@ -50,15 +50,23 @@ export function parseStoryJsx(jsx: string): ParseStoryResult {
  * Escape a decoded JSXText value for the stored HTML. acorn-jsx decodes entities in text
  * (`&lt;` → `<`), so emitting the value raw would plant a bare `<`/`&` in the stored HTML —
  * which buildStoryJsx then re-emits into the agent's markup, making the whole file unparseable
- * and every subsequent edit fail. Entities keep the render identical and the round-trip stable.
+ * and every subsequent edit fail. `{`/`}` are worse still: a re-emitted raw brace opens a JSX
+ * expression container mid-prose (acorn: "Expecting Unicode escape sequence \uXXXX" when a `\`
+ * follows), locking the file out of ALL edits. Entities keep the render identical and the
+ * round-trip stable.
  */
 function escapeHtmlText(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;');
 }
 
-function nodeToHtml(node: JsxNode, assets: number[]): string {
+function nodeToHtml(node: JsxNode, assets: number[], rawStrings = false): string {
   if (node.type === 'text') return escapeHtmlText(node.value);
-  if (node.type === 'expression') return node.value.static && typeof node.value.json === 'string' ? node.value.json : '';
+  if (node.type === 'expression') {
+    if (!node.value.static || typeof node.value.json !== 'string') return '';
+    // A {`…`} template child is raw ONLY inside <style> (CSS braces must stay literal in the
+    // stored HTML); in prose it's just text, and must be escaped like text or it poisons the file.
+    return rawStrings ? node.value.json : escapeHtmlText(node.value.json);
+  }
 
   // <Question/> → the embed placeholder AgentHtml resolves to a live chart. Polymorphic:
   // `id={N}` embeds a saved question file; `query=…` embeds an inline story-local question.
@@ -98,7 +106,7 @@ function nodeToHtml(node: JsxNode, assets: number[]): string {
   const attrs = node.attributes.map(attrToHtml).filter(Boolean).join(' ');
   const open = attrs ? `<${node.tag} ${attrs}>` : `<${node.tag}>`;
   if (VOID_TAGS.has(node.tag.toLowerCase())) return open;
-  const children = node.children.map((c) => nodeToHtml(c, assets)).join('');
+  const children = node.children.map((c) => nodeToHtml(c, assets, node.tag === 'style')).join('');
   return `${open}${children}</${node.tag}>`;
 }
 
@@ -119,12 +127,42 @@ function attrToHtml(a: { name: string; value: { static: boolean; json?: unknown 
 }
 
 /**
+ * Escape stray `{`/`}` in the TEXT spans of stored HTML — outside tags and outside `<style>`
+ * blocks (whose CSS braces must stay raw for the template-literal wrap below). New writes
+ * already store braces as entities ({@link escapeHtmlText}); this pass HEALS documents written
+ * before that fix: one raw brace in prose re-emits as a JSX expression opener, the whole file
+ * stops parsing, and every subsequent edit fails at the same position forever.
+ */
+function escapeBracesInText(html: string): string {
+  let out = '';
+  for (let i = 0; i < html.length; ) {
+    if (/^<style[\s>]/i.test(html.slice(i, i + 7))) {
+      const end = html.indexOf('</style>', i);
+      const stop = end === -1 ? html.length : end + '</style>'.length;
+      out += html.slice(i, stop); i = stop; continue;
+    }
+    if (html[i] === '<') {
+      const end = html.indexOf('>', i);
+      const stop = end === -1 ? html.length : end + 1;
+      out += html.slice(i, stop); i = stop; continue;
+    }
+    const next = html.indexOf('<', i);
+    const stop = next === -1 ? html.length : next;
+    out += html.slice(i, stop).replace(/\{/g, '&#123;').replace(/\}/g, '&#125;');
+    i = stop;
+  }
+  return out;
+}
+
+/**
  * Reverse of {@link parseStoryJsx} (best-effort, for save). Turns the story HTML back
  * into jsx: `data-question-id` embeds → `<Question id={…}/>`, `<style>` CSS wrapped in a
  * template literal, void tags self-closed. Round-trips agent-authored stories.
  */
 export function buildStoryJsx(content: StoryContent): string {
-  let html = content.story ?? '';
+  // Heal raw `{`/`}` in prose FIRST (skips <style> and tag internals), so a legacy-poisoned
+  // body becomes parseable markup again instead of failing every edit.
+  let html = escapeBracesInText(content.story ?? '');
   // <style>…</style> → <style>{`…`}</style> so CSS `{ }` don't break jsx
   html = html.replace(/<style>([\s\S]*?)<\/style>/g, (_m, css: string) => `<style>{\`${css.replace(/\\/g, '\\\\').replace(/`/g, '\\`')}\`}</style>`);
   // <div data-question-id="N" …></div> → <Question id={N} />
