@@ -12,7 +12,7 @@
  * Pure (client + server safe).
  */
 import type { QuestionParameter, VizSettings, QuestionContent } from '@/lib/validation/atlas-schemas';
-import { escTemplate, serializeJsonAttr, parseJsonAttr } from './html-attr';
+import { escAttr, escTemplate, serializeJsonAttr, parseJsonAttr } from './html-attr';
 
 /** An inline question embedded directly in a story body (no saved file). */
 export interface InlineQuestionEmbed {
@@ -118,12 +118,14 @@ export function extractInlineQuestions(html: string | null | undefined): InlineQ
   return out;
 }
 
-/** Inline embed → the `<Question/>` jsx the agent reads/edits (query as a raw template literal). */
+/** Inline embed → the `<Question/>` jsx the agent reads/edits (query as a raw template literal).
+ *  String attrs are entity-escaped (escAttr): JSX attribute strings don't process `\"` escapes,
+ *  so a raw quote in a value would end the attribute early and fail the whole-document parse. */
 export function inlineQuestionToJsx(e: InlineQuestionEmbed): string {
-  const a: string[] = [`query={\`${escTemplate(e.query)}\`}`, `connection="${e.connection}"`];
+  const a: string[] = [`query={\`${escTemplate(e.query)}\`}`, `connection="${escAttr(e.connection)}"`];
   if (e.vizSettings) a.push(`viz={${JSON.stringify(e.vizSettings)}}`);
   if (e.parameters) a.push(`params={${JSON.stringify(e.parameters)}}`);
-  if (e.height) a.push(`height="${e.height}"`);
+  if (e.height) a.push(`height="${escAttr(e.height)}"`);
   return `<Question ${a.join(' ')} />`;
 }
 

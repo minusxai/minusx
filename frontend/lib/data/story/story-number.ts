@@ -9,7 +9,7 @@
  * renders inline where the agent placed it; AgentHtml mounts the live figure there). Pure
  * (client + server safe).
  */
-import { escTemplate, styleAttr, serializeJsonAttr, parseJsonAttr } from './html-attr';
+import { escAttr, escTemplate, styleAttr, serializeJsonAttr, parseJsonAttr } from './html-attr';
 import { normalizeInlineQuery } from './story-question';
 
 /** An inline number embedded directly in a story body. One of `id` / `query` is required. */
@@ -80,15 +80,17 @@ export function extractNumberQuestionIds(html: string | null | undefined): numbe
   return [...ids];
 }
 
-/** Inline-number embed → the `<Number/>` jsx the agent reads/edits. */
+/** Inline-number embed → the `<Number/>` jsx the agent reads/edits. String attrs are
+ *  entity-escaped (escAttr) — a raw `"` in prefix/suffix/col would end the attribute early
+ *  and fail the whole-document parse (JSX attr strings don't process `\"` escapes). */
 export function numberToJsx(e: InlineNumberEmbed): string {
   const a: string[] = [];
   if (e.id != null) a.push(`id={${e.id}}`);
   if (e.query) a.push(`query={\`${escTemplate(e.query)}\`}`);
-  if (e.connection) a.push(`connection="${e.connection}"`);
-  if (e.col) a.push(`col="${e.col}"`);
-  if (e.prefix != null) a.push(`prefix="${e.prefix}"`);
-  if (e.suffix != null) a.push(`suffix="${e.suffix}"`);
+  if (e.connection) a.push(`connection="${escAttr(e.connection)}"`);
+  if (e.col) a.push(`col="${escAttr(e.col)}"`);
+  if (e.prefix != null) a.push(`prefix="${escAttr(e.prefix)}"`);
+  if (e.suffix != null) a.push(`suffix="${escAttr(e.suffix)}"`);
   if (e.style) a.push(`style={${JSON.stringify(e.style)}}`);
   return `<Number ${a.join(' ')} />`;
 }

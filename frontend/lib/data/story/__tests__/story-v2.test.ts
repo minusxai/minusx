@@ -140,6 +140,26 @@ describe('buildStoryJsx', () => {
     expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html);
   });
 
+  it('round-trips prose containing a bare > and HEALS stored HTML carrying one raw', () => {
+    // acorn-jsx rejects a raw `>` in JSXText ("Unexpected token `>`"). New writes must store it
+    // as &gt;; legacy bodies carrying it raw (browsers tolerate it) must heal on re-emit.
+    const jsx = '<div class="story"><p>uptime &gt;99% (above the &gt;95% target)</p></div>';
+    const parsed = parseStoryJsx(jsx);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.html).toContain('&gt;99%'); // stored escaped
+    const rebuilt = buildStoryJsx({ story: parsed.value.html, assets: [] } as never);
+    expect(validateJsxSource(rebuilt, ['Question'])).toEqual([]);
+    const reparsed = parseStoryJsx(rebuilt);
+    expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html);
+    // Heal: legacy stored HTML with the > raw in text
+    const legacy = '<div class="story"><p>uptime >99% at last</p></div>';
+    const healed = buildStoryJsx({ story: legacy, assets: [] } as never);
+    expect(validateJsxSource(healed, ['Question'])).toEqual([]);
+    const reparsed2 = parseStoryJsx(healed);
+    expect(reparsed2.ok && reparsed2.value.html).toContain('uptime &gt;99% at last');
+  });
+
   it('HEALS stored HTML already poisoned with raw braces in prose (the \\uXXXX edit-lockout)', () => {
     // Pre-fix documents can carry raw `{`/`}` in prose text. buildStoryJsx must escape them on
     // re-emit so the file becomes editable again, instead of failing every edit forever.
@@ -158,6 +178,34 @@ describe('buildStoryJsx', () => {
     // Stable from here on: a second round-trip is a fixpoint.
     const again = parseStoryJsx(buildStoryJsx({ story: reparsed.value.html, assets: [] } as never));
     expect(again.ok && again.value.html).toBe(reparsed.value.html);
+  });
+
+  it('round-trips embed string attrs containing quotes (Number prefix/col, Question connection)', () => {
+    // The jsx emitters write connection/col/prefix/suffix as double-quoted JSX attributes; a `"`
+    // in any of them must ride as &quot; — a raw or JSON-escaped quote ends the attribute early
+    // and the stray `\`/junk kills the whole-document parse (the \uXXXX lockout).
+    const jsx = '<div class="story"><p>Rev: <Number query={`SELECT r FROM t`} connection="duckdb" prefix={\'US$ "net" \'} suffix={\'"gross"\'} /></p></div>';
+    const parsed = parseStoryJsx(jsx);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const rebuilt = buildStoryJsx({ story: parsed.value.html, assets: [] } as never);
+    expect(validateJsxSource(rebuilt, ['Question', 'Param', 'Number'])).toEqual([]);
+    const reparsed = parseStoryJsx(rebuilt);
+    expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html);
+  });
+
+  it('round-trips plain HTML attrs whose value contains quotes or angle brackets', () => {
+    // e.g. style="font-family: &quot;Inter Display&quot;, serif" or title="a > b" — the stored
+    // HTML must entity-escape these so the placeholder regexes and the jsx re-emit stay intact.
+    const jsx = '<div class="story"><h1 style={\'font-family: "Inter Display", serif\'} title={\'a > b < c\'}>T</h1></div>';
+    const parsed = parseStoryJsx(jsx);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.html).not.toMatch(/="[^"]*[<>][^"]*"/); // no raw <, > inside attr values
+    const rebuilt = buildStoryJsx({ story: parsed.value.html, assets: [] } as never);
+    expect(validateJsxSource(rebuilt, ['Question'])).toEqual([]);
+    const reparsed = parseStoryJsx(rebuilt);
+    expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html);
   });
 
   it('round-trips a story with an INLINE question (multi-line SQL with <, >, : kept raw)', () => {

@@ -49,6 +49,24 @@ describe('fileToMarkup / markupToContent — story (jsx field inline)', () => {
     }
   });
 
+  it('round-trips a stored body with quoted font-family style attrs (the \\uXXXX attr lockout)', () => {
+    // Stored HTML legitimately carries `style="font-family: &quot;X&quot;, serif"`. The parse side
+    // decodes the entities; the serialize side must re-emit them as entities — JSON `\"` escapes
+    // don't exist in JSX attribute strings, so they make the whole file unparseable and every
+    // EditFile fails at the same position forever.
+    const story = '<div class="story"><h1 style="font-family: &quot;Inter Display&quot;, Georgia, serif; color: #123;">Q1 Review</h1><p style="font-family: &quot;Space Mono&quot;, monospace;">All fine.</p></div>';
+    const markup = fileToMarkup('story', { story });
+    const back = markupToContent('story', markup);
+    expect(back.ok, !back.ok ? back.error : '').toBe(true);
+    if (!back.ok) return;
+    expect(back.content.story).toContain('&quot;Inter Display&quot;'); // stored form preserved
+    // Fixpoint: a second round-trip through the edit surface is stable.
+    const markup2 = fileToMarkup('story', { story: back.content.story as string });
+    const back2 = markupToContent('story', markup2);
+    expect(back2.ok).toBe(true);
+    if (back2.ok) expect(back2.content.story).toBe(back.content.story);
+  });
+
   it('round-trips a stored body poisoned with raw braces/escaped-JSON prose (the edit-lockout repro)', () => {
     // Regression: a story whose stored HTML carries `{\"color\": \"pink\"}`-style prose made the
     // serialized markup unparseable ("Expecting Unicode escape sequence \uXXXX" at a fixed
@@ -198,5 +216,17 @@ describe('fileToMarkup — schemaless connection (type="…")', () => {
     expect(markup).toContain('<port type="number">5432</port>');
     const back = markupToContent('connection', markup);
     expect(back.ok && back.content).toEqual(content);
+  });
+});
+
+describe('fileToMarkup / markupToContent — strChild edge cases (other-issues audit)', () => {
+  it('round-trips a description containing a closing brace', () => {
+    // strChild's specialness test decides raw-text vs template child; `}` in JSXText position
+    // must not break the parse or silently vanish.
+    const content = { story: '<div class="story"><p>x</p></div>', description: 'ends with brace }' };
+    const markup = fileToMarkup('story', content);
+    const back = markupToContent('story', markup);
+    expect(back.ok, !back.ok ? back.error : '').toBe(true);
+    if (back.ok) expect(back.content.description).toBe('ends with brace }');
   });
 });
