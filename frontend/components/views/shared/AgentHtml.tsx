@@ -50,6 +50,12 @@ interface AgentHtmlProps {
   onChange?: (story: string) => void;
   /** Path of the file being rendered — forwarded to embeds' /api/query so share guests pass the embed allowlist. */
   filePath?: string;
+  /**
+   * Server-compiled design-system stylesheet (story content.compiledCss). Injected into the
+   * iframe HEAD — before the story's own <body> <style> blocks in document order, so authored
+   * CSS wins ties — and never serialized back (the WYSIWYG serializer reads body only).
+   */
+  compiledCss?: string | null;
 }
 
 export interface NumberQueryEditRequest {
@@ -83,7 +89,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource, onChange, filePath, colorMode },
+  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource, onChange, filePath, colorMode, compiledCss },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -117,6 +123,16 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     root.classList.toggle('dark', colorMode === 'dark');
     root.classList.toggle('light', colorMode !== 'dark');
     doc.body.style.margin = '0';
+    // Design-system stylesheet (server-compiled Tailwind) — into <head> via textContent (DOM
+    // insertion, not doc.write, so no escaping concerns), after the app-styles mirror. Body
+    // <style> blocks come later in document order and win ties; the WYSIWYG serializer reads
+    // body only, so this can never echo into a save.
+    if (compiledCss) {
+      const tw = doc.createElement('style');
+      tw.setAttribute('data-mx-tw', '');
+      tw.textContent = compiledCss;
+      doc.head.appendChild(tw);
+    }
     // @import web-fonts load natively inside an iframe (unlike a shadow root) — no hoisting needed.
     doc.body.innerHTML = sanitized;
     mirrorAppStyles(doc);
@@ -240,7 +256,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       // that case skip and let GC reclaim the orphaned fiber along with the destroyed document.
       if (root) setTimeout(() => { if (embedRoot.isConnected) root.unmount(); }, 0);
     };
-  }, [sanitized, fluid, height]); // colorMode handled separately so it doesn't rebuild the doc
+  }, [sanitized, fluid, height, compiledCss]); // colorMode handled separately so it doesn't rebuild the doc
 
   // Render (and re-render) the nested embeds root with the latest targets/props.
   useEffect(() => {

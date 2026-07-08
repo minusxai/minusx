@@ -78,6 +78,10 @@ const nextConfig: NextConfig = {
     //   (the browser then recovers via client render, masking it). External → loaded from
     //   node_modules with a real file path, so SSR works.
     '@polyglot-sql/sdk',
+    // '@tailwindcss/node' / '@tailwindcss/oxide' — the in-process Tailwind compiler for story
+    //   design-system CSS (lib/data/story/story-css.server.ts). oxide is a native addon and
+    //   node resolves stylesheets from disk; bundling either breaks the story save path.
+    '@tailwindcss/node', '@tailwindcss/oxide', 'tailwindcss',
   ],
 
   // Belt-and-suspenders: explicitly externalize duckdb in webpack config too.

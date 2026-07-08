@@ -27,6 +27,7 @@ import { extractReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { getTemplateDefaults } from '@/lib/data/story/template-defaults';
+import { withCompiledStoryCss } from '@/lib/data/story/story-css.server';
 import { validateFileStateServer } from '@/lib/validation/content-validators.server';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
 import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType, canCreateFileByRole } from '@/lib/auth/access-rules';
@@ -450,6 +451,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
       contentToCreate = { ...cc, config: await extractConnectionSecrets(name, cc.config) } as BaseFileContent;
     }
 
+    // For stories: compiledCss is server-managed — computed from the markup here (and on every
+    // save), never trusted from the client, so the stylesheet can't drift from the story body.
+    if (type === 'story') {
+      contentToCreate = await withCompiledStoryCss(contentToCreate as { story?: string | null }) as BaseFileContent;
+    }
+
     // Validate content schema before writing to DB
     const createValidationError = validateFileState({ type, content: contentToCreate, name, path: finalPath });
     if (createValidationError) {
@@ -583,6 +590,13 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // No need to compute queryResultId — it's a runtime field on FileState, not persisted
+
+    // For stories: compiledCss is server-managed — recomputed from the (possibly edited) markup
+    // on EVERY write path (agent EditFile, WYSIWYG browser save, raw API), so the stylesheet can
+    // never drift from the story body; any client-sent copy is discarded.
+    if (existingFile.type === 'story') {
+      contentToSave = await withCompiledStoryCss(contentToSave as { story?: string | null }) as BaseFileContent;
+    }
 
     // Validate content schema before writing to DB
     const saveValidationError = await validateFileStateServer({ type: existingFile.type, content: contentToSave, name, path });

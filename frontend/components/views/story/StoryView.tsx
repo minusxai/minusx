@@ -7,6 +7,7 @@ import AgentHtml, { type NumberQueryEditRequest } from '@/components/views/share
 import NumberQueryEditor from '@/components/views/story/NumberQueryEditor';
 import { StoryEmptyState } from '@/components/views/shared/empty-states';
 import { StoryContent } from '@/lib/types';
+import type { CompiledCssStoryContent } from '@/lib/data/story/story-css';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 import { applyStoryHtmlEdit } from '@/lib/file-state/file-state';
 import { STORY_W } from './ScaledStoryFrame';
@@ -122,6 +123,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             editable={editing}
             readOnly={readOnly}
             colorMode={colorMode}
+            compiledCss={(content as CompiledCssStoryContent).compiledCss}
             filePath={storyPath}
             paramValues={content.parameterValues ?? undefined}
             onEditNumber={setNumberEdit}

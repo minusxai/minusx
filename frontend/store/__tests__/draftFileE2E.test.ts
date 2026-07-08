@@ -377,7 +377,9 @@ describe('createDraftFile', () => {
     const dbFile = await DocumentDB.getById(id);
     expect(dbFile!.type).toBe('story');
     // Empty body is `''` (surfaces as an editable <story></story> tag); `assets` is legacy, dropped.
-    expect(dbFile!.content).toEqual({ description: '', story: '' });
+    // `compiledCss` is the server-managed design-system stylesheet — explicit null until the
+    // story opts in via the data-design="tw" marker (lib/data/story/story-css.ts).
+    expect(dbFile!.content).toEqual({ description: '', story: '', compiledCss: null });
   });
 });
 

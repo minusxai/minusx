@@ -302,4 +302,36 @@ describe('StoryView', () => {
     expect(screen.getByLabelText('Story page')).toBeInTheDocument();
     expect(screen.queryByLabelText('JSON editor')).not.toBeInTheDocument();
   });
+
+  // Design-system stories: the server-compiled Tailwind stylesheet (content.compiledCss) is
+  // injected into the iframe HEAD (so the story's own <style> blocks, later in document order,
+  // win ties) — and, living in <head>, it can never leak into the WYSIWYG body serialization.
+  describe('design-system CSS injection', () => {
+    const twContent = {
+      description: null,
+      story: '<div data-design="tw" class="grid gap-4"><h1 class="text-3xl">TW story</h1></div>',
+      compiledCss: '.grid{display:grid}.gap-4{gap:1rem}.text-3xl{font-size:1.875rem}',
+    } as StoryContent;
+
+    it('injects compiledCss as a head stylesheet when present', async () => {
+      renderWithProviders(<StoryView content={twContent} {...NOEDIT_PROPS} />);
+      await waitFor(() => {
+        const iframe = screen.getByLabelText('Story document') as HTMLIFrameElement;
+        const tw = iframe.contentDocument!.head.querySelector('style[data-mx-tw]');
+        expect(tw).not.toBeNull();
+        expect(tw!.textContent).toContain('.gap-4');
+        // Head placement, not body: the WYSIWYG serializer reads body only.
+        expect(iframe.contentDocument!.body.querySelector('style[data-mx-tw]')).toBeNull();
+      });
+    });
+
+    it('injects nothing for legacy stories (no compiledCss)', async () => {
+      renderWithProviders(<StoryView content={content} {...NOEDIT_PROPS} />);
+      await waitFor(() => {
+        const iframe = screen.getByLabelText('Story document') as HTMLIFrameElement;
+        expect(iframe.contentDocument!.querySelector('style[data-mx-tw]')).toBeNull();
+        expect(storyRoot().textContent).toContain('The year demand went vertical');
+      });
+    });
+  });
 });
