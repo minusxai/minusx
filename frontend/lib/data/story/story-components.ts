@@ -224,9 +224,14 @@ export function reverseStoryComponents(html: string): string {
 
     const inner = reverseStoryComponents(out.slice(openStart + openTagHtml.length, closeStart));
     let props = '';
-    for (const prop of Object.keys(def.props ?? {})) {
+    for (const [prop, allowed] of Object.entries(def.props ?? {})) {
       const pm = openTagHtml.match(new RegExp(`\\bdata-${prop}="([^"]*)"`));
-      if (pm) props += prop === 'cols' ? ` ${prop}={${pm[1]}}` : ` ${prop}="${pm[1]}"`;
+      if (!pm) continue;
+      // Emit the ALLOWLIST constant, never the stored value — mirrors the emit side, so a
+      // forged stored attribute can only ever select a hardcoded enum token.
+      const idx = allowed.indexOf(pm[1]);
+      const value = idx >= 0 ? allowed[idx] : allowed[0];
+      props += prop === 'cols' ? ` ${prop}={${value}}` : ` ${prop}="${value}"`;
     }
     // Quote-strip AFTER un-escaping: legitimately-emitted data-cls never contains quotes (the
     // emit side strips them), so any that appear post-decode are forged stored content trying

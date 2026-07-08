@@ -179,6 +179,13 @@ describe('class prop — customization without leaving the component system', ()
     expect(html).not.toContain('onmouseover="x"');
   });
 
+  it('the reverse pass only emits ALLOWLISTED enum values (forged data-tone falls back)', () => {
+    const jsx = reverseStoryComponents(
+      '<span data-c="Pill" data-tone="sparkly" class="x">y</span>',
+    );
+    expect(jsx).toBe('<Pill tone="neutral">y</Pill>'); // unknown value → the prop default
+  });
+
   it('the reverse pass never un-escapes a quote into the class prop (forged data-cls)', () => {
     // A hand-forged stored attr (JSON code view) with an entity-encoded quote must not break
     // out of the quoted class prop in the generated agent markup.
