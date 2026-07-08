@@ -24,6 +24,7 @@ import { escAttr } from './html-attr';
 import { paramFromJsxAttrs, paramToPlaceholder, placeholdersToParamJsx } from './story-params';
 import { inlineQuestionFromJsxAttrs, inlineQuestionToPlaceholder, placeholdersToInlineQuestionJsx } from './story-question';
 import { numberFromJsxAttrs, numberToPlaceholder, placeholdersToNumberJsx } from './story-number';
+import { emitStoryComponent, reverseStoryComponents, STORY_COMPONENTS } from './story-components';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
 const VOID_TAGS = immutableSet([
@@ -95,6 +96,16 @@ function nodeToHtml(node: JsxNode, assets: number[], rawStrings = false): string
     for (const a of node.attributes) if (a.value.static) attrsMap[a.name] = a.value.json;
     const num = numberFromJsxAttrs(attrsMap);
     return num ? numberToPlaceholder(num) : '';
+  }
+
+  // Design-system components (<Pill/>, <Card/>, <Grid/>, …) — compile-time only: a container
+  // element with the curated Tailwind recipe + a data-c stamp for the reverse pass. Children
+  // recurse through the normal pipeline, so embeds/components nest freely.
+  if (STORY_COMPONENTS[node.tag]) {
+    const attrsMap: Record<string, unknown> = {};
+    for (const a of node.attributes) if (a.value.static) attrsMap[a.name] = a.value.json;
+    const children = node.children.map((c) => nodeToHtml(c, assets)).join('');
+    return emitStoryComponent(node.tag, attrsMap, children) ?? '';
   }
 
   // <Param name=… /> → the shared-param placeholder AgentHtml mounts a ParameterInput at.
@@ -178,6 +189,9 @@ export function buildStoryJsx(content: StoryContent): string {
   html = placeholdersToNumberJsx(html);
   // <div data-param-* …></div> → <Param name=… />
   html = placeholdersToParamJsx(html);
+  // data-c containers → design-system components (<Pill/>, <Card/>, …). After the placeholder
+  // reversals, so embeds inside components are already jsx (their divs don't skew depth-matching).
+  html = reverseStoryComponents(html);
   // self-close void tags (jsx requires it): <br> → <br/>, <img …> → <img …/>
   html = html.replace(/<(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)((?:\s[^>]*)?)>/g, (_m, tag: string, rest: string) => `<${tag}${rest} />`);
   return html;
