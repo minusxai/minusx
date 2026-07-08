@@ -275,9 +275,10 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         onParamValuesChange={onParamValuesChange}
         onEditNumber={onEditNumber}
         storyPath={filePath}
+        colorMode={colorMode}
       />,
     );
-  }, [targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, filePath]);
+  }, [targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, filePath, colorMode]);
 
   // Keep the iframe's color-mode class in sync without rebuilding the whole document.
   useEffect(() => {

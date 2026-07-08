@@ -381,9 +381,11 @@ export const StoryContent = Type.Object({
     'prompts in the chat panel. Make them specific to the story\'s data and narrative (e.g. "Which region drove ' +
     'the drop in Q3?"), not generic. Omit or leave null to fall back to the default generic prompts.' }))),
   colorMode: Type.Optional(Nullable(StringEnum(['light', 'dark'],
-    "Forces the color mode (chart theming + tile/chrome) for PUBLIC SHARED viewers, who can't toggle it " +
-    'themselves. Pick the one that matches the story design (e.g. "dark" for a dark editorial layout). ' +
-    'Omit or leave null to use the viewer default.'))),
+    'Pins the STORY SURFACE (embedded chart theming, design-system `dark:` variants, tile chrome) to the ' +
+    'mode the design was authored for — everywhere it renders, including inside an app set to the other ' +
+    'mode, and for public shared viewers. ALWAYS set it for a single-mode design (a white board deck → ' +
+    '"light"); omit/null ONLY if the story styles both modes (every color utility paired with a dark: ' +
+    'counterpart), in which case it follows the viewer.'))),
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown(), { description:
     'Current/default values for the story\'s shared params (declared via <Param name=…> in the body). ' +
     'Keyed by param name; flows down to every embedded question, like a dashboard. Readers change them at ' +

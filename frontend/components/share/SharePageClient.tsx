@@ -347,5 +347,8 @@ function SharedStory({ fileId }: { fileId: number }) {
   // fileId is intentionally NOT forwarded to StoryView here (read-only share render, no editing) —
   // headerEditMode/storyPath/storyName mirror what StoryView would compute with no fileId.
   // Published render: the persisted compiledCss is always fresh (recomputed on every save).
-  return <StoryView content={mergedContent} readOnly headerEditMode={false} storyPath={undefined} storyName={undefined} colorMode={colorMode} compiledCss={(mergedContent as CompiledCssStoryContent).compiledCss} />;
+  // The story's declared colorMode pins the surface (the page-level dispatch also syncs the app
+  // chrome, but this keeps the iframe correct even before that effect lands).
+  const effectiveColorMode = (mergedContent.colorMode as 'light' | 'dark' | null | undefined) ?? colorMode;
+  return <StoryView content={mergedContent} readOnly headerEditMode={false} storyPath={undefined} storyName={undefined} colorMode={effectiveColorMode} compiledCss={(mergedContent as CompiledCssStoryContent).compiledCss} />;
 }

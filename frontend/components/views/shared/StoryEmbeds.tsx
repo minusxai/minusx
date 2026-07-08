@@ -15,11 +15,12 @@
  * portal (React context crosses portals), so popovers/menus position against the iframe document.
  */
 import { createPortal } from 'react-dom';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Provider as ReduxStoreProvider } from 'react-redux';
 import { Box, ChakraProvider, EnvironmentProvider } from '@chakra-ui/react';
 
 import { getOrCreateStore } from '@/store/store';
+import { withColorModeOverride } from '@/store/color-mode-override';
 import { system } from '@/lib/ui/theme';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
 import EmbeddedQuestionContainer from '@/components/containers/EmbeddedQuestionContainer';
@@ -50,10 +51,16 @@ export interface StoryEmbedsProps {
   onEditNumber?: (req: NumberQueryEditRequest) => void;
   /** Path of the hosting story — forwarded to embeds' /api/query so guests pass the embed allowlist. */
   storyPath?: string;
+  /**
+   * The story surface's color mode (AgentHtml's — the story's declared mode when it has one).
+   * Pins `ui.colorMode` for the whole embedded chart stack via a store override, so charts can
+   * never theme dark on a light-designed story (or vice versa) when the app mode differs.
+   */
+  colorMode?: 'light' | 'dark';
 }
 
 export default function StoryEmbeds({
-  doc, targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, storyPath,
+  doc, targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, storyPath, colorMode,
 }: StoryEmbedsProps) {
   // Shared param context (reader's current values), seeded once from the story defaults. StoryEmbeds
   // remounts (with the iframe) when the story content changes, re-seeding.
@@ -67,8 +74,11 @@ export default function StoryEmbeds({
   const extParams = externalParameters.length ? externalParameters : undefined;
   const extValues = externalParameters.length ? values : undefined;
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- getOrCreateStore is a stable singleton
+  const store = useMemo(() => withColorModeOverride(getOrCreateStore(), colorMode), [colorMode]);
+
   return (
-    <ReduxStoreProvider store={getOrCreateStore()}>
+    <ReduxStoreProvider store={store}>
       <ChakraProvider value={system}>
         {/* Float ark-ui popovers/menus against the iframe document (not the top document). Context
             flows through every createPortal below. */}
