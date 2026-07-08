@@ -10,6 +10,7 @@ const emailWebhook = { type: 'email_alert' as const, url: 'https://api.example.c
 const phoneWebhook = { type: 'phone_alert' as const, url: 'https://api.example.com/sms',   method: 'POST' as const };
 
 const slackChannel  = { type: 'slack' as const,  name: 'Engineering', webhook_url: 'https://hooks.slack.com/xxx' };
+const slackAppChannel = { type: 'slack_app' as const, name: 'Slack Sales', team_id: 'T_TEST', team_name: 'Test Workspace', channel_id: 'C_SALES' };
 const emailChannel  = { type: 'email' as const,  name: 'Team Email',   address: 'team@example.com' };
 const phoneChannel  = { type: 'phone' as const,  name: 'On-Call',      address: '+15550001234' };
 
@@ -60,6 +61,11 @@ describe('hasDeliveryEnabled', () => {
   it('no slack webhook + slack channel → false  (webhook required)', () => {
     const cfg = config({ channels: [slackChannel] });
     expect(hasDeliveryEnabled(cfg, [])).toBe(false);
+  });
+
+  it('slack app channel → true without webhook', () => {
+    const cfg = config({ channels: [slackAppChannel] });
+    expect(hasDeliveryEnabled(cfg, [])).toBe(true);
   });
 
   it('email webhook + users → true', () => {
@@ -113,6 +119,13 @@ describe('buildDropdownOptions', () => {
     expect(buildDropdownOptions(cfg, [], noRecipients, '')).toHaveLength(0);
   });
 
+  it('slack app channel appears without slack webhook', () => {
+    const cfg = config({ channels: [slackAppChannel] });
+    const opts = buildDropdownOptions(cfg, [], noRecipients, '');
+    expect(opts).toHaveLength(1);
+    expect(opts[0]).toMatchObject({ kind: 'slack_app', via: 'channel', channel: slackAppChannel });
+  });
+
   it('user email appears when email webhook configured', () => {
     const cfg = config({ messaging: { webhooks: [emailWebhook] } });
     const opts = buildDropdownOptions(cfg, [alice], noRecipients, '');
@@ -144,6 +157,12 @@ describe('buildDropdownOptions', () => {
   it('already-selected slack channel excluded from options', () => {
     const cfg = config({ messaging: { webhooks: [slackWebhook] }, channels: [slackChannel] });
     const selected: AlertRecipient[] = [{ channelName: 'Engineering', channel: 'slack' }];
+    expect(buildDropdownOptions(cfg, [], selected, '')).toHaveLength(0);
+  });
+
+  it('already-selected slack app channel excluded from options', () => {
+    const cfg = config({ channels: [slackAppChannel] });
+    const selected: AlertRecipient[] = [{ channelName: 'Slack Sales', channel: 'slack_app' }];
     expect(buildDropdownOptions(cfg, [], selected, '')).toHaveLength(0);
   });
 

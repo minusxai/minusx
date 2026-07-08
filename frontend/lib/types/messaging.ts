@@ -9,7 +9,8 @@ import type { AlertRecipient } from './jobs';
 export type ConfigChannel =
   | { type: 'slack'; name: string; webhook_url: string; properties?: Record<string, unknown> }
   | { type: 'email'; name: string; address: string }
-  | { type: 'phone'; name: string; address: string };
+  | { type: 'phone'; name: string; address: string }
+  | { type: 'slack_app'; name: string; team_id: string; channel_id: string; team_name?: string; channel_name?: string; captured_at?: string };
 
 export interface SlackBotConfig {
   type: 'slack';

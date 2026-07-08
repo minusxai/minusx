@@ -3,12 +3,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Box, Button, HStack, Input, Text, VStack, Badge } from '@chakra-ui/react';
-import { LuBot, LuTrash2, LuExternalLink, LuShieldCheck, LuCopy, LuCheck, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { LuBot, LuTrash2, LuExternalLink, LuShieldCheck, LuCopy, LuCheck, LuChevronDown, LuChevronRight, LuSend, LuHash } from 'react-icons/lu';
 import { useConfigs, reloadConfigs } from '@/lib/hooks/useConfigs';
 import { fetchWithCache } from '@/lib/http/fetch-wrapper';
 import { toaster } from '@/components/ui/toaster';
 import { IS_DEV } from '@/lib/constants';
-import type { SlackBotConfig } from '@/lib/types';
+import type { ConfigChannel, SlackBotConfig } from '@/lib/types';
 
 const SLACK_BASE_URL_STORAGE_KEY = 'slack-base-url';
 
@@ -20,6 +20,12 @@ function maskToken(token: string): string {
 function maskSecret(secret: string): string {
   if (secret.length <= 6) return '******';
   return `${secret.slice(0, 3)}...${secret.slice(-3)}`;
+}
+
+type SlackAppChannel = Extract<ConfigChannel, { type: 'slack_app' }>;
+
+function slackAppChannelLabel(channel: SlackAppChannel): string {
+  return channel.channel_name ? `#${channel.channel_name}` : channel.name;
 }
 
 function StepBadge({ n, done }: { n: number; done?: boolean }) {
@@ -51,9 +57,11 @@ function SlackSetupGuide({ isOAuthConfigured }: { isOAuthConfigured: boolean }) 
   const [signingSecret, setSigningSecret] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeletingTeamId, setIsDeletingTeamId] = useState<string | null>(null);
+  const [testingChannelKey, setTestingChannelKey] = useState<string | null>(null);
   const [manualExpanded, setManualExpanded] = useState(false);
 
   const slackBots = (config.bots ?? []).filter((bot): bot is SlackBotConfig => bot.type === 'slack');
+  const slackAppChannels = (config.channels ?? []).filter((channel): channel is SlackAppChannel => channel.type === 'slack_app');
 
   useEffect(() => {
     if (IS_DEV) {
@@ -177,6 +185,34 @@ function SlackSetupGuide({ isOAuthConfigured }: { isOAuthConfigured: boolean }) 
       });
     } finally {
       setIsDeletingTeamId(null);
+    }
+  };
+
+  const handleSendTestMessage = async (channel: SlackAppChannel) => {
+    const key = `${channel.team_id}:${channel.channel_id}`;
+    setTestingChannelKey(key);
+    try {
+      await fetchWithCache('/api/integrations/slack/test-message', {
+        method: 'POST',
+        skipCache: true,
+        body: JSON.stringify({
+          teamId: channel.team_id,
+          channelId: channel.channel_id,
+        }),
+      });
+      toaster.create({
+        title: 'Test message sent',
+        description: `Sent to ${slackAppChannelLabel(channel)}.`,
+        type: 'success',
+      });
+    } catch (error) {
+      toaster.create({
+        title: 'Slack test failed',
+        description: error instanceof Error ? error.message : 'Unable to send test message.',
+        type: 'error',
+      });
+    } finally {
+      setTestingChannelKey(null);
     }
   };
 
@@ -385,38 +421,93 @@ function SlackSetupGuide({ isOAuthConfigured }: { isOAuthConfigured: boolean }) 
           <VStack align="stretch" gap={2}>
             {slackBots.map((bot) => (
               <Box key={bot.team_id || bot.name} borderWidth="1px" borderColor="border" borderRadius="md" p={3}>
-                <HStack justify="space-between" align="start">
-                  <VStack align="start" gap={1}>
-                    <HStack>
-                      <Badge colorPalette="teal" size="sm">Active</Badge>
-                      {bot.install_mode === 'oauth' && <Badge colorPalette="purple" size="sm">OAuth</Badge>}
-                      <Text fontSize="sm" fontWeight="medium" fontFamily="mono">{bot.team_name || bot.name}</Text>
-                    </HStack>
-                    <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                      Team: {bot.team_id || '(pending)'}
-                    </Text>
-                    <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
-                      Token: {maskToken(bot.bot_token)}
-                    </Text>
-                    {bot.signing_secret && (
-                      <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
-                        Secret: {maskSecret(bot.signing_secret)}
+                <VStack align="stretch" gap={3}>
+                  <HStack justify="space-between" align="start">
+                    <VStack align="start" gap={1}>
+                      <HStack>
+                        <Badge colorPalette="teal" size="sm">Active</Badge>
+                        {bot.install_mode === 'oauth' && <Badge colorPalette="purple" size="sm">OAuth</Badge>}
+                        <Text fontSize="sm" fontWeight="medium" fontFamily="mono">{bot.team_name || bot.name}</Text>
+                      </HStack>
+                      <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+                        Team: {bot.team_id || '(pending)'}
                       </Text>
+                      <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
+                        Token: {maskToken(bot.bot_token)}
+                      </Text>
+                      {bot.signing_secret && (
+                        <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
+                          Secret: {maskSecret(bot.signing_secret)}
+                        </Text>
+                      )}
+                    </VStack>
+                    {bot.team_id && (
+                      <Button
+                        aria-label={`Remove Slack bot ${bot.team_name || bot.name}`}
+                        size="xs"
+                        variant="ghost"
+                        colorPalette="red"
+                        onClick={() => handleDelete(bot.team_id!)}
+                        loading={isDeletingTeamId === bot.team_id}
+                      >
+                        <LuTrash2 size={12} />
+                      </Button>
                     )}
-                  </VStack>
+                  </HStack>
+
                   {bot.team_id && (
-                    <Button
-                      aria-label={`Remove Slack bot ${bot.team_name || bot.name}`}
-                      size="xs"
-                      variant="ghost"
-                      colorPalette="red"
-                      onClick={() => handleDelete(bot.team_id!)}
-                      loading={isDeletingTeamId === bot.team_id}
-                    >
-                      <LuTrash2 size={12} />
-                    </Button>
+                    <Box borderTopWidth="1px" borderTopColor="border" pt={3}>
+                      <Text fontSize="xs" fontWeight="semibold" fontFamily="mono" color="fg.muted" mb={2} textTransform="uppercase" letterSpacing="wide">
+                        Captured channels
+                      </Text>
+                      {slackAppChannels.filter(channel => channel.team_id === bot.team_id).length === 0 ? (
+                        <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+                          No channels captured yet. Mention the bot in a channel to make it available for alert and report delivery.
+                        </Text>
+                      ) : (
+                        <VStack align="stretch" gap={2}>
+                          {slackAppChannels
+                            .filter(channel => channel.team_id === bot.team_id)
+                            .map(channel => {
+                              const key = `${channel.team_id}:${channel.channel_id}`;
+                              return (
+                                <HStack
+                                  key={key}
+                                  justify="space-between"
+                                  gap={3}
+                                  borderWidth="1px"
+                                  borderColor="border"
+                                  borderRadius="md"
+                                  p={2}
+                                >
+                                  <HStack gap={2} minW={0}>
+                                    <LuHash size={13} />
+                                    <VStack align="start" gap={0} minW={0}>
+                                      <Text fontSize="xs" fontFamily="mono" fontWeight="medium" truncate>
+                                        {slackAppChannelLabel(channel)}
+                                      </Text>
+                                      <Text fontSize="2xs" color="fg.muted" fontFamily="mono" truncate>
+                                        {channel.channel_id}
+                                      </Text>
+                                    </VStack>
+                                  </HStack>
+                                  <Button
+                                    size="xs"
+                                    variant="outline"
+                                    onClick={() => handleSendTestMessage(channel)}
+                                    loading={testingChannelKey === key}
+                                  >
+                                    <LuSend size={12} />
+                                    Send test
+                                  </Button>
+                                </HStack>
+                              );
+                            })}
+                        </VStack>
+                      )}
+                    </Box>
                   )}
-                </HStack>
+                </VStack>
               </Box>
             ))}
           </VStack>

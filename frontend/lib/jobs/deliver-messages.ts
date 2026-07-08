@@ -7,7 +7,8 @@
  */
 import 'server-only';
 import type { OrgConfig } from '@/lib/branding/whitelabel';
-import type { MessageAttemptLog, RunMessageRecord } from '@/lib/types';
+import type { MessageAttemptLog, RunMessageRecord, SlackBotConfig } from '@/lib/types';
+import { postSlackMessage } from '@/lib/integrations/slack/api';
 import { sendEmailViaWebhook, sendPhoneAlertViaWebhook, sendSlackViaWebhook, type WebhookResult } from '@/lib/messaging/webhook-executor';
 import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 
@@ -70,6 +71,7 @@ export async function deliverMessages(
 
   for (const msg of messages) {
     if (skipTypes.includes(msg.type)) continue;
+    if (msg.status !== 'pending') continue;
     try {
       if (msg.type === 'email_alert') {
         if (!emailWebhook) {
@@ -102,6 +104,25 @@ export async function deliverMessages(
             properties: msg.metadata.properties,
           });
           applyWebhookResult(msg, result);
+        }
+      } else if (msg.type === 'slack_app_alert') {
+        const bot = (config.bots ?? []).find(
+          (candidate): candidate is SlackBotConfig =>
+            candidate.type === 'slack' &&
+            candidate.enabled !== false &&
+            candidate.team_id === msg.metadata.team_id,
+        );
+        if (!bot) {
+          msg.status = 'failed';
+          msg.deliveryError = `No Slack app installation found for team ${msg.metadata.team_id}`;
+        } else {
+          await postSlackMessage(bot.bot_token, {
+            channel: msg.metadata.channel,
+            text: msg.content,
+          });
+          msg.logs = [...(msg.logs ?? []), { attemptedAt: new Date().toISOString(), success: true }];
+          msg.status = 'sent';
+          msg.sentAt = new Date().toISOString();
         }
       }
     } catch (err) {

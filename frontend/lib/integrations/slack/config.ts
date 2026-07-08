@@ -4,10 +4,12 @@ import { AUTH_URL, SLACK_SIGNING_SECRET as CONFIG_SLACK_SIGNING_SECRET, SLACK_CL
 export const SLACK_BOT_SCOPES = [
   'app_mentions:read',
   'channels:history',
+  'channels:read',
   'chat:write',
   'files:read',
   'files:write',
   'groups:history',
+  'groups:read',
   'im:history',
   'mpim:history',
   'reactions:write',

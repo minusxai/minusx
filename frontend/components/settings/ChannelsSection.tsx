@@ -14,16 +14,18 @@ import type { ConfigChannel } from '@/lib/types';
 const CHANNEL_TYPES = ['slack', 'email', 'phone'] as const;
 type ChannelType = typeof CHANNEL_TYPES[number];
 
-function channelLabel(type: ChannelType) {
+function channelLabel(type: ConfigChannel['type'] | ChannelType) {
+  if (type === 'slack_app') return 'Slack App';
   return type === 'slack' ? 'Slack' : type === 'email' ? 'Email' : 'Phone';
 }
 
-function channelBadgeColor(type: ChannelType) {
-  return type === 'slack' ? 'accent.warning' : type === 'email' ? 'accent.danger' : 'accent.primary';
+function channelBadgeColor(type: ConfigChannel['type'] | ChannelType) {
+  return type === 'slack_app' ? 'accent.secondary' : type === 'slack' ? 'accent.warning' : type === 'email' ? 'accent.danger' : 'accent.primary';
 }
 
 function channelSummary(ch: ConfigChannel) {
   if (ch.type === 'slack') return ch.webhook_url || '(no URL)';
+  if (ch.type === 'slack_app') return `${ch.team_name ?? ch.team_id} · ${ch.channel_name ? `#${ch.channel_name}` : ch.channel_id}`;
   return ch.address || '(no address)';
 }
 
@@ -152,6 +154,32 @@ function ChannelRow({ channel, onChange, onDelete, initiallyExpanded = false }: 
               </>
             )}
 
+            {channel.type === 'slack_app' && (
+              <VStack align="stretch" gap={2}>
+                <Box>
+                  <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Slack workspace</Text>
+                  <Input
+                    size="sm"
+                    fontFamily="mono"
+                    value={channel.team_name ? `${channel.team_name} (${channel.team_id})` : channel.team_id}
+                    readOnly
+                  />
+                </Box>
+                <Box>
+                  <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Slack channel ID</Text>
+                  <Input
+                    size="sm"
+                    fontFamily="mono"
+                    value={channel.channel_name ? `#${channel.channel_name} (${channel.channel_id})` : channel.channel_id}
+                    readOnly
+                  />
+                </Box>
+                <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+                  Captured when the Slack app was invoked in this channel. Delivery uses the connected Slack app, not a webhook.
+                </Text>
+              </VStack>
+            )}
+
             {(channel.type === 'email' || channel.type === 'phone') && (
               <Box>
                 <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>
@@ -229,7 +257,7 @@ export function ChannelsSection() {
       </HStack>
 
       <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-        Named delivery endpoints reused across alerts. Slack channels use the configured <code>slack_alert</code> webhook as the HTTP mechanism.
+        Named delivery endpoints reused across alerts and reports. Slack webhook channels use <code>slack_alert</code>; Slack App channels are captured when the connected bot is invoked.
       </Text>
 
       <Separator />

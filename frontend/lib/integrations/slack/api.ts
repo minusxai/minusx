@@ -22,6 +22,17 @@ interface SlackUserInfoResponse {
   };
 }
 
+interface SlackConversationInfoResponse {
+  channel?: {
+    id?: string;
+    name?: string;
+    is_channel?: boolean;
+    is_group?: boolean;
+    is_im?: boolean;
+    is_mpim?: boolean;
+  };
+}
+
 async function slackApiFetch<T>(
   path: string,
   init: RequestInit,
@@ -202,6 +213,27 @@ export async function getConversationHistory(
     throw new Error(`Slack conversations.history failed: ${result.error}`);
   }
   return { messages: result.messages ?? [] };
+}
+
+export async function getSlackConversationInfo(
+  token: string,
+  channel: string,
+): Promise<{ id?: string; name?: string } | null> {
+  const query = new URLSearchParams({ channel });
+  const result = await slackApiFetch<SlackConversationInfoResponse>(
+    `conversations.info?${query.toString()}`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+
+  if (!result.ok) {
+    console.warn(`[Slack] conversations.info failed: ${result.error}`);
+    return null;
+  }
+
+  return result.channel ?? null;
 }
 
 export async function addReaction(

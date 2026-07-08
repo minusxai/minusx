@@ -159,10 +159,11 @@ function EmptyFileHero({ ariaLabel, accent, eyebrow, title, description, illustr
           css={{ animation: 'mx-rise 0.5s ease-out 1.05s both' }}
           mt={6}
           display="inline-flex"
-          alignItems="center"
+          alignItems="flex-start"
           gap={2}
           px={3.5}
           py={2}
+          maxW={compact ? '640px' : '720px'}
           borderRadius="full"
           bg="bg.surface"
           borderWidth="1px"
@@ -172,10 +173,10 @@ function EmptyFileHero({ ariaLabel, accent, eyebrow, title, description, illustr
           _hover={{ borderColor: accent, color: 'fg.default' }}
           transition="border-color 0.2s, color 0.2s"
         >
-          <Box color={accent} display="flex">
+          <Box color={accent} display="flex" pt="1px" flexShrink={0}>
             <LuSparkles size={14} strokeWidth={2} />
           </Box>
-          <Text fontSize="xs">{tip}</Text>
+          <Text fontSize="xs" lineHeight="1.45" css={{ textWrap: 'pretty' }}>{tip}</Text>
         </Box>
       )}
     </Box>
