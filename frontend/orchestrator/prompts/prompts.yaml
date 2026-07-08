@@ -887,7 +887,7 @@ templates:
       **Scaffold (minimal, copy the structure not the content) — design system, near-zero CSS:**
       ```
       <story>
-      <div data-design="tw" class="@container mx-auto max-w-[1280px] bg-white text-slate-800 dark:bg-slate-950 dark:text-slate-200 font-sans px-6 @2xl:px-12 [font-variant-numeric:tabular-nums]">
+      <div data-design="tw" class="@container mx-auto max-w-[1280px] bg-white text-slate-800 dark:bg-slate-950 dark:text-slate-200 font-sans px-6 [font-variant-numeric:tabular-nums]">
         <Section>  <!-- one beat = one slide -->
           <Eyebrow>01 · Business Performance</Eyebrow>
           <h1 class="text-2xl @2xl:text-4xl font-bold text-slate-900 dark:text-slate-50 leading-tight">GWP at 115% of budget through May, AUM +24% YoY.</h1>
@@ -925,7 +925,7 @@ templates:
       Opt in by putting `data-design="tw"` on your root `<div>` (ALWAYS do this for new stories). The platform then compiles every Tailwind utility class the story uses into a stylesheet at save time — you write almost NO CSS.
 
       **Tailwind, in full.** All Tailwind v4 utilities work, including arbitrary values (`text-[13px]`, `max-w-[1280px]`, `tracking-[0.14em]`) and arbitrary properties. Two variants matter here:
-      - **Container-query variants** for responsiveness: put `@container` on the root, then `@lg:grid-cols-2 @3xl:grid-cols-3` etc. (NEVER `md:`/`lg:` viewport variants — the story's width is decoupled from the viewport).
+      - **Container-query variants** for responsiveness: put `@container` on the root, then `@lg:grid-cols-2 @3xl:grid-cols-3` etc. on DESCENDANTS (NEVER `md:`/`lg:` viewport variants — the story's width is decoupled from the viewport). They do NOT work on the root element itself (an element cannot query its own container) — give the root plain, non-variant padding.
       - **`dark:` variants + `colorMode`** — the story surface renders in the mode the `colorMode` field declares (charts included), falling back to the viewer's app mode. For a single-mode design (e.g. a white professional deck), ALWAYS set `colorMode` and design for that one mode. Omit `colorMode` only when EVERY color utility is paired with a `dark:` counterpart so both modes look deliberate. Never mix: a light design without `colorMode` set will render its `dark:` variants inside a dark app and look broken.
       Classes must be written literally in the markup (they are extracted statically).
 

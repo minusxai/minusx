@@ -84,6 +84,22 @@ describe('compileStoryCss', () => {
     const b = await compileStoryCss(TW_STORY);
     expect(a).toEqual(b);
   });
+
+  // The story iframe also carries the app's mirrored stylesheet (reset included) UN-layered,
+  // and un-layered CSS beats @layer CSS regardless of order — so layered utilities silently
+  // lose every property the reset touches (padding/margins/font-size: the "everything is
+  // cramped" bug). The compiled output must be FLAT (no @layer wrappers/statements) so it
+  // competes by document order, where it wins (injected after the mirror).
+  it('emits flat CSS — no cascade layers to lose against the un-layered app mirror', async () => {
+    const css = (await compileStoryCss(TW_STORY))!;
+    expect(css).not.toContain('@layer');
+    // The rules themselves survive the unwrapping, at top level.
+    expect(css).toContain('.grid-cols-3');
+    expect(css).toContain('.mt-2\\.5');
+    expect(css).toMatch(/\.bg-red-100\s*\{/);
+    // Nested at-rules (media/container/supports) survive inside the flattened output.
+    expect(css).toContain('@property');
+  });
 });
 
 describe('withCompiledStoryCss', () => {
