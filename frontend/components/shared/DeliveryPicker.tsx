@@ -4,6 +4,7 @@ import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Box, HStack, Text, Input, Flex, Badge } from '@chakra-ui/react';
 import { LuX, LuChevronDown, LuMail, LuMessageCircle, LuHash } from 'react-icons/lu';
+import { FaSlack } from 'react-icons/fa';
 import { AlertRecipient, User } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { hasDeliveryEnabled, buildDropdownOptions, type DropdownOption } from '@/lib/messaging/delivery-options';
@@ -19,11 +20,24 @@ function recipientKey(r: AlertRecipient): string {
   return 'userId' in r ? `user:${r.userId}:${r.channel}` : `channel:${r.channelName}:${r.channel}`;
 }
 
+type DeliveryKind = AlertRecipient['channel'];
+
 function optionToRecipient(opt: DropdownOption): AlertRecipient {
   if (opt.via === 'user') {
     return { userId: opt.user.id!, channel: opt.kind };
   }
   return { channelName: opt.channel.name, channel: opt.kind };
+}
+
+function deliveryBadgeLabel(kind: DeliveryKind): string {
+  return kind === 'slack_app' ? 'slack app' : kind;
+}
+
+function deliveryBadgeColor(kind: DeliveryKind): string {
+  if (kind === 'email') return 'accent.danger';
+  if (kind === 'phone') return 'accent.primary';
+  if (kind === 'slack_app') return 'accent.secondary';
+  return 'accent.warning';
 }
 
 function DropdownMenu({ containerRef, options, onSelect }: {
@@ -75,14 +89,16 @@ function DropdownMenu({ containerRef, options, onSelect }: {
         const subLabel =
           opt.via === 'user'
             ? (opt.kind === 'email' ? opt.user.email : opt.user.phone!)
-            : opt.kind === 'slack' ? undefined : opt.channel.address;
+            : opt.kind === 'slack' ? 'Webhook'
+              : opt.kind === 'slack_app' ? (opt.channel.team_name ?? 'Slack app')
+                : opt.channel.address;
 
         return (
           <HStack
             key={i}
             px={3}
             py={2}
-            gap={2}
+            gap={opt.kind === 'email' || opt.kind === 'slack_app' ? 3 : 2}
             cursor="pointer"
             _hover={{ bg: 'bg.muted' }}
             onMouseDown={(e: React.MouseEvent) => {
@@ -90,13 +106,13 @@ function DropdownMenu({ containerRef, options, onSelect }: {
               onSelect(optionToRecipient(opt));
             }}
           >
-            {opt.kind === 'email' ? <LuMail size={12} /> : opt.kind === 'phone' ? <LuMessageCircle size={12} /> : <LuHash size={12} />}
+            {opt.kind === 'email' ? <LuMail size={16} /> : opt.kind === 'phone' ? <LuMessageCircle size={12} /> : opt.kind === 'slack_app' ? <FaSlack size={16} /> : <LuHash size={12} />}
             <Box>
               <Text fontSize="xs" fontWeight="500">{displayName}</Text>
               {subLabel && <Text fontSize="xs" color="fg.muted">{subLabel}</Text>}
             </Box>
-            <Badge size="xs" color={opt.kind === 'email' ? 'accent.danger' : opt.kind === 'phone' ? 'accent.primary' : 'accent.warning'} ml="auto">
-              {opt.kind}
+            <Badge size="xs" color={deliveryBadgeColor(opt.kind)} ml="auto">
+              {deliveryBadgeLabel(opt.kind)}
             </Badge>
           </HStack>
         );
@@ -161,7 +177,7 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
     return r.channelName;
   }
 
-  function recipientChannel(r: AlertRecipient): 'email' | 'phone' | 'slack' {
+  function recipientChannel(r: AlertRecipient): DeliveryKind {
     return r.channel;
   }
 
@@ -186,8 +202,8 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
             <Text fontSize="xs" lineHeight="short">
               {recipientLabel(r)}
             </Text>
-            <Badge size="xs" color={recipientChannel(r) === 'email' ? 'accent.danger' : recipientChannel(r) === 'phone' ? 'accent.primary' : 'accent.warning'}>
-              {recipientChannel(r)}
+            <Badge size="xs" color={deliveryBadgeColor(recipientChannel(r))}>
+              {deliveryBadgeLabel(recipientChannel(r))}
             </Badge>
             {!effectiveDisabled && (
               <button

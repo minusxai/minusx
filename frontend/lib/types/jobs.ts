@@ -25,7 +25,7 @@ export type JobSchedule = {
 /** Recipient stored on an alert — references a user by ID or a named config channel. */
 export type AlertRecipient =
   | { userId: number;      channel: 'email' | 'phone' }
-  | { channelName: string; channel: 'email' | 'phone' | 'slack' };
+  | { channelName: string; channel: 'email' | 'phone' | 'slack' | 'slack_app' };
 
 /** Base content for all scheduled jobs (alerts, reports, transformations, context evals). */
 export interface ScheduledJobContent extends BaseFileContent {
@@ -57,7 +57,8 @@ export interface JobRun {
 export type RunMessage =
   | { type: 'email_alert';  content: string; metadata: { to: string; subject: string } }
   | { type: 'phone_alert';  content: string; metadata: { to: string; title?: string; desc?: string; link?: string; summary?: string } }
-  | { type: 'slack_alert';  content: string; metadata: { channel: string; webhook_url: string; properties?: Record<string, unknown> } };
+  | { type: 'slack_alert';  content: string; metadata: { channel: string; webhook_url: string; properties?: Record<string, unknown> } }
+  | { type: 'slack_app_alert'; content: string; metadata: { channel: string; team_id: string; channel_name?: string } };
 
 export interface MessageAttemptLog {
   attemptedAt: string;

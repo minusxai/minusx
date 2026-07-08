@@ -11,6 +11,7 @@ import { checkCreditGate } from '@/lib/analytics/credit-usage.server';
 import {
   addReaction,
   getConversationHistory,
+  getSlackConversationInfo,
   getSlackUserEmail,
   postSlackMessage,
   publishHomeView,
@@ -32,6 +33,7 @@ import { buildHomeView, buildWelcomeBlocks, shouldSendWelcome } from '@/lib/inte
 import {
   getOrCreateSlackConversationId,
   markSlackEventDone,
+  rememberSlackAppChannel,
   reserveSlackEvent,
   type SlackInstallationMatch,
 } from '@/lib/integrations/slack/store';
@@ -135,6 +137,19 @@ export async function processSlackEvent(
 
     // React with :eyes: to acknowledge we're working on it
     await addReaction(installation.bot.bot_token, ev.channel, ev.ts, 'eyes');
+
+    if (ev.type === 'app_mention') {
+      const teamId = installation.bot.team_id ?? getTeamId(payload);
+      if (teamId) {
+        const channelInfo = await getSlackConversationInfo(installation.bot.bot_token, ev.channel);
+        await rememberSlackAppChannel(installation.mode, {
+          teamId,
+          teamName: installation.bot.team_name,
+          channelId: ev.channel,
+          channelName: channelInfo?.name,
+        });
+      }
+    }
 
     if (!ev.user) {
       await postErrorReply(

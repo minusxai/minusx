@@ -7,6 +7,7 @@ import type { OrgConfig } from '@/lib/branding/whitelabel';
 import type { AlertRecipient, ConfigChannel, User } from '@/lib/types';
 
 export type SlackChannel  = Extract<ConfigChannel, { type: 'slack' }>;
+export type SlackAppChannel  = Extract<ConfigChannel, { type: 'slack_app' }>;
 export type EmailChannel  = Extract<ConfigChannel, { type: 'email' }>;
 export type PhoneChannel  = Extract<ConfigChannel, { type: 'phone' }>;
 
@@ -14,6 +15,7 @@ export type DropdownOption =
   | { kind: 'email'; via: 'user';    user: User }
   | { kind: 'phone'; via: 'user';    user: User }
   | { kind: 'slack'; via: 'channel'; channel: SlackChannel }
+  | { kind: 'slack_app'; via: 'channel'; channel: SlackAppChannel }
   | { kind: 'email'; via: 'channel'; channel: EmailChannel }
   | { kind: 'phone'; via: 'channel'; channel: PhoneChannel };
 
@@ -24,6 +26,7 @@ function webhookTypes(config: OrgConfig): Set<string> {
 function configChannels(config: OrgConfig) {
   return {
     slack: (config.channels ?? []).filter((c): c is SlackChannel => c.type === 'slack'),
+    slackApp: (config.channels ?? []).filter((c): c is SlackAppChannel => c.type === 'slack_app'),
     email: (config.channels ?? []).filter((c): c is EmailChannel => c.type === 'email'),
     phone: (config.channels ?? []).filter((c): c is PhoneChannel => c.type === 'phone'),
   };
@@ -35,7 +38,8 @@ export function hasDeliveryEnabled(config: OrgConfig, users: User[]): boolean {
   return (
     (types.has('email_alert') && (users.length > 0 || ch.email.length > 0)) ||
     (types.has('phone_alert') && (users.some(u => u.phone) || ch.phone.length > 0)) ||
-    (types.has('slack_alert') && ch.slack.length > 0)
+    (types.has('slack_alert') && ch.slack.length > 0) ||
+    ch.slackApp.length > 0
   );
 }
 
@@ -80,6 +84,16 @@ export function buildDropdownOptions(
   if (types.has('slack_alert')) {
     for (const c of ch.slack) {
       if (!selected.has(`channel:${c.name}:slack`)) opts.push({ kind: 'slack', via: 'channel', channel: c });
+    }
+  }
+  for (const c of ch.slackApp) {
+    const matches = !q ||
+      c.name.toLowerCase().includes(q) ||
+      c.channel_id.toLowerCase().includes(q) ||
+      (c.channel_name?.toLowerCase().includes(q) ?? false) ||
+      (c.team_name?.toLowerCase().includes(q) ?? false);
+    if (matches && !selected.has(`channel:${c.name}:slack_app`)) {
+      opts.push({ kind: 'slack_app', via: 'channel', channel: c });
     }
   }
 

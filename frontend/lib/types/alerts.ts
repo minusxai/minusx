@@ -34,7 +34,7 @@ export type ComparisonOperator = '>' | '<' | '=' | '>=' | '<=' | '!=';
 /** Snapshot of a resolved recipient written to alert run output. */
 export interface DeliveredRecipient {
   name: string;
-  channel: 'email' | 'phone' | 'slack';
+  channel: 'email' | 'phone' | 'slack' | 'slack_app';
   address: string;
 }
 

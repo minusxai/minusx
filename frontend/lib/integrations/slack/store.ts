@@ -3,7 +3,7 @@ import { getConfigsForMode, getRawConfig, saveRawConfig } from '@/lib/data/confi
 import { createConversation, findConversationIdByMeta } from '@/lib/data/conversations.server';
 import { VALID_MODES, type Mode } from '@/lib/mode/mode-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { ConfigBot, ConfigContent, ConversationSource, SlackBotConfig } from '@/lib/types';
+import type { ConfigBot, ConfigChannel, ConfigContent, ConversationSource, SlackBotConfig } from '@/lib/types';
 
 // ============================================================================
 // Bot config CRUD — lives in /org/configs/config (org config file)
@@ -51,6 +51,55 @@ export async function removeSlackBotConfig(
     ...rawConfig,
     bots: (rawConfig.bots ?? []).filter(b => !(b.type === 'slack' && b.team_id === teamId)),
   });
+}
+
+export async function rememberSlackAppChannel(
+  mode: Mode,
+  input: {
+    teamId: string;
+    channelId: string;
+    teamName?: string;
+    channelName?: string;
+  },
+): Promise<void> {
+  const rawConfig = await getRawConfig(mode);
+  const existing = (rawConfig.channels ?? []) as ConfigChannel[];
+  const channelName = input.channelName?.trim();
+  const displayName = channelName
+    ? `#${channelName}`
+    : `Slack ${input.teamName || input.teamId} ${input.channelId}`;
+
+  const next = [...existing];
+  const idx = next.findIndex(
+    ch => ch.type === 'slack_app' &&
+      ch.team_id === input.teamId &&
+      ch.channel_id === input.channelId,
+  );
+
+  if (idx >= 0) {
+    const current = next[idx];
+    if (current.type === 'slack_app') {
+      next[idx] = {
+        ...current,
+        team_name: input.teamName ?? current.team_name,
+        channel_name: channelName ?? current.channel_name,
+        name: current.name || displayName,
+        captured_at: current.captured_at ?? new Date().toISOString(),
+      };
+    }
+  } else {
+    next.push({
+      type: 'slack_app',
+      name: displayName,
+      team_id: input.teamId,
+      team_name: input.teamName,
+      channel_id: input.channelId,
+      channel_name: channelName,
+      captured_at: new Date().toISOString(),
+    });
+  }
+
+  await saveRawConfig(mode, { ...rawConfig, channels: next });
 }
 
 async function findSlackBotByTeam(

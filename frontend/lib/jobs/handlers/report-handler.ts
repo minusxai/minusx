@@ -4,6 +4,7 @@ import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import { runReportV2 } from '@/lib/chat/run-report.server';
 import { resolveBaseUrl, resolveEmailAddresses } from '@/lib/jobs/job-utils';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import { getConfigsForMode } from '@/lib/data/configs.server';
 import type { ReportAgentContext } from '@/agents/report/report-agent';
 import type { ReportContent, ReportOutput, ReportRunContent, JobHandlerResult, JobRunnerInput } from '@/lib/types';
 import type { JobHandler } from '../job-registry';
@@ -76,6 +77,35 @@ export const reportJobHandler: JobHandler = {
           content: emailBody,
           metadata: { to: address, subject },
         });
+      }
+
+      const { config } = await getConfigsForMode(user.mode);
+      const slackText = `*${reportName}*\n${bodySnippet}\n<${reportLink}|View full report>`;
+      for (const recipient of report.recipients) {
+        if ('userId' in recipient || (recipient.channel !== 'slack' && recipient.channel !== 'slack_app')) continue;
+        const ch = config.channels?.find(c => c.name === recipient.channelName);
+        if (!ch) continue;
+        if (recipient.channel === 'slack' && ch.type === 'slack') {
+          messages.push({
+            type: 'slack_alert',
+            content: slackText,
+            metadata: {
+              channel: ch.name,
+              webhook_url: ch.webhook_url,
+              properties: ch.properties,
+            },
+          });
+        } else if (recipient.channel === 'slack_app' && ch.type === 'slack_app') {
+          messages.push({
+            type: 'slack_app_alert',
+            content: slackText,
+            metadata: {
+              channel: ch.channel_id,
+              team_id: ch.team_id,
+              channel_name: ch.channel_name,
+            },
+          });
+        }
       }
     }
 
