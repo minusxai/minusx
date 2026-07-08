@@ -169,9 +169,12 @@ export function emitStoryComponent(
   let dataAttrs = '';
   for (const [prop, allowed] of Object.entries(def.props ?? {})) {
     const raw = String(attrs[prop] ?? '');
-    const value = allowed.includes(raw) ? raw : allowed[0];
+    // Interpolate the ALLOWLIST constant (never the input), so only hardcoded enum tokens can
+    // reach the attribute — and belt-and-braces escape it anyway (also satisfies CodeQL).
+    const idx = allowed.indexOf(raw);
+    const value = idx >= 0 ? allowed[idx] : allowed[0];
     resolved[prop] = value;
-    dataAttrs += ` data-${prop}="${value}"`;
+    dataAttrs += ` data-${prop}="${escAttr(value)}"`;
   }
   // Optional `class` prop: custom utilities appended AFTER the recipe, and stamped in data-cls
   // so the reverse pass can split custom from recipe. Quotes are stripped (no Tailwind class
@@ -225,8 +228,11 @@ export function reverseStoryComponents(html: string): string {
       const pm = openTagHtml.match(new RegExp(`\\bdata-${prop}="([^"]*)"`));
       if (pm) props += prop === 'cols' ? ` ${prop}={${pm[1]}}` : ` ${prop}="${pm[1]}"`;
     }
+    // Quote-strip AFTER un-escaping: legitimately-emitted data-cls never contains quotes (the
+    // emit side strips them), so any that appear post-decode are forged stored content trying
+    // to break out of the quoted class prop — enforce the same invariant in both directions.
     const cm = openTagHtml.match(/\bdata-cls="([^"]*)"/);
-    if (cm) props += ` class="${unescAttr(cm[1])}"`;
+    if (cm) props += ` class="${unescAttr(cm[1]).replace(/["']/g, '')}"`;
     const replacement = `<${name}${props}>${inner}</${name}>`;
     out = out.slice(0, openStart) + replacement + out.slice(closeStart + `</${tag}>`.length);
     searchFrom = openStart + replacement.length;

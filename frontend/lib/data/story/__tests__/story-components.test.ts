@@ -178,6 +178,15 @@ describe('class prop — customization without leaving the component system', ()
     const html = emitStoryComponent('Card', { class: 'a" onmouseover="x' }, 'x')!;
     expect(html).not.toContain('onmouseover="x"');
   });
+
+  it('the reverse pass never un-escapes a quote into the class prop (forged data-cls)', () => {
+    // A hand-forged stored attr (JSON code view) with an entity-encoded quote must not break
+    // out of the quoted class prop in the generated agent markup.
+    const jsx = reverseStoryComponents(
+      '<div data-c="Card" data-cls="a&quot; onload=&quot;x" class="rounded-2xl">y</div>',
+    );
+    expect(jsx).toBe('<Card class="a onload=x">y</Card>'); // quotes stripped, no attr injection
+  });
 });
 
 describe('buildStoryJsx ordering', () => {
