@@ -835,32 +835,33 @@ templates:
 
       **Avoid** (AI-default looks, unless asked): cream `#F4F1EA` + serif + terracotta; near-black + single acid-green accent; purple gradients on white; broadsheet hairline-rules-everywhere.
 
-      **Scaffold (minimal, copy the structure not the content):**
+      **Scaffold (minimal, copy the structure not the content) — design-system base + a SHORT motif `<style>`:**
       ```
       <story>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Source+Serif+4&family=IBM+Plex+Mono&display=swap');
-        .story-x, .story-x * { box-sizing: border-box; }
-        .story-x { container-type: inline-size; container-name: story; --bg:#101822; --ink:#f7f0df; --accent:#ffc83d; --line:rgba(255,255,255,.16); max-width:1280px; margin:0 auto; background:var(--bg); color:var(--ink); font-family:'Source Serif 4',Georgia,serif; }
-        .story-x .stamp { font-family:'IBM Plex Mono',monospace; color:var(--accent); border:1px dashed var(--accent); padding:.5em .8em; letter-spacing:.12em; text-transform:uppercase; }
-        .story-x h1 { font-family:'Space Grotesk',sans-serif; font-size:clamp(3rem,10cqi,9rem); line-height:.9; }
-        .story-x .beat { display:grid; grid-template-columns:.42fr .58fr; gap:clamp(24px,5cqi,60px); align-items:center; padding:clamp(54px,8cqi,112px) 0; }
-        .story-x .plate { background:#f6efd8; color:#17202b; box-shadow:12px 12px 0 rgba(0,0,0,.4); }
-        .story-x .caption { font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:.08em; padding:12px 14px; border-bottom:1px solid #d5cbb0; display:flex; justify-content:space-between; }
-        @container story (max-width:760px) { .story-x .beat { grid-template-columns:1fr; } }
+        .story-x { font-family:'Source Serif 4',Georgia,serif; }
+        .story-x .display { font-family:'Space Grotesk',sans-serif; }
+        .story-x .stamp { font-family:'IBM Plex Mono',monospace; border:1px dashed currentColor; }  /* the motif bits utilities can't express */
+        .story-x .plate { box-shadow:12px 12px 0 rgba(0,0,0,.4); }
       `}</style>
-      <div class="story-x">
-        <section>  <!-- HERO: open on the finding -->
-          <span class="stamp">LOG 00 · THE FINDING</span>
-          <h1>Churn doubled the quarter we raised prices.</h1>
+      <div data-design="tw" class="story-x @container mx-auto max-w-[1280px] bg-[#101822] text-[#f7f0df]">
+        <Section>  <!-- HERO: open on the finding -->
+          <span class="stamp inline-block px-3 py-2 text-[#ffc83d] uppercase tracking-[0.12em] text-sm">LOG 00 · THE FINDING</span>
+          <h1 class="display text-5xl @2xl:text-8xl leading-[0.9] mt-6">Churn doubled the quarter we raised prices.</h1>
           <Question query={`SELECT ... AS rate`} connection="duckdb"
             viz={{ type:"single_value", yCols:["rate"], singleValueConfig:{ suffix:"%", valueColor:"#ffc83d", valueSize:"clamp(3rem,14cqi,7rem)" } }} height="240px" />
-        </section>
+        </Section>
         <div class="mx-marquee"><div class="mx-marquee-track">312 → 39,882 ··· 135x ··· 6:1 ··· </div></div>
-        <section class="beat">  <!-- one beat = one idea = one visual -->
-          <div><span class="stamp">FIG. 01</span><h2>Rural counties drove the entire decline.</h2><p>...</p></div>
-          <div class="plate"><div class="caption"><span>FIG. 01 · DECLINE BY COUNTY</span><span>Rural leads</span></div><Question id={142} height="430px" /></div>
-        </section>
+        <Section>  <!-- one beat = one idea = one visual -->
+          <div class="grid grid-cols-1 @3xl:grid-cols-[0.42fr_0.58fr] gap-8 @2xl:gap-14 items-center">
+            <div><span class="stamp inline-block px-3 py-2 text-[#ffc83d] uppercase tracking-[0.12em] text-sm">FIG. 01</span>
+              <h2 class="display text-3xl @2xl:text-5xl mt-4">Rural counties drove the entire decline.</h2><p class="mt-3">...</p></div>
+            <div class="plate bg-[#f6efd8] text-[#17202b]">
+              <div class="flex justify-between px-4 py-3 border-b border-[#d5cbb0] font-mono uppercase tracking-[0.08em] text-xs"><span>FIG. 01 · DECLINE BY COUNTY</span><span>Rural leads</span></div>
+              <Question id={142} height="430px" /></div>
+          </div>
+        </Section>
       </div>
       </story>
       ```
@@ -883,31 +884,27 @@ templates:
 
       **Avoid**: motif conceits, playful stamps, saturated backgrounds, drop caps, rotations, marquees. Those belong to A and read as unserious here.
 
-      **Scaffold (minimal, copy the structure not the content):**
+      **Scaffold — this IS the default shape; copy the structure, swap the content. Note how little there is: no CSS, no classes except the root and accents:**
       ```
       <story>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap');
-        .story-x, .story-x * { box-sizing: border-box; }
-        .story-x { container-type: inline-size; container-name: story; --navy:#1a2b4a; --accent:#1f9d78; --surf:#f4f5f7; --ink:#1a2230; --mut:#6b7280; max-width:1280px; margin:0 auto; background:#fff; color:var(--ink); font-family:'IBM Plex Sans',Arial,sans-serif; font-variant-numeric:tabular-nums; }
-        .story-x .eyebrow { font-size:.72rem; letter-spacing:.12em; font-weight:600; color:var(--navy); text-transform:uppercase; }
-        .story-x h1 { color:var(--navy); font-size:clamp(1.6rem,5cqi,2.6rem); line-height:1.1; }
-        .story-x .standfirst { font-style:italic; color:var(--mut); }
-        .story-x .highlights { background:var(--surf); border-radius:8px; padding:clamp(16px,4cqi,28px); }
-        .story-x .foot { display:flex; justify-content:space-between; align-items:center; border-top:1px solid #e5e7eb; color:var(--mut); font-size:.72rem; padding-top:12px; }
-      `}</style>
-      <div class="story-x">
-        <section>  <!-- one beat = one slide -->
-          <p class="eyebrow">01 · Business Performance</p>
-          <h1>GWP at 115% of budget through May, AUM +24% YoY.</h1>
-          <p class="standfirst">May 2026 YTD vs prior year, budget, and full-year target</p>
-          <Question id={142} height="420px" />
-          <div class="highlights">
-            <p class="eyebrow">Highlights</p>
-            <ul><li>GWP YTD reached <Number id={142} prefix="IDR " suffix=" Bn" />, 115% of budget.</li></ul>
-          </div>
-        </section>
-        <div class="foot"><span>Confidential · 2026</span><span>STRICTLY PRIVATE AND CONFIDENTIAL</span><span>1</span></div>
+      <div data-design="tw" class="@container mx-auto max-w-[1280px] bg-white text-slate-800 dark:bg-slate-950 dark:text-slate-200 font-sans px-6 [font-variant-numeric:tabular-nums] [--st-accent:#0f766e]">
+        <PageHeader><span>ACME LEADERSHIP REVIEW</span><span>Confidential · 2026</span></PageHeader>
+        <Section>  <!-- one beat = one slide; repeat per beat -->
+          <Eyebrow>01 · Business Performance</Eyebrow>
+          <Headline>GWP at <strong>115% of budget</strong> through May, AUM +24% YoY.</Headline>
+          <Standfirst>May 2026 YTD vs prior year, budget, and full-year target.</Standfirst>
+          <Grid cols={3}>
+            <Card><Stat><StatLabel>GWP YTD</StatLabel><StatValue><Number id={142} prefix="IDR " suffix=" Bn" /></StatValue><StatDelta tone="up">▲ 115% of budget</StatDelta></Stat></Card>
+            <Card><Stat><StatLabel>AUM</StatLabel><StatValue><Number id={143} /></StatValue><StatDelta tone="up">▲ 24% YoY</StatDelta></Stat></Card>
+            <Card><Stat><StatLabel>Claims ratio</StatLabel><StatValue><Number id={144} suffix="%" /></StatValue><StatDelta tone="down">▼ 1.2 pp vs plan</StatDelta></Stat></Card>
+          </Grid>
+          <FigurePlate><Question id={142} height="420px" /><p>GWP tracked ahead of budget in every month since February.</p></FigurePlate>
+          <Takeaways>
+            <Eyebrow>Highlights</Eyebrow>
+            <ul><li>GWP YTD reached <Number id={142} prefix="IDR " suffix=" Bn" />, <strong>115% of budget</strong>.</li></ul>
+          </Takeaways>
+        </Section>
+        <PageFooter><span>Confidential · 2026</span><span>Strictly private and confidential</span><span>1</span></PageFooter>
       </div>
       </story>
       ```
@@ -920,7 +917,43 @@ templates:
 
       ### Authoring syntax
 
-      The `<story>` body is an HTML fragment, NOT React. Plain HTML elements use HTML attributes: `class="…"` (never `className`), and layout/styling via classes defined in the `<style>` block (prefer classes over inline styles on HTML elements). The ONLY JSX-flavored tags are the platform embeds `<Question>` / `<Number>` / `<Param>`: their props take `{…}` for numbers, expressions, and objects (`id={142}`, `query={`…`}`, `viz={{…}}`, `style={{…}}`) and quoted strings otherwise (`col="orders"`, `suffix=" Bn"`, `connection="duckdb"`). So: `class=` on your divs, `{}`-props on the embeds.
+      The `<story>` body is an HTML fragment, NOT React. Plain HTML elements use HTML attributes: `class="…"` (never `className`). Styling comes from the built-in design system below (Tailwind utilities + story components) — that is the default medium; a `<style>` block is reserved for signature CSS the utilities cannot express. The JSX-flavored tags are the platform embeds `<Question>` / `<Number>` / `<Param>` and the story components (`<Section>`, `<Card>`, `<Pill>`, …): their props take `{…}` for numbers, expressions, and objects (`id={142}`, `cols={3}`, `query={`…`}`, `viz={{…}}`) and quoted strings otherwise (`tone="bad"`, `col="orders"`, `connection="duckdb"`). So: `class=` on your divs, `{}`-props on embeds and components.
+
+      ### Design system: Tailwind + story components (the DEFAULT medium)
+
+      Opt in by putting `data-design="tw"` on your root `<div>` (ALWAYS do this for new stories). The platform then compiles every Tailwind utility class the story uses into a stylesheet at save time — you write almost NO CSS.
+
+      **Tailwind, in full.** All Tailwind v4 utilities work, including arbitrary values (`text-[13px]`, `max-w-[1280px]`, `tracking-[0.14em]`) and arbitrary properties. Two variants matter here:
+      - **Container-query variants** for responsiveness: put `@container` on the root, then `@lg:grid-cols-2 @3xl:grid-cols-3` etc. on DESCENDANTS (NEVER `md:`/`lg:` viewport variants — the story's width is decoupled from the viewport). They do NOT work on the root element itself (an element cannot query its own container) — give the root plain, non-variant padding.
+      - **`dark:` variants + `colorMode`** — the story surface renders in the mode the `colorMode` field declares (charts included), falling back to the viewer's app mode. For a single-mode design (e.g. a white professional deck), ALWAYS set `colorMode` and design for that one mode. Omit `colorMode` only when EVERY color utility is paired with a `dark:` counterpart so both modes look deliberate. Never mix: a light design without `colorMode` set will render its `dark:` variants inside a dark app and look broken.
+      Classes must be written literally in the markup (they are extracted statically).
+
+      **Story components** — the DEFAULT building blocks. Each bakes in the typography, spacing, and both color modes a designed page needs, so you write content, not design decisions:
+
+      *Page & narrative structure:*
+      - `<PageHeader><span>ACME QUARTERLY REVIEW</span><span>CONFIDENTIAL · 2026</span></PageHeader>` — top furniture band (flex-between small caps). `<PageFooter>` is its closing twin.
+      - `<Section>…</Section>` — one beat/page band (vertical rhythm + divider).
+      - `<Eyebrow>01 · Executive Summary</Eyebrow>` — small-caps section label.
+      - `<Headline>Churn doubled the quarter we raised prices.</Headline>` — the claim, in display type (responsive size, tracking, balance all baked in).
+      - `<Standfirst>Scope and framing in one italic serif line.</Standfirst>`
+      - `<Quote>…</Quote>` — pull-quote band.
+
+      *Evidence:*
+      - `<Grid cols={3}>…</Grid>` — responsive grid (`cols` 2/3/4); collapses on narrow widths automatically.
+      - `<Card>…</Card>` — bordered surface card.
+      - `<Stat><StatLabel>Orders</StatLabel><StatValue><Number id={14} /></StatValue><StatDelta tone="up">▲ 6.2%</StatDelta></Stat>` — KPI tile (`StatDelta` tone: `up`/`down`/`neutral`).
+      - `<FigurePlate><Question id={17} height="400px" /><p>One-line caption stating what the chart proves.</p></FigurePlate>` — framed chart with styled caption.
+      - `<Takeaways><Eyebrow>Highlights</Eyebrow><ul><li>…</li></ul></Takeaways>` — the takeaway box; the list styles itself.
+      - `<Pill tone="bad">▼ $2.0m · 44%</Pill>` — status chip (tone: `neutral`/`good`/`bad`/`warn`/`info`).
+      - `<Callout tone="warn">…</Callout>` — accent-edged panel (tone: `info`/`good`/`warn`/`bad`).
+
+      Text ALWAYS goes in children (never props); components nest freely with each other, plain HTML, and embeds. Every component also takes an optional `class` prop for targeted tweaks (`<Card class="bg-teal-50 dark:bg-teal-950">`) — custom classes append after the recipe, so use them to ADD (an accent, an alignment), not to re-specify what the recipe already decides.
+
+      **The accent channel.** Eyebrows, `<strong>` inside a `<Headline>`, and the Takeaways edge all take the story's accent color from ONE variable. Set it on the root, picked from the story's subject, as a mid-tone that reads on both white and near-black: `<div data-design="tw" class="… [--st-accent:#b45309]">` (finance teal `#0f766e` is the default; food/retail amber `#b45309`, risk/alert red `#b91c1c`, product indigo `#4f46e5`…). ALWAYS `<strong>` the key figure in each Headline so the claim carries the accent. That one variable re-themes the whole story for ~25 characters.
+
+      **Components-first is the rule, not a suggestion.** The default story is components + prose + embeds and NOTHING else: no `<style>` block, no font `@import`s, no custom hex colors (except the `--st-accent` value), utility classes only where no component exists for the shape. Per-story personality comes CHEAP: the accent variable plus tone props driven by the data. Escalate beyond that only when the user explicitly asks for custom design.
+
+      **When to still write `<style>`**: web-font `@import`s, a motif/signature element utilities can't express (grain, stamps, ghost numerals — design language A), or keyframe animations. Keep it SHORT (a few rules, scoped under your root class) — if your `<style>` block is growing past ~20 rules, you are re-implementing the design system by hand; stop and use utilities/components.
 
       ### Chart and number embedding
 
@@ -985,9 +1018,9 @@ templates:
 
       FLUID, never a fixed canvas, never scaled down: full-bleed on a phone (~390 to 430px) and capped ~1280px centered on desktop. The SAME fragment must look deliberate at both; a desktop layout shrunk onto a phone is the #1 failure mode.
 
-      - **Respond to the story's width, not the viewport.** `container-type:inline-size; container-name:story` on the root `<div>`, `box-sizing:border-box` everywhere, then branch with `@container story (max-width:…)`, NOT `@media` (the width is decoupled from the viewport, so media queries misfire).
-      - **Fluid type and spacing** with `clamp(min, N cqi, max)` (`cqi` is 1% of the story's own width). Fixed px on hero or section type will not scale down.
-      - **Collapse every multi-column band** (hero splits, KPI rows, tickers, timelines, side-by-side columns, chart pairs, wide tables) to a single column or `overflow-x:auto` on a phone via `@container`.
+      - **Respond to the story's width, not the viewport.** Design-system path (default): `@container` class on the root `<div>`, then Tailwind container-query variants (`@lg:`, `@2xl:`, `@3xl:` — NEVER viewport `md:`/`lg:`); `<Grid>` collapses automatically. Custom-CSS path: `container-type:inline-size; container-name:story` on the root, branch with `@container story (max-width:…)`, NOT `@media`.
+      - **Fluid type and spacing**: step sizes up with container variants (`text-3xl @2xl:text-5xl`) or, in custom CSS, `clamp(min, N cqi, max)` (`cqi` is 1% of the story's own width). Fixed px on hero or section type will not scale down.
+      - **Collapse every multi-column band** (hero splits, KPI rows, tickers, timelines, side-by-side columns, chart pairs, wide tables) to a single column or `overflow-x-auto` on a phone via container variants / `@container` rules.
       - **One beat is about one viewport tall.** Charts fill their cell at `width:100%`.
       - **Contrast survives the palette**: never light on light or dark on dark. Set the `colorMode` field ("light"/"dark") so platform charts theme to match.
 
@@ -995,9 +1028,9 @@ templates:
 
       ### Page mechanics (HTML fragment, no JS)
 
-      One root `<div>`, optionally preceded by a `<style>` block — both inside the `<story>…</story>` field element. No `<html>`/`<head>`/`<body>`, and strictly **no `<script>`**.
+      One root `<div>` (with `data-design="tw"`), optionally preceded by a SHORT `<style>` block — both inside the `<story>…</story>` field element. No `<html>`/`<head>`/`<body>`, and strictly **no `<script>`**.
 
-      - **`<style>` for the token system**: CSS variables and reusable classes (`.figure-plate`, `.section-label`, `.highlights`, `.caption-bar`) so the grammar lives in one place. Scope everything under one root class (`.story-x …`) so styles cannot leak into the host.
+      - **Design system first**: utilities + story components carry the layout, spacing, color, and type scale (see Authoring syntax). `<style>` exists only for fonts, motif/signature CSS, and keyframes — scoped under one root class (`.story-x …`) so styles cannot leak into the host. Never rebuild card/grid/pill/label recipes in CSS that components already provide.
       - **Fonts via `@import` at the top of `<style>`**, Google Fonts, graceful installed fallbacks in every stack (`'Fraunces', Didot, Georgia, serif`).
       - **No JS means no scroll triggers.** CSS-only entrance animations (`@keyframes` fade/rise on load, staggered `animation-delay`) are permitted garnish, but the story must read perfectly with zero motion. Respect `prefers-reduced-motion`. (B uses little to no motion.)
       - **Marquee: use the platform class** (A only), never hand-roll it: `<div class="mx-marquee"><div class="mx-marquee-track">…</div></div>`. Style the outer `.mx-marquee` freely; leave the track's motion to the platform. A hand-rolled `overflow:hidden; white-space:nowrap` strip just clips, it does not scroll.
@@ -1026,6 +1059,10 @@ templates:
       ### 4b. From a dashboard
 
       Turning an existing dashboard into a story: the evidence already exists, so the work is editorial and visual, not analytical. **Do NOT explore the database: run no new SQL, do no data hunting.** Reusing the dashboard's existing questions and files is fine and expected; hunting the warehouse for new numbers is not.
+
+      **The default build is COMPONENTS-FIRST and SMALL.** Unless the user asked for custom design, the whole body is the professional scaffold shape — `PageHeader` → per-beat `Section`/`Eyebrow`/`Headline`/`Standfirst`/`Grid`+`Stat`/`FigurePlate`/`Takeaways` → `PageFooter` — with no `<style>`, no font imports, no custom hexes, and only accent-level `class` props. A converted dashboard story should land WELL UNDER ~6,000 characters of body markup; if yours is bigger, you are hand-writing design the components already provide — replace it. It will look designed BECAUSE the components carry the design.
+
+      **Every `<Number>` must be provably right** (the #1 first-pass failure is a live number showing the wrong thing): ALWAYS pass `col=` (never rely on the first column — it is often the date), and make the query return exactly the row you claim (`ORDER BY month DESC LIMIT 1` for "latest"; an aggregate for totals). Before finishing, `ReadFiles` with `rawData: true` on the source questions and CHECK each rendered figure against the dashboard's own KPis — a date like `2024-01-01T00:00:00.000Z` or a first-month value where you claimed "latest" means the col/row is wrong; fix it before you screenshot.
 
       1. **Read the dashboard.** Its question references (ids), their titles, layout order, and any text/markdown cells are your raw material. Read those referenced questions and files to understand what each shows (that is reading existing artifacts, not database exploration). When you need the ACTUAL row values of a chart question — to pick the number for a claim, target a `<Number>` column, or check sort order — call `ReadFiles` with `rawData: true`: by default a chart question returns only an image + summary and the rows are dropped.
       2. **Find the lead** from what the dashboard already shows, exactly as in 4a step 2, but sourced from the existing questions rather than fresh analysis.

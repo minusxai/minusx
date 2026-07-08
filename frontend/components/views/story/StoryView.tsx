@@ -42,6 +42,8 @@ interface StoryViewProps {
   /** The story file's name (selectFile), sourced by the container — select-to-chat provenance fallback. */
   storyName?: string;
   colorMode: 'light' | 'dark';
+  /** Design-system stylesheet for the rendered story (persisted or preview-compiled), sourced by the container. */
+  compiledCss?: string | null;
 }
 
 /**
@@ -52,7 +54,7 @@ interface StoryViewProps {
  * `onChange` (so the header's Save persists them and Cancel reverts them); the html is frozen during
  * the session so the iframe doesn't rebuild mid-edit.
  */
-export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode }: StoryViewProps) {
+export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss }: StoryViewProps) {
   const numericId = typeof fileId === 'number' ? fileId : undefined;
   const canEdit = !readOnly && numericId !== undefined;
   const editing = canEdit && headerEditMode;
@@ -122,6 +124,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             editable={editing}
             readOnly={readOnly}
             colorMode={colorMode}
+            compiledCss={compiledCss}
             filePath={storyPath}
             paramValues={content.parameterValues ?? undefined}
             onEditNumber={setNumberEdit}
