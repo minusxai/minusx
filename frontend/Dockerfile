@@ -83,8 +83,13 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 # Install tsx + re-apply pi-ai patches. The npm install restores native deps
 # (libduckdb.so) that standalone tracing can't follow, but also overwrites the
 # patched pi-ai with the upstream tarball — so patches are re-applied after.
+# @tailwindcss/node|oxide + tailwindcss: the story design-system compiler
+# (lib/data/story/story-css.server.ts) imports these at RUNTIME (they're
+# serverExternalPackages — oxide is a native addon that can't be bundled), so
+# standalone tracing misses them; installing here guarantees they exist with
+# the right linux native bindings.
 COPY --from=builder /app/patches ./patches
-RUN npm install --ignore-scripts tsx
+RUN npm install --ignore-scripts tsx "@tailwindcss/node@^4" "@tailwindcss/oxide@^4" "tailwindcss@^4"
 RUN npx --yes patch-package --error-on-fail && rm -rf ./patches
 RUN grep -q "MX PATCH" /app/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js \
     || (echo "ERROR: pi-ai patch missing from runtime image" && exit 1)
