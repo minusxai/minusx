@@ -124,6 +124,12 @@ describe('higher-order components (the beautiful-by-default layer)', () => {
     expect(html).toContain('italic');
   });
 
+  it('the accent channel: Eyebrow/Headline-strong/Takeaways read --st-accent with a default', () => {
+    expect(emitStoryComponent('Eyebrow', {}, 'x')).toContain('var(--st-accent,#0f766e)');
+    expect(emitStoryComponent('Headline', {}, 'x')).toContain('var(--st-accent,#0f766e)');
+    expect(emitStoryComponent('Takeaways', {}, 'x')).toContain('var(--st-accent,#0f766e)');
+  });
+
   it('PageHeader/PageFooter are the page furniture bands (flex-between, tracked small caps)', () => {
     expect(emitStoryComponent('PageHeader', {}, '<span>L</span><span>R</span>')).toContain('justify-between');
     expect(emitStoryComponent('PageFooter', {}, '<span>L</span><span>R</span>')).toContain('border-t');

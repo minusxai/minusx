@@ -66,9 +66,13 @@ export const STORY_COMPONENTS: Record<string, StoryComponentDef> = {
     tag: 'section',
     classes: () => 'py-8 @2xl:py-12 border-b border-slate-200 dark:border-slate-800',
   },
+  // The ACCENT CHANNEL: recipes that carry the story's personality read --st-accent (with a
+  // refined teal default), so the root re-themes the whole story in one arbitrary property:
+  // <div data-design="tw" class="… [--st-accent:#b45309]">. Data colors (StatDelta/Pill tones)
+  // stay semantic and are NOT accent-driven.
   Eyebrow: {
     tag: 'p',
-    classes: () => 'text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400 mb-2',
+    classes: () => 'text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--st-accent,#0f766e)] mb-2',
   },
   Grid: {
     tag: 'div',
@@ -116,7 +120,9 @@ export const STORY_COMPONENTS: Record<string, StoryComponentDef> = {
   // dashboard→story pass is components + content with almost no utility classes.
   Headline: {
     tag: 'h2',
-    classes: () => 'text-4xl @2xl:text-6xl font-semibold leading-[1.04] tracking-[-0.03em] text-slate-950 dark:text-slate-50 [text-wrap:balance] mt-3 max-w-[24ch]',
+    classes: () =>
+      'text-4xl @2xl:text-6xl font-semibold leading-[1.04] tracking-[-0.03em] text-slate-950 dark:text-slate-50 [text-wrap:balance] mt-3 max-w-[24ch] ' +
+      '[&_strong]:text-[color:var(--st-accent,#0f766e)] [&_strong]:font-semibold', // <strong> the key figure in the claim → it takes the accent
   },
   Standfirst: {
     tag: 'p',
@@ -134,7 +140,8 @@ export const STORY_COMPONENTS: Record<string, StoryComponentDef> = {
     tag: 'div',
     classes: () =>
       'rounded-2xl border border-slate-200 bg-slate-50 p-6 mt-10 dark:border-slate-800 dark:bg-slate-900 ' +
-      '[&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-2 [&_ul]:mt-3 [&_li]:leading-relaxed',
+      'border-l-4 border-l-[color:var(--st-accent,#0f766e)] ' +
+      '[&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-2 [&_ul]:mt-3 [&_li]:leading-relaxed [&_strong]:text-slate-900 dark:[&_strong]:text-slate-100',
   },
   FigurePlate: {
     tag: 'div',

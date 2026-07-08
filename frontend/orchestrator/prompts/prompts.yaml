@@ -887,11 +887,11 @@ templates:
       **Scaffold — this IS the default shape; copy the structure, swap the content. Note how little there is: no CSS, no classes except the root and accents:**
       ```
       <story>
-      <div data-design="tw" class="@container mx-auto max-w-[1280px] bg-white text-slate-800 dark:bg-slate-950 dark:text-slate-200 font-sans px-6 [font-variant-numeric:tabular-nums]">
+      <div data-design="tw" class="@container mx-auto max-w-[1280px] bg-white text-slate-800 dark:bg-slate-950 dark:text-slate-200 font-sans px-6 [font-variant-numeric:tabular-nums] [--st-accent:#0f766e]">
         <PageHeader><span>ACME LEADERSHIP REVIEW</span><span>Confidential · 2026</span></PageHeader>
         <Section>  <!-- one beat = one slide; repeat per beat -->
           <Eyebrow>01 · Business Performance</Eyebrow>
-          <Headline>GWP at 115% of budget through May, AUM +24% YoY.</Headline>
+          <Headline>GWP at <strong>115% of budget</strong> through May, AUM +24% YoY.</Headline>
           <Standfirst>May 2026 YTD vs prior year, budget, and full-year target.</Standfirst>
           <Grid cols={3}>
             <Card><Stat><StatLabel>GWP YTD</StatLabel><StatValue><Number id={142} prefix="IDR " suffix=" Bn" /></StatValue><StatDelta tone="up">▲ 115% of budget</StatDelta></Stat></Card>
@@ -949,7 +949,9 @@ templates:
 
       Text ALWAYS goes in children (never props); components nest freely with each other, plain HTML, and embeds. Every component also takes an optional `class` prop for targeted tweaks (`<Card class="bg-teal-50 dark:bg-teal-950">`) — custom classes append after the recipe, so use them to ADD (an accent, an alignment), not to re-specify what the recipe already decides.
 
-      **Components-first is the rule, not a suggestion.** The default story is components + prose + embeds and NOTHING else: no `<style>` block, no font `@import`s, no custom hex colors, utility classes only where no component exists for the shape. Per-story personality comes CHEAP: tone props driven by the data, plus ONE accent color applied via a few `class` props (e.g. `class="text-teal-700 dark:text-teal-400"` on eyebrows/deltas) — a whole re-theme costs ~100 chars. Escalate beyond that only when the user explicitly asks for custom design.
+      **The accent channel.** Eyebrows, `<strong>` inside a `<Headline>`, and the Takeaways edge all take the story's accent color from ONE variable. Set it on the root, picked from the story's subject, as a mid-tone that reads on both white and near-black: `<div data-design="tw" class="… [--st-accent:#b45309]">` (finance teal `#0f766e` is the default; food/retail amber `#b45309`, risk/alert red `#b91c1c`, product indigo `#4f46e5`…). ALWAYS `<strong>` the key figure in each Headline so the claim carries the accent. That one variable re-themes the whole story for ~25 characters.
+
+      **Components-first is the rule, not a suggestion.** The default story is components + prose + embeds and NOTHING else: no `<style>` block, no font `@import`s, no custom hex colors (except the `--st-accent` value), utility classes only where no component exists for the shape. Per-story personality comes CHEAP: the accent variable plus tone props driven by the data. Escalate beyond that only when the user explicitly asks for custom design.
 
       **When to still write `<style>`**: web-font `@import`s, a motif/signature element utilities can't express (grain, stamps, ghost numerals — design language A), or keyframe animations. Keep it SHORT (a few rules, scoped under your root class) — if your `<style>` block is growing past ~20 rules, you are re-implementing the design system by hand; stop and use utilities/components.
 
