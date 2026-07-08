@@ -31,6 +31,10 @@ export function hasDesignSystemMarker(html: string | null | undefined): boolean 
 
 const CLASS_ATTR_RE = /\bclass\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
+/** Stored attribute values are entity-escaped (escAttr) — decode before tokenizing. &amp; last. */
+const decodeAttr = (s: string) =>
+  s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
 /**
  * All class-attribute tokens in the HTML — the Tailwind candidate set.
  * Deduped and sorted so the compiled CSS is deterministic for a given document.
@@ -38,7 +42,7 @@ const CLASS_ATTR_RE = /\bclass\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 export function extractClassCandidates(html: string): string[] {
   const tokens = new Set<string>();
   for (const m of html.matchAll(CLASS_ATTR_RE)) {
-    for (const token of (m[1] ?? m[2] ?? '').split(/\s+/)) {
+    for (const token of decodeAttr(m[1] ?? m[2] ?? '').split(/\s+/)) {
       if (token) tokens.add(token);
     }
   }

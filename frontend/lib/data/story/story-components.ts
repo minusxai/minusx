@@ -17,11 +17,17 @@
  *
  * The Tailwind classes live in the emitted HTML, so the save-time compiler (story-css.server)
  * picks them up with no extra wiring, and `dark:` variants key off the iframe's `.dark` class.
+ *
+ * Attribute safety: recipes use arbitrary-variant selectors (`[&>p]:`, `[&_ul]:`) whose `&`/`>`
+ * would break the tag-boundary scanners over stored HTML (the PR #575 bug class) — so every
+ * emitted attribute value is entity-escaped (escAttr), and the save-time candidate extraction
+ * decodes them back (story-css.ts).
  */
+import { escAttr, unescAttr } from './html-attr';
 
 interface StoryComponentDef {
   /** The HTML container the component compiles to. */
-  tag: 'section' | 'div' | 'span' | 'p' | 'blockquote';
+  tag: 'section' | 'div' | 'span' | 'p' | 'blockquote' | 'h2';
   /** Enum props: name → allowed values; the FIRST value is the default. */
   props?: Record<string, readonly string[]>;
   /** Class recipe for the resolved props. */
@@ -104,6 +110,38 @@ export const STORY_COMPONENTS: Record<string, StoryComponentDef> = {
     tag: 'blockquote',
     classes: () => 'border-y-2 border-slate-900 dark:border-slate-100 py-6 my-6 font-serif italic text-xl text-slate-800 dark:text-slate-100',
   },
+
+  // ── Higher-order components: the beautiful-by-default layer ─────────────────────────────
+  // These bake the typographic/spacing decisions a designed board deck needs, so the default
+  // dashboard→story pass is components + content with almost no utility classes.
+  Headline: {
+    tag: 'h2',
+    classes: () => 'text-4xl @2xl:text-6xl font-semibold leading-[1.04] tracking-[-0.03em] text-slate-950 dark:text-slate-50 [text-wrap:balance] mt-3 max-w-[24ch]',
+  },
+  Standfirst: {
+    tag: 'p',
+    classes: () => 'font-serif italic text-lg @2xl:text-2xl leading-relaxed text-slate-500 dark:text-slate-400 mt-5 max-w-[62ch]',
+  },
+  PageHeader: {
+    tag: 'div',
+    classes: () => 'flex justify-between items-baseline gap-4 pt-1 pb-6 text-xs font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500',
+  },
+  PageFooter: {
+    tag: 'div',
+    classes: () => 'flex justify-between items-center gap-4 mt-12 pt-4 border-t border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500',
+  },
+  Takeaways: {
+    tag: 'div',
+    classes: () =>
+      'rounded-2xl border border-slate-200 bg-slate-50 p-6 mt-10 dark:border-slate-800 dark:bg-slate-900 ' +
+      '[&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-2 [&_ul]:mt-3 [&_li]:leading-relaxed',
+  },
+  FigurePlate: {
+    tag: 'div',
+    classes: () =>
+      'rounded-2xl border border-slate-200 bg-white p-4 @2xl:p-5 shadow-sm mt-10 min-w-0 dark:border-slate-800 dark:bg-slate-900 ' +
+      '[&>p]:mt-3 [&>p]:text-sm [&>p]:text-slate-500 dark:[&>p]:text-slate-400',
+  },
 };
 
 export const STORY_COMPONENT_NAMES = Object.keys(STORY_COMPONENTS);
@@ -128,7 +166,17 @@ export function emitStoryComponent(
     resolved[prop] = value;
     dataAttrs += ` data-${prop}="${value}"`;
   }
-  return `<${def.tag} data-c="${name}"${dataAttrs} class="${def.classes(resolved)}">${childrenHtml}</${def.tag}>`;
+  // Optional `class` prop: custom utilities appended AFTER the recipe, and stamped in data-cls
+  // so the reverse pass can split custom from recipe. Quotes are stripped (no Tailwind class
+  // needs them — and it kills attribute breakout); the rest is entity-escaped like every other
+  // stored attribute value.
+  let custom = '';
+  if (typeof attrs.class === 'string') {
+    custom = attrs.class.replace(/["']/g, '').replace(/\s+/g, ' ').trim();
+    if (custom) dataAttrs += ` data-cls="${escAttr(custom)}"`;
+  }
+  const cls = def.classes(resolved) + (custom ? ` ${custom}` : '');
+  return `<${def.tag} data-c="${name}"${dataAttrs} class="${escAttr(cls)}">${childrenHtml}</${def.tag}>`;
 }
 
 /**
@@ -139,7 +187,7 @@ export function emitStoryComponent(
  * placeholder reversals so embed divs inside components are already `<Question/>` jsx.
  */
 export function reverseStoryComponents(html: string): string {
-  const OPEN_RE = /<(section|div|span|p|blockquote)\b[^>]*\bdata-c="([A-Za-z]+)"[^>]*>/;
+  const OPEN_RE = /<(section|div|span|p|blockquote|h2)\b[^>]*\bdata-c="([A-Za-z]+)"[^>]*>/;
   let out = html;
   // Innermost-first: repeatedly rewrite containers whose inner HTML holds no further data-c
   // stamp, until none remain. Each rewrite is one depth-matched container, so same-tag nesting
@@ -170,6 +218,8 @@ export function reverseStoryComponents(html: string): string {
       const pm = openTagHtml.match(new RegExp(`\\bdata-${prop}="([^"]*)"`));
       if (pm) props += prop === 'cols' ? ` ${prop}={${pm[1]}}` : ` ${prop}="${pm[1]}"`;
     }
+    const cm = openTagHtml.match(/\bdata-cls="([^"]*)"/);
+    if (cm) props += ` class="${unescAttr(cm[1])}"`;
     const replacement = `<${name}${props}>${inner}</${name}>`;
     out = out.slice(0, openStart) + replacement + out.slice(closeStart + `</${tag}>`.length);
     searchFrom = openStart + replacement.length;

@@ -329,9 +329,12 @@ export const StoryContent = Type.Object({
     'classes you use at save time. Responsiveness: Tailwind CONTAINER-QUERY variants (`@lg:`, `@2xl:`, `@3xl:` — ' +
     'NEVER viewport `md:`/`lg:`), collapsing every multi-column band to one column on narrow widths; wrap wide ' +
     'tables in `overflow-x-auto`. Dark/light: `dark:` variants follow the app mode. Story COMPONENTS replace ' +
-    'hand-built containers: <Section>, <Eyebrow>, <Grid cols={2|3|4}>, <Card>, <Stat>+<StatLabel>/<StatValue>/' +
-    '<StatDelta tone="up|down|neutral">, <Pill tone="neutral|good|bad|warn|info">, <Callout tone="info|good|warn|bad">, ' +
-    '<Quote> — text goes in CHILDREN, props are enums only; they nest freely with HTML and embeds. A <style> ' +
+    'hand-built containers AND carry the design (components-first is the default): <PageHeader>/<PageFooter>, ' +
+    '<Section>, <Eyebrow>, <Headline>, <Standfirst>, <Grid cols={2|3|4}>, <Card>, <Stat>+<StatLabel>/<StatValue>/' +
+    '<StatDelta tone="up|down|neutral">, <FigurePlate> (chart + styled caption <p>), <Takeaways> (self-styling ' +
+    '<ul>), <Pill tone="neutral|good|bad|warn|info">, <Callout tone="info|good|warn|bad">, <Quote> — text goes in ' +
+    'CHILDREN, props are enums plus an optional `class` for accent-level tweaks; they nest freely with HTML and ' +
+    'embeds. A <style> ' +
     'block is allowed ONLY for web-font @imports, motif/signature CSS utilities cannot express, and keyframes — ' +
     'keep it short and scoped under your root class; rules targeting body or html will NOT apply. <script> tags, ' +
     'event-handler attributes, and iframes are stripped at render time. Write it like a designed long-form ' +

@@ -109,6 +109,71 @@ describe('full agent round trip', () => {
   });
 });
 
+describe('higher-order components (the beautiful-by-default layer)', () => {
+  it('Headline compiles to an h2 with the display-type recipe baked in', () => {
+    const html = emitStoryComponent('Headline', {}, 'Orders scaled 128x.')!;
+    expect(html).toMatch(/^<h2\b/);
+    expect(html).toContain('data-c="Headline"');
+    expect(html).toContain('font-semibold');
+    expect(html).toContain('@2xl:text-6xl'); // responsive display size is the recipe's job, not the agent's
+  });
+
+  it('Standfirst is the serif italic lede', () => {
+    const html = emitStoryComponent('Standfirst', {}, 'A leadership view…')!;
+    expect(html).toContain('font-serif');
+    expect(html).toContain('italic');
+  });
+
+  it('PageHeader/PageFooter are the page furniture bands (flex-between, tracked small caps)', () => {
+    expect(emitStoryComponent('PageHeader', {}, '<span>L</span><span>R</span>')).toContain('justify-between');
+    expect(emitStoryComponent('PageFooter', {}, '<span>L</span><span>R</span>')).toContain('border-t');
+  });
+
+  it('Takeaways styles its own nested list, entity-escaped in the stored attr (PR #575 rule)', () => {
+    const html = emitStoryComponent('Takeaways', {}, '<ul><li>x</li></ul>')!;
+    expect(html).toContain('[&amp;_ul]:list-disc'); // & escaped at rest; extraction decodes it back
+    expect(html).not.toMatch(/class="[^"]*&(?!amp;|gt;|lt;|quot;)/); // no raw & inside the attr
+  });
+
+  it('FigurePlate frames a chart and styles a trailing caption paragraph (escaped at rest)', () => {
+    const html = emitStoryComponent('FigurePlate', {}, '<div data-question-id="1"></div><p>caption</p>')!;
+    expect(html).toContain('data-c="FigurePlate"');
+    expect(html).toContain('[&amp;&gt;p]:'); // > never appears raw inside a stored attribute
+  });
+});
+
+describe('class prop — customization without leaving the component system', () => {
+  it('merges custom classes after the recipe and stamps them for the reverse pass', () => {
+    const html = emitStoryComponent('Card', { class: 'bg-indigo-50 border-indigo-200' }, 'x')!;
+    expect(html).toContain('data-cls="bg-indigo-50 border-indigo-200"');
+    expect(html).toMatch(/class="[^"]*rounded-2xl[^"]*bg-indigo-50 border-indigo-200"/); // recipe first, custom last
+  });
+
+  it('reverses back to a class prop (recipe classes dropped, custom kept)', () => {
+    const html = emitStoryComponent('Pill', { tone: 'good', class: 'text-base' }, 'up')!;
+    expect(reverseStoryComponents(html)).toBe('<Pill tone="good" class="text-base">up</Pill>');
+  });
+
+  it('round-trips through the full agent markup pipeline', () => {
+    const markup =
+      '<description>d</description>\n<story><div data-design="tw" class="@container">' +
+      '<Section><Headline class="text-center">Claim.</Headline>' +
+      '<FigurePlate><Question id={14} height="300px" /><p>cap</p></FigurePlate></Section></div></story>';
+    const parsed = markupToContent('story', markup);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const emitted = fileToMarkup('story', parsed.content as StoryContent);
+    expect(emitted).toContain('<Headline class="text-center">Claim.</Headline>');
+    expect(emitted).toContain('<FigurePlate><Question id={14}');
+    expect(emitted).not.toContain('data-c=');
+  });
+
+  it('escapes/ignores malformed class values safely (no attribute breakout)', () => {
+    const html = emitStoryComponent('Card', { class: 'a" onmouseover="x' }, 'x')!;
+    expect(html).not.toContain('onmouseover="x"');
+  });
+});
+
 describe('buildStoryJsx ordering', () => {
   it('reverses embeds inside components (placeholders first, then containers)', () => {
     const stored =

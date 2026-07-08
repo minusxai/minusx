@@ -49,6 +49,15 @@ describe('extractClassCandidates', () => {
     const c = extractClassCandidates('<div data-x="flex" title="grid">bg-red-100</div>');
     expect(c).toEqual([]);
   });
+
+  it('decodes entity-escaped arbitrary-variant classes (stored attrs escape &/>/<)', () => {
+    // Component recipes like [&>p]:mt-3 are stored entity-escaped (escAttr) so tag scanners
+    // don't break; extraction must decode them back to the real Tailwind candidates.
+    const c = extractClassCandidates('<div class="[&amp;&gt;p]:mt-3 [&amp;_ul]:list-disc rounded-2xl">x</div>');
+    expect(c).toContain('[&>p]:mt-3');
+    expect(c).toContain('[&_ul]:list-disc');
+    expect(c).toContain('rounded-2xl');
+  });
 });
 
 describe('compileStoryCss', () => {
@@ -83,6 +92,15 @@ describe('compileStoryCss', () => {
     const a = await compileStoryCss(TW_STORY);
     const b = await compileStoryCss(TW_STORY);
     expect(a).toEqual(b);
+  });
+
+  // End-to-end for component recipes: emitted (entity-escaped) arbitrary-variant classes must
+  // survive storage → extraction → compile and produce real descendant rules.
+  it('compiles entity-escaped arbitrary-variant recipes (Takeaways/FigurePlate descendant styling)', async () => {
+    const stored = '<div data-design="tw"><div class="[&amp;_ul]:list-disc [&amp;&gt;p]:mt-3">x</div></div>';
+    const css = (await compileStoryCss(stored))!;
+    expect(css).toContain('list-style-type: disc');
+    expect(css).toMatch(/>\s*p/); // the child-combinator selector made it into the CSS
   });
 
   // The story iframe also carries the app's mirrored stylesheet (reset included) UN-layered,
