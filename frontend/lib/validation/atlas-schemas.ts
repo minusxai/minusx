@@ -322,23 +322,22 @@ export const StoryContent = Type.Object({
   story: NullableD(Type.String({ format: 'jsx' }),
     'One self-contained, FLUID RESPONSIVE HTML document rendered as a single scrolling story page (height ' +
     'unlimited — the page scrolls). It is NOT a fixed canvas and is NOT scaled: it renders full-bleed on a phone ' +
-    '(~390–430px wide) and capped ~1280px wide, centered, on desktop. The SAME document must look great at BOTH, ' +
-    'so you MUST design responsively. It renders in an isolated frame, so go all-out on design: <style> blocks, ' +
-    'CSS classes, web fonts (@import in a <style> tag), gradients and CSS animations are all allowed and ' +
-    'encouraged. Scope all CSS under your own root wrapper (e.g. <div class="story">…) — rules targeting body or ' +
-    'html will NOT apply. <script> tags, event-handler attributes, and iframes are stripped at render time. ' +
-    'Write it like a designed long-form editorial piece: narrative prose between charts, big pull-quote numbers, ' +
-    'section headers. ' +
-    'RESPONSIVE RULES (non-negotiable — this is how it stays readable on mobile): ' +
-    '(1) Put `container-type:inline-size;container-name:story` on your root wrapper and `box-sizing:border-box` ' +
-    'on everything. (2) Size ALL typography and major spacing with `clamp(min, Ncqi, max)` so it scales with the ' +
-    "story's own width (`cqi` = 1% of the container width). (3) Use `@container story (max-width:…)` queries — " +
-    'NOT `@media` — to collapse every multi-column band to a single column on narrow widths: CSS grids, ' +
-    'side-by-side columns, KPI/stat rows, timelines, and chart pairs must all stack on a phone. Never let any ' +
-    'fixed-px width exceed the container (wrap wide tables in a `overflow-x:auto` scroller). (4) CONTRAST: every ' +
-    'piece of text — especially headings — must contrast strongly with the background behind it (never light ' +
-    'text on a light page or vice-versa). Set the `colorMode` field to the mode your design uses so embedded ' +
-    'charts theme to match (a dark story → "dark"). ' +
+    '(~390–430px wide) and capped ~1280px wide, centered, on desktop. The SAME document must look great at BOTH. ' +
+    'STYLING — use the built-in DESIGN SYSTEM (the default): put `data-design="tw"` and the `@container` class on ' +
+    'your root wrapper (e.g. <div data-design="tw" class="@container mx-auto max-w-[1280px] …">). Every Tailwind ' +
+    'v4 utility then works (arbitrary values like text-[13px] included) — the platform compiles exactly the ' +
+    'classes you use at save time. Responsiveness: Tailwind CONTAINER-QUERY variants (`@lg:`, `@2xl:`, `@3xl:` — ' +
+    'NEVER viewport `md:`/`lg:`), collapsing every multi-column band to one column on narrow widths; wrap wide ' +
+    'tables in `overflow-x-auto`. Dark/light: `dark:` variants follow the app mode. Story COMPONENTS replace ' +
+    'hand-built containers: <Section>, <Eyebrow>, <Grid cols={2|3|4}>, <Card>, <Stat>+<StatLabel>/<StatValue>/' +
+    '<StatDelta tone="up|down|neutral">, <Pill tone="neutral|good|bad|warn|info">, <Callout tone="info|good|warn|bad">, ' +
+    '<Quote> — text goes in CHILDREN, props are enums only; they nest freely with HTML and embeds. A <style> ' +
+    'block is allowed ONLY for web-font @imports, motif/signature CSS utilities cannot express, and keyframes — ' +
+    'keep it short and scoped under your root class; rules targeting body or html will NOT apply. <script> tags, ' +
+    'event-handler attributes, and iframes are stripped at render time. Write it like a designed long-form ' +
+    'editorial piece: narrative prose between charts, big pull-quote numbers, section headers. CONTRAST: every ' +
+    'piece of text must contrast strongly with the background behind it. Set the `colorMode` field to the mode ' +
+    'your design uses so embedded charts theme to match (a dark story → "dark"). ' +
     'CHART EMBEDS — the body is the single source of truth (there is no separate assets field). ' +
     'Use the <Question/> component, two forms: ' +
     '(A) SAVED — <Question id={N} height="420px" /> embeds saved question file N. PREFER THIS: reuse an ' +
