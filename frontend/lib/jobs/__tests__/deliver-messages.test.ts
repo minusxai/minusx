@@ -66,4 +66,25 @@ describe('deliverMessages slack_app_alert', () => {
       deliveryError: 'No Slack app installation found for team T_TEST',
     });
   });
+
+  it('does not resend messages that are no longer pending', async () => {
+    const messages = [slackAppMessage({ status: 'sent', sentAt: '2026-01-01T00:00:00.000Z' })];
+    const config = baseConfig({
+      bots: [{
+        type: 'slack',
+        name: 'Slack',
+        install_mode: 'oauth',
+        bot_token: 'xoxb-test',
+        team_id: 'T_TEST',
+      }],
+    });
+
+    await deliverMessages(messages, config);
+
+    expect(postSlackMessageMock).not.toHaveBeenCalled();
+    expect(messages[0]).toMatchObject({
+      status: 'sent',
+      sentAt: '2026-01-01T00:00:00.000Z',
+    });
+  });
 });

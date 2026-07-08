@@ -71,6 +71,7 @@ export async function deliverMessages(
 
   for (const msg of messages) {
     if (skipTypes.includes(msg.type)) continue;
+    if (msg.status !== 'pending') continue;
     try {
       if (msg.type === 'email_alert') {
         if (!emailWebhook) {
