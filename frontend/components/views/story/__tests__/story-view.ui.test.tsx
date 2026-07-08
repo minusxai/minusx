@@ -310,11 +310,11 @@ describe('StoryView', () => {
     const twContent = {
       description: null,
       story: '<div data-design="tw" class="grid gap-4"><h1 class="text-3xl">TW story</h1></div>',
-      compiledCss: '.grid{display:grid}.gap-4{gap:1rem}.text-3xl{font-size:1.875rem}',
     } as StoryContent;
+    const twCss = '.grid{display:grid}.gap-4{gap:1rem}.text-3xl{font-size:1.875rem}';
 
     it('injects compiledCss as a head stylesheet when present', async () => {
-      renderWithProviders(<StoryView content={twContent} {...NOEDIT_PROPS} />);
+      renderWithProviders(<StoryView content={twContent} compiledCss={twCss} {...NOEDIT_PROPS} />);
       await waitFor(() => {
         const iframe = screen.getByLabelText('Story document') as HTMLIFrameElement;
         const tw = iframe.contentDocument!.head.querySelector('style[data-mx-tw]');

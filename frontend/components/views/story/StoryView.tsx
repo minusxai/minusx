@@ -7,7 +7,6 @@ import AgentHtml, { type NumberQueryEditRequest } from '@/components/views/share
 import NumberQueryEditor from '@/components/views/story/NumberQueryEditor';
 import { StoryEmptyState } from '@/components/views/shared/empty-states';
 import { StoryContent } from '@/lib/types';
-import type { CompiledCssStoryContent } from '@/lib/data/story/story-css';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 import { applyStoryHtmlEdit } from '@/lib/file-state/file-state';
 import { STORY_W } from './ScaledStoryFrame';
@@ -43,6 +42,8 @@ interface StoryViewProps {
   /** The story file's name (selectFile), sourced by the container — select-to-chat provenance fallback. */
   storyName?: string;
   colorMode: 'light' | 'dark';
+  /** Design-system stylesheet for the rendered story (persisted or preview-compiled), sourced by the container. */
+  compiledCss?: string | null;
 }
 
 /**
@@ -53,7 +54,7 @@ interface StoryViewProps {
  * `onChange` (so the header's Save persists them and Cancel reverts them); the html is frozen during
  * the session so the iframe doesn't rebuild mid-edit.
  */
-export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode }: StoryViewProps) {
+export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss }: StoryViewProps) {
   const numericId = typeof fileId === 'number' ? fileId : undefined;
   const canEdit = !readOnly && numericId !== undefined;
   const editing = canEdit && headerEditMode;
@@ -123,7 +124,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             editable={editing}
             readOnly={readOnly}
             colorMode={colorMode}
-            compiledCss={(content as CompiledCssStoryContent).compiledCss}
+            compiledCss={compiledCss}
             filePath={storyPath}
             paramValues={content.parameterValues ?? undefined}
             onEditNumber={setNumberEdit}

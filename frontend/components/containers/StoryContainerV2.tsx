@@ -15,7 +15,8 @@
 import { useMemo, useState } from 'react';
 import { LuGlobe } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
-import { selectMergedContent } from '@/store/filesSlice';
+import { selectMergedContent, selectIsDirty } from '@/store/filesSlice';
+import { useStoryPreviewCss } from '@/lib/hooks/use-story-preview-css';
 import { selectFileEditMode } from '@/store/uiSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -33,6 +34,9 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const headerEditMode = useAppSelector(state => (numericId !== undefined ? selectFileEditMode(state, numericId) : false));
   const colorMode = useAppSelector(state => state.ui.colorMode);
+  const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
+  // Persisted compiledCss for clean saved stories; preview-compiled for drafts/staged edits.
+  const compiledCss = useStoryPreviewCss(mergedContent, isDirty);
 
   // Publishing is admin-only; published via a toolbar action + the ShareModal.
   const canShare = numericId !== undefined && isAdmin(effectiveUser?.role || 'viewer');
@@ -56,6 +60,7 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
         storyPath={numericId !== undefined ? file.path : undefined}
         storyName={numericId !== undefined ? file.name : undefined}
         colorMode={colorMode}
+        compiledCss={compiledCss}
       />
       {canShare && numericId !== undefined && (
         <ShareModal fileId={numericId} fileName={file.name} isOpen={shareOpen} onClose={() => setShareOpen(false)} />

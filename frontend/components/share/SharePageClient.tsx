@@ -20,6 +20,7 @@ import ChatInterface from '@/components/explore/ChatInterface';
 import ShareLeadGate from './ShareLeadGate';
 import ShareFloatingChat from './ShareFloatingChat';
 import { StoryContent } from '@/lib/types';
+import type { CompiledCssStoryContent } from '@/lib/data/story/story-css';
 import type { AppState } from '@/lib/appState';
 import type { Mode } from '@/lib/mode/mode-types';
 
@@ -345,5 +346,6 @@ function SharedStory({ fileId }: { fileId: number }) {
   }
   // fileId is intentionally NOT forwarded to StoryView here (read-only share render, no editing) —
   // headerEditMode/storyPath/storyName mirror what StoryView would compute with no fileId.
-  return <StoryView content={mergedContent} readOnly headerEditMode={false} storyPath={undefined} storyName={undefined} colorMode={colorMode} />;
+  // Published render: the persisted compiledCss is always fresh (recomputed on every save).
+  return <StoryView content={mergedContent} readOnly headerEditMode={false} storyPath={undefined} storyName={undefined} colorMode={colorMode} compiledCss={(mergedContent as CompiledCssStoryContent).compiledCss} />;
 }
