@@ -23,6 +23,8 @@ interface ChatHeaderBarProps {
   isExplorePage: boolean;
   /** Agent turn in flight — mirrors the server's mint guard by disabling Copy-to-Agent. */
   agentBusy?: boolean;
+  /** Current page state — captured at mint time so the remote agent knows what the user is looking at. */
+  appState?: unknown;
   navigate: (href: string) => void;
   handleNewChat: () => void;
 }
@@ -41,6 +43,7 @@ export default function ChatHeaderBar({
   hasMessages,
   isExplorePage,
   agentBusy = false,
+  appState,
   navigate,
   handleNewChat,
 }: ChatHeaderBarProps) {
@@ -87,7 +90,13 @@ export default function ChatHeaderBar({
       }
       // patchApiUrl carries mode/as_user — a tutorial-mode session must mint AS tutorial, or the
       // owner/mode check correctly 403s (browser-verified failure).
-      const res = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${targetId}/remote-session`), { method: 'POST' });
+      const res = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${targetId}/remote-session`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Mint-time app state: the page the user is looking at (dashboard/question/story) rides to
+        // the session root so the agent starts oriented (skill doc "Current page", /context).
+        body: JSON.stringify({ appState: appState ?? undefined }),
+      });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         const message = (body as { error?: { message?: string } })?.error?.message
@@ -107,7 +116,7 @@ export default function ChatHeaderBar({
       console.error('[ChatHeaderBar] copy-to-agent failed:', err);
       toaster.create({ title: 'Could not start a remote session', type: 'error' });
     }
-  }, [conversationID, dispatch]);
+  }, [conversationID, appState, dispatch]);
 
   // Handler for setting conversation as active
   const handleSetAsActive = () => {

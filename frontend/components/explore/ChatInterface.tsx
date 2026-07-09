@@ -879,6 +879,7 @@ export default function ChatInterface({
           hasMessages={allMessages.length > 0}
           isExplorePage={isExplorePage}
           agentBusy={isAgentRunning || isStreaming || remoteSessionActive}
+          appState={appState ?? undefined}
           navigate={navigate}
           handleNewChat={handleNewChat}
         />

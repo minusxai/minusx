@@ -13,6 +13,7 @@ import type { AgentInvocation } from '@/orchestrator/types';
 import type { ToolResultMessage } from '@/orchestrator/llm';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
+import { getPageType } from '@/agents/analyst/skills';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { UserDB } from '@/lib/database/user-db';
@@ -34,7 +35,7 @@ import {
   saveRemoteSession,
   touchRemoteSession,
 } from '@/lib/data/remote-sessions.server';
-import type { RemoteSessionDenial, RemoteSessionMintResult } from '@/lib/data/remote-sessions.types';
+import type { RemoteSessionDenial, RemoteSessionMintResult, RemoteSessionPage } from '@/lib/data/remote-sessions.types';
 import { notifyInterrupt, notifyMessage, notifyStatus } from '@/lib/chat/conversation-stream.server';
 
 /** Root-invocation user message — rendered as the turn boundary in the side chat and in later
@@ -51,7 +52,7 @@ export class RemoteSessionMintError extends Error {
 /** Build the agent context the session's tools will read (schema, whitelist, context docs, …) —
  *  the same server-resolved pieces `setupOrchestration` gives a browser turn that sends no
  *  client pointers. Stored on the root invocation like any other turn's context. */
-async function buildRemoteSessionContext(user: EffectiveUser): Promise<RemoteAnalystContext> {
+async function buildRemoteSessionContext(user: EffectiveUser, appState?: unknown): Promise<RemoteAnalystContext> {
   const serverArgs = await buildServerAgentArgs(user, {});
   const whitelistedTables: string[] = [];
   for (const s of serverArgs.schema) {
@@ -71,9 +72,26 @@ async function buildRemoteSessionContext(user: EffectiveUser): Promise<RemoteAna
     schema: serverArgs.schema,
     homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
     role: user.role,
+    // Mint-time app state (the page the user is looking at) — same field a normal turn carries,
+    // so tools and later LLM turns see what was on screen when the session started.
+    appState,
+    pageType: getPageType(appState),
     // Frozen like Orchestrator.run() does, so later projections re-render identically.
     currentTime: `${new Date().toISOString().slice(0, 13).replace('T', ' ')}:00 UTC`,
   } as RemoteAnalystContext;
+}
+
+/** Lean page summary from a file-page app state (undefined for explore/folder/absent states). */
+export function summarizeAppStatePage(appState: unknown): RemoteSessionPage | undefined {
+  const a = appState as { type?: string; state?: { fileState?: { id?: number; type?: string; name?: string; path?: string } } } | null;
+  const fs = a && a.type === 'file' ? a.state?.fileState : undefined;
+  if (!fs || typeof fs.id !== 'number') return undefined;
+  return {
+    fileId: fs.id,
+    ...(fs.type ? { fileType: fs.type } : {}),
+    ...(fs.name ? { fileName: fs.name } : {}),
+    ...(fs.path ? { path: fs.path } : {}),
+  };
 }
 
 /**
@@ -85,17 +103,20 @@ export async function mintRemoteSession(
   conversation: Conversation,
   user: EffectiveUser,
   baseUrl: string,
+  opts: { appState?: unknown } = {},
 ): Promise<RemoteSessionMintResult> {
   if (conversation.runStatus === 'running' || conversation.runStatus === 'paused') {
     throw new RemoteSessionMintError('busy');
   }
   const reMint = conversation.runStatus === 'remote' && !!conversation.meta.remoteSession;
   const { nonce, record } = buildRemoteSessionRecord(user.userId);
+  const page = summarizeAppStatePage(opts.appState) ?? conversation.meta.remoteSession?.page;
+  if (page) record.page = page;
 
   if (!reMint) {
     // Session root invocation — gives every remote tool call a valid parent and the tools their
     // context. Appended exactly like Orchestrator.run() appends a turn's root.
-    const context = await buildRemoteSessionContext(user);
+    const context = await buildRemoteSessionContext(user, opts.appState);
     const rootInvocation: AgentInvocation & { parent_id: null } = {
       type: 'toolCall',
       id: randomUUID(),

@@ -11,6 +11,7 @@ import {
 import type { RemoteSessionStatus } from '@/lib/data/remote-sessions.types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { Conversation } from '@/lib/data/conversations.types';
+import { boundContextAppState } from '@/lib/chat/compress-augmented';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -44,7 +45,11 @@ export const POST = withAuth(async (
     const proto = (request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', ''))
       .split(',')[0].trim();
     const host = request.headers.get('host') || request.nextUrl.host;
-    const result = await mintRemoteSession(conversation, user, `${proto}://${host}`);
+    // Mint-time app state (what the user is looking at) — bounded like the turns route bounds it.
+    const body = await request.json().catch(() => ({} as Record<string, unknown>));
+    const appState = (body as { appState?: unknown }).appState;
+    if (appState) boundContextAppState(appState);
+    const result = await mintRemoteSession(conversation, user, `${proto}://${host}`, { appState });
     return successResponse(result);
   } catch (error) {
     if (error instanceof RemoteSessionMintError) {

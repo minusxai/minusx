@@ -42,6 +42,10 @@ export async function GET(
   const { conversation, user } = resolved;
   const base = baseUrl(request);
   const sessionUrl = `${base}/s/${code}`;
+  const page = conversation.meta.remoteSession?.page;
+  const pageLine = page
+    ? `\n- Current page: the user is looking at ${page.fileType ?? 'file'} "${page.fileName ?? ''}" (file id ${page.fileId}) — \`ReadFiles\` it for details. (Navigate changes this.)`
+    : '';
 
   const connections = (await listAllConnections(user)).connections.map((c) => ({
     name: c.name,
@@ -61,7 +65,7 @@ Everything you do is rendered in the user's chat sidebar in real time and durabl
 
 ## Session
 
-- Conversation id: ${conversation.id}
+- Conversation id: ${conversation.id}${pageLine}
 - Session URL (this page — treat it as a secret): \`${sessionUrl}\`
 - Data connections: ${connections.length > 0 ? connections.map((c) => `\`${c.name}\` (${c.dialect})`).join(', ') : '(none configured)'}
 

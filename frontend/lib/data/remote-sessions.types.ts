@@ -26,6 +26,17 @@ export interface RemoteSessionRecord {
   createdBy: number;
   /** Names the exposed leaf-tool list (currently always 'remote-session'). */
   toolset: string;
+  /** The page the user was on at mint time (from the client's app state) — surfaced in the skill
+   *  doc + /context so the agent knows what the user is looking at. Navigate changes the live page. */
+  page?: RemoteSessionPage;
+}
+
+/** Lean page summary extracted from the mint-time app state. */
+export interface RemoteSessionPage {
+  fileId?: number;
+  fileType?: string;
+  fileName?: string;
+  path?: string;
 }
 
 export type RemoteSessionDenial =
@@ -76,6 +87,8 @@ export interface RemoteSessionContext {
   conversationId: number;
   mode: string;
   agentName: string;
+  /** Page the user was on when the session started (Navigate changes the live page). */
+  currentPage?: RemoteSessionPage;
   connections: { name: string; dialect: string }[];
   toolNames: string[];
 }

@@ -135,6 +135,47 @@ describe('remote session mint / stop / status routes', () => {
   });
 });
 
+describe('mint captures the current app state (the page the user is looking at)', () => {
+  setupTestDb(TEST_DB_PATH);
+
+  const APP_STATE = {
+    type: 'file',
+    state: { fileState: { id: 77, type: 'dashboard', name: 'Executive KPIs', path: '/org/executive-kpis' } },
+  };
+
+  async function mintWithAppState(conversationId: number) {
+    const res = await mintRoute(
+      new NextRequest(`http://localhost:3000/api/conversations/${conversationId}/remote-session`, {
+        method: 'POST',
+        body: JSON.stringify({ appState: APP_STATE }),
+      }),
+      idCtx(conversationId),
+    );
+    return (await res.json()).data as RemoteSessionMintResult;
+  }
+
+  it('the session root invocation carries the app state (tools + later turns see the page)', async () => {
+    const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+    await mintWithAppState(conv.id);
+    const rows = await loadMessages(conv.id);
+    const ctx = (rows[0].content as { context?: { appState?: { type?: string }; pageType?: string } }).context;
+    expect(ctx?.appState?.type).toBe('file');
+    expect(ctx?.pageType).toBe('dashboard');
+  });
+
+  it('the skill doc and /context tell the agent what page the user is on', async () => {
+    const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+    const mint = await mintWithAppState(conv.id);
+    const doc = await (await skillDocRoute(new NextRequest(`http://localhost:3000/s/${mint.code}`), codeCtx(mint.code))).text();
+    expect(doc).toContain('Executive KPIs');
+    expect(doc).toContain('77');
+
+    const { GET: contextRoute } = await import('@/app/s/[code]/context/route');
+    const snapshot = await (await contextRoute(new NextRequest(`http://localhost:3000/s/${mint.code}/context`), codeCtx(mint.code))).json();
+    expect(snapshot.currentPage).toMatchObject({ fileId: 77, fileType: 'dashboard', fileName: 'Executive KPIs' });
+  });
+});
+
 describe('public /s/<code> skill document', () => {
   setupTestDb(TEST_DB_PATH);
 

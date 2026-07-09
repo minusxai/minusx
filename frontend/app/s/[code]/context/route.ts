@@ -17,6 +17,7 @@ export const GET = withRemoteSessionAuth(async (_request: NextRequest, { convers
     conversationId: conversation.id,
     mode: conversation.mode,
     agentName: 'RemoteSessionAgent',
+    ...(conversation.meta.remoteSession?.page ? { currentPage: conversation.meta.remoteSession.page } : {}),
     connections,
     toolNames: RemoteSessionAgent.tools.map((t) => t.name),
   };
