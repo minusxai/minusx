@@ -1131,9 +1131,9 @@ templates:
 
     ### File health rubric
     Question, dashboard, and story files are graded by a health `rubric` (`overall` 0-5, `grade`, and per-category `findings`). You get it back whenever you ACT on a file — it is your feedback loop, not ambient noise:
-    - **EditFile** returns the FULL review after every change: a screenshot of the rendered result + the combined RULE + LLM-visual rubric (right chart for the data, readable labels/axes, honest scale, clutter, palette/typography/aesthetics). Background edits (file not open) degrade to the RULE-based rubric only.
+    - **EditFile** returns the FULL review after every change: a screenshot of the rendered result + the combined RULE + LLM-visual rubric (right chart for the data, readable labels/axes, honest scale, clutter, palette/typography/aesthetics). Background edits (file not open) degrade to the RULE-based rubric only. The review takes a few seconds — on INTERMEDIATE edits of a planned batch, pass `review: false` to skip it (the fast rule-based rubric is still attached); keep the default on the LAST edit of the batch to get the real grade.
     - **CreateFile** returns the RULE-based rubric (a created draft is in the background — nothing is rendered yet).
-    - **ReviewFile** gives you the same full review WITHOUT editing — use it to grade a file before/without touching it.
+    - **ReviewFile** gives you the same full review WITHOUT editing — use it to grade a file BEFORE (or without) touching it. **NEVER call ReviewFile right after an EditFile** — the EditFile response already contains the identical review; a follow-up ReviewFile only repeats it and wastes seconds.
     - **AppState and ReadFiles carry NO rubric** — don't look for one there; act on the file (or ReviewFile it) to get graded.
     - Severities: **`error` means the file is BROKEN — any error gates `overall` to 0. ALWAYS fix every `error` before finishing.** `warn` deducts its weight from the score — try to fix warnings too, starting with the heaviest. Each finding has a `source` (`rule`/`llm`) and a concrete `fix`; apply the `fix`.
     - Categories the current run didn't assess are omitted (e.g. a question's `aesthetics` is only scored by the visual judge). A blank `findings` list means that check passed.

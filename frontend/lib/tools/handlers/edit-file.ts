@@ -25,7 +25,7 @@ import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { selectEffectiveUser } from '@/store/authSlice';
 import type { FrontendToolHandler } from './types';
 import { renderFileChartImageBlocks } from './chart-images';
-import { reviewFile } from './file-review';
+import { deterministicAgentRubric, reviewFile } from './file-review';
 import { vizWarningForQuestion } from './viz-warning';
 
 /**
@@ -329,9 +329,12 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
   // Rubric v2: every successful EditFile returns the file's health review — a screenshot of the
   // live rendered view + the FULL rubric (deterministic + LLM visual judge + score) when the
   // file's view is mounted, degrading to the rules-only rubric for background edits. Best-effort:
-  // a review failure never fails the staged edit.
+  // a review failure never fails the staged edit. `review: false` skips the expensive
+  // capture+judge round (intermediate edits of a batch) — the free rules-based rubric stays.
   const colorMode: 'light' | 'dark' = context.state?.ui?.colorMode === 'dark' ? 'dark' : 'light';
-  const review = await reviewFile(fileId, { colorMode, fullHeight: true });
+  const review = args.review !== false
+    ? await reviewFile(fileId, { colorMode, fullHeight: true })
+    : { rubric: deterministicAgentRubric(fileId), screenshotUrl: undefined, reviewMode: 'deterministic' as const };
 
   // Render the chart image only for the image presentation AND when the result/viz actually changed.
   const queryResultChanged = compressed.queryResults.some((qr: { id?: string }) => {
