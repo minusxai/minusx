@@ -43,6 +43,8 @@ import * as storeModule from '@/store/store';
 import ChatInput from '@/components/explore/ChatInput';
 import RemoteSessionBanner from '@/components/explore/RemoteSessionBanner';
 import ChatHeaderBar from '@/components/explore/ChatHeaderBar';
+import RemoteSessionPrompts from '@/components/remote/RemoteSessionPrompts';
+import { loadConversation, setRemoteSession, addUserInputRequest } from '@/store/chatSlice';
 
 describe('ChatInput: remote session hard freeze', () => {
   beforeEach(() => {
@@ -143,5 +145,71 @@ describe('ChatHeaderBar: Copy to Agent', () => {
     renderHeader({ agentBusy: true });
     const btn = screen.getByLabelText('Copy to agent') as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
+  });
+});
+
+
+describe('RemoteSessionPrompts: global approval host', () => {
+  function storeWithPendingConfirm(remote: boolean) {
+    const store = storeModule.makeStore();
+    store.dispatch(loadConversation({
+      conversation: {
+        _id: 'rp-1',
+        conversationID: 900,
+        log_index: 1,
+        messages: [],
+        executionState: 'EXECUTING',
+        pending_tool_calls: [{
+          toolCall: { id: 'tc-1', type: 'function', function: { name: 'Navigate', arguments: { file_id: 7 } } },
+          result: undefined,
+        }],
+        streamedCompletedToolCalls: [],
+        streamedThinking: '',
+        agent: 'WebAnalystAgent',
+        agent_args: {},
+        version: 3,
+      } as never,
+      setAsActive: false,
+    }));
+    if (remote) store.dispatch(setRemoteSession({ conversationID: 900, active: true }));
+    store.dispatch(addUserInputRequest({
+      conversationID: 900,
+      tool_call_id: 'tc-1',
+      userInput: {
+        id: 'ui-1',
+        props: { type: 'confirmation', title: 'Navigation request', message: 'The agent wants to navigate to file "7". Allow it?' },
+        result: undefined,
+        providedAt: undefined,
+      } as never,
+    }));
+    return store;
+  }
+
+  it('surfaces a remote session pending approval GLOBALLY (independent of the chat view)', () => {
+    const store = storeWithPendingConfirm(true);
+    renderWithProviders(<RemoteSessionPrompts />, { store });
+    expect(screen.getByLabelText('Remote session prompts')).toBeTruthy();
+    expect(screen.getByLabelText('Remote prompt: Navigation request')).toBeTruthy();
+  });
+
+  it('renders nothing when no remote session is active (normal chats keep inline prompts)', () => {
+    const store = storeWithPendingConfirm(false);
+    renderWithProviders(<RemoteSessionPrompts />, { store });
+    expect(screen.queryByLabelText('Remote session prompts')).toBeNull();
+  });
+
+  it('renders nothing when the remote session has no unresolved inputs', () => {
+    const store = storeModule.makeStore();
+    store.dispatch(loadConversation({
+      conversation: {
+        _id: 'rp-2', conversationID: 901, log_index: 0, messages: [], executionState: 'FINISHED',
+        pending_tool_calls: [], streamedCompletedToolCalls: [], streamedThinking: '',
+        agent: 'WebAnalystAgent', agent_args: {}, version: 3,
+      } as never,
+      setAsActive: false,
+    }));
+    store.dispatch(setRemoteSession({ conversationID: 901, active: true }));
+    renderWithProviders(<RemoteSessionPrompts />, { store });
+    expect(screen.queryByLabelText('Remote session prompts')).toBeNull();
   });
 });

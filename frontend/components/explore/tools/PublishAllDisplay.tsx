@@ -27,7 +27,9 @@ export function PublishAllDetailCard({ msg }: DetailCardProps) {
   const pendingTool = conversation?.pending_tool_calls.find(p => p.toolCall.id === toolCallId);
   const pendingUserInputs = pendingTool?.userInputs?.filter(ui => ui.result === undefined);
 
-  if (pendingUserInputs && pendingUserInputs.length > 0 && conversation) {
+  // Remote sessions: the global RemoteSessionPrompts host is the sole prompt renderer
+  // (mounting the publish prompt twice would stack two auto-opened PublishModals).
+  if (pendingUserInputs && pendingUserInputs.length > 0 && conversation && !conversation.remoteSession?.active) {
     return (
       <Box mx={3} mb={2}>
         {pendingUserInputs.map(userInput => (

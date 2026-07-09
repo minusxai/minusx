@@ -740,6 +740,34 @@ export const selectAllToolsCompleted = (state: RootState, conversationID: number
 
 export const selectChatInputHistory = (state: RootState) => state.chat.inputHistory;
 
+/**
+ * Remote Agent Sessions: unresolved user-approval prompts (Navigate confirms, PublishAll review)
+ * across ALL remote-active conversations — rendered by the GLOBAL RemoteSessionPrompts host so
+ * approvals reach the user on any page (the agent routinely navigates them away from the chat
+ * view that would show the inline prompt). Memoized; recomputes only when conversations change.
+ */
+export interface RemoteSessionPrompt {
+  conversationID: number;
+  toolCall: ToolCall;
+  userInput: UserInput;
+}
+export const selectRemoteSessionPrompts = createSelector(
+  [(state: RootState) => state.chat.conversations],
+  (conversations): RemoteSessionPrompt[] => {
+    const out: RemoteSessionPrompt[] = [];
+    for (const conv of Object.values(conversations)) {
+      if (!conv?.remoteSession?.active) continue;
+      for (const p of conv.pending_tool_calls) {
+        if (p.result) continue;
+        for (const ui of p.userInputs ?? []) {
+          if (ui.result === undefined) out.push({ conversationID: conv.conversationID, toolCall: p.toolCall, userInput: ui });
+        }
+      }
+    }
+    return out;
+  },
+);
+
 // Walk the fork chain starting from a given conversation ID and return the
 // tail (latest) conversation. Memoized so that — even though state.chat.conversations
 // gets a new top-level reference on every streaming dispatch — the OUTPUT ref is

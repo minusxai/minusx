@@ -26,8 +26,10 @@ export default function ToolCallDisplay({ toolCallTuple, databaseName, isCompact
     ui => ui.result === undefined
   );
 
-  // If tool is waiting for user input, show that instead
-  if (pendingUserInputs && pendingUserInputs.length > 0) {
+  // If tool is waiting for user input, show that instead. Remote Agent Sessions are the
+  // exception: their prompts render ONLY in the global RemoteSessionPrompts host (the user may be
+  // on any page; and a publish prompt auto-opens a modal — two mounts would stack two modals).
+  if (pendingUserInputs && pendingUserInputs.length > 0 && !conversation?.remoteSession?.active) {
     // Extract fileId from agent_args and tool arguments for UserInputComponent
     const fileId = conversation?.agent_args?.file_id;
     const toolArgs = pendingTool?.toolCall.function?.arguments;
