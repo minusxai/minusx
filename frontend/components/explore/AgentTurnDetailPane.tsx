@@ -38,6 +38,7 @@ interface AgentTurnDetailPaneProps {
 const DETAIL_CARD_BY_TOOL: Record<string, React.ComponentType<DetailCardProps> | null> = {
   'Navigate': NavigateDetailCard,
   'Screenshot': ScreenshotDetailCard,
+  'ReviewFile': ScreenshotDetailCard,
   'PublishAll': PublishAllDetailCard,
   'LoadSkill': LoadSkillDetailCard,
   'LoadContext': LoadContextDetailCard,

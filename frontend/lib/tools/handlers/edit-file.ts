@@ -25,6 +25,7 @@ import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { selectEffectiveUser } from '@/store/authSlice';
 import type { FrontendToolHandler } from './types';
 import { renderFileChartImageBlocks } from './chart-images';
+import { deterministicAgentRubric, reviewFile } from './file-review';
 import { vizWarningForQuestion } from './viz-warning';
 
 /**
@@ -100,6 +101,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
   const diffs: string[] = [];
   const autoCorrections: string[] = [];
   let editValidation: string[] | undefined;
+  let editNormalized = false;
   if (changes.length > 0) {
     // Validate all changes in memory first (atomic: no Redux writes until all pass)
     const built = buildCurrentFileStr(stateBefore, fileId);
@@ -167,6 +169,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
     }
     if (result.diff) diffs.push(result.diff);
     editValidation = result.validation;
+    editNormalized = !!result.normalized;
   }
 
   // Apply the rename (metadata `name`) — the data layer supports `changes.name`; the agent's
@@ -323,6 +326,16 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
   const vizType = (augmented.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
   const showImage = isImageViz(vizType);
 
+  // Rubric v2: every successful EditFile returns the file's health review — a screenshot of the
+  // live rendered view + the FULL rubric (deterministic + LLM visual judge + score) when the
+  // file's view is mounted, degrading to the rules-only rubric for background edits. Best-effort:
+  // a review failure never fails the staged edit. `review: false` skips the expensive
+  // capture+judge round (intermediate edits of a batch) — the free rules-based rubric stays.
+  const colorMode: 'light' | 'dark' = context.state?.ui?.colorMode === 'dark' ? 'dark' : 'light';
+  const review = args.review !== false
+    ? await reviewFile(fileId, { colorMode, fullHeight: true })
+    : { rubric: deterministicAgentRubric(fileId), screenshotUrl: undefined, reviewMode: 'deterministic' as const };
+
   // Render the chart image only for the image presentation AND when the result/viz actually changed.
   const queryResultChanged = compressed.queryResults.some((qr: { id?: string }) => {
     const qrId = qr.id;
@@ -331,7 +344,9 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
   const prevVizSettings = (augmentedBefore?.fileState.content as { vizSettings?: unknown } | undefined)?.vizSettings;
   const currVizSettings = (augmented.fileState.content as { vizSettings?: unknown } | undefined)?.vizSettings;
   const vizSettingsChanged = JSON.stringify(prevVizSettings) !== JSON.stringify(currVizSettings);
-  const imageBlocks = showImage && (queryResultChanged || vizSettingsChanged)
+  // When a full-view screenshot was captured it already shows the rendered chart — skip the
+  // separate chart image so the response doesn't carry two pictures of the same thing.
+  const imageBlocks = !review.screenshotUrl && showImage && (queryResultChanged || vizSettingsChanged)
     ? await renderFileChartImageBlocks([augmented])
     : [];
 
@@ -355,20 +370,30 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
     success: true,
     isDirty: true,
     ...(diff ? { diff } : {}),
+    // The stored text differs from the newMatch you sent (whitespace/escaping normalization).
+    // Future oldMatch strings must be built from the diff's `+` lines, not from memory.
+    ...(editNormalized ? { editNote: 'Applied text was normalized on save — the diff above shows the EXACT stored form; build future oldMatch strings from it, not from the newMatch you sent.' } : {}),
     ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
     ...(vizWarning ? { vizWarning } : {}),
     ...(titleWarning ? { titleWarning } : {}),
     ...(editValidation?.length ? { validation: editValidation } : {}),
     ...(autoCorrections.length > 0 ? { autoCorrections } : {}),
+    // The health rubric for the edited file. ALWAYS fix `error` findings (an error gates the
+    // score to 0); try to fix `warn` findings. Full (screenshot + rules + visual judge) when
+    // the view was captured; rules-only otherwise.
+    ...(review.rubric ? { rubric: review.rubric } : {}),
   };
   const augmentedDetails: AugmentedToolDetails = {
     __augmented: [{ file: entry, references: [] }],
     __jsonTag: 'Files',
     __status: status,
   };
+  const screenshotBlocks = review.screenshotUrl
+    ? [{ type: 'image_url', image_url: { url: review.screenshotUrl } }]
+    : [];
   return {
-    content: [{ type: 'text', text: JSON.stringify(status) }, ...imageBlocks],
-    details: { success: true, diff, ...augmentedDetails } as EditFileDetails,
+    content: [{ type: 'text', text: JSON.stringify(status) }, ...imageBlocks, ...screenshotBlocks],
+    details: { success: true, diff, screenshotUrl: review.screenshotUrl, ...augmentedDetails } as EditFileDetails,
   };
 };
 

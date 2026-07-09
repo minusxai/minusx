@@ -30,17 +30,23 @@ describe('scoreStory', () => {
 
   it('flags a story with too few design tokens', () => {
     const story = `<div class="story"><style>{\`.story{color:#111}\`}</style><h1>Title</h1><Question id={7} /></div>`;
-    expect(scoreStory(makeStory({ story })).find((x) => x.ruleId === 'story.no-design-tokens')?.severity).toBe('info');
+    const tokens = scoreStory(makeStory({ story })).find((x) => x.ruleId === 'story.no-design-tokens');
+    expect(tokens?.severity).toBe('warn');
+    expect(tokens?.deduction).toBe(0.5);
   });
 
   it('flags a story with too many colors', () => {
     const colors = ['#111111', '#222222', '#333333', '#444444', '#555555', '#666666', '#777777', '#888888', '#999999', '#aaaaaa', '#bbbbbb', '#cccccc'];
     const story = `<div class="story"><style>{\`.story{font-family:Inter;${colors.map((c, i) => `.c${i}{color:${c}}`).join(' ')}\`}</style><h1>T</h1><Question id={7} /></div>`;
-    expect(scoreStory(makeStory({ story })).find((x) => x.ruleId === 'story.too-many-colors')?.severity).toBe('info');
+    const colorsFinding = scoreStory(makeStory({ story })).find((x) => x.ruleId === 'story.too-many-colors');
+    expect(colorsFinding?.severity).toBe('warn');
+    expect(colorsFinding?.deduction).toBe(0.25);
   });
 
   it('flags a blank description as no-lead', () => {
-    expect(scoreStory(makeStory({ description: '' })).find((x) => x.ruleId === 'story.no-lead')?.severity).toBe('info');
+    const lead = scoreStory(makeStory({ description: '' })).find((x) => x.ruleId === 'story.no-lead');
+    expect(lead?.severity).toBe('warn');
+    expect(lead?.deduction).toBe(0.25);
   });
 
   it('returns no findings for a healthy story', () => {
@@ -107,5 +113,73 @@ describe('scoreStory', () => {
   it('does NOT flag a param declared via parameterValues', () => {
     const story = withEmbed(`<Question viz={{type:"bar"}} query={\`SELECT x FROM t WHERE r = :region\`} connection="duckdb" />`);
     expect(ids(scoreStory(makeStory({ story, parameterValues: { region: 'west' } })))).not.toContain('story.undeclared-param');
+  });
+
+  // ── no-page-gutter ─────────────────────────────────────────────────────────
+  // Content flush against the viewport edge is the #1 first-render flaw: the iframe body has
+  // margin 0 and no component owns horizontal padding, so the gutter MUST live in the markup.
+  const gutterStory = (rootAttrs: string, css = '.story{font-family:Inter;color:#111;background:#fff} h1{color:#2563eb} .a{color:#f59e0b}', inner = '<h1>T</h1><Question id={7} />') =>
+    `<style>{\`${css}\`}</style><div ${rootAttrs}>${inner}</div>`;
+
+  it('flags a story whose root (and top-level children) carry no horizontal padding', () => {
+    const f = scoreStory(makeStory({ story: gutterStory('class="story"') })).find((x) => x.ruleId === 'story.no-page-gutter');
+    expect(f?.severity).toBe('warn');
+    expect(f?.category).toBe('aesthetics');
+  });
+
+  it('passes when the root has a Tailwind px- utility', () => {
+    const story = gutterStory('data-design="tw" class="story px-6"');
+    expect(ids(scoreStory(makeStory({ story })))).not.toContain('story.no-page-gutter');
+  });
+
+  it('passes when a root class declares padding in the <style> block', () => {
+    const story = gutterStory('class="story"', '.story{font-family:Inter;color:#111;background:#fff;padding:0 48px} h1{color:#2563eb} .a{color:#f59e0b}');
+    expect(ids(scoreStory(makeStory({ story })))).not.toContain('story.no-page-gutter');
+  });
+
+  it('passes when the root has inline style padding', () => {
+    const story = gutterStory('class="story" style={{padding:"0 40px"}}');
+    expect(ids(scoreStory(makeStory({ story })))).not.toContain('story.no-page-gutter');
+  });
+
+  it('passes when every direct child section carries the gutter instead of the root', () => {
+    const story = gutterStory('class="story"', undefined,
+      '<section class="px-8"><h1>T</h1></section><section class="px-8"><Question id={7} /></section>');
+    expect(ids(scoreStory(makeStory({ story })))).not.toContain('story.no-page-gutter');
+  });
+
+  // ── embed-too-narrow from MEASURED widths ──────────────────────────────────
+  // The static scan simulates layout from parseable CSS and is blind to Tailwind utility
+  // classes. When the caller provides MEASURED widths (real pixels from the rendered iframe,
+  // robust to any CSS), they supersede the static estimate entirely.
+  const measuredStory = () => makeStory({
+    story: `<style>{\`.s{font-family:Inter;color:#111;background:#fff;padding:0 48px} h1{color:#2563eb} .a{color:#f59e0b}\`}</style><div class="s"><h1>T</h1><Question id={7} /></div>`,
+  });
+
+  it('flags a measured cartesian embed narrower than half the column (Tailwind-blind case)', () => {
+    const findings = scoreStory(measuredStory(), {
+      vizTypeByQuestionId: { 7: 'line' },
+      measuredEmbeds: [{ vizType: 'line', widthPx: 340, columnPx: 1200 }],
+    });
+    const f = findings.find((x) => x.ruleId === 'story.embed-too-narrow');
+    expect(f?.severity).toBe('error');
+    expect(f?.detail).toContain('340');
+  });
+
+  it('does not flag a measured embed that is wide enough, even when the static scan cannot see the layout', () => {
+    const findings = scoreStory(measuredStory(), {
+      vizTypeByQuestionId: { 7: 'line' },
+      measuredEmbeds: [{ vizType: 'line', widthPx: 700, columnPx: 1200 }],
+    });
+    expect(ids(findings)).not.toContain('story.embed-too-narrow');
+  });
+
+  it('measured widths supersede the static estimate (static would flag this fixed-width embed)', () => {
+    const story = `<style>{\`.s{font-family:Inter;color:#111;background:#fff;padding:0 48px} h1{color:#2563eb} .a{color:#f59e0b}\`}</style><div class="s"><h1>T</h1><div style={{width:"300px"}}><Question viz={{type:"bar"}} query={\`SELECT 1\`} connection="duckdb" /></div></div>`;
+    // Static scan sees width:300px → would flag; the measurement says it actually renders at 800px.
+    const findings = scoreStory(makeStory({ story }), {
+      measuredEmbeds: [{ vizType: 'bar', widthPx: 800, columnPx: 1200 }],
+    });
+    expect(ids(findings)).not.toContain('story.embed-too-narrow');
   });
 });

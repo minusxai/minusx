@@ -45,6 +45,7 @@ const DETERMINISTIC_CHECKS: Record<RubricFileType, RubricCheck[]> = {
     { ruleId: 'story.no-headline', label: 'Has a headline', category: 'clarity' },
     { ruleId: 'story.no-lead', label: 'Has a lead', category: 'clarity' },
     { ruleId: 'story.embed-too-narrow', label: 'Charts wide enough', category: 'clarity' },
+    { ruleId: 'story.no-page-gutter', label: 'Page gutter present', category: 'aesthetics' },
     { ruleId: 'story.no-design-tokens', label: 'Design tokens defined', category: 'aesthetics' },
     { ruleId: 'story.too-many-colors', label: 'Palette disciplined', category: 'aesthetics' },
   ],
@@ -69,10 +70,10 @@ export interface LlmCheck {
 export const LLM_CHECKS: Record<RubricFileType, LlmCheck[]> = {
   question: [
     { id: 'chart-type-fit', category: 'aesthetics', severity: 'error', label: 'Right chart for the data',
-      question: 'The chart type matches the analytical intent (comparison → bar/column, trend over time → line, part-of-whole → pie/donut only with ≤5 slices, correlation → scatter, distribution → histogram). PASS if the type fits the data and question.',
+      question: 'The chart type matches the analytical intent (comparison → bar/column, trend over time → line, part-of-whole → pie/donut only with ≤5 slices, correlation → scatter, distribution → histogram). FAIL only when you can point to the specific mismatch (e.g. "a pie with 12 slices", "a time trend drawn as a pie"). PASS otherwise.',
       fix: 'Switch to the chart type that matches the question (e.g. line for a time trend, bar for a category comparison).' },
     { id: 'honest-scale', category: 'aesthetics', severity: 'error', label: 'Honest axes',
-      question: 'The value axis is not misleading — bars/areas start at a zero baseline and there is no truncated or dual-axis distortion that exaggerates differences. PASS if the scale is honest.',
+      question: 'The value axis is not misleading — bars/areas start at a zero baseline and there is no truncated or dual-axis distortion that exaggerates differences. FAIL only when you can point to the specific axis and how it distorts. PASS otherwise.',
       fix: 'Start the value axis at zero (or clearly mark the break); avoid deceptive dual axes.' },
     { id: 'axes-labeled', category: 'aesthetics', severity: 'warn', label: 'Axes & legend labeled',
       question: 'Axes have clear titles with units, and any legend/series is labeled. PASS if a reader can tell what each axis and series means.',
@@ -98,10 +99,10 @@ export const LLM_CHECKS: Record<RubricFileType, LlmCheck[]> = {
       question: 'There is a clear visual hierarchy — the most important metric is prominent (larger / top-left, F-pattern). PASS if the eye is guided to what matters.',
       fix: 'Promote the headline KPI (bigger tile, top-left) and de-emphasize secondary charts.' },
     { id: 'plots-readable', category: 'aesthetics', severity: 'error', label: 'Plots readable at tile size',
-      question: 'Each chart is the right type and legible at its tile size (for example, a line chart with time axis with 2 width is too cramped. PASS if all charts are readable at their tile size.',
+      question: 'Each chart is legible at its tile size (for example, a line chart with a time axis in a 2-wide tile is too cramped). FAIL only when you can point to the specific cramped/illegible tile. PASS otherwise.',
       fix: 'Enlarge cramped tiles or simplify the chart so it reads at tile size.' },
     { id: 'non-overlapping-plot-text', category: 'aesthetics', severity: 'error', label: 'No overlapping plot text',
-      question: 'No chart text (labels, titles, annotations) overlaps with other text. PASS if all text is legible and not overlapping.',
+      question: 'No chart text (labels, titles, annotations) overlaps other text. FAIL only when you can point to the specific overlapping text. PASS otherwise.',
       fix: 'Adjust text placement or tile size to prevent overlapping text.' },
     { id: 'consistent-formatting', category: 'aesthetics', severity: 'warn', label: 'Consistent formatting',
       question: 'Number formats, date formats, colors, and title styling are consistent across tiles. PASS if consistent.',
@@ -115,10 +116,10 @@ export const LLM_CHECKS: Record<RubricFileType, LlmCheck[]> = {
   ],
   story: [
     { id: 'single-lead', category: 'aesthetics', severity: 'error', label: 'One clear lead',
-      question: 'The story states ONE clear lead finding — a claim containing a number — near the top. PASS if there is a single stated lead with a number.',
+      question: 'The story states ONE clear lead finding — a claim containing a number — near the top. FAIL only when you can point to the problem: no lead claim at all, a lead with no number, or two competing leads. PASS otherwise.',
       fix: 'Open with one sentence stating the finding and its number.' },
     { id: 'evidence-supports-claims', category: 'aesthetics', severity: 'error', label: 'Claims are supported',
-      question: 'Every claim is supported by the chart/number shown; nothing is overstated, extrapolated, or invented. PASS if honest and evidenced.',
+      question: 'No stated NUMBER or specific factual claim is contradicted by — or absent from — the charts/numbers shown. Subjective wording ("large", "strong", "meaningful") is NOT a failure. FAIL only when you can point to the specific figure or fact that the visible evidence contradicts or does not contain. PASS otherwise.',
       fix: 'Only claim what the referenced chart shows; remove or hedge unsupported statements.' },
     { id: 'headlines-are-findings', category: 'aesthetics', severity: 'warn', label: 'Headlines state findings',
       question: 'Section headlines state findings/conclusions, not just topics (“Revenue fell 12% in Q3”, not “Revenue”). PASS if headlines are findings.',
@@ -133,15 +134,15 @@ export const LLM_CHECKS: Record<RubricFileType, LlmCheck[]> = {
       question: 'Charts render cleanly and honestly: no misleading cratered/partial final period, no overlapping titles or labels, no broken/empty/all-zero plots. PASS if every chart renders without artifacts.',
       fix: 'Fix the chart at its source — trim an incomplete final period, resolve overlapping text, and ensure the query returns a clean series before embedding.' },
     { id: 'ugly-empty-space-alignment', category: 'aesthetics', severity: 'error', label: 'No ugly empty space',
-        question: 'The story has no large empty space, misaligned charts or headings. The headings don’t wrap to multiple lines, and the charts are aligned to a grid. PASS if the story is visually tidy.',
-        fix: 'Align charts to a grid, avoid multi-line headings, and remove large empty space.' },
+        question: 'There is no LARGE empty region (roughly half a viewport or more of blank space) and no chart or block visibly misaligned with its neighbors. A heading wrapping onto a second line is fine. FAIL only when you can point to the specific blank region or misaligned element. PASS otherwise.',
+        fix: 'Align charts to a grid and remove large empty regions.' },
     { id: 'readable-charts', category: 'aesthetics', severity: 'error', label: 'Charts are readable',
-        question: 'Charts are readable: no overlapping labels, no font blending into the background, no tiny text, and no cramped or overplotted charts. PASS if all charts are legible.',
+        question: 'Chart text is readable: no overlapping labels, no font blending into the background, no tiny text, and no blank/broken/empty chart panel. FAIL only when you can point to the specific illegible label or broken panel. PASS otherwise.',
         fix: 'Fix the chart at its source — adjust label placement, font color, and size, and reduce overplotting before embedding.' },
     { id: 'text-readable', category: 'aesthetics', severity: 'error', label: 'Text is readable',
-        question: 'All text is readable: no tiny font, no low contrast, and no cramped or overlapping text. PASS if all text is legible.',
+        question: 'All prose is readable: no tiny font, no low contrast, no cramped or overlapping text. FAIL only when you can point to the specific illegible text. PASS otherwise.',
         fix: 'Increase font size, improve contrast, and adjust spacing to avoid cramped or overlapping text.'},
-    { id: 'harmonious-chart-body', category: 'aesthetics', severity: 'error', label: 'Charts harmonize with the body',
+    { id: 'harmonious-chart-body', category: 'aesthetics', severity: 'warn', label: 'Charts harmonize with the body',
       question: 'Charts harmonize with the story body: no chart is visually jarring or stylistically inconsistent with the surrounding text and story style. PASS if charts feel integrated and consistent with the story.',
       fix: 'Adjust chart styles, colors, and fonts or fix the body of the story to ensure visual harmony. This is critical for maintaining a cohesive visual narrative.' },
     { id: 'deliberate-palette', category: 'aesthetics', severity: 'warn', label: 'Deliberate palette',
@@ -154,9 +155,11 @@ export const LLM_CHECKS: Record<RubricFileType, LlmCheck[]> = {
   context: [], // a context is a non-visual knowledge file — deterministic checks only, no LLM judge
 };
 
-/** Render the LLM checklist for a file type into the prompt (`{checklist}` var). */
+/** Render the LLM checklist for a file type into the prompt (`{checklist}` var). Each check is
+ *  tagged with its severity: an `error` check gates the file's score to 0, so the judge is told
+ *  (in the prompt) to fail those only on an unambiguous, pointable defect. */
 export function formatChecklist(fileType: RubricFileType): string {
-  return LLM_CHECKS[fileType].map((c) => `- ${c.id} [${c.category}]: ${c.question}`).join('\n');
+  return LLM_CHECKS[fileType].map((c) => `- ${c.id} [${c.category}, ${c.severity}]: ${c.question}`).join('\n');
 }
 
 const llmToRubricCheck = (c: LlmCheck): RubricCheck => ({ ruleId: `llm.${c.id}`, label: c.label, category: c.category });

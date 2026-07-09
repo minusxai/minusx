@@ -48,7 +48,8 @@ export function findFactualNumbers(text: string): string[] {
   return (text.match(re) ?? []).map((s) => s.trim());
 }
 
-/** Small constructor so scorers stay declarative. */
+/** Small constructor so scorers stay declarative. `deduction` sets a warn's weight
+ *  (default 1, lightest 0.25); errors ignore it — they gate the score to 0. */
 export function finding(
   ruleId: string,
   category: RubricCategory,
@@ -56,6 +57,7 @@ export function finding(
   title: string,
   detail: string,
   fix: string,
+  deduction?: number,
 ): RubricFinding {
-  return { ruleId, category, severity, title, detail, fix, source: 'rule' };
+  return { ruleId, category, severity, title, detail, fix, source: 'rule', ...(deduction !== undefined ? { deduction } : {}) };
 }

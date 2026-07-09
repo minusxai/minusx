@@ -14,19 +14,18 @@ import type {
   RubricFinding,
   RubricGrade,
   RubricReport,
-  RubricSeverity,
 } from './types';
 
 /** Every score starts here (perfect) and findings deduct from it. */
 export const MAX_SCORE = 5;
 export const MIN_SCORE = 0;
 
-/** Points deducted from the 5 baseline per finding, by severity. */
-export const SEVERITY_DEDUCTION: Record<RubricSeverity, number> = {
-  error: 3,
-  warn: 1,
-  info: 0.5,
-};
+/**
+ * Points a `warn` finding deducts from its category's 5 when the rule doesn't set its own
+ * `deduction`. `error` findings don't deduct — ANY error gates the category AND the overall
+ * score to 0 (the file is broken until it's fixed).
+ */
+export const DEFAULT_WARN_DEDUCTION = 1;
 
 /** Fixed category order (priority waterfall) — every report emits all three. */
 const CATEGORIES: readonly RubricCategory[] = ['correctness', 'clarity', 'aesthetics'];
@@ -54,9 +53,12 @@ export function gradeFor(overall: number): RubricGrade {
   return 'poor';
 }
 
+const hasError = (findings: RubricFinding[]) => findings.some((f) => f.severity === 'error');
+
 /**
  * Score one category. When `assessed` is false the source didn't evaluate this category (e.g.
  * deterministic aesthetics on a question) — score is `null` and it's excluded from the overall.
+ * An `error` finding zeroes the category outright; `warn` findings deduct their weight.
  */
 export function scoreCategory(
   category: RubricCategory,
@@ -65,7 +67,8 @@ export function scoreCategory(
   assessed = true,
 ): RubricCategoryScore {
   if (!assessed) return { category, weight, findings, score: null, assessed: false };
-  const deduction = findings.reduce((sum, f) => sum + SEVERITY_DEDUCTION[f.severity], 0);
+  if (hasError(findings)) return { category, weight, findings, score: MIN_SCORE, assessed: true };
+  const deduction = findings.reduce((sum, f) => sum + (f.deduction ?? DEFAULT_WARN_DEDUCTION), 0);
   return { category, weight, findings, score: toScore(MAX_SCORE - deduction), assessed: true };
 }
 
@@ -87,7 +90,11 @@ export function buildReport(
   );
   const scored = categories.filter((c): c is RubricCategoryScore & { score: number } => c.assessed && c.score !== null);
   const totalWeight = scored.reduce((sum, c) => sum + c.weight, 0) || 1;
-  const overall = toScore(scored.reduce((sum, c) => sum + c.score * c.weight, 0) / totalWeight);
+  // Error gate: ANY error means the file is broken — overall 0 / poor until it's fixed,
+  // regardless of how clean the other categories are.
+  const overall = hasError(findings)
+    ? MIN_SCORE
+    : toScore(scored.reduce((sum, c) => sum + c.score * c.weight, 0) / totalWeight);
   return { fileType, overall, grade: gradeFor(overall), categories };
 }
 

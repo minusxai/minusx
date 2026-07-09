@@ -1,5 +1,5 @@
 import { parseJsx } from '@/lib/jsx';
-import type { JsxNode } from '@/lib/jsx';
+import type { JsonValue, JsxElement, JsxNode } from '@/lib/jsx';
 import { buildStoryJsx } from '@/lib/data/story/story-v2';
 import type { StoryContent } from '@/lib/types';
 import type { DeterministicContext, RubricFinding } from '../types';
@@ -45,6 +45,45 @@ function walk(nodes: JsxNode[], acc: StoryScan, insideStyle: boolean): void {
   }
 }
 
+// ── page gutter detection ─────────────────────────────────────────────────────
+// The iframe body renders with margin 0 and NO component owns horizontal padding, so the page
+// gutter must live in the story markup itself — on the root (`px-6`, inline padding, or a root
+// class's CSS padding) or on the top-level sections. Without it, content sits flush against the
+// viewport edge: the single most common first-render flaw.
+
+const PAD_CLASS_RE = /(?:^|\s)(?:p|px|pl|pr)-/;
+
+function staticAttr(el: JsxElement, name: string): JsonValue | undefined {
+  const a = el.attributes.find((x) => x.name === name);
+  return a && a.value.static ? a.value.json : undefined;
+}
+
+/** Does this element carry horizontal padding — via Tailwind class, inline style, or a CSS rule
+ *  (in `css`) on one of its classes? */
+function hasHorizontalPadding(el: JsxElement, css: string): boolean {
+  const cls = staticAttr(el, 'className') ?? staticAttr(el, 'class');
+  const classes = typeof cls === 'string' ? cls.split(/\s+/).filter(Boolean) : [];
+  if (typeof cls === 'string' && PAD_CLASS_RE.test(cls)) return true;
+  const style = staticAttr(el, 'style');
+  if (typeof style === 'string' && /padding/i.test(style)) return true;
+  if (style && typeof style === 'object' && !Array.isArray(style)
+    && Object.keys(style).some((k) => /^padding/i.test(k))) return true;
+  return classes.some((c) => new RegExp(`\\.${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])[^{}]*\\{[^{}]*padding`, 'i').test(css));
+}
+
+/** True when the story has a page gutter: the root element is padded, or most of its direct
+ *  element children are (per-section gutters; a minority of full-bleed elements is fine). */
+function hasPageGutter(nodes: JsxNode[], css: string): boolean {
+  const root = nodes.find((n): n is JsxElement => n.type === 'element' && n.tag.toLowerCase() !== 'style');
+  if (!root) return true; // nothing to judge
+  if (hasHorizontalPadding(root, css)) return true;
+  const children = root.children.filter((n): n is JsxElement =>
+    n.type === 'element' && !['style', 'Param'].includes(n.tag));
+  if (children.length === 0) return false;
+  const padded = children.filter((c) => hasHorizontalPadding(c, css)).length;
+  return padded >= Math.ceil(children.length / 2);
+}
+
 /**
  * A story body is STORED as placeholder-div HTML (`<div data-question-id>`, raw `<style>`); the
  * clean `<Question viz=… />` JSX only exists in the agent markup. Normalize to that agent form so
@@ -63,9 +102,9 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
 
   // no-lead (clarity) — uses the description field directly, not the body
   if (isBlank(content.description)) {
-    out.push(finding('story.no-lead', 'clarity', 'info', 'No lead',
+    out.push(finding('story.no-lead', 'clarity', 'warn', 'No lead',
       'The story has no description/lead.',
-      'State the single lead finding (with its number) in the description.'));
+      'State the single lead finding (with its number) in the description.', 0.25));
   }
 
   const bodyJsx = toAgentBodyJsx(content.story ?? '');
@@ -95,17 +134,24 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
       `Replace the typed figure "${first}" with a live <Number> embed so it can't go stale or be wrong.`));
   }
 
+  // no-page-gutter (aesthetics) — content flush against the viewport edge
+  if (parsed.ok && !hasPageGutter(parsed.nodes, acc.css)) {
+    out.push(finding('story.no-page-gutter', 'aesthetics', 'warn', 'No page gutter',
+      'Neither the root element nor its top-level sections carry horizontal padding — content sits flush against the viewport edge.',
+      'Add a page gutter on the root div (e.g. `px-6 @2xl:px-12`, or padding in its CSS class) so text and charts never touch the edge.'));
+  }
+
   // design tokens (aesthetics)
   const colors = distinctHexColors(acc.css);
   const fonts = hasFontFamily(acc.css);
   if (colors.length < MIN_COLORS || !fonts) {
-    out.push(finding('story.no-design-tokens', 'aesthetics', 'info', 'Thin design tokens',
+    out.push(finding('story.no-design-tokens', 'aesthetics', 'warn', 'Thin design tokens',
       `The style block defines ${colors.length} color(s)${fonts ? '' : ' and no font-family'}.`,
-      'Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling.'));
+      'Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling.', 0.5));
   } else if (colors.length > MAX_COLORS) {
-    out.push(finding('story.too-many-colors', 'aesthetics', 'info', 'Too many colors',
+    out.push(finding('story.too-many-colors', 'aesthetics', 'warn', 'Too many colors',
       `The style block defines ${colors.length} distinct colors.`,
-      'Reduce to a disciplined 4–6 color palette with one protagonist accent.'));
+      'Reduce to a disciplined 4–6 color palette with one protagonist accent.', 0.25));
   }
 
   // ── layout-aware rules (width + params) ──────────────────────────────────────
@@ -113,18 +159,34 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
   const vizById = ctx?.vizTypeByQuestionId;
 
   // embed-too-narrow (clarity) — cartesian/pie charts squeezed below a legible width.
+  // MEASURED widths (real pixels from the rendered iframe, provided by the review path)
+  // supersede the static CSS estimate entirely — the static scan only simulates layout from
+  // parseable CSS and is blind to utility-class layouts (Tailwind grids etc.).
   const narrow: string[] = [];
-  for (const e of scan.embeds) {
-    const vt = e.vizType ?? (e.savedId != null ? vizById?.[e.savedId] : undefined);
-    if (!vt) continue; // unknown type (saved embed with no ctx) — can't judge, skip
-    const cartesian = CARTESIAN.has(vt);
-    const round = ROUND.has(vt);
-    if (!cartesian && !round) continue;
-    const minFrac = cartesian ? MIN_CARTESIAN_FRACTION : MIN_ROUND_FRACTION;
-    const minPx = cartesian ? MIN_CARTESIAN_PX : MIN_ROUND_PX;
-    if (e.fraction < minFrac - 1e-6 || (e.minPx !== null && e.minPx < minPx)) {
-      const where = e.fraction < minFrac - 1e-6 ? `~${Math.round(e.fraction * 100)}% of the column` : `${e.minPx}px wide`;
-      narrow.push(`${vt} chart at ${where}`);
+  if (ctx?.measuredEmbeds) {
+    for (const m of ctx.measuredEmbeds) {
+      const vt = m.vizType;
+      if (!vt || !(CARTESIAN.has(vt) || ROUND.has(vt)) || m.columnPx <= 0) continue;
+      const cartesian = CARTESIAN.has(vt);
+      const minFrac = cartesian ? MIN_CARTESIAN_FRACTION : MIN_ROUND_FRACTION;
+      const minPx = cartesian ? MIN_CARTESIAN_PX : MIN_ROUND_PX;
+      if (m.widthPx / m.columnPx < minFrac - 1e-6 && m.widthPx < minPx) {
+        narrow.push(`${vt} chart rendered at ${Math.round(m.widthPx)}px (~${Math.round((m.widthPx / m.columnPx) * 100)}% of the ${Math.round(m.columnPx)}px column)`);
+      }
+    }
+  } else {
+    for (const e of scan.embeds) {
+      const vt = e.vizType ?? (e.savedId != null ? vizById?.[e.savedId] : undefined);
+      if (!vt) continue; // unknown type (saved embed with no ctx) — can't judge, skip
+      const cartesian = CARTESIAN.has(vt);
+      const round = ROUND.has(vt);
+      if (!cartesian && !round) continue;
+      const minFrac = cartesian ? MIN_CARTESIAN_FRACTION : MIN_ROUND_FRACTION;
+      const minPx = cartesian ? MIN_CARTESIAN_PX : MIN_ROUND_PX;
+      if (e.fraction < minFrac - 1e-6 || (e.minPx !== null && e.minPx < minPx)) {
+        const where = e.fraction < minFrac - 1e-6 ? `~${Math.round(e.fraction * 100)}% of the column` : `${e.minPx}px wide`;
+        narrow.push(`${vt} chart at ${where}`);
+      }
     }
   }
   if (narrow.length > 0) {

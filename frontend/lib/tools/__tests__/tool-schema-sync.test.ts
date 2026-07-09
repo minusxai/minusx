@@ -17,7 +17,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import {
-  EditFile, CreateFile, ReadFiles, Navigate, Screenshot, ClarifyFrontend, PublishAll,
+  EditFile, CreateFile, ReadFiles, Navigate, ReviewFile, ClarifyFrontend, PublishAll,
 } from '@/agents/web-analyst/web-tools';
 
 // ── Extraction ────────────────────────────────────────────────────────────────
@@ -67,7 +67,8 @@ const BRIDGED_TOOLS = [
   { name: 'CreateFile', schema: CreateFile.schema, file: 'create-file.ts' },
   { name: 'ReadFiles', schema: ReadFiles.schema, file: 'read-files.ts' },
   { name: 'Navigate', schema: Navigate.schema, file: 'navigate.ts' },
-  { name: 'Screenshot', schema: Screenshot.schema, file: 'screenshot.ts' },
+  // Screenshot is a legacy alias of ReviewFile (same schema, same handler) — auditing ReviewFile covers it.
+  { name: 'ReviewFile', schema: ReviewFile.schema, file: 'review-file.ts' },
   { name: 'ClarifyFrontend', schema: ClarifyFrontend.schema, file: 'clarify.ts' },
   { name: 'PublishAll', schema: PublishAll.schema, file: 'publish-all.ts' },
 ] as const;

@@ -186,7 +186,7 @@ export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState
  */
 export async function editFileStr(
   options: EditFileStrOptions
-): Promise<{ success: boolean; diff?: string; error?: string; validation?: string[] }> {
+): Promise<{ success: boolean; diff?: string; error?: string; validation?: string[]; normalized?: boolean }> {
   const { fileId, oldMatch, newMatch } = options;
   const state = getStore().getState();
 
@@ -264,10 +264,17 @@ export async function editFileStr(
     validation = collectEditValidation(getStore().getState(), fileState, newContent);
   }
 
-  // Generate diff
-  const diff = generateDiff(fullFileStr, editedStr);
+  // Diff against the CANONICAL post-edit markup, not the agent's replacement text. The round
+  // trip (markup → content → markup) normalizes what the agent wrote (class-prop whitespace,
+  // attribute escaping/ordering) — echoing its own text back hid that, so its next oldMatch,
+  // built from memory of newMatch, missed the stored form and edits failed in a retry/rewrite
+  // loop. The diff is the agent's anchor for future edits, so it must show the stored text.
+  const rebuilt = buildCurrentFileStr(getStore().getState(), fileId);
+  const canonicalStr = rebuilt.success ? rebuilt.fullFileStr : editedStr;
+  const diff = generateDiff(fullFileStr, canonicalStr);
+  const normalized = canonicalStr !== editedStr;
 
-  return { success: true, diff, ...(validation.length ? { validation } : {}) };
+  return { success: true, diff, ...(normalized ? { normalized } : {}), ...(validation.length ? { validation } : {}) };
 }
 
 /**

@@ -225,7 +225,7 @@ templates:
       - Any question that requires real-world data not available in the connected databases
       - **Do NOT use web search** for questions answerable from the connected databases or existing saved questions — always check internal data first.
     ### Feedback/Validation tools (to close the loop on changes you make)
-    - **Screenshot**: Capture a screenshot of the current page to see your changes.
+    - **ReviewFile**: Review the current file without editing it — a rendered screenshot plus the full health rubric (deterministic errors/warnings + LLM visual judge + score). Same output as an EditFile with no changes.
 
   skill_questions:
     description: Question file structure (query, vizSettings, parameters, references), question page behavior guidelines
@@ -776,8 +776,8 @@ templates:
 
       1. **Clarify** with the user (via the `clarify` tool). Settle three things: the **design language** (A scrollytelling or B professional, see below), the **audience and goal**, and the **scope/data** to cover. Ask about the design language unless the request already makes it obvious. Infer audience/goal/scope when you reasonably can and just confirm.
       2. **Build** the story (Procedures, section 4): find the lead, storyboard the beats, apply the chosen design language and the mechanics.
-      3. **Screenshot** it and judge it as the intended reader. The Screenshot also runs the LLM visual rubric, so this is where you get the real grade.
-      4. **Fix and improve.** Address every rubric finding (`error` first, then `warn`), applying each finding's `fix`, and raise the `overall` score. Re-screenshot and repeat. **Do not stop until every `error` finding is cleared AND `overall` is at least 4.** Keep going past that only if it still looks off.
+      3. **Review** it and judge it as the intended reader. Every EditFile already returns the screenshot + full rubric (LLM visual review included); call ReviewFile when you want a fresh grade without editing.
+      4. **Fix and improve.** ALWAYS fix every `error` finding (any error gates `overall` to 0), then work through the `warn`s, applying each finding's `fix`, and raise the `overall` score. Repeat. **Do not stop until every `error` is cleared AND `overall` is at least 4.** Keep going past that only if it still looks off.
       5. **Done.**
 
       Sections 2 to 4 are the detail behind steps 1, 2, and 4.
@@ -845,7 +845,7 @@ templates:
         .story-x .stamp { font-family:'IBM Plex Mono',monospace; border:1px dashed currentColor; }  /* the motif bits utilities can't express */
         .story-x .plate { box-shadow:12px 12px 0 rgba(0,0,0,.4); }
       `}</style>
-      <div data-design="tw" class="story-x @container mx-auto max-w-[1280px] bg-[#101822] text-[#f7f0df]">
+      <div data-design="tw" class="story-x @container mx-auto max-w-[1280px] px-6 @2xl:px-12 bg-[#101822] text-[#f7f0df]">
         <Section>  <!-- HERO: open on the finding -->
           <span class="stamp inline-block px-3 py-2 text-[#ffc83d] uppercase tracking-[0.12em] text-sm">LOG 00 · THE FINDING</span>
           <h1 class="display text-5xl @2xl:text-8xl leading-[0.9] mt-6">Churn doubled the quarter we raised prices.</h1>
@@ -887,7 +887,7 @@ templates:
       **Scaffold — this IS the default shape; copy the structure, swap the content. Note how little there is: no CSS, no classes except the root and accents:**
       ```
       <story>
-      <div data-design="tw" class="@container mx-auto max-w-[1280px] bg-white text-slate-800 dark:bg-slate-950 dark:text-slate-200 font-sans px-6 [font-variant-numeric:tabular-nums] [--st-accent:#0f766e]">
+      <div data-design="tw" class="@container mx-auto max-w-[1280px] bg-white text-slate-800 dark:bg-slate-950 dark:text-slate-200 font-sans px-6 @2xl:px-12 [font-variant-numeric:tabular-nums] [--st-accent:#0f766e]">
         <PageHeader><span>ACME LEADERSHIP REVIEW</span><span>Confidential · 2026</span></PageHeader>
         <Section>  <!-- one beat = one slide; repeat per beat -->
           <Eyebrow>01 · Business Performance</Eyebrow>
@@ -1030,6 +1030,8 @@ templates:
 
       One root `<div>` (with `data-design="tw"`), optionally preceded by a SHORT `<style>` block — both inside the `<story>…</story>` field element. No `<html>`/`<head>`/`<body>`, and strictly **no `<script>`**.
 
+      **The root div must ALWAYS carry a page gutter** — `px-6 @2xl:px-12` (or equivalent padding in its CSS class). The page renders with zero body margin and NO component adds horizontal padding, so without a root gutter every headline, paragraph, and chart sits flush against the viewport edge. Put the gutter in your FIRST draft, not in a fix-up pass; deliberate full-bleed elements (a marquee, a full-bleed figure) can escape it with negative margins (`-mx-6 @2xl:-mx-12`).
+
       - **Design system first**: utilities + story components carry the layout, spacing, color, and type scale (see Authoring syntax). `<style>` exists only for fonts, motif/signature CSS, and keyframes — scoped under one root class (`.story-x …`) so styles cannot leak into the host. Never rebuild card/grid/pill/label recipes in CSS that components already provide.
       - **Fonts via `@import` at the top of `<style>`**, Google Fonts, graceful installed fallbacks in every stack (`'Fraunces', Didot, Georgia, serif`).
       - **No JS means no scroll triggers.** CSS-only entrance animations (`@keyframes` fade/rise on load, staggered `animation-delay`) are permitted garnish, but the story must read perfectly with zero motion. Respect `prefers-reduced-motion`. (B uses little to no motion.)
@@ -1053,8 +1055,8 @@ templates:
       7. **pre-Build** : ALWAYS go to the new story page first — `Navigate` with `new_file_type="story"` (the user confirms and can follow along) — then build with EditFile. In interactive chat, `CreateFile` for a story is BLOCKED (like dashboards); only headless/background runs may CreateFile a story directly.
       8. **Build** the fragment following the plan exactly, every displayed number a live embed (Mechanics), tokens applied with total consistency.
       Build the shell first, then fill in the beats one by one. DO NOT attempt to "finish" the story in one pass, it will very likely fail the edit tool.
-      9. **Screenshot and grade.** Critique as the intended reader, top to bottom (can the headlines alone tell the story? does the ending deliver the goal? is every claim backed by its embed and true to the data?), and read the rubric the Screenshot returns. You MUST include `<Question>` embeds for all prominent charts.
-      10. **Fix and improve** against the rubric: resolve every finding (`error` first, then `warn`) with its `fix`, raise the `overall` score, re-screenshot, and repeat until every `error` is cleared AND `overall` is at least 4 (keep going past that only if it still looks off).
+      9. **Review and grade.** Critique as the intended reader, top to bottom (can the headlines alone tell the story? does the ending deliver the goal? is every claim backed by its embed and true to the data?), and read the screenshot + rubric every EditFile returns (or call ReviewFile for a fresh grade without editing). You MUST include `<Question>` embeds for all prominent charts.
+      10. **Fix and improve** against the rubric: ALWAYS fix every `error` (any error gates `overall` to 0), then the `warn`s, each with its `fix`; raise the `overall` score and repeat until every `error` is cleared AND `overall` is at least 4 (keep going past that only if it still looks off).
 
       ### 4b. From a dashboard
 
@@ -1069,7 +1071,7 @@ templates:
       3. **Curate and reorder.** You do not have to use every question. Drop the ones that do not advance an argument, keep the ones that do, and reorder them into a narrative arc rather than the grid order.
       4. **Storyboard, headline, and end** as in 4a steps 3 to 5: group the kept questions into 3 to 6 beats, write a claim-style headline and standfirst for each (from the questions' titles and the numbers they already contain), and decide the takeaway. Reference each by its existing saved id (`<Question id={N} />`): reuse, do not rebuild. You MUST include `<Question>` embeds for all prominent charts.
       5. **Lock the design language tokens.** The language was settled in the Clarify step (a board/financial dashboard leans B, a public/marketing one leans A); now fix its palette, fonts, and grammar. Each beat should have "highlights" or "takeaways" of some sort. You can use creative section to separate beats, like a quote or a full-bleed question.
-      6 **Pre-Build, Build, Review, screenshot, fix** as in 4a steps 7 to 10: the only difference from scratch is that the numbers and charts already exist, so you are giving them an argument and a design, then grading and improving against the rubric.
+      6 **Pre-Build, Build, Review, fix** as in 4a steps 7 to 10: the only difference from scratch is that the numbers and charts already exist, so you are giving them an argument and a design, then grading and improving against the rubric each EditFile/ReviewFile returns.
 
   skill_notebooks:
     description: Notebook file structure (cells = inline SQL questions + markdown text), the activeCellId convention for editing the right cell, and notebook page behavior
@@ -1128,11 +1130,13 @@ templates:
     4. **Respond**: Summarize insights, end with a continuation question. After edits, the user saves or discards; call PublishAll only if they ask explicitly.
 
     ### File health rubric
-    Question, dashboard, and story files carry a `rubric` — a health report (`overall` 1-5, `grade`, and per-category `findings`) that grades the file. Use it: leave files healthier than you found them, and fix regressions you introduce.
-    - **AppState, ReadFiles, EditFile, CreateFile** attach the RULE-based rubric — fast deterministic checks (params `:tokens` in sync, viz configured, dashboard layout integrity, tile/plot sizes, inline-text length, missing description/parameters, etc.).
-    - **Screenshot** additionally runs the LLM VISUAL review, so its rubric is combined RULE + LLM — it also grades what only the render shows (right chart for the data, readable labels/axes, honest scale, clutter, palette/typography/aesthetics). Take a Screenshot when you want the visual grade.
-    - Each finding has a `source` (`rule` = static check, `llm` = visual judge), a `severity` (`error` > `warn` > `info`), and a concrete `fix`. Prioritize `error` then `warn`; apply the finding's `fix`.
-    - Categories the current run didn't assess are omitted (e.g. a question's `aesthetics` is only scored after a Screenshot). A blank `findings` list means that check passed.
+    Question, dashboard, and story files are graded by a health `rubric` (`overall` 0-5, `grade`, and per-category `findings`). You get it back whenever you ACT on a file — it is your feedback loop, not ambient noise:
+    - **EditFile** returns the FULL review after every change: a screenshot of the rendered result + the combined RULE + LLM-visual rubric (right chart for the data, readable labels/axes, honest scale, clutter, palette/typography/aesthetics). Background edits (file not open) degrade to the RULE-based rubric only. The review takes a few seconds — on INTERMEDIATE edits of a planned batch, pass `review: false` to skip it (the fast rule-based rubric is still attached); keep the default on the LAST edit of the batch to get the real grade.
+    - **CreateFile** returns the RULE-based rubric (a created draft is in the background — nothing is rendered yet).
+    - **ReviewFile** gives you the same full review WITHOUT editing — use it to grade a file BEFORE (or without) touching it, or after a batch of `review: false` edits. **Never call ReviewFile when you already hold a fresh full review from your most recent EditFile** — it would return the identical result and waste seconds. (If your last edit skipped the review with `review: false`, ReviewFile is the right way to get the grade.)
+    - **AppState and ReadFiles carry NO rubric** — don't look for one there; act on the file (or ReviewFile it) to get graded.
+    - Severities: **`error` means the file is BROKEN — any error gates `overall` to 0. ALWAYS fix every `error` before finishing.** `warn` deducts its weight from the score — try to fix warnings too, starting with the heaviest. Each finding has a `source` (`rule`/`llm`) and a concrete `fix`; apply the `fix`.
+    - Categories the current run didn't assess are omitted (e.g. a question's `aesthetics` is only scored by the visual judge). A blank `findings` list means that check passed.
 
     ### EditFile Tips
     - Copy the `oldMatch` snippet verbatim from the file's `<file_markup>` block (in AppState / ReadFiles). **Shortest unique match wins** — longer matches fail more often.
@@ -1405,9 +1409,11 @@ prompts:
         - Do NOT give the artifact the benefit of the doubt. "Looks roughly fine" / "acceptable" / "mostly OK" is a FAIL, not a pass. Only pass on clear positive evidence.
         - Set "applicable": false ONLY when the check truly cannot apply (e.g. a visual check with no screenshot) — never as a way to avoid failing.
 
+        Severity discipline: each check is tagged (error) or (warn). An (error) check GATES the file's score to ZERO, so it must be decided objectively: FAIL an (error) check ONLY on an unambiguous defect you can point at — name the exact element, label, region, or claim in the reason. A matter of taste, degree, or uncertainty is NEVER an (error) failure; express taste-level problems by failing the relevant (warn) check instead. The strict fail-hard bias above applies in full to (warn) checks.
+
         Before you answer, scan the screenshot specifically for these common failures: large empty/dead space inside cards or embeds (e.g. a single number stranded in a tall box); numbers or text that are small, faint, or low-contrast; charts squeezed too narrow, cramped, overplotted, or with overlapping/illegible labels; misaligned, lopsided, or awkwardly tall/narrow tiles; a chart whose last data point craters or the series looks partial. a chart where the text is similar color as background and is impossible to read. Every one of these you can see MUST fail its corresponding check.
 
-        Checks (id [category]: PASS condition):
+        Checks (id [category, severity]: PASS condition):
         {checklist}
 
         Return ONLY a JSON object, no prose, of this exact shape:

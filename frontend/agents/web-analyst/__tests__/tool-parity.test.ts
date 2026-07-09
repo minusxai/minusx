@@ -24,7 +24,7 @@ const EXPECTED_TOOLS = [
   'LoadSkill',
   'LoadContext',
   'FuzzyMatch',
-  'Screenshot',
+  'ReviewFile', // replaced Screenshot (rubric v2) — Screenshot survives only as a registered legacy alias
 ].sort();
 
 describe('WebAnalystAgent tool-set', () => {

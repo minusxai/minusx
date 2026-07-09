@@ -104,10 +104,10 @@ describe('rubric_llm prompt', () => {
 
 describe('combineReports', () => {
   it('merges deterministic and judge findings into one combined report', () => {
-    const deterministic = scoreFileDeterministic('question', makeQuestion({ description: '' })); // clarity info (no-description)
+    const deterministic = scoreFileDeterministic('question', makeQuestion({ description: '' })); // clarity warn 0.25 (no-description)
     const judge = buildJudgeReport();
     const combined = combineReports(deterministic, judge);
-    expect(combined.categories.find((c) => c.category === 'clarity')?.score).toBe(4.5); // 5 - 0.5 info
+    expect(combined.categories.find((c) => c.category === 'clarity')?.score).toBe(5); // 5 - 0.25 rounds back to 5
     expect(combined.categories.find((c) => c.category === 'aesthetics')?.score).toBe(4); // 5 - 1 warn
   });
 });

@@ -10,10 +10,6 @@ import { getQueryHash } from '@/lib/utils/query-hash';
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import { sortObjectKeysDeep } from '@/lib/chat/file-encoding';
 import { fileToMarkup } from '@/lib/data/story/file-markup';
-import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
-import { buildVizTypeCtx } from '@/lib/rubric/refs';
-import { toAgentRubric } from '@/lib/rubric/scoring';
-import type { AgentRubric } from '@/lib/rubric/types';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import type {
@@ -135,35 +131,24 @@ export function compressQueryResult(qr: QueryResult & { error?: string; truncate
 
 /**
  * Cache of the EXPENSIVE derived facets of a FileState (merged/shaped content, markup
- * projection, rubric, queryResultId), keyed by the FileState object itself.
+ * projection, queryResultId), keyed by the FileState object itself.
  *
  * Why this is sound: Redux (immer) keeps a file's FileState identity stable until THAT file
  * changes — an unrelated action (another file edited, a query result landing, per-keystroke
  * ticks elsewhere) replaces the files map but not this entry. selectAppState recomputes on
- * every such change and used to rebuild markup + rubric from scratch each time; this cache
- * makes those recomputes O(lookup) for untouched files. The rubric additionally depends on the
- * referenced files' viz types, so an entry is only valid while the refs' identities match too.
+ * every such change and used to rebuild markup from scratch each time; this cache makes
+ * those recomputes O(lookup) for untouched files.
  */
 interface DerivedFacets {
-  refs: FileState[] | undefined;
   agentContent: FileState['content'];
   markup: string;
-  rubric: AgentRubric | undefined;
   queryResultId: string | undefined;
 }
 const derivedFacetsCache = new WeakMap<FileState, DerivedFacets>();
 
-function sameRefIdentities(a: FileState[] | undefined, b: FileState[] | undefined): boolean {
-  const la = a?.length ?? 0;
-  const lb = b?.length ?? 0;
-  if (la !== lb) return false;
-  for (let i = 0; i < la; i++) if (a![i] !== b![i]) return false;
-  return true;
-}
-
-function deriveFacets(fs: FileState, refs?: FileState[]): DerivedFacets {
+function deriveFacets(fs: FileState): DerivedFacets {
   const cached = derivedFacetsCache.get(fs);
-  if (cached && sameRefIdentities(cached.refs, refs)) return cached;
+  if (cached) return cached;
 
   const mergedContent = { ...(fs.content || {}), ...(fs.persistableChanges || {}) } as FileState['content'];
   let queryResultId = fs.queryResultId;
@@ -190,19 +175,17 @@ function deriveFacets(fs: FileState, refs?: FileState[]): DerivedFacets {
   // types, whose `content` stays full).
   const agentContent = fs.type === 'context' ? shapeContextForAgent(mergedContent) : mergedContent;
   const facets: DerivedFacets = {
-    refs: refs ? [...refs] : undefined,
     agentContent,
     // File Architecture v2: the markup the agent reads + edits (matches buildCurrentFileStr).
     markup: fileToMarkup(fs.type as FileType, agentContent),
-    rubric: computeRubric(fs.type as FileType, agentContent, refs),
     queryResultId,
   };
   derivedFacetsCache.set(fs, facets);
   return facets;
 }
 
-function compressFileState(fs: FileState, refs?: FileState[]): CompressedFileState {
-  const { agentContent, markup, rubric, queryResultId } = deriveFacets(fs, refs);
+function compressFileState(fs: FileState): CompressedFileState {
+  const { agentContent, markup, queryResultId } = deriveFacets(fs);
   const isDirty = !!(
     (fs.persistableChanges && Object.keys(fs.persistableChanges).length > 0) ||
     fs.metadataChanges?.name !== undefined ||
@@ -217,29 +200,7 @@ function compressFileState(fs: FileState, refs?: FileState[]): CompressedFileSta
     isDirty,
     ...(queryResultId ? { queryResultId } : {}),
     markup,
-    ...(rubric ? { rubric } : {}),
   };
-}
-
-/**
- * Deterministic health rubric for a file's content — auto-injected so the agent sees current
- * health on every read/app-state. Pure + cheap; only question/dashboard/story are scored.
- * Never throws (a scoring bug must not break file serialization).
- */
-function computeRubric(type: FileType, content: unknown, refs?: FileState[]): AgentRubric | undefined {
-  if (!isRubricFileType(type) || !content) return undefined;
-  // Dashboard tile rules AND story width rules need each referenced question's chart type — a
-  // saved embed's viz type lives on the question, not in the dashboard/story content. Build the
-  // ctx through the shared assembler (id set = referencedQuestionIds) so this auto-inject path is
-  // IDENTICAL to the client badge / server scorers; here the lookup source is the resolved `refs`.
-  const vizByRefId = new Map((refs ?? []).filter((r) => r.type === 'question')
-    .map((r) => [r.id, (r.content as QuestionContent | null)?.vizSettings?.type] as const));
-  const ctx = buildVizTypeCtx(type, content, (id) => vizByRefId.get(id));
-  try {
-    return toAgentRubric(scoreFileDeterministic(type, content, ctx));
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -310,8 +271,7 @@ export function boundContextAppState(appState: unknown): void {
  */
 export function compressAugmentedFile(augmented: AugmentedFile, maxChars = LIMIT_CHARS): CompressedAugmentedFile {
   return {
-    // Pass the references so dashboard tile rules can see each question's chart type.
-    fileState: compressFileState(augmented.fileState, augmented.references),
+    fileState: compressFileState(augmented.fileState),
     references: augmented.references.map((r) => compressFileState(r)),
     queryResults: augmented.queryResults.map(qr => compressQueryResult(qr, maxChars)),
   };

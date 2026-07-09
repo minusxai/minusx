@@ -53,7 +53,16 @@ export const POST = withAuth(async (
     // against a fresh picture. Fall back to the saved DB snapshot when the caller sends none.
     const content = body?.content && typeof body.content === 'object' ? body.content : file.content;
 
-    return successResponse({ report: await scoreFile(file.type, content, user, screenshotUrl) });
+    // MEASURED embed widths from the caller's rendered iframe (real pixels; supersede the static
+    // CSS width estimate). Validated defensively — malformed entries are dropped, never fatal.
+    const measuredEmbeds = Array.isArray(body?.measuredEmbeds)
+      ? (body.measuredEmbeds as unknown[])
+          .map((m) => m as { vizType?: unknown; widthPx?: unknown; columnPx?: unknown })
+          .filter((m) => m && typeof m.widthPx === 'number' && typeof m.columnPx === 'number' && m.widthPx >= 0 && m.columnPx > 0)
+          .map((m) => ({ ...(typeof m.vizType === 'string' ? { vizType: m.vizType } : {}), widthPx: m.widthPx as number, columnPx: m.columnPx as number }))
+      : undefined;
+
+    return successResponse({ report: await scoreFile(file.type, content, user, screenshotUrl, measuredEmbeds) });
   } catch (error) {
     return handleApiError(error);
   }

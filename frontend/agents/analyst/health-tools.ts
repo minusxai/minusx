@@ -49,7 +49,8 @@ export class CheckFileHealth extends MXTool<typeof CheckFileHealthParams, Analys
     name: 'CheckFileHealth',
     description:
       'Score the health of a question, dashboard, or story file and return actionable findings '
-      + '(1–5 score + grade across clarity/correctness/craft/aesthetics, each finding with a concrete fix). '
+      + '(0–5 score + grade across correctness/clarity/aesthetics, each finding with a concrete fix; '
+      + 'any `error` finding gates the score to 0 — ALWAYS fix errors, try to fix warnings). '
       + 'Set llmJudge=true to also run an LLM review of visual quality (uses the file\'s rendered screenshot when available).',
     parameters: CheckFileHealthParams,
   };

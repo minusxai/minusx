@@ -166,6 +166,9 @@ export interface GetRubricOptions {
   screenshotUrl?: string;
   /** Live-edited (merged) content to score instead of the saved DB snapshot. */
   content?: unknown;
+  /** MEASURED embed widths from the rendered story iframe (real pixels — supersede the static
+   *  CSS width estimate, which is blind to utility-class layouts). */
+  measuredEmbeds?: Array<{ vizType?: string; widthPx: number; columnPx: number }>;
 }
 
 /**

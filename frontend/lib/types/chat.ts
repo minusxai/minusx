@@ -5,7 +5,6 @@
 
 import { FileType } from '../ui/file-metadata';
 import type { FileState } from '@/store/filesSlice';
-import type { AgentRubric } from '@/lib/rubric/types';
 import type { BaseFileContent, QueryResult, CompressedQueryResult } from './files';
 
 // Chat attachment types
@@ -94,6 +93,9 @@ export interface ToolCallDetails {
 
 export interface EditFileDetails extends ToolCallDetails {
   diff: string;
+  /** Full-view screenshot captured for the post-edit review (rubric v2). UI-only, survives
+   *  the turn like ScreenshotDetails.screenshotUrl. */
+  screenshotUrl?: string;
 }
 
 export interface ScreenshotDetails extends ToolCallDetails {
@@ -315,10 +317,6 @@ export interface CompressedFileState {
    *  stable identity for cross-turn dedup by the projection pass. Replaces the old per-chart
    *  image series. */
   image?: { key: string; url?: string; data?: string; mimeType?: string };
-  /** Lean deterministic health rubric for question/dashboard/story files — auto-computed from
-   *  content so the agent sees current health (overall + per-category scores + actionable
-   *  findings) on every read. See `lib/rubric` / `docs/rubrik.md`. Absent for other file types. */
-  rubric?: AgentRubric;
 }
 
 export interface CompressedAugmentedFile {
