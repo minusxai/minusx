@@ -42,6 +42,19 @@ function storageUrl(key: string): string {
 }
 
 /**
+ * Directories the sandboxed DuckDB may touch. The local temp dir is ALWAYS included:
+ * materializeTransforms COPYs to a temp file before store.put in both store modes, so an
+ * S3-only allowlist would fail every materialization with a DuckDB Permission Error.
+ */
+export function sandboxAllowedDirs(mode: string, connectionName: string): string[] {
+  const storagePrefix = `csvs/${mode}/${connectionName}`;
+  const prefixDir = isLocalObjectStore()
+    ? `${join(LOCAL_UPLOAD_PATH, storagePrefix)}/`
+    : `s3://${OBJECT_STORE_BUCKET}/${storagePrefix}/`;
+  return [prefixDir, `${tmpdir()}/`];
+}
+
+/**
  * Open an in-memory DuckDB with every raw grid mounted as `raw."<table_name>"`, locked to the
  * connection's storage prefix, and hand it to `fn`. Always closes the instance.
  */
@@ -54,7 +67,6 @@ async function withRawGridDb<T>(
   const instance = await DuckDBInstance.create(':memory:');
   const conn = await instance.connect();
   try {
-    const storagePrefix = `csvs/${mode}/${connectionName}`;
     if (!isLocalObjectStore()) {
       await conn.run('INSTALL httpfs');
       await conn.run('LOAD httpfs');
@@ -65,11 +77,9 @@ async function withRawGridDb<T>(
         await conn.run(`SET s3_endpoint = '${OBJECT_STORE_ENDPOINT}'`);
         await conn.run("SET s3_url_style = 'path'");
       }
-      await conn.run(`SET allowed_directories = ['s3://${OBJECT_STORE_BUCKET}/${storagePrefix}/']`);
-    } else {
-      // Local writes go through temp files, which DuckDB must also be allowed to touch.
-      await conn.run(`SET allowed_directories = ['${join(LOCAL_UPLOAD_PATH, storagePrefix)}/', '${tmpdir()}/']`);
     }
+    const allowedDirs = sandboxAllowedDirs(mode, connectionName).map((d) => `'${d}'`).join(', ');
+    await conn.run(`SET allowed_directories = [${allowedDirs}]`);
 
     await conn.run('CREATE SCHEMA IF NOT EXISTS raw');
     for (const f of rawFiles) {

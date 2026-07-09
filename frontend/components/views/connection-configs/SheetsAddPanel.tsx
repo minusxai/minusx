@@ -92,6 +92,7 @@ export function SheetsAddPanel({
     const schemaErr = pendingSheets[0]?.schema ? validateIdentifier(pendingSheets[0].schema) : null;
     if (schemaErr) { onError(`Schema "${pendingSheets[0].schema}": ${schemaErr}`); return; }
 
+    onError('');
     setAgentPhase('analyzing');
     const result = await analyzeGoogleSheet('static', firstSheet.url);
     if (!result.success) { onError(result.message); setAgentPhase('idle'); return; }
@@ -109,6 +110,7 @@ export function SheetsAddPanel({
 
   const handleAgentRevise = async (feedback: string) => {
     if (!analysis || !firstSheet) return;
+    onError('');
     setAgentPhase('revising');
     const result = await reviseGoogleSheetTransforms(
       'static', analysis.raw_files, proposals.map((p) => p.transform), feedback,
@@ -124,6 +126,7 @@ export function SheetsAddPanel({
     if (!analysis || !firstSheet) return;
     const accepted = proposals.filter((p) => p.included).map((p) => p.transform);
     if (accepted.length === 0) return;
+    onError('');
     setAgentPhase('confirming');
     const result = await confirmGoogleSheetImport('static', firstSheet.url, analysis.raw_files, accepted);
     if (!result.success) { onError(result.message); setAgentPhase('review'); return; }
