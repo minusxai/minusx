@@ -55,6 +55,13 @@ function callTool(code: string, payload: Record<string, unknown>): Promise<Respo
 
 describe('remote session tool endpoint', () => {
   setupTestDb(TEST_DB_PATH);
+// Remote Agents is OFF by default (Settings toggle) — enable it for this suite.
+// beforeEach (not beforeAll): setupTestDb re-imports the DB (wiping files/config) per test.
+beforeEach(async () => {
+  const { saveRawConfig } = await import('@/lib/data/configs.server');
+  await saveRawConfig('org', { remoteAgentsEnabled: true });
+});
+
   beforeEach(() => resetRemoteSessionRateLimit());
 
   it('executes a server tool in-process and appends well-formed log rows', async () => {
@@ -205,11 +212,13 @@ describe('remote session tool endpoint', () => {
     expect(closure?.isError).toBe(true);
     expect((await getConversation(conversationId))!.runStatus).toBe('idle');
 
+    // The stopped session's code still PROVES ownership → honest 410 session_ended (not 404).
     const dead = await resultRoute(
       new NextRequest(`http://localhost:3000/s/${code}/result/${pending.toolCallId}`),
       resultCtx(code, pending.toolCallId),
     );
-    expect(dead.status).toBe(404);
+    expect(dead.status).toBe(410);
+    expect((await dead.json()).error).toBe('session_ended');
   });
 
   it('browser-unreachable: polls only HINT (never force-close); the NEXT call supersedes the stale one', async () => {

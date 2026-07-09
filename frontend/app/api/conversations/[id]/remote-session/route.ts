@@ -12,6 +12,8 @@ import type { RemoteSessionStatus } from '@/lib/data/remote-sessions.types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { Conversation } from '@/lib/data/conversations.types';
 import { boundContextAppState } from '@/lib/chat/compress-augmented';
+import { getRawConfig } from '@/lib/data/configs.server';
+import type { Mode } from '@/lib/mode/mode-types';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -41,10 +43,16 @@ export const POST = withAuth(async (
     const conversation = await loadOwned(id, user);
     if (conversation instanceof NextResponse) return conversation;
 
+    // Feature toggle (Settings → Integrations → Remote Agents). OFF by default.
+    if (!(await getRawConfig(conversation.mode as Mode)).remoteAgentsEnabled) {
+      return ApiErrors.forbidden('Remote Agents is disabled — enable it in Settings → Integrations');
+    }
+
     // Base URL for the copyable link — honor proxies the same way middleware does.
     const proto = (request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', ''))
       .split(',')[0].trim();
-    const host = request.headers.get('host') || request.nextUrl.host;
+    const host = (request.headers.get('x-forwarded-host') || request.headers.get('host') || request.nextUrl.host)
+      .split(',')[0].trim();
     // Mint-time app state (what the user is looking at) — bounded like the turns route bounds it.
     const body = await request.json().catch(() => ({} as Record<string, unknown>));
     const appState = (body as { appState?: unknown }).appState;

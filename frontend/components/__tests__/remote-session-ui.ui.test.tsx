@@ -9,8 +9,11 @@ vi.mock('@/lib/navigation/use-navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+// Mutable toggle so individual tests can flip the Remote Agents feature flag.
+const mockConfig = { branding: { agentName: 'TestBot' }, remoteAgentsEnabled: true };
 vi.mock('@/lib/hooks/useConfigs', () => ({
-  useConfigs: () => ({ config: { branding: { agentName: 'TestBot' } } }),
+  useConfigs: () => ({ config: mockConfig }),
+  updateConfig: vi.fn(),
 }));
 
 vi.mock('@/lib/utils/attachment-extract', () => ({
@@ -145,6 +148,16 @@ describe('ChatHeaderBar: Copy to Agent', () => {
     renderHeader({ agentBusy: true });
     const btn = screen.getByLabelText('Copy to agent') as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
+  });
+
+  it('the button is HIDDEN while the Remote Agents toggle is off (default)', () => {
+    mockConfig.remoteAgentsEnabled = false;
+    try {
+      renderHeader();
+      expect(screen.queryByLabelText('Copy to agent')).toBeNull();
+    } finally {
+      mockConfig.remoteAgentsEnabled = true;
+    }
   });
 
   it('EMPTY chat (no conversation yet): creates a conversation first, then mints on it', async () => {

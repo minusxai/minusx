@@ -36,6 +36,13 @@ async function mint(conversationId: number): Promise<{ status: number; result?: 
 
 describe('remote session mint / stop / status routes', () => {
   setupTestDb(TEST_DB_PATH);
+// Remote Agents is OFF by default (Settings toggle) — enable it for this suite.
+// beforeEach (not beforeAll): setupTestDb re-imports the DB (wiping files/config) per test.
+beforeEach(async () => {
+  const { saveRawConfig } = await import('@/lib/data/configs.server');
+  await saveRawConfig('org', { remoteAgentsEnabled: true });
+});
+
 
   it('mint on an idle conversation → remote status, hashed record, root invocation appended', async () => {
     const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
@@ -137,6 +144,13 @@ describe('remote session mint / stop / status routes', () => {
 
 describe('mint captures the current app state (the page the user is looking at)', () => {
   setupTestDb(TEST_DB_PATH);
+// Remote Agents is OFF by default (Settings toggle) — enable it for this suite.
+// beforeEach (not beforeAll): setupTestDb re-imports the DB (wiping files/config) per test.
+beforeEach(async () => {
+  const { saveRawConfig } = await import('@/lib/data/configs.server');
+  await saveRawConfig('org', { remoteAgentsEnabled: true });
+});
+
 
   const APP_STATE = {
     type: 'file',
@@ -176,8 +190,37 @@ describe('mint captures the current app state (the page the user is looking at)'
   });
 });
 
+describe('Remote Agents feature toggle (default OFF)', () => {
+  setupTestDb(TEST_DB_PATH);
+
+  it('minting is refused until the Settings toggle is enabled; enabling opens it; disabling kills live codes', async () => {
+    const { saveRawConfig } = await import('@/lib/data/configs.server');
+    await saveRawConfig('org', {}); // pristine config — toggle absent = off
+
+    const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+    expect((await mint(conv.id)).status).toBe(403);
+
+    await saveRawConfig('org', { remoteAgentsEnabled: true });
+    const { status, result } = await mint(conv.id);
+    expect(status).toBe(200);
+
+    // Toggling OFF invalidates the LIVE code immediately (skill doc stops resolving).
+    await saveRawConfig('org', { remoteAgentsEnabled: false });
+    const doc = await skillDocRoute(new NextRequest(`http://localhost:3000/s/${result!.code}`), codeCtx(result!.code));
+    expect(doc.status).toBe(404);
+    await saveRawConfig('org', { remoteAgentsEnabled: true }); // restore for later suites
+  });
+});
+
 describe('public /s/<code> skill document', () => {
   setupTestDb(TEST_DB_PATH);
+// Remote Agents is OFF by default (Settings toggle) — enable it for this suite.
+// beforeEach (not beforeAll): setupTestDb re-imports the DB (wiping files/config) per test.
+beforeEach(async () => {
+  const { saveRawConfig } = await import('@/lib/data/configs.server');
+  await saveRawConfig('org', { remoteAgentsEnabled: true });
+});
+
 
   it('serves the toolset + protocol as markdown for a live session', async () => {
     const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });

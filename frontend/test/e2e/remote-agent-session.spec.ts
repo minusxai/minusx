@@ -17,7 +17,10 @@ import { enterSideChatMessage, assertRedux } from '@/test/flows/e2e';
 import { asClient } from './fixtures';
 
 test('full remote session loop: mint → freeze → tools (server + browser round-trip) → stop → normal chat', async ({ page, request }) => {
-  // ── A conversation with messages (the header bar renders only then) ─────────────────────────
+  // Remote Agents is OFF by default — enable the Settings toggle first (what a real admin does).
+  await request.post('/api/configs', { data: { remoteAgentsEnabled: true } });
+
+  // ── A conversation with messages ────────────────────────────────────────────────────────────
   await setFauxLLM(asClient(request), [
     { userMessage: 'hello there', response: { kind: 'text', text: 'Hi! Ready when you are.' } },
     { userMessage: 'summarize the session', response: { kind: 'text', text: 'Session summarized.' } },
@@ -100,9 +103,9 @@ test('full remote session loop: mint → freeze → tools (server + browser roun
     { message: 'Stop left an error artifact on the conversation' },
   );
 
-  // The code is dead: skill doc 410, tool 404.
+  // The code is dead but still proves ownership: skill doc AND tool endpoints say session_ended (410).
   expect((await request.get(session)).status()).toBe(410);
-  expect((await request.post(`${session}/tool`, { data: { tool: 'SearchFiles', args: { query: 'x' } } })).status()).toBe(404);
+  expect((await request.post(`${session}/tool`, { data: { tool: 'SearchFiles', args: { query: 'x' } } })).status()).toBe(410);
 
   // ── Log invariant, end-to-end: a NORMAL faux-LLM turn on the same conversation still works ──
   await enterSideChatMessage(page, 'summarize the session');

@@ -18,6 +18,7 @@ import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { UserDB } from '@/lib/database/user-db';
 import type { Mode } from '@/lib/mode/mode-types';
+import { getRawConfig } from '@/lib/data/configs.server';
 import {
   getConversation,
   getMaxSeq,
@@ -207,6 +208,11 @@ export async function resolveRemoteSession(code: string): Promise<ResolvedRemote
 
   const conversation = await getConversation(decoded.conversationId);
   if (!conversation) return { ok: false, denial: 'not_found' };
+
+  // Feature toggle: switching Remote Agents OFF immediately invalidates live codes too.
+  if (!(await getRawConfig(conversation.mode as Mode)).remoteAgentsEnabled) {
+    return { ok: false, denial: 'not_found' };
+  }
 
   const denial = remoteSessionDenial(conversation.meta.remoteSession, decoded.nonce);
   if (denial) {

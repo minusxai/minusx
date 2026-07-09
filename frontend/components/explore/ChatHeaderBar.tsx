@@ -9,6 +9,7 @@ import { useAppDispatch } from '@/store/hooks';
 import { setActiveConversation, setConversationTitle, setRemoteSession, createConversation } from '@/store/chatSlice';
 import type { RemoteSessionMintResult } from '@/lib/data/remote-sessions.types';
 import { ConversationsAPI } from '@/lib/data/conversations';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 import { API_BASE_URL, patchApiUrl } from '@/store/api-url';
 import { preserveParams } from '@/lib/navigation/url-utils';
 
@@ -48,6 +49,8 @@ export default function ChatHeaderBar({
   handleNewChat,
 }: ChatHeaderBarProps) {
   const dispatch = useAppDispatch();
+  // Remote Agents feature toggle (Settings → Integrations) — OFF by default.
+  const remoteAgentsEnabled = useConfigs().config.remoteAgentsEnabled === true;
 
   // Inline rename of the conversation title (the ▾ menu → Rename).
   const [isRenaming, setIsRenaming] = useState(false);
@@ -105,7 +108,12 @@ export default function ChatHeaderBar({
         return;
       }
       const mint = (body as { data: RemoteSessionMintResult }).data;
-      await navigator.clipboard.writeText(mint.copyText);
+      // Compose the copied URL from the BROWSER's own origin — the same mechanism link sharing
+      // uses (the server's absolute URL from proxy headers is a fallback for API consumers).
+      const url = `${window.location.origin}/s/${mint.code}`;
+      await navigator.clipboard.writeText(
+        `Fetch ${url} and follow its instructions to operate my MinusX session.`,
+      );
       dispatch(setRemoteSession({ conversationID: targetId, active: true, expiresAt: mint.expiresAt }));
       toaster.create({
         title: 'Copied — paste it into your agent',
@@ -262,7 +270,7 @@ export default function ChatHeaderBar({
         <HStack gap={2}>
           {setAsActiveButton}
           {newChatButton}
-          {(
+          {remoteAgentsEnabled && (
             <Tooltip content="Copy to agent — let Claude Code (or any agent) drive this chat" positioning={{ placement: 'bottom' }}>
               <Button
                 aria-label="Copy to agent"

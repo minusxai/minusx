@@ -101,7 +101,7 @@ which returns the same \`200 completed\` shape (or \`202\` again — keep pollin
 
 Errors:
 - \`400\` — unknown tool or args failed schema validation (body includes details). Fix and retry.
-- \`404\` — this session has ended. Stop; ask the user for a new link.
+- \`410 { "error": "session_ended" }\` — this session has ended (stopped, expired, or disabled). Stop making calls; ask the user for a fresh link. (\`404\` = the URL is not a live session at all.)
 - \`409\` — another call is still in flight. Wait and retry.
 - A \`202\` with \`"browserMaybeUnreachable": true\` — the tool has waited unusually long in the user's browser: either no tab is open, or a confirmation prompt (e.g. allowing a navigation) is awaiting the user. Keep polling and tell YOUR user to check their MinusX tab. Issuing a different tool call will supersede (cancel) the stuck one.
 - \`429\` — rate limited. Back off.
@@ -130,6 +130,7 @@ curl -sS -X POST ${sessionUrl}/tool \\
 
 - Start with \`SearchDBSchema\` to discover tables, then \`ExecuteQuery\` to explore data.
 - \`ReadFiles\` / \`SearchFiles\` read the user's saved questions/dashboards; \`EditFile\` / \`CreateFile\` modify them (these run in the user's browser — expect \`202\` + poll).
+- The stored markup is a **normalized projection**: HTML comments are dropped and attributes/whitespace may be rewritten on save — so text YOU authored may not survive verbatim. Never anchor an \`EditFile\` \`oldMatch\` on something you wrote from memory; anchor on markup you have SEEN (the latest diff, \`currentMarkup\` from a failed edit, or a fresh \`ReadFiles\`). Every EditFile response's \`diff\` shows the exact stored form.
 - File contents use MinusX markup. **Before creating or editing a file type for the first time, call \`LoadSkill\` with that type's guide** — \`{"tool":"LoadSkill","args":{"name":"stories"}}\` (also: \`questions\`, \`dashboards\`, \`visualizations\`, \`reports\`, \`alerts\`, \`notebooks\`). The guide is the source of truth for that type's markup; follow it precisely.
 - To create a NEW story/question/dashboard: \`Navigate\` with \`newFileType\` (creates a draft and opens it in the user's browser), then \`EditFile\` the returned file id. Save/publish happens via \`PublishAll\`, which asks the USER to approve — expect a wait while they review.
 - If you need input from a human, ask YOUR user directly (your own chat/terminal) — there is no in-MinusX prompt channel.
@@ -154,7 +155,8 @@ ${JSON.stringify(t.parameters, null, 2)}
 function baseUrl(request: NextRequest): string {
   const proto = (request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', ''))
     .split(',')[0].trim();
-  const host = request.headers.get('host') || request.nextUrl.host;
+  const host = (request.headers.get('x-forwarded-host') || request.headers.get('host') || request.nextUrl.host)
+    .split(',')[0].trim();
   return `${proto}://${host}`;
 }
 

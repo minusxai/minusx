@@ -57,7 +57,15 @@ export function withRemoteSessionAuth(handler: RemoteSessionHandler) {
     const code = params.code ?? '';
     const resolved = await resolveRemoteSession(code);
     if (!resolved.ok) {
-      // Uniform 404 across malformed/revoked/expired/unknown — see REMOTE_AGENT_SESSIONS.md §10.
+      // A code that PROVED ownership (nonce matched the stored hash) but is dead gets an honest
+      // 410 "session_ended" so agents stop cleanly; anything else (unknown/malformed/replaced —
+      // indistinguishable from a guess) stays a uniform 404. See REMOTE_AGENT_SESSIONS.md §10.
+      if (resolved.denial === 'revoked' || resolved.denial === 'expired' || resolved.denial === 'idle_expired') {
+        return NextResponse.json({
+          error: 'session_ended',
+          message: 'This remote session has ended (stopped by the user, expired, or disabled). Stop making calls with this URL and ask the user for a fresh "Copy to Agent" link.',
+        }, { status: 410 });
+      }
       return NextResponse.json({ error: 'not_found' }, { status: 404 });
     }
     if (rateLimited(resolved.conversation.id)) {

@@ -25,6 +25,13 @@ const codeCtx = (code: string) => ({ params: Promise.resolve({ code }) }) as nev
 
 describe('chatListener: remote session completions', () => {
   setupTestDb(TEST_DB_PATH);
+// Remote Agents is OFF by default (Settings toggle) — enable it for this suite.
+// beforeEach (not beforeAll): setupTestDb re-imports the DB (wiping files/config) per test.
+beforeEach(async () => {
+  const { saveRawConfig } = await import('@/lib/data/configs.server');
+  await saveRawConfig('org', { remoteAgentsEnabled: true });
+});
+
   // Route the listener's POST /api/conversations/:id/turns to the real handler.
   setupMockFetch({
     additionalInterceptors: [async (urlStr, init) => {
