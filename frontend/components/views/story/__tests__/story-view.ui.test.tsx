@@ -310,6 +310,35 @@ describe('StoryView', () => {
     });
   });
 
+  // Height-ratchet guard: the app's own body{min-height:100dvh} rule is mirrored into the iframe,
+  // where 100dvh = the iframe's CURRENT height — so once the iframe grows (e.g. side-chat open
+  // narrows the pane and text wraps taller), body.scrollHeight can never report smaller and the
+  // iframe never shrinks back, leaving a large blank void below the story. The doc build must pin
+  // the viewport min-height off inside the content-driven document.
+  it('pins viewport min-height off inside the iframe document (no height ratchet)', async () => {
+    renderWithProviders(<StoryView content={content} {...NOEDIT_PROPS} />);
+    await waitFor(() => {
+      const iframe = screen.getByLabelText('Story document') as HTMLIFrameElement;
+      const doc = iframe.contentDocument!;
+      expect(doc.documentElement.style.minHeight).toBe('0');
+      expect(doc.body.style.minHeight).toBe('0');
+    });
+  });
+
+  // Reflow resync: pane-width changes (side-chat toggle) rewrap the fluid story to a different
+  // content height. The body lives in another document, where ResizeObserver delivery is not
+  // guaranteed — the sync must ALSO observe the iframe element itself (same-document), so a width
+  // change always re-runs the height sync.
+  it('observes the iframe element itself for width-driven height resync', async () => {
+    renderWithProviders(<StoryView content={content} {...NOEDIT_PROPS} />);
+    await waitFor(() => {
+      const iframe = screen.getByLabelText('Story document') as HTMLIFrameElement;
+      const observed = (global.ResizeObserver as unknown as ReturnType<typeof vi.fn>).mock.instances
+        .flatMap(inst => (inst.observe as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0]));
+      expect(observed).toContain(iframe);
+    });
+  });
+
   // The JSON/XML "Code view" moved out of StoryView into the shared CodeView
   // (rendered centrally by FileView) — see components/views/__tests__/code-view.ui.test.tsx.
   it('renders the story visual canvas (never a code editor)', () => {
