@@ -1,6 +1,14 @@
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
-import { deleteS3File, importGoogleSheetToS3, processFilesFromS3 } from '@/lib/csv-processor';
+import {
+  deleteS3File,
+  importGoogleSheetToS3,
+  processFilesFromS3,
+  downloadSpreadsheetAsXlsx,
+  parseSpreadsheetId,
+} from '@/lib/csv-processor';
+import { extractRawGrids } from '@/lib/sheets-import/raw-grid';
+import { materializeTransforms } from '@/lib/sheets-import/executor';
 import { mergeReimportedSheetFiles } from '@/lib/data/helpers/sheet-reimport';
 import type { JobHandler } from '../job-registry';
 import type { ConnectionContent, CsvFileInfo, JobHandlerResult, JobRunnerInput } from '@/lib/types';
@@ -43,17 +51,46 @@ export const sheetsSyncJobHandler: JobHandler = {
       const schemaName = groupFiles[0].schema_name ?? 'public';
       const oldS3Keys = groupFiles.map((f) => f.s3_key);
 
+      // Agentic group: every table in it was produced by an agent-authored transform. Resync
+      // re-extracts the raw grids from the LIVE sheet and re-runs the SAME transform SQL, so
+      // refreshed data flows through the identical cleaning (table detection / unpivot / value
+      // cleaning). Legacy (or mixed) groups keep the plain per-tab reimport path.
+      const groupTransforms = groupFiles.map((f) => f.transform).filter((t): t is NonNullable<typeof t> => !!t);
+      const isAgenticGroup = groupTransforms.length > 0 && groupTransforms.length === groupFiles.length;
+
       try {
-        const { files: incoming, spreadsheetId: parsedId } = await importGoogleSheetToS3(
-          spreadsheetUrl, connFile.name, user.mode, schemaName,
-        );
-        const registered = await processFilesFromS3(user.mode, connFile.name, incoming);
-        const reimported: CsvFileInfo[] = registered.map((f) => ({
-          ...f,
-          source_type: 'google_sheets' as const,
-          spreadsheet_url: spreadsheetUrl,
-          spreadsheet_id: parsedId,
-        }));
+        let reimported: CsvFileInfo[];
+        let parsedId: string;
+        if (isAgenticGroup) {
+          parsedId = parseSpreadsheetId(spreadsheetUrl);
+          const xlsx = await downloadSpreadsheetAsXlsx(parsedId);
+          const rawKeys: string[] = [];
+          try {
+            const rawFiles = await extractRawGrids(xlsx, connFile.name, user.mode, rawKeys);
+            const registered = await materializeTransforms(user.mode, connFile.name, rawFiles, groupTransforms);
+            const byTable = new Map(groupTransforms.map((t) => [t.output_table, t]));
+            reimported = registered.map((f) => ({
+              ...f,
+              source_type: 'google_sheets' as const,
+              spreadsheet_url: spreadsheetUrl,
+              spreadsheet_id: parsedId,
+              transform: byTable.get(f.table_name),
+            }));
+          } finally {
+            // Raw grids are transient — always cleaned up, success or failure.
+            await Promise.allSettled(rawKeys.map((key) => deleteS3File(key)));
+          }
+        } else {
+          const imported = await importGoogleSheetToS3(spreadsheetUrl, connFile.name, user.mode, schemaName);
+          parsedId = imported.spreadsheetId;
+          const registered = await processFilesFromS3(user.mode, connFile.name, imported.files);
+          reimported = registered.map((f) => ({
+            ...f,
+            source_type: 'google_sheets' as const,
+            spreadsheet_url: spreadsheetUrl,
+            spreadsheet_id: parsedId,
+          }));
+        }
 
         // Refresh the tabs the user still has — preserving deletions AND renames — instead of
         // blindly replacing the group with every live tab (which resurrected deleted tabs; the same

@@ -412,7 +412,7 @@ export function parseSpreadsheetId(url: string): string {
   return match[1];
 }
 
-async function downloadSpreadsheetAsXlsx(spreadsheetId: string): Promise<Buffer> {
+export async function downloadSpreadsheetAsXlsx(spreadsheetId: string): Promise<Buffer> {
   const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=xlsx`;
   const res = await fetch(exportUrl, { signal: AbortSignal.timeout(30_000) });
   if (res.status === 404) throw new Error('Spreadsheet not found — it may be private or deleted');

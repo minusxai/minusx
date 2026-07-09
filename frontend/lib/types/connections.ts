@@ -56,6 +56,13 @@ export interface CsvFileInfo {
   source_type?: 'csv' | 'google_sheets';
   spreadsheet_url?: string;    // For google_sheets: the source spreadsheet URL
   spreadsheet_id?: string;     // For google_sheets: Google spreadsheet ID (groups sheets from the same doc)
+  /**
+   * Agentic import: the agent-authored DuckDB transform that produced this table from the
+   * spreadsheet's raw grids (see lib/sheets-import). Presence marks the table as agentically
+   * imported — on resync the raw grids are re-extracted and this SQL re-runs, so refreshed
+   * sheet data flows through the same cleaning (table detection / unpivot / value cleaning).
+   */
+  transform?: import('@/lib/sheets-import/types').SheetTransform;
 }
 
 // CSV connection config — pure S3-backed, no local files
