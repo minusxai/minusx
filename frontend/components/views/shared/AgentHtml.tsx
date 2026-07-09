@@ -177,8 +177,13 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     }
 
     // Sizing contract: honor explicit px sizes, default a missing height, clamp below-minimum boxes.
+    // Discovery empties each placeholder into a blank fixed-height box; its React embed only
+    // mounts a render pass later. Stamp the placeholder busy so the screenshot readiness wait
+    // (waitForFileViewReady) never captures that half-hydrated window — StoryEmbeds clears the
+    // stamp after the embed commits (a still-loading embed then carries its own busy marker).
     const sizeEmbedEl = (el: HTMLElement, minH = MIN_CHART_H, defaultH = DEFAULT_CHART_H) => {
       el.replaceChildren();
+      el.setAttribute('data-mx-busy', 'true');
       el.setAttribute('data-mx-osz', el.getAttribute('style') ?? '');
       const px = (v: string) => (v.endsWith('px') ? parseFloat(v) : NaN);
       const w = px(el.style.width);
@@ -208,6 +213,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       const embed = numberFromEl(el);
       if (!embed) return;
       el.replaceChildren();
+      el.setAttribute('data-mx-busy', 'true'); // cleared by StoryEmbeds on mount (see sizeEmbedEl)
       numbersFound.push({ el, embed });
     });
     const paramsFound: ParamTarget[] = [];
@@ -215,6 +221,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       const param: StoryParam | null = paramFromPlaceholderEl(el);
       if (!param) return;
       el.replaceChildren();
+      el.setAttribute('data-mx-busy', 'true'); // cleared by StoryEmbeds on mount (see sizeEmbedEl)
       paramsFound.push({ el, param });
     });
 

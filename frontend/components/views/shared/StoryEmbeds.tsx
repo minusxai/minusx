@@ -15,7 +15,7 @@
  * portal (React context crosses portals), so popovers/menus position against the iframe document.
  */
 import { createPortal } from 'react-dom';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Provider as ReduxStoreProvider } from 'react-redux';
 import { Box, ChakraProvider, EnvironmentProvider } from '@chakra-ui/react';
 
@@ -76,6 +76,17 @@ export default function StoryEmbeds({
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- getOrCreateStore is a stable singleton
   const store = useMemo(() => withColorModeOverride(getOrCreateStore(), colorMode), [colorMode]);
+
+  // Clear the discovery busy stamps (AgentHtml marks every emptied placeholder `data-mx-busy` so
+  // the screenshot readiness wait doesn't capture the pre-hydration blank boxes). This effect runs
+  // AFTER the portals below commit, so each placeholder already holds its embed's real DOM — and a
+  // still-loading embed shows its own busy marker (query spinner / InlineNumber), which readiness
+  // keeps waiting on.
+  useEffect(() => {
+    for (const t of [...targets, ...inlineTargets, ...numberTargets, ...paramTargets]) {
+      t.el.removeAttribute('data-mx-busy');
+    }
+  }, [targets, inlineTargets, numberTargets, paramTargets]);
 
   return (
     <ReduxStoreProvider store={store}>

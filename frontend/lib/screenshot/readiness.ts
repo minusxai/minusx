@@ -10,7 +10,9 @@
  * Busy signals (explicit, opt-in): any element with `data-mx-busy="true"` inside the view —
  * including inside same-origin iframes (the story body) — or an iframe whose document is still
  * loading. Components that render a transient loading state mark it with `data-mx-busy` (e.g.
- * QuestionVisualization's query spinner, InlineNumber while its query runs).
+ * QuestionVisualization's query spinner, InlineNumber while its query runs), and AgentHtml stamps
+ * every emptied embed placeholder at discovery (cleared by StoryEmbeds once the embed mounts) so
+ * the pre-hydration blank boxes after a story remount are never captured as "settled".
  *
  * Best-effort by design: always resolves by `timeoutMs` — a stuck query must degrade to a
  * screenshot of the spinner, never hang the tool.
