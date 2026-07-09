@@ -212,22 +212,32 @@ describe('remote session tool endpoint', () => {
     expect(dead.status).toBe(404);
   });
 
-  it('browser-unreachable: a pending call older than the browser timeout closes with 410', async () => {
+  it('browser-unreachable: polls only HINT (never force-close); the NEXT call supersedes the stale one', async () => {
     const { conversationId, code } = await mintSession();
     const res = await callTool(code, { tool: 'EditFile', args: { fileId: 9 }, waitMs: 0 });
     const pending = (await res.json()) as RemoteToolCallPending;
 
+    // A poll past the browser timeout stays pending with the advisory hint — a user confirmation
+    // (e.g. Navigate's Allow) may legitimately sit for minutes; the poll must never kill it.
     const conversation = (await getConversation(conversationId))!;
-    const outcome = await getRemoteToolResult(conversation, pending.toolCallId, { waitMs: 0, browserTimeoutMs: 0 });
-    expect(outcome.kind).toBe('browser_unreachable');
+    const polled = await getRemoteToolResult(conversation, pending.toolCallId, { waitMs: 0, browserTimeoutMs: 0 });
+    expect(polled).toMatchObject({ kind: 'pending', browserMaybeUnreachable: true });
+    expect(await loadLog(conversationId)).not.toContainEqual(
+      expect.objectContaining({ role: 'toolResult', toolCallId: pending.toolCallId }),
+    );
 
-    // The dangling call was closed with an isError result so the log stays loadable.
+    // When the agent MOVES ON, the stale call is closed (isError) and the new call proceeds.
+    const next = await import('@/lib/chat/remote-session-engine.server').then((m) =>
+      m.executeRemoteToolCall(conversation, { userId: 1, email: 't@example.com' },
+        { tool: 'SearchFiles', args: { query: 'x' } }, { browserTimeoutMs: 0 }),
+    );
+    expect(next.kind).toBe('completed');
     const log = await loadLog(conversationId);
     const closure = log.find(
       (e) => (e as { role?: string }).role === 'toolResult'
         && (e as { toolCallId?: string }).toolCallId === pending.toolCallId,
-    );
-    expect(closure).toBeTruthy();
+    ) as { isError?: boolean } | undefined;
+    expect(closure?.isError).toBe(true);
   });
 
   it('GET /s/<code>/context returns orientation; POST /s/<code>/end ends the session', async () => {

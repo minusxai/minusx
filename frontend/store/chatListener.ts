@@ -304,11 +304,16 @@ async function runV3TurnInListener(
 // Remote Agent Sessions — the browser observer (REMOTE_AGENT_SESSIONS.md §9.1)
 // ---------------------------------------------------------------------------
 
-/** Reload the durable log and render it as the final state (shared by turn settle + observer). */
-async function finalizeFromDurableLog(
+/**
+ * Reload the durable log and render it (shared by the observer's live re-render + finalize).
+ * The durable rows are the single source of truth — remote tool calls/results and their display
+ * cards (incl. Navigate/PublishAll confirmation prompts) all come from here.
+ */
+async function renderFromDurableLog(
   conversationID: number,
   conversation: NonNullable<ReturnType<typeof selectConversation>>,
   dispatch: AppDispatch,
+  executionState: 'EXECUTING' | 'FINISHED',
 ): Promise<void> {
   const detail = await ConversationsAPI.get(conversationID);
   const piLog = detail.messages.map((m) => m.content) as unknown as ConversationLog;
@@ -329,8 +334,12 @@ async function finalizeFromDurableLog(
       pending_tool_calls: [],
       streamedCompletedToolCalls: [],
       streamedThinking: '',
-      executionState: 'FINISHED',
+      executionState,
       version: 3,
+      // Durable errors[] (already in `messages`) are the truth; a stale client-side error banner
+      // (e.g. an interrupt artifact) must not survive the remote re-render.
+      error: undefined,
+      wasInterrupted: false,
     },
     setAsActive: false,
   }));
@@ -363,30 +372,50 @@ chatListenerMiddleware.startListening({
     const abortController = new AbortController();
     abortControllers.set(conversation._id, abortController);
 
-    const toolMeta = new Map<string, ToolCallMeta>();
+    // Debounced live re-render from the durable log — remote server-tool activity appears as it
+    // lands. Chained (never concurrent) so reloads can't interleave; pending dispatches queue on
+    // the same chain so they always apply AFTER the reload that precedes them (loadConversation
+    // resets pending_tool_calls).
+    let renderChain: Promise<void> = Promise.resolve();
+    let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+    const enqueue = (work: () => Promise<void>) => {
+      renderChain = renderChain.then(work).catch((e) => console.warn('[remote-session] render failed:', e));
+    };
+    const reloadNow = () => enqueue(async () => {
+      const cur = selectConversation(listenerApi.getState() as RootState, conversationID);
+      if (cur) await renderFromDurableLog(conversationID, cur, dispatch, 'EXECUTING');
+    });
+    const scheduleReload = () => {
+      clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(reloadNow, 150);
+    };
+
     try {
       await observeConversation(conversationID, (conversation.log_index ?? 0) - 1, abortController.signal, {
         onDelta: () => { /* remote sessions have no LLM deltas */ },
-        onMessage: (content) => {
-          for (const [id, meta] of collectToolCallMeta(content)) toolMeta.set(id, meta);
-          const toolCallId = (content as { toolCallId?: string } | null)?.toolCallId;
-          const streamed = piToolResultToStreamedCall(content, toolCallId ? toolMeta.get(toolCallId) : undefined);
-          if (streamed) dispatch(addStreamingMessage({ conversationID, type: 'ToolCompleted', payload: streamed } as never));
-        },
+        onMessage: () => scheduleReload(),
         onPending: (pending) => {
-          // Only dispatch when something NEW is pending — re-emits of a call this tab is already
-          // executing must not reset its in-progress result (multi-tab/dup execution is further
-          // guarded by the server-side completion dedupe).
-          const cur = selectConversation(listenerApi.getState() as RootState, conversationID);
-          const known = new Set((cur?.pending_tool_calls ?? []).map((p) => p.toolCall.id));
+          // Re-render first (the pending tool's assistant row + display card come from the log),
+          // then set pending — but only when something NEW is pending: re-emits of a call this tab
+          // is already executing must not reset its in-progress result (multi-tab/dup execution is
+          // further guarded by the server-side completion dedupe).
+          const known = new Set(
+            (selectConversation(listenerApi.getState() as RootState, conversationID)?.pending_tool_calls ?? [])
+              .map((p) => p.toolCall.id),
+          );
           if (!pending.some((p) => !known.has(p.id))) return;
-          dispatch(updateConversation({
-            conversationID,
-            log_index: cur?.log_index ?? 0,
-            completed_tool_calls: [],
-            pending_tool_calls: v3PendingToToolCalls(pending) as never,
-            debug: [],
-          }));
+          clearTimeout(reloadTimer);
+          reloadNow();
+          enqueue(async () => {
+            const cur = selectConversation(listenerApi.getState() as RootState, conversationID);
+            dispatch(updateConversation({
+              conversationID,
+              log_index: cur?.log_index ?? 0,
+              completed_tool_calls: [],
+              pending_tool_calls: v3PendingToToolCalls(pending) as never,
+              debug: [],
+            }));
+          });
         },
       });
     } catch (error) {
@@ -395,11 +424,13 @@ chatListenerMiddleware.startListening({
       }
     } finally {
       observingConversations.delete(conversationID);
+      clearTimeout(reloadTimer);
+      await renderChain.catch(() => {});
       // Session over (Stop / expiry / agent end / abort): final render from the durable log, then
       // lift the freeze. Best-effort — the log reload can fail offline; the flag must still clear.
       const latest = selectConversation(listenerApi.getState() as RootState, conversationID);
       if (latest) {
-        try { await finalizeFromDurableLog(conversationID, latest, dispatch); } catch { /* offline */ }
+        try { await renderFromDurableLog(conversationID, latest, dispatch, 'FINISHED'); } catch { /* offline */ }
       }
       dispatch(setRemoteSession({ conversationID, active: false }));
     }

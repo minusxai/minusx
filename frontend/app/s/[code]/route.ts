@@ -92,7 +92,7 @@ Errors:
 - \`400\` — unknown tool or args failed schema validation (body includes details). Fix and retry.
 - \`404\` — this session has ended. Stop; ask the user for a new link.
 - \`409\` — another call is still in flight. Wait and retry.
-- \`410 { "error": "browser_unreachable" }\` — the tool needed the user's browser and no browser is connected. Tell the user to open the conversation in MinusX, then retry.
+- A \`202\` with \`"browserMaybeUnreachable": true\` — the tool has waited unusually long in the user's browser: either no tab is open, or a confirmation prompt (e.g. allowing a navigation) is awaiting the user. Keep polling and tell YOUR user to check their MinusX tab. Issuing a different tool call will supersede (cancel) the stuck one.
 - \`429\` — rate limited. Back off.
 
 ### Orientation

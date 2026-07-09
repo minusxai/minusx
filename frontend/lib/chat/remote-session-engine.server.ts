@@ -57,11 +57,13 @@ const CALL_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
 
 export type RemoteToolOutcome =
   | { kind: 'completed'; toolCallId: string; isError: boolean; content: RemoteContentBlock[] }
-  | { kind: 'pending'; toolCallId: string }
+  // browserMaybeUnreachable: the call has been pending past the browser timeout — either no tab is
+  // attached, or a user confirmation (Navigate/PublishAll) is sitting unanswered. Advisory only:
+  // a pending human decision must never be force-closed by a poll (browser-verified failure mode).
+  | { kind: 'pending'; toolCallId: string; browserMaybeUnreachable?: boolean }
   | { kind: 'invalid'; message: string }
   | { kind: 'busy'; message: string }
-  | { kind: 'not_found' }
-  | { kind: 'browser_unreachable'; toolCallId: string };
+  | { kind: 'not_found' };
 
 function clampWaitMs(raw: unknown, fallback: number): number {
   const n = Number(raw);
@@ -171,6 +173,7 @@ export async function executeRemoteToolCall(
   conversation: Conversation,
   user: { userId: number; email: string },
   request: RemoteToolCallRequest & { waitMs?: unknown },
+  opts: { browserTimeoutMs?: number } = {},
 ): Promise<RemoteToolOutcome> {
   const startedAt = Date.now();
   const log = await loadLog(conversation.id);
@@ -183,9 +186,35 @@ export async function executeRemoteToolCall(
   }
 
   // Single-flight: one remote call at a time (the browser may still be executing the last one).
+  // A call stuck past the browser timeout (tab closed, or a confirmation nobody will answer) is
+  // closed HERE — at the moment the agent moves on — never by the poll, which must not kill a
+  // pending human decision. Closing it unwedges the session; the new call then proceeds.
   const unresolved = unresolvedToolCallIds(log);
   if (unresolved.length > 0) {
-    return { kind: 'busy', message: `tool call ${unresolved[0]} is still in flight — wait for it (poll /result/${unresolved[0]}) before the next call` };
+    const stale = findToolCall(log, unresolved[0]);
+    const browserTimeoutMs = opts.browserTimeoutMs ?? DEFAULT_BROWSER_TIMEOUT_MS;
+    if (!stale || Date.now() - stale.timestamp < browserTimeoutMs) {
+      return { kind: 'busy', message: `tool call ${unresolved[0]} is still in flight — wait for it (poll /result/${unresolved[0]}) before the next call` };
+    }
+    const closer: ToolResultMessage & { parent_id: string | null } = {
+      role: 'toolResult',
+      toolCallId: unresolved[0],
+      toolName: stale.name,
+      content: [{ type: 'text', text: 'Superseded: no browser completed this tool call in time (browser_unreachable or an unanswered confirmation), and the agent moved on.' }],
+      isError: true,
+      timestamp: Date.now(),
+      parent_id: stale.parent_id,
+    };
+    try {
+      await appendMessages(conversation.id, [closer], log.length);
+      await notifyMessage(conversation.id, log.length);
+      log.push(closer);
+    } catch (err) {
+      if (err instanceof ConcurrentAppendError) {
+        return { kind: 'busy', message: 'another writer advanced this conversation — retry' };
+      }
+      throw err;
+    }
   }
 
   if (typeof request.tool !== 'string' || !REMOTE_TOOL_NAMES.has(request.tool)) {
@@ -269,9 +298,11 @@ export async function executeRemoteToolCall(
 }
 
 /**
- * Result lookup / long-poll for a previously-dispatched call. A pending browser-bridged call older
- * than `browserTimeoutMs` is closed with an isError result (the log must never wedge) and reported
- * as `browser_unreachable` (410) so the agent knows to ask the user to open the app.
+ * Result lookup / long-poll for a previously-dispatched call. NEVER force-closes a pending call —
+ * a bridged tool may legitimately sit for minutes awaiting a user confirmation (Navigate's Allow).
+ * Past the browser timeout the pending response carries `browserMaybeUnreachable: true` so the
+ * agent can tell its user to open the app; the stale call is actually closed only when the agent
+ * issues its NEXT tool call (see executeRemoteToolCall) or the session ends.
  */
 export async function getRemoteToolResult(
   conversation: Conversation,
@@ -285,31 +316,14 @@ export async function getRemoteToolResult(
   const existing = findToolResult(log, toolCallId);
   if (existing) return completedOutcome(existing);
 
-  const browserTimeoutMs = opts.browserTimeoutMs ?? DEFAULT_BROWSER_TIMEOUT_MS;
-  if (Date.now() - call.timestamp >= browserTimeoutMs) {
-    const closer: ToolResultMessage & { parent_id: string | null } = {
-      role: 'toolResult',
-      toolCallId,
-      toolName: call.name,
-      content: [{ type: 'text', text: 'No browser executed this tool call in time (browser_unreachable). Ask the user to open the conversation in MinusX, then retry.' }],
-      isError: true,
-      timestamp: Date.now(),
-      parent_id: call.parent_id,
-    };
-    try {
-      await appendMessages(conversation.id, [closer], log.length);
-      await notifyMessage(conversation.id, log.length);
-    } catch (err) {
-      // A concurrent completion beat us — serve it instead of the closure.
-      if (!(err instanceof ConcurrentAppendError)) throw err;
-      const fresh = findToolResult(await loadLog(conversation.id), toolCallId);
-      if (fresh) return completedOutcome(fresh);
-    }
-    return { kind: 'browser_unreachable', toolCallId };
-  }
-
   const waited = await waitForToolResult(conversation.id, toolCallId, clampWaitMs(opts.waitMs, 25_000));
-  return waited ? completedOutcome(waited) : { kind: 'pending', toolCallId };
+  if (waited) return completedOutcome(waited);
+  const browserTimeoutMs = opts.browserTimeoutMs ?? DEFAULT_BROWSER_TIMEOUT_MS;
+  return {
+    kind: 'pending',
+    toolCallId,
+    ...(Date.now() - call.timestamp >= browserTimeoutMs ? { browserMaybeUnreachable: true } : {}),
+  };
 }
 
 /**

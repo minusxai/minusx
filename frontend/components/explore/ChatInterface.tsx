@@ -529,9 +529,10 @@ export default function ChatInterface({
     }
   };
 
-  // Stop a Remote Agent Session: revoke server-side (kills the code + closes dangling calls +
-  // releases to idle), then interrupt locally (aborts the observer stream, whose finalize path
-  // reloads the log and lifts the freeze). Both halves are idempotent.
+  // Stop a Remote Agent Session: revoke server-side — that kills the code, closes dangling calls,
+  // releases the conversation to idle, and NOTIFYs, which ends the observer stream; the observer's
+  // finalize then reloads the log and lifts the freeze. Deliberately NOT interruptChat: that
+  // reducer stamps a generic "Interrupted by user" error, which is wrong for a clean Stop.
   const handleStopRemoteSession = async () => {
     if (!conversationID || conversationID <= 0) return;
     try {
@@ -539,7 +540,6 @@ export default function ChatInterface({
     } catch (err) {
       console.warn('[ChatInterface] remote-session stop failed (best-effort):', err);
     }
-    dispatch(interruptChat({ conversationID }));
   };
 
   const closeContextSizePanel = useCallback(() => {

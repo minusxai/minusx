@@ -27,7 +27,10 @@ export const POST = withRemoteSessionAuth(async (request: NextRequest, { convers
       });
     case 'pending':
       return NextResponse.json(
-        { status: 'pending', toolCallId: outcome.toolCallId, pollAfterMs: REMOTE_TOOL_POLL_AFTER_MS },
+        {
+          status: 'pending', toolCallId: outcome.toolCallId, pollAfterMs: REMOTE_TOOL_POLL_AFTER_MS,
+          ...(outcome.browserMaybeUnreachable ? { browserMaybeUnreachable: true } : {}),
+        },
         { status: 202 },
       );
     case 'invalid':

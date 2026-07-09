@@ -64,6 +64,9 @@ export interface RemoteToolCallPending {
   status: 'pending';
   toolCallId: string;
   pollAfterMs: number;
+  /** Pending past the browser timeout — no tab attached, or a user confirmation sits unanswered.
+   *  Advisory: tell your user to open the conversation in MinusX. Polling never force-closes. */
+  browserMaybeUnreachable?: boolean;
 }
 
 export type RemoteToolCallResponse = RemoteToolCallCompleted | RemoteToolCallPending;

@@ -10,8 +10,9 @@ export const runtime = 'nodejs';
 
 /**
  * GET /s/<code>/result/<toolCallId>[?waitMs=N] — poll (short long-poll) a previously-dispatched
- * remote tool call. 200 completed / 202 pending / 404 unknown id / 410 browser_unreachable
- * (no browser executed the bridged tool in time; the call was closed with an isError result).
+ * remote tool call. 200 completed / 202 pending / 404 unknown id. A pending response may carry
+ * `browserMaybeUnreachable: true` (no browser completed the call in time — possibly an unanswered
+ * user confirmation); polling never force-closes a pending call.
  */
 export const GET = withRemoteSessionAuth(async (request: NextRequest, { conversation, params }) => {
   const toolCallId = params.toolCallId ?? '';
@@ -25,11 +26,12 @@ export const GET = withRemoteSessionAuth(async (request: NextRequest, { conversa
       });
     case 'pending':
       return NextResponse.json(
-        { status: 'pending', toolCallId: outcome.toolCallId, pollAfterMs: REMOTE_TOOL_POLL_AFTER_MS },
+        {
+          status: 'pending', toolCallId: outcome.toolCallId, pollAfterMs: REMOTE_TOOL_POLL_AFTER_MS,
+          ...(outcome.browserMaybeUnreachable ? { browserMaybeUnreachable: true } : {}),
+        },
         { status: 202 },
       );
-    case 'browser_unreachable':
-      return NextResponse.json({ error: 'browser_unreachable', toolCallId: outcome.toolCallId }, { status: 410 });
     default:
       return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
