@@ -243,7 +243,9 @@ async function runV3TurnInListener(
         if (streamed) dispatch(addStreamingMessage({ conversationID, type: 'ToolCompleted', payload: streamed } as never));
       },
     });
-    status = result.status === 'running' ? 'idle' : result.status;
+    // 'remote' (Remote Agent Session holds the conversation) settles this helper like idle — the
+    // remote observer path owns rendering/pending in that mode, not the turn runner.
+    status = result.status === 'running' || result.status === 'remote' ? 'idle' : result.status;
     runError = result.error;
   }
   // Reload the durable log for the final render (one source of truth). Also carries errors[] — the

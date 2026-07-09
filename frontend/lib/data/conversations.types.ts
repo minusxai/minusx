@@ -6,6 +6,7 @@
  * 0-based pi log index and the stream cursor. See docs/chat-architecture-v3.md.
  */
 import type { ConversationLogEntry } from '@/orchestrator/types';
+import type { RemoteSessionRecord } from './remote-sessions.types';
 
 /** A frontend-bridged tool call the client must execute (derived from the committed log). */
 export interface StreamPendingToolCall {
@@ -14,7 +15,12 @@ export interface StreamPendingToolCall {
   arguments: Record<string, unknown>;
 }
 
-export type RunStatus = 'idle' | 'running' | 'paused' | 'error';
+/**
+ * 'remote' = an external agent holds the conversation (Remote Agent Session). Unlike 'running'
+ * it is NOT lease/heartbeat-bearing — liveness is judged from `meta.remoteSession` (TTL + idle),
+ * lazily released by whichever reader observes expiry. See REMOTE_AGENT_SESSIONS.md.
+ */
+export type RunStatus = 'idle' | 'running' | 'paused' | 'error' | 'remote';
 
 export interface ConversationMeta {
   /** Schema version tag; 3 for v3 conversations. */
@@ -27,6 +33,8 @@ export interface ConversationMeta {
   autoRetries?: number;
   /** True once an AI-generated title has been written to `title` (vs the raw first message). */
   titleGenerated?: boolean;
+  /** Live/most-recent Remote Agent Session for this conversation (see remote-sessions.types). */
+  remoteSession?: RemoteSessionRecord;
   [key: string]: unknown;
 }
 
