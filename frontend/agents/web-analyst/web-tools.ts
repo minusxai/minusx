@@ -1,7 +1,7 @@
 import { Type } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/types';
-import { loadSkill } from '@/agents/skill-content';
+import { loadSkill, listSystemSkillNames } from '@/agents/skill-content';
 import { loadContextDocsByKeys } from '@/lib/sql/context-docs';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 // All tools below execute in the browser via the existing
@@ -267,7 +267,9 @@ export class PublishAll extends MXTool<typeof PublishAllParams, RemoteAnalystCon
 // `registerFrontendTool('LoadSkill', ...)` handler in lib/tools/tool-handlers.ts.
 const LoadSkillParams = Type.Object({
   name: Type.String({
-    description: "Skill name to load (e.g., 'alerts', 'reports', or a user-defined skill name).",
+    // Enumerate the REAL names — agents were guessing ('story', 'writing_stories') and burning
+    // retries; the list is derived live from prompts.yaml so it can't drift.
+    description: `Skill name to load. System skills: ${listSystemSkillNames().map((n) => `'${n}'`).join(', ')}. User-defined Knowledge Base skill names also work.`,
   }),
 });
 
@@ -289,7 +291,17 @@ export class LoadSkill extends MXTool<typeof LoadSkillParams, RemoteAnalystConte
     // System skills live in the shared prompts.yaml — resolve them here.
     const content = loadSkill(name);
     if (content === null) {
-      // Not a system skill → user-defined; resolve on the frontend.
+      // Not a system skill. Bridge to the frontend ONLY when the name matches a user-defined
+      // Knowledge Base skill (the browser resolves its content). A name that matches NEITHER is a
+      // guess — fail fast WITH the valid names so the agent self-corrects in one step, instead of
+      // a wasted browser round-trip ending in an unhelpful "not found".
+      const userSkillNames = (this.context.userSkillCatalog ?? []).map((sk) => sk.name);
+      if (!userSkillNames.includes(name)) {
+        const error = `Unknown skill '${name}'. System skills: ${listSystemSkillNames().map((n) => `'${n}'`).join(', ')}`
+          + (userSkillNames.length > 0 ? `. User skills: ${userSkillNames.map((n) => `'${n}'`).join(', ')}` : '')
+          + '.';
+        return { content: [{ type: 'text', text: JSON.stringify({ success: false, error }) }], isError: true };
+      }
       throw new UserInputException(this.id);
     }
     return {

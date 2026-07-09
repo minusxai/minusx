@@ -96,10 +96,20 @@ describe('LoadSkill tool', () => {
     expect(String(payload.content)).toContain('## Visualizations');
   });
 
-  it('defers unknown (user-defined) skills to the frontend via UserInputException', async () => {
+  it('defers KNOWN user-defined skills (in the catalog) to the frontend via UserInputException', async () => {
     const orch = new Orchestrator([], []);
-    const tool = new LoadSkill(orch, { name: 'a_user_kb_skill_that_is_not_in_yaml' }, ctx);
+    const ctxWithCatalog = { ...ctx, userSkillCatalog: [{ name: 'a_user_kb_skill', description: 'kb' }] };
+    const tool = new LoadSkill(orch, { name: 'a_user_kb_skill' }, ctxWithCatalog as typeof ctx);
     await expect(tool.run()).rejects.toBeInstanceOf(UserInputException);
+  });
+
+  it('an unknown name (neither system nor user skill) errors WITH the valid names — no bridge', async () => {
+    const orch = new Orchestrator([], []);
+    const tool = new LoadSkill(orch, { name: 'writing_stories' }, ctx);
+    const res = await tool.run();
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.success).toBe(false);
+    expect(String(payload.error)).toContain("'stories'");
   });
 
   it('returns an error (without pausing) when no name is given', async () => {

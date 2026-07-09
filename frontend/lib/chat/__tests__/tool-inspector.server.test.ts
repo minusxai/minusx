@@ -30,9 +30,9 @@ describe('executeRegisteredTool', () => {
   });
 
   it('reports a tool requiring frontend interaction as not executable, without throwing', async () => {
-    // Not a system skill → real LoadSkill throws UserInputException (resolved
-    // client-side as a user-defined Knowledge Base skill).
-    const outcome = await executeRegisteredTool('LoadSkill', { name: 'some-user-defined-skill' }, testUser);
+    // EditFile is frontend-bridged — its run() always throws UserInputException. (LoadSkill no
+    // longer bridges for unknown names; it errors with the valid names instead.)
+    const outcome = await executeRegisteredTool('EditFile', { fileId: 1 }, testUser);
     expect(outcome.executable).toBe(false);
     expect(outcome.error).toMatch(/user interaction/i);
   });

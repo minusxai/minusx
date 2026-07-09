@@ -8,7 +8,7 @@
  * agent skill-loading goes through here — never call the raw `getSkill` directly.
  */
 import { PROMPTS } from '@/orchestrator/prompts';
-import { getSkill as getSkillFromTree, type PromptTree } from '@/orchestrator/prompts/prompt-loader';
+import { getSkill as getSkillFromTree, listSkills, type PromptTree } from '@/orchestrator/prompts/prompt-loader';
 import { SCHEMA_TEMPLATE_VARS } from '@/lib/validation/atlas-json-schemas';
 
 const withSchemas = (tree: PromptTree): PromptTree => ({
@@ -19,6 +19,11 @@ const withSchemas = (tree: PromptTree): PromptTree => ({
 /** Load a skill by name from the default tree, with live content schemas substituted. */
 export function loadSkill(name: string): string | null {
   return getSkillFromTree(withSchemas(PROMPTS), name);
+}
+
+/** Canonical system skill names (the `skill_*` keys in prompts.yaml, sans prefix). */
+export function listSystemSkillNames(): string[] {
+  return Object.keys(listSkills(PROMPTS, { skipHidden: true }));
 }
 
 /** Load a skill from a caller-provided tree, with live content schemas substituted. */

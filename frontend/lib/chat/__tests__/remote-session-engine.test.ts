@@ -94,6 +94,17 @@ beforeEach(async () => {
     expect(body.isError).toBe(true);
   });
 
+  it('LoadSkill with a WRONG name fails fast with the full list of valid names (agents self-correct in one step)', async () => {
+    const { code } = await mintSession();
+    const res = await callTool(code, { tool: 'LoadSkill', args: { name: 'story' } });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as RemoteToolCallCompleted;
+    expect(body.isError).toBe(true);
+    const text = body.content.map((b) => (b as { text?: string }).text ?? '').join('');
+    expect(text).toContain("'stories'"); // the correct name is IN the error
+    expect(text).toContain('questions'); // along with the full system list
+  });
+
   it('rejects unknown tools, agents, ClarifyFrontend, and invalid args with 400', async () => {
     const { code } = await mintSession();
     expect((await callTool(code, { tool: 'NoSuchTool', args: {} })).status).toBe(400);
