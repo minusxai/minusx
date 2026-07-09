@@ -1,16 +1,61 @@
 'use client';
 
-import { Box, HStack, VStack, Text, Icon, GridItem } from '@chakra-ui/react';
+import { useMemo } from 'react';
+import { useSelector } from 'react-redux';
+import { Box, HStack, VStack, Text, Icon, GridItem, Spinner } from '@chakra-ui/react';
 import { LuCheck, LuX, LuUpload } from 'react-icons/lu';
 import { DisplayProps, contentToDetails } from '@/lib/types';
+import type { RootState } from '@/store/store';
+import { makeSelectConversationByToolCallId } from '@/store/chatSlice';
+import UserInputComponent from '../UserInputComponent';
 import { type DetailCardProps, parseToolContent, isToolSuccess } from './DetailCarousel';
 
 // ─── Detail card for AgentTurnContainer carousel ──────────────────
 
 export function PublishAllDetailCard({ msg }: DetailCardProps) {
+  const toolMsg = msg as { tool_call_id?: string; function?: { name?: string } };
+  const toolCallId = toolMsg.tool_call_id ?? '';
   const success = isToolSuccess(msg);
   const content = parseToolContent(msg);
   const message = content?.message || '';
+
+  // Pending publish confirmation: PublishAll never publishes by itself — it opens the publish
+  // prompt and waits for the USER. Render that prompt (mirrors NavigateDetailCard); without this
+  // branch an unresolved call mis-rendered as "Published successfully".
+  const selectConversation = useMemo(() => makeSelectConversationByToolCallId(), []);
+  const conversation = useSelector((state: RootState) => selectConversation(state, toolCallId));
+  const pendingTool = conversation?.pending_tool_calls.find(p => p.toolCall.id === toolCallId);
+  const pendingUserInputs = pendingTool?.userInputs?.filter(ui => ui.result === undefined);
+
+  if (pendingUserInputs && pendingUserInputs.length > 0 && conversation) {
+    return (
+      <Box mx={3} mb={2}>
+        {pendingUserInputs.map(userInput => (
+          <UserInputComponent
+            key={userInput.id}
+            conversationID={conversation.conversationID}
+            tool_call_id={toolCallId}
+            userInput={userInput}
+            toolName={toolMsg.function?.name}
+          />
+        ))}
+      </Box>
+    );
+  }
+
+  // Unresolved and no prompt yet (result not in the log): waiting, NOT success.
+  if (!content && pendingTool && !pendingTool.result) {
+    return (
+      <Box mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+        <HStack gap={2}>
+          <Spinner size="xs" color="fg.muted" />
+          <Text fontSize="sm" fontFamily="mono" color="fg.muted">
+            Waiting for publish confirmation…
+          </Text>
+        </HStack>
+      </Box>
+    );
+  }
 
   return (
     <Box mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">

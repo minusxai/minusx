@@ -16,6 +16,7 @@ import RemoteSessionBanner from './RemoteSessionBanner';
 import { useAppDispatch, useAppSelector, useAppStore } from '@/store/hooks';
 import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setConversationTitle, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
+import { API_BASE_URL, patchApiUrl } from '@/store/api-url';
 import { ConversationsAPI } from '@/lib/data/conversations';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -536,7 +537,7 @@ export default function ChatInterface({
   const handleStopRemoteSession = async () => {
     if (!conversationID || conversationID <= 0) return;
     try {
-      await fetch(`/api/conversations/${conversationID}/remote-session`, { method: 'DELETE' });
+      await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${conversationID}/remote-session`), { method: 'DELETE' });
     } catch (err) {
       console.warn('[ChatInterface] remote-session stop failed (best-effort):', err);
     }

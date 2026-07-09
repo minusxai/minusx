@@ -9,6 +9,7 @@ import { useAppDispatch } from '@/store/hooks';
 import { setActiveConversation, setConversationTitle, setRemoteSession } from '@/store/chatSlice';
 import type { RemoteSessionMintResult } from '@/lib/data/remote-sessions.types';
 import { ConversationsAPI } from '@/lib/data/conversations';
+import { API_BASE_URL, patchApiUrl } from '@/store/api-url';
 import { preserveParams } from '@/lib/navigation/url-utils';
 
 interface ChatHeaderBarProps {
@@ -71,7 +72,9 @@ export default function ChatHeaderBar({
   const handleCopyToAgent = useCallback(async () => {
     if (!conversationID || conversationID <= 0) return;
     try {
-      const res = await fetch(`/api/conversations/${conversationID}/remote-session`, { method: 'POST' });
+      // patchApiUrl carries mode/as_user — a tutorial-mode session must mint AS tutorial, or the
+      // owner/mode check correctly 403s (browser-verified failure).
+      const res = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${conversationID}/remote-session`), { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         const message = (body as { error?: { message?: string } })?.error?.message
