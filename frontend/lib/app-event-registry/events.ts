@@ -14,6 +14,7 @@ export const AppEvents = {
   JOB_CRON_FAILED:          'job:cron_failed',
   USER_MESSAGE:             'user:message',
   MCP_TOOL_CALL:            'mcp:tool_call',
+  REMOTE_TOOL_CALL:         'remote:tool_call',
   USER_LOGGED_IN:           'user:login',
   USER_CREATED:             'user:created',
   USER_DELETED:             'user:deleted',
@@ -45,6 +46,9 @@ export interface AppEventPayloads {
   'job:cron_failed':          BaseEventPayload & { triggered: number; skipped: number; failed: number };
   'user:message':             BaseEventPayload & { source: 'explore' | 'side_chat' | 'slack' | 'mcp'; conversationId?: number; userId?: number; userEmail?: string; messagePreview?: string };
   'mcp:tool_call':            BaseEventPayload & { sessionId: string; tool: string; userId?: number; userEmail?: string };
+  // Remote Agent Sessions: one event per externally-authored tool call (audit/metering — the
+  // per-LLM-call credit gate never fires in a remote session; LLM cost is the external agent's).
+  'remote:tool_call':         BaseEventPayload & { conversationId: number; tool: string; durationMs: number; isError: boolean; pending: boolean; userId?: number; userEmail?: string };
   'user:login':               BaseEventPayload & { userId?: number; userEmail?: string; role?: string };
   'user:created':             BaseEventPayload & { userId?: number; userEmail?: string; role?: string; createdBy?: string };
   'user:deleted':             BaseEventPayload & { userId?: number; userEmail?: string; role?: string; deletedBy?: string };

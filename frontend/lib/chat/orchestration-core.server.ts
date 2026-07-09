@@ -52,6 +52,7 @@ import {
   type BenchmarkConnectionEntry,
 } from '@/agents/benchmark-analyst/connection-source';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
+import { RemoteSessionAgent } from '@/agents/remote-session/remote-session-agent';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { getPageType } from '@/agents/analyst/skills';
 import { normalizeAttachments } from '@/lib/chat/attachments.server';
@@ -144,6 +145,10 @@ export const REGISTRABLES: RegistrableClass[] = [
   // The new V1 chained tools — registered so saved V1 benchmark logs
   // resume against the post-port behavior. FetchHandleV2 is shared with V2.
   FetchHandleV2,
+  // Remote Agent Sessions: the session root invocation (`name: 'RemoteSessionAgent'`) must be
+  // reconstructable both by the remote dispatch driver and by any later NORMAL turn loading a log
+  // that contains a past remote session. Never run() as an LLM loop.
+  RemoteSessionAgent,
 ];
 
 /**

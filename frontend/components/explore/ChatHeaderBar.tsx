@@ -2,12 +2,15 @@
 
 import { useState, useCallback } from 'react';
 import { Box, HStack, Text, Icon, Button, Menu, Portal, Input } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuRefreshCw, LuPin, LuShare2, LuExpand, LuPencil } from 'react-icons/lu';
+import { LuPlus, LuChevronDown, LuRefreshCw, LuPin, LuShare2, LuExpand, LuPencil, LuUnplug } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
 import { useAppDispatch } from '@/store/hooks';
-import { setActiveConversation, setConversationTitle } from '@/store/chatSlice';
+import { setActiveConversation, setConversationTitle, setRemoteSession, createConversation } from '@/store/chatSlice';
+import type { RemoteSessionMintResult } from '@/lib/data/remote-sessions.types';
 import { ConversationsAPI } from '@/lib/data/conversations';
+import { useConfigs } from '@/lib/hooks/useConfigs';
+import { API_BASE_URL, patchApiUrl } from '@/store/api-url';
 import { preserveParams } from '@/lib/navigation/url-utils';
 
 interface ChatHeaderBarProps {
@@ -19,6 +22,10 @@ interface ChatHeaderBarProps {
   conversationTitle: string | null;
   hasMessages: boolean;
   isExplorePage: boolean;
+  /** Agent turn in flight — mirrors the server's mint guard by disabling Copy-to-Agent. */
+  agentBusy?: boolean;
+  /** Current page state — captured at mint time so the remote agent knows what the user is looking at. */
+  appState?: unknown;
   navigate: (href: string) => void;
   handleNewChat: () => void;
 }
@@ -36,10 +43,14 @@ export default function ChatHeaderBar({
   conversationTitle,
   hasMessages,
   isExplorePage,
+  agentBusy = false,
+  appState,
   navigate,
   handleNewChat,
 }: ChatHeaderBarProps) {
   const dispatch = useAppDispatch();
+  // Remote Agents feature toggle (Settings → Integrations) — OFF by default.
+  const remoteAgentsEnabled = useConfigs().config.remoteAgentsEnabled === true;
 
   // Inline rename of the conversation title (the ▾ menu → Rename).
   const [isRenaming, setIsRenaming] = useState(false);
@@ -60,6 +71,60 @@ export default function ChatHeaderBar({
       toaster.create({ title: "Couldn't rename the conversation", type: 'error' });
     }
   }, [renameValue, conversationID, conversationTitle, dispatch]);
+
+  // Copy to Agent: mint a Remote Agent Session for this conversation and copy the one-liner an
+  // external agent (Claude Code, Codex, ...) fetches to drive this chat. Minting freezes the input
+  // (the server flips runStatus -> 'remote'; setRemoteSession raises the local flag + observer).
+  // An EMPTY chat has no conversation row yet — create one first (same pattern as the send path's
+  // lazy pre-create), so "open side chat -> hand straight to my agent" works without a filler message.
+  const handleCopyToAgent = useCallback(async () => {
+    try {
+      let targetId = conversationID && conversationID > 0 ? conversationID : undefined;
+      if (!targetId) {
+        const initRes = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const { id: newId } = await initRes.json();
+        if (!newId) throw new Error('Failed to create a conversation for the session');
+        targetId = newId as number;
+        dispatch(createConversation({ conversationID: targetId, agent: 'AnalystAgent', version: 3 }));
+      }
+      // patchApiUrl carries mode/as_user — a tutorial-mode session must mint AS tutorial, or the
+      // owner/mode check correctly 403s (browser-verified failure).
+      const res = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${targetId}/remote-session`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Mint-time app state: the page the user is looking at (dashboard/question/story) rides to
+        // the session root so the agent starts oriented (skill doc "Current page", /context).
+        body: JSON.stringify({ appState: appState ?? undefined }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message = (body as { error?: { message?: string } })?.error?.message
+          ?? 'Could not start a remote session';
+        toaster.create({ title: message, type: 'error' });
+        return;
+      }
+      const mint = (body as { data: RemoteSessionMintResult }).data;
+      // Compose the copied URL from the BROWSER's own origin — the same mechanism link sharing
+      // uses (the server's absolute URL from proxy headers is a fallback for API consumers).
+      const url = `${window.location.origin}/s/${mint.code}`;
+      await navigator.clipboard.writeText(
+        `Fetch ${url} and follow its instructions to operate my MinusX session.`,
+      );
+      dispatch(setRemoteSession({ conversationID: targetId, active: true, expiresAt: mint.expiresAt }));
+      toaster.create({
+        title: 'Copied — paste it into your agent',
+        description: 'Anyone with this link can operate this chat until it expires or you stop it.',
+        type: 'success',
+      });
+    } catch (err) {
+      console.error('[ChatHeaderBar] copy-to-agent failed:', err);
+      toaster.create({ title: 'Could not start a remote session', type: 'error' });
+    }
+  }, [conversationID, appState, dispatch]);
 
   // Handler for setting conversation as active
   const handleSetAsActive = () => {
@@ -205,6 +270,22 @@ export default function ChatHeaderBar({
         <HStack gap={2}>
           {setAsActiveButton}
           {newChatButton}
+          {remoteAgentsEnabled && (
+            <Tooltip content="Copy to agent — let Claude Code (or any agent) drive this chat" positioning={{ placement: 'bottom' }}>
+              <Button
+                aria-label="Copy to agent"
+                onClick={handleCopyToAgent}
+                disabled={agentBusy}
+                size="xs"
+                variant="outline"
+                borderColor="border.emphasized"
+                color="fg.muted"
+                _hover={{ bg: 'bg.muted', borderColor: 'accent.teal', color: 'accent.teal' }}
+              >
+                <LuUnplug />
+              </Button>
+            </Tooltip>
+          )}
           <Tooltip content="Copy link" positioning={{ placement: 'bottom' }}>
             <Button
               onClick={() => {

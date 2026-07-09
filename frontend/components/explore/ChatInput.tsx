@@ -25,6 +25,8 @@ interface ChatInputProps {
   onSend: (message: string, attachments: Attachment[]) => void;
   onStop: () => void;
   isAgentRunning: boolean;
+  /** Remote Agent Session active: HARD-freeze the input (no queueing) until the session ends. */
+  remoteSessionActive?: boolean;
   allowChatQueue?: boolean;
   disabled?: boolean;
   isPreparing?: boolean;
@@ -50,6 +52,7 @@ function ChatInputInner({
   onSend,
   onStop,
   isAgentRunning,
+  remoteSessionActive = false,
   allowChatQueue = false,
   disabled = false,
   isPreparing = false,
@@ -170,7 +173,9 @@ function ChatInputInner({
     dispatch(clearChatAttachments());
   }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading, attachments]);
 
-  const chatLocked = isAgentRunning && !allowChatQueue;
+  // Remote sessions HARD-lock (queueing deliberately ignored — the external agent is the only
+  // decider until the user stops the session). See REMOTE_AGENT_SESSIONS.md §9.2.
+  const chatLocked = remoteSessionActive || (isAgentRunning && !allowChatQueue);
 
   // useStableCallback: LexicalMentionEditor is React.memo'd with a comparator
   // that strips `onSubmit` from comparison ("must be a stable callback" contract).
@@ -312,9 +317,11 @@ function ChatInputInner({
   const colSpan = colSpanProp ?? (isFloating ? 12 : isCompact ? 12 : { base: 12, md: 8, lg: 6 });
   const colStart = colStartProp ?? (isFloating ? 1 : isCompact ? 1 : { base: 1, md: 3, lg: 4 });
 
-  const placeholder = isFloating
-    ? `Ask ${agentName} anything (${shortcutKey})`
-    : chatLocked ? `${agentName} is still working...` : isAgentRunning ? `Add to agent queue...` : `Ask ${agentName} anything!`;
+  const placeholder = remoteSessionActive
+    ? 'Remote agent connected — input disabled'
+    : isFloating
+      ? `Ask ${agentName} anything (${shortcutKey})`
+      : chatLocked ? `${agentName} is still working...` : isAgentRunning ? `Add to agent queue...` : `Ask ${agentName} anything!`;
 
   return (
     <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}

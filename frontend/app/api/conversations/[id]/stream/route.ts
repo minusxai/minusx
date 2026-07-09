@@ -3,6 +3,8 @@ import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { getConversation, loadMessages, loadLog, isRunLeaseStale, releaseRunLease, appendError, MAX_AUTO_RETRIES, AUTO_RETRY_EXHAUSTED_MESSAGE } from '@/lib/data/conversations.server';
 import { subscribe } from '@/lib/chat/conversation-stream.server';
 import { derivePendingToolCalls } from '@/lib/data/conversation-log';
+import { isRemoteSessionLive } from '@/lib/data/remote-sessions.server';
+import { endRemoteSession } from '@/lib/chat/remote-session.server';
 import type { ConversationStreamEvent } from '@/lib/data/conversations.types';
 
 export const dynamic = 'force-dynamic';
@@ -127,8 +129,15 @@ export async function GET(
       return;
     }
 
-    // status === 'running' — tail to completion. Serialize handler work so catch-up SELECTs
+    // status === 'running' | 'remote' — tail. A running turn tails to completion; a remote agent
+    // session (REMOTE_AGENT_SESSIONS.md) tails for the session's lifetime: 'remote' status notifies
+    // re-derive pending (frontend-bridged tools the observer must execute) and never close — only
+    // the terminal idle/error (session ended) closes. Serialize handler work so catch-up SELECTs
     // (which advance the shared cursor) never overlap.
+    if (status === 'remote') {
+      send({ type: 'status', runStatus: 'remote' });
+      await emitPendingIfPaused();
+    }
     let chain: Promise<void> = Promise.resolve();
     unsub = await subscribe(conversationId, (n) => {
       chain = chain.then(async () => {
@@ -138,7 +147,7 @@ export async function GET(
         if (n.kind === 'status' && n.runStatus) {
           await flushCatchup();
           send({ type: 'status', runStatus: n.runStatus });
-          if (n.runStatus === 'paused') await emitPendingIfPaused();
+          if (n.runStatus === 'paused' || n.runStatus === 'remote') await emitPendingIfPaused();
           if (n.runStatus === 'idle' || n.runStatus === 'error' || n.runStatus === 'paused') {
             send({ type: 'done', seq: cursor });
             await close();
@@ -156,12 +165,17 @@ export async function GET(
         if (closed) return;
         const cur = await getConversation(conversationId);
         if (cur && isRunLeaseStale(cur)) await failStale();
+        // Lazy expiry for a QUIET remote session (no agent traffic to trigger the usual lazy
+        // release): end it so the freeze lifts — endRemoteSession notifies idle, which closes us.
+        if (cur?.runStatus === 'remote' && !isRemoteSessionLive(cur.meta.remoteSession)) {
+          await endRemoteSession(conversationId);
+        }
       })().catch(() => {});
     }, 15000);
 
     // Race guard: the turn may have settled between catch-up and subscribe.
     const recheck = (await getConversation(conversationId))?.runStatus ?? 'running';
-    if (recheck !== 'running') {
+    if (recheck !== 'running' && recheck !== 'remote') {
       await flushCatchup();
       send({ type: 'status', runStatus: recheck });
       if (recheck === 'paused') await emitPendingIfPaused();

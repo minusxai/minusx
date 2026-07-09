@@ -216,6 +216,46 @@ async function startAndStream(
 }
 
 /**
+ * OBSERVER MODE (Remote Agent Sessions): tail an externally-driven conversation WITHOUT starting a
+ * turn — no POST, just the resumable GET stream. Used while `runStatus === 'remote'`: the stream
+ * stays open for the session's lifetime, delivering committed rows (remote tool activity) and
+ * `pending` events (frontend-bridged tools this browser must execute). Resolves when the session
+ * ends (terminal idle/error) or the signal aborts; reconnects indefinitely across transport drops
+ * (backoff capped at the last RESUME_BACKOFF_MS step, reset whenever the cursor advanced).
+ */
+export async function observeConversation(
+  conversationId: number,
+  sinceSeq: number,
+  signal: AbortSignal,
+  cb: V3StreamCallbacks,
+): Promise<V3TurnResult> {
+  const state = {
+    cursor: sinceSeq,
+    result: { status: 'remote' as RunStatus, pendingToolCalls: [] as StreamPendingToolCall[], finalSeq: sinceSeq },
+  };
+  let attempt = 0;
+  for (;;) {
+    const cursorBefore = state.cursor;
+    try {
+      await readStreamOnce(conversationId, state.cursor, signal, cb, state);
+      return state.result;
+    } catch (error) {
+      const isTransport = error instanceof Error && error.message === 'Network error';
+      if (!isTransport || signal.aborted) throw error;
+      if (state.cursor > cursorBefore) attempt = 0; // made progress — fresh backoff window
+      const delay = RESUME_BACKOFF_MS[Math.min(attempt, RESUME_BACKOFF_MS.length - 1)];
+      attempt++;
+      await new Promise((r) => setTimeout(r, delay));
+      if (signal.aborted) {
+        const err = new Error('The operation was aborted.');
+        err.name = 'AbortError';
+        throw err;
+      }
+    }
+  }
+}
+
+/**
  * Run a v3 turn to completion. On a crash-interruption (the stream reports a `retryable` error —
  * server restarted mid-turn), silently re-run the turn from the durable log, up to the cap. The
  * server independently enforces MAX_AUTO_RETRIES on the conversation, so a reload or second tab

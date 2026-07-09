@@ -12,9 +12,11 @@ import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-
 import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
+import RemoteSessionBanner from './RemoteSessionBanner';
 import { useAppDispatch, useAppSelector, useAppStore } from '@/store/hooks';
 import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setConversationTitle, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
+import { API_BASE_URL, patchApiUrl } from '@/store/api-url';
 import { ConversationsAPI } from '@/lib/data/conversations';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -362,6 +364,9 @@ export default function ChatInterface({
   // Check if this conversation has an ongoing agent
   const isAgentRunning = conversation?.executionState === 'WAITING' || conversation?.executionState === 'EXECUTING';
   const isStreaming = conversation?.executionState === 'STREAMING';
+  // Remote Agent Session: an external agent drives this conversation — input is HARD-frozen and a
+  // banner (with Stop) replaces the normal affordances until the session ends.
+  const remoteSessionActive = conversation?.remoteSession?.active === true;
 
   // Check if waiting for user input (any pending tool has userInputs without result)
   const isWaitingForUserInput = useMemo(() => {
@@ -522,6 +527,19 @@ export default function ChatInterface({
   const handleStopAgent = () => {
     if (conversationID) {
       dispatch(interruptChat({ conversationID }));
+    }
+  };
+
+  // Stop a Remote Agent Session: revoke server-side — that kills the code, closes dangling calls,
+  // releases the conversation to idle, and NOTIFYs, which ends the observer stream; the observer's
+  // finalize then reloads the log and lifts the freeze. Deliberately NOT interruptChat: that
+  // reducer stamps a generic "Interrupted by user" error, which is wrong for a clean Stop.
+  const handleStopRemoteSession = async () => {
+    if (!conversationID || conversationID <= 0) return;
+    try {
+      await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${conversationID}/remote-session`), { method: 'DELETE' });
+    } catch (err) {
+      console.warn('[ChatInterface] remote-session stop failed (best-effort):', err);
     }
   };
 
@@ -848,7 +866,9 @@ export default function ChatInterface({
   return (
     <VStack gap={0} align="stretch" height="100%" overflow="hidden">
       {/* Action Buttons Bar (only show when there are messages, hidden in readOnly) */}
-      {!readOnly && allMessages.length > 0 && (
+      {/* Always shown (not gated on messages): an EMPTY side chat must still offer Copy-to-Agent
+          so a user can hand a fresh session to their external agent without a filler message. */}
+      {!readOnly && (
         <ChatHeaderBar
           container={container}
           conversationID={conversationID}
@@ -858,6 +878,8 @@ export default function ChatInterface({
           conversationTitle={conversationTitle}
           hasMessages={allMessages.length > 0}
           isExplorePage={isExplorePage}
+          agentBusy={isAgentRunning || isStreaming || remoteSessionActive}
+          appState={appState ?? undefined}
           navigate={navigate}
           handleNewChat={handleNewChat}
         />
@@ -1076,7 +1098,18 @@ export default function ChatInterface({
             </Grid>
           )}
 
-          {(isAgentRunning || isStreaming) && (
+          {remoteSessionActive && (
+            <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
+              <GridItem colSpan={colSpan} colStart={colStart}>
+                <RemoteSessionBanner
+                  expiresAt={conversation?.remoteSession?.expiresAt}
+                  onStop={handleStopRemoteSession}
+                />
+              </GridItem>
+            </Grid>
+          )}
+
+          {!remoteSessionActive && (isAgentRunning || isStreaming) && (
             <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
                 gap={2}
                 w="100%"
@@ -1107,6 +1140,7 @@ export default function ChatInterface({
               onSend={stableSendMessage}
               onStop={handleStopAgent}
               isAgentRunning={isAgentRunning || isStreaming}
+              remoteSessionActive={remoteSessionActive}
               allowChatQueue={allowChatQueue}
               isPreparing={isPreparing}
               disabled={isLoading}

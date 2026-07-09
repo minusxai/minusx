@@ -43,6 +43,10 @@ async function routeRequest(req: AuthReq): Promise<NextResponse> {
     // and ?mode / ?as_user are ignored for guests, so there is no escalation via this admit.
     const isSharePublicPath =
       pathname.startsWith('/l/') || pathname.startsWith('/api/share/guest-session');
+    // Remote Agent Sessions (`/s/<code>` skill doc + tool endpoints): public — the unguessable
+    // code IS the credential, validated downstream by withRemoteSessionAuth / resolveRemoteSession
+    // (hash compare + TTL/idle/revocation). No session cookie is ever minted for these.
+    const isRemoteSessionPath = pathname.startsWith('/s/');
     // Honor the guest cookie ONLY on share pages + the APIs they call — never on the
     // main app pages, so a share link doesn't log the visitor into the app UI.
     const hasGuestSession =
@@ -53,6 +57,7 @@ async function routeRequest(req: AuthReq): Promise<NextResponse> {
     if (
       isPublicRoute ||
       isSharePublicPath ||
+      isRemoteSessionPath ||
       hasGuestSession ||
       // Root metadata image route (generic OG card) — must be crawler-reachable.
       // The per-share `/l/<id>/opengraph-image` is already covered by `/l/` above.

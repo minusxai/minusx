@@ -8,6 +8,7 @@ import Sidebar from './Sidebar';
 import MobileBottomNav from './MobileBottomNav';
 import DataPrepBanner from '../banners/DataPrepBanner';
 import { RecordingProvider } from '@/lib/hooks/useRecordingContext';
+import RemoteSessionPrompts from '@/components/remote/RemoteSessionPrompts';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { endNavigation } from '@/lib/navigation/nav-progress';
 import { clearViewStack } from '@/store/uiSlice';
@@ -53,7 +54,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
   // mobile nav, data-prep banner, or sidebar margin). Keep RecordingProvider so
   // file/chat surfaces that depend on its context still work.
   if (viewAtLeast(view, 'file')) {
-    return <RecordingProvider>{children}</RecordingProvider>;
+    return <RecordingProvider>{children}<RemoteSessionPrompts /></RecordingProvider>;
   }
 
   return (
@@ -71,6 +72,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
         <DataPrepBanner />
         {children}
       </Box>
+      <RemoteSessionPrompts />
     </RecordingProvider>
   );
 }

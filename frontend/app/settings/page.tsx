@@ -13,6 +13,7 @@ import { ChannelsSection } from '@/components/settings/ChannelsSection';
 import { CreditsUsageCards } from '@/components/settings/CreditsCard';
 import { SlackIntegration } from '@/components/settings/integrations/SlackIntegration';
 import { McpIntegration } from '@/components/settings/integrations/McpIntegration';
+import { RemoteAgentsSection } from '@/components/settings/RemoteAgentsSection';
 import UsersContent from '@/components/settings/UsersContent';
 import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
 import StylesContainerV2 from '@/components/containers/StylesContainerV2';
@@ -657,6 +658,7 @@ function SettingsContent() {
           </Text>
           <SlackIntegration />
           <McpIntegration />
+          <RemoteAgentsSection />
         </VStack>
       ),
     },

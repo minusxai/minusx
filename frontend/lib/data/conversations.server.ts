@@ -342,12 +342,15 @@ export async function deleteConversation(id: number): Promise<void> {
 export async function forkConversation(sourceId: number, atSeq: number): Promise<Conversation> {
   const src = await getConversation(sourceId);
   if (!src) throw new Error(`fork source conversation ${sourceId} not found`);
+  // NEVER copy remoteSession: it holds a live capability hash (Remote Agent Sessions) — a fork is
+  // a normal conversation and must not inherit the bearer credential.
+  const { remoteSession: _remoteSession, ...srcMeta } = src.meta;
   const created = await createConversation({
     ownerUserId: src.ownerUserId,
     mode: src.mode,
     agent: src.agent,
     title: src.title,
-    meta: { ...src.meta, version: 3, forkedFrom: sourceId },
+    meta: { ...srcMeta, version: 3, forkedFrom: sourceId },
   });
   const rows = await loadMessages(sourceId);
   // loadMessages already excludes error rows (seq IS NULL), but guard for the nullable type.

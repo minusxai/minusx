@@ -75,6 +75,9 @@ export interface OrgConfig {
   allowedVizTypes?: VisualizationType[];  // Restrict available visualization types (default: all)
   chartColorPalette?: string[];  // Custom color palette for charts (hex values, e.g. ['#16a085', '#2980b9'])
   analytics?: { enabled: boolean };
+  /** Remote Agent Sessions ("Copy to Agent"): lets an external agent drive a chat over HTTP.
+   *  OFF by default — enable in Settings → Integrations. Gates minting AND live-session auth. */
+  remoteAgentsEnabled?: boolean;
 }
 
 /**
@@ -166,6 +169,7 @@ export function mergeConfig(
       ? overrides.chartColorPalette
       : defaults.chartColorPalette,
     analytics: overrides.analytics ?? defaults.analytics,
+    remoteAgentsEnabled: overrides.remoteAgentsEnabled ?? defaults.remoteAgentsEnabled,
   };
 }
 

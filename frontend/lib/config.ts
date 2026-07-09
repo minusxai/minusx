@@ -80,6 +80,9 @@ interface EnvironmentConfig {
   QUERY_CACHE_REVALIDATE_MS: number;
   QUERY_CACHE_EXPIRY_MS: number;
   QUERY_CACHE_LEASE_MS: number;
+  // Remote Agent Sessions ("Copy to Agent") — hard TTL + idle timeout for a session code.
+  REMOTE_SESSION_TTL_MS: number;
+  REMOTE_SESSION_IDLE_MS: number;
 }
 
 const errors: string[] = [];
@@ -187,6 +190,9 @@ const config: EnvironmentConfig = {
   QUERY_CACHE_REVALIDATE_MS: getOptionalNumber(process.env.QUERY_CACHE_REVALIDATE_MS, 20 * 60_000),
   QUERY_CACHE_EXPIRY_MS: getOptionalNumber(process.env.QUERY_CACHE_EXPIRY_MS, 60 * 60_000),
   QUERY_CACHE_LEASE_MS: getOptionalNumber(process.env.QUERY_CACHE_LEASE_MS, 2 * 60_000),
+  // Remote Agent Sessions: 4h hard TTL, 30min idle timeout (see REMOTE_AGENT_SESSIONS.md).
+  REMOTE_SESSION_TTL_MS: getOptionalNumber(process.env.REMOTE_SESSION_TTL_MS, 4 * 60 * 60_000),
+  REMOTE_SESSION_IDLE_MS: getOptionalNumber(process.env.REMOTE_SESSION_IDLE_MS, 30 * 60_000),
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -350,6 +356,8 @@ export const QUERY_TIMEOUT_MS = config.QUERY_TIMEOUT_MS;
 export const QUERY_CACHE_REVALIDATE_MS = config.QUERY_CACHE_REVALIDATE_MS;
 export const QUERY_CACHE_EXPIRY_MS = config.QUERY_CACHE_EXPIRY_MS;
 export const QUERY_CACHE_LEASE_MS = config.QUERY_CACHE_LEASE_MS;
+export const REMOTE_SESSION_TTL_MS = config.REMOTE_SESSION_TTL_MS;
+export const REMOTE_SESSION_IDLE_MS = config.REMOTE_SESSION_IDLE_MS;
 export const LOCAL_UPLOAD_PATH = config.LOCAL_UPLOAD_PATH;
 export const MXFOOD_DUCKDB_URL = config.MXFOOD_DUCKDB_URL;
 export const MD_HOME = config.MD_HOME;

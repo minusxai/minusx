@@ -1,0 +1,44 @@
+---
+title: Remote Agent Sessions
+description: Let Claude Code (or any AI agent) drive your MinusX session with one copyable link
+---
+
+Remote Agent Sessions let an **external AI agent** — Claude Code, Codex, or anything that can make HTTP requests — operate one of your MinusX conversations: run SQL, search your schema, read and edit questions and dashboards, and navigate the app. Everything the agent does renders live in your chat sidebar and is durably logged.
+
+---
+
+## Enable the feature
+
+Remote Agents is **off by default**. An admin enables it in **Settings → Integrations → Remote Agents**. Switching it off later immediately invalidates any active session links.
+
+## Start a session
+
+1. Open a conversation (the chat sidebar or an Explore chat).
+2. Click the **Copy to agent** button (the plug icon) in the chat header.
+3. Paste the copied line into your agent, e.g. into Claude Code:
+
+```
+Fetch https://<your-host>/s/<code> and follow its instructions to operate my MinusX session.
+```
+
+That URL serves a self-describing **skill document**: what the session is, the HTTP protocol, and the full JSON-Schema for every available tool. Any agent that can fetch a URL and run `curl` can drive the session — no SDK, no MCP setup.
+
+## While a session is active
+
+- **Your chat input is frozen** — the external agent is the only driver until the session ends. A banner shows the connection with a **Stop** button.
+- Every tool call the agent makes appears in the side chat in real time, exactly like MinusX's own agent activity.
+- Tools that act on your browser (editing the open file, navigating, screenshots) execute **in your tab**. Navigation is pre-approved for the session (you granted standing consent by starting it); **saving/publishing always asks you** to review first.
+- Query results and chart images flow back to the agent — as public URLs on hosted deployments, or inlined as base64 on self-hosted ones.
+
+## Stop a session
+
+Any of these ends the session and unfreezes your chat:
+
+- Click **Stop** on the banner.
+- The agent calls the session's `/end` endpoint when it finishes.
+- The session expires — after 4 hours, or 30 minutes of inactivity (`REMOTE_SESSION_TTL_MS` / `REMOTE_SESSION_IDLE_MS`).
+- Clicking **Copy to agent** again mints a fresh link and kills the old one.
+
+## Security
+
+The link is a **bearer capability**: anyone holding it can operate that one conversation as you until it expires or you stop it — treat it like a password. MinusX stores only a hash of the secret, scopes it to a single conversation (and its mode), rate-limits calls, and logs every action to the conversation, so a session is fully auditable and replayable after the fact.
