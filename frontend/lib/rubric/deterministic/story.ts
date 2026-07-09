@@ -159,18 +159,34 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
   const vizById = ctx?.vizTypeByQuestionId;
 
   // embed-too-narrow (clarity) — cartesian/pie charts squeezed below a legible width.
+  // MEASURED widths (real pixels from the rendered iframe, provided by the review path)
+  // supersede the static CSS estimate entirely — the static scan only simulates layout from
+  // parseable CSS and is blind to utility-class layouts (Tailwind grids etc.).
   const narrow: string[] = [];
-  for (const e of scan.embeds) {
-    const vt = e.vizType ?? (e.savedId != null ? vizById?.[e.savedId] : undefined);
-    if (!vt) continue; // unknown type (saved embed with no ctx) — can't judge, skip
-    const cartesian = CARTESIAN.has(vt);
-    const round = ROUND.has(vt);
-    if (!cartesian && !round) continue;
-    const minFrac = cartesian ? MIN_CARTESIAN_FRACTION : MIN_ROUND_FRACTION;
-    const minPx = cartesian ? MIN_CARTESIAN_PX : MIN_ROUND_PX;
-    if (e.fraction < minFrac - 1e-6 || (e.minPx !== null && e.minPx < minPx)) {
-      const where = e.fraction < minFrac - 1e-6 ? `~${Math.round(e.fraction * 100)}% of the column` : `${e.minPx}px wide`;
-      narrow.push(`${vt} chart at ${where}`);
+  if (ctx?.measuredEmbeds) {
+    for (const m of ctx.measuredEmbeds) {
+      const vt = m.vizType;
+      if (!vt || !(CARTESIAN.has(vt) || ROUND.has(vt)) || m.columnPx <= 0) continue;
+      const cartesian = CARTESIAN.has(vt);
+      const minFrac = cartesian ? MIN_CARTESIAN_FRACTION : MIN_ROUND_FRACTION;
+      const minPx = cartesian ? MIN_CARTESIAN_PX : MIN_ROUND_PX;
+      if (m.widthPx / m.columnPx < minFrac - 1e-6 && m.widthPx < minPx) {
+        narrow.push(`${vt} chart rendered at ${Math.round(m.widthPx)}px (~${Math.round((m.widthPx / m.columnPx) * 100)}% of the ${Math.round(m.columnPx)}px column)`);
+      }
+    }
+  } else {
+    for (const e of scan.embeds) {
+      const vt = e.vizType ?? (e.savedId != null ? vizById?.[e.savedId] : undefined);
+      if (!vt) continue; // unknown type (saved embed with no ctx) — can't judge, skip
+      const cartesian = CARTESIAN.has(vt);
+      const round = ROUND.has(vt);
+      if (!cartesian && !round) continue;
+      const minFrac = cartesian ? MIN_CARTESIAN_FRACTION : MIN_ROUND_FRACTION;
+      const minPx = cartesian ? MIN_CARTESIAN_PX : MIN_ROUND_PX;
+      if (e.fraction < minFrac - 1e-6 || (e.minPx !== null && e.minPx < minPx)) {
+        const where = e.fraction < minFrac - 1e-6 ? `~${Math.round(e.fraction * 100)}% of the column` : `${e.minPx}px wide`;
+        narrow.push(`${vt} chart at ${where}`);
+      }
     }
   }
   if (narrow.length > 0) {

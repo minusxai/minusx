@@ -18,7 +18,8 @@ import { FilesAPI } from '@/lib/data/files';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
 import { buildVizTypeCtx } from '@/lib/rubric/refs';
 import { toAgentRubric } from '@/lib/rubric/scoring';
-import type { AgentRubric } from '@/lib/rubric/types';
+import type { AgentRubric, DeterministicContext } from '@/lib/rubric/types';
+import { inlineQuestionFromEl } from '@/lib/data/story/story-question';
 import type { QuestionContent } from '@/lib/types';
 
 export interface FileReview {
@@ -43,6 +44,37 @@ export function deterministicAgentRubric(fileId: number): AgentRubric | undefine
   const ctx = buildVizTypeCtx(type, content, (id) => (selectFile(state, id)?.content as QuestionContent | undefined)?.vizSettings?.type);
   try {
     return toAgentRubric(scoreFileDeterministic(type, content, ctx));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * MEASURE each story embed's rendered width against the story column, from the live iframe DOM.
+ * Real pixels — robust to ANY css (the static rubric scan simulates layout from parseable CSS and
+ * is blind to utility-class grids). Best-effort: returns undefined when nothing is measurable
+ * (view not mounted, no iframe, non-story file), so callers just omit the measurements.
+ */
+export function measureStoryEmbeds(fileId: number): DeterministicContext['measuredEmbeds'] {
+  try {
+    const view = document.querySelector(`[data-file-id="${fileId}"]`);
+    const iframe = view?.querySelector('iframe');
+    const doc = (iframe as HTMLIFrameElement | null)?.contentDocument;
+    if (!doc) return undefined;
+    const columnPx = (doc.querySelector('[data-mx-story-root]') ?? doc.body)?.getBoundingClientRect().width ?? 0;
+    if (columnPx <= 0) return undefined;
+    const state = getStore().getState();
+    const out: NonNullable<DeterministicContext['measuredEmbeds']> = [];
+    doc.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline]').forEach((el) => {
+      const widthPx = el.getBoundingClientRect().width;
+      if (widthPx <= 0) return;
+      const savedId = parseInt(el.getAttribute('data-question-id') ?? '', 10);
+      const vizType = Number.isFinite(savedId)
+        ? (selectFile(state, savedId)?.content as QuestionContent | undefined)?.vizSettings?.type
+        : inlineQuestionFromEl(el)?.vizSettings?.type;
+      out.push({ ...(vizType ? { vizType } : {}), widthPx, columnPx });
+    });
+    return out.length ? out : undefined;
   } catch {
     return undefined;
   }
@@ -87,7 +119,10 @@ export async function reviewFile(
   if (screenshotUrl) {
     try {
       const merged = selectMergedContent(getStore().getState(), fileId);
-      const { report } = await FilesAPI.getRubric(fileId, { screenshotUrl, content: merged });
+      // Measure AFTER the capture (the view has settled): real embed widths supersede the
+      // static CSS estimate for the width rules.
+      const measuredEmbeds = measureStoryEmbeds(fileId);
+      const { report } = await FilesAPI.getRubric(fileId, { screenshotUrl, content: merged, ...(measuredEmbeds ? { measuredEmbeds } : {}) });
       if (report) return { rubric: toAgentRubric(report), screenshotUrl, reviewMode: 'full' };
     } catch {
       // Judge/API failure — fall through to deterministic, but keep the screenshot.

@@ -147,4 +147,39 @@ describe('scoreStory', () => {
       '<section class="px-8"><h1>T</h1></section><section class="px-8"><Question id={7} /></section>');
     expect(ids(scoreStory(makeStory({ story })))).not.toContain('story.no-page-gutter');
   });
+
+  // ── embed-too-narrow from MEASURED widths ──────────────────────────────────
+  // The static scan simulates layout from parseable CSS and is blind to Tailwind utility
+  // classes. When the caller provides MEASURED widths (real pixels from the rendered iframe,
+  // robust to any CSS), they supersede the static estimate entirely.
+  const measuredStory = () => makeStory({
+    story: `<style>{\`.s{font-family:Inter;color:#111;background:#fff;padding:0 48px} h1{color:#2563eb} .a{color:#f59e0b}\`}</style><div class="s"><h1>T</h1><Question id={7} /></div>`,
+  });
+
+  it('flags a measured cartesian embed narrower than half the column (Tailwind-blind case)', () => {
+    const findings = scoreStory(measuredStory(), {
+      vizTypeByQuestionId: { 7: 'line' },
+      measuredEmbeds: [{ vizType: 'line', widthPx: 340, columnPx: 1200 }],
+    });
+    const f = findings.find((x) => x.ruleId === 'story.embed-too-narrow');
+    expect(f?.severity).toBe('error');
+    expect(f?.detail).toContain('340');
+  });
+
+  it('does not flag a measured embed that is wide enough, even when the static scan cannot see the layout', () => {
+    const findings = scoreStory(measuredStory(), {
+      vizTypeByQuestionId: { 7: 'line' },
+      measuredEmbeds: [{ vizType: 'line', widthPx: 700, columnPx: 1200 }],
+    });
+    expect(ids(findings)).not.toContain('story.embed-too-narrow');
+  });
+
+  it('measured widths supersede the static estimate (static would flag this fixed-width embed)', () => {
+    const story = `<style>{\`.s{font-family:Inter;color:#111;background:#fff;padding:0 48px} h1{color:#2563eb} .a{color:#f59e0b}\`}</style><div class="s"><h1>T</h1><div style={{width:"300px"}}><Question viz={{type:"bar"}} query={\`SELECT 1\`} connection="duckdb" /></div></div>`;
+    // Static scan sees width:300px → would flag; the measurement says it actually renders at 800px.
+    const findings = scoreStory(makeStory({ story }), {
+      measuredEmbeds: [{ vizType: 'bar', widthPx: 800, columnPx: 1200 }],
+    });
+    expect(ids(findings)).not.toContain('story.embed-too-narrow');
+  });
 });

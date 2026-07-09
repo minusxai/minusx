@@ -46,16 +46,34 @@ beforeEach(() => {
 describe('POST /api/files/[id]/rubric — scores the caller-supplied merged content', () => {
   it('scores body.content (the live/merged view) when provided, not the saved DB content', async () => {
     await post(5, { screenshotUrl: 'https://x/s.jpg', content: MERGED });
-    expect(mockScore).toHaveBeenCalledWith('story', MERGED, USER, 'https://x/s.jpg');
+    expect(mockScore).toHaveBeenCalledWith('story', MERGED, USER, 'https://x/s.jpg', undefined);
   });
 
   it('falls back to the saved DB content when no content is supplied', async () => {
     await post(5, { screenshotUrl: 'https://x/s.jpg' });
-    expect(mockScore).toHaveBeenCalledWith('story', SAVED, USER, 'https://x/s.jpg');
+    expect(mockScore).toHaveBeenCalledWith('story', SAVED, USER, 'https://x/s.jpg', undefined);
   });
 
   it('ignores a non-object content (e.g. null) and scores saved content', async () => {
     await post(5, { screenshotUrl: 'https://x/s.jpg', content: null });
-    expect(mockScore).toHaveBeenCalledWith('story', SAVED, USER, 'https://x/s.jpg');
+    expect(mockScore).toHaveBeenCalledWith('story', SAVED, USER, 'https://x/s.jpg', undefined);
+  });
+
+  // MEASURED embed widths (real pixels from the caller's rendered iframe) ride along and
+  // supersede the static CSS width estimate; malformed entries are dropped, never fatal.
+  it('forwards valid measuredEmbeds and drops malformed entries', async () => {
+    await post(5, {
+      screenshotUrl: 'https://x/s.jpg',
+      measuredEmbeds: [
+        { vizType: 'line', widthPx: 340, columnPx: 1200 },
+        { vizType: 'bar', widthPx: 'oops', columnPx: 1200 },      // non-numeric width → dropped
+        { widthPx: 500, columnPx: 0 },                            // zero column → dropped
+        { widthPx: 700, columnPx: 1200 },                          // no vizType → kept (typeless)
+      ],
+    });
+    expect(mockScore).toHaveBeenCalledWith('story', SAVED, USER, 'https://x/s.jpg', [
+      { vizType: 'line', widthPx: 340, columnPx: 1200 },
+      { widthPx: 700, columnPx: 1200 },
+    ]);
   });
 });

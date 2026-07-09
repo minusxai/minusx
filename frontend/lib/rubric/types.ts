@@ -79,6 +79,12 @@ export interface RubricReport {
 export interface DeterministicContext {
   /** viz `type` per referenced question id (for dashboard tile rules). */
   vizTypeByQuestionId?: Record<number, string>;
+  /**
+   * MEASURED embed widths from the rendered story iframe (real pixels — robust to any CSS,
+   * including Tailwind utilities the static layout scan can't parse). When present these
+   * SUPERSEDE the static width estimate for `story.embed-too-narrow`.
+   */
+  measuredEmbeds?: Array<{ vizType?: string; widthPx: number; columnPx: number }>;
 }
 
 /** A deterministic scorer is a (mostly) pure function from a file's content to findings. */

@@ -55,15 +55,21 @@ export async function scoreFileDeterministicResolved(
  * Deterministic + LLM judge, combined. `screenshotUrl` (https or `data:`) lets the judge grade
  * the rendered visual; without it the judge falls back to markup-only. The deterministic half
  * resolves referenced viz types so it matches the client badge exactly (running the judge never
- * changes a deterministic finding).
+ * changes a deterministic finding). `measuredEmbeds` (real pixel widths measured in the rendered
+ * story iframe by the review path) supersede the static CSS width estimate.
  */
 export async function scoreFile(
   fileType: RubricFileType,
   content: unknown,
   user: EffectiveUser,
   screenshotUrl?: string,
+  measuredEmbeds?: DeterministicContext['measuredEmbeds'],
 ): Promise<RubricReport> {
-  const deterministic = scoreFileDeterministic(fileType, content, await resolveVizTypeCtx(fileType, content, user));
+  const resolved = await resolveVizTypeCtx(fileType, content, user);
+  const ctx: DeterministicContext | undefined = measuredEmbeds?.length
+    ? { ...(resolved ?? {}), measuredEmbeds }
+    : resolved;
+  const deterministic = scoreFileDeterministic(fileType, content, ctx);
   const llm = await scoreFileLLM({ fileType, content, screenshotUrl }, user);
   return combineReports(deterministic, llm);
 }

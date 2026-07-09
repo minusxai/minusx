@@ -101,6 +101,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
   const diffs: string[] = [];
   const autoCorrections: string[] = [];
   let editValidation: string[] | undefined;
+  let editNormalized = false;
   if (changes.length > 0) {
     // Validate all changes in memory first (atomic: no Redux writes until all pass)
     const built = buildCurrentFileStr(stateBefore, fileId);
@@ -168,6 +169,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
     }
     if (result.diff) diffs.push(result.diff);
     editValidation = result.validation;
+    editNormalized = !!result.normalized;
   }
 
   // Apply the rename (metadata `name`) — the data layer supports `changes.name`; the agent's
@@ -365,6 +367,9 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
     success: true,
     isDirty: true,
     ...(diff ? { diff } : {}),
+    // The stored text differs from the newMatch you sent (whitespace/escaping normalization).
+    // Future oldMatch strings must be built from the diff's `+` lines, not from memory.
+    ...(editNormalized ? { editNote: 'Applied text was normalized on save — the diff above shows the EXACT stored form; build future oldMatch strings from it, not from the newMatch you sent.' } : {}),
     ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
     ...(vizWarning ? { vizWarning } : {}),
     ...(titleWarning ? { titleWarning } : {}),
