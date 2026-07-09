@@ -20,6 +20,7 @@ import { navigateHandler } from './handlers/navigate';
 import { clarifyFrontendHandler } from './handlers/clarify';
 import { readFilesHandler } from './handlers/read-files';
 import { screenshotHandler } from './handlers/screenshot';
+import { reviewFileHandler } from './handlers/review-file';
 import { editFileHandler } from './handlers/edit-file';
 import { createFileHandler } from './handlers/create-file';
 import { publishAllHandler } from './handlers/publish-all';
@@ -136,8 +137,10 @@ registerFrontendTool('ClarifyFrontend', clarifyFrontendHandler);
 registerFrontendTool('ReadFiles', readFilesHandler);
 
 /**
- * Screenshot - capture the LIVE rendered DOM of the current file as an image
+ * ReviewFile - screenshot of the LIVE rendered view + full health rubric (deterministic +
+ * LLM visual judge + score). Screenshot is its legacy alias (old conversation logs only).
  */
+registerFrontendTool('ReviewFile', reviewFileHandler);
 registerFrontendTool('Screenshot', screenshotHandler);
 
 /**

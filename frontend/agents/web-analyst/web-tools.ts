@@ -178,20 +178,34 @@ export class Navigate extends MXTool<typeof NavigateParams, RemoteAnalystContext
   }
 }
 
-// ─── Screenshot ──────────────────────────────────────────────────────────────
-// Schema matches `registerFrontendTool('Screenshot', ...)`. Frontend-only: it
+// ─── ReviewFile ──────────────────────────────────────────────────────────────
+// Schema matches `registerFrontendTool('ReviewFile', ...)`. Frontend-only: it
 // captures the LIVE rendered DOM (html-to-image) of the file currently open in the
 // browser, so it can't run headless (no DOM).
-const ScreenshotParams = Type.Object({
-  fileId: Type.Number({ description: 'ID of the file to screenshot — must be the file currently open in the browser (its rendered view is captured).' }),
-  fullHeight: Type.Optional(Type.Boolean({ description: 'Capture the full scrolled height including off-screen content (default false — visible area only).' })),
+const ReviewFileParams = Type.Object({
+  fileId: Type.Number({ description: 'ID of the file to review — must be the file currently open in the browser (its rendered view is captured).' }),
+  fullHeight: Type.Optional(Type.Boolean({ description: 'Capture the full scrolled height including off-screen content (default true).' })),
 });
 
-export class Screenshot extends MXTool<typeof ScreenshotParams, RemoteAnalystContext> {
-  static readonly schema: Tool<typeof ScreenshotParams> = {
+export class ReviewFile extends MXTool<typeof ReviewFileParams, RemoteAnalystContext> {
+  static readonly schema: Tool<typeof ReviewFileParams> = {
+    name: 'ReviewFile',
+    description: 'Review the current file WITHOUT editing it: returns a rendered screenshot plus the full health rubric — deterministic errors/warnings, the LLM visual judge, and the score (the same review EditFile returns after a change). ALWAYS fix `error` findings (any error gates the score to 0); try to fix `warn` findings. Use after authoring visual content — especially a story, report, or dashboard — to verify layout, styling, and embeds before telling the user it is done.',
+    parameters: ReviewFileParams,
+  };
+
+  async run(): Promise<ToolResponse> {
+    throw new UserInputException(this.id);
+  }
+}
+
+// LEGACY: replaced by ReviewFile. Kept registered (REGISTRABLES + frontend handler alias) so
+// saved conversation logs with Screenshot calls still resume; NOT in any agent's toolset.
+export class Screenshot extends MXTool<typeof ReviewFileParams, RemoteAnalystContext> {
+  static readonly schema: Tool<typeof ReviewFileParams> = {
     name: 'Screenshot',
-    description: 'See a rendered screenshot of the current file (question/dashboard/story/notebook/report) as an image. Use after authoring visual content — especially a story, report, or notebook — to verify the layout, styling, and embeds render as intended before telling the user it is done.',
-    parameters: ScreenshotParams,
+    description: 'Legacy alias of ReviewFile.',
+    parameters: ReviewFileParams,
   };
 
   async run(): Promise<ToolResponse> {

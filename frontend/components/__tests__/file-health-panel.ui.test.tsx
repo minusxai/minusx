@@ -105,7 +105,7 @@ describe('FileHealthBadge', () => {
     for (const qid of [21, 22, 23]) seedQuestion(store, qid, { description: 'x', query: 'SELECT 1', vizSettings: { type: 'bar' }, parameters: [], connection_name: 'w' });
     renderWithProviders(<FileHealthBadge fileId={10} fileType="story" />, { store });
     const badge = await screen.findByLabelText(/File health:/);
-    expect(badge.getAttribute('aria-label')).toContain('4 of 5'); // clarity -3 (error) for embed-too-narrow
+    expect(badge.getAttribute('aria-label')).toContain('0 of 5 (poor)'); // embed-too-narrow is an error — the gate zeroes the overall
   });
 
   it('does not flag the same story when the referenced question viz types are unknown', async () => {

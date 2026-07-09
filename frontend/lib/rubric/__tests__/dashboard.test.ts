@@ -61,7 +61,9 @@ describe('scoreDashboard', () => {
       assets: [q(1), q(1)],
       layout: { items: [{ id: 1, x: 0, y: 0, w: 6, h: 4 }] },
     }));
-    expect(findings.find((x) => x.ruleId === 'dashboard.duplicate-question')?.severity).toBe('info');
+    const dupe = findings.find((x) => x.ruleId === 'dashboard.duplicate-question');
+    expect(dupe?.severity).toBe('warn');
+    expect(dupe?.deduction).toBe(0.5);
   });
 
   it('flags a dashboard with too much inline text', () => {
@@ -76,9 +78,11 @@ describe('scoreDashboard', () => {
     expect(findings.find((x) => x.ruleId === 'dashboard.too-much-text')?.severity).toBe('error');
   });
 
-  it('flags a dashboard with no parameters (info)', () => {
+  it('flags a dashboard with no parameters (lightest warn)', () => {
     const findings = scoreDashboard(makeDashboard({ parameterValues: null }));
-    expect(findings.find((x) => x.ruleId === 'dashboard.no-parameters')?.severity).toBe('info');
+    const noParams = findings.find((x) => x.ruleId === 'dashboard.no-parameters');
+    expect(noParams?.severity).toBe('warn');
+    expect(noParams?.deduction).toBe(0.25);
   });
 
   it('flags a cartesian plot smaller than 3x3 (needs referenced viz types)', () => {

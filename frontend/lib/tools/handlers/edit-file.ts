@@ -25,6 +25,7 @@ import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { selectEffectiveUser } from '@/store/authSlice';
 import type { FrontendToolHandler } from './types';
 import { renderFileChartImageBlocks } from './chart-images';
+import { reviewFile } from './file-review';
 import { vizWarningForQuestion } from './viz-warning';
 
 /**
@@ -323,6 +324,13 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
   const vizType = (augmented.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
   const showImage = isImageViz(vizType);
 
+  // Rubric v2: every successful EditFile returns the file's health review — a screenshot of the
+  // live rendered view + the FULL rubric (deterministic + LLM visual judge + score) when the
+  // file's view is mounted, degrading to the rules-only rubric for background edits. Best-effort:
+  // a review failure never fails the staged edit.
+  const colorMode: 'light' | 'dark' = context.state?.ui?.colorMode === 'dark' ? 'dark' : 'light';
+  const review = await reviewFile(fileId, { colorMode, fullHeight: true });
+
   // Render the chart image only for the image presentation AND when the result/viz actually changed.
   const queryResultChanged = compressed.queryResults.some((qr: { id?: string }) => {
     const qrId = qr.id;
@@ -331,7 +339,9 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
   const prevVizSettings = (augmentedBefore?.fileState.content as { vizSettings?: unknown } | undefined)?.vizSettings;
   const currVizSettings = (augmented.fileState.content as { vizSettings?: unknown } | undefined)?.vizSettings;
   const vizSettingsChanged = JSON.stringify(prevVizSettings) !== JSON.stringify(currVizSettings);
-  const imageBlocks = showImage && (queryResultChanged || vizSettingsChanged)
+  // When a full-view screenshot was captured it already shows the rendered chart — skip the
+  // separate chart image so the response doesn't carry two pictures of the same thing.
+  const imageBlocks = !review.screenshotUrl && showImage && (queryResultChanged || vizSettingsChanged)
     ? await renderFileChartImageBlocks([augmented])
     : [];
 
@@ -360,15 +370,22 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
     ...(titleWarning ? { titleWarning } : {}),
     ...(editValidation?.length ? { validation: editValidation } : {}),
     ...(autoCorrections.length > 0 ? { autoCorrections } : {}),
+    // The health rubric for the edited file. ALWAYS fix `error` findings (an error gates the
+    // score to 0); try to fix `warn` findings. Full (screenshot + rules + visual judge) when
+    // the view was captured; rules-only otherwise.
+    ...(review.rubric ? { rubric: review.rubric } : {}),
   };
   const augmentedDetails: AugmentedToolDetails = {
     __augmented: [{ file: entry, references: [] }],
     __jsonTag: 'Files',
     __status: status,
   };
+  const screenshotBlocks = review.screenshotUrl
+    ? [{ type: 'image_url', image_url: { url: review.screenshotUrl } }]
+    : [];
   return {
-    content: [{ type: 'text', text: JSON.stringify(status) }, ...imageBlocks],
-    details: { success: true, diff, ...augmentedDetails } as EditFileDetails,
+    content: [{ type: 'text', text: JSON.stringify(status) }, ...imageBlocks, ...screenshotBlocks],
+    details: { success: true, diff, screenshotUrl: review.screenshotUrl, ...augmentedDetails } as EditFileDetails,
   };
 };
 

@@ -26,6 +26,7 @@ import { selectEffectiveUser } from '@/store/authSlice';
 import { selectAppState } from '@/store/appStateSelector';
 import { selectUnrestrictedMode } from '@/store/uiSlice';
 import type { FrontendToolHandler } from './types';
+import { deterministicAgentRubric } from './file-review';
 import { vizWarningForQuestion } from './viz-warning';
 
 export const createFileHandler: FrontendToolHandler = async (args, context) => {
@@ -205,7 +206,12 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
 
   // Pull the new file's JSX `markup` out of its `state` JSON → a separate raw <file_markup> block.
   const { value: stateNoMarkup, blocks: createBlocks } = takeAugmentedMarkup(compressAugmentedFile(augmented));
+  // Rubric v2: a created file is always a BACKGROUND draft (this tool never navigates), so its
+  // view isn't mounted and no screenshot/visual-judge review is possible — attach the rules-only
+  // rubric. ALWAYS fix `error` findings (an error gates the score to 0); try to fix `warn`s.
+  const rubric = deterministicAgentRubric(draftId);
   const result: Record<string, any> = { success: true, state: stateNoMarkup };
+  if (rubric) result.rubric = rubric;
   if (vizWarning) result.vizWarning = vizWarning;
   if (createValidation.length) result.validation = createValidation; // non-blocking feedback
   // A nameless draft's path ends in a random token (DB uniqueness only) that is rewritten to the
@@ -227,6 +233,7 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
     __jsonTag: 'Files',
     __status: {
       success: true,
+      ...(rubric ? { rubric } : {}),
       ...(vizWarning ? { vizWarning } : {}),
       ...(createValidation.length ? { validation: createValidation } : {}),
     },

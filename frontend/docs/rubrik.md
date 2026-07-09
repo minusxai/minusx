@@ -7,8 +7,8 @@ can read and act on to improve the file.
 Two flavors, one shared report contract:
 
 - **Deterministic** — `content → RubricReport`. Cheap, synchronous, content-only (no I/O, no
-  query results). Auto-injected on every file read / edit / create so the agent always sees
-  current health.
+  query results). Returned by EditFile/CreateFile (and the fallback when a full review can't
+  screenshot).
 - **LLM judge** — `(content + rendered screenshot) → RubricReport`. Judges the subjective /
   visual dimensions a static check can't (does the chart support the claim, does the story
   look crafted). Async, on-demand (tool call / UI request). Reuses the existing full-file
@@ -44,7 +44,7 @@ decoration.
 ## Report contract
 
 ```ts
-type RubricSeverity = 'error' | 'warn' | 'info';
+type RubricSeverity = 'error' | 'warn';  // error = disqualifying gate; warn = weighted deduction
 type RubricCategory = 'correctness' | 'clarity' | 'aesthetics';
 
 interface RubricFinding {
@@ -55,6 +55,7 @@ interface RubricFinding {
   detail: string;            // what's wrong, includes the offending value
   fix: string;               // imperative, agent-actionable
   source: 'rule' | 'llm';    // which scorer produced it (there is NO report-level source)
+  deduction?: number;        // warn weight (default 1, lightest 0.25); ignored for errors
 }
 interface RubricCategoryScore {
   category: RubricCategory; score: number | null; weight: number; assessed: boolean; findings: RubricFinding[];
@@ -89,18 +90,21 @@ this order — so there's always exactly one home for a new rule:
 ## Scoring math
 
 A deliberately **coarse 0–5 scale** (avoids false precision / variance). Each category starts
-at **5**; deduct per finding — **error −3, warn −1, info −0.5** — then round to the nearest 0.5
-and clamp to [0, 5]. Overall = weighted mean of category scores (same 0–5 scale). Weights and
+at **5**; a `warn` finding deducts its per-rule `deduction` (default **−1**, lightest **−0.25**),
+rounded to the nearest 0.5 and clamped to [0, 5]. An **`error` is a GATE, not a deduction: any
+error zeroes its category AND the overall (grade `poor`) until fixed** — the agent must ALWAYS
+fix errors, and try to fix warnings. Overall (when error-free) = weighted mean of category
+scores (same 0–5 scale). Weights and
 deductions are constants in one place (`scoring.ts`) so they calibrate against a human gold set
 later. Note the baseline is always 5 regardless of how many rules a category has — a category is
 only penalized for *actual* findings, so adding more granular checks never harshens a clean file.
 
 | type | correctness | clarity | aesthetics |
 |---|---|---|---|
-| question  | 0.5  | 0.35 | 0.15 |
-| dashboard | 0.45 | 0.35 | 0.2 |
-| story     | 0.3  | 0.3  | 0.4 |
-| context   | 0.5  | 0.5  | 0   |
+| question  | 0.3 | 0.3 | 0.4 |
+| dashboard | 0.3 | 0.3 | 0.4 |
+| story     | 0.3 | 0.3 | 0.4 |
+| context   | 0.5 | 0.5 | 0   |
 
 Grade bands: `overall >= 4 → good`, `>= 2.5 → fair`, else `poor`.
 
@@ -109,9 +113,9 @@ Grade bands: `overall >= 4 → good`, `>= 2.5 → fair`, else `poor`.
 | ruleId | category | severity | trigger | fix |
 |---|---|---|---|---|
 | `query-too-long` | clarity | warn / error | est. tokens of `query` (chars ÷ 4) > 400 (warn) / > 800 (error) | Simplify the SQL: extract reusable sub-queries into `@`-referenced saved questions, drop unused columns, push aggregation into the warehouse. |
-| `no-description` | clarity | info | `description` blank | Add a one-line description stating what this question answers. |
+| `no-description` | clarity | warn (0.25) | `description` blank | Add a one-line description stating what this question answers. |
 | `undeclared-param` | correctness | error | a `:token` in `query` is not declared in `parameters` | Declare `:{name}` in parameters (text/number/date) or remove the token. |
-| `unused-param` | correctness | info | a declared parameter is never referenced in `query` | Remove the unused `{name}` parameter or reference `:{name}` in the SQL. |
+| `unused-param` | correctness | warn (0.25) | a declared parameter is never referenced in `query` | Remove the unused `{name}` parameter or reference `:{name}` in the SQL. |
 | `viz-config-incomplete` | correctness | error | `type` is `pivot` and `pivotConfig` is missing or has no `values` (and no `rows`/`columns`) | Configure the pivot (rows, columns, at least one value measure) or switch to `table`. |
 | `pie-multi-measure` | correctness | warn | `type` ∈ {pie, funnel} and `yCols.length > 1` | Pie/funnel show a single measure. Keep one `yCols`, or use a bar chart. |
 | `too-many-series` | clarity | warn | `type` ∈ {line, bar, area} and `yCols.length > 5` | More than 5 series is hard to read (≤7 rule). Split into small multiples or drop series. |
@@ -138,10 +142,10 @@ text/image/divider assets are ignored for counting.
 | `tile-too-small` | clarity | warn | a question tile has `w < 2` or `h < 2` | Question tiles need room to be legible; enlarge tile {id}. |
 | `plot-too-small` | clarity | warn | a tile whose question is a line/area/bar/scatter chart is `< 3×3` (needs the referenced viz type) | Resize the plot tile to ≥3×3, or use a compact viz (single_value / table). |
 | `visual-count` | clarity | error / warn | question count `< 1` (error, empty) / `> 9` (warn) | Keep 5–9 visuals per dashboard; split into multiple dashboards or drop low-value charts. |
-| `duplicate-question` | correctness | info | the same question id is referenced more than once | Reference question {id} once; parameterize instead of duplicating. |
+| `duplicate-question` | correctness | warn (0.5) | the same question id is referenced more than once | Reference question {id} once; parameterize instead of duplicating. |
 | `too-much-text` | clarity | warn | total inline-text asset tokens > ~400 | Trim inline text to short annotations; move long prose into a story. |
-| `no-parameters` | clarity | info | `parameterValues` has no keys (no filters) | Add shared parameters (date range, region) — dashboards are far more useful when filterable. |
-| `no-description` | clarity | info | `description` blank | Add a description stating the dashboard's decision purpose. |
+| `no-parameters` | clarity | warn (0.25) | `parameterValues` has no keys (no filters) | Add shared parameters (date range, region) — dashboards are far more useful when filterable. |
+| `no-description` | clarity | warn (0.25) | `description` blank | Add a description stating the dashboard's decision purpose. |
 
 > `asset-not-in-layout` / `layout-orphan` only fire when a `layout` with `items` exists — a
 > dashboard with no explicit layout is auto-laid-out and not penalized.
@@ -161,9 +165,9 @@ text/image/divider assets are ignored for counting.
 | `typed-number` | correctness | warn | a factual figure (`$`/`%`/thousands-separator or ≥4 digits) sits in prose text, not inside a `<Number>` / `single_value` embed | Replace the typed figure "{x}" with a live `<Number>` embed so it can't go stale or be wrong. |
 | `no-headline` | clarity | warn | body has no `<h1>` / `<h2>` heading | Add a headline that states the finding (a claim with a number), not a topic. |
 | `embed-too-narrow` | clarity | error | a cartesian chart (line/area/bar/scatter) resolves to `< 50%` of the story column, or a pie/funnel to `< ~34%` — from CSS grid-track division (inline `style` + class rules) or a fixed narrow px width (`< 480px` cartesian / `< 260px` round) | Drop packed multi-column grids to 1–2 columns, remove fixed narrow px widths, let each plot fill its cell. |
-| `no-lead` | clarity | info | `description` blank | State the single lead finding (with its number) in the description. |
-| `no-design-tokens` | aesthetics | info | the `<style>` block has < 2 distinct hex colors, or no `font-family` | Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling. |
-| `too-many-colors` | aesthetics | info | the `<style>` block has > 10 distinct hex colors | Reduce to a disciplined 4–6 color palette with one protagonist accent. |
+| `no-lead` | clarity | warn (0.25) | `description` blank | State the single lead finding (with its number) in the description. |
+| `no-design-tokens` | aesthetics | warn (0.5) | the `<style>` block has < 2 distinct hex colors, or no `font-family` | Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling. |
+| `too-many-colors` | aesthetics | warn (0.25) | the `<style>` block has > 10 distinct hex colors | Reduce to a disciplined 4–6 color palette with one protagonist accent. |
 
 > **Width is CSS-structural, not pixel-exact.** `embed-too-narrow` (impl in
 > `deterministic/story-layout.ts`) resolves each embed's *column-width share* by dividing by the
@@ -265,16 +269,21 @@ there and both the prompt (`formatChecklist`) and the parsing update automatical
   merged report is just findings from both scorers together. ("Did the LLM run?" is UI-local
   state, not stored on the report.)
 
-## Consumption — the 3-piece architecture
+## Consumption — feedback where the agent ACTS (rubric v2)
 
-1. **Deterministic fn (piece 1)** — `scoreFileDeterministic`, auto-injected into the file the
-   agent sees at `compressFileState` (`lib/chat/compress-augmented.ts`), covering every
-   read / edit / create. Cheap + pure, safe every time.
-2. **LLM fn (piece 2)** — `scoreFileLLM`, same contract. Attached to the **Screenshot tool**: after
-   the `Screenshot` frontend handler (`lib/tools/tool-handlers.ts`) captures + uploads the shot, it
-   POSTs the URL to the rubric route and appends the **combined** report to the tool result — so
-   every screenshot carries the file's full health (best-effort; a rubric failure never blocks
-   the shot).
+The rubric is NOT auto-injected into AppState/ReadFiles (that was v1 — ambient noise). It is
+returned by the tools that change or review a file (`lib/tools/handlers/file-review.ts` is the
+shared core):
+
+1. **EditFile** — every successful edit returns the FULL review: a screenshot of the live
+   rendered view + the combined rule+LLM rubric (graded on the merged content the screenshot
+   shows). Background edits (view not mounted) degrade to the deterministic rubric. Best-effort;
+   never fails the staged edit.
+2. **CreateFile** — returns the deterministic rubric (a created file is a background draft, so
+   nothing is rendered to screenshot/judge).
+3. **ReviewFile** — the full review WITHOUT an edit (same output as EditFile with no changes).
+   Replaces the old `Screenshot` tool, which survives only as a registered legacy alias so old
+   conversation logs still resume.
 3. **Run-both fn (piece 3)** — `scoreFile(fileType, content, user, screenshotUrl?)`
    (`lib/rubric/score-file.server.ts`) = deterministic + judge, combined. Two thin doors call it:
    - **UI** — `FileHealthBadge` (`components/FileHealthPanel.tsx`) in the `FileHeader` badge row.

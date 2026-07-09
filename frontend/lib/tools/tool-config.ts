@@ -143,6 +143,15 @@ const TOOL_CONFIGS: Record<string, ToolConfig> = {
 
     timelineVerb: 'Capturing',
   },
+  'ReviewFile': {
+    displayComponent: ScreenshotDisplay,
+
+    chipLabel: 'review',
+    chipLabelPlural: 'reviews',
+    chipIcon: LuCamera,
+
+    timelineVerb: 'Reviewing',
+  },
   'EditFile': {
     displayComponent: EditFileDisplay,
 

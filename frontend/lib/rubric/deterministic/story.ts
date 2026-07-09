@@ -63,9 +63,9 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
 
   // no-lead (clarity) — uses the description field directly, not the body
   if (isBlank(content.description)) {
-    out.push(finding('story.no-lead', 'clarity', 'info', 'No lead',
+    out.push(finding('story.no-lead', 'clarity', 'warn', 'No lead',
       'The story has no description/lead.',
-      'State the single lead finding (with its number) in the description.'));
+      'State the single lead finding (with its number) in the description.', 0.25));
   }
 
   const bodyJsx = toAgentBodyJsx(content.story ?? '');
@@ -99,13 +99,13 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
   const colors = distinctHexColors(acc.css);
   const fonts = hasFontFamily(acc.css);
   if (colors.length < MIN_COLORS || !fonts) {
-    out.push(finding('story.no-design-tokens', 'aesthetics', 'info', 'Thin design tokens',
+    out.push(finding('story.no-design-tokens', 'aesthetics', 'warn', 'Thin design tokens',
       `The style block defines ${colors.length} color(s)${fonts ? '' : ' and no font-family'}.`,
-      'Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling.'));
+      'Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling.', 0.5));
   } else if (colors.length > MAX_COLORS) {
-    out.push(finding('story.too-many-colors', 'aesthetics', 'info', 'Too many colors',
+    out.push(finding('story.too-many-colors', 'aesthetics', 'warn', 'Too many colors',
       `The style block defines ${colors.length} distinct colors.`,
-      'Reduce to a disciplined 4–6 color palette with one protagonist accent.'));
+      'Reduce to a disciplined 4–6 color palette with one protagonist accent.', 0.25));
   }
 
   // ── layout-aware rules (width + params) ──────────────────────────────────────

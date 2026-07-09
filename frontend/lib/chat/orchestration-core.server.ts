@@ -21,6 +21,7 @@ import {
   CreateFile,
   ReadFiles,
   Navigate,
+  ReviewFile,
   Screenshot,
   ClarifyFrontend,
   PublishAll,
@@ -113,7 +114,8 @@ export const REGISTRABLES: RegistrableClass[] = [
   EditFile,
   CreateFile,
   Navigate,
-  Screenshot,
+  ReviewFile,
+  Screenshot, // legacy alias of ReviewFile — old conversation logs still resolve it
   ClarifyFrontend,
   PublishAll,
   LoadSkill,

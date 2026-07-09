@@ -1,9 +1,9 @@
 /**
  * compressFileState memoization. selectAppState recomputes on EVERY files-map / query-results
  * change — which happens per debounced keystroke and per landing query result — and each
- * recompute rebuilt the file's markup (fileToMarkup) and rubric from scratch even when the FILE
- * ITSELF was untouched. FileState objects are identity-stable under immer for untouched files,
- * so the expensive derived parts must be cached by (fileState identity, refs identities).
+ * recompute rebuilt the file's markup (fileToMarkup) from scratch even when the FILE ITSELF
+ * was untouched. FileState objects are identity-stable under immer for untouched files, so
+ * the expensive derived parts are cached by fileState identity.
  */
 import { describe, it, expect } from 'vitest';
 import { compressAugmentedFile } from '@/lib/chat/compress-augmented';
@@ -44,7 +44,7 @@ const augmented = (fileState: FileState, references: FileState[] = []): Augmente
   ({ fileState, references, queryResults: [] } as AugmentedFile);
 
 describe('compressFileState memoization', () => {
-  it('returns IDENTITY-equal markup/content/rubric for the same fileState + refs identities', () => {
+  it('returns IDENTITY-equal markup/content for the same fileState identity', () => {
     const ref = questionFile(2);
     const dash = dashboardFile(1, [2]);
 
@@ -53,7 +53,6 @@ describe('compressFileState memoization', () => {
 
     expect(b.fileState.markup).toBe(a.fileState.markup);   // string identity — not re-derived
     expect(b.fileState.content).toBe(a.fileState.content); // cached agentContent reused
-    expect(b.fileState.rubric).toBe(a.fileState.rubric);
   });
 
   it('recomputes when the fileState identity changes (the file was actually edited)', () => {
@@ -65,22 +64,6 @@ describe('compressFileState memoization', () => {
 
     expect(b.fileState.markup).not.toBe(a.fileState.markup);
     expect(b.fileState.markup).toContain('now edited');
-  });
-
-  it('recomputes when a ref identity changes (rubric depends on refs viz types)', () => {
-    const ref = questionFile(2);
-    const dash = dashboardFile(1, [2]);
-    const a = compressAugmentedFile(augmented(dash, [ref]));
-
-    const changedRef = {
-      ...ref,
-      content: { ...(ref.content as object), vizSettings: { type: 'bar', xCols: ['n'], yCols: ['n'] } },
-    } as FileState;
-    const b = compressAugmentedFile(augmented(dash, [changedRef]));
-
-    // The dashboard itself is unchanged, but the refs input to the rubric changed — must not
-    // serve the stale cached rubric.
-    expect(b.fileState.rubric).not.toBe(a.fileState.rubric);
   });
 
   it('does not let one file poison another (cache is per fileState object)', () => {

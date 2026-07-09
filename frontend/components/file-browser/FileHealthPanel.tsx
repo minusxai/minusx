@@ -37,13 +37,12 @@ const GRADE_COLOR: Record<string, string> = { good: 'accent.success', fair: 'acc
 const LEVEL: Record<Level, { color: string; label: string }> = {
   error: { color: 'accent.danger', label: 'ERROR' },
   warn: { color: 'accent.warning', label: 'WARN' },
-  info: { color: 'fg.muted', label: 'INFO' },
   pass: { color: 'accent.success', label: 'PASS' },
 };
 const CATEGORY_LABEL: Record<RubricCategory, string> = {
   correctness: 'Correctness', clarity: 'Clarity', aesthetics: 'Aesthetics',
 };
-const LEVEL_ORDER: Record<Level, number> = { error: 0, warn: 1, info: 2, pass: 3 };
+const LEVEL_ORDER: Record<Level, number> = { error: 0, warn: 1, pass: 2 };
 
 function LevelTag({ level }: { level: Level }) {
   const t = LEVEL[level];

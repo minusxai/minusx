@@ -30,16 +30,16 @@ export function scoreDashboard(content: DashboardContent, ctx?: DeterministicCon
 
   // no-description (clarity)
   if (isBlank(content.description)) {
-    out.push(finding('dashboard.no-description', 'clarity', 'info', 'No description',
+    out.push(finding('dashboard.no-description', 'clarity', 'warn', 'No description',
       'The dashboard has no description.',
-      "Add a description stating the dashboard's decision purpose."));
+      "Add a description stating the dashboard's decision purpose.", 0.25));
   }
 
-  // no-parameters (clarity, info — dashboards are far more useful when filterable)
+  // no-parameters (clarity, lightest warn — dashboards are far more useful when filterable)
   if (Object.keys(content.parameterValues ?? {}).length === 0) {
-    out.push(finding('dashboard.no-parameters', 'clarity', 'info', 'No parameters',
+    out.push(finding('dashboard.no-parameters', 'clarity', 'warn', 'No parameters',
       'The dashboard has no parameters/filters.',
-      'Add shared parameters (e.g. a date range or region filter) so viewers can slice the data — dashboards are far more useful when interactive.'));
+      'Add shared parameters (e.g. a date range or region filter) so viewers can slice the data — dashboards are far more useful when interactive.', 0.25));
   }
 
   // visual-count (clarity — too few/many hurts comprehension, not correctness)
@@ -70,9 +70,9 @@ export function scoreDashboard(content: DashboardContent, ctx?: DeterministicCon
   const dupes = new Set<number>();
   for (const id of questionIds) (seen.has(id) ? dupes : seen).add(id);
   for (const id of dupes) {
-    out.push(finding('dashboard.duplicate-question', 'correctness', 'info', 'Duplicated question',
+    out.push(finding('dashboard.duplicate-question', 'correctness', 'warn', 'Duplicated question',
       `Question ${id} is referenced more than once.`,
-      `Reference question ${id} once; parameterize instead of duplicating.`));
+      `Reference question ${id} once; parameterize instead of duplicating.`, 0.5));
   }
 
   if (hasLayout) {

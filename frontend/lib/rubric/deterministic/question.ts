@@ -27,9 +27,9 @@ export function scoreQuestion(content: QuestionContent): RubricFinding[] {
 
   // no-description (clarity)
   if (isBlank(content.description)) {
-    out.push(finding('question.no-description', 'clarity', 'info', 'No description',
+    out.push(finding('question.no-description', 'clarity', 'warn', 'No description',
       'The question has no description.',
-      'Add a one-line description stating what this question answers.'));
+      'Add a one-line description stating what this question answers.', 0.25));
   }
 
   // param ↔ :token sync (correctness)
@@ -45,9 +45,9 @@ export function scoreQuestion(content: QuestionContent): RubricFinding[] {
   }
   for (const name of declared) {
     if (!used.has(name)) {
-      out.push(finding('question.unused-param', 'correctness', 'info', 'Unused parameter',
+      out.push(finding('question.unused-param', 'correctness', 'warn', 'Unused parameter',
         `Parameter ${name} is declared but never referenced in the SQL.`,
-        `Remove the unused ${name} parameter or reference :${name} in the SQL.`));
+        `Remove the unused ${name} parameter or reference :${name} in the SQL.`, 0.25));
     }
   }
 

@@ -44,7 +44,9 @@ describe('scoreQuestion', () => {
       query: 'SELECT * FROM t',
       parameters: [param('limit')],
     }));
-    expect(findings.find((x) => x.ruleId === 'question.unused-param')?.severity).toBe('info');
+    const unused = findings.find((x) => x.ruleId === 'question.unused-param');
+    expect(unused?.severity).toBe('warn');
+    expect(unused?.deduction).toBe(0.25);
   });
 
   it('flags a pivot with no pivotConfig, but not a configured one', () => {
