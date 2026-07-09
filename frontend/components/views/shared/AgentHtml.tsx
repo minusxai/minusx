@@ -123,6 +123,15 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     root.classList.toggle('dark', colorMode === 'dark');
     root.classList.toggle('light', colorMode !== 'dark');
     doc.body.style.margin = '0';
+    if (height === undefined) {
+      // Content-driven height: the iframe is sized to its content (syncHeight below), so its document
+      // must never scroll on its own. body.scrollHeight is an integer while the true content height
+      // can be fractional — the sync can leave the iframe ~0.5px short, which Chrome treats as
+      // scrollable: a second scrollbar next to the page's, and wheel scrolling jerks through the
+      // half-pixel inner range before chaining to the page scroller. Pin vertical overflow shut.
+      doc.documentElement.style.overflowY = 'hidden';
+      doc.body.style.overflowY = 'hidden';
+    }
     // Design-system stylesheet (server-compiled Tailwind) — into <head> via textContent (DOM
     // insertion, not doc.write, so no escaping concerns), after the app-styles mirror. Body
     // <style> blocks come later in document order and win ties; the WYSIWYG serializer reads

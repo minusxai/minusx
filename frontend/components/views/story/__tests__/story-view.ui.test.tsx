@@ -295,6 +295,21 @@ describe('StoryView', () => {
     });
   });
 
+  // Content-driven height contract (AgentHtml "no inner scrollbar"): the iframe is sized to its
+  // content, so its document must never scroll on its own. body.scrollHeight is an integer while the
+  // story's true content height can be fractional — at 100% browser zoom the sync can leave the
+  // iframe ~0.5px shorter than its content, which Chrome treats as scrollable: a second scrollbar
+  // renders next to the page's and wheel scrolling jerks (inner half-pixel scroll, then chains out).
+  it('pins the iframe document unscrollable vertically (content-driven height)', async () => {
+    renderWithProviders(<StoryView content={content} {...NOEDIT_PROPS} />);
+    await waitFor(() => {
+      const iframe = screen.getByLabelText('Story document') as HTMLIFrameElement;
+      const doc = iframe.contentDocument!;
+      expect(doc.documentElement.style.overflowY).toBe('hidden');
+      expect(doc.body.style.overflowY).toBe('hidden');
+    });
+  });
+
   // The JSON/XML "Code view" moved out of StoryView into the shared CodeView
   // (rendered centrally by FileView) — see components/views/__tests__/code-view.ui.test.tsx.
   it('renders the story visual canvas (never a code editor)', () => {
