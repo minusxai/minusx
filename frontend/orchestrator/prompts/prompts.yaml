@@ -845,7 +845,7 @@ templates:
         .story-x .stamp { font-family:'IBM Plex Mono',monospace; border:1px dashed currentColor; }  /* the motif bits utilities can't express */
         .story-x .plate { box-shadow:12px 12px 0 rgba(0,0,0,.4); }
       `}</style>
-      <div data-design="tw" class="story-x @container mx-auto max-w-[1280px] bg-[#101822] text-[#f7f0df]">
+      <div data-design="tw" class="story-x @container mx-auto max-w-[1280px] px-6 @2xl:px-12 bg-[#101822] text-[#f7f0df]">
         <Section>  <!-- HERO: open on the finding -->
           <span class="stamp inline-block px-3 py-2 text-[#ffc83d] uppercase tracking-[0.12em] text-sm">LOG 00 · THE FINDING</span>
           <h1 class="display text-5xl @2xl:text-8xl leading-[0.9] mt-6">Churn doubled the quarter we raised prices.</h1>
@@ -887,7 +887,7 @@ templates:
       **Scaffold — this IS the default shape; copy the structure, swap the content. Note how little there is: no CSS, no classes except the root and accents:**
       ```
       <story>
-      <div data-design="tw" class="@container mx-auto max-w-[1280px] bg-white text-slate-800 dark:bg-slate-950 dark:text-slate-200 font-sans px-6 [font-variant-numeric:tabular-nums] [--st-accent:#0f766e]">
+      <div data-design="tw" class="@container mx-auto max-w-[1280px] bg-white text-slate-800 dark:bg-slate-950 dark:text-slate-200 font-sans px-6 @2xl:px-12 [font-variant-numeric:tabular-nums] [--st-accent:#0f766e]">
         <PageHeader><span>ACME LEADERSHIP REVIEW</span><span>Confidential · 2026</span></PageHeader>
         <Section>  <!-- one beat = one slide; repeat per beat -->
           <Eyebrow>01 · Business Performance</Eyebrow>
@@ -1029,6 +1029,8 @@ templates:
       ### Page mechanics (HTML fragment, no JS)
 
       One root `<div>` (with `data-design="tw"`), optionally preceded by a SHORT `<style>` block — both inside the `<story>…</story>` field element. No `<html>`/`<head>`/`<body>`, and strictly **no `<script>`**.
+
+      **The root div must ALWAYS carry a page gutter** — `px-6 @2xl:px-12` (or equivalent padding in its CSS class). The page renders with zero body margin and NO component adds horizontal padding, so without a root gutter every headline, paragraph, and chart sits flush against the viewport edge. Put the gutter in your FIRST draft, not in a fix-up pass; deliberate full-bleed elements (a marquee, a full-bleed figure) can escape it with negative margins (`-mx-6 @2xl:-mx-12`).
 
       - **Design system first**: utilities + story components carry the layout, spacing, color, and type scale (see Authoring syntax). `<style>` exists only for fonts, motif/signature CSS, and keyframes — scoped under one root class (`.story-x …`) so styles cannot leak into the host. Never rebuild card/grid/pill/label recipes in CSS that components already provide.
       - **Fonts via `@import` at the top of `<style>`**, Google Fonts, graceful installed fallbacks in every stack (`'Fraunces', Didot, Georgia, serif`).

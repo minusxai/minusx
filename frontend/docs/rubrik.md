@@ -166,6 +166,7 @@ text/image/divider assets are ignored for counting.
 | `no-headline` | clarity | warn | body has no `<h1>` / `<h2>` heading | Add a headline that states the finding (a claim with a number), not a topic. |
 | `embed-too-narrow` | clarity | error | a cartesian chart (line/area/bar/scatter) resolves to `< 50%` of the story column, or a pie/funnel to `< ~34%` — from CSS grid-track division (inline `style` + class rules) or a fixed narrow px width (`< 480px` cartesian / `< 260px` round) | Drop packed multi-column grids to 1–2 columns, remove fixed narrow px widths, let each plot fill its cell. |
 | `no-lead` | clarity | warn (0.25) | `description` blank | State the single lead finding (with its number) in the description. |
+| `no-page-gutter` | aesthetics | warn | neither the root element nor most top-level sections carry horizontal padding (Tailwind `p*-`, inline style, or CSS class padding) | Add a page gutter on the root div (`px-6 @2xl:px-12` or CSS padding) so content never touches the viewport edge. |
 | `no-design-tokens` | aesthetics | warn (0.5) | the `<style>` block has < 2 distinct hex colors, or no `font-family` | Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling. |
 | `too-many-colors` | aesthetics | warn (0.25) | the `<style>` block has > 10 distinct hex colors | Reduce to a disciplined 4–6 color palette with one protagonist accent. |
 

@@ -114,4 +114,37 @@ describe('scoreStory', () => {
     const story = withEmbed(`<Question viz={{type:"bar"}} query={\`SELECT x FROM t WHERE r = :region\`} connection="duckdb" />`);
     expect(ids(scoreStory(makeStory({ story, parameterValues: { region: 'west' } })))).not.toContain('story.undeclared-param');
   });
+
+  // ── no-page-gutter ─────────────────────────────────────────────────────────
+  // Content flush against the viewport edge is the #1 first-render flaw: the iframe body has
+  // margin 0 and no component owns horizontal padding, so the gutter MUST live in the markup.
+  const gutterStory = (rootAttrs: string, css = '.story{font-family:Inter;color:#111;background:#fff} h1{color:#2563eb} .a{color:#f59e0b}', inner = '<h1>T</h1><Question id={7} />') =>
+    `<style>{\`${css}\`}</style><div ${rootAttrs}>${inner}</div>`;
+
+  it('flags a story whose root (and top-level children) carry no horizontal padding', () => {
+    const f = scoreStory(makeStory({ story: gutterStory('class="story"') })).find((x) => x.ruleId === 'story.no-page-gutter');
+    expect(f?.severity).toBe('warn');
+    expect(f?.category).toBe('aesthetics');
+  });
+
+  it('passes when the root has a Tailwind px- utility', () => {
+    const story = gutterStory('data-design="tw" class="story px-6"');
+    expect(ids(scoreStory(makeStory({ story })))).not.toContain('story.no-page-gutter');
+  });
+
+  it('passes when a root class declares padding in the <style> block', () => {
+    const story = gutterStory('class="story"', '.story{font-family:Inter;color:#111;background:#fff;padding:0 48px} h1{color:#2563eb} .a{color:#f59e0b}');
+    expect(ids(scoreStory(makeStory({ story })))).not.toContain('story.no-page-gutter');
+  });
+
+  it('passes when the root has inline style padding', () => {
+    const story = gutterStory('class="story" style={{padding:"0 40px"}}');
+    expect(ids(scoreStory(makeStory({ story })))).not.toContain('story.no-page-gutter');
+  });
+
+  it('passes when every direct child section carries the gutter instead of the root', () => {
+    const story = gutterStory('class="story"', undefined,
+      '<section class="px-8"><h1>T</h1></section><section class="px-8"><Question id={7} /></section>');
+    expect(ids(scoreStory(makeStory({ story })))).not.toContain('story.no-page-gutter');
+  });
 });

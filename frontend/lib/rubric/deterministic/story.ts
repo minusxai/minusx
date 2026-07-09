@@ -1,5 +1,5 @@
 import { parseJsx } from '@/lib/jsx';
-import type { JsxNode } from '@/lib/jsx';
+import type { JsonValue, JsxElement, JsxNode } from '@/lib/jsx';
 import { buildStoryJsx } from '@/lib/data/story/story-v2';
 import type { StoryContent } from '@/lib/types';
 import type { DeterministicContext, RubricFinding } from '../types';
@@ -43,6 +43,45 @@ function walk(nodes: JsxNode[], acc: StoryScan, insideStyle: boolean): void {
     if (/^h[12]$/i.test(n.tag)) acc.headings++;
     walk(n.children, acc, insideStyle || n.tag.toLowerCase() === 'style');
   }
+}
+
+// ── page gutter detection ─────────────────────────────────────────────────────
+// The iframe body renders with margin 0 and NO component owns horizontal padding, so the page
+// gutter must live in the story markup itself — on the root (`px-6`, inline padding, or a root
+// class's CSS padding) or on the top-level sections. Without it, content sits flush against the
+// viewport edge: the single most common first-render flaw.
+
+const PAD_CLASS_RE = /(?:^|\s)(?:p|px|pl|pr)-/;
+
+function staticAttr(el: JsxElement, name: string): JsonValue | undefined {
+  const a = el.attributes.find((x) => x.name === name);
+  return a && a.value.static ? a.value.json : undefined;
+}
+
+/** Does this element carry horizontal padding — via Tailwind class, inline style, or a CSS rule
+ *  (in `css`) on one of its classes? */
+function hasHorizontalPadding(el: JsxElement, css: string): boolean {
+  const cls = staticAttr(el, 'className') ?? staticAttr(el, 'class');
+  const classes = typeof cls === 'string' ? cls.split(/\s+/).filter(Boolean) : [];
+  if (typeof cls === 'string' && PAD_CLASS_RE.test(cls)) return true;
+  const style = staticAttr(el, 'style');
+  if (typeof style === 'string' && /padding/i.test(style)) return true;
+  if (style && typeof style === 'object' && !Array.isArray(style)
+    && Object.keys(style).some((k) => /^padding/i.test(k))) return true;
+  return classes.some((c) => new RegExp(`\\.${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])[^{}]*\\{[^{}]*padding`, 'i').test(css));
+}
+
+/** True when the story has a page gutter: the root element is padded, or most of its direct
+ *  element children are (per-section gutters; a minority of full-bleed elements is fine). */
+function hasPageGutter(nodes: JsxNode[], css: string): boolean {
+  const root = nodes.find((n): n is JsxElement => n.type === 'element' && n.tag.toLowerCase() !== 'style');
+  if (!root) return true; // nothing to judge
+  if (hasHorizontalPadding(root, css)) return true;
+  const children = root.children.filter((n): n is JsxElement =>
+    n.type === 'element' && !['style', 'Param'].includes(n.tag));
+  if (children.length === 0) return false;
+  const padded = children.filter((c) => hasHorizontalPadding(c, css)).length;
+  return padded >= Math.ceil(children.length / 2);
 }
 
 /**
@@ -93,6 +132,13 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
     out.push(finding('story.typed-number', 'correctness', 'warn', 'Hardcoded number in prose',
       `A factual figure "${first}" is typed into prose instead of a live embed.`,
       `Replace the typed figure "${first}" with a live <Number> embed so it can't go stale or be wrong.`));
+  }
+
+  // no-page-gutter (aesthetics) — content flush against the viewport edge
+  if (parsed.ok && !hasPageGutter(parsed.nodes, acc.css)) {
+    out.push(finding('story.no-page-gutter', 'aesthetics', 'warn', 'No page gutter',
+      'Neither the root element nor its top-level sections carry horizontal padding — content sits flush against the viewport edge.',
+      'Add a page gutter on the root div (e.g. `px-6 @2xl:px-12`, or padding in its CSS class) so text and charts never touch the edge.'));
   }
 
   // design tokens (aesthetics)

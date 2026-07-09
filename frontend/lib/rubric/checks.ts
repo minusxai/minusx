@@ -45,6 +45,7 @@ const DETERMINISTIC_CHECKS: Record<RubricFileType, RubricCheck[]> = {
     { ruleId: 'story.no-headline', label: 'Has a headline', category: 'clarity' },
     { ruleId: 'story.no-lead', label: 'Has a lead', category: 'clarity' },
     { ruleId: 'story.embed-too-narrow', label: 'Charts wide enough', category: 'clarity' },
+    { ruleId: 'story.no-page-gutter', label: 'Page gutter present', category: 'aesthetics' },
     { ruleId: 'story.no-design-tokens', label: 'Design tokens defined', category: 'aesthetics' },
     { ruleId: 'story.too-many-colors', label: 'Palette disciplined', category: 'aesthetics' },
   ],

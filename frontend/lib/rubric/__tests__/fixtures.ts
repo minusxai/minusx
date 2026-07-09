@@ -46,7 +46,7 @@ export function makeDashboard(overrides: Partial<DashboardContent> = {}): Dashbo
 }
 
 const GOOD_STORY = `<div class="story">
-  <style>{\`.story{font-family:Inter,sans-serif;color:#111827;background:#ffffff}
+  <style>{\`.story{font-family:Inter,sans-serif;color:#111827;background:#ffffff;padding:0 48px}
     h1{color:#2563eb} .accent{color:#f59e0b} .muted{color:#6b7280}\`}</style>
   <h1>Revenue climbed sharply this quarter</h1>
   <p>The headline: <Number id={5} prefix="$" /> in new revenue.</p>
