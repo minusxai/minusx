@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { loadConversation, selectConversation, setUserInputResult } from '@/store/chatSlice';
+import { loadConversation, selectConversation, setRemoteSession, setUserInputResult } from '@/store/chatSlice';
 import { parsePiConversation } from '@/lib/conversations-utils';
 import { ConversationsAPI } from '@/lib/data/conversations';
 import { derivePendingToolCalls, isColdReopenResumable } from '@/lib/data/conversation-log';
@@ -106,6 +106,19 @@ export function useConversation(conversationId?: number) {
           },
           setAsActive: false,
         }));
+
+        // Remote Agent Session in progress (this tab may be a refresh / a second tab): re-raise the
+        // flag, which hard-freezes the input and starts the observer stream (banner, live remote
+        // activity, frontend-tool execution). See REMOTE_AGENT_SESSIONS.md §9.4 E6.
+        if (v3detail.conversation.runStatus === 'remote') {
+          dispatch(setRemoteSession({
+            conversationID: conversationId,
+            active: true,
+            ...(v3detail.conversation.meta?.remoteSession?.expiresAt
+              ? { expiresAt: v3detail.conversation.meta.remoteSession.expiresAt as string }
+              : {}),
+          }));
+        }
 
         // Kick the auto-exec listener for any replayed answers: setUserInputResult fires the listener
         // (loadConversation does not), which re-runs ClarifyFrontend with the seeded result → resumes

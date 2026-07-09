@@ -12,6 +12,7 @@ import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-
 import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
+import RemoteSessionBanner from './RemoteSessionBanner';
 import { useAppDispatch, useAppSelector, useAppStore } from '@/store/hooks';
 import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setConversationTitle, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
@@ -362,6 +363,9 @@ export default function ChatInterface({
   // Check if this conversation has an ongoing agent
   const isAgentRunning = conversation?.executionState === 'WAITING' || conversation?.executionState === 'EXECUTING';
   const isStreaming = conversation?.executionState === 'STREAMING';
+  // Remote Agent Session: an external agent drives this conversation — input is HARD-frozen and a
+  // banner (with Stop) replaces the normal affordances until the session ends.
+  const remoteSessionActive = conversation?.remoteSession?.active === true;
 
   // Check if waiting for user input (any pending tool has userInputs without result)
   const isWaitingForUserInput = useMemo(() => {
@@ -523,6 +527,19 @@ export default function ChatInterface({
     if (conversationID) {
       dispatch(interruptChat({ conversationID }));
     }
+  };
+
+  // Stop a Remote Agent Session: revoke server-side (kills the code + closes dangling calls +
+  // releases to idle), then interrupt locally (aborts the observer stream, whose finalize path
+  // reloads the log and lifts the freeze). Both halves are idempotent.
+  const handleStopRemoteSession = async () => {
+    if (!conversationID || conversationID <= 0) return;
+    try {
+      await fetch(`/api/conversations/${conversationID}/remote-session`, { method: 'DELETE' });
+    } catch (err) {
+      console.warn('[ChatInterface] remote-session stop failed (best-effort):', err);
+    }
+    dispatch(interruptChat({ conversationID }));
   };
 
   const closeContextSizePanel = useCallback(() => {
@@ -858,6 +875,7 @@ export default function ChatInterface({
           conversationTitle={conversationTitle}
           hasMessages={allMessages.length > 0}
           isExplorePage={isExplorePage}
+          agentBusy={isAgentRunning || isStreaming || remoteSessionActive}
           navigate={navigate}
           handleNewChat={handleNewChat}
         />
@@ -1076,7 +1094,18 @@ export default function ChatInterface({
             </Grid>
           )}
 
-          {(isAgentRunning || isStreaming) && (
+          {remoteSessionActive && (
+            <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
+              <GridItem colSpan={colSpan} colStart={colStart}>
+                <RemoteSessionBanner
+                  expiresAt={conversation?.remoteSession?.expiresAt}
+                  onStop={handleStopRemoteSession}
+                />
+              </GridItem>
+            </Grid>
+          )}
+
+          {!remoteSessionActive && (isAgentRunning || isStreaming) && (
             <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
                 gap={2}
                 w="100%"
@@ -1107,6 +1136,7 @@ export default function ChatInterface({
               onSend={stableSendMessage}
               onStop={handleStopAgent}
               isAgentRunning={isAgentRunning || isStreaming}
+              remoteSessionActive={remoteSessionActive}
               allowChatQueue={allowChatQueue}
               isPreparing={isPreparing}
               disabled={isLoading}
