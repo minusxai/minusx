@@ -115,4 +115,23 @@ describe('FileHealthBadge', () => {
     const badge = await screen.findByLabelText(/File health:/);
     expect(badge.getAttribute('aria-label')).toContain('5 of 5');
   });
+
+  // A DRAFT's saved content is the empty template — grading it reads "no live evidence → 0/5"
+  // while a full story is visibly on screen (the agent's staged build). For drafts the badge must
+  // grade the MERGED (staged) content; published files keep the cheap saved-content scoring.
+  it('grades a draft story on its staged content, not the empty saved template', async () => {
+    const store = makeStore();
+    store.dispatch(setFile({ file: {
+      id: 12, name: '', path: '/tutorial/x', type: 'story', draft: true,
+      content: { description: '', story: '', suggestedQuestions: null, colorMode: null, parameterValues: null },
+    } as unknown as DbFile }));
+    // The agent stages a healthy story body (gutter, headline, live embed, tokens).
+    store.dispatch(setEdit({ fileId: 12, edits: {
+      description: 'Orders grew 6.2% month over month.',
+      story: `<style>{\`.s{font-family:Inter;color:#111;background:#fff;padding:0 48px} h1{color:#2563eb} .a{color:#f59e0b}\`}</style><div class="s"><h1>Orders grew 6.2%</h1><Question id={21} height="430px" /></div>`,
+    } }));
+    renderWithProviders(<FileHealthBadge fileId={12} fileType="story" />, { store });
+    const badge = await screen.findByLabelText(/File health:/);
+    expect(badge.getAttribute('aria-label')).not.toContain('0 of 5'); // no bogus "no live evidence" gate
+  });
 });

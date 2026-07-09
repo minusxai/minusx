@@ -86,7 +86,15 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
   // Score the SAVED content, not live edits — so this recomputes on save/load, NOT on every
   // keypress (which re-parsed stories on each stroke and froze the header). The refresh button
   // re-runs against the current unsaved edits on demand.
-  const savedContent = useAppSelector((s) => selectFile(s, fileId)?.content);
+  //
+  // EXCEPTION — drafts: a never-published file's saved content is the EMPTY template, so grading
+  // it reads "no live evidence → 0/5 poor" while the agent's staged build is visibly on screen.
+  // For drafts, grade the MERGED (staged) content instead; a draft's content changes via agent
+  // edits / debounced WYSIWYG syncs, not per keystroke, so the perf concern doesn't apply.
+  const savedContent = useAppSelector((s) => {
+    const f = selectFile(s, fileId);
+    return f?.draft ? selectMergedContent(s, fileId) : f?.content;
+  });
   const store = useAppStore();
   const [override, setOverride] = useState<RubricReport | null>(null); // manual refresh or judge result
   const [llmRan, setLlmRan] = useState(false); // did the LLM visual review run for the shown report?
