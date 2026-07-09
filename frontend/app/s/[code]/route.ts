@@ -65,6 +65,13 @@ Everything you do is rendered in the user's chat sidebar in real time and durabl
 - Session URL (this page — treat it as a secret): \`${sessionUrl}\`
 - Data connections: ${connections.length > 0 ? connections.map((c) => `\`${c.name}\` (${c.dialect})`).join(', ') : '(none configured)'}
 
+## First: confirm the goal with YOUR user
+
+Unless your user already told you what to accomplish in this session, tell them you're connected
+(list the connections and what you can do — query data, read/edit questions, dashboards, stories,
+reports) and ask what they'd like done BEFORE making changes. Read-only orientation calls
+(\`GET .../context\`, \`SearchFiles\`, \`ReadFiles\`, \`SearchDBSchema\`) are fine to run up front.
+
 ## Protocol
 
 Drive the session with plain HTTP. **One tool call at a time** — wait for each result before the next call.
@@ -119,7 +126,8 @@ curl -sS -X POST ${sessionUrl}/tool \\
 
 - Start with \`SearchDBSchema\` to discover tables, then \`ExecuteQuery\` to explore data.
 - \`ReadFiles\` / \`SearchFiles\` read the user's saved questions/dashboards; \`EditFile\` / \`CreateFile\` modify them (these run in the user's browser — expect \`202\` + poll).
-- File contents use MinusX markup — each tool's description below documents its exact args and markup rules. Follow them precisely.
+- File contents use MinusX markup. **Before creating or editing a file type for the first time, call \`LoadSkill\` with that type's guide** — \`{"tool":"LoadSkill","args":{"name":"stories"}}\` (also: \`questions\`, \`dashboards\`, \`visualizations\`, \`reports\`, \`alerts\`, \`notebooks\`). The guide is the source of truth for that type's markup; follow it precisely.
+- To create a NEW story/question/dashboard: \`Navigate\` with \`newFileType\` (creates a draft and opens it in the user's browser), then \`EditFile\` the returned file id. Save/publish happens via \`PublishAll\`, which asks the USER to approve — expect a wait while they review.
 - If you need input from a human, ask YOUR user directly (your own chat/terminal) — there is no in-MinusX prompt channel.
 
 ## Tools

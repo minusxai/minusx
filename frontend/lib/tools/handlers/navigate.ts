@@ -12,10 +12,15 @@ export const navigateHandler: FrontendToolHandler = async (args, context) => {
   const { file_id, path, newFileType } = args;
   const { state, userInputs } = context;
 
-  // Check if user confirmation is required
-//   const askForConfirmation = state?.ui?.askForConfirmation ?? false;
-// All navigation is always confirmed for now since it's a critical action and we don't want accidental navigations.
-  const askForConfirmation = true;
+  // Navigation is always user-confirmed in NORMAL chat (an accidental LLM navigation is cheap to
+  // prevent). Remote Agent Sessions are the exception: the user granted STANDING consent by
+  // minting the session (the banner + Stop button are always visible, and REMOTE_AGENT_SESSIONS.md
+  // §9.4 makes the external agent the sole driver), and agent workflows navigate on every file
+  // hop — per-hop confirms would make the experience unusable.
+  const isRemoteSession = Object.values(state?.chat?.conversations ?? {}).some(
+    (c) => (c as { remoteSession?: { active?: boolean } } | undefined)?.remoteSession?.active,
+  );
+  const askForConfirmation = !isRemoteSession;
 
   if (askForConfirmation) {
     // Check if user already confirmed
