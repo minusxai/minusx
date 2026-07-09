@@ -90,6 +90,19 @@ export function remoteSessionDenial(
   return null;
 }
 
+/**
+ * Nonce-free liveness (for the owner's own status/banner and lazy-release sweeps — NOT for
+ * authorizing bearer requests; that's `remoteSessionDenial`, which also verifies the nonce).
+ */
+export function isRemoteSessionLive(record: RemoteSessionRecord | undefined, now = Date.now()): boolean {
+  return (
+    !!record &&
+    !record.revoked &&
+    now <= Date.parse(record.expiresAt) &&
+    now - Date.parse(record.lastActivityAt) <= record.idleTimeoutMs
+  );
+}
+
 // ── persistence (conversations.meta.remoteSession) ─────────────────────────────
 
 export async function saveRemoteSession(conversationId: number, record: RemoteSessionRecord): Promise<void> {

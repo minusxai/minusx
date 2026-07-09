@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { withAuth } from '@/lib/http/with-auth';
 import { getConversation } from '@/lib/data/conversations.server';
+import { isRemoteSessionLive } from '@/lib/data/remote-sessions.server';
 import {
   mintRemoteSession,
   endRemoteSession,
@@ -81,12 +82,7 @@ export const GET = withAuth(async (
     const record = conversation.meta.remoteSession;
     // Active = status says remote AND the record itself is still live (revoked/expiry checked
     // data-side; the nonce isn't needed to judge liveness for the owner's own banner).
-    const live =
-      conversation.runStatus === 'remote' &&
-      !!record &&
-      !record.revoked &&
-      Date.now() <= Date.parse(record.expiresAt) &&
-      Date.now() - Date.parse(record.lastActivityAt) <= record.idleTimeoutMs;
+    const live = conversation.runStatus === 'remote' && isRemoteSessionLive(record);
     const status: RemoteSessionStatus = live
       ? { active: true, expiresAt: record!.expiresAt, lastActivityAt: record!.lastActivityAt }
       : { active: false };

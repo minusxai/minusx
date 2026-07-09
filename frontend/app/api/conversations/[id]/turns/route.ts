@@ -4,6 +4,7 @@ import { withAuth } from '@/lib/http/with-auth';
 import { getConversation, releaseRunLease, acquireRunLease, appendError, getMaxSeq, resetAutoRetries } from '@/lib/data/conversations.server';
 import { notifyStatus } from '@/lib/chat/conversation-stream.server';
 import { runConversationTurn, INSTANCE_ID } from '@/lib/chat/conversation-turn.server';
+import { appendRemoteToolCompletions } from '@/lib/chat/remote-session-engine.server';
 import { getModules } from '@/lib/modules/registry';
 import type { ChatRequest } from '@/lib/chat/chat-types';
 import { boundContextAppState } from '@/lib/chat/compress-augmented';
@@ -47,6 +48,19 @@ export const POST = withAuth(async (
     if (!userMessage && !completedToolCalls && !autoRetry) {
       return ApiErrors.validationError('turn requires userMessage, completedToolCalls, or autoRetry');
     }
+
+    // Remote Agent Session holds this conversation (mutual exclusion, REMOTE_AGENT_SESSIONS.md §9.4):
+    // user messages / retries are refused — the external agent is the only decider. The ONE allowed
+    // write is the browser posting frontend-tool completions, which is APPEND-ONLY (short-circuit):
+    // toolResult rows + NOTIFY wake the remote endpoint's waiter; the orchestrator/LLM never runs.
+    if (conversation.runStatus === 'remote') {
+      if (completedToolCalls && completedToolCalls.length > 0 && !userMessage && !autoRetry) {
+        const result = await appendRemoteToolCompletions(conversationId, completedToolCalls);
+        return successResponse({ ok: true, remote: true, ...result });
+      }
+      return ApiErrors.conflict('a remote agent session is active on this conversation — stop it to chat');
+    }
+
     // A fresh user turn / auto-retry can't start while one is already running (idempotency for retried POSTs).
     if ((userMessage || autoRetry) && conversation.runStatus === 'running') {
       return successResponse({ ok: true, alreadyRunning: true });
