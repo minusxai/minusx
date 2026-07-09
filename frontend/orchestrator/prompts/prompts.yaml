@@ -1409,9 +1409,11 @@ prompts:
         - Do NOT give the artifact the benefit of the doubt. "Looks roughly fine" / "acceptable" / "mostly OK" is a FAIL, not a pass. Only pass on clear positive evidence.
         - Set "applicable": false ONLY when the check truly cannot apply (e.g. a visual check with no screenshot) — never as a way to avoid failing.
 
+        Severity discipline: each check is tagged (error) or (warn). An (error) check GATES the file's score to ZERO, so it must be decided objectively: FAIL an (error) check ONLY on an unambiguous defect you can point at — name the exact element, label, region, or claim in the reason. A matter of taste, degree, or uncertainty is NEVER an (error) failure; express taste-level problems by failing the relevant (warn) check instead. The strict fail-hard bias above applies in full to (warn) checks.
+
         Before you answer, scan the screenshot specifically for these common failures: large empty/dead space inside cards or embeds (e.g. a single number stranded in a tall box); numbers or text that are small, faint, or low-contrast; charts squeezed too narrow, cramped, overplotted, or with overlapping/illegible labels; misaligned, lopsided, or awkwardly tall/narrow tiles; a chart whose last data point craters or the series looks partial. a chart where the text is similar color as background and is impossible to read. Every one of these you can see MUST fail its corresponding check.
 
-        Checks (id [category]: PASS condition):
+        Checks (id [category, severity]: PASS condition):
         {checklist}
 
         Return ONLY a JSON object, no prose, of this exact shape:
