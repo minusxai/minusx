@@ -51,7 +51,9 @@ export class CheckFileHealth extends MXTool<typeof CheckFileHealthParams, Analys
       'Score the health of a question, dashboard, or story file and return actionable findings '
       + '(0–5 score + grade across correctness/clarity/aesthetics, each finding with a concrete fix; '
       + 'any `error` finding gates the score to 0 — ALWAYS fix errors, try to fix warnings). '
-      + 'Set llmJudge=true to also run an LLM review of visual quality (uses the file\'s rendered screenshot when available).',
+      + 'Set llmJudge=true to also run an LLM review of visual quality (uses the file\'s rendered screenshot when available). '
+      + 'NOTE: this evaluates the last SAVED version of the file — unsaved draft edits are NOT reflected '
+      + '(a fresh draft scores 0/5). To grade in-progress draft edits, use EditFile\'s built-in review instead.',
     parameters: CheckFileHealthParams,
   };
 

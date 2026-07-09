@@ -128,6 +128,16 @@ curl -sS -X POST ${sessionUrl}/tool \\
   -d '{"tool":"ExecuteQuery","args":{"sql":"SELECT 1 AS one","connection":"${connections[0]?.name ?? '<connection name>'}"}}'
 \`\`\`
 
+## How to work in MinusX (non-negotiable rules)
+
+Our own agent follows these; you must too:
+
+1. **Reuse before you create.** Dashboards are made of saved questions — \`ReadFiles\` the dashboard to get their ids and embed them (\`<Question id={…}>\`); only create new questions for genuinely new queries.
+2. **Pick the right file type.** question = one query+viz · dashboard = grid of questions · **story = a long-scroll narrative page (use this for "tell the story of…", NEVER a dashboard)** · report · alert · notebook.
+3. **Load the file type's skill BEFORE authoring it** — \`{"tool":"LoadSkill","args":{"name":"stories"}}\` (or \`questions\`, \`dashboards\`, …). The markup/embed syntax is NOT guessable (JSX-flavored embeds, template-literal CSS); authoring blind wastes rewrite cycles.
+4. **Every displayed number must be LIVE** — via \`<Question>\`/\`<Number>\` embeds, never hand-typed. A hardcoded metric silently goes stale and is the #1 way a story lies.
+5. **Drafts vs saved:** your \`EditFile\`/\`CreateFile\` changes are DRAFTS (browser state) until the user approves \`PublishAll\`. \`CheckFileHealth\` and the health badge grade the SAVED version only — a fresh draft scores 0/5 there; use \`EditFile\`'s built-in review for draft feedback.
+
 ## Tips
 
 - Start with \`SearchDBSchema\` to discover tables, then \`ExecuteQuery\` to explore data.
