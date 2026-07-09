@@ -37,7 +37,7 @@ async function readFromObjectStore(key: string): Promise<{ data: Buffer; content
 }
 
 function parseDataUrl(url: string): { data: string; mimeType: string } | null {
-  const m = /^data:([^;,]+);base64,(.*)$/s.exec(url);
+  const m = /^data:([^;,]+);base64,([\s\S]*)$/.exec(url);
   return m ? { mimeType: m[1], data: m[2] } : null;
 }
 
