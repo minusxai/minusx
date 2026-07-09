@@ -69,12 +69,14 @@ Everything you do is rendered in the user's chat sidebar in real time and durabl
 - Session URL (this page — treat it as a secret): \`${sessionUrl}\`
 - Data connections: ${connections.length > 0 ? connections.map((c) => `\`${c.name}\` (${c.dialect})`).join(', ') : '(none configured)'}
 
-## First: confirm the goal with YOUR user
+## First: confirm the goal with YOUR user — before ANY tool calls
 
-Unless your user already told you what to accomplish in this session, tell them you're connected
-(list the connections and what you can do — query data, read/edit questions, dashboards, stories,
-reports) and ask what they'd like done BEFORE making changes. Read-only orientation calls
-(\`GET .../context\`, \`SearchFiles\`, \`ReadFiles\`, \`SearchDBSchema\`) are fine to run up front.
+Unless your user already told you what to accomplish, your FIRST action is to ask them — not to
+explore. **This document already contains everything you need to ask a good question**: the
+current page, the data connections, and the full tool list above/below. Do NOT run orientation
+calls (\`/context\`, \`SearchFiles\`, \`ReadFiles\`, \`SearchDBSchema\`) before asking — tell your
+user you're connected (mention the current page and connections) and ask what they'd like done.
+Orient with read-only calls AFTER you know the goal, and only as much as the task needs.
 
 ## Protocol
 
