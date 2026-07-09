@@ -205,6 +205,25 @@ vi.mock('@/lib/navigation/use-navigation', () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// PointerEvent polyfill — jsdom doesn't implement it, but @zag-js (Chakra
+// checkbox/press interactions) constructs one on blur. MouseEvent carries all
+// the fields zag reads.
+// ---------------------------------------------------------------------------
+if (typeof window !== 'undefined' && typeof window.PointerEvent === 'undefined') {
+  class PointerEventPolyfill extends MouseEvent {
+    pointerId: number;
+    pointerType: string;
+    constructor(type: string, params: PointerEventInit = {}) {
+      super(type, params);
+      this.pointerId = params.pointerId ?? 0;
+      this.pointerType = params.pointerType ?? '';
+    }
+  }
+  (window as any).PointerEvent = PointerEventPolyfill;
+  (global as any).PointerEvent = PointerEventPolyfill;
+}
+
+// ---------------------------------------------------------------------------
 // ResizeObserver polyfill (react-grid-layout uses it)
 // ---------------------------------------------------------------------------
 global.ResizeObserver = vi.fn().mockImplementation(function (this: any) {

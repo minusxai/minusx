@@ -14,10 +14,19 @@ import {
   LuX,
   LuLink,
   LuCheck,
+  LuSparkles,
 } from 'react-icons/lu';
 import { CsvFileInfo } from '@/lib/types';
-import { importGoogleSheets } from '@/lib/connections/client/google-sheets';
+import {
+  importGoogleSheets,
+  analyzeGoogleSheet,
+  reviseGoogleSheetTransforms,
+  confirmGoogleSheetImport,
+  type SheetAnalysisResult,
+} from '@/lib/connections/client/google-sheets';
+import type { SheetTransform } from '@/lib/sheets-import/types';
 import { validateIdentifier } from '@/lib/csv-utils';
+import SheetImportReview, { type SheetImportProposal } from './SheetImportReview';
 import type { BaseConfigProps } from './types';
 import type { ActivePanel } from './StaticConnectionConfig';
 
@@ -54,6 +63,95 @@ export function SheetsAddPanel({
   setCollapsedSchemas,
 }: SheetsAddPanelProps) {
   const [importStage, setImportStage] = useState<string>('');
+
+  // Agentic import: the agent inspects the raw sheet and proposes transforms; the user
+  // reviews (redact / feedback / confirm) before anything lands on the connection.
+  type AgentPhase = 'idle' | 'analyzing' | 'review' | 'revising' | 'confirming';
+  const [agentPhase, setAgentPhase] = useState<AgentPhase>('idle');
+  const [analysis, setAnalysis] = useState<SheetAnalysisResult | null>(null);
+  const [proposals, setProposals] = useState<SheetImportProposal[]>([]);
+  const [dropped, setDropped] = useState<string[]>([]);
+
+  const firstSheet = pendingSheets.find((s) => s.url.trim());
+  const datasetSchema = pendingSheets[0]?.schema || 'public';
+
+  // The dataset name field groups the imported tables — it overrides the agent's default schema.
+  const withDatasetSchema = (transforms: SheetTransform[]): SheetTransform[] =>
+    transforms.map((t) => ({ ...t, schema_name: datasetSchema }));
+
+  const toProposals = (result: SheetAnalysisResult, includedByTable?: Map<string, boolean>): SheetImportProposal[] =>
+    withDatasetSchema(result.transforms).map((t) => ({
+      transform: t,
+      preview: result.previews[t.output_table],
+      included: includedByTable?.get(t.output_table) ?? true,
+    }));
+
+  const handleAgentAnalyze = async () => {
+    if (!firstSheet) { onError('Please enter a Google Sheets URL'); return; }
+    if (!firstSheet.url.includes('docs.google.com/spreadsheets')) { onError(`Invalid URL: ${firstSheet.url}`); return; }
+    const schemaErr = pendingSheets[0]?.schema ? validateIdentifier(pendingSheets[0].schema) : null;
+    if (schemaErr) { onError(`Schema "${pendingSheets[0].schema}": ${schemaErr}`); return; }
+
+    setAgentPhase('analyzing');
+    const result = await analyzeGoogleSheet('static', firstSheet.url);
+    if (!result.success) { onError(result.message); setAgentPhase('idle'); return; }
+    setAnalysis(result.data);
+    setProposals(toProposals(result.data));
+    setDropped(result.data.dropped);
+    setAgentPhase('review');
+  };
+
+  const handleAgentToggle = (outputTable: string) => {
+    setProposals((prev) => prev.map((p) =>
+      p.transform.output_table === outputTable ? { ...p, included: !p.included } : p,
+    ));
+  };
+
+  const handleAgentRevise = async (feedback: string) => {
+    if (!analysis || !firstSheet) return;
+    setAgentPhase('revising');
+    const result = await reviseGoogleSheetTransforms(
+      'static', analysis.raw_files, proposals.map((p) => p.transform), feedback,
+    );
+    if (!result.success) { onError(result.message); setAgentPhase('review'); return; }
+    const includedByTable = new Map(proposals.map((p) => [p.transform.output_table, p.included]));
+    setProposals(toProposals({ ...analysis, ...result.data }, includedByTable));
+    setDropped(result.data.dropped);
+    setAgentPhase('review');
+  };
+
+  const handleAgentConfirm = async () => {
+    if (!analysis || !firstSheet) return;
+    const accepted = proposals.filter((p) => p.included).map((p) => p.transform);
+    if (accepted.length === 0) return;
+    setAgentPhase('confirming');
+    const result = await confirmGoogleSheetImport('static', firstSheet.url, analysis.raw_files, accepted);
+    if (!result.success) { onError(result.message); setAgentPhase('review'); return; }
+
+    onChange({ files: [...result.data.files, ...existingFiles] });
+    setImportProgress('done');
+    setAnalysis(null);
+    setProposals([]);
+    setDropped([]);
+    setAgentPhase('idle');
+    setPendingSheets([{ url: '', schema: '', tableName: '' }]);
+    setActivePanel('csv-upload');
+    setTablesOpen(true);
+    // Collapse all schemas except the newly imported one (same behavior as the plain import).
+    const importedSchemas = new Set(result.data.files.map((f) => f.schema_name));
+    const allSchemas = new Set(existingFiles.map((f) => f.schema_name));
+    importedSchemas.forEach((s) => allSchemas.delete(s));
+    setCollapsedSchemas(allSchemas);
+  };
+
+  const handleAgentCancel = () => {
+    setAnalysis(null);
+    setProposals([]);
+    setDropped([]);
+    setAgentPhase('idle');
+  };
+
+  const agentReviewing = agentPhase === 'review' || agentPhase === 'revising' || agentPhase === 'confirming';
 
   // ── Google Sheets add handler ─────────────────────────────────────────────
 
@@ -116,6 +214,23 @@ export function SheetsAddPanel({
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (!isActive) return null;
+
+  if (agentReviewing) {
+    return (
+      <Box p={3}>
+        <SheetImportReview
+          proposals={proposals}
+          dropped={dropped}
+          revising={agentPhase === 'revising'}
+          confirming={agentPhase === 'confirming'}
+          onToggle={handleAgentToggle}
+          onRevise={handleAgentRevise}
+          onConfirm={handleAgentConfirm}
+          onCancel={handleAgentCancel}
+        />
+      </Box>
+    );
+  }
 
   return (
     <Box p={3}>
@@ -214,17 +329,36 @@ export function SheetsAddPanel({
           Sheets must be shared as &quot;Anyone with the link can view&quot;. Each tab becomes a table.
         </Text>
 
-        <Button
-          onClick={handleSheetImport}
-          loading={importProgress === 'importing'}
-          disabled={pendingSheets.every((s) => !s.url.trim()) || !pendingSheets[0]?.schema}
-          size="sm"
-          bg="accent.teal"
-          color="white"
-          aria-label="Import sheets"
-        >
-          Import
-        </Button>
+        <HStack gap={2}>
+          <Button
+            onClick={handleAgentAnalyze}
+            loading={agentPhase === 'analyzing'}
+            disabled={pendingSheets.every((s) => !s.url.trim()) || importProgress === 'importing'}
+            size="sm"
+            bg="accent.teal"
+            color="white"
+            flex={1}
+            aria-label="Import with agent"
+          >
+            <LuSparkles size={14} /> Import with agent
+          </Button>
+          <Button
+            onClick={handleSheetImport}
+            loading={importProgress === 'importing'}
+            disabled={pendingSheets.every((s) => !s.url.trim()) || !pendingSheets[0]?.schema || agentPhase === 'analyzing'}
+            size="sm"
+            variant="subtle"
+            flex={1}
+            aria-label="Import sheets"
+          >
+            Import tabs as-is
+          </Button>
+        </HStack>
+        {agentPhase === 'analyzing' && (
+          <Text fontSize="xs" color="accent.teal">
+            The agent is reading the sheet, finding tables, and writing transforms — this can take a minute…
+          </Text>
+        )}
         {importProgress === 'importing' && importStage && (
           <Text fontSize="xs" color="accent.teal">{importStage}</Text>
         )}
