@@ -123,6 +123,21 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     root.classList.toggle('dark', colorMode === 'dark');
     root.classList.toggle('light', colorMode !== 'dark');
     doc.body.style.margin = '0';
+    if (height === undefined) {
+      // Content-driven height: the iframe is sized to its content (syncHeight below), so its document
+      // must never scroll on its own. body.scrollHeight is an integer while the true content height
+      // can be fractional — the sync can leave the iframe ~0.5px short, which Chrome treats as
+      // scrollable: a second scrollbar next to the page's, and wheel scrolling jerks through the
+      // half-pixel inner range before chaining to the page scroller. Pin vertical overflow shut.
+      doc.documentElement.style.overflowY = 'hidden';
+      doc.body.style.overflowY = 'hidden';
+      // The app's own body{min-height:100dvh} is mirrored in (mirrorAppStyles), and inside the
+      // iframe 100dvh = the iframe's CURRENT height — a ratchet: once the iframe grows (side-chat
+      // open narrows the pane, text wraps taller), body.scrollHeight can never report smaller and
+      // the iframe never shrinks back, leaving a blank void below the story. Pin it off.
+      doc.documentElement.style.minHeight = '0';
+      doc.body.style.minHeight = '0';
+    }
     // Design-system stylesheet (server-compiled Tailwind) — into <head> via textContent (DOM
     // insertion, not doc.write, so no escaping concerns), after the app-styles mirror. Body
     // <style> blocks come later in document order and win ties; the WYSIWYG serializer reads
@@ -227,6 +242,10 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     if (height === undefined && typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(syncHeight);
       ro.observe(doc.body);
+      // The body lives in another document, where ResizeObserver delivery is not guaranteed.
+      // Observing the iframe element itself (same-document) makes pane-width changes (side-chat
+      // toggle) — which rewrap the fluid story to a different content height — always resync.
+      ro.observe(iframe);
     }
 
     // Re-mirror app styles whenever the iframe tree mutates — emotion injects each tile's styles lazily
