@@ -13,6 +13,7 @@
     "knowledge-base",
     "proactive",
     "integrations",
+    "remote-agent-sessions",
     "---Operations---",
     "self-hosting",
     "---Internals---",

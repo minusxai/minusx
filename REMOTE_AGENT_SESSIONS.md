@@ -1,6 +1,6 @@
 # Remote Agent Sessions ("Copy to Agent") — Architecture & Implementation Plan
 
-**Status:** Draft for review · **Scope:** design + phased implementation plan
+**Status:** ✅ Implemented (Phases 1–4), browser-verified end-to-end · PR #583 · **Scope:** design + phased implementation plan (kept in sync with the implementation)
 **Feature:** A "Copy to Agent" button in the chat sidebar copies a single line — `Fetch https://<host>/s/<code>` — that the user pastes into any external agent (Claude Code, Codex, a chat, …). The external agent fetches that URL, receives a self-describing skill document, and can then drive the user's MinusX session over plain HTTP: executing the same tools our own agent uses, editing files, running queries, and receiving results (including chart images). While the remote session is active, the side chat input is frozen and every remote action renders live in the side chat. The user can stop the session at any time and resume normal chat.
 
 ---
@@ -349,13 +349,13 @@ Detailed view renders remote tool calls with zero changes (`SimpleChatMessage`/`
 - [x] **Poll force-closed pending user confirmations** (the original B10 design was wrong): `Navigate` legitimately sat minutes awaiting the user's Allow; the age-based 410 closed it as `browser_unreachable` and the real completion got deduped away. Fix: **polling never force-closes** — 202 carries an advisory `browserMaybeUnreachable: true` past the browser timeout; the stale call is closed (isError, "superseded") only when the agent issues its NEXT tool call, or at session end. §4.3 contract updated accordingly (410 removed).
 - [x] **Stop stamped a spurious "Interrupted by user" error**: Stop now relies on the server-side DELETE (revoke → notify idle → observer finalize), and the remote finalize clears stale client-side error banners (durable errors[] remain the truth).
 
-### Phase 4 — Rich outputs, E2E, polish
-- [ ] `RenderChartImage` frontend tool (TypeBox schema in `agents/web-analyst/web-tools.ts`, handler on `renderFileChartImageBlocks`, register in `REGISTRABLES` + handler registry + `tool-config.ts` display entry) — red tests first per the tool-addition checklist.
-- [ ] Playwright E2E spec (§13.1) added to `test/e2e/` and green in CI.
-- [ ] Grouped-view "Remote agent" turn header; toast/UX polish; skill-doc iteration based on real agent transcripts.
-- [ ] User docs page under `docs/content/docs/`.
+### Phase 4 — Rich outputs, E2E, polish ✅
+- [x] **Rich outputs — resolved by existing tools, no new tool needed**: `ExecuteQuery` already accepts `vizSettings` and renders a chart JPEG server-side; the frontend `ReadFiles`/`EditFile` handlers already attach live chart images. All image blocks flow through `serializeRemoteContent` (§7): public URL on S3 deployments, base64 inline on local ones. A separate `RenderChartImage` tool would duplicate `ReadFiles`' live-state rendering — dropped deliberately.
+- [x] **Playwright E2E spec** `test/e2e/remote-agent-session.spec.ts` — green (~12 s): faux turn → mint via real click (mint response captured; clipboard equals `copyText`) → banner + contenteditable-off freeze → skill doc assertions → server tool 200 → **frontend `EditFile` round-trips through the real browser** (observer → auto-exec → completions POST → waiter) → user-message turn 409 while remote → Stop unfreezes with no error artifact → dead code 410/404 → normal faux turn afterwards (log invariant, end-to-end). The spec itself plays the external agent — no LLM anywhere in the remote loop.
+- [x] Turn-boundary rendering: the session root's "Remote agent session" bubble + tools timeline render via the existing components (verified in the real browser); no extra grouped-view work needed.
+- [x] User docs: `docs/content/docs/remote-agent-sessions.mdx` (+ nav entry).
 
-### Phase 5 (optional / later) — MCP adapter
+### Phase 5 (optional / later) — MCP adapter (not started, deliberately)
 - [ ] `app/s/[code]/mcp/route.ts`: streamable-HTTP MCP server over the same toolset (thin adapter over Phase-2 internals; `/api/mcp` public-prefix precedent exists). Ship only after the HTTP protocol stabilizes — the skill doc makes HTTP-only agent-friendly already.
 
 ---
