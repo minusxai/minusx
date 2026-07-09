@@ -146,6 +146,50 @@ describe('ChatHeaderBar: Copy to Agent', () => {
     const btn = screen.getByLabelText('Copy to agent') as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
   });
+
+  it('EMPTY chat (no conversation yet): creates a conversation first, then mints on it', async () => {
+    const copyText = 'Fetch http://localhost:3000/s/zz-fresh and follow its instructions to operate my MinusX session.';
+    const calls: string[] = [];
+    global.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(url);
+      calls.push(`${init?.method ?? 'GET'} ${u}`);
+      if (u.includes('/remote-session')) {
+        return { ok: true, json: async () => ({ success: true, data: { url: 'http://localhost:3000/s/zz-fresh', code: 'zz-fresh', expiresAt: new Date().toISOString(), copyText } }) } as Response;
+      }
+      // conversation pre-create
+      return { ok: true, json: async () => ({ id: 4242 }) } as Response;
+    }) as unknown as typeof fetch;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    const store = storeModule.makeStore();
+    renderWithProviders(
+      <ChatHeaderBar
+        container="sidebar"
+        conversationID={undefined}
+        providedConversationId={undefined}
+        hasConversation={false}
+        isConversationActive={false}
+        conversationTitle={null}
+        hasMessages={false}
+        isExplorePage={false}
+        navigate={vi.fn()}
+        handleNewChat={vi.fn()}
+      />,
+      { store },
+    );
+    await userEvent.click(screen.getByLabelText('Copy to agent'));
+
+    await waitFor(() => {
+      expect(calls.some((c) => c.startsWith('POST') && c.includes('/api/conversations') && !c.includes('remote-session'))).toBe(true);
+      expect(calls.some((c) => c.startsWith('POST') && c.includes('/api/conversations/4242/remote-session'))).toBe(true);
+      expect(writeText).toHaveBeenCalledWith(copyText);
+      // The new conversation exists in Redux, is active, and carries the remote flag (freeze).
+      const conv = (store.getState() as any).chat.conversations[4242];
+      expect(conv?.active).toBe(true);
+      expect(conv?.remoteSession?.active).toBe(true);
+    });
+  });
 });
 
 

@@ -866,7 +866,9 @@ export default function ChatInterface({
   return (
     <VStack gap={0} align="stretch" height="100%" overflow="hidden">
       {/* Action Buttons Bar (only show when there are messages, hidden in readOnly) */}
-      {!readOnly && allMessages.length > 0 && (
+      {/* Always shown (not gated on messages): an EMPTY side chat must still offer Copy-to-Agent
+          so a user can hand a fresh session to their external agent without a filler message. */}
+      {!readOnly && (
         <ChatHeaderBar
           container={container}
           conversationID={conversationID}

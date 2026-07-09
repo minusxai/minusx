@@ -6,7 +6,7 @@ import { LuPlus, LuChevronDown, LuRefreshCw, LuPin, LuShare2, LuExpand, LuPencil
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
 import { useAppDispatch } from '@/store/hooks';
-import { setActiveConversation, setConversationTitle, setRemoteSession } from '@/store/chatSlice';
+import { setActiveConversation, setConversationTitle, setRemoteSession, createConversation } from '@/store/chatSlice';
 import type { RemoteSessionMintResult } from '@/lib/data/remote-sessions.types';
 import { ConversationsAPI } from '@/lib/data/conversations';
 import { API_BASE_URL, patchApiUrl } from '@/store/api-url';
@@ -69,12 +69,25 @@ export default function ChatHeaderBar({
   // Copy to Agent: mint a Remote Agent Session for this conversation and copy the one-liner an
   // external agent (Claude Code, Codex, ...) fetches to drive this chat. Minting freezes the input
   // (the server flips runStatus -> 'remote'; setRemoteSession raises the local flag + observer).
+  // An EMPTY chat has no conversation row yet — create one first (same pattern as the send path's
+  // lazy pre-create), so "open side chat -> hand straight to my agent" works without a filler message.
   const handleCopyToAgent = useCallback(async () => {
-    if (!conversationID || conversationID <= 0) return;
     try {
+      let targetId = conversationID && conversationID > 0 ? conversationID : undefined;
+      if (!targetId) {
+        const initRes = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const { id: newId } = await initRes.json();
+        if (!newId) throw new Error('Failed to create a conversation for the session');
+        targetId = newId as number;
+        dispatch(createConversation({ conversationID: targetId, agent: 'AnalystAgent', version: 3 }));
+      }
       // patchApiUrl carries mode/as_user — a tutorial-mode session must mint AS tutorial, or the
       // owner/mode check correctly 403s (browser-verified failure).
-      const res = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${conversationID}/remote-session`), { method: 'POST' });
+      const res = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${targetId}/remote-session`), { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         const message = (body as { error?: { message?: string } })?.error?.message
@@ -84,7 +97,7 @@ export default function ChatHeaderBar({
       }
       const mint = (body as { data: RemoteSessionMintResult }).data;
       await navigator.clipboard.writeText(mint.copyText);
-      dispatch(setRemoteSession({ conversationID, active: true, expiresAt: mint.expiresAt }));
+      dispatch(setRemoteSession({ conversationID: targetId, active: true, expiresAt: mint.expiresAt }));
       toaster.create({
         title: 'Copied — paste it into your agent',
         description: 'Anyone with this link can operate this chat until it expires or you stop it.',
@@ -240,7 +253,7 @@ export default function ChatHeaderBar({
         <HStack gap={2}>
           {setAsActiveButton}
           {newChatButton}
-          {conversationID != null && conversationID > 0 && (
+          {(
             <Tooltip content="Copy to agent — let Claude Code (or any agent) drive this chat" positioning={{ placement: 'bottom' }}>
               <Button
                 aria-label="Copy to agent"
