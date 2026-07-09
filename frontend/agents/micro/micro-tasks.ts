@@ -41,6 +41,7 @@ export const MICRO_TASKS: Record<string, MicroTaskConfig> = {
   description: task('description'),
   feed_summary: task('feed_summary'),
   rubric_llm: task('rubric_llm', 'analyst'),
+  sheets_import: task('sheets_import', 'analyst'),
 };
 
 export function getMicroTask(key: string): MicroTaskConfig {

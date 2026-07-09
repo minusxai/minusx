@@ -86,6 +86,19 @@ async function withRawGridDb<T>(
   }
 }
 
+/** Run an arbitrary read-only SQL over the mounted raw grids (agent sampling / inspection). */
+export async function queryRawGrids(
+  rawFiles: RawGridFile[],
+  sql: string,
+  mode = 'org',
+  connectionName = 'static',
+): Promise<Array<Record<string, unknown>>> {
+  return withRawGridDb(mode, connectionName, rawFiles, async (conn) => {
+    const res = await conn.run(sql);
+    return await res.getRowObjectsJS() as Array<Record<string, unknown>>;
+  });
+}
+
 /**
  * Run one transform bounded: schema (DESCRIBE), first `limit` rows, and the full row count.
  * SQL errors are thrown as-is — they are the input to the agent's self-repair loop.

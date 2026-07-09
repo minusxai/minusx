@@ -14,11 +14,8 @@ import * as XLSX from 'xlsx';
 import { DuckDBInstance } from '@duckdb/node-api';
 
 const TEMP_STORE = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { mkdtempSync } = require('fs') as typeof import('fs');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { tmpdir } = require('os') as typeof import('os');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { join: j } = require('path') as typeof import('path');
   return mkdtempSync(j(tmpdir(), 'mx-sheets-import-'));
 });
