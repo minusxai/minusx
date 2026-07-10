@@ -16,9 +16,9 @@ import { downloadSpreadsheetAsXlsx, parseSpreadsheetId, deleteS3File } from '@/l
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { CsvFileInfo } from '@/lib/types/connections';
 import { extractRawGrids } from './raw-grid';
-import { materializeTransforms } from './executor';
+import { materializeTransforms, previewTransform } from './executor';
 import { authorSheetTransforms, type AuthoredTransforms } from './analyst.server';
-import type { RawGridFile, SheetTransform } from './types';
+import type { RawGridFile, SheetTransform, TransformPreview } from './types';
 
 export interface AnalyzeResult extends AuthoredTransforms {
   spreadsheet_id: string;
@@ -60,6 +60,55 @@ export async function analyzeSpreadsheet(params: {
     await Promise.allSettled(createdKeys.map(key => deleteS3File(key)));
     throw err;
   }
+}
+
+/**
+ * Post-import adjustment, step 1: re-download the live sheet, re-extract raw grids, and preview
+ * the STORED transforms against the fresh data — no LLM call. Transforms the live sheet broke
+ * go to `dropped` (with the error) so the user sees exactly what no longer runs; the rest pass
+ * through untouched, ready for the same revise/confirm loop as a first import.
+ */
+export async function prepareSheetAdjustment(params: {
+  spreadsheetUrl: string;
+  transforms: SheetTransform[];
+  connectionName: string;
+  user: EffectiveUser;
+}): Promise<AnalyzeResult> {
+  const { spreadsheetUrl, transforms, connectionName, user } = params;
+  const mode = user.mode;
+  const spreadsheetId = parseSpreadsheetId(spreadsheetUrl);
+  const xlsx = await downloadSpreadsheetAsXlsx(spreadsheetId);
+
+  const createdKeys: string[] = [];
+  try {
+    const rawFiles = await extractRawGrids(xlsx, connectionName, mode, createdKeys);
+    const kept: SheetTransform[] = [];
+    const previews: Record<string, TransformPreview> = {};
+    const dropped: string[] = [];
+    for (const t of transforms) {
+      try {
+        previews[t.output_table] = await previewTransform(rawFiles, t, 50, mode, connectionName);
+        kept.push(t);
+      } catch (err) {
+        dropped.push(`- ${t.output_table}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    return { spreadsheet_id: spreadsheetId, raw_files: rawFiles, transforms: kept, previews, dropped };
+  } catch (err) {
+    await Promise.allSettled(createdKeys.map(key => deleteS3File(key)));
+    throw err;
+  }
+}
+
+/** Delete transient raw grids (wizard cancelled). Prefix-guarded like every client round-trip. */
+export async function discardRawGrids(params: {
+  rawFiles: RawGridFile[];
+  connectionName: string;
+  user: EffectiveUser;
+}): Promise<void> {
+  const { rawFiles, connectionName, user } = params;
+  assertRawKeysInPrefix(rawFiles, user.mode, connectionName);
+  await Promise.allSettled(rawFiles.map(f => deleteS3File(f.s3_key)));
 }
 
 /** Re-run the agent over the SAME raw grids with the user's feedback on the current transforms. */

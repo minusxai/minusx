@@ -166,3 +166,27 @@ export function confirmGoogleSheetImport(
     transforms,
   }, 'Import failed — please try again');
 }
+
+/**
+ * Post-import adjustment, step 1: re-extract raw grids from the LIVE sheet and preview the
+ * STORED transforms against them (no LLM). Feed the result into the same revise/confirm loop.
+ */
+export function prepareGoogleSheetAdjustment(
+  connectionName: string,
+  spreadsheetUrl: string,
+  transforms: SheetTransform[],
+) {
+  return postJson<SheetAnalysisResult>('/api/google-sheets/adjust', {
+    connection_name: connectionName,
+    spreadsheet_url: spreadsheetUrl,
+    transforms,
+  }, 'Could not load the sheet for adjustment — please try again');
+}
+
+/** Delete transient raw grids when an import/adjust wizard is cancelled (best-effort). */
+export function discardGoogleSheetRawGrids(connectionName: string, rawFiles: RawGridFile[]) {
+  return postJson<Record<string, never>>('/api/google-sheets/discard', {
+    connection_name: connectionName,
+    raw_files: rawFiles,
+  }, 'Cleanup failed');
+}

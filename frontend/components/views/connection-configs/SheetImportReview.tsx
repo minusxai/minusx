@@ -24,6 +24,8 @@ export interface SheetImportReviewProps {
   dropped: string[];
   revising: boolean;
   confirming: boolean;
+  /** Verb on the confirm button — "Import" for first imports (default), "Apply" for adjustments. */
+  confirmLabel?: string;
   onToggle: (outputTable: string) => void;
   onRevise: (feedback: string) => void;
   onConfirm: () => void;
@@ -113,7 +115,7 @@ function ProposalCard({ proposal, onToggle }: { proposal: SheetImportProposal; o
 }
 
 export default function SheetImportReview({
-  proposals, dropped, revising, confirming, onToggle, onRevise, onConfirm, onCancel,
+  proposals, dropped, revising, confirming, confirmLabel = 'Import', onToggle, onRevise, onConfirm, onCancel,
 }: SheetImportReviewProps) {
   const [feedback, setFeedback] = useState('');
   const includedCount = proposals.filter(p => p.included).length;
@@ -164,14 +166,14 @@ export default function SheetImportReview({
 
       <HStack gap={2}>
         <Button
-          aria-label={`Import ${includedCount} tables`}
+          aria-label={`${confirmLabel} ${includedCount} tables`}
           size="sm"
           bg="accent.teal"
           disabled={includedCount === 0 || revising || confirming}
           loading={confirming}
           onClick={onConfirm}
         >
-          <LuCheck size={14} /> Import {includedCount} table{includedCount === 1 ? '' : 's'}
+          <LuCheck size={14} /> {confirmLabel} {includedCount} table{includedCount === 1 ? '' : 's'}
         </Button>
         <Button aria-label="Cancel import review" size="sm" variant="ghost" disabled={confirming} onClick={onCancel}>
           Cancel

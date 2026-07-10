@@ -40,6 +40,7 @@ import {
   LuChevronRight,
   LuCircleAlert,
   LuDatabase,
+  LuSparkles,
 } from 'react-icons/lu';
 import { CsvFileInfo, JobSchedule } from '@/lib/types';
 import { reimportGoogleSheets } from '@/lib/connections/client/google-sheets';
@@ -50,6 +51,7 @@ import { SheetsAutoSyncSection } from './SheetsAutoSyncSection';
 import { FileRow } from './FileRow';
 import { CsvUploadPanel } from './CsvUploadPanel';
 import { SheetsAddPanel } from './SheetsAddPanel';
+import SheetAdjustDialog from './SheetAdjustDialog';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -192,6 +194,8 @@ export default function StaticConnectionConfig({
 
   // ── Per-item loading states ───────────────────────────────────────────────
   const [reimportingId, setReimportingId] = useState<string | null>(null);
+  // Spreadsheet group currently open in the "Adjust with agent" dialog (agentic groups only).
+  const [adjustingId, setAdjustingId] = useState<string | null>(null);
 
   // ── Existing tables open/close ─────────────────────────────────────────────
   const [tablesOpen, setTablesOpen] = useState(false);
@@ -576,6 +580,22 @@ export default function StaticConnectionConfig({
                                         </Text>
                                       </HStack>
                                       <HStack gap={0} flexShrink={0}>
+                                        {item.files.every((f) => f.transform) ? (
+                                          // Agentic group: the stored transforms define these tables — the legacy
+                                          // per-tab re-import would bypass them. Adjust re-runs (and lets the user
+                                          // revise) the transforms against the live sheet instead.
+                                          <Tooltip content="Adjust with agent">
+                                            <IconButton
+                                              size="2xs"
+                                              variant="ghost"
+                                              color="accent.teal"
+                                              aria-label="Adjust imported tables with agent"
+                                              onClick={() => setAdjustingId(item.id)}
+                                            >
+                                              <LuSparkles size={11} />
+                                            </IconButton>
+                                          </Tooltip>
+                                        ) : (
                                         <Tooltip content="Re-import">
                                           <IconButton
                                             size="2xs"
@@ -586,6 +606,7 @@ export default function StaticConnectionConfig({
                                             {isReimporting ? <Spinner size="xs" /> : <LuRefreshCw size={11} />}
                                           </IconButton>
                                         </Tooltip>
+                                        )}
                                         <IconButton
                                           size="2xs"
                                           variant="ghost"
@@ -645,6 +666,20 @@ export default function StaticConnectionConfig({
         onCancel={() => setDeleteTarget(null)}
         onConfirm={handleDeleteConfirm}
       />
+
+      {/* ── Adjust-with-agent dialog (agentic spreadsheet groups) ── */}
+      {adjustingId && (
+        <SheetAdjustDialog
+          open
+          connectionName="static"
+          groupFiles={sheetsGroups.get(adjustingId) ?? []}
+          existingFiles={existingFiles}
+          onChange={onChange}
+          onError={onError}
+          onPendingDeletion={(s3Key) => onPendingDeletion?.(s3Key)}
+          onClose={() => setAdjustingId(null)}
+        />
+      )}
     </VStack>
   );
 }
