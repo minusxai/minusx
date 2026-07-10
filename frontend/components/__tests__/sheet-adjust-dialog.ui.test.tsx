@@ -91,9 +91,11 @@ describe('SheetAdjustDialog', () => {
   });
 
   it('revising sends feedback with the current transforms over the fresh raw grids', async () => {
+    // The LLM often omits schema_name (normalizer defaults it to 'public') — the dialog must
+    // pin revised transforms back to the group's ORIGINAL schema, never silently move tables.
     api.reviseGoogleSheetTransforms.mockResolvedValue({
       success: true, message: 'ok',
-      data: { transforms: [transform('pnl_v2')], previews: { pnl_v2: preview }, dropped: [] },
+      data: { transforms: [{ ...transform('pnl_v2'), schema_name: 'public' }], previews: { pnl_v2: preview }, dropped: [] },
     });
     setup();
     await waitFor(() => expect(screen.getByLabelText('Preview of pnl_long')).toBeTruthy());
@@ -108,6 +110,8 @@ describe('SheetAdjustDialog', () => {
     expect(transforms).toHaveLength(2);
     expect(feedback).toBe('merge margins into pnl');
     await waitFor(() => expect(screen.getByLabelText('Preview of pnl_v2')).toBeTruthy());
+    // Revised proposal keeps the group's original schema despite the LLM's 'public' default.
+    expect(screen.getByText('finance.pnl_v2')).toBeTruthy();
   });
 
   it('applying replaces the group files in place and queues the old blobs for deletion on save', async () => {

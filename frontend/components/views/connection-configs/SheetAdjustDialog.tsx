@@ -51,6 +51,9 @@ export default function SheetAdjustDialog({
 
   const spreadsheetUrl = groupFiles[0]?.spreadsheet_url ?? '';
   const spreadsheetId = groupFiles[0]?.spreadsheet_id ?? '';
+  // The revision LLM often omits schema_name (defaulted to 'public' server-side); pin every
+  // revised transform back to the group's original schema so tables never silently move.
+  const groupSchema = groupFiles[0]?.schema_name ?? 'public';
 
   useEffect(() => {
     if (!open || !spreadsheetUrl) return;
@@ -97,7 +100,7 @@ export default function SheetAdjustDialog({
     if (!result.success) { onError(result.message); setPhase('review'); return; }
     const includedByTable = new Map(proposals.map((p) => [p.transform.output_table, p.included]));
     setProposals(result.data.transforms.map((t) => ({
-      transform: t,
+      transform: { ...t, schema_name: groupSchema },
       preview: result.data.previews[t.output_table],
       included: includedByTable.get(t.output_table) ?? true,
     })));
