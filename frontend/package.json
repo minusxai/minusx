@@ -104,6 +104,9 @@
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typebox": "1.1.37",
+    "vega": "6.2.0",
+    "vega-interpreter": "2.2.1",
+    "vega-lite": "6.4.3",
     "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },

@@ -216,6 +216,44 @@ export const VizSettings = Type.Object({
 export type VizSettings = Static<typeof VizSettings>;
 
 // ============================================================================
+// Viz V2 envelope (docs/Visualization Arch V2.md)
+//
+// Only the MinusX envelope lives in TypeBox. Native Vega-Lite/Vega spec bodies are
+// deliberately opaque here (open records) — they are validated against the vendored
+// official grammar schema plus the MinusX field/security passes in lib/viz/validate.ts.
+// Do NOT reproduce the grammars in TypeBox.
+// ============================================================================
+
+export const VIZ_GRAMMAR_VEGA_LITE = 'vega-lite@6';
+
+export const VizSourceVegaLite = Type.Object({
+  kind: Type.Literal('vega-lite'),
+  grammar: Type.Literal(VIZ_GRAMMAR_VEGA_LITE, { description: 'pinned grammar major version; never fetched from the network' }),
+  spec: Type.Record(Type.String(), Type.Unknown(), { description:
+    'a Vega-Lite spec. Omit `data` — the query result is injected as the named dataset "main" ' +
+    '(`data: {"name": "main"}`); external data URLs are rejected. Validated against the official ' +
+    'Vega-Lite schema and the query-result columns.' }),
+}, { title: 'VizSourceVegaLite' });
+export type VizSourceVegaLite = Static<typeof VizSourceVegaLite>;
+
+// Discriminated on `kind`. The probe ships `vega-lite` only; `recipe`, `vega`, `table`,
+// `pivot`, and `slippy-map` join this union as they land (additive — see the RFC).
+export const VizSource = Type.Union([VizSourceVegaLite], { title: 'VizSource' });
+export type VizSource = Static<typeof VizSource>;
+
+export const VizEnvelope = Type.Object({
+  version: Type.Literal(2),
+  source: VizSource,
+  // Reserved namespaces (RFC §13) — schema-present so saved envelopes never need a shape
+  // migration when these land; ignored by the probe runtime.
+  dataBindings: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'RESERVED: query param bindings (re-execute). Not yet implemented — omit.' })),
+  viewParams: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'RESERVED: presentation-only params/signals. Not yet implemented — omit.' })),
+  interactions: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'RESERVED: typed interaction outputs. Not yet implemented — omit.' })),
+  assets: Nullable(Type.Record(Type.String(), Type.String(), { description: 'RESERVED: named-asset registry refs (e.g. topojson boundaries). Not yet implemented — omit.' })),
+}, { title: 'VizEnvelope' });
+export type VizEnvelope = Static<typeof VizEnvelope>;
+
+// ============================================================================
 // Question Content
 // ============================================================================
 
@@ -290,6 +328,9 @@ export const QuestionContent = Type.Object({
   connection_name: Type.String({ description: 'connection name (empty string if none)' }),
   cachePolicy: Nullable(CachePolicy),
   semanticQuery: NullableD(SemanticQuerySpec, 'Semantic-tier state; query holds the compiled SQL'),
+  viz: NullableD(VizEnvelope,
+    'Viz V2 envelope (docs/Visualization Arch V2.md). When present it is AUTHORITATIVE — the chart renders ' +
+    'from viz and legacy vizSettings is ignored. Omit to keep rendering via vizSettings.'),
 }, { title: 'QuestionContent' });
 export type QuestionContent = Static<typeof QuestionContent>;
 

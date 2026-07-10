@@ -1,0 +1,40 @@
+/**
+ * Viz V2 shared contracts (docs/Visualization Arch V2.md).
+ *
+ * The envelope schema itself lives in lib/validation/atlas-schemas.ts (VizEnvelope);
+ * these are the runtime contracts for the validation / data-binding / theme pipeline.
+ */
+
+/** The reserved dataset name the query result is injected under. */
+export const VIZ_DATASET_MAIN = 'main';
+
+/** Inferred visualization kind for a query-result column (from its SQL type). */
+export type VizColumnKind = 'quantitative' | 'temporal' | 'nominal' | 'boolean' | 'unknown';
+
+export interface VizResultColumn {
+  name: string;
+  kind: VizColumnKind;
+}
+
+export type VizIssueCode =
+  | 'E_ENVELOPE'         // envelope shape invalid (version/source/kind/grammar)
+  | 'E_SCHEMA'           // spec fails the vendored official grammar schema
+  | 'E_FIELD_NOT_FOUND'  // spec references a field not in the query result
+  | 'E_EXTERNAL_DATA'    // spec declares a data url / inline values (only the named dataset is allowed)
+  | 'E_DATASET_NAME'     // spec names a dataset other than the reserved one
+  | 'W_COMPILE';         // vega-lite compiler warning (captured logger)
+
+export interface VizIssue {
+  severity: 'error' | 'warning';
+  code: VizIssueCode;
+  /** JSON-pointer-ish path into the envelope/spec, e.g. '/source/spec/layer/1/encoding/y/field'. */
+  path: string;
+  /** Actionable, agent-readable message (includes available fields for E_FIELD_NOT_FOUND). */
+  message: string;
+}
+
+export interface VizValidationResult {
+  /** True when there are no error-severity issues (warnings allowed). */
+  ok: boolean;
+  issues: VizIssue[];
+}
