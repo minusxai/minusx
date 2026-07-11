@@ -239,6 +239,29 @@ templates:
       ```
       - A question's saved parameter default values live in `<parameterValues>` (a compact JSON object), not on the `<parameters>` items.
       - **VizSettings**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`, `combo`, `waterfall`, `trend`, `single_value`. The full viz schema — combo / dual-axis (`yRightCols` + `axisConfig.dualAxis`), pivot (`pivotConfig`), geo (`geoConfig`), trend, waterfall, single_value (`singleValueConfig`) — is in the **visualizations** instructions preloaded below; consult it before authoring any non-basic chart.
+      - **Viz V2 (Vega-Lite)**: a question may instead carry `<viz>` — a full Vega-Lite v6 spec. When present it is AUTHORITATIVE and `vizSettings` is ignored. Use it when the user asks for a Vega/Vega-Lite chart, or for a chart the vizSettings types cannot express (layered/faceted charts, custom marks/encodings, window-transform visuals). Markup form:
+        ```
+        <viz>
+          <version>2</version>
+          <source>
+            <kind>vega-lite</kind>
+            <grammar>vega-lite@6</grammar>
+            <spec>{{
+              "mark": "bar",
+              "encoding": {
+                "x": {"field": "month", "type": "temporal"},
+                "y": {"field": "revenue", "type": "quantitative"},
+                "color": {"field": "region", "type": "nominal"}
+              }
+            }}</spec>
+          </source>
+        </viz>
+        ```
+        - The `<spec>` body is the Vega-Lite JSON object wrapped in ONE extra pair of expression braces (`{{…}}`): outer brace = markup expression, inner = the JSON object. Write plain multi-line JSON — no escaping, no string-encoding.
+        - OMIT `data` — the query result is injected automatically as the named dataset `"main"`. External URLs and inline `values` are rejected.
+        - Field names must match the query's result columns EXACTLY (aliases included). The full VL grammar is available: `layer`, `facet`, `transform` (fold/window/calculate), dual axis via layers + `resolve: {"scale": {"y": "independent"}}`.
+        - MinusX theming (font, palette, light/dark) is applied automatically beneath your spec — do not hardcode fonts or colors unless the user asks for specific ones. Do not set `width`/`height` (the container sizes the chart).
+        - To go back to the standard chart types, remove `<viz>` entirely (set it to null) and configure `vizSettings`.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
 
       ### Question Page Behavior

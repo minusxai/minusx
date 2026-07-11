@@ -6,7 +6,8 @@
  */
 
 import { Box, HStack, VStack, Text, Spinner, Button } from '@chakra-ui/react';
-import { LuRocket, LuWrench, LuCode, LuRefreshCw, LuCloudOff } from 'react-icons/lu';
+import { LuRocket, LuWrench, LuSettings, LuCode, LuRefreshCw, LuCloudOff } from 'react-icons/lu';
+import dynamic from 'next/dynamic';
 import { Tooltip } from '@/components/ui/tooltip';
 import { TableV2 } from '@/components/plotx/TableV2';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
@@ -18,6 +19,11 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
+
+// Viz V2 (docs/Visualization Arch V2.md): lazy chunk — vega/vega-lite only load on
+// pages that actually render a V2 envelope (same pattern as GeoPlot/Leaflet).
+// eslint-disable-next-line no-restricted-syntax
+const VegaChart = dynamic(() => import('@/components/viz/VegaChart'), { ssr: false });
 
 export interface ContainerConfig {
   showHeader: boolean;
@@ -162,6 +168,7 @@ function QuestionVisualizationInner({
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
   const showJson = useAppSelector(state => state.ui.devMode);
+  const colorMode = useAppSelector(state => state.ui.colorMode);
   const { config: appConfig } = useConfigs();
   const agentName = appConfig.branding.agentName;
 
@@ -186,7 +193,9 @@ function QuestionVisualizationInner({
     return null;
   }
 
-  const isChartType = currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table';
+  // A V2 envelope is authoritative when present (RFC): the vizSettings pipeline is bypassed.
+  const hasVizV2 = currentState?.viz != null;
+  const isChartType = !hasVizV2 && currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table';
 
   const showChartTitle = config.viz.showTitle;
   return (
@@ -432,12 +441,21 @@ function QuestionVisualizationInner({
                     </Box>
                   </Tooltip>
                 )}
-                {currentState?.vizSettings?.type === 'table' && (
+                {hasVizV2 && (
+                  <Box flex="1" minHeight="0" overflow="hidden" display="flex" p={3}>
+                    <VegaChart
+                      envelope={currentState.viz!}
+                      rows={data.rows}
+                      colorMode={colorMode}
+                    />
+                  </Box>
+                )}
+                {!hasVizV2 && currentState?.vizSettings?.type === 'table' && (
                   <Box flex="1" minHeight="0" overflow="hidden" display="flex" width={"100%"} alignItems={"stretch"} flexDirection={"column"}>
                     <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.connection_name} enableDrilldown={config.enableDrilldown !== false} columnFormats={currentState.vizSettings?.columnFormats ?? undefined} onColumnFormatsChange={config.editable ? onColumnFormatsChange : undefined} conditionalFormats={currentState.vizSettings?.conditionalFormats ?? undefined} />
                   </Box>
                 )}
-                {(currentState?.vizSettings?.type === 'line' ||
+                {!hasVizV2 && (currentState?.vizSettings?.type === 'line' ||
                   currentState?.vizSettings?.type === 'bar' ||
                   currentState?.vizSettings?.type === 'area' ||
                   currentState?.vizSettings?.type === 'scatter' ||
