@@ -123,7 +123,7 @@ const waterfall: VizTemplate = {
           mark: { type: 'text', dy: -8 },
           encoding: {
             x,
-            y: { field: '__mx_sum', type: 'quantitative', title: null },
+            y: { field: '__mx_sum', type: 'quantitative', title: value },
             text: { field: '__mx_label', type: 'nominal' },
           },
         },
@@ -136,7 +136,7 @@ const waterfall: VizTemplate = {
           mark: { type: 'bar', cornerRadiusEnd: 2 },
           encoding: {
             x,
-            y: { field: '__mx_total', type: 'quantitative', title: null },
+            y: { field: '__mx_total', type: 'quantitative', title: value },
             y2: { datum: 0 },
             color: { value: '#2980b9' },
           },
@@ -150,7 +150,7 @@ const waterfall: VizTemplate = {
           mark: { type: 'text', dy: -8, fontWeight: 'bold' },
           encoding: {
             x,
-            y: { field: '__mx_total', type: 'quantitative', title: null },
+            y: { field: '__mx_total', type: 'quantitative', title: value },
             text: { field: '__mx_total_label', type: 'nominal' },
           },
         },
