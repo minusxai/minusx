@@ -325,7 +325,7 @@ function inferBindings(envelope: VizEnvelope): { category: string | null; value:
   if (source.kind === 'recipe') {
     const bindings = (source.bindings ?? {}) as Record<string, string>;
     return {
-      category: bindings.stage ?? bindings.category ?? null,
+      category: bindings.stage ?? bindings.category ?? bindings.metric ?? null,
       value: bindings.value ?? null,
     };
   }
