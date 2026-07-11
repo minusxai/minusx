@@ -225,8 +225,19 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       paramsFound.push({ el, param });
     });
 
-    // Mount the nested React root for this fresh document.
-    reactRootRef.current = createRoot(embedRoot);
+    // Mount the nested React root for this fresh document. The deferred teardown (cleanup below)
+    // can run after the iframe document was already rewritten; React then throws NOT_FOUND
+    // detaching orphaned portal nodes — AFTER the embeds' effect cleanups (ECharts dispose,
+    // ResizeObserver disconnect) have run. React reports commit-phase errors through this hook
+    // (not the unmount() call stack), so suppress exactly that case here; everything else keeps
+    // the default console reporting.
+    let tearingDown = false;
+    reactRootRef.current = createRoot(embedRoot, {
+      onUncaughtError: (error) => {
+        if (tearingDown && (error as DOMException)?.name === 'NotFoundError') return;
+        console.error(error);
+      },
+    });
 
     // Discovery is necessarily effect → state (placeholders exist only after the doc write).
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -272,15 +283,16 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       if (debounce) window.clearTimeout(debounce);
       timers.forEach(t => window.clearTimeout(t));
       // Defer unmount: cleanup runs during the parent's commit, and synchronously unmounting another
-      // root then warns ("unmount while React was already rendering"). The iframe doc is torn down with
-      // this component, so a microtask-later unmount is safe.
+      // root then warns ("unmount while React was already rendering"). Always unmount — even when the
+      // iframe document is already gone (remount rewrote it via doc.open, or the iframe was detached),
+      // because unmounting is what runs the embeds' effect cleanups: ECharts dispose(), ResizeObserver
+      // disconnects. Skipping it leaks one undisposed chart set per rebuild (ECharts registers every
+      // instance until disposed). React runs effect destroys before host-node removal, so the cleanups
+      // land even if detaching orphaned portal nodes then throws — onUncaughtError above eats that.
       const root = reactRootRef.current;
       reactRootRef.current = null;
-      // Defer so we don't unmount during the parent's commit (React warns about that). Only unmount if
-      // the embed host is STILL connected: on a remount / teardown the iframe document is already gone,
-      // so its nodes are detached and React's unmount would throw NOT_FOUND trying to detach them — in
-      // that case skip and let GC reclaim the orphaned fiber along with the destroyed document.
-      if (root) setTimeout(() => { if (embedRoot.isConnected) root.unmount(); }, 0);
+      tearingDown = true;
+      if (root) setTimeout(() => { try { root.unmount(); } catch { /* detached doc nodes */ } }, 0);
     };
   }, [sanitized, fluid, height, compiledCss]); // colorMode handled separately so it doesn't rebuild the doc
 
