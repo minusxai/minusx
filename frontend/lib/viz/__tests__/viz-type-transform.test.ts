@@ -90,4 +90,28 @@ describe('setVizType', () => {
   it('exports the supported set for the selector', () => {
     expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['bar', 'line', 'area', 'scatter', 'pie', 'row']);
   });
+
+  it('pie renders as a donut (innerRadius on the arc mark, MinusX house style)', () => {
+    const spec = specOf(setVizType(envelope(BAR), 'pie'));
+    expect((spec.mark as Record<string, unknown>).innerRadius).toBeDefined();
+  });
+
+  it('leaving pie strips the donut innerRadius from the mark', () => {
+    const pie = specOf(setVizType(envelope(BAR), 'pie'));
+    const back = specOf(setVizType(envelope(pie), 'bar'));
+    expect((back.mark as Record<string, unknown>).innerRadius).toBeUndefined();
+  });
+});
+
+describe('zonesForVizType', () => {
+  it('cartesian types get X/Y/Color zones', async () => {
+    const { zonesForVizType } = await import('@/lib/viz/encoding-edit');
+    expect(zonesForVizType('bar').map(z => z.channel)).toEqual(['x', 'y', 'color']);
+    expect(zonesForVizType('line').map(z => z.channel)).toEqual(['x', 'y', 'color']);
+  });
+
+  it('pie gets Slices/Value zones (color/theta) — no positional channels offered', async () => {
+    const { zonesForVizType } = await import('@/lib/viz/encoding-edit');
+    expect(zonesForVizType('pie').map(z => z.channel)).toEqual(['color', 'theta']);
+  });
 });

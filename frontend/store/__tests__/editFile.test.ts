@@ -246,6 +246,46 @@ describe('editFile - Question Editing Flow', () => {
     expect(selectIsDirty(finalState, fileId)).toBe(true);
   });
 
+  it('viz envelope edits REPLACE wholesale — deleted encoding channels stay deleted', async () => {
+    const store = getStore();
+    const fileId = questionId2;
+    await readFiles([fileId]);
+
+    const vizWith = (encoding: Record<string, unknown>) => ({
+      version: 2,
+      source: {
+        kind: 'vega-lite',
+        grammar: 'vega-lite@6',
+        spec: { mark: 'bar', encoding },
+      },
+    });
+
+    // First edit: bar with x/y/color (this lands in persistableChanges).
+    editFile({ fileId, changes: { content: { viz: vizWith({
+      x: { field: 'a', type: 'nominal' },
+      y: { field: 'b', type: 'quantitative' },
+      color: { field: 'c', type: 'nominal' },
+    }) } } });
+
+    // Second edit: color REMOVED (the drop-zone × path). Deep-merging deltas would
+    // resurrect color from the first edit — the envelope must replace wholesale.
+    editFile({ fileId, changes: { content: { viz: vizWith({
+      x: { field: 'a', type: 'nominal' },
+      y: { field: 'b', type: 'quantitative' },
+    }) } } });
+
+    await waitFor(() => {
+      const content = selectMergedContent(store.getState(), fileId) as QuestionContent;
+      const enc = (content.viz?.source as { spec?: { encoding?: Record<string, unknown> } })?.spec?.encoding;
+      return enc != null && !('color' in enc);
+    }, 1000);
+
+    const content = selectMergedContent(store.getState(), fileId) as QuestionContent;
+    const enc = (content.viz!.source as unknown as { spec: { encoding: Record<string, unknown> } }).spec.encoding;
+    expect('color' in enc).toBe(false);
+    expect(enc.x).toEqual({ field: 'a', type: 'nominal' });
+  });
+
   it('should trigger selector updates (component re-render)', async () => {
     const store = getStore();
     const fileId = questionId1;

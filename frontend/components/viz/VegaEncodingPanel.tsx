@@ -13,14 +13,8 @@ import { useState } from 'react';
 import { Box, HStack, Text, Wrap } from '@chakra-ui/react';
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from '@/components/plotx/AxisComponents';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { isUnitVegaLiteSpec, getChannelField, setChannelField, EDITABLE_CHANNELS, type EditableChannel } from '@/lib/viz/encoding-edit';
+import { isUnitVegaLiteSpec, getChannelField, setChannelField, getVizType, zonesForVizType, type EditableChannel } from '@/lib/viz/encoding-edit';
 import { sqlTypeToVizKind } from '@/lib/viz/query-data';
-
-const CHANNEL_LABELS: Record<EditableChannel, string> = {
-  x: 'X-Axis',
-  y: 'Y-Axis',
-  color: 'Color / Series',
-};
 
 export interface VegaEncodingPanelProps {
   envelope: VizEnvelope;
@@ -44,7 +38,10 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
     );
   }
 
-  const assigned = new Set(EDITABLE_CHANNELS.map(ch => getChannelField(spec, ch)).filter(Boolean));
+  // Zones are viz-type-aware: a pie offers Slices/Value (color/theta), never x/y —
+  // positional encodings on an arc draw overlapping wedges per position.
+  const zones = zonesForVizType(getVizType(spec));
+  const assigned = new Set(zones.map(z => getChannelField(spec, z.channel)).filter(Boolean));
 
   const assign = (channel: EditableChannel, name: string | null) => {
     const column = name != null
@@ -73,12 +70,12 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
         ))}
       </Wrap>
       <HStack gap={2} align="stretch" flexWrap="wrap">
-        {EDITABLE_CHANNELS.map(channel => {
+        {zones.map(({ channel, label }) => {
           const field = getChannelField(spec, channel);
           return (
-            <Box key={channel} flex="1" minW="120px" aria-label={`${CHANNEL_LABELS[channel]} drop zone`}>
+            <Box key={channel} flex="1" minW="120px" aria-label={`${label} drop zone`}>
               <DropZone
-                label={CHANNEL_LABELS[channel]}
+                label={label}
                 isTouchDevice={isTouchDevice}
                 onDrop={() => {
                   const col = dragged ?? mobileSelected;

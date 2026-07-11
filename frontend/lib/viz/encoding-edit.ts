@@ -10,7 +10,7 @@
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { VizColumnKind } from './types';
 
-export const EDITABLE_CHANNELS = ['x', 'y', 'color'] as const;
+export const EDITABLE_CHANNELS = ['x', 'y', 'color', 'theta'] as const;
 export type EditableChannel = (typeof EDITABLE_CHANNELS)[number];
 
 const COMPOSITION_KEYS = ['layer', 'hconcat', 'vconcat', 'concat', 'repeat', 'facet', 'spec'];
@@ -173,6 +173,8 @@ export function setVizType(envelope: VizEnvelope, type: V2VizType): VizEnvelope 
     delete encoding.x;
     delete encoding.y;
     withMark(spec, 'arc');
+    // House style: pies are donuts (~30/70 like the ECharts builder), responsive to size.
+    (spec.mark as Record<string, unknown>).innerRadius = { expr: 'min(width,height)/2 * 0.45' };
   } else if (type === 'row') {
     const x = encoding.x;
     encoding.x = encoding.y;
@@ -188,9 +190,32 @@ export function setVizType(envelope: VizEnvelope, type: V2VizType): VizEnvelope 
     withMark(spec, MARK_FOR_TYPE[type]);
   }
 
+  // The donut radius only makes sense on arcs — strip it when leaving pie.
+  if (type !== 'pie' && spec.mark && typeof spec.mark === 'object') {
+    delete (spec.mark as Record<string, unknown>).innerRadius;
+  }
+
   for (const key of Object.keys(encoding)) if (encoding[key] === undefined) delete encoding[key];
   spec.encoding = encoding;
   return next;
+}
+
+/**
+ * The drop zones a viz type actually uses — per-type, so a pie never offers
+ * positional channels (assigning x/y to an arc draws overlapping wedges per position).
+ */
+export function zonesForVizType(type: V2VizType | null): Array<{ channel: EditableChannel; label: string }> {
+  if (type === 'pie') {
+    return [
+      { channel: 'color', label: 'Slices' },
+      { channel: 'theta', label: 'Value' },
+    ];
+  }
+  return [
+    { channel: 'x', label: 'X-Axis' },
+    { channel: 'y', label: 'Y-Axis' },
+    { channel: 'color', label: 'Color / Series' },
+  ];
 }
 
 export function getYLogScale(spec: Record<string, unknown>): boolean {
