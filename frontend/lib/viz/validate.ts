@@ -239,6 +239,13 @@ export function validateVizEnvelope(
         }
       }
     }
+    // columnFormats keys are column references too (applied at materialization).
+    for (const key of Object.keys((source.columnFormats as Record<string, unknown> | null | undefined) ?? {})) {
+      if (!known.has(key)) {
+        issues.push(err('E_FIELD_NOT_FOUND', `/source/columnFormats/${key}`,
+          `"${key}" is not in the query result. Available fields: ${available}`));
+      }
+    }
     if (issues.some(i => i.severity === 'error')) return { ok: false, issues };
     // Native-vega recipes (e.g. radar) can't run the VL pipeline — smoke-parse the
     // materialized Vega spec instead (shipped specs; bindings already checked above).

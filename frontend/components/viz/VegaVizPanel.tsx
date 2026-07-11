@@ -15,7 +15,7 @@ import {
   isEnvelopeEditable, getEnvelopeVizType, setEnvelopeVizType, V2_SUPPORTED_VIZ_TYPES,
   getStacked, setStacked, getYLogScale, setYLogScale,
   getTableConditionalFormats, setTableConditionalFormats, getVizCss, setVizCss,
-  getPivotConfig, setPivotConfig,
+  getPivotConfig, setPivotConfig, getVizColumnFormats, mergeVizColumnFormat,
   type V2VizType,
 } from '@/lib/viz/encoding-edit';
 import { sqlTypeToVizKind } from '@/lib/viz/query-data';
@@ -129,6 +129,8 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
             types={types}
             pivotConfig={getPivotConfig(envelope) ?? undefined}
             onPivotConfigChange={(config) => onVizChange(setPivotConfig(envelope, config))}
+            columnFormats={getVizColumnFormats(envelope)}
+            onColumnFormatChange={(column, config) => onVizChange(mergeVizColumnFormat(envelope, column, config))}
           />
         ) : (
           <VegaEncodingPanel envelope={envelope} columns={columns} types={types} onVizChange={onVizChange} />

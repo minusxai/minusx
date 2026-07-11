@@ -13,7 +13,10 @@ import { useState } from 'react';
 import { Box, HStack, Text, Wrap } from '@chakra-ui/react';
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from '@/components/plotx/AxisComponents';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { isEnvelopeEditable, getEnvelopeZones, getZoneFields, addZoneField, removeZoneField } from '@/lib/viz/encoding-edit';
+import {
+  isEnvelopeEditable, getEnvelopeZones, getZoneFields, addZoneField, removeZoneField,
+  getVizColumnFormats, mergeVizColumnFormat,
+} from '@/lib/viz/encoding-edit';
 import { sqlTypeToVizKind } from '@/lib/viz/query-data';
 import { VizFieldPopover } from './VizFieldPopover';
 
@@ -43,6 +46,11 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
   // Multi-capable zones (native Y via fold, recipe slots flagged `multi`) hold lists.
   const zones = getEnvelopeZones(envelope);
   const assigned = new Set(zones.flatMap(z => getZoneFields(envelope, z.channel)));
+  const isRecipe = (envelope.source as unknown as { kind: string }).kind === 'recipe';
+  // Recipe chips carry the CLASSIC format popover (alias/decimals/prefix/suffix) —
+  // stored as source.columnFormats and applied at materialization. Native specs use
+  // the d3-native VizFieldPopover instead (spec `title`/`axis.format`).
+  const recipeFormats = isRecipe ? getVizColumnFormats(envelope) : undefined;
 
   const columnOf = (name: string) => ({ name, kind: sqlTypeToVizKind(types[columns.indexOf(name)] ?? '') });
 
@@ -93,9 +101,12 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
                       column={field}
                       type={resolveColumnType(field, columns, types)}
                       onRemove={() => removeFromZone(channel, field)}
-                      // Alias/format settings: native single-field channels only —
-                      // recipes format internally; folded measures share one axis.
-                      extra={(envelope.source as unknown as { kind: string }).kind === 'vega-lite' && fields.length === 1 ? (
+                      // Recipe chips: classic format popover → source.columnFormats
+                      // (aliases/labels applied at materialization).
+                      formatConfig={isRecipe ? recipeFormats?.[field] : undefined}
+                      onFormatChange={isRecipe ? (config) => onVizChange(mergeVizColumnFormat(envelope, field, config)) : undefined}
+                      // Native single-field channels: d3-native settings (spec title/axis.format).
+                      extra={!isRecipe && (envelope.source as unknown as { kind: string }).kind === 'vega-lite' && fields.length === 1 ? (
                         <VizFieldPopover
                           envelope={envelope}
                           channel={channel}

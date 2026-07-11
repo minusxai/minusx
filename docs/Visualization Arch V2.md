@@ -503,7 +503,10 @@ Move items up as they pass; anything that fails gets a note + fix before it move
   resize/stats/CSV/drilldown built in); persists columnFormats + conditionalFormats + `css` (looks are
   CSS against the stable `.mx-*` class contract — no style toggles by design; chrome hides via
   `.mx-toolbar {display: none}`); UI + agent
-- [ ] pivot — stays DOM; same contract as table (shared `.mx-*` classes + css field), next up (RFC §10)
+- [x] pivot — `pivot` source kind on the DOM tier: PivotTable + PivotAxisBuilder reused wholesale
+  (nested headers, subtotals, collapsible groups, heatmap, formulas, drilldown built in); the typed
+  STRUCTURE persists as the classic `PivotConfig` under `source.config`; looks via the shared `css`
+  contract (`.mx-pivot` root + element selectors); UI + agent
 - [ ] trend — recipe-vs-DOM-widget spike decision (RFC §17)
 - [ ] single_value — follows the trend decision
 - [ ] geo — Vega recipes for analytic geo; Leaflet frozen for tile basemaps (RFC §9)
@@ -532,12 +535,16 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - Simple + stacked bar from a prompt — clean multi-line JSON, tooltips/formats/titles idiomatic, no escaping
 - Split series via `color` encoding (no SQL pivot)
 - Convert an existing vizSettings question ("rewrite this in vega") — first try, clean spec
+- Pie from a prompt follows the skill idiom (minimal `mark: arc` + SUM theta, no hand-rolled donut props)
+- Explicit label formats on request ("show full numbers", "format dates as Jan '25")
 
 **Interactions**
 - Legend click highlights series (others dim to 25%), legend entries dim too — injected
   `mx_legend_sel` platform default with opt-outs (own params / own opacity / composed specs);
   human click on a legend entry verified
-- Automatic tooltips on all marks (`config.mark.tooltip: encoding`), styled vega-tooltip handler
+- Shift-click accumulates legend selection; click-elsewhere clears
+- Automatic tooltips on all marks (`config.mark.tooltip: encoding`), styled vega-tooltip handler;
+  hover shows encoded fields with titles + formats (mono, rounded)
 
 **UI panel (Fields / Settings / Spec)**
 - Icon grid above subtabs (classic placement); 6 types enabled (bar/line/area/row/scatter/pie),
@@ -561,6 +568,20 @@ Move items up as they pass; anything that fails gets a note + fix before it move
   green cells + `.mx-th` css override live; Table icon enabled/selected; Fields hint; Settings hosts
   the conditional-format panel + css textarea; table→waterfall icon switch inferred bindings from
   the columns fallback (STEPS=platform, VALUE=revenue) with a working Discard round-trip
+- Pivot source end-to-end (2026-07-11): envelope renders PivotTable with rows×columns, SUM heatmap
+  cells, `$` prefix from columnFormats, Total column, `.mx-pivot th` css override live; Pivot icon
+  enabled/selected; Fields hosts the full PivotAxisBuilder (Rows/Columns/Values + agg selector)
+- Zebra stripe is a CSS default on parity classes (`.mx-row-odd`/`.mx-row-even`, data-index — not
+  nth-child, virtualization spacers would flip parity) — overridable from the `css` field
+- Drag a column chip into a drop zone (drag-and-drop path)
+- Stacked toggle / log-scale toggle round-trip in browser
+- Save persists → reload renders the saved spec
+- Field-settings popover near viewport edges / while the panel scrolls
+- Composed (layered) spec: Fields/Settings show the "edit via chat" hint, Spec still works
+- Undo/redo behavior with surgical edits
+
+**Data handling**
+- 10k+ row result — render time acceptable
 
 **Regressions**
 - Full test suite green after every probe commit (continuous through the session)
@@ -572,40 +593,35 @@ Move items up as they pass; anything that fails gets a note + fix before it move
   agent idiom `legend: {columns: N}`)
 
 **Agent authoring**
-- [x] Pie from a prompt follows the skill idiom: minimal `mark: arc` + `theta` with `aggregate: sum`,
-  no hand-rolled donut props / legend orient (skill updated 2026-07-11 — needs a live agent run)
+- [ ] Table and pivot from a prompt follow the skill idioms (skills updated 2026-07-11 — live agent runs)
 - [ ] Dual-axis combo (layers + `resolve: {scale: {y: "independent"}}`)
 - [ ] Facet / small multiples
 - [ ] Window-transform visual (rolling average) — SQL-vs-transform judgment
 - [ ] Heatmap (`rect` mark)
 - [ ] Horizontal bar + sort (`y` nominal sorted by value)
 - [ ] Custom tooltip field list overriding the automatic one
-- [x] Explicit label formats on request ("show full numbers", "format dates as Jan '25")
 - [ ] Revert to classic ("go back to a normal bar chart") — viz removed, vizSettings restored
 - [ ] Recovery from a misspelled field (agent told verbally — does it fix in one step?)
 - [ ] Recovery from malformed JSON in `<spec>` (EditFile error loop)
 - [ ] JSON-syntax-error rate per EditFile stays ~zero across the session (probe metric)
 
-**Interactions**
-- [x] Shift-click accumulates selection; click-elsewhere clears
-- [x] Tooltip hover: encoded fields with titles + formats, styled (mono, rounded)
-
 **UI panel**
-- [x] Drag a column chip into a zone (drag-and-drop path; click-remove and type-switch are verified)
-- [x] Stacked toggle / log-scale toggle round-trip in browser
-- [x] Save persists → reload renders the saved spec (only Cancel exercised so far)
-- [x] Field-settings popover near viewport edges / while the panel scrolls (position is computed once
-  at open — fixed-position panel doesn't track scroll)
-- [x] Composed (layered) spec: Fields/Settings show the "edit via chat" hint, Spec still works
-- [x] Undo/redo behavior with surgical edits (if the page supports it for content edits)
-- [ ] color panels
+- [ ] Column alias/format for RECIPE sources (funnel/waterfall/radar) and PIVOT — reported
+  2026-07-11: the gear only exists on native single-field channels; pivot's builder has the
+  props but they're unwired. In progress.
+- [ ] Color controls ("color panels") — decide the V2 equivalent of the classic per-series
+  swatches (surgical `scale.range` edit vs agent-only)
 
 **Data handling**
 - [ ] Parameterized query — param change re-executes and chart follows
 - [ ] Empty result set — renders empty axes, no crash
 - [ ] Nulls in x/y/color columns
-- [x] 10k+ row result — render time acceptable
 - [ ] Timezone-sensitive timestamps — axis values match the table view (known wire-format risk)
+
+**Surfaces**
+- [ ] Dashboards / story embeds / notebook cells with V2 envelopes — they all render through the
+  shared QuestionVisualization, so routing may already work; verify each, then delete the
+  known-gaps line
 
 **Regressions**
 - [ ] Every legacy vizSettings type still renders (table, line, bar, row, area, scatter, funnel,
@@ -614,9 +630,9 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [ ] Dashboards with legacy charts unaffected
 
 ### Known gaps (expected to fail — do not file)
-- Agent gets no ValidateVisualization feedback in tool results yet (validator built + tested;
-  `/api/viz/validate` route + tool wiring pending)
+- Agent gets no ValidateVisualization feedback in tool results yet (validator built + tested —
+  incl. table/pivot field checks + css policy; `/api/viz/validate` route + tool wiring pending)
 - Vega charts invisible to the agent in follow-up turns (chart→LLM image path pending)
-- Dashboards / story embeds / notebook cells do not route `content.viz` (question page only)
 - Public/guest story rendering with viz untested (CSP interpreter is in, path unwired)
-- Image/CSV export of viz-V2 charts unwired
+- Image/CSV export of viz-V2 charts unwired (table's own CSV button works — it's the chart-image
+  and question-level export paths that aren't)

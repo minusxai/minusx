@@ -8,6 +8,7 @@
  * rule instead). The `@1` is a behavior contract: changing a builder's output in a
  * visually meaningful way means shipping `@2` and keeping `@1` frozen.
  */
+import type { ColumnFormatConfig } from '@/lib/validation/atlas-schemas';
 
 export interface VizTemplateBinding {
   name: string;
@@ -20,6 +21,26 @@ export interface VizTemplateBinding {
   multi?: boolean;
 }
 
+type VizFormats = Record<string, ColumnFormatConfig> | undefined;
+
+/** Display name for a bound column (alias wins). */
+const aliasOf = (formats: VizFormats, column: string): string =>
+  formats?.[column]?.alias || column;
+
+/**
+ * A vega expression rendering `ref` as a formatted number per the column's config:
+ * decimalPoints → a full-digit d3 pattern (else the SI default), prefix/suffix
+ * concatenated. Strings are JSON-escaped into the expression.
+ */
+const numExpr = (ref: string, formats: VizFormats, column: string): string => {
+  const cfg = formats?.[column];
+  const pattern = cfg?.decimalPoints != null ? `,.${cfg.decimalPoints}f` : '.3~s';
+  const core = `format(${ref}, '${pattern}')`;
+  const pre = cfg?.prefix ? `${JSON.stringify(cfg.prefix)} + ` : '';
+  const suf = cfg?.suffix ? ` + ${JSON.stringify(cfg.suffix)}` : '';
+  return `${pre}${core}${suf}`;
+};
+
 export type VizTemplateEngine = 'vega-lite' | 'vega';
 
 export interface VizTemplate {
@@ -29,8 +50,8 @@ export interface VizTemplate {
   /** Grammar of the materialized spec ('vega' skips the VL compile). */
   engine: VizTemplateEngine;
   bindings: ReadonlyArray<VizTemplateBinding>;
-  /** Materialize the full spec from bound column names. */
-  build(bindings: Record<string, string | string[]>): Record<string, unknown>;
+  /** Materialize the full spec from bound column names (+ optional column formats). */
+  build(bindings: Record<string, string | string[]>, formats?: VizFormats): Record<string, unknown>;
 }
 
 // ── minusx/funnel@1 ─────────────────────────────────────────────────────────────
@@ -44,7 +65,7 @@ const funnel: VizTemplate = {
     { name: 'stage', label: 'Stages', accepts: ['nominal', 'temporal'] },
     { name: 'value', label: 'Value', accepts: ['quantitative'] },
   ],
-  build(bindings) {
+  build(bindings, formats) {
     const stage = String(bindings.stage);
     const value = String(bindings.value);
     // Data order IS the funnel order (SQL owns semantics — ORDER BY the stage
@@ -58,7 +79,7 @@ const funnel: VizTemplate = {
         { window: [{ op: 'first_value', field: '__mx_value', as: '__mx_first' }], frame: [null, null] },
         { calculate: '-datum.__mx_value / 2', as: '__mx_x0' },
         { calculate: 'datum.__mx_value / 2', as: '__mx_x1' },
-        { calculate: "format(datum.__mx_value, '.3~s') + ' (' + format(datum.__mx_value / datum.__mx_first * 100, '.1f') + '%)'", as: '__mx_label' },
+        { calculate: `${numExpr('datum.__mx_value', formats, value)} + ' (' + format(datum.__mx_value / datum.__mx_first * 100, '.1f') + '%)'`, as: '__mx_label' },
       ],
       layer: [
         {
@@ -95,23 +116,24 @@ const waterfall: VizTemplate = {
     { name: 'category', label: 'Steps', accepts: ['nominal', 'temporal'] },
     { name: 'value', label: 'Value', accepts: ['quantitative'] },
   ],
-  build(bindings) {
+  build(bindings, formats) {
     const category = String(bindings.category);
     const value = String(bindings.value);
+    const yTitle = aliasOf(formats, value);
     const x = { field: category, type: 'nominal', sort: null, title: null };
     return {
       transform: [
         { aggregate: [{ op: 'sum', field: value, as: '__mx_amount' }], groupby: [category] },
         { window: [{ op: 'sum', field: '__mx_amount', as: '__mx_sum' }] },
         { calculate: 'datum.__mx_sum - datum.__mx_amount', as: '__mx_prev' },
-        { calculate: "datum.__mx_amount >= 0 ? '+' + format(datum.__mx_amount, '.3~s') : format(datum.__mx_amount, '.3~s')", as: '__mx_label' },
+        { calculate: `datum.__mx_amount >= 0 ? '+' + ${numExpr('datum.__mx_amount', formats, value)} : ${numExpr('datum.__mx_amount', formats, value)}`, as: '__mx_label' },
       ],
       layer: [
         {
           mark: { type: 'bar', cornerRadiusEnd: 2 },
           encoding: {
             x,
-            y: { field: '__mx_prev', type: 'quantitative', title: value },
+            y: { field: '__mx_prev', type: 'quantitative', title: yTitle },
             y2: { field: '__mx_sum' },
             color: {
               condition: { test: 'datum.__mx_amount < 0', value: '#c0392b' },
@@ -123,7 +145,7 @@ const waterfall: VizTemplate = {
           mark: { type: 'text', dy: -8 },
           encoding: {
             x,
-            y: { field: '__mx_sum', type: 'quantitative', title: value },
+            y: { field: '__mx_sum', type: 'quantitative', title: yTitle },
             text: { field: '__mx_label', type: 'nominal' },
           },
         },
@@ -136,7 +158,7 @@ const waterfall: VizTemplate = {
           mark: { type: 'bar', cornerRadiusEnd: 2 },
           encoding: {
             x,
-            y: { field: '__mx_total', type: 'quantitative', title: value },
+            y: { field: '__mx_total', type: 'quantitative', title: yTitle },
             y2: { datum: 0 },
             color: { value: '#2980b9' },
           },
@@ -145,12 +167,12 @@ const waterfall: VizTemplate = {
           transform: [
             { aggregate: [{ op: 'sum', field: '__mx_amount', as: '__mx_total' }] },
             { calculate: "'Total'", as: category },
-            { calculate: "format(datum.__mx_total, '.3~s')", as: '__mx_total_label' },
+            { calculate: numExpr('datum.__mx_total', formats, value), as: '__mx_total_label' },
           ],
           mark: { type: 'text', dy: -8, fontWeight: 'bold' },
           encoding: {
             x,
-            y: { field: '__mx_total', type: 'quantitative', title: value },
+            y: { field: '__mx_total', type: 'quantitative', title: yTitle },
             text: { field: '__mx_total_label', type: 'nominal' },
           },
         },
@@ -176,7 +198,7 @@ const radar: VizTemplate = {
     { name: 'value', label: 'Value', accepts: ['quantitative'], multi: true },
     { name: 'series', label: 'Series', accepts: ['nominal'], optional: true },
   ],
-  build(bindings) {
+  build(bindings, formats) {
     const metric = String(bindings.metric);
     const value = bindings.value;
     const series = bindings.series;
@@ -186,11 +208,22 @@ const radar: VizTemplate = {
     const angular = (of: string) => `scale('angular', ${of}[${m}])`;
     // Multiple value columns fold into series (the measures ARE the series);
     // otherwise the optional series binding groups the rows. With neither, the
-    // single series is NAMED AFTER the value column so the legend reads like the
-    // classic ECharts radar ("revenue"), and the legend always shows.
+    // single series is NAMED AFTER the value column (alias when set) so the legend
+    // reads like the classic ECharts radar ("revenue"), and the legend always shows.
     const seriesExpr = series && !multi
       ? `datum[${JSON.stringify(String(series))}]`
-      : JSON.stringify(values[0]);
+      : JSON.stringify(aliasOf(formats, values[0]));
+    // Wide data: folded series names ARE column names — remap the aliased ones so
+    // the legend shows display names (chained ternary over aliased columns only).
+    const aliased = values.filter(v => formats?.[v]?.alias);
+    const aliasRemap = aliased.length > 0
+      ? [{
+          type: 'formula', as: '__mx_series',
+          expr: aliased.reduce(
+            (acc, v) => `datum.__mx_series === ${JSON.stringify(v)} ? ${JSON.stringify(formats![v].alias)} : (${acc})`,
+            'datum.__mx_series'),
+        }]
+      : [];
     const gridStroke = 'rgba(139, 148, 158, 0.35)'; // neutral in both modes
     const RINGS = 4;
     return {
@@ -206,6 +239,7 @@ const radar: VizTemplate = {
           transform: multi
             ? [
                 { type: 'fold', fields: values, as: ['__mx_series', '__mx_fold_value'] },
+                ...aliasRemap,
                 { type: 'aggregate', groupby: [String(metric), '__mx_series'], fields: ['__mx_fold_value'], ops: ['sum'], as: ['__mx_value'] },
               ]
             : [
@@ -341,7 +375,11 @@ export type MaterializeResult =
   | { ok: false; error: string };
 
 /** Materialize a recipe source into its grammar spec. */
-export function materializeRecipe(source: { recipe: string; bindings: Record<string, string | string[]> }): MaterializeResult {
+export function materializeRecipe(source: {
+  recipe: string;
+  bindings: Record<string, string | string[]>;
+  columnFormats?: Record<string, ColumnFormatConfig> | null;
+}): MaterializeResult {
   const template = getTemplate(source.recipe);
   if (!template) {
     return { ok: false, error: `unknown recipe "${source.recipe}" — available: ${Object.keys(VIZ_TEMPLATES).join(', ')}` };
@@ -355,5 +393,5 @@ export function materializeRecipe(source: { recipe: string; bindings: Record<str
   if (badMulti) {
     return { ok: false, error: `recipe "${source.recipe}" binding "${badMulti.name}" takes a single column, not an array` };
   }
-  return { ok: true, spec: template.build(source.bindings), engine: template.engine };
+  return { ok: true, spec: template.build(source.bindings, source.columnFormats ?? undefined), engine: template.engine };
 }

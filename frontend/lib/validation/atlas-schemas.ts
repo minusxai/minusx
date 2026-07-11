@@ -246,6 +246,10 @@ export const VizSourceRecipe = Type.Object({
     'recipe binding slots → query-result column names (validated against the actual columns). Multi-capable ' +
     "slots (e.g. radar's value) accept an ARRAY of columns — one series per column." }),
   params: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'optional recipe params (see the recipe docs); omit for defaults' })),
+  columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description:
+    'per-column display formatting keyed by RESULT column name, applied at materialization: `alias` ' +
+    'renames displays derived from the column name (waterfall y-axis title, radar series names); ' +
+    'decimalPoints/prefix/suffix reshape the value labels (waterfall bars, funnel values). Omit for defaults.' })),
 }, { title: 'VizSourceRecipe' });
 export type VizSourceRecipe = Static<typeof VizSourceRecipe>;
 

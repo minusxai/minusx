@@ -522,17 +522,32 @@ const isDomTierSource = (envelope: VizEnvelope): boolean => {
 };
 const isTableSource = (envelope: VizEnvelope): boolean => sourceOf(envelope).kind === 'table';
 const isPivotSource = (envelope: VizEnvelope): boolean => sourceOf(envelope).kind === 'pivot';
+// columnFormats live on the DOM-tier sources AND recipes (applied at materialization —
+// aliases rename column-name-derived displays, number configs reshape value labels).
+const isFormatBearingSource = (envelope: VizEnvelope): boolean =>
+  isDomTierSource(envelope) || sourceOf(envelope).kind === 'recipe';
 
 export function getVizColumnFormats(envelope: VizEnvelope): Record<string, ColumnFormatConfig> {
-  if (!isDomTierSource(envelope)) return {};
+  if (!isFormatBearingSource(envelope)) return {};
   return (sourceOf(envelope).columnFormats as Record<string, ColumnFormatConfig> | null | undefined) ?? {};
 }
 
 export function setVizColumnFormats(envelope: VizEnvelope, formats: Record<string, ColumnFormatConfig>): VizEnvelope {
-  if (!isDomTierSource(envelope)) return envelope;
+  if (!isFormatBearingSource(envelope)) return envelope;
   const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
   (next.source as unknown as AnySource).columnFormats = Object.keys(formats).length > 0 ? formats : null;
   return next;
+}
+
+const isEmptyFormat = (cfg: ColumnFormatConfig): boolean =>
+  !cfg.alias && cfg.decimalPoints == null && !cfg.dateFormat && !cfg.prefix && !cfg.suffix;
+
+/** Upsert one column's format (an emptied config removes the key — TableV2 semantics). */
+export function mergeVizColumnFormat(envelope: VizEnvelope, column: string, config: ColumnFormatConfig): VizEnvelope {
+  const formats = { ...getVizColumnFormats(envelope) };
+  if (isEmptyFormat(config)) delete formats[column];
+  else formats[column] = config;
+  return setVizColumnFormats(envelope, formats);
 }
 
 export function getTableConditionalFormats(envelope: VizEnvelope): ConditionalFormatRule[] {

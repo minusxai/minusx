@@ -443,6 +443,7 @@ export const ZoneChip = ({ column, type, onRemove, extra, formatConfig, onFormat
         {onFormatChange && (
           <Box
             as="button"
+            aria-label={`Format column ${column}`}
             onClick={(e: React.MouseEvent) => { e.stopPropagation(); setShowPopover(!showPopover) }}
             ml={0.5}
             color={hasFormat ? 'accent.teal' : 'fg.subtle'}

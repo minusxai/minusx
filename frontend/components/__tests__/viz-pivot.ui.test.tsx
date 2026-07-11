@@ -139,6 +139,18 @@ describe('VegaVizPanel — pivot envelope', () => {
     expect((next.source as unknown as { css: string }).css).toContain('.mx-pivot th')
   })
 
+  it('zone-chip gear edits column alias into the envelope columnFormats', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderPanel(pivotViz())
+
+    await user.click(screen.getByLabelText('Format column revenue'))
+    await user.type(screen.getByLabelText('Alias for revenue'), 'Rev')
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const source = next.source as unknown as { columnFormats: Record<string, { alias?: string }> }
+    expect(source.columnFormats.revenue.alias).toBeTruthy()
+  })
+
   it('switching table → pivot via the icon seeds config from the columns', async () => {
     const user = userEvent.setup()
     const table = { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } } as unknown as VizEnvelope
@@ -148,5 +160,30 @@ describe('VegaVizPanel — pivot envelope', () => {
     const source = next.source as unknown as { kind: string; config: PivotConfig }
     expect(source.kind).toBe('pivot')
     expect(source.config.values[0].column).toBe('revenue')
+  })
+})
+
+// ─── VegaVizPanel — recipe zone-chip formats ─────────────────────────────────
+
+describe('VegaVizPanel — recipe column formats', () => {
+  const waterfallViz: VizEnvelope = {
+    version: 2,
+    source: { kind: 'recipe', recipe: 'minusx/waterfall@1', bindings: { category: 'region', value: 'revenue' }, params: null, columnFormats: null },
+  } as unknown as VizEnvelope
+
+  it('recipe zone chips expose the format gear; alias edits land in columnFormats', async () => {
+    const user = userEvent.setup()
+    const onVizChange = vi.fn()
+    renderWithProviders(
+      <VegaVizPanel envelope={waterfallViz} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
+    )
+
+    await user.click(screen.getByLabelText('Format column revenue'))
+    await user.type(screen.getByLabelText('Alias for revenue'), 'Rev')
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const source = next.source as unknown as { kind: string; columnFormats: Record<string, { alias?: string }> }
+    expect(source.kind).toBe('recipe')
+    expect(source.columnFormats.revenue.alias).toBeTruthy()
   })
 })
