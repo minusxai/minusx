@@ -82,6 +82,7 @@ export function getVegaParserConfig(mode: 'light' | 'dark'): Record<string, unkn
     text: { fill: colors.fgDefault, font, fontSize: 11 },
     legend: {
       orient: 'top',
+      layout: { top: { anchor: 'middle' } },
       labelColor: colors.fgMuted,
       titleColor: colors.fgDefault,
       labelFont: font,

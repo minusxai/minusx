@@ -69,6 +69,21 @@ export interface VegaViewOptions {
 }
 
 /**
+ * Single-series legend (ECharts parity, matches the radar behavior): a colorless
+ * unit chart with a field-bearing y gets a constant color datum named after the
+ * measure (its title if set, else the field name) — which renders as a one-entry
+ * legend. Render-time only; any author color encoding wins untouched.
+ */
+export function injectSingleSeriesLegend(prepared: Record<string, unknown>): void {
+  const encoding = prepared.encoding as Record<string, Record<string, unknown> | undefined> | undefined;
+  if (!encoding || encoding.color != null) return;
+  const y = encoding.y;
+  if (!y || typeof y !== 'object' || typeof y.field !== 'string') return;
+  const label = typeof y.title === 'string' ? y.title : y.field;
+  encoding.color = { datum: label };
+}
+
+/**
  * Interactive-legend platform default (ECharts parity): clicking a legend entry
  * highlights that series (shift-click for multi-select, click elsewhere to clear).
  * Injected at render time only — never persisted — and only when it's safely additive:
@@ -113,10 +128,18 @@ export function compileVegaLite(spec: Record<string, unknown>, mode: 'light' | '
     if (!('height' in prepared)) prepared.height = 'container';
     if (!('autosize' in prepared)) prepared.autosize = { type: 'fit', contains: 'padding' };
   }
-  // Legend toggle only for true single-view specs — in composed/layered specs param
+  // Legend defaults only for true single-view specs — in composed/layered specs param
   // placement differs per view, so authors declare interactions themselves.
-  if (!composed && !('layer' in prepared)) injectLegendToggle(prepared);
+  if (!composed && !('layer' in prepared)) {
+    injectSingleSeriesLegend(prepared);
+    injectLegendToggle(prepared);
+  }
   const { spec: vegaSpec } = compile(prepared as unknown as TopLevelSpec, { config: getVegaLiteConfig(mode) });
+  // Center top legends within the chart width (a Vega-level legend layout — VL's
+  // config surface doesn't expose it, so it's merged into the compiled config).
+  const cfg = ((vegaSpec as unknown as Record<string, unknown>).config ??= {}) as Record<string, unknown>;
+  const legendCfg = (cfg.legend ??= {}) as Record<string, unknown>;
+  legendCfg.layout = { top: { anchor: 'middle' }, ...(legendCfg.layout as object | undefined ?? {}) };
   return vegaSpec;
 }
 
