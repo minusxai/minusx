@@ -251,14 +251,14 @@ describe('editFile - Question Editing Flow', () => {
     const fileId = questionId2;
     await readFiles([fileId]);
 
-    const vizWith = (encoding: Record<string, unknown>) => ({
+    const vizWith = (encoding: Record<string, unknown>): NonNullable<QuestionContent['viz']> => ({
       version: 2,
       source: {
         kind: 'vega-lite',
         grammar: 'vega-lite@6',
         spec: { mark: 'bar', encoding },
       },
-    });
+    } as unknown as NonNullable<QuestionContent['viz']>);
 
     // First edit: bar with x/y/color (this lands in persistableChanges).
     editFile({ fileId, changes: { content: { viz: vizWith({

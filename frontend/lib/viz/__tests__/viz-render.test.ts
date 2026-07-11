@@ -68,6 +68,27 @@ describe('renderVegaLiteToSvg', () => {
     expect(svg).toContain('AlphaRegion');
   });
 
+  it('discrete-axis charts fill the container (width: container defeats step-sizing)', async () => {
+    // A 3-category bar without explicit width would be step-sized (~60px) — the
+    // compiled spec must carry container sizing so few categories still fill.
+    const { compileVegaLite } = await import('@/lib/viz/render-vega');
+    const vegaSpec = compileVegaLite({
+      mark: 'bar',
+      encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } },
+    }, 'dark');
+    expect(JSON.stringify(vegaSpec)).toContain('container');
+  });
+
+  it('respects explicit spec width (author opt-out of container fill)', async () => {
+    const { compileVegaLite } = await import('@/lib/viz/render-vega');
+    const vegaSpec = compileVegaLite({
+      width: 200,
+      mark: 'bar',
+      encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } },
+    }, 'dark');
+    expect(JSON.stringify(vegaSpec)).not.toContain('"container"');
+  });
+
   it('respects explicit width/height when provided', async () => {
     const svg = await renderVegaLiteToSvg(BAR_SPEC, ROWS, 'dark', { width: 512, height: 256 });
     expect(svg).toContain('<svg');

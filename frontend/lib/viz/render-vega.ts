@@ -67,11 +67,16 @@ export function compileVegaLite(spec: Record<string, unknown>, mode: 'light' | '
   // mutate their inputs (normalization, Symbol(vega_id) tagging). Never hand them
   // shared state — deep-clone here (specs are small).
   const prepared = prepareVegaLiteSpec(JSON.parse(JSON.stringify(spec)) as Record<string, unknown>);
-  // `fit` is invalid for concat/repeat/facet composition (layer is fine) — VL warns and
-  // falls back, so only default it where it applies cleanly.
+  // Responsive container fill (`width/height: 'container'` is only valid for
+  // single/layer specs). Without an explicit width, VL STEP-SIZES discrete axes
+  // (band-step × category count) — a 3-category bar renders ~60px wide instead of
+  // filling the card. Container sizing flips the scale range to [0, container].
+  // An explicit spec width/height/autosize is the author's opt-out (RFC §15).
   const composed = ['hconcat', 'vconcat', 'concat', 'repeat', 'facet'].some(k => k in prepared);
-  if (!('autosize' in prepared) && !composed) {
-    prepared.autosize = { type: 'fit', contains: 'padding' };
+  if (!composed) {
+    if (!('width' in prepared)) prepared.width = 'container';
+    if (!('height' in prepared)) prepared.height = 'container';
+    if (!('autosize' in prepared)) prepared.autosize = { type: 'fit', contains: 'padding' };
   }
   // Legend toggle only for true single-view specs — in composed/layered specs param
   // placement differs per view, so authors declare interactions themselves.

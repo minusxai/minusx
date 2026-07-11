@@ -91,9 +91,12 @@ describe('setVizType', () => {
     expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['bar', 'line', 'area', 'scatter', 'pie', 'row']);
   });
 
-  it('pie renders as a donut (innerRadius on the arc mark, MinusX house style)', () => {
+  it('pie renders as a donut with rounded, padded sectors (ECharts house style)', () => {
     const spec = specOf(setVizType(envelope(BAR), 'pie'));
-    expect((spec.mark as Record<string, unknown>).innerRadius).toBeDefined();
+    const mark = spec.mark as Record<string, unknown>;
+    expect(mark.innerRadius).toBeDefined();
+    expect(mark.cornerRadius).toBe(6);
+    expect(mark.padAngle).toBeGreaterThan(0);
   });
 
   it('leaving pie strips the donut innerRadius from the mark', () => {

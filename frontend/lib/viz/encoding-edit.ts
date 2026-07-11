@@ -173,8 +173,13 @@ export function setVizType(envelope: VizEnvelope, type: V2VizType): VizEnvelope 
     delete encoding.x;
     delete encoding.y;
     withMark(spec, 'arc');
-    // House style: pies are donuts (~30/70 like the ECharts builder), responsive to size.
-    (spec.mark as Record<string, unknown>).innerRadius = { expr: 'min(width,height)/2 * 0.45' };
+    // House style (matches the ECharts pie builder): responsive donut with rounded,
+    // slightly separated sectors (borderRadius: 6 / borderWidth: 2 over there).
+    Object.assign(spec.mark as Record<string, unknown>, {
+      innerRadius: { expr: 'min(width,height)/2 * 0.45' },
+      cornerRadius: 6,
+      padAngle: 0.015,
+    });
   } else if (type === 'row') {
     const x = encoding.x;
     encoding.x = encoding.y;
@@ -190,9 +195,12 @@ export function setVizType(envelope: VizEnvelope, type: V2VizType): VizEnvelope 
     withMark(spec, MARK_FOR_TYPE[type]);
   }
 
-  // The donut radius only makes sense on arcs — strip it when leaving pie.
+  // The donut props only make sense on arcs — strip them when leaving pie.
   if (type !== 'pie' && spec.mark && typeof spec.mark === 'object') {
-    delete (spec.mark as Record<string, unknown>).innerRadius;
+    const mark = spec.mark as Record<string, unknown>;
+    delete mark.innerRadius;
+    delete mark.cornerRadius;
+    delete mark.padAngle;
   }
 
   for (const key of Object.keys(encoding)) if (encoding[key] === undefined) delete encoding[key];
