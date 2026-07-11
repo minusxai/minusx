@@ -10,14 +10,25 @@ import { useState } from 'react';
 import { Box, Button, HStack, Text, Switch } from '@chakra-ui/react';
 import { LuLayoutGrid, LuSettings2, LuBraces } from 'react-icons/lu';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import type { VizSettings } from '@/lib/types';
 import {
-  isUnitVegaLiteSpec, getMarkType, setMarkType,
+  isUnitVegaLiteSpec, getVizType, setVizType, V2_SUPPORTED_VIZ_TYPES,
   getStacked, setStacked, getYLogScale, setYLogScale,
+  type V2VizType,
 } from '@/lib/viz/encoding-edit';
+import { VizTypeSelector } from '@/components/question/VizTypeSelector';
 import { VegaEncodingPanel } from './VegaEncodingPanel';
 import { VizSpecInspector } from './VizSpecInspector';
 
-const MARK_TYPES = ['bar', 'line', 'area', 'point', 'arc'] as const;
+// Everything the classic selector offers minus what V2 type-switching supports today —
+// shown disabled, so the icon grid doubles as the live V2 coverage checklist.
+const ALL_CLASSIC_TYPES: VizSettings['type'][] = [
+  'table', 'bar', 'line', 'area', 'row', 'scatter', 'pie', 'combo', 'funnel',
+  'waterfall', 'radar', 'pivot', 'trend', 'single_value', 'geo',
+];
+const V2_DISABLED_TYPES = ALL_CLASSIC_TYPES.filter(
+  t => !(V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t),
+);
 
 export interface VegaVizPanelProps {
   envelope: VizEnvelope;
@@ -30,7 +41,7 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
   const [activeTab, setActiveTab] = useState<'fields' | 'settings' | 'spec'>('fields');
   const spec = (envelope.source as { spec: Record<string, unknown> }).spec;
   const isUnit = isUnitVegaLiteSpec(spec);
-  const markType = getMarkType(spec);
+  const vizType = getVizType(spec);
 
   const TABS = [
     { key: 'fields', icon: LuLayoutGrid, label: 'Fields' },
@@ -66,27 +77,17 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
       {activeTab === 'settings' && (
         isUnit ? (
           <Box display="flex" flexDirection="column" gap={3} py={1}>
-            <Box>
-              <Text fontSize="10px" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
-                Mark
-              </Text>
-              <HStack gap={1} flexWrap="wrap">
-                {MARK_TYPES.map(t => (
-                  <Button
-                    key={t}
-                    aria-label={`Mark type ${t}`}
-                    size="xs"
-                    variant={markType === t ? 'solid' : 'outline'}
-                    colorPalette={markType === t ? 'teal' : undefined}
-                    onClick={() => onVizChange(setMarkType(envelope, t))}
-                    px={2}
-                    fontFamily="mono"
-                  >
-                    {t}
-                  </Button>
-                ))}
-              </HStack>
-            </Box>
+            <VizTypeSelector
+              value={(vizType ?? 'bar') as VizSettings['type']}
+              onChange={(t) => {
+                if ((V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t)) {
+                  onVizChange(setVizType(envelope, t as V2VizType));
+                }
+              }}
+              orientation="grouped"
+              disabledTypes={V2_DISABLED_TYPES}
+              disabledReason="Not yet supported for Vega charts — ask the agent"
+            />
             <HStack justify="space-between">
               <Text fontSize="xs" color="fg.muted">Stacked</Text>
               <Switch.Root

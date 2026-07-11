@@ -111,6 +111,88 @@ export function setStacked(envelope: VizEnvelope, stacked: boolean): VizEnvelope
   return next;
 }
 
+// ── Viz-type switching (the icon selector) ─────────────────────────────────────────
+//
+// Cartesian marks are interchangeable (same positional encodings) — pure mark swaps.
+// `row` swaps the x/y defs wholesale so axis/format config travels with the channel.
+// `pie` is an encoding TRANSFORM: a naive mark swap to `arc` renders garbage because
+// arcs read theta/color, not x/y.
+
+export const V2_SUPPORTED_VIZ_TYPES = ['bar', 'line', 'area', 'scatter', 'pie', 'row'] as const;
+export type V2VizType = (typeof V2_SUPPORTED_VIZ_TYPES)[number];
+
+const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'row' | 'pie'>, string> = {
+  bar: 'bar', line: 'line', area: 'area', scatter: 'point',
+};
+
+/** Classify a unit spec into a selector viz type (null when unrecognized). */
+export function getVizType(spec: Record<string, unknown>): V2VizType | null {
+  const mark = getMarkType(spec);
+  if (mark === 'arc') return 'pie';
+  if (mark === 'point') return 'scatter';
+  if (mark === 'bar') {
+    const x = channelDef(spec, 'x');
+    const y = channelDef(spec, 'y');
+    // Row = horizontal bar: the measure runs along x, the category/time along y.
+    if (x?.type === 'quantitative' && y != null && y.type !== 'quantitative') return 'row';
+    return 'bar';
+  }
+  if (mark === 'line' || mark === 'area') return mark;
+  return null;
+}
+
+const withMark = (spec: Record<string, unknown>, type: string): void => {
+  spec.mark = typeof spec.mark === 'object' && spec.mark != null
+    ? { ...(spec.mark as Record<string, unknown>), type }
+    : { type };
+};
+
+/** Switch a unit spec's viz type, transforming encodings where the shapes differ. */
+export function setVizType(envelope: VizEnvelope, type: V2VizType): VizEnvelope {
+  const { next, spec } = cloneEnvelope(envelope);
+  const encoding = { ...((spec.encoding as Record<string, unknown> | undefined) ?? {}) } as Record<string, Record<string, unknown> | undefined>;
+  const from = getVizType(spec);
+
+  // Leaving pie: restore positional channels from theta/color before anything else.
+  if (from === 'pie' && type !== 'pie') {
+    if (encoding.color && !encoding.x) encoding.x = { ...encoding.color };
+    if (encoding.theta && !encoding.y) encoding.y = { ...encoding.theta };
+    delete encoding.theta;
+  }
+
+  if (type === 'pie') {
+    const value = encoding.y ?? encoding.theta;
+    const slice = encoding.color ?? encoding.x;
+    if (value) {
+      const theta = { ...value };
+      delete theta.axis; // meaningless on theta
+      delete theta.stack;
+      encoding.theta = theta;
+    }
+    if (slice) encoding.color = { ...slice };
+    delete encoding.x;
+    delete encoding.y;
+    withMark(spec, 'arc');
+  } else if (type === 'row') {
+    const x = encoding.x;
+    encoding.x = encoding.y;
+    encoding.y = x;
+    withMark(spec, 'bar');
+  } else {
+    // Coming FROM row, restore vertical orientation (swap back).
+    if (from === 'row') {
+      const x = encoding.x;
+      encoding.x = encoding.y;
+      encoding.y = x;
+    }
+    withMark(spec, MARK_FOR_TYPE[type]);
+  }
+
+  for (const key of Object.keys(encoding)) if (encoding[key] === undefined) delete encoding[key];
+  spec.encoding = encoding;
+  return next;
+}
+
 export function getYLogScale(spec: Record<string, unknown>): boolean {
   const scale = channelDef(spec, 'y')?.scale as Record<string, unknown> | undefined;
   return scale?.type === 'log';

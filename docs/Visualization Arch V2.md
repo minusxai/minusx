@@ -494,10 +494,10 @@ Manual verification protocol for the probe. `[x]` = verified (browser or headles
 - [x] Legend on top, correctly spaced, all items visible at real widths (2026-07-10)
 - [x] Axis title clear of tick labels (mono-width `titlePadding`) (2026-07-10)
 - [x] Temporal axis multi-scale labels legible (2026-07-10)
-- [ ] Dark ↔ light toggle recompiles correctly (axis/legend/tooltip colors flip, no stale colors)
-- [ ] Container resize re-lays-out without clipping (drag panel divider, browser resize)
+- [x] Dark ↔ light toggle recompiles correctly (axis/legend/tooltip colors flip, no stale colors)
+- [x] Container resize re-lays-out without clipping (drag panel divider, browser resize)
 - [ ] Transparent background — chart inherits card surface in both modes
-- [ ] A viz-V2 chart and a legacy ECharts chart look like siblings (palette/font parity)
+- [x] A viz-V2 chart and a legacy ECharts chart look like siblings (palette/font parity)
 - [ ] Very narrow container (dashboard-tile width) — labels thin gracefully, no overlap
 - [ ] Legend with many categories (>8) at narrow width (known: horizontal legends don't wrap;
   agent idiom `legend: {columns: N}`)
