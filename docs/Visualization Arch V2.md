@@ -571,6 +571,10 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - Pivot source end-to-end (2026-07-11): envelope renders PivotTable with rows×columns, SUM heatmap
   cells, `$` prefix from columnFormats, Total column, `.mx-pivot th` css override live; Pivot icon
   enabled/selected; Fields hosts the full PivotAxisBuilder (Rows/Columns/Values + agg selector)
+- Inline viz validation on EditFile/CreateFile (2026-07-11): errors reject the write atomically with
+  per-issue paths + available fields in the tool result; query+viz combined edits re-check after
+  auto-execute (`vizValidation`); columns-unknown paths skip field checks (no false positives).
+  `POST /api/viz/validate` carries it for the browser-side handlers (schema stays server-only)
 - Zebra stripe is a CSS default on parity classes (`.mx-row-odd`/`.mx-row-even`, data-index — not
   nth-child, virtualization spacers would flip parity) — overridable from the `css` field
 - Drag a column chip into a drop zone (drag-and-drop path)
@@ -634,8 +638,6 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [ ] Dashboards with legacy charts unaffected
 
 ### Known gaps (expected to fail — do not file)
-- Agent gets no ValidateVisualization feedback in tool results yet (validator built + tested —
-  incl. table/pivot field checks + css policy; `/api/viz/validate` route + tool wiring pending)
 - Vega charts invisible to the agent in follow-up turns (chart→LLM image path pending)
 - Public/guest story rendering with viz untested (CSP interpreter is in, path unwired)
 - Image/CSV export of viz-V2 charts unwired (table's own CSV button works — it's the chart-image
