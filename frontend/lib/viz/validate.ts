@@ -66,17 +66,24 @@ function validateEnvelopeShape(envelope: unknown): { issues: VizIssue[]; env?: V
     }
     return { issues: [], env: env as unknown as VizEnvelope };
   }
-  if (source.kind === 'table') {
+  if (source.kind === 'table' || source.kind === 'pivot') {
     if (source.columnFormats != null && (typeof source.columnFormats !== 'object' || Array.isArray(source.columnFormats))) {
       return { issues: [err('E_ENVELOPE', '/source/columnFormats', 'columnFormats must be a record keyed by result column name')] };
     }
     if (source.css != null && typeof source.css !== 'string') {
       return { issues: [err('E_ENVELOPE', '/source/css', 'css must be a string of CSS rules against the .mx-* class contract')] };
     }
+    if (source.kind === 'pivot') {
+      const config = source.config as Record<string, unknown> | undefined;
+      if (config == null || typeof config !== 'object' || Array.isArray(config)) {
+        return { issues: [err('E_ENVELOPE', '/source/config',
+          'pivot sources need config: {rows: [...], columns: [...], values: [{column, aggFunction}]}')] };
+      }
+    }
     return { issues: [], env: env as unknown as VizEnvelope };
   }
   if (source.kind !== 'vega-lite') {
-    return { issues: [err('E_ENVELOPE', '/source/kind', `unsupported source kind ${JSON.stringify(source.kind)} — available: "vega-lite", "recipe", "table"`)] };
+    return { issues: [err('E_ENVELOPE', '/source/kind', `unsupported source kind ${JSON.stringify(source.kind)} — available: "vega-lite", "recipe", "table", "pivot"`)] };
   }
   if (source.grammar !== VIZ_GRAMMAR_VEGA_LITE) {
     return { issues: [err('E_ENVELOPE', '/source/grammar', `source.grammar must be "${VIZ_GRAMMAR_VEGA_LITE}", got ${JSON.stringify(source.grammar)}`)] };
@@ -184,24 +191,31 @@ export function validateVizEnvelope(
 
   let rawSpec: Record<string, unknown>;
   const source = shape.env.source as Record<string, unknown>;
-  if (source.kind === 'table') {
-    // The DOM tier: no grammar to validate. Check columnFormats keys against the
+  if (source.kind === 'table' || source.kind === 'pivot') {
+    // The DOM tier: no grammar to validate. Check every column reference against the
     // result columns (typo feedback) and sanitize the css override.
     const known = new Set(columns.map(c => c.name));
     const available = columns.map(c => `${c.name} (${c.kind})`).join(', ');
+    const notFound = (path: string, name: string) =>
+      issues.push(err('E_FIELD_NOT_FOUND', path, `"${name}" is not in the query result. Available fields: ${available}`));
     for (const key of Object.keys((source.columnFormats as Record<string, unknown> | null | undefined) ?? {})) {
-      if (!known.has(key)) {
-        issues.push(err('E_FIELD_NOT_FOUND', `/source/columnFormats/${key}`,
-          `"${key}" is not in the query result. Available fields: ${available}`));
-      }
+      if (!known.has(key)) notFound(`/source/columnFormats/${key}`, key);
+    }
+    if (source.kind === 'pivot') {
+      const config = source.config as { rows?: string[]; columns?: string[]; values?: Array<{ column?: string }> };
+      (config.rows ?? []).forEach((name, i) => { if (!known.has(name)) notFound(`/source/config/rows/${i}`, name); });
+      (config.columns ?? []).forEach((name, i) => { if (!known.has(name)) notFound(`/source/config/columns/${i}`, name); });
+      (config.values ?? []).forEach((v, i) => {
+        if (typeof v?.column === 'string' && !known.has(v.column)) notFound(`/source/config/values/${i}/column`, v.column);
+      });
     }
     const css = source.css as string | null | undefined;
     if (css) {
       if (/@import/i.test(css)) {
-        issues.push(err('E_CSS', '/source/css', '@import is not allowed in table css overrides'));
+        issues.push(err('E_CSS', '/source/css', '@import is not allowed in css overrides'));
       }
       if (/url\s*\(/i.test(css)) {
-        issues.push(err('E_CSS', '/source/css', 'url() is not allowed in table css overrides — style with colors/fonts/spacing only'));
+        issues.push(err('E_CSS', '/source/css', 'url() is not allowed in css overrides — style with colors/fonts/spacing only'));
       }
     }
     return { ok: !issues.some(i => i.severity === 'error'), issues };

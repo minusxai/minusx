@@ -262,14 +262,31 @@ export const VizSourceTable = Type.Object({
   css: Nullable(Type.String({ description:
     'CSS overrides for the table LOOKS (the DOM tier equivalent of a chart spec), scoped to this ' +
     "table automatically. Write rules against the stable class contract: .mx-table, .mx-header-row, " +
-    '.mx-th, .mx-row, .mx-cell, .mx-col-<columnName> (per-column), .mx-toolbar (bottom bar). ' +
-    'No @import and no external url() — both are rejected. Omit for the default theme.' })),
+    '.mx-th, .mx-row, .mx-cell, .mx-col-<columnName> (per-column), .mx-toolbar (bottom bar), ' +
+    '.mx-row-odd/.mx-row-even (zebra stripe parity — the default stripe is a CSS rule, restyle or ' +
+    'unset it here). No @import and no external url() — both are rejected. Omit for the default theme.' })),
 }, { title: 'VizSourceTable' });
 export type VizSourceTable = Static<typeof VizSourceTable>;
 
-// Discriminated on `kind`. `vega`, `pivot`, and `slippy-map` join this union
-// as they land (additive — see the RFC).
-export const VizSource = Type.Union([VizSourceVegaLite, VizSourceRecipe, VizSourceTable], { title: 'VizSource' });
+// The pivot grid (RFC §10): same DOM tier + css contract as table; the pivot
+// STRUCTURE (rows/columns/values) is real config, so it stays typed — reusing the
+// classic PivotConfig schema wholesale (subtotals, heatmap, formulas included).
+export const VizSourcePivot = Type.Object({
+  kind: Type.Literal('pivot'),
+  config: PivotConfig,
+  columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description:
+    'per-column display formatting keyed by RESULT column name (alias for dimension/value headers, ' +
+    'decimalPoints/prefix/suffix for cells). Omit for sensible defaults.' })),
+  css: Nullable(Type.String({ description:
+    'CSS overrides for the pivot LOOKS, scoped to this pivot automatically. Target the root class ' +
+    'plus element selectors: `.mx-pivot th { … }`, `.mx-pivot td { … }`, `.mx-pivot thead { … }`. ' +
+    'No @import and no external url() — both are rejected. Omit for the default theme.' })),
+}, { title: 'VizSourcePivot' });
+export type VizSourcePivot = Static<typeof VizSourcePivot>;
+
+// Discriminated on `kind`. `vega` and `slippy-map` join this union as they land
+// (additive — see the RFC).
+export const VizSource = Type.Union([VizSourceVegaLite, VizSourceRecipe, VizSourceTable, VizSourcePivot], { title: 'VizSource' });
 export type VizSource = Static<typeof VizSource>;
 
 export const VizEnvelope = Type.Object({

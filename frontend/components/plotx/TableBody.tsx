@@ -51,11 +51,12 @@ export const TableBody = ({
           <tr
             key={row.id}
             data-row-idx={virtualRow.index}
-            // mx-row is the STABLE class contract (css overrides); table-v2-row is internal
-            className="table-v2-row mx-row"
+            // mx-* is the STABLE class contract (css overrides); table-v2-row is internal.
+            // Zebra parity rides DATA-index classes (virtualization spacers break
+            // nth-child) — the stripe itself is a CSS default in TableV2, overridable.
+            className={`table-v2-row mx-row ${virtualRow.index % 2 === 1 ? 'mx-row-odd' : 'mx-row-even'}`}
             style={{
               height: wrapColumns?.size ? undefined : ROW_HEIGHT,
-              background: virtualRow.index % 2 === 1 ? 'var(--chakra-colors-bg-emphasized)' : undefined,
               cursor: onRowClick ? 'pointer' : undefined,
             }}
             onClick={onRowClick ? () => onRowClick(original, virtualRow.index) : undefined}

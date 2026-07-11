@@ -617,7 +617,10 @@ export const PivotTable = ({
         '&::-webkit-scrollbar-thumb:hover': { background: 'var(--chakra-colors-fg-muted)' },
       }}
     >
-      <ChakraTable.Root size="sm" css={{ borderCollapse: 'separate', borderSpacing: compact ? '3px' : 0, ...(compact ? { '& td, & th': { borderBottom: 'none', borderRadius: '3px' } } : { '& td, & th': { borderBottom: '1px solid', borderColor: 'var(--chakra-colors-fg-subtle)' } }) }}>
+      {/* mx-pivot: the STABLE class contract root for css overrides (Viz V2 pivot
+          source `css` field / story styling) — target with element selectors,
+          e.g. `.mx-pivot th { … }`. */}
+      <ChakraTable.Root className="mx-pivot" size="sm" css={{ borderCollapse: 'separate', borderSpacing: compact ? '3px' : 0, ...(compact ? { '& td, & th': { borderBottom: 'none', borderRadius: '3px' } } : { '& td, & th': { borderBottom: '1px solid', borderColor: 'var(--chakra-colors-fg-subtle)' } }) }}>
         <PivotTableHeader
           augmentedColHeaderRows={augmentedColHeaderRows}
           numRowDims={numRowDims}

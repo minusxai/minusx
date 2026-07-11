@@ -16,7 +16,7 @@ import { useId } from 'react';
 import { Box } from '@chakra-ui/react';
 import { TableV2 } from '@/components/plotx/TableV2';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { getTableColumnFormats, getTableConditionalFormats, getTableCss, setTableColumnFormats } from '@/lib/viz/encoding-edit';
+import { getVizColumnFormats, getTableConditionalFormats, getVizCss, setVizColumnFormats } from '@/lib/viz/encoding-edit';
 
 export interface VizTableViewProps {
   envelope: VizEnvelope;
@@ -36,8 +36,8 @@ const isCssSafe = (css: string): boolean => !/@import/i.test(css) && !/url\s*\(/
 
 export function VizTableView({ envelope, columns, types, rows, sql, databaseName, enableDrilldown, onVizChange }: VizTableViewProps) {
   const scopeClass = `mx-viz-scope-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
-  const css = getTableCss(envelope);
-  const columnFormats = getTableColumnFormats(envelope);
+  const css = getVizCss(envelope);
+  const columnFormats = getVizColumnFormats(envelope);
 
   return (
     <Box className={scopeClass} flex="1" minHeight="0" display="flex" flexDirection="column" width="100%">
@@ -53,7 +53,7 @@ export function VizTableView({ envelope, columns, types, rows, sql, databaseName
         databaseName={databaseName}
         enableDrilldown={enableDrilldown}
         columnFormats={Object.keys(columnFormats).length > 0 ? columnFormats : undefined}
-        onColumnFormatsChange={onVizChange ? (formats) => onVizChange(setTableColumnFormats(envelope, formats)) : undefined}
+        onColumnFormatsChange={onVizChange ? (formats) => onVizChange(setVizColumnFormats(envelope, formats)) : undefined}
         conditionalFormats={getTableConditionalFormats(envelope)}
       />
     </Box>

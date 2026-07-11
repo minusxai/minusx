@@ -291,8 +291,21 @@ templates:
           </viz>
           ```
           - `columnFormats`: per-column `alias`/`decimalPoints`/`dateFormat`/`prefix`/`suffix`, keyed by EXACT result column names.
-          - `css`: styles the table's LOOKS (a backtick template string). Stable class contract: `.mx-table`, `.mx-header-row`, `.mx-th`, `.mx-row`, `.mx-cell`, `.mx-col-<columnName>` (per column), `.mx-toolbar` (the stats/filters/CSV bar — `display: none` hides the chrome, e.g. for story embeds). Rules are scoped to this table automatically. No `@import`, no `url()`. Omit for the default theme.
+          - `css`: styles the table's LOOKS (a backtick template string). Stable class contract: `.mx-table`, `.mx-header-row`, `.mx-th`, `.mx-row`, `.mx-cell`, `.mx-col-<columnName>` (per column), `.mx-toolbar` (the stats/filters/CSV bar — `display: none` hides the chrome, e.g. for story embeds), `.mx-row-odd`/`.mx-row-even` (zebra parity — the default stripe is a CSS rule on `.mx-row-odd`; restyle or `background: transparent` it here). Rules are scoped to this table automatically. No `@import`, no `url()`. Omit for the default theme.
           - `conditionalFormats`: background rules `[{id, column, operator, value, target: "cell"|"row"|"column", bgColor}]` (JSON expression like columnFormats).
+        - **Pivot** — a `pivot` source renders the pivot grid (nested headers, subtotals, collapsible groups, heatmap, totals — all built in). The structure is typed config; looks are css:
+          ```
+          <viz>
+            <version>2</version>
+            <source>
+              <kind>pivot</kind>
+              <config>{{"rows": ["region"], "columns": ["month"], "values": [{"column": "revenue", "aggFunction": "SUM"}]}}</config>
+            </source>
+          </viz>
+          ```
+          - `config` (REQUIRED): `rows`/`columns` are dimension column lists, `values` are measures with `aggFunction` (SUM/AVG/COUNT/MIN/MAX) — all EXACT result column names. Optional keys: `showRowTotals`, `showColumnTotals`, `showHeatmap`, `compact` (GitHub-graph style), `heatmapScale` ('red-yellow-green'|'green'|'blue'), `rowFormulas`/`columnFormulas` (`[{name, operandA, operandB, operator}]` over top-level dimension values).
+          - `columnFormats` (optional): same shape as table — aliases rename dimension/value headers, decimalPoints/prefix/suffix format cells.
+          - `css` (optional, backtick template string like table): scoped overrides targeting the `.mx-pivot` root with element selectors — `.mx-pivot th { … }`, `.mx-pivot td { … }`. No `@import` / `url()`.
         - To go back to the standard chart types, remove `<viz>` entirely (set it to null) and configure `vizSettings`.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
 

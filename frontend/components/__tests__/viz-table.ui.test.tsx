@@ -166,6 +166,20 @@ describe('QuestionVisualization — table envelope routing', () => {
     expect(document.querySelector('.mx-col-revenue')).toBeTruthy()
     expect(document.querySelector('.mx-toolbar')).toBeTruthy()
   })
+
+  it('zebra striping is a CSS default on parity classes, not an inline style', () => {
+    renderViz(tableViz())
+    // Parity must be computed from the DATA index (virtualization spacers break
+    // nth-child), expressed as classes so agent css can override the default.
+    const rows = Array.from(document.querySelectorAll('.mx-row'))
+    expect(rows.length).toBeGreaterThan(1)
+    expect(rows[0].classList.contains('mx-row-even')).toBe(true)
+    expect(rows[1].classList.contains('mx-row-odd')).toBe(true)
+    // No inline background anywhere — the stripe comes from a stylesheet rule.
+    for (const row of rows) {
+      expect((row as HTMLElement).style.background).toBe('')
+    }
+  })
 })
 
 // ─── VegaVizPanel — table state ──────────────────────────────────────────────
@@ -205,7 +219,7 @@ describe('VegaVizPanel — table envelope', () => {
 
     expect(screen.getByLabelText('Add conditional formatting rule')).toBeInTheDocument()
 
-    const cssEditor = screen.getByLabelText('Table CSS overrides')
+    const cssEditor = screen.getByLabelText('CSS overrides')
     await user.click(cssEditor)
     await user.type(cssEditor, '.mx-th {{ font-size: 14px; }')
     await user.tab() // commit on blur

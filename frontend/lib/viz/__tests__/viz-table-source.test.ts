@@ -6,9 +6,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   getEnvelopeVizType, isEnvelopeEditable, getEnvelopeZones, setEnvelopeVizType,
-  getTableColumnFormats, setTableColumnFormats,
+  getVizColumnFormats, setVizColumnFormats,
   getTableConditionalFormats, setTableConditionalFormats,
-  getTableCss, setTableCss,
+  getVizCss, setVizCss,
   V2_SUPPORTED_VIZ_TYPES,
 } from '@/lib/viz/encoding-edit';
 import { validateVizEnvelope } from '@/lib/viz/validate';
@@ -91,11 +91,11 @@ describe('switching away from table (columns fallback inference)', () => {
 });
 
 describe('table format edits (surgical)', () => {
-  it('setTableColumnFormats writes formats; getTableColumnFormats reads them back', () => {
-    const next = setTableColumnFormats(tableEnvelope(), { revenue: { alias: 'Revenue ($)', decimalPoints: 2 } });
-    expect(getTableColumnFormats(next)).toEqual({ revenue: { alias: 'Revenue ($)', decimalPoints: 2 } });
+  it('setVizColumnFormats writes formats; getVizColumnFormats reads them back', () => {
+    const next = setVizColumnFormats(tableEnvelope(), { revenue: { alias: 'Revenue ($)', decimalPoints: 2 } });
+    expect(getVizColumnFormats(next)).toEqual({ revenue: { alias: 'Revenue ($)', decimalPoints: 2 } });
     // Original untouched (immutably cloned)
-    expect(getTableColumnFormats(tableEnvelope())).toEqual({});
+    expect(getVizColumnFormats(tableEnvelope())).toEqual({});
   });
 
   it('setTableConditionalFormats writes rules; empty list clears to null', () => {
@@ -108,14 +108,14 @@ describe('table format edits (surgical)', () => {
   });
 
   it('format setters are no-ops on non-table sources', () => {
-    expect(setTableColumnFormats(barEnvelope, { x: { alias: 'nope' } })).toBe(barEnvelope);
+    expect(setVizColumnFormats(barEnvelope, { x: { alias: 'nope' } })).toBe(barEnvelope);
   });
 
-  it('setTableCss writes the css override; empty/whitespace clears to null', () => {
-    const withCss = setTableCss(tableEnvelope(), '.mx-th { background: #222; }');
-    expect(getTableCss(withCss)).toBe('.mx-th { background: #222; }');
-    const cleared = setTableCss(withCss, '   ');
-    expect(getTableCss(cleared)).toBeNull();
+  it('setVizCss writes the css override; empty/whitespace clears to null', () => {
+    const withCss = setVizCss(tableEnvelope(), '.mx-th { background: #222; }');
+    expect(getVizCss(withCss)).toBe('.mx-th { background: #222; }');
+    const cleared = setVizCss(withCss, '   ');
+    expect(getVizCss(cleared)).toBeNull();
     expect((cleared.source as unknown as Record<string, unknown>).css).toBeNull();
   });
 });

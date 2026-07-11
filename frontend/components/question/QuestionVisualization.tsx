@@ -11,6 +11,7 @@ import dynamic from 'next/dynamic';
 import { Tooltip } from '@/components/ui/tooltip';
 import { TableV2 } from '@/components/plotx/TableV2';
 import { VizTableView } from '@/components/viz/VizTableView';
+import { VizPivotView } from '@/components/viz/VizPivotView';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/components/question/error-parser';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
@@ -200,9 +201,10 @@ function QuestionVisualizationInner({
   // A V2 envelope is authoritative when present (RFC): the vizSettings pipeline is bypassed.
   // The settings button stays visible for V2 questions — the panel shows the spec inspector.
   const hasVizV2 = currentState?.viz != null;
-  // The table kind renders on the DOM tier (TableV2), never through vega (RFC §10).
-  const isVizV2Table = hasVizV2 &&
-    (currentState.viz!.source as unknown as { kind: string }).kind === 'table';
+  // table/pivot kinds render on the DOM tier, never through vega (RFC §10).
+  const vizV2Kind = hasVizV2 ? (currentState.viz!.source as unknown as { kind: string }).kind : null;
+  const isVizV2Table = vizV2Kind === 'table';
+  const isVizV2Pivot = vizV2Kind === 'pivot';
   const isChartType = hasVizV2 || (currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table');
 
   const showChartTitle = config.viz.showTitle;
@@ -461,7 +463,16 @@ function QuestionVisualizationInner({
                     onVizChange={config.editable ? onVizChange : undefined}
                   />
                 )}
-                {hasVizV2 && !isVizV2Table && (
+                {hasVizV2 && isVizV2Pivot && (
+                  <VizPivotView
+                    envelope={currentState.viz!}
+                    rows={data.rows}
+                    sql={currentState?.query}
+                    databaseName={currentState?.connection_name}
+                    enableDrilldown={config.enableDrilldown !== false}
+                  />
+                )}
+                {hasVizV2 && !isVizV2Table && !isVizV2Pivot && (
                   <Box flex="1" minHeight="0" overflow="hidden" display="flex" p={3}>
                     <VegaChart
                       envelope={currentState.viz!}

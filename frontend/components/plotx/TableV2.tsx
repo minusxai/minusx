@@ -332,6 +332,11 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
             '&::-webkit-scrollbar-thumb': { background: 'rgba(128,128,128,0.3)', borderRadius: '3px' },
             '&::-webkit-scrollbar-thumb:hover': { background: 'rgba(128,128,128,0.5)' },
             '&::-webkit-scrollbar-corner': { background: 'transparent' },
+            // Zebra stripe DEFAULT — a stylesheet rule (not inline) so css overrides
+            // (.mx-row-odd / .mx-row-even in the scoped `css` field) can restyle it.
+            '& .mx-row-odd': {
+              background: 'var(--chakra-colors-bg-emphasized)',
+            },
             '& .table-v2-row': {},
             '& .table-v2-row:hover': {
               background: 'var(--chakra-colors-bg-muted) !important',
