@@ -499,8 +499,11 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [x] funnel — shipped recipe `minusx/funnel@1` (tapered area, data-order stages, % of first stage)
 - [x] waterfall — shipped recipe `minusx/waterfall@1` (floating bars, signed labels, closing Total)
 - [x] radar — shipped recipe `minusx/radar@1`, NATIVE VEGA engine (angular/radial scales, series polygons, optional series binding) — the vega tier's first resident
-- [ ] table — stays DOM; `<GridView>` phase (RFC §10)
-- [ ] pivot — stays DOM; `<GridView>` phase (RFC §10)
+- [x] table — `table` source kind on the DOM tier: TableV2 reused wholesale (sort/filter/visibility/
+  resize/stats/CSV/drilldown built in); persists columnFormats + conditionalFormats + `css` (looks are
+  CSS against the stable `.mx-*` class contract — no style toggles by design; chrome hides via
+  `.mx-toolbar {display: none}`); UI + agent
+- [ ] pivot — stays DOM; same contract as table (shared `.mx-*` classes + css field), next up (RFC §10)
 - [ ] trend — recipe-vs-DOM-widget spike decision (RFC §17)
 - [ ] single_value — follows the trend decision
 - [ ] geo — Vega recipes for analytic geo; Leaflet frozen for tile basemaps (RFC §9)
@@ -554,6 +557,10 @@ Move items up as they pass; anything that fails gets a note + fix before it move
   body — fixed: the chip's overflow-hidden clipped an in-chip panel invisible (the original DOM-query
   "verification" was a false positive; physical-click re-verified)
 - Spec tab shows the live envelope; copy button present
+- Table source end-to-end (2026-07-11): envelope renders TableV2 with alias + decimals + conditional
+  green cells + `.mx-th` css override live; Table icon enabled/selected; Fields hint; Settings hosts
+  the conditional-format panel + css textarea; table→waterfall icon switch inferred bindings from
+  the columns fallback (STEPS=platform, VALUE=revenue) with a working Discard round-trip
 
 **Regressions**
 - Full test suite green after every probe commit (continuous through the session)
