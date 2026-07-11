@@ -40,3 +40,7 @@ export interface VizValidationResult {
   ok: boolean;
   issues: VizIssue[];
 }
+
+/** Render issues as the agent-facing feedback string (one line per issue). */
+export const formatVizIssues = (issues: VizIssue[]): string =>
+  issues.map(i => `[${i.severity}] ${i.code} at ${i.path || '/'}: ${i.message}`).join('\n');

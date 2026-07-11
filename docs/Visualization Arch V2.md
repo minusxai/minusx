@@ -611,6 +611,10 @@ Move items up as they pass; anything that fails gets a note + fix before it move
   props but they're unwired. In progress.
 - [ ] Color controls ("color panels") — decide the V2 equivalent of the classic per-series
   swatches (surgical `scale.range` edit vs agent-only)
+- [ ] annotations
+- [ ] custom plot
+- [ ] heatmap table?
+
 
 **Data handling**
 - [ ] Parameterized query — param change re-executes and chart follows

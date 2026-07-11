@@ -307,6 +307,7 @@ templates:
           - `config` (REQUIRED): `rows`/`columns` are dimension column lists, `values` are measures with `aggFunction` (SUM/AVG/COUNT/MIN/MAX) — all EXACT result column names. Optional keys: `showRowTotals`, `showColumnTotals`, `showHeatmap`, `compact` (GitHub-graph style), `heatmapScale` ('red-yellow-green'|'green'|'blue'), `rowFormulas`/`columnFormulas` (`[{name, operandA, operandB, operator}]` over top-level dimension values).
           - `columnFormats` (optional): same shape as table — `alias` renames dimension/value headers, `format` (d3) formats cells and date headers.
           - `css` (optional, backtick template string like table): scoped overrides targeting the `.mx-pivot` root with element selectors — `.mx-pivot th { … }`, `.mx-pivot td { … }`. No `@import` / `url()`.
+        - **Validation is automatic**: every EditFile/CreateFile that changes `<viz>` is validated (official Vega-Lite schema, field names vs the query result, recipe bindings, css policy). Errors REJECT the write — nothing is saved — and the tool result lists each issue with its path and the available fields; fix and retry. When you change the query and viz together, field checks run after the query executes and any issues come back as `vizValidation` in the result.
         - To go back to the standard chart types, remove `<viz>` entirely (set it to null) and configure `vizSettings`.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
 

@@ -11,7 +11,12 @@ import type { EditFileDetails, NotebookContent, NotebookSqlCell } from '@/lib/ty
 import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
 import { isTitleMissing, missingTitleFeedback } from '@/lib/data/story/file-title';
 import { contextEditWithinBounds } from '@/lib/context/context-agent-view';
-import { clearQueryResult } from '@/store/queryResultsSlice';
+import isEqual from 'lodash/isEqual';
+import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
+import { markupToContent } from '@/lib/data/story/file-markup';
+import { validateVizRemote } from '@/lib/viz/validate-remote';
+import { formatVizIssues } from '@/lib/viz/types';
+import { toVizColumns } from '@/lib/viz/query-data';
 import { getStore } from '@/store/store';
 import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, editFile as editFileOp } from '@/lib/file-state/file-state';
 import { getRootParams, storyEmbedRuns } from '@/lib/data/helpers/param-resolution';
@@ -162,6 +167,38 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
         : workingStr.replace(effectiveOld, effectiveNew);
     }
 
+    // Inline viz validation (RFC §11, compiler model): a changed V2 envelope is
+    // validated BEFORE the edit applies — errors reject atomically with the issues
+    // in the tool result. Field checks use the cached result columns only when the
+    // query is unchanged (else they're skipped here and re-run after auto-execute).
+    if (fileState?.type === 'question') {
+      const parsedNext = markupToContent('question', workingStr);
+      if (parsedNext.ok) {
+        const nextContent = parsedNext.content as { viz?: unknown; query?: string };
+        const prevContent = selectMergedContent(stateBefore, fileId) as
+          { viz?: unknown; query?: string; connection_name?: string; parameterValues?: Record<string, unknown> } | undefined;
+        // Deep equality, not string compare — the markup round-trip reorders keys.
+        const vizChanged = !isEqual(nextContent.viz ?? null, prevContent?.viz ?? null);
+        if (nextContent.viz != null && vizChanged) {
+          const queryUnchanged = nextContent.query === prevContent?.query;
+          // The slice stores {data: QueryResult, ...}; columns live on `data`.
+          const cached = queryUnchanged && prevContent?.query && prevContent.connection_name
+            ? (selectQueryResult(stateBefore, prevContent.query, prevContent.parameterValues || {}, prevContent.connection_name) as
+                { data?: { columns?: string[]; types?: string[] } } | undefined)?.data
+            : undefined;
+          const verdict = await validateVizRemote(
+            nextContent.viz,
+            cached?.columns && cached?.types ? toVizColumns(cached.columns, cached.types) : undefined,
+          );
+          if (!verdict.ok) {
+            const err = 'Viz validation failed — NO changes were applied. Fix the issues and retry:\n'
+              + formatVizIssues(verdict.issues);
+            return { content: { success: false, error: err, vizIssues: verdict.issues }, details: { success: false, error: err } };
+          }
+        }
+      }
+    }
+
     const result = await editFileStr({ fileId, oldMatch: built.fullFileStr, newMatch: workingStr });
     if (!result.success) {
       const err = result.error || 'Edit failed';
@@ -196,6 +233,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
   }
 
   // Auto-execute query for questions (agent sees results immediately)
+  let vizPostValidation: string | null = null;
   if (fileState?.type === 'question') {
     const updatedState = getStore().getState();
     const finalContent = selectMergedContent(updatedState, fileId) as any;
@@ -220,12 +258,22 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
       // Auto-execute is best-effort: a failed execution (e.g. no data, bad param) must NOT
       // cause EditFile to report failure. The edit was already staged successfully.
       try {
-        await getQueryResult({
+        const execResult = await getQueryResult({
           query: finalContent.query,
           params,
           database: finalContent.connection_name,
           filePath: fileState?.path,
         });
+        // Re-validate the viz against the FRESH result columns (RFC §11) — the
+        // pre-apply check skips field refs when the query changed in the same edit.
+        // Advisory only: the edit is staged; issues feed back so the agent fixes next.
+        if (finalContent.viz != null && execResult?.columns && execResult?.types) {
+          const verdict = await validateVizRemote(finalContent.viz, toVizColumns(execResult.columns, execResult.types));
+          if (verdict.issues.length > 0) {
+            vizPostValidation = 'The saved viz has issues against the query result — fix with another EditFile:\n'
+              + formatVizIssues(verdict.issues);
+          }
+        }
       } catch (execErr) {
         console.warn('[EditFile] Auto-execute failed (edit still staged):', execErr);
       }
@@ -374,6 +422,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
     ...(editNormalized ? { editNote: 'Applied text was normalized on save — the diff above shows the EXACT stored form; build future oldMatch strings from it, not from the newMatch you sent.' } : {}),
     ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
     ...(vizWarning ? { vizWarning } : {}),
+    ...(vizPostValidation ? { vizValidation: vizPostValidation } : {}),
     ...(titleWarning ? { titleWarning } : {}),
     ...(editValidation?.length ? { validation: editValidation } : {}),
     ...(autoCorrections.length > 0 ? { autoCorrections } : {}),

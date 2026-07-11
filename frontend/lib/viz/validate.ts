@@ -179,9 +179,15 @@ function makeCapturingLogger(captured: CapturedLog[]) {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Validate a viz envelope. `columns` may be undefined when the query result is
+ * unknown (headless paths, or an edit that changes query and viz together) —
+ * field-reference checks are then SKIPPED (never false-positive against stale
+ * columns); schema/policy/recipe/css checks always run.
+ */
 export function validateVizEnvelope(
   envelope: unknown,
-  columns: VizResultColumn[],
+  columns?: VizResultColumn[],
 ): VizValidationResult {
   const issues: VizIssue[] = [];
 
@@ -193,21 +199,24 @@ export function validateVizEnvelope(
   const source = shape.env.source as Record<string, unknown>;
   if (source.kind === 'table' || source.kind === 'pivot') {
     // The DOM tier: no grammar to validate. Check every column reference against the
-    // result columns (typo feedback) and sanitize the css override.
-    const known = new Set(columns.map(c => c.name));
-    const available = columns.map(c => `${c.name} (${c.kind})`).join(', ');
-    const notFound = (path: string, name: string) =>
-      issues.push(err('E_FIELD_NOT_FOUND', path, `"${name}" is not in the query result. Available fields: ${available}`));
-    for (const key of Object.keys((source.columnFormats as Record<string, unknown> | null | undefined) ?? {})) {
-      if (!known.has(key)) notFound(`/source/columnFormats/${key}`, key);
-    }
-    if (source.kind === 'pivot') {
-      const config = source.config as { rows?: string[]; columns?: string[]; values?: Array<{ column?: string }> };
-      (config.rows ?? []).forEach((name, i) => { if (!known.has(name)) notFound(`/source/config/rows/${i}`, name); });
-      (config.columns ?? []).forEach((name, i) => { if (!known.has(name)) notFound(`/source/config/columns/${i}`, name); });
-      (config.values ?? []).forEach((v, i) => {
-        if (typeof v?.column === 'string' && !known.has(v.column)) notFound(`/source/config/values/${i}/column`, v.column);
-      });
+    // result columns (typo feedback, skipped when the result is unknown) and sanitize
+    // the css override.
+    if (columns) {
+      const known = new Set(columns.map(c => c.name));
+      const available = columns.map(c => `${c.name} (${c.kind})`).join(', ');
+      const notFound = (path: string, name: string) =>
+        issues.push(err('E_FIELD_NOT_FOUND', path, `"${name}" is not in the query result. Available fields: ${available}`));
+      for (const key of Object.keys((source.columnFormats as Record<string, unknown> | null | undefined) ?? {})) {
+        if (!known.has(key)) notFound(`/source/columnFormats/${key}`, key);
+      }
+      if (source.kind === 'pivot') {
+        const config = source.config as { rows?: string[]; columns?: string[]; values?: Array<{ column?: string }> };
+        (config.rows ?? []).forEach((name, i) => { if (!known.has(name)) notFound(`/source/config/rows/${i}`, name); });
+        (config.columns ?? []).forEach((name, i) => { if (!known.has(name)) notFound(`/source/config/columns/${i}`, name); });
+        (config.values ?? []).forEach((v, i) => {
+          if (typeof v?.column === 'string' && !known.has(v.column)) notFound(`/source/config/values/${i}/column`, v.column);
+        });
+      }
     }
     const css = source.css as string | null | undefined;
     if (css) {
@@ -228,22 +237,25 @@ export function validateVizEnvelope(
       return { ok: false, issues };
     }
     // Bindings are the recipe's field references — check them against the columns
-    // directly (the materialized spec's own refs are then internally consistent).
-    const known = new Set(columns.map(c => c.name));
-    const available = columns.map(c => `${c.name} (${c.kind})`).join(', ');
-    for (const [slot, bound] of Object.entries(recipeSource.bindings)) {
-      for (const columnName of Array.isArray(bound) ? bound : [bound]) {
-        if (!known.has(columnName)) {
-          issues.push(err('E_FIELD_NOT_FOUND', `/source/bindings/${slot}`,
-            `"${columnName}" is not in the query result. Available fields: ${available}`));
+    // directly (skipped when the result is unknown; the materialized spec's own
+    // refs are then internally consistent either way).
+    if (columns) {
+      const known = new Set(columns.map(c => c.name));
+      const available = columns.map(c => `${c.name} (${c.kind})`).join(', ');
+      for (const [slot, bound] of Object.entries(recipeSource.bindings)) {
+        for (const columnName of Array.isArray(bound) ? bound : [bound]) {
+          if (!known.has(columnName)) {
+            issues.push(err('E_FIELD_NOT_FOUND', `/source/bindings/${slot}`,
+              `"${columnName}" is not in the query result. Available fields: ${available}`));
+          }
         }
       }
-    }
-    // columnFormats keys are column references too (applied at materialization).
-    for (const key of Object.keys((source.columnFormats as Record<string, unknown> | null | undefined) ?? {})) {
-      if (!known.has(key)) {
-        issues.push(err('E_FIELD_NOT_FOUND', `/source/columnFormats/${key}`,
-          `"${key}" is not in the query result. Available fields: ${available}`));
+      // columnFormats keys are column references too (applied at materialization).
+      for (const key of Object.keys((source.columnFormats as Record<string, unknown> | null | undefined) ?? {})) {
+        if (!known.has(key)) {
+          issues.push(err('E_FIELD_NOT_FOUND', `/source/columnFormats/${key}`,
+            `"${key}" is not in the query result. Available fields: ${available}`));
+        }
       }
     }
     if (issues.some(i => i.severity === 'error')) return { ok: false, issues };
@@ -274,7 +286,7 @@ export function validateVizEnvelope(
     return { ok: false, issues };
   }
 
-  validateFieldRefs(spec, columns, issues);
+  if (columns) validateFieldRefs(spec, columns, issues);
   if (issues.some(i => i.severity === 'error')) return { ok: false, issues };
 
   const captured: CapturedLog[] = [];
