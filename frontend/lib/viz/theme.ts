@@ -99,6 +99,15 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
       cornerRadius: 6,
       padAngle: 0.015,
     },
+    // Boxplot sub-marks: whiskers are `rule` marks and VL defaults them (and the
+    // outlier points) to BLACK — invisible on the dark card. Mode-aware foregrounds;
+    // the median tick uses the strong foreground so it reads against the
+    // series-coloured box fill in both modes. Spec-level boxplot config wins natively.
+    boxplot: {
+      rule: { color: colors.fgMuted, strokeWidth: 1.5 },
+      median: { color: colors.fgDefault },
+      outliers: { color: colors.fgMuted },
+    },
   };
 }
 

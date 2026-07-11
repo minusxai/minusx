@@ -50,4 +50,18 @@ describe('getVegaLiteConfig', () => {
       padAngle: 0.015,
     });
   });
+
+  it('themes boxplot sub-marks per mode (VL defaults are black — invisible on the dark card)', () => {
+    // Whiskers are `rule` marks (VL default: black) and the median tick needs to
+    // contrast with the series-coloured box in BOTH modes.
+    const light = getVegaLiteConfig('light') as Record<string, any>;
+    const dark = getVegaLiteConfig('dark') as Record<string, any>;
+    for (const config of [light, dark]) {
+      expect(config.boxplot.rule.color).toBeTruthy();
+      expect(config.boxplot.median.color).toBeTruthy();
+      expect(config.boxplot.outliers.color).toBeTruthy();
+    }
+    // Mode-aware: the whisker/outlier colour must flip with the surface.
+    expect(light.boxplot.rule.color).not.toEqual(dark.boxplot.rule.color);
+  });
 });
