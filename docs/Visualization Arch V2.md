@@ -618,6 +618,7 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [ ] annotations
 - [ ] custom plot
 - [ ] heatmap table?
+- [ ] img/csv download
 
 
 **Data handling**
@@ -638,7 +639,11 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [ ] Dashboards with legacy charts unaffected
 
 ### Known gaps (expected to fail — do not file)
-- Vega charts invisible to the agent in follow-up turns (chart→LLM image path pending)
+- Vega charts invisible to the agent for UNMOUNTED files only (chart→LLM image path — parked
+  2026-07-11 with design settled: on-page edits already reach the agent via the live file
+  screenshot; the gap is renderFileChartImageBlocks (ECharts-only) + isImageViz (legacy
+  vizSettings.type). Plan: view.toCanvas() → composite on theme bg (transparent + JPEG = black)
+  → JPEG, canvas NOT svg-rasterize (fonts), dynamic-import to keep vega out of the main bundle)
 - Public/guest story rendering with viz untested (CSP interpreter is in, path unwired)
 - Image/CSV export of viz-V2 charts unwired (table's own CSV button works — it's the chart-image
   and question-level export paths that aren't)
