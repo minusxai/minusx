@@ -34,6 +34,30 @@ export interface VegaViewOptions {
 }
 
 /**
+ * Interactive-legend platform default (ECharts parity): clicking a legend entry
+ * highlights that series (shift-click for multi-select, click elsewhere to clear).
+ * Injected at render time only — never persisted — and only when it's safely additive:
+ * a single-view spec with a discrete color field, no author params, no author opacity.
+ * Uses the reserved `mx` signal namespace (RFC §13).
+ */
+function injectLegendToggle(prepared: Record<string, unknown>): void {
+  if ('params' in prepared) return;
+  const encoding = prepared.encoding as Record<string, Record<string, unknown>> | undefined;
+  const color = encoding?.color;
+  if (!encoding || !color || typeof color.field !== 'string' || 'opacity' in encoding) return;
+  if (color.type != null && color.type !== 'nominal' && color.type !== 'ordinal') return;
+  prepared.params = [{
+    name: 'mx_legend_sel',
+    select: { type: 'point', fields: [color.field] },
+    bind: 'legend',
+  }];
+  encoding.opacity = {
+    condition: { param: 'mx_legend_sel', value: 1 },
+    value: 0.25,
+  };
+}
+
+/**
  * Compile a (raw, saved) Vega-Lite spec into a full Vega spec with the MinusX theme.
  * A responsive-by-default autosize is applied at render time only — never persisted
  * into the saved spec (the container owns sizing, RFC §15); explicit spec autosize wins.
@@ -43,12 +67,15 @@ export function compileVegaLite(spec: Record<string, unknown>, mode: 'light' | '
   // mutate their inputs (normalization, Symbol(vega_id) tagging). Never hand them
   // shared state — deep-clone here (specs are small).
   const prepared = prepareVegaLiteSpec(JSON.parse(JSON.stringify(spec)) as Record<string, unknown>);
-  // `fit` is invalid for concat/repeat/facet composition — VL warns and falls back, so
-  // only default it for specs where it applies cleanly.
+  // `fit` is invalid for concat/repeat/facet composition (layer is fine) — VL warns and
+  // falls back, so only default it where it applies cleanly.
   const composed = ['hconcat', 'vconcat', 'concat', 'repeat', 'facet'].some(k => k in prepared);
   if (!('autosize' in prepared) && !composed) {
     prepared.autosize = { type: 'fit', contains: 'padding' };
   }
+  // Legend toggle only for true single-view specs — in composed/layered specs param
+  // placement differs per view, so authors declare interactions themselves.
+  if (!composed && !('layer' in prepared)) injectLegendToggle(prepared);
   const { spec: vegaSpec } = compile(prepared as unknown as TopLevelSpec, { config: getVegaLiteConfig(mode) });
   return vegaSpec;
 }
