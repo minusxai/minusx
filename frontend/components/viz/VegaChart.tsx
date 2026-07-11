@@ -28,6 +28,27 @@ const sizeOf = (el: HTMLElement) => ({
   height: Math.max(el.clientHeight, 60),
 });
 
+// Vega writes fonts as SVG presentation attributes, which lose to ANY author CSS rule —
+// including Chakra's `@layer reset` universal preflight. The app font then overrides
+// every chart label (measured mono, rendered sans → all spacing wrong). Promote vega's
+// font-* attributes to inline styles, which win the cascade. Re-applied via a
+// MutationObserver because vega rewrites text nodes on every dataflow re-render.
+const FONT_ATTRS = [
+  ['font-family', 'fontFamily'],
+  ['font-size', 'fontSize'],
+  ['font-weight', 'fontWeight'],
+  ['font-style', 'fontStyle'],
+] as const;
+
+function promoteFontAttrs(root: HTMLElement): void {
+  for (const t of root.querySelectorAll('svg text')) {
+    for (const [attr, prop] of FONT_ATTRS) {
+      const v = t.getAttribute(attr);
+      if (v && (t as SVGTextElement).style[prop] !== v) (t as SVGTextElement).style[prop] = v;
+    }
+  }
+}
+
 export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<View | null>(null);
@@ -64,6 +85,7 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
         });
         viewRef.current = view;
         await view.runAsync();
+        promoteFontAttrs(el);
         if (!cancelled) setError(null);
       } catch (e) {
         // Full stack to the console — the error box shows only the message.
@@ -85,6 +107,16 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
     setMainData(view, rows);
     view.runAsync().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   }, [rows]);
+
+  // Re-promote font attrs whenever vega rewrites text nodes (data/resize re-renders).
+  // 'style' is not in the filter, so our own writes can't retrigger the observer.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const mo = new MutationObserver(() => promoteFontAttrs(el));
+    mo.observe(el, { childList: true, subtree: true, attributeFilter: ['font-family', 'font-size', 'font-weight', 'font-style'] });
+    return () => mo.disconnect();
+  }, []);
 
   // Container resizes drive the size signals.
   useEffect(() => {
