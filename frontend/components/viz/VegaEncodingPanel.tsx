@@ -52,7 +52,7 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
 
   return (
     <Box aria-label="Vega encoding drop zones" pb={2}>
-      <Wrap gap={1.5} pb={2}>
+      <Wrap gap={1.5} pb={4}>
         {columns.map(col => (
           <ColumnChip
             key={col}
