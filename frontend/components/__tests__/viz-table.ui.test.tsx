@@ -147,6 +147,34 @@ describe('QuestionVisualization — table envelope routing', () => {
     expect(source.columnFormats.revenue.alias).toBeTruthy()
   })
 
+  it('renders cells with a d3 format from the envelope (unified vocabulary)', () => {
+    renderViz(tableViz({ columnFormats: { revenue: { format: '$,.2f' } } }))
+    expect(screen.getByText('$100.00')).toBeInTheDocument()
+    expect(screen.getByText('$200.00')).toBeInTheDocument()
+  })
+
+  it('V2 table header popover speaks d3: preset click stores a format string', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderViz(tableViz())
+
+    await user.click(screen.getByLabelText('Format column revenue'))
+    await user.click(await screen.findByLabelText('Format $1,234'))
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const source = next.source as unknown as { columnFormats: Record<string, { format?: string }> }
+    expect(source.columnFormats.revenue.format).toBe('$,.0f')
+  })
+
+  it('V2 table header popover shows a non-preset pattern in the custom d3 input', async () => {
+    const user = userEvent.setup()
+    renderViz(tableViz({ columnFormats: { revenue: { format: '.4~s' } } }))
+
+    await user.click(screen.getByLabelText('Format column revenue'))
+
+    const custom = await screen.findByLabelText('Custom d3 format for revenue')
+    expect((custom as HTMLInputElement).value).toBe('.4~s')
+  })
+
   it('injects the css override scoped to this table instance', () => {
     renderViz(tableViz({ css: '.mx-th { background: rgb(1, 2, 3); }' }))
     const styles = Array.from(document.querySelectorAll('style')).map(s => s.textContent ?? '')

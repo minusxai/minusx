@@ -14,22 +14,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Button, HStack, Input, Portal, Text } from '@chakra-ui/react';
 import { LuSettings2 } from 'react-icons/lu';
+import { D3_NUMBER_PRESETS, D3_DATE_PRESETS } from '@/lib/chart/chart-format';
 import type { VizColumnKind } from '@/lib/viz/types';
-
-const NUMBER_PRESETS: Array<{ label: string; format: string | null }> = [
-  { label: 'Default (20k)', format: null },
-  { label: '1,234', format: ',.0f' },
-  { label: '1,234.56', format: ',.2f' },
-  { label: '$1,234', format: '$,.0f' },
-  { label: '12.3%', format: '.1%' },
-];
-
-const DATE_PRESETS: Array<{ label: string; format: string | null }> = [
-  { label: 'Default (smart)', format: null },
-  { label: 'Jan 2025', format: '%b %Y' },
-  { label: "Jan '25", format: "%b '%y" },
-  { label: '2025-01-31', format: '%Y-%m-%d' },
-];
 
 export interface VizFieldPopoverProps {
   /** Display key for aria labels (native: the channel, recipes: the column). */
@@ -74,7 +60,7 @@ export function VizFieldPopover({ channel, kind, value, onCommit }: VizFieldPopo
     setFormatDraft(null);
   };
 
-  const presets = kind === 'temporal' ? DATE_PRESETS : kind === 'quantitative' ? NUMBER_PRESETS : null;
+  const presets = kind === 'temporal' ? D3_DATE_PRESETS : kind === 'quantitative' ? D3_NUMBER_PRESETS : null;
   const hasCustomization = value.title != null || value.format != null;
 
   return (

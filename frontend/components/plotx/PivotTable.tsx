@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import { Box, Table as ChakraTable } from '@chakra-ui/react'
-import { formatLargeNumber, formatNumber, formatDateValue, applyPrefixSuffix } from '@/lib/chart/chart-format'
+import { formatLargeNumber, formatNumber, formatDateValue, applyPrefixSuffix, formatD3Number, formatD3Date } from '@/lib/chart/chart-format'
 import type { PivotData, FormulaResults } from '@/lib/chart/pivot-utils'
 import { useAppSelector } from '@/store/hooks'
 import type { ColumnFormatConfig } from '@/lib/types'
@@ -68,13 +68,18 @@ export const PivotTable = ({
     [cellPresent],
   )
 
-  // Format a numeric cell value using per-value-column decimal/prefix/suffix config
+  // Format a numeric cell value per the value column's config: `format` (d3, the
+  // unified viz vocabulary) wins; legacy decimal/prefix/suffix fall back.
   // When valueIndex is omitted (totals), fall back to first value column's format
   const fmt = useCallback((value: number, valueIndex?: number): string => {
     if (columnFormats && valueColumns) {
       const idx = valueIndex !== undefined ? valueIndex % (valueColumns.length || 1) : 0
       const colName = valueColumns[idx]
       const cfg = colName ? columnFormats[colName] : undefined
+      if (cfg?.format) {
+        const d3v = formatD3Number(value, cfg.format)
+        if (d3v != null) return d3v
+      }
       const dp = cfg?.decimalPoints
       const formatted = dp != null ? formatNumber(value, dp) : formatLargeNumber(value)
       return applyPrefixSuffix(formatted, cfg?.prefix, cfg?.suffix)
@@ -82,11 +87,17 @@ export const PivotTable = ({
     return formatLargeNumber(value)
   }, [columnFormats, valueColumns])
 
-  // Format a header value (row or column) using date format config
+  // Format a header value (row or column): a d3 time pattern (`format`) wins for
+  // date dimensions; the legacy Unicode dateFormat falls back.
   const fmtHeader = useCallback((value: string, dimName?: string): string => {
     if (!dimName || !columnFormats) return value
-    const dateFormat = columnFormats[dimName]?.dateFormat
-    if (dateFormat) return formatDateValue(value, dateFormat)
+    const cfg = columnFormats[dimName]
+    if (cfg?.format) {
+      const d = new Date(value)
+      const d3v = isNaN(d.getTime()) ? null : formatD3Date(d, cfg.format)
+      if (d3v != null) return d3v
+    }
+    if (cfg?.dateFormat) return formatDateValue(value, cfg.dateFormat)
     return value
   }, [columnFormats])
 

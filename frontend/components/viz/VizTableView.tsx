@@ -55,6 +55,7 @@ export function VizTableView({ envelope, columns, types, rows, sql, databaseName
         columnFormats={Object.keys(columnFormats).length > 0 ? columnFormats : undefined}
         onColumnFormatsChange={onVizChange ? (formats) => onVizChange(setVizColumnFormats(envelope, formats)) : undefined}
         conditionalFormats={getTableConditionalFormats(envelope)}
+        d3Formats
       />
     </Box>
   );

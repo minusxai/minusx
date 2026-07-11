@@ -27,6 +27,8 @@ interface TableHeaderCellProps {
   columnFormats?: Record<string, ColumnFormatConfig>
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
   handleFormatChange: (col: string, cfg: ColumnFormatConfig) => void
+  /** d3 vocabulary format popover (Viz V2 table). */
+  d3Formats?: boolean
   activeFilterCol: string | null
   setActiveFilterCol: React.Dispatch<React.SetStateAction<string | null>>
   activeFormatCol: string | null
@@ -51,6 +53,7 @@ export const TableHeaderCell = ({
   columnFormats,
   onColumnFormatsChange,
   handleFormatChange,
+  d3Formats,
   activeFilterCol,
   setActiveFilterCol,
   activeFormatCol,
@@ -367,6 +370,7 @@ export const TableHeaderCell = ({
                 column={header.id}
                 formatConfig={columnFormats?.[header.id] ?? {}}
                 onChange={(cfg) => handleFormatChange(header.id, cfg)}
+                d3Formats={d3Formats}
               />
             </Box>
           </Portal>

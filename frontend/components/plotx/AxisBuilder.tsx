@@ -49,6 +49,8 @@ interface AxisBuilderProps {
   zones: AxisZone[]
   columnFormats?: Record<string, ColumnFormatConfig>
   onColumnFormatChange?: (column: string, config: ColumnFormatConfig) => void
+  /** d3 vocabulary format popovers (Viz V2 surfaces). */
+  d3Formats?: boolean
   children?: React.ReactNode
   stylePanel?: React.ReactNode
   annotationPanel?: React.ReactNode
@@ -189,7 +191,7 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
   )
 }
 
-export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, children, stylePanel, annotationPanel, axisConfig, onAxisConfigChange, chartType, borderless = false }: AxisBuilderProps) => {
+export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, d3Formats, children, stylePanel, annotationPanel, axisConfig, onAxisConfigChange, chartType, borderless = false }: AxisBuilderProps) => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
   const [dragSourceZone, setDragSourceZone] = useState<AxisZone | null>(null)
   const [selectedColumnForMobile, setSelectedColumnForMobile] = useState<string | null>(null)
@@ -442,6 +444,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
                         extra={item.extra}
                         formatConfig={columnFormats?.[item.column]}
                         onFormatChange={onColumnFormatChange ? (config) => onColumnFormatChange(item.column, config) : undefined}
+                        d3Formats={d3Formats}
                         onDragStart={(e) => handleZoneChipDragStart(e, item.column, zone)}
                         onDragEnd={handleDragEnd}
                       />

@@ -151,6 +151,24 @@ describe('VegaVizPanel — pivot envelope', () => {
     expect(source.columnFormats.revenue.alias).toBeTruthy()
   })
 
+  it('V2 pivot gear speaks d3: preset click stores a format string', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderPanel(pivotViz())
+
+    await user.click(screen.getByLabelText('Format column revenue'))
+    await user.click(await screen.findByLabelText('Format $1,234'))
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const source = next.source as unknown as { columnFormats: Record<string, { format?: string }> }
+    expect(source.columnFormats.revenue.format).toBe('$,.0f')
+  })
+
+  it('pivot cells render a d3 format from the envelope', () => {
+    renderViz(pivotViz({ columnFormats: { revenue: { format: '$,.0f' } } }))
+    // West/Jan = 100 → $100 (heatmap cell)
+    expect(screen.getAllByText('$100').length).toBeGreaterThan(0)
+  })
+
   it('switching table → pivot via the icon seeds config from the columns', async () => {
     const user = userEvent.setup()
     const table = { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } } as unknown as VizEnvelope

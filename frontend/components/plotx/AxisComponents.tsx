@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
 import { LuHash, LuCalendar, LuType, LuX, LuSettings2, LuBraces } from 'react-icons/lu'
 import { getColumnType } from '@/lib/database/duckdb'
-import { DATE_FORMAT_OPTIONS } from '@/lib/chart/chart-format'
+import { DATE_FORMAT_OPTIONS, D3_NUMBER_PRESETS, D3_DATE_PRESETS } from '@/lib/chart/chart-format'
 import type { ColumnFormatConfig } from '@/lib/types'
 
 // Shared types
@@ -243,9 +243,75 @@ interface FormatPopoverProps {
   column: string
   formatConfig: ColumnFormatConfig
   onChange: (config: ColumnFormatConfig) => void
+  /** d3 vocabulary (Viz V2 surfaces): presets + a custom d3 pattern instead of prefix/suffix/decimals. */
+  d3Formats?: boolean
 }
 
-export const FormatPopover = ({ type, column, formatConfig, onChange }: FormatPopoverProps) => {
+/** d3-mode format section: preset chips + always-visible custom pattern input. */
+const D3FormatSection = ({ type, column, config, onChange }: {
+  type: ColumnType
+  column: string
+  config: ColumnFormatConfig
+  onChange: (config: ColumnFormatConfig) => void
+}) => {
+  const [draft, setDraft] = useState<string | null>(null)
+  const presets = type === 'date' ? D3_DATE_PRESETS : D3_NUMBER_PRESETS
+  // Writing a d3 format clears the legacy fields — one vocabulary at a time.
+  const commit = (format: string | null) => onChange({
+    alias: config.alias,
+    format: format && format.trim() !== '' ? format.trim() : undefined,
+  })
+
+  return (
+    <Box>
+      <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+        Format
+      </Text>
+      <HStack gap={1} flexWrap="wrap">
+        {presets.map(({ label, format }) => (
+          <Box
+            key={label}
+            as="button"
+            aria-label={`Format ${label}`}
+            px={1.5}
+            py={0.5}
+            borderRadius="sm"
+            cursor="pointer"
+            fontSize="xs"
+            fontFamily="mono"
+            fontWeight={(config.format ?? null) === format ? '700' : '500'}
+            bg={(config.format ?? null) === format ? 'accent.teal' : 'bg.surface'}
+            color={(config.format ?? null) === format ? 'white' : 'fg.default'}
+            border="1px solid"
+            borderColor={(config.format ?? null) === format ? 'accent.teal' : 'border.muted'}
+            _hover={{ bg: (config.format ?? null) === format ? 'accent.teal' : 'bg.muted' }}
+            onClick={(e: React.MouseEvent) => { e.stopPropagation(); setDraft(null); commit(format) }}
+            transition="all 0.15s"
+          >
+            {label}
+          </Box>
+        ))}
+      </HStack>
+      <input
+        type="text"
+        aria-label={`Custom d3 format for ${column}`}
+        placeholder={type === 'date' ? 'custom d3, e.g. %b %d' : 'custom d3, e.g. .2~s'}
+        value={draft ?? config.format ?? ''}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => { if (draft != null) { commit(draft); setDraft(null) } }}
+        onKeyDown={(e) => { if (e.key === 'Enter') { commit((e.target as HTMLInputElement).value); setDraft(null) } }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          fontSize: '12px', fontFamily: 'var(--fonts-mono, monospace)', padding: '4px 8px',
+          width: '100%', marginTop: '6px', border: '1px solid var(--colors-border-muted, #333)',
+          borderRadius: '4px', background: 'transparent', color: 'inherit', outline: 'none',
+        }}
+      />
+    </Box>
+  )
+}
+
+export const FormatPopover = ({ type, column, formatConfig, onChange, d3Formats }: FormatPopoverProps) => {
   const config = formatConfig
 
   const handleAliasChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -290,8 +356,13 @@ export const FormatPopover = ({ type, column, formatConfig, onChange }: FormatPo
         />
       </Box>
 
+      {/* d3 vocabulary (Viz V2): one format pattern for numbers AND dates */}
+      {d3Formats && (type === 'number' || type === 'date') && (
+        <D3FormatSection type={type} column={column} config={config} onChange={onChange} />
+      )}
+
       {/* Prefix & Suffix - shown for number type */}
-      {type === 'number' && (
+      {!d3Formats && type === 'number' && (
         <HStack gap={2}>
           <Box flex={1}>
             <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
@@ -323,7 +394,7 @@ export const FormatPopover = ({ type, column, formatConfig, onChange }: FormatPo
       )}
 
       {/* Decimal points - shown for number type */}
-      {type === 'number' && (
+      {!d3Formats && type === 'number' && (
         <Box>
           <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
             Decimal Places
@@ -357,7 +428,7 @@ export const FormatPopover = ({ type, column, formatConfig, onChange }: FormatPo
       )}
 
       {/* Date format - shown for date type */}
-      {type === 'date' && (
+      {!d3Formats && type === 'date' && (
         <DateFormatPicker dateFormat={config.dateFormat} onChange={(dateFormat) => onChange({ ...config, dateFormat })} />
       )}
     </VStack>
@@ -373,11 +444,13 @@ interface ZoneChipProps {
   extra?: React.ReactNode
   formatConfig?: ColumnFormatConfig
   onFormatChange?: (config: ColumnFormatConfig) => void
+  /** d3 vocabulary popover (Viz V2 surfaces). */
+  d3Formats?: boolean
   onDragStart?: (e: React.DragEvent) => void
   onDragEnd?: () => void
 }
 
-export const ZoneChip = ({ column, type, onRemove, extra, formatConfig, onFormatChange, onDragStart, onDragEnd }: ZoneChipProps) => {
+export const ZoneChip = ({ column, type, onRemove, extra, formatConfig, onFormatChange, d3Formats, onDragStart, onDragEnd }: ZoneChipProps) => {
   const Icon = getTypeIcon(type)
   const color = getTypeColor(type)
   const [showPopover, setShowPopover] = useState(false)
@@ -486,6 +559,7 @@ export const ZoneChip = ({ column, type, onRemove, extra, formatConfig, onFormat
             column={column}
             formatConfig={formatConfig || {}}
             onChange={handleFormatChange}
+            d3Formats={d3Formats}
           />
         </Box>
       )}

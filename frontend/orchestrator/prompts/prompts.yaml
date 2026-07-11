@@ -305,7 +305,7 @@ templates:
           </viz>
           ```
           - `config` (REQUIRED): `rows`/`columns` are dimension column lists, `values` are measures with `aggFunction` (SUM/AVG/COUNT/MIN/MAX) — all EXACT result column names. Optional keys: `showRowTotals`, `showColumnTotals`, `showHeatmap`, `compact` (GitHub-graph style), `heatmapScale` ('red-yellow-green'|'green'|'blue'), `rowFormulas`/`columnFormulas` (`[{name, operandA, operandB, operator}]` over top-level dimension values).
-          - `columnFormats` (optional): same shape as table — aliases rename dimension/value headers, decimalPoints/prefix/suffix format cells.
+          - `columnFormats` (optional): same shape as table — `alias` renames dimension/value headers, `format` (d3) formats cells and date headers.
           - `css` (optional, backtick template string like table): scoped overrides targeting the `.mx-pivot` root with element selectors — `.mx-pivot th { … }`, `.mx-pivot td { … }`. No `@import` / `url()`.
         - To go back to the standard chart types, remove `<viz>` entirely (set it to null) and configure `vizSettings`.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.

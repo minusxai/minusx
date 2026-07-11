@@ -262,8 +262,9 @@ export type VizSourceRecipe = Static<typeof VizSourceRecipe>;
 export const VizSourceTable = Type.Object({
   kind: Type.Literal('table'),
   columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description:
-    'per-column display formatting keyed by RESULT column name (alias, decimalPoints, dateFormat, ' +
-    'prefix, suffix). Omit for sensible defaults.' })),
+    'per-column display formatting keyed by RESULT column name: `alias` + `format` (d3 — the unified ' +
+    'viz vocabulary, numbers and dates). Legacy decimalPoints/dateFormat/prefix/suffix also honored. ' +
+    'Omit for sensible defaults.' })),
   conditionalFormats: Nullable(Type.Array(ConditionalFormatRule, { description:
     'conditional background-color rules — each paints cells/rows/columns a color when a condition ' +
     'on a column holds. Omit for none.' })),
@@ -283,8 +284,8 @@ export const VizSourcePivot = Type.Object({
   kind: Type.Literal('pivot'),
   config: PivotConfig,
   columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description:
-    'per-column display formatting keyed by RESULT column name (alias for dimension/value headers, ' +
-    'decimalPoints/prefix/suffix for cells). Omit for sensible defaults.' })),
+    'per-column display formatting keyed by RESULT column name: `alias` renames dimension/value ' +
+    'headers, `format` (d3) formats cells and date headers. Omit for sensible defaults.' })),
   css: Nullable(Type.String({ description:
     'CSS overrides for the pivot LOOKS, scoped to this pivot automatically. Target the root class ' +
     'plus element selectors: `.mx-pivot th { … }`, `.mx-pivot td { … }`, `.mx-pivot thead { … }`. ' +

@@ -131,6 +131,7 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
             onPivotConfigChange={(config) => onVizChange(setPivotConfig(envelope, config))}
             columnFormats={getVizColumnFormats(envelope)}
             onColumnFormatChange={(column, config) => onVizChange(mergeVizColumnFormat(envelope, column, config))}
+            d3Formats
           />
         ) : (
           <VegaEncodingPanel envelope={envelope} columns={columns} types={types} onVizChange={onVizChange} />

@@ -22,6 +22,8 @@ interface PivotAxisBuilderProps {
   availableColumnValues?: string[]
   columnFormats?: Record<string, ColumnFormatConfig>
   onColumnFormatChange?: (column: string, config: ColumnFormatConfig) => void
+  /** d3 vocabulary format popovers (Viz V2 surfaces). */
+  d3Formats?: boolean
   rowDimensions?: DimensionInfo[]
   getRowValuesAtLevel?: (level: number, parentValues?: string[]) => string[]
 }
@@ -35,6 +37,7 @@ export const PivotAxisBuilder = ({
   availableColumnValues,
   columnFormats,
   onColumnFormatChange,
+  d3Formats,
   rowDimensions,
   getRowValuesAtLevel,
 }: PivotAxisBuilderProps) => {
@@ -315,7 +318,7 @@ export const PivotAxisBuilder = ({
 
       {/* Fields tab — AxisBuilder renders its own styled container */}
       {activeTab === 'fields' && (
-        <AxisBuilder columns={columns} types={types} zones={zones} columnFormats={columnFormats} onColumnFormatChange={onColumnFormatChange} borderless />
+        <AxisBuilder columns={columns} types={types} zones={zones} columnFormats={columnFormats} onColumnFormatChange={onColumnFormatChange} d3Formats={d3Formats} borderless />
       )}
 
       {/* Settings tab */}
