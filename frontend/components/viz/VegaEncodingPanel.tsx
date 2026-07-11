@@ -15,6 +15,7 @@ import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } f
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { isEnvelopeEditable, getEnvelopeZones, getZoneFields, addZoneField, removeZoneField } from '@/lib/viz/encoding-edit';
 import { sqlTypeToVizKind } from '@/lib/viz/query-data';
+import { VizFieldPopover } from './VizFieldPopover';
 
 export interface VegaEncodingPanelProps {
   envelope: VizEnvelope;
@@ -92,6 +93,16 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
                       column={field}
                       type={resolveColumnType(field, columns, types)}
                       onRemove={() => removeFromZone(channel, field)}
+                      // Alias/format settings: native single-field channels only —
+                      // recipes format internally; folded measures share one axis.
+                      extra={(envelope.source as unknown as { kind: string }).kind === 'vega-lite' && fields.length === 1 ? (
+                        <VizFieldPopover
+                          envelope={envelope}
+                          channel={channel}
+                          kind={sqlTypeToVizKind(types[columns.indexOf(field)] ?? '')}
+                          onVizChange={onVizChange}
+                        />
+                      ) : undefined}
                     />
                   ))
                 ) : (

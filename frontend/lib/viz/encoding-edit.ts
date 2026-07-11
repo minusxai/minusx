@@ -10,6 +10,7 @@
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { VizColumnKind } from './types';
 import { getTemplate, VIZ_TEMPLATES } from './viz-templates';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 
 export const EDITABLE_CHANNELS = ['x', 'y', 'color', 'theta'] as const;
 export type EditableChannel = (typeof EDITABLE_CHANNELS)[number];
@@ -563,5 +564,63 @@ export function removeYField(envelope: VizEnvelope, name: string): VizEnvelope {
   }
   if (encoding.color?.field === fold.as[0]) delete encoding.color;
   spec.encoding = encoding;
+  return next;
+}
+
+// ── Channel presentation (the zone-chip settings popover) ──────────────────────────
+//
+// Alias and format are NATIVE spec properties (RFC §6): alias = the channel's
+// `title`; format = a d3 pattern on `axis.format` for positional channels, or the
+// field def's `format` where there is no axis (theta). Surgical edits only.
+
+const AXIS_CHANNELS = immutableSet(['x', 'y']);
+
+export interface ChannelPresentation {
+  title: string | null;
+  format: string | null;
+}
+
+export function getChannelPresentation(envelope: VizEnvelope, channel: string): ChannelPresentation {
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') return { title: null, format: null };
+  const spec = (source as { spec: Record<string, unknown> }).spec;
+  const def = channelDef(spec, channel);
+  if (!def) return { title: null, format: null };
+  const axis = def.axis as Record<string, unknown> | undefined;
+  const format = AXIS_CHANNELS.has(channel)
+    ? (typeof axis?.format === 'string' ? axis.format : null)
+    : (typeof def.format === 'string' ? def.format : null);
+  return { title: typeof def.title === 'string' ? def.title : null, format };
+}
+
+/** Set/clear (null) the alias and/or format on one channel. `undefined` leaves as-is. */
+export function setChannelPresentation(
+  envelope: VizEnvelope,
+  channel: string,
+  changes: { title?: string | null; format?: string | null },
+): VizEnvelope {
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') return envelope; // recipes format internally
+  const { next, spec } = cloneEnvelope(envelope);
+  const def = channelDef(spec, channel);
+  if (!def) return next;
+
+  if (changes.title !== undefined) {
+    if (changes.title === null || changes.title === '') delete def.title;
+    else def.title = changes.title;
+  }
+
+  if (changes.format !== undefined) {
+    if (AXIS_CHANNELS.has(channel)) {
+      const axis = { ...((def.axis as Record<string, unknown> | undefined) ?? {}) };
+      if (changes.format === null || changes.format === '') delete axis.format;
+      else axis.format = changes.format;
+      if (Object.keys(axis).length > 0) def.axis = axis;
+      else delete def.axis;
+    } else {
+      if (changes.format === null || changes.format === '') delete def.format;
+      else def.format = changes.format;
+    }
+  }
   return next;
 }
