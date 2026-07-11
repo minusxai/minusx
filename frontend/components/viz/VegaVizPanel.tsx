@@ -51,6 +51,21 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
 
   return (
     <Box>
+      {/* Viz-type icon grid on top — same placement as the classic panel. Disabled
+          entries double as the live "not yet in V2" coverage list. */}
+      {isUnit && (
+        <VizTypeSelector
+          value={(vizType ?? 'bar') as VizSettings['type']}
+          onChange={(t) => {
+            if ((V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t)) {
+              onVizChange(setVizType(envelope, t as V2VizType));
+            }
+          }}
+          orientation="grouped"
+          disabledTypes={V2_DISABLED_TYPES}
+          disabledReason="Not yet supported for Vega charts — ask the agent"
+        />
+      )}
       <HStack gap={1} pb={2}>
         {TABS.map(({ key, icon: Icon, label }) => (
           <Button
@@ -77,17 +92,6 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
       {activeTab === 'settings' && (
         isUnit ? (
           <Box display="flex" flexDirection="column" gap={3} py={1}>
-            <VizTypeSelector
-              value={(vizType ?? 'bar') as VizSettings['type']}
-              onChange={(t) => {
-                if ((V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t)) {
-                  onVizChange(setVizType(envelope, t as V2VizType));
-                }
-              }}
-              orientation="grouped"
-              disabledTypes={V2_DISABLED_TYPES}
-              disabledReason="Not yet supported for Vega charts — ask the agent"
-            />
             <HStack justify="space-between">
               <Text fontSize="xs" color="fg.muted">Stacked</Text>
               <Switch.Root
