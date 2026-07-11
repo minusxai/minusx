@@ -56,6 +56,18 @@ describe('renderVegaLiteToSvg', () => {
     expect(svg).toContain('mark-line');
   });
 
+  it('renders deep-frozen spec AND rows (Redux immer-freezes state; vega/vega-lite mutate their inputs)', async () => {
+    const deepFreeze = <T,>(o: T): T => {
+      if (o && typeof o === 'object') { Object.values(o).forEach(deepFreeze); Object.freeze(o); }
+      return o;
+    };
+    const spec = deepFreeze(JSON.parse(JSON.stringify({ ...BAR_SPEC, mark: { type: 'bar' } })));
+    const rows = deepFreeze(ROWS.map(r => ({ ...r })));
+    const svg = await renderVegaLiteToSvg(spec, rows as unknown as Record<string, unknown>[], 'dark');
+    expect(svg).toContain('mark-rect');
+    expect(svg).toContain('AlphaRegion');
+  });
+
   it('respects explicit width/height when provided', async () => {
     const svg = await renderVegaLiteToSvg(BAR_SPEC, ROWS, 'dark', { width: 512, height: 256 });
     expect(svg).toContain('<svg');

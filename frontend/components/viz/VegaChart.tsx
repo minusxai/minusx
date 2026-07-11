@@ -12,8 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, Text } from '@chakra-ui/react';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { compileVegaLite, createVegaView } from '@/lib/viz/render-vega';
-import { VIZ_DATASET_MAIN } from '@/lib/viz/types';
+import { compileVegaLite, createVegaView, setMainData } from '@/lib/viz/render-vega';
 
 export interface VegaChartProps {
   envelope: VizEnvelope;
@@ -57,6 +56,8 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
         await view.runAsync();
         if (!cancelled) setError(null);
       } catch (e) {
+        // Full stack to the console — the error box shows only the message.
+        console.error('[VegaChart] render failed:', e);
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
     })();
@@ -71,7 +72,7 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
-    view.data(VIZ_DATASET_MAIN, rows);
+    setMainData(view, rows);
     view.runAsync().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   }, [rows]);
 

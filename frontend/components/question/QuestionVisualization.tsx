@@ -194,8 +194,9 @@ function QuestionVisualizationInner({
   }
 
   // A V2 envelope is authoritative when present (RFC): the vizSettings pipeline is bypassed.
+  // The settings button stays visible for V2 questions — the panel shows the spec inspector.
   const hasVizV2 = currentState?.viz != null;
-  const isChartType = !hasVizV2 && currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table';
+  const isChartType = hasVizV2 || (currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table');
 
   const showChartTitle = config.viz.showTitle;
   return (

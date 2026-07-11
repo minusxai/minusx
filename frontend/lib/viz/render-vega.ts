@@ -36,7 +36,10 @@ export interface VegaViewOptions {
  * into the saved spec (the container owns sizing, RFC §15); explicit spec autosize wins.
  */
 export function compileVegaLite(spec: Record<string, unknown>, mode: 'light' | 'dark'): VegaSpec {
-  const prepared = prepareVegaLiteSpec(spec);
+  // Ownership boundary: specs arrive from Redux (immer deep-frozen) and vega-lite/vega
+  // mutate their inputs (normalization, Symbol(vega_id) tagging). Never hand them
+  // shared state — deep-clone here (specs are small).
+  const prepared = prepareVegaLiteSpec(JSON.parse(JSON.stringify(spec)) as Record<string, unknown>);
   // `fit` is invalid for concat/repeat/facet composition — VL warns and falls back, so
   // only default it for specs where it applies cleanly.
   const composed = ['hconcat', 'vconcat', 'concat', 'repeat', 'facet'].some(k => k in prepared);
@@ -45,6 +48,15 @@ export function compileVegaLite(spec: Record<string, unknown>, mode: 'light' | '
   }
   const { spec: vegaSpec } = compile(prepared as unknown as TopLevelSpec, { config: getVegaLiteConfig(mode) });
   return vegaSpec;
+}
+
+/**
+ * Bind the query result as the reserved named dataset. Rows arrive from Redux
+ * (immer-frozen); vega tags each tuple in place with Symbol(vega_id), so it must
+ * own the row objects — shallow-clone each (values are scalars, never mutated).
+ */
+export function setMainData(view: View, rows: Record<string, unknown>[]): void {
+  view.data(VIZ_DATASET_MAIN, rows.map(r => ({ ...r })));
 }
 
 /** Parse a compiled Vega spec and build a View with the query result bound as 'main'. */
@@ -60,7 +72,7 @@ export function createVegaView(
     hover: opts.renderer !== 'none',
     ...(opts.container ? { container: opts.container } : {}),
   });
-  view.data(VIZ_DATASET_MAIN, rows);
+  setMainData(view, rows);
   if (opts.width != null) view.width(opts.width);
   if (opts.height != null) view.height(opts.height);
   return view;

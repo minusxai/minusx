@@ -39,6 +39,7 @@ import { deriveModelStubs, type ModelStub } from '@/lib/semantic/derive';
 import { useSemanticModels } from '@/lib/hooks/use-semantic-models';
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
+import { VizSpecInspector } from '../viz/VizSpecInspector';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
 import { useSemanticCompat } from '@/lib/hooks/use-semantic-compat';
 import { inferVizType, recommendedVizTypes } from '@/lib/semantic/infer-viz';
@@ -790,10 +791,17 @@ export default function QuestionViewV2({
                   </Box>
                 )}
 
+                {/* Viz Mode (V2 envelope): the spec IS the config — show the inspector, bypass the classic panels */}
+                {queryMode === 'viz' && content.viz != null && (
+                  <Box flex={1} overflow="auto" px={3} py={2} display="flex" flexDirection="column" gap={0}>
+                    <VizSpecInspector envelope={content.viz} />
+                  </Box>
+                )}
+
                 {/* Viz Mode (compact layout only): the same config block the
                     wide layout shows in the right-hand VizPanel column (which
                     carries the Auto badge in its header — here it sits on top) */}
-                {effectiveQueryMode === 'viz' && (
+                {effectiveQueryMode === 'viz' && content.viz == null && (
                   <Box flex={1} overflow="auto">
                     {autoTypeBadge && (
                       <HStack justify="flex-end" px={3} pt={2}>
