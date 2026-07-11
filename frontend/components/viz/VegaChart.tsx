@@ -79,6 +79,7 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
         if (!resolved.ok) throw new Error(resolved.error);
         const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode);
         if (cancelled) return;
+        el.replaceChildren(); // drop any stale chart DOM from a failed predecessor
         view = createVegaView(vegaSpec, rowsRef.current, {
           renderer: 'svg',
           container: el,
@@ -135,26 +136,27 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
     return () => ro.disconnect();
   }, []);
 
-  if (error) {
-    return (
-      <Box p={4} width="full" aria-label="Vega chart error">
-        <Text fontSize="xs" fontFamily="mono" color="accent.danger" whiteSpace="pre-wrap">
-          Chart failed to render: {error}
-        </Text>
-      </Box>
-    );
-  }
-
+  // The container must ALWAYS stay mounted: the build effect needs containerRef on
+  // every envelope change. Unmounting it on error made error states permanent (the
+  // effect bailed on a null ref forever). Errors overlay instead.
   return (
-    <Box
-      ref={containerRef}
-      aria-label="Vega chart"
-      flex="1"
-      width="full"
-      minHeight="0"
-      overflow="hidden"
-      css={{ '& .vega-embed, & svg': { display: 'block' } }}
-    />
+    <Box position="relative" flex="1" width="full" minHeight="0" overflow="hidden">
+      {error && (
+        <Box position="absolute" inset={0} zIndex={1} bg="bg.subtle" p={4} overflow="auto" aria-label="Vega chart error">
+          <Text fontSize="xs" fontFamily="mono" color="accent.danger" whiteSpace="pre-wrap">
+            Chart failed to render: {error}
+          </Text>
+        </Box>
+      )}
+      <Box
+        ref={containerRef}
+        aria-label="Vega chart"
+        width="full"
+        height="100%"
+        overflow="hidden"
+        css={{ '& .vega-embed, & svg': { display: 'block' } }}
+      />
+    </Box>
   );
 }
 

@@ -87,7 +87,10 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
                     type={resolveColumnType(field, columns, types)}
                     onRemove={() => assign(channel, null)}
                   />
-                ) : null}
+                ) : (
+                  // chip-height placeholder so empty zones align with filled ones
+                  <Box h="27px" width="full" />
+                )}
               </DropZone>
             </Box>
           );

@@ -175,6 +175,7 @@ const radar: VizTemplate = {
     const angular = (of: string) => `scale('angular', ${of}[${m}])`;
     const seriesExpr = series ? `datum[${JSON.stringify(series)}]` : "'all'";
     const gridStroke = 'rgba(139, 148, 158, 0.35)'; // neutral in both modes
+    const RINGS = 4;
     return {
       autosize: { type: 'fit', contains: 'padding' },
       signals: [
@@ -191,9 +192,17 @@ const radar: VizTemplate = {
           ],
         },
         { name: 'keys', source: 'table', transform: [{ type: 'aggregate', groupby: [metric] }] },
+        // grid levels for the concentric ring polygons (ECharts-style)
+        { name: 'rings', transform: [{ type: 'sequence', start: 1, stop: RINGS + 1, as: 'lvl' }] },
       ],
       scales: [
-        { name: 'angular', type: 'point', range: { signal: '[-PI, PI]' }, padding: 0.5, domain: { data: 'table', field: metric } },
+        // First metric at 12 o'clock (ECharts convention): angles run from -PI/2,
+        // stopping one step short of the full turn so first/last don't overlap.
+        {
+          name: 'angular', type: 'point', padding: 0,
+          range: { signal: `[-PI/2, 3*PI/2 - 2*PI/max(1, length(data('keys')))]` },
+          domain: { data: 'table', field: metric },
+        },
         { name: 'radial', type: 'linear', range: [0, { signal: 'radius' }], zero: true, nice: false, domain: { data: 'table', field: '__mx_value' } },
         { name: 'color', type: 'ordinal', domain: { data: 'table', field: '__mx_series' }, range: 'category' },
       ],
@@ -203,19 +212,26 @@ const radar: VizTemplate = {
           type: 'group',
           encode: { enter: { x: { signal: 'width / 2' }, y: { signal: 'height / 2' } } },
           marks: [
-            // outer ring
+            // concentric grid polygons, one per level
             {
-              type: 'line',
-              from: { data: 'keys' },
-              encode: {
-                update: {
-                  interpolate: { value: 'linear-closed' },
-                  x: { signal: `radius * cos(${angular('datum')})` },
-                  y: { signal: `radius * sin(${angular('datum')})` },
-                  stroke: { value: gridStroke },
-                  strokeWidth: { value: 1 },
+              type: 'group',
+              from: { data: 'rings' },
+              marks: [
+                {
+                  type: 'line',
+                  from: { data: 'keys' },
+                  encode: {
+                    update: {
+                      interpolate: { value: 'linear-closed' },
+                      x: { signal: `radius * (parent.lvl / ${RINGS}) * cos(${angular('datum')})` },
+                      y: { signal: `radius * (parent.lvl / ${RINGS}) * sin(${angular('datum')})` },
+                      stroke: { value: gridStroke },
+                      strokeWidth: { value: 1 },
+                      fill: { value: 'rgba(139, 148, 158, 0.045)' },
+                    },
+                  },
                 },
-              },
+              ],
             },
             // spokes
             {
@@ -232,7 +248,7 @@ const radar: VizTemplate = {
                 },
               },
             },
-            // series polygons
+            // series polygons + vertex points
             {
               type: 'group',
               from: { facet: { data: 'table', name: 'facet', groupby: '__mx_series' } },
@@ -252,6 +268,18 @@ const radar: VizTemplate = {
                     },
                   },
                 },
+                {
+                  type: 'symbol',
+                  from: { data: 'facet' },
+                  encode: {
+                    update: {
+                      x: { signal: `scale('radial', datum.__mx_value) * cos(${angular('datum')})` },
+                      y: { signal: `scale('radial', datum.__mx_value) * sin(${angular('datum')})` },
+                      fill: { scale: 'color', field: '__mx_series' },
+                      size: { value: 35 },
+                    },
+                  },
+                },
               ],
             },
             // metric labels
@@ -260,8 +288,8 @@ const radar: VizTemplate = {
               from: { data: 'keys' },
               encode: {
                 update: {
-                  x: { signal: `(radius + 10) * cos(${angular('datum')})` },
-                  y: { signal: `(radius + 10) * sin(${angular('datum')})` },
+                  x: { signal: `(radius + 12) * cos(${angular('datum')})` },
+                  y: { signal: `(radius + 12) * sin(${angular('datum')})` },
                   text: { field: metric },
                   align: { signal: `cos(${angular('datum')}) > 0.05 ? 'left' : (cos(${angular('datum')}) < -0.05 ? 'right' : 'center')` },
                   baseline: { signal: `sin(${angular('datum')}) > 0.05 ? 'top' : (sin(${angular('datum')}) < -0.05 ? 'bottom' : 'middle')` },
