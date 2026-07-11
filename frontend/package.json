@@ -107,6 +107,7 @@
     "vega": "6.2.0",
     "vega-interpreter": "2.2.1",
     "vega-lite": "6.4.3",
+    "vega-tooltip": "1.1.0",
     "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },

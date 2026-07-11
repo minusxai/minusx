@@ -18,6 +18,7 @@ import type { TopLevelSpec } from 'vega-lite';
 import { parse, View } from 'vega';
 import type { Spec as VegaSpec } from 'vega';
 import { expressionInterpreter } from 'vega-interpreter';
+import { Handler as TooltipHandler } from 'vega-tooltip';
 import { prepareVegaLiteSpec } from './prepare';
 import { getVegaLiteConfig } from './theme';
 import { VIZ_DATASET_MAIN } from './types';
@@ -28,6 +29,8 @@ export interface VegaViewOptions {
   container?: HTMLElement;
   width?: number;
   height?: number;
+  /** Install the styled HTML tooltip handler (browser only; styled in globals.css). */
+  tooltipTheme?: 'light' | 'dark';
 }
 
 /**
@@ -71,6 +74,9 @@ export function createVegaView(
     renderer: opts.renderer,
     hover: opts.renderer !== 'none',
     ...(opts.container ? { container: opts.container } : {}),
+    ...(opts.container && opts.tooltipTheme
+      ? { tooltip: new TooltipHandler({ theme: opts.tooltipTheme }).call }
+      : {}),
   });
   setMainData(view, rows);
   if (opts.width != null) view.width(opts.width);

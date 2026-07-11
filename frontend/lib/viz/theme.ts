@@ -34,6 +34,7 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
       labelSeparation: 4,
     },
     legend: {
+      orient: 'top',
       labelColor: colors.fgMuted,
       titleColor: colors.fgDefault,
       labelFontSize: 11,
@@ -41,6 +42,10 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
       titleLimit: 240,
       labelLimit: 220,
     },
+    // Automatic tooltips everywhere: hovering any mark shows its encoded fields
+    // (with their titles/formats). A spec-level `tooltip` encoding overrides this
+    // with a custom field list; `mark: {tooltip: null}` opts a spec out.
+    mark: { tooltip: { content: 'encoding' } },
     title: {
       color: colors.fgDefault,
       fontSize: 14,

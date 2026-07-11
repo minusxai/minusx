@@ -56,7 +56,12 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
         if (cancelled) return;
         const vegaSpec = compileVegaLite(envelope.source.spec as Record<string, unknown>, colorMode);
         if (cancelled) return;
-        view = createVegaView(vegaSpec, rowsRef.current, { renderer: 'svg', container: el, ...sizeOf(el) });
+        view = createVegaView(vegaSpec, rowsRef.current, {
+          renderer: 'svg',
+          container: el,
+          tooltipTheme: colorMode,
+          ...sizeOf(el),
+        });
         viewRef.current = view;
         await view.runAsync();
         if (!cancelled) setError(null);

@@ -25,4 +25,14 @@ describe('getVegaLiteConfig', () => {
     const config = getVegaLiteConfig('dark') as Record<string, any>;
     expect(config.background).toBe('transparent');
   });
+
+  it('places legends on top by default', () => {
+    const config = getVegaLiteConfig('dark') as Record<string, any>;
+    expect(config.legend.orient).toBe('top');
+  });
+
+  it('enables encoding tooltips on all marks by default', () => {
+    const config = getVegaLiteConfig('dark') as Record<string, any>;
+    expect(config.mark.tooltip).toEqual({ content: 'encoding' });
+  });
 });
