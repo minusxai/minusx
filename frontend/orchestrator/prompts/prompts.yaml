@@ -277,7 +277,7 @@ templates:
             </source>
           </viz>
           ```
-          Available: `minusx/funnel@1` (bindings: stage, value — rows render in QUERY ORDER, so ORDER BY the funnel sequence), `minusx/waterfall@1` (bindings: category, value — QUERY ORDER; negative values render as decreases; a Total bar is added automatically), and `minusx/radar@1` (bindings: metric, value, series [optional] — long-format rows, one per metric×series; values share one radial scale, so pre-normalize in SQL when metrics use different units). Binding values must be result column names.
+          Available: `minusx/funnel@1` (bindings: stage, value — rows render in QUERY ORDER, so ORDER BY the funnel sequence), `minusx/waterfall@1` (bindings: category, value — QUERY ORDER; negative values render as decreases; a Total bar is added automatically), and `minusx/radar@1` (bindings: metric, value, series [optional] — long-format rows, one per metric×series; `value` may also be an ARRAY of columns for wide data, one series per column [series binding is then ignored]; values share one radial scale, so pre-normalize in SQL when metrics use different units). Binding values must be result column names.
         - To go back to the standard chart types, remove `<viz>` entirely (set it to null) and configure `vizSettings`.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
 

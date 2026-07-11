@@ -242,8 +242,9 @@ export const VizSourceRecipe = Type.Object({
     "a SHIPPED recipe id, e.g. 'minusx/funnel@1' or 'minusx/waterfall@1'. The chart is generated from the " +
     'recipe + bindings at render time — nothing else to author. Available recipes and their bindings are ' +
     'listed in the questions skill.' }),
-  bindings: Type.Record(Type.String(), Type.String(), { description:
-    'recipe binding slots → query-result column names (validated against the actual columns)' }),
+  bindings: Type.Record(Type.String(), Type.Union([Type.String(), Type.Array(Type.String())]), { description:
+    'recipe binding slots → query-result column names (validated against the actual columns). Multi-capable ' +
+    "slots (e.g. radar's value) accept an ARRAY of columns — one series per column." }),
   params: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'optional recipe params (see the recipe docs); omit for defaults' })),
 }, { title: 'VizSourceRecipe' });
 export type VizSourceRecipe = Static<typeof VizSourceRecipe>;

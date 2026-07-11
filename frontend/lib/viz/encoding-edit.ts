@@ -293,10 +293,76 @@ export function getEnvelopeZones(envelope: VizEnvelope): Array<{ channel: string
 export function getZoneField(envelope: VizEnvelope, channel: string): string | null {
   const source = sourceOf(envelope);
   if (source.kind === 'recipe') {
-    const bindings = (source.bindings ?? {}) as Record<string, string>;
-    return bindings[channel] ?? null;
+    const bound = ((source.bindings ?? {}) as Record<string, string | string[]>)[channel];
+    if (Array.isArray(bound)) return bound[0] ?? null;
+    return bound ?? null;
   }
   return getChannelField((source as { spec: Record<string, unknown> }).spec, channel as EditableChannel);
+}
+
+/**
+ * All columns a zone holds. Multi-capable zones (native cartesian Y via fold, or a
+ * recipe slot with `multi`) return the full list; single zones return 0–1 items.
+ */
+export function getZoneFields(envelope: VizEnvelope, channel: string): string[] {
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') {
+    const bound = ((source.bindings ?? {}) as Record<string, string | string[]>)[channel];
+    if (bound == null || bound === '') return [];
+    return Array.isArray(bound) ? bound : [bound];
+  }
+  const spec = (source as { spec: Record<string, unknown> }).spec;
+  if (channel === 'y') return getYFields(spec);
+  const f = getChannelField(spec, channel as EditableChannel);
+  return f ? [f] : [];
+}
+
+/** Whether a zone accepts multiple columns. */
+export function isMultiZone(envelope: VizEnvelope, channel: string): boolean {
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') {
+    return getTemplate(source.recipe as string)?.bindings.find(b => b.name === channel)?.multi ?? false;
+  }
+  return channel === 'y' && isUnitVegaLiteSpec((source as { spec: Record<string, unknown> }).spec);
+}
+
+/** Add a column to a multi zone (append) or assign a single zone. */
+export function addZoneField(envelope: VizEnvelope, channel: string, column: { name: string; kind: VizColumnKind }): VizEnvelope {
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') {
+    if (!isMultiZone(envelope, channel)) return setZoneField(envelope, channel, column);
+    const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
+    const bindings = (next.source as unknown as AnySource).bindings as Record<string, string | string[]>;
+    const current = bindings[channel];
+    const list = current == null || current === '' ? [] : Array.isArray(current) ? current : [current];
+    if (!list.includes(column.name)) list.push(column.name);
+    bindings[channel] = list.length === 1 ? list[0] : list;
+    return next;
+  }
+  if (channel === 'y') return addYField(envelope, column);
+  return setZoneField(envelope, channel, column);
+}
+
+/** Remove one column from a zone (multi-aware). */
+export function removeZoneField(envelope: VizEnvelope, channel: string, name: string): VizEnvelope {
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') {
+    if (!isMultiZone(envelope, channel)) return setZoneField(envelope, channel, null);
+    const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
+    const bindings = (next.source as unknown as AnySource).bindings as Record<string, string | string[]>;
+    const current = bindings[channel];
+    const list = (Array.isArray(current) ? current : [current]).filter((f): f is string => typeof f === 'string' && f !== name);
+    if (list.length === 0) {
+      const template = getTemplate(source.recipe as string);
+      if (template?.bindings.find(b => b.name === channel)?.optional) delete bindings[channel];
+      else return envelope; // required multi slot keeps its last column
+    } else {
+      bindings[channel] = list.length === 1 ? list[0] : list;
+    }
+    return next;
+  }
+  if (channel === 'y') return removeYField(envelope, name);
+  return setZoneField(envelope, channel, null);
 }
 
 /** Assign/remove a zone's column. Recipe bindings are required — removal is a no-op there. */

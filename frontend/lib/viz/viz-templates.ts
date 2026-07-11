@@ -16,6 +16,8 @@ export interface VizTemplateBinding {
   accepts: ReadonlyArray<'nominal' | 'quantitative' | 'temporal'>;
   /** Optional slots may be unbound (e.g. radar's series). */
   optional?: boolean;
+  /** Multi-capable slots accept an array of columns (e.g. radar's value → one series each). */
+  multi?: boolean;
 }
 
 export type VizTemplateEngine = 'vega-lite' | 'vega';
@@ -28,7 +30,7 @@ export interface VizTemplate {
   engine: VizTemplateEngine;
   bindings: ReadonlyArray<VizTemplateBinding>;
   /** Materialize the full spec from bound column names. */
-  build(bindings: Record<string, string>): Record<string, unknown>;
+  build(bindings: Record<string, string | string[]>): Record<string, unknown>;
 }
 
 // ── minusx/funnel@1 ─────────────────────────────────────────────────────────────
@@ -42,7 +44,9 @@ const funnel: VizTemplate = {
     { name: 'stage', label: 'Stages', accepts: ['nominal', 'temporal'] },
     { name: 'value', label: 'Value', accepts: ['quantitative'] },
   ],
-  build({ stage, value }) {
+  build(bindings) {
+    const stage = String(bindings.stage);
+    const value = String(bindings.value);
     // Data order IS the funnel order (SQL owns semantics — ORDER BY the stage
     // sequence). The tapered silhouette is a ranged area (x…x2 = ±value/2) over the
     // stage rank; linear interpolation between ranks yields the classic trapezoids.
@@ -91,7 +95,9 @@ const waterfall: VizTemplate = {
     { name: 'category', label: 'Steps', accepts: ['nominal', 'temporal'] },
     { name: 'value', label: 'Value', accepts: ['quantitative'] },
   ],
-  build({ category, value }) {
+  build(bindings) {
+    const category = String(bindings.category);
+    const value = String(bindings.value);
     const x = { field: category, type: 'nominal', sort: null, title: null };
     return {
       transform: [
@@ -167,13 +173,24 @@ const radar: VizTemplate = {
   engine: 'vega',
   bindings: [
     { name: 'metric', label: 'Metrics', accepts: ['nominal'] },
-    { name: 'value', label: 'Value', accepts: ['quantitative'] },
+    { name: 'value', label: 'Value', accepts: ['quantitative'], multi: true },
     { name: 'series', label: 'Series', accepts: ['nominal'], optional: true },
   ],
-  build({ metric, value, series }) {
+  build(bindings) {
+    const metric = String(bindings.metric);
+    const value = bindings.value;
+    const series = bindings.series;
     const m = JSON.stringify(metric);
+    const values = (Array.isArray(value) ? value : [value]).map(String);
+    const multi = values.length > 1;
     const angular = (of: string) => `scale('angular', ${of}[${m}])`;
-    const seriesExpr = series ? `datum[${JSON.stringify(series)}]` : "'all'";
+    // Multiple value columns fold into series (the measures ARE the series);
+    // otherwise the optional series binding groups the rows. With neither, the
+    // single series is NAMED AFTER the value column so the legend reads like the
+    // classic ECharts radar ("revenue"), and the legend always shows.
+    const seriesExpr = series && !multi
+      ? `datum[${JSON.stringify(String(series))}]`
+      : JSON.stringify(values[0]);
     const gridStroke = 'rgba(139, 148, 158, 0.35)'; // neutral in both modes
     const RINGS = 4;
     return {
@@ -186,10 +203,15 @@ const radar: VizTemplate = {
         {
           name: 'table',
           source: 'main',
-          transform: [
-            { type: 'formula', as: '__mx_series', expr: seriesExpr },
-            { type: 'aggregate', groupby: [metric, '__mx_series'], fields: [value], ops: ['sum'], as: ['__mx_value'] },
-          ],
+          transform: multi
+            ? [
+                { type: 'fold', fields: values, as: ['__mx_series', '__mx_fold_value'] },
+                { type: 'aggregate', groupby: [String(metric), '__mx_series'], fields: ['__mx_fold_value'], ops: ['sum'], as: ['__mx_value'] },
+              ]
+            : [
+                { type: 'formula', as: '__mx_series', expr: seriesExpr },
+                { type: 'aggregate', groupby: [String(metric), '__mx_series'], fields: [values[0]], ops: ['sum'], as: ['__mx_value'] },
+              ],
         },
         { name: 'keys', source: 'table', transform: [{ type: 'aggregate', groupby: [metric] }] },
         // grid levels for the concentric ring polygons (ECharts-style)
@@ -206,7 +228,7 @@ const radar: VizTemplate = {
         { name: 'radial', type: 'linear', range: [0, { signal: 'radius' }], zero: true, nice: false, domain: { data: 'table', field: '__mx_value' } },
         { name: 'color', type: 'ordinal', domain: { data: 'table', field: '__mx_series' }, range: 'category' },
       ],
-      ...(series ? { legends: [{ fill: 'color', symbolType: 'circle' }] } : {}),
+      legends: [{ fill: 'color', symbolType: 'circle' }],
       marks: [
         {
           type: 'group',
@@ -319,14 +341,19 @@ export type MaterializeResult =
   | { ok: false; error: string };
 
 /** Materialize a recipe source into its grammar spec. */
-export function materializeRecipe(source: { recipe: string; bindings: Record<string, string> }): MaterializeResult {
+export function materializeRecipe(source: { recipe: string; bindings: Record<string, string | string[]> }): MaterializeResult {
   const template = getTemplate(source.recipe);
   if (!template) {
     return { ok: false, error: `unknown recipe "${source.recipe}" — available: ${Object.keys(VIZ_TEMPLATES).join(', ')}` };
   }
-  const missing = template.bindings.filter(b => !b.optional && !source.bindings[b.name]);
+  const empty = (v: string | string[] | undefined) => v == null || v === '' || (Array.isArray(v) && v.length === 0);
+  const missing = template.bindings.filter(b => !b.optional && empty(source.bindings[b.name]));
   if (missing.length > 0) {
     return { ok: false, error: `recipe "${source.recipe}" is missing binding${missing.length > 1 ? 's' : ''}: ${missing.map(b => b.name).join(', ')}` };
+  }
+  const badMulti = template.bindings.find(b => !b.multi && Array.isArray(source.bindings[b.name]));
+  if (badMulti) {
+    return { ok: false, error: `recipe "${source.recipe}" binding "${badMulti.name}" takes a single column, not an array` };
   }
   return { ok: true, spec: template.build(source.bindings), engine: template.engine };
 }

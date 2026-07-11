@@ -176,7 +176,7 @@ export function validateVizEnvelope(
   let rawSpec: Record<string, unknown>;
   const source = shape.env.source as Record<string, unknown>;
   if (source.kind === 'recipe') {
-    const recipeSource = source as unknown as { recipe: string; bindings: Record<string, string> };
+    const recipeSource = source as unknown as { recipe: string; bindings: Record<string, string | string[]> };
     const materialized = materializeRecipe(recipeSource);
     if (!materialized.ok) {
       issues.push(err('E_RECIPE', '/source/recipe', materialized.error));
@@ -186,10 +186,12 @@ export function validateVizEnvelope(
     // directly (the materialized spec's own refs are then internally consistent).
     const known = new Set(columns.map(c => c.name));
     const available = columns.map(c => `${c.name} (${c.kind})`).join(', ');
-    for (const [slot, columnName] of Object.entries(recipeSource.bindings)) {
-      if (!known.has(columnName)) {
-        issues.push(err('E_FIELD_NOT_FOUND', `/source/bindings/${slot}`,
-          `"${columnName}" is not in the query result. Available fields: ${available}`));
+    for (const [slot, bound] of Object.entries(recipeSource.bindings)) {
+      for (const columnName of Array.isArray(bound) ? bound : [bound]) {
+        if (!known.has(columnName)) {
+          issues.push(err('E_FIELD_NOT_FOUND', `/source/bindings/${slot}`,
+            `"${columnName}" is not in the query result. Available fields: ${available}`));
+        }
       }
     }
     if (issues.some(i => i.severity === 'error')) return { ok: false, issues };

@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { Box, HStack, Text, Wrap } from '@chakra-ui/react';
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from '@/components/plotx/AxisComponents';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { isEnvelopeEditable, getEnvelopeZones, getZoneField, setZoneField, getYFields, addYField, removeYField } from '@/lib/viz/encoding-edit';
+import { isEnvelopeEditable, getEnvelopeZones, getZoneFields, addZoneField, removeZoneField } from '@/lib/viz/encoding-edit';
 import { sqlTypeToVizKind } from '@/lib/viz/query-data';
 
 export interface VegaEncodingPanelProps {
@@ -39,35 +39,19 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
 
   // Zones are source-aware: recipes expose their binding slots (funnel → Stages/Value);
   // native unit specs expose type-aware channels (pie → Slices/Value, never x/y).
+  // Multi-capable zones (native Y via fold, recipe slots flagged `multi`) hold lists.
   const zones = getEnvelopeZones(envelope);
-  const sourceKind = (envelope.source as unknown as { kind: string }).kind;
-  const spec = sourceKind === 'vega-lite'
-    ? (envelope.source as unknown as { spec: Record<string, unknown> }).spec
-    : null;
-
-  // The Y zone of a native cartesian spec holds MULTIPLE measures (folded, RFC §4);
-  // every other zone holds one field.
-  const zoneFields = (channel: string): string[] => {
-    if (channel === 'y' && spec) return getYFields(spec);
-    const f = getZoneField(envelope, channel);
-    return f ? [f] : [];
-  };
-  const assigned = new Set(zones.flatMap(z => zoneFields(z.channel)));
+  const assigned = new Set(zones.flatMap(z => getZoneFields(envelope, z.channel)));
 
   const columnOf = (name: string) => ({ name, kind: sqlTypeToVizKind(types[columns.indexOf(name)] ?? '') });
 
-  const assign = (channel: string, name: string | null) => {
-    if (channel === 'y' && spec && name != null) {
-      onVizChange(addYField(envelope, columnOf(name)));
-    } else {
-      onVizChange(setZoneField(envelope, channel, name != null ? columnOf(name) : null));
-    }
+  const assign = (channel: string, name: string) => {
+    onVizChange(addZoneField(envelope, channel, columnOf(name)));
     setMobileSelected(null);
   };
 
   const removeFromZone = (channel: string, name: string) => {
-    if (channel === 'y' && spec) onVizChange(removeYField(envelope, name));
-    else onVizChange(setZoneField(envelope, channel, null));
+    onVizChange(removeZoneField(envelope, channel, name));
   };
 
   return (
@@ -90,7 +74,7 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
       </Wrap>
       <HStack gap={2} align="stretch" flexWrap="wrap">
         {zones.map(({ channel, label }) => {
-          const fields = zoneFields(channel).filter(f => f !== '__mx_key');
+          const fields = getZoneFields(envelope, channel).filter(f => f !== '__mx_key');
           return (
             <Box key={channel} flex="1" minW="120px" aria-label={`${label} drop zone`}>
               <DropZone
