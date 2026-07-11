@@ -18,7 +18,7 @@ import { DrillDownCard, type DrillDownState } from '@/components/plotx/DrillDown
 import { ChartError } from '@/components/plotx/ChartError';
 import { aggregatePivotData, computeFormulas } from '@/lib/chart/pivot-utils';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { getPivotConfig, getVizColumnFormats, getVizCss } from '@/lib/viz/encoding-edit';
+import { getPivotConfig, getVizColumnFormats, getVizCss, getTableConditionalFormats } from '@/lib/viz/encoding-edit';
 
 export interface VizPivotViewProps {
   envelope: VizEnvelope;
@@ -83,6 +83,7 @@ export function VizPivotView({ envelope, rows, sql, databaseName, enableDrilldow
         onCellClick={enableDrilldown ? handleCellClick : undefined}
         columnFormats={columnFormats}
         valueColumns={config.values.map(v => v.column)}
+        conditionalFormats={getTableConditionalFormats(envelope)}
       />
       <DrillDownCard drillDown={drillDown} onClose={closeDrillDown} sql={sql} databaseName={databaseName} />
     </Box>

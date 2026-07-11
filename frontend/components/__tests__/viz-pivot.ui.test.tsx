@@ -221,3 +221,133 @@ describe('VegaVizPanel — recipe column formats', () => {
     expect(source.columnFormats.revenue.format).toBe('$,.0f')
   })
 })
+
+// ─── Unified grid: pivot speaks the same contract as the flat table ──────────
+
+describe('Pivot on the unified grid', () => {
+  it('renders the shared class contract: .mx-table root, .mx-th headers, zebra data rows', () => {
+    renderViz(pivotViz())
+    const root = document.querySelector('.mx-pivot')
+    expect(root).toBeTruthy()
+    expect(root!.classList.contains('mx-table')).toBe(true)
+    expect(document.querySelectorAll('.mx-pivot .mx-th').length).toBeGreaterThan(0)
+    const dataRows = Array.from(document.querySelectorAll('.mx-pivot tbody tr.mx-row'))
+    expect(dataRows.length).toBeGreaterThan(0)
+    expect(dataRows[0].classList.contains('mx-row-even')).toBe(true)
+    expect(dataRows[1].classList.contains('mx-row-odd')).toBe(true)
+  })
+
+  it('colour-scale rule paints value cells along the ramp (heatmap off)', () => {
+    renderViz(pivotViz({
+      config: { ...CONFIG, showHeatmap: false },
+      conditionalFormats: [{ id: 's1', column: 'revenue', scale: 'blue' }],
+    }))
+    const cells = Array.from(document.querySelectorAll('.mx-pivot td.mx-col-revenue')) as HTMLElement[]
+    expect(cells.length).toBeGreaterThan(0)
+    const painted = cells.filter(c => c.style.backgroundColor.startsWith('rgba('))
+    expect(painted.length).toBeGreaterThan(0)
+  })
+
+  it('condition rule paints matching value cells (heatmap off)', () => {
+    renderViz(pivotViz({
+      config: { ...CONFIG, showHeatmap: false },
+      conditionalFormats: [
+        { id: 'c1', column: 'revenue', operator: '>', value: '150', target: 'cell', bgColor: '#123456' },
+      ],
+    }))
+    const cells = Array.from(document.querySelectorAll('.mx-pivot td.mx-col-revenue')) as HTMLElement[]
+    // Only East/Jan = 200 exceeds 150
+    const painted = cells.filter(c => c.style.backgroundColor === 'rgb(18, 52, 86)')
+    expect(painted.length).toBe(1)
+  })
+
+  it('shares the grid toolbar: row count + CSV download', () => {
+    renderViz(pivotViz())
+    expect(screen.getByLabelText('Download CSV')).toBeInTheDocument()
+  })
+
+  it('Settings tab hosts conditional formatting for pivot sources', async () => {
+    const user = userEvent.setup()
+    const onVizChange = vi.fn()
+    renderWithProviders(
+      <VegaVizPanel envelope={pivotViz()} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
+    )
+    await user.click(screen.getByLabelText('Settings tab'))
+    await user.click(screen.getByLabelText('Add color scale rule'))
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const source = next.source as unknown as { conditionalFormats: Array<Record<string, unknown>> }
+    expect(source.conditionalFormats).toHaveLength(1)
+    expect(source.conditionalFormats[0].scale).toBe('red-yellow-green')
+  })
+})
+
+// ─── V2 panel owns the tabs: no nested Fields/Settings inside PivotAxisBuilder ─
+
+describe('VegaVizPanel — pivot sections ride the panel tabs', () => {
+  function renderPanel(viz: VizEnvelope) {
+    renderWithProviders(
+      <VegaVizPanel envelope={viz} columns={DATA.columns} types={DATA.types} onVizChange={vi.fn()} />
+    )
+  }
+
+  it('Fields tab shows zones WITHOUT the builder-internal tab bar or options', () => {
+    renderPanel(pivotViz())
+    expect(screen.queryByLabelText('Pivot fields section')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Pivot settings section')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Toggle row totals')).not.toBeInTheDocument()
+  })
+
+  it('Settings tab hosts the pivot options (totals/heatmap) beside conditional formats', async () => {
+    const user = userEvent.setup()
+    renderPanel(pivotViz())
+    await user.click(screen.getByLabelText('Settings tab'))
+    expect(screen.getByLabelText('Toggle row totals')).toBeInTheDocument()
+    expect(screen.getByLabelText('Toggle column totals')).toBeInTheDocument()
+    expect(screen.getByLabelText('Toggle heatmap')).toBeInTheDocument()
+    expect(screen.getByLabelText('Add color scale rule')).toBeInTheDocument()
+  })
+
+  it('classic surfaces keep the internal Fields/Settings tabs', async () => {
+    const { PivotAxisBuilder } = await import('@/components/plotx/PivotAxisBuilder')
+    renderWithProviders(
+      <PivotAxisBuilder
+        columns={DATA.columns}
+        types={DATA.types}
+        pivotConfig={CONFIG}
+        onPivotConfigChange={vi.fn()}
+        columnFormats={{}}
+        onColumnFormatChange={vi.fn()}
+      />
+    )
+    expect(screen.getByLabelText('Pivot fields section')).toBeInTheDocument()
+    expect(screen.getByLabelText('Pivot settings section')).toBeInTheDocument()
+  })
+})
+
+describe('VegaVizPanel — pivot formulas in V2', () => {
+  it('Settings tab offers the Formulas builder when dimensions have ≥2 values', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <VegaVizPanel
+        envelope={pivotViz()}
+        columns={DATA.columns}
+        types={DATA.types}
+        rows={DATA.rows}
+        onVizChange={vi.fn()}
+      />
+    )
+    await user.click(screen.getByLabelText('Settings tab'))
+    // The Formulas settings card renders (collapse control carries the card title)
+    expect(screen.getByLabelText('Collapse Formulas')).toBeInTheDocument()
+  })
+
+  it('without rows the Formulas card is absent (no values to build from)', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <VegaVizPanel envelope={pivotViz()} columns={DATA.columns} types={DATA.types} onVizChange={vi.fn()} />
+    )
+    await user.click(screen.getByLabelText('Settings tab'))
+    expect(screen.queryByLabelText('Collapse Formulas')).not.toBeInTheDocument()
+  })
+})

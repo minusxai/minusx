@@ -507,6 +507,11 @@ Move items up as they pass; anything that fails gets a note + fix before it move
   (nested headers, subtotals, collapsible groups, heatmap, formulas, drilldown built in); the typed
   STRUCTURE persists as the classic `PivotConfig` under `source.config`; looks via the shared `css`
   contract (`.mx-pivot` root + element selectors); UI + agent
+- [x] heatmap — NATIVE rect spec (like pie): own icon (V2-only selector entry), UI transform
+  (pivot→heatmap maps columns[0]→x / rows[0]→y / values[0]→SUM color; bar→heatmap moves the series
+  to y and the measure to color), agent idiom in skill_questions (`scheme: greens` = GitHub look).
+  Replaces the pivot's `compact` mode (deprecated in schema, toggle hidden on the V2 panel,
+  legacy pivots keep rendering it)
 - [ ] trend — recipe-vs-DOM-widget spike decision (RFC §17)
 - [ ] single_value — follows the trend decision
 - [ ] geo — Vega recipes for analytic geo; Leaflet frozen for tile basemaps (RFC §9)
@@ -571,6 +576,19 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - Pivot source end-to-end (2026-07-11): envelope renders PivotTable with rows×columns, SUM heatmap
   cells, `$` prefix from columnFormats, Total column, `.mx-pivot th` css override live; Pivot icon
   enabled/selected; Fields hosts the full PivotAxisBuilder (Rows/Columns/Values + agg selector)
+- Table+pivot grid merge, stages 1–2 (2026-07-11 pm): pivot layout math extracted to the PURE
+  engine `lib/chart/pivot-grid.ts` (header trees, display rows, collapse filtering, row spans,
+  heatmap domain, conditional cell bg — unit-tested; PivotTable.tsx 682→~300 lines); pivot now
+  speaks the table's FULL class contract (`.mx-table` root + `.mx-header-row .mx-th .mx-row`
+  + zebra parity classes + `.mx-cell .mx-col-<valueColumn>` + `.mx-toolbar`, `.mx-pivot` kept);
+  zebra default on pivot data rows; SHARED bottom toolbar (row count + CSV export — TableBottomBar
+  sections go optional); conditionalFormats on pivot VALUE columns (same rule vocabulary as table,
+  cell/row/column/scale semantics over the cross-tab); concrete cell colours paint INLINE (like
+  the table) so css overrides/heatmaps behave identically in both grids
+- ConditionalFormatRule is now a UNION: condition rules + colour-scale rules (`{id, column, scale:
+  red-yellow-green|green|blue}`) — ramp math extracted to `lib/chart/color-scale.ts` (shared by
+  table cells, pivot cells, and the legacy pivot heatmap); panel grew an "Add scale" button; the
+  flat table gets heatmap cells (closes "heatmap table?"); dark/light ramps via ui colorMode
 - Inline viz validation on EditFile/CreateFile (2026-07-11): errors reject the write atomically with
   per-issue paths + available fields in the tool result; query+viz combined edits re-check after
   auto-execute (`vizValidation`); columns-unknown paths skip field checks (no false positives).
@@ -617,9 +635,12 @@ Move items up as they pass; anything that fails gets a note + fix before it move
   swatches (surgical `scale.range` edit vs agent-only)
 - [ ] annotations
 - [ ] custom plot
-- [ ] heatmap table?
-- [ ] img/csv download
-- [ ] table and pivot table as single table
+- [x] heatmap table? — shipped as the colour-scale ConditionalFormatRule (see Verified)
+- [ ] img download (table's + pivot's own CSV buttons now both work; chart image export still unwired)
+- [x] table and pivot table as single table — stages 1–2 shipped (shared class contract, shared
+  toolbar, conditional formats on both; see Verified). Remaining stage 3 candidates: sort /
+  column-visibility semantics for pivot leaf columns, format gear on pivot leaf headers
+- [ ] box plot
 
 
 **Data handling**
@@ -698,6 +719,18 @@ where things live and the decisions not obvious from the code.
   contract. Recipe/table/pivot markup examples match what `fileToMarkup` actually emits.
 
 ### Decisions made 2026-07-11 (beyond the 07-10 log)
+
+- **Grid merge shape (user-confirmed).** Pivot rides the same grid stack as the table: shared
+  class contract + shared toolbar + shared conditional-format vocabulary; pivot stays
+  UNVIRTUALIZED (aggregated data is small; rowSpan'd sticky dim columns fight virtualization).
+  The pivot's layout stays in the pure engine (`pivot-grid.ts`), not TanStack's row model —
+  subtotal/formula interleaving and rowSpans aren't row-model shapes; TanStack remains the flat
+  table's engine. Sorting/filter/stats on pivot leaf columns deferred (product semantics TBD).
+- **Heatmap is a viz TYPE, not a pivot mode.** Native VL rect spec (no recipe — Fields zones work
+  directly); `PivotConfig.compact` is deprecated (legacy renders keep working; V2 panel hides the
+  toggle). Discrete axes only: temporal category kinds map to ordinal on heatmap axes (rect +
+  continuous time = slivers).
+
 
 - **One format vocabulary = d3, everywhere.** Vega tier natively (spec `axis.format`, recipe label
   exprs); DOM grids render `format` via d3-format/d3-time-format (deps pinned 3.1.2/4.1.0 + @types);

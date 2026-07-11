@@ -116,7 +116,7 @@ export const PivotConfig = Type.Object({
   showRowTotals: Nullable(Type.Boolean({ description: 'show row totals column' })),
   showColumnTotals: Nullable(Type.Boolean({ description: 'show column totals row' })),
   showHeatmap: Nullable(Type.Boolean({ description: 'show heatmap conditional formatting' })),
-  compact: Nullable(Type.Boolean({ description: 'compact heatmap mode: hides cell values, shows only colored squares with tooltips, and uses smaller cells — like a GitHub contribution graph' })),
+  compact: Nullable(Type.Boolean({ description: 'DEPRECATED compact heatmap mode (GitHub-contribution-graph look) — kept rendering for legacy pivots; prefer the dedicated heatmap viz type (vega-lite rect mark) instead' })),
   heatmapScale: Nullable(Type.String({ description: "heatmap color scale: 'red-yellow-green' (default), 'green' (single-hue like GitHub), 'blue' (single-hue blue)" })),
   rowFormulas: Nullable(Type.Array(PivotFormula, { description: 'formulas combining top-level row dimension values' })),
   columnFormulas: Nullable(Type.Array(PivotFormula, { description: 'formulas combining top-level column dimension values' })),
@@ -151,14 +151,26 @@ export const ColumnFormatConfig = Type.Object({
 }, { title: 'ColumnFormatConfig' });
 export type ColumnFormatConfig = Static<typeof ColumnFormatConfig>;
 
-export const ConditionalFormatRule = Type.Object({
+export const ConditionFormatRule = Type.Object({
   id: Type.String({ description: 'stable unique id for this rule' }),
   column: Type.String({ description: 'the column whose value the condition is checked against' }),
   operator: StringEnum(['=', '!=', '>', '<', '>=', '<=', 'contains'], 'comparison operator'),
   value: Type.String({ description: 'value to compare against (coerced to number for numeric columns)' }),
   target: StringEnum(['cell', 'row', 'column'], "what gets painted when the condition matches: the matching 'cell', the entire 'row', or the entire 'column'"),
   bgColor: Type.String({ description: "background color as a hex string, e.g. '#fde68a'" }),
-}, { title: 'ConditionalFormatRule' });
+}, { title: 'ConditionFormatRule' });
+export type ConditionFormatRule = Static<typeof ConditionFormatRule>;
+
+export const ColorScaleFormatRule = Type.Object({
+  id: Type.String({ description: 'stable unique id for this rule' }),
+  column: Type.String({ description: 'numeric column whose cells are painted with a min→max colour ramp over the column values (heatmap cells)' }),
+  scale: StringEnum(['red-yellow-green', 'green', 'blue'], "colour ramp: 'red-yellow-green' (diverging, default), 'green' (single-hue, GitHub-like), 'blue' (single-hue)"),
+}, { title: 'ColorScaleFormatRule' });
+export type ColorScaleFormatRule = Static<typeof ColorScaleFormatRule>;
+
+// A conditional format is EITHER a condition rule (paint when a predicate holds)
+// or a colour-scale rule (min→max ramp over a numeric column).
+export const ConditionalFormatRule = Type.Union([ConditionFormatRule, ColorScaleFormatRule], { title: 'ConditionalFormatRule' });
 export type ConditionalFormatRule = Static<typeof ConditionalFormatRule>;
 
 export const VisualizationStyleConfig = Type.Object({
@@ -286,9 +298,15 @@ export const VizSourcePivot = Type.Object({
   columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description:
     'per-column display formatting keyed by RESULT column name: `alias` renames dimension/value ' +
     'headers, `format` (d3) formats cells and date headers. Omit for sensible defaults.' })),
+  conditionalFormats: Nullable(Type.Array(ConditionalFormatRule, { description:
+    'conditional background-color rules over VALUE columns (keyed by result column name): condition ' +
+    'rules paint cells/rows/columns when a predicate holds; colour-scale rules paint cells min→max ' +
+    'along a ramp. Omit for none.' })),
   css: Nullable(Type.String({ description:
-    'CSS overrides for the pivot LOOKS, scoped to this pivot automatically. Target the root class ' +
-    'plus element selectors: `.mx-pivot th { … }`, `.mx-pivot td { … }`, `.mx-pivot thead { … }`. ' +
+    'CSS overrides for the pivot LOOKS, scoped to this pivot automatically. The pivot shares the ' +
+    "table's class contract — .mx-table, .mx-header-row, .mx-th, .mx-row (+ .mx-row-odd/.mx-row-even " +
+    'zebra), .mx-cell, .mx-col-<columnName> (per value column), .mx-toolbar — plus the root class ' +
+    '`.mx-pivot` for element selectors (`.mx-pivot th { … }`). ' +
     'No @import and no external url() — both are rejected. Omit for the default theme.' })),
 }, { title: 'VizSourcePivot' });
 export type VizSourcePivot = Static<typeof VizSourcePivot>;

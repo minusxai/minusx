@@ -9,7 +9,7 @@ import { contentToDetails, connectionTypeToDialect } from '@/lib/types';
 import { QuestionVisualization } from '@/components/question/QuestionVisualization';
 import SqlEditor from '@/components/query-builder/SqlEditor';
 import { QueryModeSelector, type QueryTab } from '@/components/query-builder';
-import { VizTypeSelector } from '@/components/question/VizTypeSelector';
+import { VizTypeSelector, isClassicVizType } from '@/components/question/VizTypeSelector';
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
 
 /** A generic chart item that can come from ExecuteQuery or CreateFile */
@@ -308,7 +308,7 @@ export default function ChartCarousel({
                 <Box px={3} py={2} display="flex" flexDirection="column" gap={0}>
                   <VizTypeSelector
                     value={localContent.vizSettings?.type || 'table'}
-                    onChange={(type) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, type } })}
+                    onChange={(type) => { if (isClassicVizType(type)) handleContentChange({ vizSettings: { ...localContent!.vizSettings, type } }) }}
                     orientation="grouped"
                   />
                   {localContent.vizSettings?.type && localContent.vizSettings.type !== 'table' && (

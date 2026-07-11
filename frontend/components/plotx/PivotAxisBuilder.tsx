@@ -24,6 +24,10 @@ interface PivotAxisBuilderProps {
   onColumnFormatChange?: (column: string, config: ColumnFormatConfig) => void
   /** d3 vocabulary format popovers (Viz V2 surfaces). */
   d3Formats?: boolean
+  /** Render ONE section without the internal tab bar — the host panel owns the
+   * tabs (V2 VegaVizPanel: Fields tab → 'fields', Settings tab → 'settings').
+   * Omit for the classic self-tabbed layout. */
+  section?: 'fields' | 'settings'
   rowDimensions?: DimensionInfo[]
   getRowValuesAtLevel?: (level: number, parentValues?: string[]) => string[]
 }
@@ -38,6 +42,7 @@ export const PivotAxisBuilder = ({
   columnFormats,
   onColumnFormatChange,
   d3Formats,
+  section,
   rowDimensions,
   getRowValuesAtLevel,
 }: PivotAxisBuilderProps) => {
@@ -234,6 +239,9 @@ export const PivotAxisBuilder = ({
   const showColFormulas = config.columns.length > 0 && availableColumnValues && availableColumnValues.length >= 2
 
   const [activeTab, setActiveTab] = useState<'fields' | 'settings'>('fields')
+  // When a host panel owns the tabs (the V2 VegaVizPanel), it renders one section
+  // per host tab — the internal segmented control is hidden.
+  const active = section ?? activeTab
   const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({
     options: false,
     formulas: false,
@@ -283,7 +291,9 @@ export const PivotAxisBuilder = ({
 
   return (
     <VStack align="stretch" gap={0}>
-      {/* Tab bar — segmented control matching AxisBuilder */}
+      {/* Tab bar — segmented control matching AxisBuilder (classic only; hidden
+          when a host panel supplies `section`) */}
+      {section == null && (
       <HStack
         gap={0}
         bg="bg.muted"
@@ -296,6 +306,7 @@ export const PivotAxisBuilder = ({
           <HStack
             key={key}
             as="button"
+            aria-label={`Pivot ${key} section`}
             flex={1}
             gap={1.5}
             justify="center"
@@ -315,18 +326,20 @@ export const PivotAxisBuilder = ({
           </HStack>
         ))}
       </HStack>
+      )}
 
       {/* Fields tab — AxisBuilder renders its own styled container */}
-      {activeTab === 'fields' && (
+      {active === 'fields' && (
         <AxisBuilder columns={columns} types={types} zones={zones} columnFormats={columnFormats} onColumnFormatChange={onColumnFormatChange} d3Formats={d3Formats} borderless />
       )}
 
       {/* Settings tab */}
-      {activeTab === 'settings' && (
+      {active === 'settings' && (
         <Box display="flex" flexDirection="column" gap={3}>
           {renderSettingsCard('Options', 'options',
             <HStack gap={4} flexWrap="wrap">
               <Checkbox
+                aria-label="Toggle row totals"
                 checked={config.showRowTotals !== false}
                 onCheckedChange={(e) => onPivotConfigChange({ ...config, showRowTotals: e.checked })}
                 size="sm"
@@ -334,6 +347,7 @@ export const PivotAxisBuilder = ({
                 <Text fontSize="xs" color="fg.muted">Row Totals</Text>
               </Checkbox>
               <Checkbox
+                aria-label="Toggle column totals"
                 checked={config.showColumnTotals !== false}
                 onCheckedChange={(e) => onPivotConfigChange({ ...config, showColumnTotals: e.checked })}
                 size="sm"
@@ -341,12 +355,16 @@ export const PivotAxisBuilder = ({
                 <Text fontSize="xs" color="fg.muted">Column Totals</Text>
               </Checkbox>
               <Checkbox
+                aria-label="Toggle heatmap"
                 checked={config.showHeatmap !== false}
                 onCheckedChange={(e) => onPivotConfigChange({ ...config, showHeatmap: e.checked })}
                 size="sm"
               >
                 <Text fontSize="xs" color="fg.muted">Heatmap</Text>
               </Checkbox>
+              {/* Compact (GitHub-graph) mode is legacy-only: on V2 (d3Formats) the
+                  dedicated heatmap viz type replaces it. */}
+              {!d3Formats && (
               <Checkbox
                 checked={config.compact === true}
                 onCheckedChange={(e) => onPivotConfigChange({ ...config, compact: e.checked })}
@@ -354,6 +372,7 @@ export const PivotAxisBuilder = ({
               >
                 <Text fontSize="xs" color="fg.muted">Compact (GitHub Style)</Text>
               </Checkbox>
+              )}
               {config.showHeatmap !== false && (
                 <ColorScalePicker
                   value={config.heatmapScale}

@@ -256,3 +256,38 @@ describe('VegaVizPanel — table envelope', () => {
     expect((next.source as unknown as { css: string }).css).toContain('.mx-th')
   })
 })
+
+// ─── Colour-scale conditional formatting (heatmap cells on the flat table) ───
+
+describe('Table colour-scale rules', () => {
+  function renderPanel(viz: VizEnvelope, onVizChange = vi.fn()) {
+    renderWithProviders(
+      <VegaVizPanel envelope={viz} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
+    )
+    return onVizChange
+  }
+
+  it('Settings tab can add a colour-scale rule into the envelope', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderPanel(tableViz())
+    await user.click(screen.getByLabelText('Settings tab'))
+    await user.click(screen.getByLabelText('Add color scale rule'))
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const source = next.source as unknown as { conditionalFormats: Array<Record<string, unknown>> }
+    expect(source.conditionalFormats).toHaveLength(1)
+    expect(source.conditionalFormats[0].scale).toBe('red-yellow-green')
+    expect(source.conditionalFormats[0].column).toBe('region')
+  })
+
+  it('cells of the scaled column get ramp backgrounds (min ≠ max colour)', () => {
+    renderViz(tableViz({
+      conditionalFormats: [{ id: 's1', column: 'revenue', scale: 'red-yellow-green' }],
+    }))
+    const cells = Array.from(document.querySelectorAll('td.mx-col-revenue')) as HTMLElement[]
+    expect(cells.length).toBe(3)
+    const bgs = cells.map(c => c.style.backgroundColor)
+    expect(bgs.every(bg => bg.startsWith('rgba('))).toBe(true)
+    expect(new Set(bgs).size).toBe(3) // three distinct values → three distinct ramp colours
+  })
+})

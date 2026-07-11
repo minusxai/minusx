@@ -6,7 +6,7 @@
  * subtab idiom. Every control performs a SURGICAL spec edit (lib/viz/encoding-edit);
  * the long tail of styling stays with the agent. Pure view: no Redux.
  */
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Box, Button, HStack, Text, Textarea, Switch } from '@chakra-ui/react';
 import { LuLayoutGrid, LuSettings2, LuBraces } from 'react-icons/lu';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
@@ -19,11 +19,14 @@ import {
   type V2VizType,
 } from '@/lib/viz/encoding-edit';
 import { sqlTypeToVizKind } from '@/lib/viz/query-data';
-import { VizTypeSelector } from '@/components/question/VizTypeSelector';
+import { VizTypeSelector, type SelectableVizType } from '@/components/question/VizTypeSelector';
 import { TableConditionalFormatPanel } from '@/components/plotx/TableConditionalFormatPanel';
 import { PivotAxisBuilder } from '@/components/plotx/PivotAxisBuilder';
 import { VegaEncodingPanel } from './VegaEncodingPanel';
 import { VizSpecInspector } from './VizSpecInspector';
+import {
+  aggregatePivotData, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues, getUniqueRowValuesAtLevel,
+} from '@/lib/chart/pivot-utils';
 
 // Everything the classic selector offers minus what V2 type-switching supports today —
 // shown disabled, so the icon grid doubles as the live V2 coverage checklist.
@@ -39,10 +42,13 @@ export interface VegaVizPanelProps {
   envelope: VizEnvelope;
   columns: string[];
   types: string[];
+  /** Query result rows — feeds the pivot Formulas builder (dimension VALUES come
+   * from the data, not the schema). Omit and formulas simply don't render. */
+  rows?: Record<string, unknown>[];
   onVizChange: (envelope: VizEnvelope) => void;
 }
 
-export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizPanelProps) {
+export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: VegaVizPanelProps) {
   const [activeTab, setActiveTab] = useState<'fields' | 'settings' | 'spec'>('fields');
   const source = envelope.source as unknown as Record<string, unknown>;
   const isRecipe = source.kind === 'recipe';
@@ -54,6 +60,30 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
   const vizType = getEnvelopeVizType(envelope);
   // Draft for the DOM-tier css textarea — committed to the envelope on blur.
   const [cssDraft, setCssDraft] = useState<string | null>(null);
+
+  // Pivot Formulas builder inputs — the same derivation ChartBuilder does for the
+  // classic panel: dimension VALUES come from aggregating the result rows.
+  const pivotConfig = useMemo(() => (isPivot ? getPivotConfig(envelope) : null), [isPivot, envelope]);
+  const pivotData = useMemo(() => {
+    if (!pivotConfig || !rows?.length || pivotConfig.values.length === 0) return null;
+    return aggregatePivotData(rows as Record<string, never>[], pivotConfig);
+  }, [pivotConfig, rows]);
+  const availableRowValues = useMemo(
+    () => (pivotData ? getUniqueTopLevelRowValues(pivotData) : undefined), [pivotData]);
+  const availableColumnValues = useMemo(
+    () => (pivotData ? getUniqueTopLevelColumnValues(pivotData) : undefined), [pivotData]);
+  const rowDimensions = useMemo(() => {
+    if (!pivotData || !pivotConfig || pivotConfig.rows.length < 2) return undefined;
+    return pivotConfig.rows.map((col, level) => ({
+      name: col,
+      level,
+      availableValues: getUniqueRowValuesAtLevel(pivotData, level),
+    }));
+  }, [pivotData, pivotConfig]);
+  const getRowValuesAtLevel = useCallback(
+    (level: number, parentValues?: string[]) =>
+      (pivotData ? getUniqueRowValuesAtLevel(pivotData, level, parentValues) : []),
+    [pivotData]);
 
   const TABS = [
     { key: 'fields', icon: LuLayoutGrid, label: 'Fields' },
@@ -84,7 +114,8 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
         <VizTypeSelector
           // vizType is DERIVED from the spec (never stored). null = a shape the grid
           // doesn't recognize (rule/text marks…) — highlight nothing rather than lie.
-          value={vizType as VizSettings['type']}
+          value={vizType as SelectableVizType}
+          includeV2Only
           onChange={(t) => {
             if ((V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t)) {
               // Columns feed the fallback inference (leaving table, which has no
@@ -124,6 +155,8 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
             headers and bottom toolbar, rename &amp; format via each header&apos;s ⚙.
           </Text>
         ) : isPivot ? (
+          // section="fields": the panel's own tabs host the builder's sections —
+          // zones here, pivot options under the Settings tab (no nested tab bar).
           <PivotAxisBuilder
             columns={columns}
             types={types}
@@ -132,6 +165,7 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
             columnFormats={getVizColumnFormats(envelope)}
             onColumnFormatChange={(column, config) => onVizChange(mergeVizColumnFormat(envelope, column, config))}
             d3Formats
+            section="fields"
           />
         ) : (
           <VegaEncodingPanel envelope={envelope} columns={columns} types={types} onVizChange={onVizChange} />
@@ -140,7 +174,23 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
 
       {activeTab === 'settings' && isDomTier && (
         <Box display="flex" flexDirection="column" gap={3} py={1}>
-          {isTable && (
+          {isPivot && (
+            <PivotAxisBuilder
+              columns={columns}
+              types={types}
+              pivotConfig={pivotConfig ?? undefined}
+              onPivotConfigChange={(config) => onVizChange(setPivotConfig(envelope, config))}
+              columnFormats={getVizColumnFormats(envelope)}
+              onColumnFormatChange={(column, config) => onVizChange(mergeVizColumnFormat(envelope, column, config))}
+              d3Formats
+              section="settings"
+              availableRowValues={availableRowValues}
+              availableColumnValues={availableColumnValues}
+              rowDimensions={rowDimensions}
+              getRowValuesAtLevel={getRowValuesAtLevel}
+            />
+          )}
+          {(isTable || isPivot) && (
             <TableConditionalFormatPanel
               columns={columns}
               rules={getTableConditionalFormats(envelope)}
@@ -180,7 +230,9 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
             This chart is generated from the {String((envelope.source as unknown as Record<string, unknown>).recipe)} recipe —
             bind columns in Fields, or ask the agent for deeper customization.
           </Text>
-        ) : isUnit && spec ? (
+        ) : isUnit && spec && !['heatmap', 'pie'].includes(vizType ?? '') ? (
+          // Stacked / log-y are cartesian concepts — hidden for pie (theta) and
+          // heatmap (colour), where they'd silently do nothing sensible.
           <Box display="flex" flexDirection="column" gap={3} py={1}>
             <HStack justify="space-between">
               <Text fontSize="xs" color="fg.muted">Stacked</Text>
@@ -210,6 +262,10 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
               Everything else (formats, colors, layers, interactions) — ask the agent; it edits the spec directly.
             </Text>
           </Box>
+        ) : isUnit && spec ? (
+          <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
+            Nothing to toggle for this chart type — formats, colors, and interactions are edited via chat.
+          </Text>
         ) : (
           <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
             This spec uses layers/facets — settings toggles only apply to simple charts. Edit via chat.

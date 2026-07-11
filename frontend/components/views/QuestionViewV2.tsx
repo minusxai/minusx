@@ -37,7 +37,7 @@ import { QueryModeSelector, SemanticExplorer, type QueryTab } from '../query-bui
 import { VizPanel } from '../question/VizPanel';
 import { deriveModelStubs, type ModelStub } from '@/lib/semantic/derive';
 import { useSemanticModels } from '@/lib/hooks/use-semantic-models';
-import { VizTypeSelector } from '../question/VizTypeSelector';
+import { VizTypeSelector, isClassicVizType } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { VegaVizPanel } from '../viz/VegaVizPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
@@ -576,7 +576,7 @@ export default function QuestionViewV2({
     <Box px={3} py={2} display="flex" flexDirection="column" gap={0}>
       <VizTypeSelector
         value={content.vizSettings?.type || 'table'}
-        onChange={handleVizTypeChange}
+        onChange={(type) => { if (isClassicVizType(type)) handleVizTypeChange(type) }}
         orientation="grouped"
         recommended={recommendedTypes}
       />
@@ -798,6 +798,7 @@ export default function QuestionViewV2({
                       envelope={content.viz}
                       columns={queryData?.columns ?? []}
                       types={queryData?.types ?? []}
+                      rows={queryData?.rows}
                       onVizChange={(viz) => onChange({ viz })}
                     />
                   </Box>

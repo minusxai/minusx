@@ -112,6 +112,29 @@ function injectLegendToggle(prepared: Record<string, unknown>): void {
  * A responsive-by-default autosize is applied at render time only — never persisted
  * into the saved spec (the container owns sizing, RFC §15); explicit spec autosize wins.
  */
+/**
+ * House heatmap cell layout: rect-mark unit specs get FLUSH bands (padding 0) on
+ * their discrete x/y — the visible gap between cells is the theme's constant-pixel
+ * surface-colour stroke, NOT band padding, which scales with cell size and looks
+ * cavernous on small cross-tabs. Any author-set scale padding on a channel opts out.
+ */
+export function injectHeatmapCellLayout(prepared: Record<string, unknown>): void {
+  const mark = prepared.mark;
+  const markType = typeof mark === 'string' ? mark : (mark as { type?: string } | undefined)?.type;
+  if (markType !== 'rect') return;
+  const encoding = prepared.encoding as Record<string, unknown> | undefined;
+  if (!encoding) return;
+  for (const channel of ['x', 'y']) {
+    const def = encoding[channel];
+    if (!def || typeof def !== 'object' || Array.isArray(def)) continue;
+    const d = def as Record<string, unknown>;
+    if (d.type !== 'nominal' && d.type !== 'ordinal') continue;
+    const scale = (d.scale ?? {}) as Record<string, unknown>;
+    if ('paddingInner' in scale || 'paddingOuter' in scale || 'padding' in scale) continue;
+    d.scale = { ...scale, paddingInner: 0, paddingOuter: 0 };
+  }
+}
+
 export function compileVegaLite(spec: Record<string, unknown>, mode: 'light' | 'dark'): VegaSpec {
   // Ownership boundary: specs arrive from Redux (immer deep-frozen) and vega-lite/vega
   // mutate their inputs (normalization, Symbol(vega_id) tagging). Never hand them
@@ -133,6 +156,7 @@ export function compileVegaLite(spec: Record<string, unknown>, mode: 'light' | '
   if (!composed && !('layer' in prepared)) {
     injectSingleSeriesLegend(prepared);
     injectLegendToggle(prepared);
+    injectHeatmapCellLayout(prepared);
   }
   const { spec: vegaSpec } = compile(prepared as unknown as TopLevelSpec, { config: getVegaLiteConfig(mode) });
   // Center top legends within the chart width (a Vega-level legend layout — VL's

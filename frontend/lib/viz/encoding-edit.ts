@@ -56,7 +56,12 @@ export function setChannelField(
     const base = existing && typeof existing === 'object' && !Array.isArray(existing)
       ? (existing as Record<string, unknown>)
       : {};
-    const def: Record<string, unknown> = { ...base, field: column.name, type: KIND_TO_VL_TYPE[column.kind] };
+    // Heatmap rule (rect marks): x/y are DISCRETE bands. A temporal type would go
+    // continuous and collapse the rows into one giant rect per category — the same
+    // temporal→ordinal mapping the pivot→heatmap transform applies.
+    const rectAxis = (channel === 'x' || channel === 'y') && getMarkType(spec) === 'rect';
+    const vlType = rectAxis && column.kind === 'temporal' ? 'ordinal' : KIND_TO_VL_TYPE[column.kind];
+    const def: Record<string, unknown> = { ...base, field: column.name, type: vlType };
     // A previous datum/value literal on this channel would fight the new field ref.
     delete def.datum;
     delete def.value;
@@ -120,10 +125,10 @@ export function setStacked(envelope: VizEnvelope, stacked: boolean): VizEnvelope
 // `pie` is an encoding TRANSFORM: a naive mark swap to `arc` renders garbage because
 // arcs read theta/color, not x/y.
 
-export const V2_SUPPORTED_VIZ_TYPES = ['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar'] as const;
+export const V2_SUPPORTED_VIZ_TYPES = ['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap'] as const;
 export type V2VizType = (typeof V2_SUPPORTED_VIZ_TYPES)[number];
 
-const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie' | 'funnel' | 'waterfall' | 'radar'>, string> = {
+const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie' | 'heatmap' | 'funnel' | 'waterfall' | 'radar'>, string> = {
   bar: 'bar', line: 'line', area: 'area', scatter: 'point',
 };
 
@@ -131,6 +136,7 @@ const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie'
 export function getVizType(spec: Record<string, unknown>): V2VizType | null {
   const mark = getMarkType(spec);
   if (mark === 'arc') return 'pie';
+  if (mark === 'rect') return 'heatmap';
   if (mark === 'point') return 'scatter';
   if (mark === 'bar') {
     const x = channelDef(spec, 'x');
@@ -165,6 +171,16 @@ export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelop
     delete encoding.theta;
   }
 
+  // Leaving heatmap: the measure lives on color and the second category on y —
+  // restore the cartesian shape (measure → y, category → color/series).
+  if (from === 'heatmap' && type !== 'heatmap') {
+    const measure = encoding.color;
+    const series = encoding.y;
+    if (measure) encoding.y = { ...measure };
+    if (series) encoding.color = { ...series };
+    else delete encoding.color;
+  }
+
   if (type === 'pie') {
     const value = encoding.y ?? encoding.theta;
     const slice = encoding.color ?? encoding.x;
@@ -190,6 +206,29 @@ export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelop
     // padded) is the theme's config.arc, so this saved spec stays identical to what
     // an agent authors and both render the same.
     withMark(spec, 'arc');
+  } else if (type === 'heatmap') {
+    // Heatmap = two discrete axes + the measure as colour. The y measure moves
+    // to color (SUM-aggregated like pie), the colour series (if any) becomes y.
+    const measure = encoding.y;
+    const series = encoding.color;
+    if (measure) {
+      const color = { ...measure };
+      delete color.axis;
+      delete color.stack;
+      if (color.aggregate == null) color.aggregate = 'sum';
+      encoding.color = color;
+    }
+    if (series) {
+      const y = { ...series };
+      delete y.scale; // colour scales (scheme/range) are meaningless on an axis
+      encoding.y = y;
+    } else {
+      delete encoding.y;
+    }
+    delete encoding.tooltip;
+    delete encoding.detail;
+    delete encoding.order;
+    withMark(spec, 'rect');
   } else if (type === 'row') {
     const x = encoding.x;
     encoding.x = encoding.y;
@@ -223,6 +262,13 @@ export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelop
  * positional channels (assigning x/y to an arc draws overlapping wedges per position).
  */
 export function zonesForVizType(type: V2VizType | null): Array<{ channel: EditableChannel; label: string }> {
+  if (type === 'heatmap') {
+    return [
+      { channel: 'x', label: 'X-Axis' },
+      { channel: 'y', label: 'Y-Axis' },
+      { channel: 'color', label: 'Value' },
+    ];
+  }
   if (type === 'pie') {
     return [
       { channel: 'color', label: 'Slices' },
@@ -489,6 +535,45 @@ export function setEnvelopeVizType(
   }
 
   const source = sourceOf(envelope);
+  if (type === 'heatmap' && (source.kind === 'recipe' || source.kind === 'table' || source.kind === 'pivot')) {
+    // Heatmap needs TWO discrete axes — the pivot's structure maps directly
+    // (columns[0] → x, rows[0] → y, values[0] → colour); other sources fall back
+    // to the first two categorical result columns.
+    let xCat: string | null = null;
+    let yCat: string | null = null;
+    let measure: string | null = value;
+    if (source.kind === 'pivot') {
+      const cfg = source.config as { rows?: string[]; columns?: string[]; values?: Array<{ column?: string }> };
+      xCat = cfg.columns?.[0] ?? null;
+      yCat = cfg.rows?.[0] ?? null;
+      measure = cfg.values?.[0]?.column ?? value;
+    }
+    const cats = (columns ?? []).filter(c => c.kind !== 'quantitative').map(c => c.name);
+    xCat = xCat ?? cats.find(c => c !== yCat) ?? null;
+    yCat = yCat ?? cats.find(c => c !== xCat) ?? null;
+    // Discrete axes only: a temporal kind renders as ordered bands (ordinal),
+    // never a continuous time scale (rect slivers). Kinds still come from the
+    // COLUMN KIND — nothing is invented.
+    const axisType = (name: string | null): string => {
+      const kind = (name != null ? columns?.find(c => c.name === name)?.kind : undefined) ?? 'nominal';
+      return kind === 'temporal' ? 'ordinal' : KIND_TO_VL_TYPE[kind];
+    };
+    return {
+      version: 2,
+      source: {
+        kind: 'vega-lite',
+        grammar: 'vega-lite@6',
+        spec: {
+          mark: { type: 'rect' },
+          encoding: {
+            ...(xCat ? { x: { field: xCat, type: axisType(xCat) } } : {}),
+            ...(yCat ? { y: { field: yCat, type: axisType(yCat) } } : {}),
+            ...(measure ? { color: { field: measure, aggregate: 'sum', type: 'quantitative' } } : {}),
+          },
+        },
+      },
+    } as unknown as VizEnvelope;
+  }
   if (source.kind === 'recipe' || source.kind === 'table' || source.kind === 'pivot') {
     // Reconstruct a plain bar from the bindings/columns, then transform to the target.
     const barEnvelope = {
@@ -555,12 +640,12 @@ export function mergeVizColumnFormat(envelope: VizEnvelope, column: string, conf
 }
 
 export function getTableConditionalFormats(envelope: VizEnvelope): ConditionalFormatRule[] {
-  if (!isTableSource(envelope)) return [];
+  if (!isDomTierSource(envelope)) return [];
   return (sourceOf(envelope).conditionalFormats as ConditionalFormatRule[] | null | undefined) ?? [];
 }
 
 export function setTableConditionalFormats(envelope: VizEnvelope, rules: ConditionalFormatRule[]): VizEnvelope {
-  if (!isTableSource(envelope)) return envelope;
+  if (!isDomTierSource(envelope)) return envelope;
   const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
   (next.source as unknown as AnySource).conditionalFormats = rules.length > 0 ? rules : null;
   return next;

@@ -4,6 +4,7 @@ import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, ge
 import { calculateHistogram } from '@/lib/chart/histogram'
 import { formatNumber, applyPrefixSuffix, formatDateValue, formatD3Number, formatD3Date } from '@/lib/chart/chart-format'
 import { buildConditionalBg } from '@/lib/chart/conditional-format-utils'
+import { useAppSelector } from '@/store/hooks'
 import type { ColumnFormatConfig, ConditionalFormatRule } from '@/lib/types'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
 import { TableHeaderCell } from './TableHeaderCell'
@@ -124,11 +125,13 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
   )
 
   // Conditional background-color lookup. No-op (returns undefined) when no rules.
+  // Colour-scale rules ramp differently per colour mode (same as the pivot heatmap).
+  const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const getCellBg = useMemo(() => {
     const typeByName: Record<string, ColumnType> = {}
     colNames.forEach((col, i) => { typeByName[col] = columnTypes[i] })
-    return buildConditionalBg(conditionalFormats, rows, typeByName)
-  }, [conditionalFormats, rows, colNames, columnTypes])
+    return buildConditionalBg(conditionalFormats, rows, typeByName, { isDark: colorMode === 'dark' })
+  }, [conditionalFormats, rows, colNames, columnTypes, colorMode])
 
   // Reset visibility when columns change
   useEffect(() => {

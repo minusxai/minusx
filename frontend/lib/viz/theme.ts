@@ -22,7 +22,20 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
     numberFormat: '.3~s',
     // The card owns the surface; charts inherit it (same rule as the ECharts theme).
     background: 'transparent',
-    range: { category: COLOR_PALETTE },
+    range: {
+      category: COLOR_PALETTE,
+      // Quantitative colour on rect marks (heatmaps) pulls from `heatmap`: the
+      // GitHub contribution-graph greens, per mode. Lives HERE (like the house
+      // donut) so a bare `mark: rect` + quantitative color — what agents and the
+      // UI transform both produce — gets the look; a spec-level `scale.scheme`
+      // or `scale.range` opts out.
+      // Dark low end is #21262d (GitHub's border gray), NOT GitHub's #161b22
+      // empty-cell colour — that's identical to our dark card surface, and a
+      // lowest-value cell must still read as a cell, not a hole.
+      heatmap: mode === 'light'
+        ? ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39']
+        : ['#21262d', '#0e4429', '#006d32', '#26a641', '#39d353'],
+    },
     axis: {
       labelColor: colors.fgMuted,
       titleColor: colors.fgDefault,
@@ -37,6 +50,9 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
       // give titles room from the tick labels and keep thinned labels apart.
       titlePadding: 12,
       labelSeparation: 4,
+      // Discrete (band/point) scales don't thin overlapping labels by default —
+      // a 100-value ordinal axis (weekly heatmap columns) renders as a smear.
+      labelOverlap: true,
     },
     legend: {
       orient: 'top',
@@ -69,6 +85,11 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
     line: { strokeWidth: 2 },
     point: { filled: true, size: 60 },
     bar: { cornerRadiusEnd: 2 },
+    // House heatmap cells = the GitHub contribution graph: rounded cells with a
+    // CONSTANT pixel gap. The gap is a full-band rect stroked in the card surface
+    // colour — a relative band gap scales with cell size and looks cavernous on
+    // small cross-tabs (2×3 → giant cells → giant gaps).
+    rect: { cornerRadius: 5, stroke: colors.bgSurface, strokeWidth: 4 },
     // House pie = responsive donut with rounded, slightly separated sectors (matches
     // the classic ECharts pie). Lives HERE so a bare `mark: arc` — what agents and
     // the UI transform both produce — gets the look; `innerRadius: 0` in a spec

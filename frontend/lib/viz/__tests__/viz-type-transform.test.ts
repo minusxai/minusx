@@ -111,7 +111,7 @@ describe('setVizType', () => {
   });
 
   it('exports the supported set for the selector', () => {
-    expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar']);
+    expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap']);
   });
 
   it('pie emits a MINIMAL arc mark — the theme owns the house donut styling', () => {
