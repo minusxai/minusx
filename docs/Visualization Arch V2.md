@@ -479,3 +479,82 @@ Only these remain open — they require measurement, not design debate:
   `DerivedSpec` artifact (source hash + compiler version, theme excluded); spec bodies are `Type.Unknown` in
   TypeBox.
 - ECharts-options-as-contract: documented fallback only.
+
+---
+
+## Appendix A — Probe verification checklist (living)
+
+Manual verification protocol for the probe. `[x]` = verified (browser or headless, date noted);
+`[ ]` = pending. Update as items are checked; anything that fails gets a note + issue.
+
+### A1. Rendering & theming
+- [x] JetBrains Mono renders AND measures correctly (2026-07-10 — root-caused: Chakra `@layer reset`
+  overrides SVG presentation attributes; fixed via inline-style promotion in `VegaChart`)
+- [x] SI number labels by default (`650k`, `2.5M`) (2026-07-10)
+- [x] Legend on top, correctly spaced, all items visible at real widths (2026-07-10)
+- [x] Axis title clear of tick labels (mono-width `titlePadding`) (2026-07-10)
+- [x] Temporal axis multi-scale labels legible (2026-07-10)
+- [ ] Dark ↔ light toggle recompiles correctly (axis/legend/tooltip colors flip, no stale colors)
+- [ ] Container resize re-lays-out without clipping (drag panel divider, browser resize)
+- [ ] Transparent background — chart inherits card surface in both modes
+- [ ] A viz-V2 chart and a legacy ECharts chart look like siblings (palette/font parity)
+- [ ] Very narrow container (dashboard-tile width) — labels thin gracefully, no overlap
+- [ ] Legend with many categories (>8) at narrow width (known: horizontal legends don't wrap;
+  agent idiom `legend: {columns: N}`)
+
+### A2. Agent authoring (the probe's core evidence)
+- [x] Simple bar/stacked bar from a prompt — clean multi-line JSON, no escaping (2026-07-10)
+- [x] Split series via `color` encoding, no SQL pivot (2026-07-10)
+- [ ] Dual-axis combo (layers + `resolve: {scale: {y: "independent"}}`)
+- [ ] Facet / small multiples
+- [ ] Window-transform visual (rolling average) — SQL-vs-transform judgment
+- [ ] Heatmap (`rect` mark)
+- [ ] Horizontal bar + sort (`y` nominal sorted by value)
+- [ ] Custom tooltip field list overriding the automatic one
+- [ ] Explicit label formats on request ("show full numbers", "format dates as Jan '25")
+- [ ] Convert an existing vizSettings question ("rewrite this in vega") — parity + reversibility
+- [ ] Revert to classic ("go back to a normal bar chart") — viz removed, vizSettings restored
+- [ ] Recovery from a misspelled field (agent told verbally — does it fix in one step?)
+- [ ] Recovery from malformed JSON in `<spec>` (EditFile error loop)
+- [ ] JSON-syntax-error rate per EditFile stays ~zero across the session (probe metric)
+
+### A3. Interactions
+- [x] Legend click highlights series (others dim to 25%), legend entries dim too (2026-07-10,
+  DOM-dispatched click — needs one human click to confirm hit-targets feel right)
+- [ ] Shift-click accumulates selection; click-elsewhere clears
+- [ ] Injection opt-outs respected: spec with own `params` / own `opacity` / layered spec untouched
+- [ ] Tooltips show encoded fields with titles + formats on hover, styled (mono, rounded)
+
+### A4. UI panel (Fields / Settings / Spec)
+- [x] Fields tab reads current spec encodings into X/Y/Color zones (2026-07-10)
+- [x] Mark-type switch (bar→line) — surgical edit, dirty state appears (2026-07-10)
+- [ ] Drag a column chip into a zone — channel reassigned, other channel props (axis/format) survive
+- [ ] Remove (×) a zone chip — channel deleted, chart re-renders sensibly
+- [ ] Stacked toggle / log-scale toggle round-trip
+- [ ] Save persists; reload renders the saved spec; Cancel reverts
+- [ ] Spec tab shows live envelope; copy button works
+- [ ] Composed (layered) spec: Fields/Settings show the "edit via chat" hint, Spec still works
+- [ ] Undo/redo behavior with surgical edits (if the page supports it for content edits)
+
+### A5. Data handling
+- [ ] Re-run query (data changes) — chart updates without rebuild/flicker
+- [ ] Parameterized query — param change re-executes and chart follows
+- [ ] Empty result set — renders empty axes, no crash
+- [ ] Nulls in x/y/color columns
+- [ ] 10k+ row result — render time acceptable
+- [ ] Timezone-sensitive timestamps — axis values match the table view (known wire-format risk)
+
+### A6. Regressions (legacy must be untouched)
+- [ ] Every legacy vizSettings type still renders (table, line, bar, row, area, scatter, funnel,
+  pie, pivot, trend, waterfall, combo, radar, geo, single_value)
+- [ ] Legacy question editing via agent unchanged (vizSettings markup path)
+- [ ] Dashboards with legacy charts unaffected
+- [x] Full test suite green after every probe commit (2026-07-10, continuous)
+
+### A7. Known gaps (expected to fail — do not file)
+- Agent gets no ValidateVisualization feedback in tool results yet (validator built + tested;
+  `/api/viz/validate` route + tool wiring pending)
+- Vega charts invisible to the agent in follow-up turns (chart→LLM image path pending)
+- Dashboards / story embeds / notebook cells do not route `content.viz` (question page only)
+- Public/guest story rendering with viz untested (CSP interpreter is in, path unwired)
+- Image/CSV export of viz-V2 charts unwired
