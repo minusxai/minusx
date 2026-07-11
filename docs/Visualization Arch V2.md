@@ -494,7 +494,7 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [x] area — encoding transform, UI + agent
 - [x] row — encoding transform (x/y def swap), UI + agent
 - [x] scatter — encoding transform (point mark), UI + agent
-- [x] pie — encoding transform (theta SUM-aggregated, rounded donut), UI + agent
+- [x] pie — encoding transform (theta SUM-aggregated); house donut lives in theme `config.arc`, so the UI transform and agent both emit the same minimal `mark: arc` spec (`innerRadius: 0` = solid-pie opt-out)
 - [ ] combo — agent-authorable TODAY (layers + independent y scales); no one-click UI transform yet
 - [x] funnel — shipped recipe `minusx/funnel@1` (tapered area, data-order stages, % of first stage)
 - [x] waterfall — shipped recipe `minusx/waterfall@1` (floating bars, signed labels, closing Total)
@@ -505,7 +505,7 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [ ] single_value — follows the trend decision
 - [ ] geo — Vega recipes for analytic geo; Leaflet frozen for tile basemaps (RFC §9)
 
-### ✅ Verified (as of 2026-07-10)
+### ✅ Verified (as of 2026-07-11)
 
 **Rendering & theming**
 - JetBrains Mono renders AND measures correctly — root-caused: Chakra `@layer reset` overrides SVG
@@ -517,6 +517,13 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - Container-fill sizing: discrete-axis charts fill the card (`width/height: container` injected at compile —
   VL step-sizing rendered a 5-category bar ~tiny otherwise); explicit spec width = author opt-out
 - Chart re-renders on hot data without rebuild (data-only view updates)
+- Dark ↔ light toggle recompiles correctly (axis/legend/tooltip colors flip, no stale colors)
+- Viz-V2 and legacy ECharts charts side by side look like siblings (palette/font parity)
+- Very narrow container (dashboard-tile width) — labels thin gracefully, no overlap
+- Single-series charts always get a legend (constant color datum named after the measure — ECharts parity)
+- Legend entries centered over the chart; legend title inline-left of the entries
+- House donut in theme `config.arc` (responsive hole, rounded padded sectors): a bare agent-authored
+  `mark: arc` renders identically to the UI transform; spec-level `innerRadius` overrides (solid pie)
 
 **Agent authoring**
 - Simple + stacked bar from a prompt — clean multi-line JSON, tooltips/formats/titles idiomatic, no escaping
@@ -525,7 +532,8 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 
 **Interactions**
 - Legend click highlights series (others dim to 25%), legend entries dim too — injected
-  `mx_legend_sel` platform default with opt-outs (own params / own opacity / composed specs)
+  `mx_legend_sel` platform default with opt-outs (own params / own opacity / composed specs);
+  human click on a legend entry verified
 - Automatic tooltips on all marks (`config.mark.tooltip: encoding`), styled vega-tooltip handler
 
 **UI panel (Fields / Settings / Spec)**
@@ -539,6 +547,12 @@ Move items up as they pass; anything that fails gets a note + fix before it move
   the normal editFile path; Cancel restores
 - Zone-chip × removal persists — fixed: viz envelope now has REPLACE delta semantics in `editFile`
   (deep-merge resurrected deleted channels from prior deltas); red-first store-level regression test
+- Multiple Y columns per zone via a render-friendly fold transform (create/append/unfold; an
+  agent-authored default-key fold is recognized; author color never stolen)
+- Field-settings gear on native single-field chips: alias → channel `title`, format presets → d3
+  `axis.format` — preset click re-rendered the axis live (`650k` → `650,000.00`). Popover PORTALS to
+  body — fixed: the chip's overflow-hidden clipped an in-chip panel invisible (the original DOM-query
+  "verification" was a false positive; physical-click re-verified)
 - Spec tab shows the live envelope; copy button present
 
 **Regressions**
@@ -547,13 +561,12 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 ### ⬜ Remaining
 
 **Rendering & theming**
-- [x] Dark ↔ light toggle recompiles correctly (axis/legend/tooltip colors flip, no stale colors)
-- [x] A viz-V2 chart and a legacy ECharts chart side by side look like siblings (palette/font parity)
-- [x] Very narrow container (dashboard-tile width) — labels thin gracefully, no overlap
 - [ ] Legend with many categories (>8) at narrow width (known: horizontal legends don't wrap;
   agent idiom `legend: {columns: N}`)
 
 **Agent authoring**
+- [ ] Pie from a prompt follows the skill idiom: minimal `mark: arc` + `theta` with `aggregate: sum`,
+  no hand-rolled donut props / legend orient (skill updated 2026-07-11 — needs a live agent run)
 - [ ] Dual-axis combo (layers + `resolve: {scale: {y: "independent"}}`)
 - [ ] Facet / small multiples
 - [ ] Window-transform visual (rolling average) — SQL-vs-transform judgment
@@ -567,8 +580,6 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [ ] JSON-syntax-error rate per EditFile stays ~zero across the session (probe metric)
 
 **Interactions**
-- [x] One human click on a legend item (automation verified via dispatched DOM click — confirm the
-  hit-target feels right)
 - [ ] Shift-click accumulates selection; click-elsewhere clears
 - [ ] Tooltip hover: encoded fields with titles + formats, styled (mono, rounded)
 
@@ -576,6 +587,8 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [ ] Drag a column chip into a zone (drag-and-drop path; click-remove and type-switch are verified)
 - [ ] Stacked toggle / log-scale toggle round-trip in browser
 - [ ] Save persists → reload renders the saved spec (only Cancel exercised so far)
+- [ ] Field-settings popover near viewport edges / while the panel scrolls (position is computed once
+  at open — fixed-position panel doesn't track scroll)
 - [ ] Composed (layered) spec: Fields/Settings show the "edit via chat" hint, Spec still works
 - [ ] Undo/redo behavior with surgical edits (if the page supports it for content edits)
 
