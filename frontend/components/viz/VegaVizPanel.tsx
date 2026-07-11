@@ -55,7 +55,9 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
           entries double as the live "not yet in V2" coverage list. */}
       {isUnit && (
         <VizTypeSelector
-          value={(vizType ?? 'bar') as VizSettings['type']}
+          // vizType is DERIVED from the spec (never stored). null = a shape the grid
+          // doesn't recognize (rule/text marks…) — highlight nothing rather than lie.
+          value={vizType as VizSettings['type']}
           onChange={(t) => {
             if ((V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t)) {
               onVizChange(setVizType(envelope, t as V2VizType));

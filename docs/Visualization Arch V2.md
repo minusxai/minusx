@@ -529,9 +529,9 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 ### ⬜ Remaining
 
 **Rendering & theming**
-- [ ] Dark ↔ light toggle recompiles correctly (axis/legend/tooltip colors flip, no stale colors)
-- [ ] A viz-V2 chart and a legacy ECharts chart side by side look like siblings (palette/font parity)
-- [ ] Very narrow container (dashboard-tile width) — labels thin gracefully, no overlap
+- [x] Dark ↔ light toggle recompiles correctly (axis/legend/tooltip colors flip, no stale colors)
+- [x] A viz-V2 chart and a legacy ECharts chart side by side look like siblings (palette/font parity)
+- [x] Very narrow container (dashboard-tile width) — labels thin gracefully, no overlap
 - [ ] Legend with many categories (>8) at narrow width (known: horizontal legends don't wrap;
   agent idiom `legend: {columns: N}`)
 
