@@ -22,6 +22,7 @@ import {
   LuHash,
   LuChartBar,
   LuChartCandlestick,
+  LuChartColumnBig,
 } from 'react-icons/lu';
 import type { VizSettings } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -59,7 +60,7 @@ const BrickWallFireIcon = ({ size = 16 }: { size?: number }) => (
  * frozen until the ECharts pipeline is deleted). V2-only entries render solely
  * when `includeV2Only` is set (the Vega panel); classic surfaces never see them.
  */
-export type SelectableVizType = VizSettings['type'] | 'heatmap' | 'boxplot';
+export type SelectableVizType = VizSettings['type'] | 'heatmap' | 'boxplot' | 'histogram';
 
 interface VizTypeOption {
   type: SelectableVizType;
@@ -97,6 +98,7 @@ const ALL_VIZ_GROUPS: VizTypeGroup[] = [
       { type: 'heatmap', icon: <BrickWallFireIcon size={16} />, label: 'Heatmap', v2Only: true },
       // Candlestick is Lucide's closest glyph to a box-and-whisker plot.
       { type: 'boxplot', icon: <LuChartCandlestick size={16} />, label: 'Boxplot', v2Only: true },
+      { type: 'histogram', icon: <LuChartColumnBig size={16} />, label: 'Histogram', v2Only: true },
     ],
   },
   {

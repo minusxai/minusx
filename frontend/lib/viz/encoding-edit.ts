@@ -125,10 +125,10 @@ export function setStacked(envelope: VizEnvelope, stacked: boolean): VizEnvelope
 // `pie` is an encoding TRANSFORM: a naive mark swap to `arc` renders garbage because
 // arcs read theta/color, not x/y.
 
-export const V2_SUPPORTED_VIZ_TYPES = ['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot'] as const;
+export const V2_SUPPORTED_VIZ_TYPES = ['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot', 'trend', 'histogram'] as const;
 export type V2VizType = (typeof V2_SUPPORTED_VIZ_TYPES)[number];
 
-const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie' | 'heatmap' | 'funnel' | 'waterfall' | 'radar'>, string> = {
+const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie' | 'heatmap' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'histogram'>, string> = {
   bar: 'bar', line: 'line', area: 'area', scatter: 'point', boxplot: 'boxplot',
 };
 
@@ -142,6 +142,9 @@ export function getVizType(spec: Record<string, unknown>): V2VizType | null {
   if (mark === 'bar') {
     const x = channelDef(spec, 'x');
     const y = channelDef(spec, 'y');
+    // Histogram = a binned x (distribution plot). Checked before row: a binned x
+    // is quantitative and would misread as a plain bar.
+    if (x != null && x.bin != null && x.bin !== false) return 'histogram';
     // Row = horizontal bar: the measure runs along x, the category/time along y.
     if (x?.type === 'quantitative' && y != null && y.type !== 'quantitative') return 'row';
     return 'bar';
@@ -157,7 +160,7 @@ const withMark = (spec: Record<string, unknown>, type: string): void => {
 };
 
 /** Native-spec viz types (recipes and the DOM table route through setEnvelopeVizType instead). */
-export type SpecVizType = Exclude<V2VizType, 'table' | 'pivot' | 'funnel' | 'waterfall' | 'radar'>;
+export type SpecVizType = Exclude<V2VizType, 'table' | 'pivot' | 'funnel' | 'waterfall' | 'radar' | 'trend'>;
 
 /** Switch a unit spec's viz type, transforming encodings where the shapes differ. */
 export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelope {
@@ -170,6 +173,19 @@ export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelop
     if (encoding.color && !encoding.x) encoding.x = { ...encoding.color };
     if (encoding.theta && !encoding.y) encoding.y = { ...encoding.theta };
     delete encoding.theta;
+  }
+
+  // Leaving histogram: the measure lives on binned x (count on y) — restore it to
+  // y (bin stripped). The original category was dropped entering histogram, so x
+  // stays empty; the user re-adds one via the zones.
+  if (from === 'histogram' && type !== 'histogram') {
+    const measure = encoding.x ? { ...encoding.x } : undefined;
+    delete encoding.x;
+    delete encoding.y; // the implicit count def
+    if (measure) {
+      delete measure.bin;
+      encoding.y = measure;
+    }
   }
 
   // Leaving heatmap: the measure lives on color and the second category on y —
@@ -230,6 +246,33 @@ export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelop
     delete encoding.detail;
     delete encoding.order;
     withMark(spec, 'rect');
+  } else if (type === 'histogram') {
+    // Histogram = distribution plot: the measure binned along x, record count on
+    // y, optional discrete colour split. Coming from row the measure sits on x —
+    // normalize to the vertical shape first.
+    if (from === 'row') {
+      const x = encoding.x;
+      encoding.x = encoding.y;
+      encoding.y = x;
+    }
+    const measure = encoding.y;
+    if (measure) {
+      const x = { ...measure };
+      delete x.aggregate; // bin and aggregate fight; the histogram aggregates by COUNT
+      delete x.stack;
+      x.bin = true;
+      x.type = 'quantitative';
+      encoding.x = x; // the measure's presentation (axis, title…) travels to the values axis
+    } else {
+      delete encoding.x; // no measure to bin — the category axis means nothing here
+    }
+    encoding.y = { aggregate: 'count', type: 'quantitative' };
+    // Non-aggregated field channels would join the count groupby and re-shard the
+    // bins (same rule as pie/heatmap); automatic tooltips cover the bars.
+    delete encoding.tooltip;
+    delete encoding.detail;
+    delete encoding.order;
+    withMark(spec, 'bar');
   } else if (type === 'row') {
     const x = encoding.x;
     encoding.x = encoding.y;
@@ -282,6 +325,14 @@ export function zonesForVizType(type: V2VizType | null): Array<{ channel: Editab
     return [
       { channel: 'color', label: 'Slices' },
       { channel: 'theta', label: 'Value' },
+    ];
+  }
+  if (type === 'histogram') {
+    // y is the implicit record count — only the binned measure and the split are
+    // author-assignable.
+    return [
+      { channel: 'x', label: 'Values' },
+      { channel: 'color', label: 'Color / Split' },
     ];
   }
   return [
@@ -479,6 +530,7 @@ const TEMPLATE_FOR_TYPE: Partial<Record<V2VizType, string>> = {
   funnel: 'minusx/funnel@1',
   waterfall: 'minusx/waterfall@1',
   radar: 'minusx/radar@1',
+  trend: 'minusx/trend@1',
 };
 
 /**

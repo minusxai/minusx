@@ -111,7 +111,68 @@ describe('setVizType', () => {
   });
 
   it('exports the supported set for the selector', () => {
-    expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot']);
+    expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot', 'trend', 'histogram']);
+  });
+
+  it('detects histogram as a bar with a binned x (before the row check — binned x is quantitative)', () => {
+    const hist = { mark: 'bar', encoding: { x: { field: 'revenue', bin: true, type: 'quantitative' }, y: { aggregate: 'count', type: 'quantitative' } } };
+    expect(getVizType(hist)).toBe('histogram');
+    const maxbins = { mark: 'bar', encoding: { x: { field: 'revenue', bin: { maxbins: 40 }, type: 'quantitative' }, y: { aggregate: 'count', type: 'quantitative' } } };
+    expect(getVizType(maxbins)).toBe('histogram');
+  });
+
+  it('bar → histogram bins the measure on x, counts on y, keeps the colour split, drops the category', () => {
+    const next = setVizType(envelope(BAR), 'histogram');
+    const spec = specOf(next);
+    expect(getVizType(spec)).toBe('histogram');
+    expect(spec.mark).toEqual({ type: 'bar' });
+    expect(spec.encoding.x.field).toBe('revenue');
+    expect(spec.encoding.x.bin).toBe(true);
+    expect(spec.encoding.x.type).toBe('quantitative');
+    expect(spec.encoding.x.axis).toEqual({ format: ',.0f' }); // the measure's axis travels
+    expect(spec.encoding.x.aggregate).toBeUndefined(); // bin and aggregate fight
+    expect(spec.encoding.y).toEqual({ aggregate: 'count', type: 'quantitative' });
+    expect(spec.encoding.color).toEqual(BAR.encoding.color); // the split column
+  });
+
+  it('row → histogram reads the measure from x (row is horizontal)', () => {
+    const row = { mark: 'bar', encoding: { y: { field: 'region', type: 'nominal' }, x: { field: 'revenue', type: 'quantitative' } } };
+    const spec = specOf(setVizType(envelope(row), 'histogram'));
+    expect(spec.encoding.x.field).toBe('revenue');
+    expect(spec.encoding.x.bin).toBe(true);
+    expect(spec.encoding.y).toEqual({ aggregate: 'count', type: 'quantitative' });
+  });
+
+  it('histogram → bar restores the measure to y (bin stripped, count dropped)', () => {
+    const hist = specOf(setVizType(envelope(BAR), 'histogram'));
+    const back = specOf(setVizType(envelope(hist), 'bar'));
+    expect(back.encoding.y.field).toBe('revenue');
+    expect(back.encoding.y.bin).toBeUndefined();
+    expect(back.encoding.y.axis).toEqual({ format: ',.0f' });
+    expect(back.encoding.x).toBeUndefined(); // the original category was dropped entering histogram
+    expect(back.encoding.color).toEqual(BAR.encoding.color);
+  });
+
+  it('histogram → pie routes the measure to theta with the SUM default', () => {
+    const hist = specOf(setVizType(envelope(BAR), 'histogram'));
+    const spec = specOf(setVizType(envelope(hist), 'pie'));
+    expect(spec.encoding.theta.field).toBe('revenue');
+    expect(spec.encoding.theta.aggregate).toBe('sum');
+    expect(spec.encoding.theta.bin).toBeUndefined();
+  });
+
+  it('table → histogram (envelope path) bins the first measure from result columns', () => {
+    const table = { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } } as unknown as VizEnvelope;
+    const cols = [
+      { name: 'region', kind: 'nominal' as const },
+      { name: 'revenue', kind: 'quantitative' as const },
+    ];
+    const spec = specOf(setEnvelopeVizType(table, 'histogram', cols));
+    expect(getVizType(spec)).toBe('histogram');
+    expect(spec.encoding.x.field).toBe('revenue');
+    expect(spec.encoding.x.bin).toBe(true);
+    expect(spec.encoding.x.aggregate).toBeUndefined();
+    expect(spec.encoding.y).toEqual({ aggregate: 'count', type: 'quantitative' });
   });
 
   it('maps the boxplot composite mark (string or mark-def) to boxplot', () => {
@@ -202,5 +263,12 @@ describe('zonesForVizType', () => {
   it('pie gets Slices/Value zones (color/theta) — no positional channels offered', async () => {
     const { zonesForVizType } = await import('@/lib/viz/encoding-edit');
     expect(zonesForVizType('pie').map(z => z.channel)).toEqual(['color', 'theta']);
+  });
+
+  it('histogram gets Values/Split zones (x/color) — y is the implicit count', async () => {
+    const { zonesForVizType } = await import('@/lib/viz/encoding-edit');
+    const zones = zonesForVizType('histogram');
+    expect(zones.map(z => z.channel)).toEqual(['x', 'color']);
+    expect(zones.map(z => z.label)).toEqual(['Values', 'Color / Split']);
   });
 });
