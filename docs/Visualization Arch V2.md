@@ -619,6 +619,7 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [ ] custom plot
 - [ ] heatmap table?
 - [ ] img/csv download
+- [ ] table and pivot table as single table
 
 
 **Data handling**
@@ -647,3 +648,92 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - Public/guest story rendering with viz untested (CSP interpreter is in, path unwired)
 - Image/CSV export of viz-V2 charts unwired (table's own CSV button works — it's the chart-image
   and question-level export paths that aren't)
+
+## Appendix B — Probe implementation map & continuation notes (2026-07-11)
+
+Written for a fresh session picking up the probe. Appendix A holds verification state; this holds
+where things live and the decisions not obvious from the code.
+
+### Implementation map (all under `frontend/`)
+
+- **Envelope schemas** — `lib/validation/atlas-schemas.ts`: `VizEnvelope` (version 2), `VizSource` =
+  `VizSourceVegaLite | VizSourceRecipe | VizSourceTable | VizSourcePivot`. `ColumnFormatConfig` gained
+  `format` (d3). Spec bodies stay `Type.Unknown` (RFC §2).
+- **`lib/viz/`** — the probe core:
+  - `types.ts` (VizIssue codes incl. `E_CSS`; `formatVizIssues`), `query-data.ts` (`toVizColumns`),
+    `prepare.ts`, `field-refs.ts`, `theme.ts` (VL config + native-vega parser config; `config.arc`
+    house donut; SI `numberFormat`), `viz-templates.ts` (recipes funnel/waterfall/radar; `build(bindings,
+    formats)`; `numExpr` d3-first), `encoding-edit.ts` (ALL surgical edits: channel/type/zones/multi-Y
+    fold/presentation/table+pivot helpers/`mergeVizColumnFormat`; `setEnvelopeVizType(env, type, columns?)`
+    — the columns fallback types categories from COLUMN KIND, never hardcodes nominal),
+    `render-vega.ts` (compile → parse(ast)+interpreter → View; render-time injections: container sizing,
+    single-series legend, `mx_legend_sel` toggle, centered legend layout), `validate.ts` (5-stage;
+    `columns` OPTIONAL — field checks skipped when result unknown), `validate-remote.ts` (browser client
+    of the route; FAIL-OPEN), `vendor/vega-lite-v6.schema.json` (1.4MB — server-only, never bundle).
+- **Components** — `components/viz/`: `VegaChart` (lazy via next/dynamic; promoteFontAttrs beats Chakra
+  @layer reset), `VegaVizPanel` (icon grid + Fields/Settings/Spec; DOM-tier settings = conditional
+  formats [table] + css textarea), `VegaEncodingPanel` (zones; unified `VizFieldPopover` for native +
+  recipes), `VizFieldPopover` (STORAGE-AGNOSTIC: value/onCommit; alias + d3 presets + always-visible
+  custom pattern input; portals to body — chips clip overflow), `VizTableView` / `VizPivotView`
+  (scoped `<style>` via CSS nesting under a per-mount class), `VizSpecInspector`.
+  Routing: `QuestionVisualization` — envelope kind table→VizTableView, pivot→VizPivotView, else
+  VegaChart; `onVizChange` prop threads from QuestionViewV2 `onChange({viz})`.
+- **Grid reuse** — `TableV2`/`PivotTable`/`PivotAxisBuilder` untouched in behavior; gained the stable
+  class contract (`.mx-table .mx-header-row .mx-th .mx-row(+.mx-row-odd/-even zebra, DATA-index — not
+  nth-child, virtualization spacers) .mx-cell .mx-col-<name> .mx-toolbar`; pivot root `.mx-pivot` +
+  element selectors), d3 cell formatting (`formatD3Number/formatD3Date` in `lib/chart/chart-format.ts`,
+  cached, null→legacy fallback), and `d3Formats` popover mode (drilled: TableV2→TableHeaderCell;
+  PivotAxisBuilder→AxisBuilder→ZoneChip→FormatPopover).
+- **Validation wiring** — `app/api/viz/validate/route.ts` (thin withAuth wrapper; the route exists ONLY
+  because EditFile handlers run in the BROWSER and the vendored schema must not ship there);
+  `lib/tools/handlers/edit-file.ts` (pre-apply check: rejects atomically when the envelope CHANGED —
+  deep-equality via lodash isEqual, markup round-trip reorders keys; columns only when query unchanged;
+  post-auto-execute recheck vs fresh columns → `vizValidation` advisory in result);
+  `lib/tools/handlers/create-file.ts` (pre-create, columns undefined).
+- **editFile REPLACE semantics** for the `viz` key — `lib/file-state/file-edit.ts` (deep-merge would
+  resurrect deleted spec keys).
+- **Agent docs** — `orchestrator/prompts/prompts.yaml` `skill_questions`: markup forms (`<spec>{{…}}</spec>`
+  double-brace JSON; css as backtick template string — both round-trip via content-jsx), recipes +
+  `columnFormats {alias, format}`, table/pivot sources, pie idiom (minimal arc + SUM theta), validation
+  contract. Recipe/table/pivot markup examples match what `fileToMarkup` actually emits.
+
+### Decisions made 2026-07-11 (beyond the 07-10 log)
+
+- **One format vocabulary = d3, everywhere.** Vega tier natively (spec `axis.format`, recipe label
+  exprs); DOM grids render `format` via d3-format/d3-time-format (deps pinned 3.1.2/4.1.0 + @types);
+  legacy decimalPoints/prefix/suffix remain as fallback only. One popover per tier: vega tier =
+  VizFieldPopover, DOM grids = FormatPopover in `d3Formats` mode; classic (non-V2) surfaces keep the
+  legacy popover until migration deletes them.
+- **DOM-tier looks = CSS, no style toggles.** `css` field scoped per instance; validator + render guard
+  reject `@import`/`url()` (`E_CSS`); chrome hides via `.mx-toolbar{display:none}` per surface or per
+  question — story-level styling cascades naturally since embeds share the DOM.
+- **Recipes stay reference-level.** Formats ride `columnFormats` on the reference and compile in at
+  materialization (never spec patches — recipe internals are private; column names are the public API).
+  Spec-level control = the one-way detach (RFC §3), not yet built.
+- **No rebuild path may invent a type.** Category VL types always derive from column kinds (regression:
+  table→bar hardcoded nominal → temporal week_start band-scaled into a mangled axis).
+- **Validation is inline (compiler model), not an agent-called tool.** Errors reject the write; warnings
+  ride success; fail-open on route unreachability.
+
+### Session/dev facts a fresh session needs
+
+- Dev server: **http://localhost:3002** (not 3000). Test workspace `mxlocal` (kiwi@minusx.ai); scratch
+  question **/f/1017** currently holds a pivot envelope over a UNION-ALL platform/month/revenue query.
+- `npm run validate` MUST run from `frontend/`; check exit code via `> /dev/null 2>&1; echo $?` (pipes
+  mask it). Full suite ~4.3k tests; `store/__tests__/chat-listener-inflight.test.ts` is FLAKY under
+  parallel load (2.5s waitFor) — passes in isolation, unrelated to viz.
+- Browser-automation gotchas: dirty drafts persist across reload (discard via Review → Discard All);
+  `window.onbeforeunload = null` before scripted navigation; file PATCH needs `{name, path, content}`.
+- Viz test files: `lib/viz/__tests__/*` (node), `components/__tests__/viz-*.ui.test.tsx` (jsdom),
+  `lib/tools/__tests__/editfile-viz-validation.test.ts` (handler loop, fetch-stubbed to the real
+  validator), `app/api/viz/validate/__tests__/route.test.ts`.
+
+### Build queue (user-ranked, next session)
+
+1. **Surfaces sweep** — dashboards/story/notebook embeds share QuestionVisualization; verify V2 renders
+   in each, then prune the known-gaps line. Guest/public story path after.
+2. **Vega chart→LLM images for UNMOUNTED files** — parked WITH settled design (see Known gaps entry;
+   also Claude task #7): `view.toCanvas()` + theme-bg composite, never svg-rasterize, dynamic import.
+3. Trend + single_value spike decision (RFC §17); combo one-click transform; color controls
+   (surgical `scale.range` vs agent-only); live agent-run checklist items (dual-axis, facet, heatmap).
+4. Migration (RFC §18) only after the loop hardens on real usage.
