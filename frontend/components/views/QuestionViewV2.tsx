@@ -40,6 +40,7 @@ import { useSemanticModels } from '@/lib/hooks/use-semantic-models';
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { VizSpecInspector } from '../viz/VizSpecInspector';
+import { VegaEncodingPanel } from '../viz/VegaEncodingPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
 import { useSemanticCompat } from '@/lib/hooks/use-semantic-compat';
 import { inferVizType, recommendedVizTypes } from '@/lib/semantic/infer-viz';
@@ -791,9 +792,17 @@ export default function QuestionViewV2({
                   </Box>
                 )}
 
-                {/* Viz Mode (V2 envelope): the spec IS the config — show the inspector, bypass the classic panels */}
+                {/* Viz Mode (V2 envelope): drop-zone lens (surgical channel edits) + spec inspector */}
                 {queryMode === 'viz' && content.viz != null && (
                   <Box flex={1} overflow="auto" px={3} py={2} display="flex" flexDirection="column" gap={0}>
+                    {queryData && (
+                      <VegaEncodingPanel
+                        envelope={content.viz}
+                        columns={queryData.columns}
+                        types={queryData.types}
+                        onVizChange={(viz) => onChange({ viz })}
+                      />
+                    )}
                     <VizSpecInspector envelope={content.viz} />
                   </Box>
                 )}
