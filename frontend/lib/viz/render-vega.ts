@@ -21,7 +21,23 @@ import { expressionInterpreter } from 'vega-interpreter';
 import { Handler as TooltipHandler } from 'vega-tooltip';
 import { prepareVegaLiteSpec } from './prepare';
 import { getVegaLiteConfig } from './theme';
+import { materializeRecipe } from './viz-templates';
 import { VIZ_DATASET_MAIN } from './types';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+
+/**
+ * Resolve an envelope's renderable Vega-Lite spec: native sources return their spec,
+ * recipe sources materialize from the shipped registry (render-time, never stored).
+ */
+export function resolveEnvelopeSpec(envelope: VizEnvelope):
+  | { ok: true; spec: Record<string, unknown> }
+  | { ok: false; error: string } {
+  const source = envelope.source as unknown as Record<string, unknown>;
+  if (source.kind === 'recipe') {
+    return materializeRecipe(source as unknown as { recipe: string; bindings: Record<string, string> });
+  }
+  return { ok: true, spec: (source as { spec: Record<string, unknown> }).spec };
+}
 
 export interface VegaViewOptions {
   renderer: 'svg' | 'canvas' | 'none';

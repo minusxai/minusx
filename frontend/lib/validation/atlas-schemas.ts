@@ -236,9 +236,21 @@ export const VizSourceVegaLite = Type.Object({
 }, { title: 'VizSourceVegaLite' });
 export type VizSourceVegaLite = Static<typeof VizSourceVegaLite>;
 
-// Discriminated on `kind`. The probe ships `vega-lite` only; `recipe`, `vega`, `table`,
-// `pivot`, and `slippy-map` join this union as they land (additive — see the RFC).
-export const VizSource = Type.Union([VizSourceVegaLite], { title: 'VizSource' });
+export const VizSourceRecipe = Type.Object({
+  kind: Type.Literal('recipe'),
+  recipe: Type.String({ description:
+    "a SHIPPED recipe id, e.g. 'minusx/funnel@1' or 'minusx/waterfall@1'. The chart is generated from the " +
+    'recipe + bindings at render time — nothing else to author. Available recipes and their bindings are ' +
+    'listed in the questions skill.' }),
+  bindings: Type.Record(Type.String(), Type.String(), { description:
+    'recipe binding slots → query-result column names (validated against the actual columns)' }),
+  params: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'optional recipe params (see the recipe docs); omit for defaults' })),
+}, { title: 'VizSourceRecipe' });
+export type VizSourceRecipe = Static<typeof VizSourceRecipe>;
+
+// Discriminated on `kind`. `vega`, `table`, `pivot`, and `slippy-map` join this union
+// as they land (additive — see the RFC).
+export const VizSource = Type.Union([VizSourceVegaLite, VizSourceRecipe], { title: 'VizSource' });
 export type VizSource = Static<typeof VizSource>;
 
 export const VizEnvelope = Type.Object({

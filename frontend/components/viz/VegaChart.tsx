@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, Text } from '@chakra-ui/react';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { compileVegaLite, createVegaView, setMainData } from '@/lib/viz/render-vega';
+import { compileVegaLite, createVegaView, setMainData, resolveEnvelopeSpec } from '@/lib/viz/render-vega';
 
 export interface VegaChartProps {
   envelope: VizEnvelope;
@@ -75,7 +75,9 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
         // producing crowded/overlapping ticks. Wait for fonts before the first layout.
         if (typeof document !== 'undefined' && document.fonts?.ready) await document.fonts.ready;
         if (cancelled) return;
-        const vegaSpec = compileVegaLite(envelope.source.spec as Record<string, unknown>, colorMode);
+        const resolved = resolveEnvelopeSpec(envelope);
+        if (!resolved.ok) throw new Error(resolved.error);
+        const vegaSpec = compileVegaLite(resolved.spec, colorMode);
         if (cancelled) return;
         view = createVegaView(vegaSpec, rowsRef.current, {
           renderer: 'svg',

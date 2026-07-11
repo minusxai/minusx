@@ -12,7 +12,7 @@ import { LuLayoutGrid, LuSettings2, LuBraces } from 'react-icons/lu';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { VizSettings } from '@/lib/types';
 import {
-  isUnitVegaLiteSpec, getVizType, setVizType, V2_SUPPORTED_VIZ_TYPES,
+  isEnvelopeEditable, getEnvelopeVizType, setEnvelopeVizType, V2_SUPPORTED_VIZ_TYPES,
   getStacked, setStacked, getYLogScale, setYLogScale,
   type V2VizType,
 } from '@/lib/viz/encoding-edit';
@@ -39,9 +39,11 @@ export interface VegaVizPanelProps {
 
 export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizPanelProps) {
   const [activeTab, setActiveTab] = useState<'fields' | 'settings' | 'spec'>('fields');
-  const spec = (envelope.source as { spec: Record<string, unknown> }).spec;
-  const isUnit = isUnitVegaLiteSpec(spec);
-  const vizType = getVizType(spec);
+  const source = envelope.source as unknown as Record<string, unknown>;
+  const isRecipe = source.kind === 'recipe';
+  const spec = isRecipe ? null : (source as { spec: Record<string, unknown> }).spec;
+  const isUnit = isEnvelopeEditable(envelope);
+  const vizType = getEnvelopeVizType(envelope);
 
   const TABS = [
     { key: 'fields', icon: LuLayoutGrid, label: 'Fields' },
@@ -60,7 +62,7 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
           value={vizType as VizSettings['type']}
           onChange={(t) => {
             if ((V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t)) {
-              onVizChange(setVizType(envelope, t as V2VizType));
+              onVizChange(setEnvelopeVizType(envelope, t as V2VizType));
             }
           }}
           orientation="grouped"
@@ -92,7 +94,12 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
       )}
 
       {activeTab === 'settings' && (
-        isUnit ? (
+        isRecipe ? (
+          <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
+            This chart is generated from the {String((envelope.source as unknown as Record<string, unknown>).recipe)} recipe —
+            bind columns in Fields, or ask the agent for deeper customization.
+          </Text>
+        ) : isUnit && spec ? (
           <Box display="flex" flexDirection="column" gap={3} py={1}>
             <HStack justify="space-between">
               <Text fontSize="xs" color="fg.muted">Stacked</Text>

@@ -9,6 +9,7 @@
  */
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { VizColumnKind } from './types';
+import { getTemplate, VIZ_TEMPLATES } from './viz-templates';
 
 export const EDITABLE_CHANNELS = ['x', 'y', 'color', 'theta'] as const;
 export type EditableChannel = (typeof EDITABLE_CHANNELS)[number];
@@ -118,10 +119,10 @@ export function setStacked(envelope: VizEnvelope, stacked: boolean): VizEnvelope
 // `pie` is an encoding TRANSFORM: a naive mark swap to `arc` renders garbage because
 // arcs read theta/color, not x/y.
 
-export const V2_SUPPORTED_VIZ_TYPES = ['bar', 'line', 'area', 'scatter', 'pie', 'row'] as const;
+export const V2_SUPPORTED_VIZ_TYPES = ['bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall'] as const;
 export type V2VizType = (typeof V2_SUPPORTED_VIZ_TYPES)[number];
 
-const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'row' | 'pie'>, string> = {
+const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'row' | 'pie' | 'funnel' | 'waterfall'>, string> = {
   bar: 'bar', line: 'line', area: 'area', scatter: 'point',
 };
 
@@ -147,8 +148,11 @@ const withMark = (spec: Record<string, unknown>, type: string): void => {
     : { type };
 };
 
+/** Native-spec viz types (recipes route through setEnvelopeVizType instead). */
+export type SpecVizType = Exclude<V2VizType, 'funnel' | 'waterfall'>;
+
 /** Switch a unit spec's viz type, transforming encodings where the shapes differ. */
-export function setVizType(envelope: VizEnvelope, type: V2VizType): VizEnvelope {
+export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelope {
   const { next, spec } = cloneEnvelope(envelope);
   const encoding = { ...((spec.encoding as Record<string, unknown> | undefined) ?? {}) } as Record<string, Record<string, unknown> | undefined>;
   const from = getVizType(spec);
@@ -251,3 +255,138 @@ export function setYLogScale(envelope: VizEnvelope, log: boolean): VizEnvelope {
   else delete y.scale;
   return next;
 }
+
+// ── Envelope-level (source-aware) operations ────────────────────────────────────────
+//
+// The panel operates on envelopes, not bare specs: recipe sources classify/edit via
+// their registry entry (bindings), native vega-lite sources via the spec itself.
+
+
+type AnySource = Record<string, unknown>;
+const sourceOf = (envelope: VizEnvelope): AnySource => envelope.source as unknown as AnySource;
+
+export function getEnvelopeVizType(envelope: VizEnvelope): V2VizType | null {
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') {
+    return getTemplate(source.recipe as string)?.vizType ?? null;
+  }
+  return getVizType((source as { spec: Record<string, unknown> }).spec);
+}
+
+export function isEnvelopeEditable(envelope: VizEnvelope): boolean {
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') return getTemplate(source.recipe as string) != null;
+  return isUnitVegaLiteSpec((source as { spec: Record<string, unknown> }).spec);
+}
+
+/** Zone descriptors for the Fields tab: recipe bindings, or VL channels by type. */
+export function getEnvelopeZones(envelope: VizEnvelope): Array<{ channel: string; label: string }> {
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') {
+    const template = getTemplate(source.recipe as string);
+    return template ? template.bindings.map(b => ({ channel: b.name, label: b.label })) : [];
+  }
+  return zonesForVizType(getVizType((source as { spec: Record<string, unknown> }).spec));
+}
+
+/** The column a zone currently holds (binding value or channel field). */
+export function getZoneField(envelope: VizEnvelope, channel: string): string | null {
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') {
+    const bindings = (source.bindings ?? {}) as Record<string, string>;
+    return bindings[channel] ?? null;
+  }
+  return getChannelField((source as { spec: Record<string, unknown> }).spec, channel as EditableChannel);
+}
+
+/** Assign/remove a zone's column. Recipe bindings are required — removal is a no-op there. */
+export function setZoneField(
+  envelope: VizEnvelope,
+  channel: string,
+  column: { name: string; kind: VizColumnKind } | null,
+): VizEnvelope {
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') {
+    if (column == null) return envelope; // recipes need every binding; re-bind instead
+    const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
+    ((next.source as unknown as AnySource).bindings as Record<string, string>)[channel] = column.name;
+    return next;
+  }
+  return setChannelField(envelope, channel as EditableChannel, column);
+}
+
+/** The bindings a template needs, inferred from whatever the current source encodes. */
+function inferBindings(envelope: VizEnvelope): { category: string | null; value: string | null } {
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') {
+    const bindings = (source.bindings ?? {}) as Record<string, string>;
+    return {
+      category: bindings.stage ?? bindings.category ?? null,
+      value: bindings.value ?? null,
+    };
+  }
+  const spec = (source as { spec: Record<string, unknown> }).spec;
+  const pick = (channels: EditableChannel[], want: (def: Record<string, unknown>) => boolean): string | null => {
+    for (const ch of channels) {
+      const enc = (spec.encoding as Record<string, Record<string, unknown>> | undefined)?.[ch];
+      if (enc && typeof enc.field === 'string' && want(enc)) return enc.field;
+    }
+    return null;
+  };
+  return {
+    category: pick(['color', 'x', 'y'], d => d.type !== 'quantitative'),
+    value: pick(['y', 'theta', 'x'], d => d.type === 'quantitative'),
+  };
+}
+
+const TEMPLATE_FOR_TYPE: Partial<Record<V2VizType, string>> = {
+  funnel: 'minusx/funnel@1',
+  waterfall: 'minusx/waterfall@1',
+};
+
+/**
+ * Envelope-level type switch. Recipe targets produce a REFERENCE source (bindings
+ * inferred from the current encodings); leaving a recipe reconstructs a native
+ * vega-lite source from its bindings, then applies the spec-level transform.
+ */
+export function setEnvelopeVizType(envelope: VizEnvelope, type: V2VizType): VizEnvelope {
+  const templateId = TEMPLATE_FOR_TYPE[type];
+  if (templateId) {
+    const { category, value } = inferBindings(envelope);
+    const template = getTemplate(templateId)!;
+    const bindings: Record<string, string> = {};
+    for (const b of template.bindings) {
+      const inferred = b.accepts.includes('quantitative') ? value : category;
+      if (inferred) bindings[b.name] = inferred;
+    }
+    return {
+      version: 2,
+      source: { kind: 'recipe', recipe: templateId, bindings, params: null },
+    } as unknown as VizEnvelope;
+  }
+
+  const source = sourceOf(envelope);
+  if (source.kind === 'recipe') {
+    // Reconstruct a plain bar from the bindings, then transform to the target type.
+    const { category, value } = inferBindings(envelope);
+    const barEnvelope = {
+      version: 2,
+      source: {
+        kind: 'vega-lite',
+        grammar: 'vega-lite@6',
+        spec: {
+          mark: { type: 'bar' },
+          encoding: {
+            ...(category ? { x: { field: category, type: 'nominal' } } : {}),
+            ...(value ? { y: { field: value, type: 'quantitative', aggregate: 'sum' } } : {}),
+          },
+        },
+      },
+    } as unknown as VizEnvelope;
+    return type === 'bar' ? barEnvelope : setVizType(barEnvelope, type as SpecVizType);
+  }
+  return setVizType(envelope, type as SpecVizType);
+}
+
+/** Recipe ids currently shipped (for docs/UI). */
+export const SHIPPED_RECIPE_IDS = Object.keys(VIZ_TEMPLATES);

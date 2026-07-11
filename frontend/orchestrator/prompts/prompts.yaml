@@ -266,6 +266,18 @@ templates:
         - Interactive legend (click to highlight/toggle a series) — add a point selection bound to the legend plus a conditional opacity:
           `"params": [{"name": "sel", "select": {"type": "point", "fields": ["<colorField>"]}, "bind": "legend"}]` and
           `"opacity": {"condition": {"param": "sel", "value": 1}, "value": 0.2}` in the encoding.
+        - **Shipped recipes** — funnel and waterfall charts are generated from a recipe REFERENCE; never author their specs by hand:
+          ```
+          <viz>
+            <version>2</version>
+            <source>
+              <kind>recipe</kind>
+              <recipe>minusx/funnel@1</recipe>
+              <bindings>{{"stage": "stage_column", "value": "value_column"}}</bindings>
+            </source>
+          </viz>
+          ```
+          Available: `minusx/funnel@1` (bindings: stage, value) and `minusx/waterfall@1` (bindings: category, value — rows render in QUERY ORDER, so ORDER BY the step sequence; negative values render as decreases). Binding values must be result column names.
         - To go back to the standard chart types, remove `<viz>` entirely (set it to null) and configure `vizSettings`.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
 

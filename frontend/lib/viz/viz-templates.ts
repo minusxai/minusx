@@ -1,0 +1,173 @@
+/**
+ * SHIPPED recipe registry (RFC §5, the `recipe` source kind).
+ *
+ * A recipe instance stores ONLY the reference — {kind: 'recipe', recipe: 'minusx/x@1',
+ * bindings} — and the spec is materialized at render time from this registry. Shipped
+ * recipes are app code: they can't be deleted or shadowed, so a reference is safe
+ * (workspace-authored recipes, when they land, follow the RFC's materialize-always
+ * rule instead). The `@1` is a behavior contract: changing a builder's output in a
+ * visually meaningful way means shipping `@2` and keeping `@1` frozen.
+ */
+
+export interface VizTemplateBinding {
+  name: string;
+  label: string;
+  /** Column kinds this slot accepts (drives drop-zone hints; not enforced hard). */
+  accepts: ReadonlyArray<'nominal' | 'quantitative' | 'temporal'>;
+}
+
+export interface VizTemplate {
+  id: string;
+  /** The icon-grid type this recipe implements. */
+  vizType: 'funnel' | 'waterfall';
+  bindings: ReadonlyArray<VizTemplateBinding>;
+  /** Materialize the full Vega-Lite spec from bound column names. */
+  build(bindings: Record<string, string>): Record<string, unknown>;
+}
+
+// ── minusx/funnel@1 ─────────────────────────────────────────────────────────────
+// Tapered funnel silhouette (ECharts look): a ranged area over the stage sequence,
+// single hue, stage + value/percent labels centered. Stage order = data order.
+const funnel: VizTemplate = {
+  id: 'minusx/funnel@1',
+  vizType: 'funnel',
+  bindings: [
+    { name: 'stage', label: 'Stages', accepts: ['nominal', 'temporal'] },
+    { name: 'value', label: 'Value', accepts: ['quantitative'] },
+  ],
+  build({ stage, value }) {
+    // Data order IS the funnel order (SQL owns semantics — ORDER BY the stage
+    // sequence). The tapered silhouette is a ranged area (x…x2 = ±value/2) over the
+    // stage rank; linear interpolation between ranks yields the classic trapezoids.
+    const y = { field: '__mx_rank', type: 'quantitative', axis: null, scale: { reverse: true, zero: false } };
+    return {
+      transform: [
+        { aggregate: [{ op: 'sum', field: value, as: '__mx_value' }], groupby: [stage] },
+        { window: [{ op: 'rank', as: '__mx_rank' }] },
+        { window: [{ op: 'first_value', field: '__mx_value', as: '__mx_first' }], frame: [null, null] },
+        { calculate: '-datum.__mx_value / 2', as: '__mx_x0' },
+        { calculate: 'datum.__mx_value / 2', as: '__mx_x1' },
+        { calculate: "format(datum.__mx_value, '.3~s') + ' (' + format(datum.__mx_value / datum.__mx_first * 100, '.1f') + '%)'", as: '__mx_label' },
+      ],
+      layer: [
+        {
+          mark: { type: 'area', interpolate: 'linear', opacity: 0.88 },
+          encoding: {
+            y,
+            x: { field: '__mx_x0', type: 'quantitative', axis: null },
+            x2: { field: '__mx_x1' },
+            color: { value: '#16a085' },
+          },
+        },
+        {
+          mark: { type: 'text', dy: -7, fontWeight: 'bold' },
+          encoding: { y, x: { datum: 0, axis: null }, text: { field: stage, type: 'nominal' } },
+        },
+        {
+          mark: { type: 'text', dy: 8 },
+          encoding: { y, x: { datum: 0, axis: null }, text: { field: '__mx_label', type: 'nominal' } },
+        },
+      ],
+    };
+  },
+};
+
+// ── minusx/waterfall@1 ──────────────────────────────────────────────────────────
+// Floating bars on a running total, data order preserved (waterfall order is
+// semantic). Increases use the theme palette; decreases use the danger red —
+// matching the classic ECharts waterfall. Value labels ride each bar.
+const waterfall: VizTemplate = {
+  id: 'minusx/waterfall@1',
+  vizType: 'waterfall',
+  bindings: [
+    { name: 'category', label: 'Steps', accepts: ['nominal', 'temporal'] },
+    { name: 'value', label: 'Value', accepts: ['quantitative'] },
+  ],
+  build({ category, value }) {
+    const x = { field: category, type: 'nominal', sort: null, title: null };
+    return {
+      transform: [
+        { aggregate: [{ op: 'sum', field: value, as: '__mx_amount' }], groupby: [category] },
+        { window: [{ op: 'sum', field: '__mx_amount', as: '__mx_sum' }] },
+        { calculate: 'datum.__mx_sum - datum.__mx_amount', as: '__mx_prev' },
+        { calculate: "datum.__mx_amount >= 0 ? '+' + format(datum.__mx_amount, '.3~s') : format(datum.__mx_amount, '.3~s')", as: '__mx_label' },
+      ],
+      layer: [
+        {
+          mark: { type: 'bar', cornerRadiusEnd: 2 },
+          encoding: {
+            x,
+            y: { field: '__mx_prev', type: 'quantitative', title: null },
+            y2: { field: '__mx_sum' },
+            color: {
+              condition: { test: 'datum.__mx_amount < 0', value: '#c0392b' },
+              value: '#16a085',
+            },
+          },
+        },
+        {
+          mark: { type: 'text', dy: -8 },
+          encoding: {
+            x,
+            y: { field: '__mx_sum', type: 'quantitative', title: null },
+            text: { field: '__mx_label', type: 'nominal' },
+          },
+        },
+        // Closing Total bar (classic waterfall; palette blue like the ECharts builder).
+        {
+          transform: [
+            { aggregate: [{ op: 'sum', field: '__mx_amount', as: '__mx_total' }] },
+            { calculate: "'Total'", as: category },
+          ],
+          mark: { type: 'bar', cornerRadiusEnd: 2 },
+          encoding: {
+            x,
+            y: { field: '__mx_total', type: 'quantitative', title: null },
+            y2: { datum: 0 },
+            color: { value: '#2980b9' },
+          },
+        },
+        {
+          transform: [
+            { aggregate: [{ op: 'sum', field: '__mx_amount', as: '__mx_total' }] },
+            { calculate: "'Total'", as: category },
+            { calculate: "format(datum.__mx_total, '.3~s')", as: '__mx_total_label' },
+          ],
+          mark: { type: 'text', dy: -8, fontWeight: 'bold' },
+          encoding: {
+            x,
+            y: { field: '__mx_total', type: 'quantitative', title: null },
+            text: { field: '__mx_total_label', type: 'nominal' },
+          },
+        },
+      ],
+    };
+  },
+};
+
+export const VIZ_TEMPLATES: Record<string, VizTemplate> = {
+  [funnel.id]: funnel,
+  [waterfall.id]: waterfall,
+};
+
+/** Registry lookup for a recipe source; null for unknown ids. */
+export function getTemplate(recipeId: string): VizTemplate | null {
+  return VIZ_TEMPLATES[recipeId] ?? null;
+}
+
+export type MaterializeResult =
+  | { ok: true; spec: Record<string, unknown> }
+  | { ok: false; error: string };
+
+/** Materialize a recipe source into its Vega-Lite spec. */
+export function materializeRecipe(source: { recipe: string; bindings: Record<string, string> }): MaterializeResult {
+  const template = getTemplate(source.recipe);
+  if (!template) {
+    return { ok: false, error: `unknown recipe "${source.recipe}" — available: ${Object.keys(VIZ_TEMPLATES).join(', ')}` };
+  }
+  const missing = template.bindings.filter(b => !source.bindings[b.name]);
+  if (missing.length > 0) {
+    return { ok: false, error: `recipe "${source.recipe}" is missing binding${missing.length > 1 ? 's' : ''}: ${missing.map(b => b.name).join(', ')}` };
+  }
+  return { ok: true, spec: template.build(source.bindings) };
+}

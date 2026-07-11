@@ -487,6 +487,24 @@ Only these remain open — they require measurement, not design debate:
 Two sections: **Verified** (done, with dates) and **Remaining** (the working list).
 Move items up as they pass; anything that fails gets a note + fix before it moves.
 
+### Plot type coverage (cross off as they land in V2)
+
+- [x] bar — encoding transform, UI + agent
+- [x] line — encoding transform, UI + agent
+- [x] area — encoding transform, UI + agent
+- [x] row — encoding transform (x/y def swap), UI + agent
+- [x] scatter — encoding transform (point mark), UI + agent
+- [x] pie — encoding transform (theta SUM-aggregated, rounded donut), UI + agent
+- [ ] combo — agent-authorable TODAY (layers + independent y scales); no one-click UI transform yet
+- [x] funnel — shipped recipe `minusx/funnel@1` (tapered area, data-order stages, % of first stage)
+- [x] waterfall — shipped recipe `minusx/waterfall@1` (floating bars, signed labels, closing Total)
+- [ ] radar — native Vega proto-recipe; needs the `vega` source kind (phase two of this pass)
+- [ ] table — stays DOM; `<GridView>` phase (RFC §10)
+- [ ] pivot — stays DOM; `<GridView>` phase (RFC §10)
+- [ ] trend — recipe-vs-DOM-widget spike decision (RFC §17)
+- [ ] single_value — follows the trend decision
+- [ ] geo — Vega recipes for analytic geo; Leaflet frozen for tile basemaps (RFC §9)
+
 ### ✅ Verified (as of 2026-07-10)
 
 **Rendering & theming**
@@ -549,7 +567,7 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [ ] JSON-syntax-error rate per EditFile stays ~zero across the session (probe metric)
 
 **Interactions**
-- [ ] One human click on a legend item (automation verified via dispatched DOM click — confirm the
+- [x] One human click on a legend item (automation verified via dispatched DOM click — confirm the
   hit-target feels right)
 - [ ] Shift-click accumulates selection; click-elsewhere clears
 - [ ] Tooltip hover: encoded fields with titles + formats, styled (mono, rounded)

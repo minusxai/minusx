@@ -19,6 +19,7 @@ import vegaLiteSchema from './vendor/vega-lite-v6.schema.json';
 import { VIZ_GRAMMAR_VEGA_LITE } from '@/lib/validation/atlas-schemas';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { prepareVegaLiteSpec } from './prepare';
+import { materializeRecipe } from './viz-templates';
 import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } from './field-refs';
 import { VIZ_DATASET_MAIN } from './types';
 import type { VizIssue, VizResultColumn, VizValidationResult } from './types';
@@ -53,10 +54,19 @@ function validateEnvelopeShape(envelope: unknown): { issues: VizIssue[]; env?: V
   }
   const source = env.source as Record<string, unknown> | undefined;
   if (source == null || typeof source !== 'object') {
-    return { issues: [err('E_ENVELOPE', '/source', 'viz.source is required: {kind: "vega-lite", grammar: "vega-lite@6", spec: {…}}')] };
+    return { issues: [err('E_ENVELOPE', '/source', 'viz.source is required: {kind: "vega-lite", grammar: "vega-lite@6", spec: {…}} or {kind: "recipe", recipe: "minusx/…@1", bindings: {…}}')] };
+  }
+  if (source.kind === 'recipe') {
+    if (typeof source.recipe !== 'string') {
+      return { issues: [err('E_ENVELOPE', '/source/recipe', 'recipe sources need a recipe id string, e.g. "minusx/funnel@1"')] };
+    }
+    if (source.bindings == null || typeof source.bindings !== 'object' || Array.isArray(source.bindings)) {
+      return { issues: [err('E_ENVELOPE', '/source/bindings', 'recipe sources need bindings: {slotName: "columnName", …}')] };
+    }
+    return { issues: [], env: env as unknown as VizEnvelope };
   }
   if (source.kind !== 'vega-lite') {
-    return { issues: [err('E_ENVELOPE', '/source/kind', `unsupported source kind ${JSON.stringify(source.kind)} — only "vega-lite" is available`)] };
+    return { issues: [err('E_ENVELOPE', '/source/kind', `unsupported source kind ${JSON.stringify(source.kind)} — available: "vega-lite", "recipe"`)] };
   }
   if (source.grammar !== VIZ_GRAMMAR_VEGA_LITE) {
     return { issues: [err('E_ENVELOPE', '/source/grammar', `source.grammar must be "${VIZ_GRAMMAR_VEGA_LITE}", got ${JSON.stringify(source.grammar)}`)] };
@@ -162,7 +172,30 @@ export function validateVizEnvelope(
   issues.push(...shape.issues);
   if (!shape.env) return { ok: false, issues };
 
-  const rawSpec = (shape.env.source as { spec: Record<string, unknown> }).spec;
+  let rawSpec: Record<string, unknown>;
+  const source = shape.env.source as Record<string, unknown>;
+  if (source.kind === 'recipe') {
+    const recipeSource = source as unknown as { recipe: string; bindings: Record<string, string> };
+    const materialized = materializeRecipe(recipeSource);
+    if (!materialized.ok) {
+      issues.push(err('E_RECIPE', '/source/recipe', materialized.error));
+      return { ok: false, issues };
+    }
+    // Bindings are the recipe's field references — check them against the columns
+    // directly (the materialized spec's own refs are then internally consistent).
+    const known = new Set(columns.map(c => c.name));
+    const available = columns.map(c => `${c.name} (${c.kind})`).join(', ');
+    for (const [slot, columnName] of Object.entries(recipeSource.bindings)) {
+      if (!known.has(columnName)) {
+        issues.push(err('E_FIELD_NOT_FOUND', `/source/bindings/${slot}`,
+          `"${columnName}" is not in the query result. Available fields: ${available}`));
+      }
+    }
+    if (issues.some(i => i.severity === 'error')) return { ok: false, issues };
+    rawSpec = materialized.spec;
+  } else {
+    rawSpec = (source as { spec: Record<string, unknown> }).spec;
+  }
   validateDataPolicy(rawSpec, '/source/spec', issues);
   if (issues.some(i => i.severity === 'error')) return { ok: false, issues };
 

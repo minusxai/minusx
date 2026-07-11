@@ -51,6 +51,9 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
     // (with their titles/formats). A spec-level `tooltip` encoding overrides this
     // with a custom field list; `mark: {tooltip: null}` opts a spec out.
     mark: { tooltip: { content: 'encoding' } },
+    // Text marks default to BLACK in vega-lite — unreadable in dark mode. Theme them
+    // like axis titles; specs/recipes override per-layer where they need contrast.
+    text: { color: colors.fgDefault, fontSize: 11 },
     title: {
       color: colors.fgDefault,
       fontSize: 14,
