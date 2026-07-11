@@ -35,4 +35,9 @@ describe('getVegaLiteConfig', () => {
     const config = getVegaLiteConfig('dark') as Record<string, any>;
     expect(config.mark.tooltip).toEqual({ content: 'encoding' });
   });
+
+  it('defaults quantitative labels to SI units (20,000 → 20k)', () => {
+    const config = getVegaLiteConfig('dark') as Record<string, any>;
+    expect(config.numberFormat).toBe('.3~s');
+  });
 });

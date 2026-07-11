@@ -7,14 +7,19 @@
  * Passed as external compiler config — spec-internal `config` wins natively.
  */
 import type { Config as VegaLiteConfig } from 'vega-lite';
-import { COLOR_PALETTE, LIGHT_THEME, DARK_THEME } from '@/lib/chart/echarts-theme';
-
-const FONT = 'JetBrains Mono, Consolas, Monaco, Courier New, monospace';
+import { COLOR_PALETTE, LIGHT_THEME, DARK_THEME, getChartFontFamily } from '@/lib/chart/echarts-theme';
 
 export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
   const colors = mode === 'light' ? LIGHT_THEME : DARK_THEME;
   return {
-    font: FONT,
+    // getChartFontFamily resolves the ACTUAL loaded font family (next/font registers
+    // JetBrains Mono under a hashed name, exposed via --font-jetbrains-mono). Using the
+    // literal name makes canvas measureText and SVG rendering fall back to DIFFERENT
+    // fonts — vega then under-reserves every label and titles overlap ticks.
+    font: getChartFontFamily(),
+    // Default number format for quantitative axis/legend/tooltip labels without an
+    // explicit format: SI units ('.3~s' → 20k, 1.5M, 431k). Specs override per-encoding.
+    numberFormat: '.3~s',
     // The card owns the surface; charts inherit it (same rule as the ECharts theme).
     background: 'transparent',
     range: { category: COLOR_PALETTE },
