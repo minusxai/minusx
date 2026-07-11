@@ -28,12 +28,18 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
       titleFontSize: 12,
       titleFontWeight: 'normal',
       gridDash: [3, 3],
+      // JetBrains Mono runs wider than the fonts VL's default spacing assumes:
+      // give titles room from the tick labels and keep thinned labels apart.
+      titlePadding: 12,
+      labelSeparation: 4,
     },
     legend: {
       labelColor: colors.fgMuted,
       titleColor: colors.fgDefault,
       labelFontSize: 11,
       titleFontSize: 12,
+      titleLimit: 240,
+      labelLimit: 220,
     },
     title: {
       color: colors.fgDefault,

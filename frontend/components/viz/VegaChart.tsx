@@ -49,6 +49,11 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
     // Async so state updates never fire synchronously inside the effect body.
     (async () => {
       try {
+        // Vega measures label widths via canvas measureText — if JetBrains Mono isn't
+        // loaded yet it measures the fallback font and underestimates every label,
+        // producing crowded/overlapping ticks. Wait for fonts before the first layout.
+        if (typeof document !== 'undefined' && document.fonts?.ready) await document.fonts.ready;
+        if (cancelled) return;
         const vegaSpec = compileVegaLite(envelope.source.spec as Record<string, unknown>, colorMode);
         if (cancelled) return;
         view = createVegaView(vegaSpec, rowsRef.current, { renderer: 'svg', container: el, ...sizeOf(el) });
