@@ -23,6 +23,7 @@ export type VizIssueCode =
   | 'E_FIELD_NOT_FOUND'  // spec references a field not in the query result
   | 'E_EXTERNAL_DATA'    // spec declares a data url / inline values (only the named dataset is allowed)
   | 'E_DATASET_NAME'     // spec names a dataset other than the reserved one
+  | 'E_CSS'              // table css override uses @import / external url()
   | 'W_COMPILE';         // vega-lite compiler warning (captured logger)
 
 export interface VizIssue {

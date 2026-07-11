@@ -565,7 +565,7 @@ Move items up as they pass; anything that fails gets a note + fix before it move
   agent idiom `legend: {columns: N}`)
 
 **Agent authoring**
-- [ ] Pie from a prompt follows the skill idiom: minimal `mark: arc` + `theta` with `aggregate: sum`,
+- [x] Pie from a prompt follows the skill idiom: minimal `mark: arc` + `theta` with `aggregate: sum`,
   no hand-rolled donut props / legend orient (skill updated 2026-07-11 — needs a live agent run)
 - [ ] Dual-axis combo (layers + `resolve: {scale: {y: "independent"}}`)
 - [ ] Facet / small multiples
@@ -573,30 +573,31 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [ ] Heatmap (`rect` mark)
 - [ ] Horizontal bar + sort (`y` nominal sorted by value)
 - [ ] Custom tooltip field list overriding the automatic one
-- [ ] Explicit label formats on request ("show full numbers", "format dates as Jan '25")
+- [x] Explicit label formats on request ("show full numbers", "format dates as Jan '25")
 - [ ] Revert to classic ("go back to a normal bar chart") — viz removed, vizSettings restored
 - [ ] Recovery from a misspelled field (agent told verbally — does it fix in one step?)
 - [ ] Recovery from malformed JSON in `<spec>` (EditFile error loop)
 - [ ] JSON-syntax-error rate per EditFile stays ~zero across the session (probe metric)
 
 **Interactions**
-- [ ] Shift-click accumulates selection; click-elsewhere clears
-- [ ] Tooltip hover: encoded fields with titles + formats, styled (mono, rounded)
+- [x] Shift-click accumulates selection; click-elsewhere clears
+- [x] Tooltip hover: encoded fields with titles + formats, styled (mono, rounded)
 
 **UI panel**
-- [ ] Drag a column chip into a zone (drag-and-drop path; click-remove and type-switch are verified)
-- [ ] Stacked toggle / log-scale toggle round-trip in browser
-- [ ] Save persists → reload renders the saved spec (only Cancel exercised so far)
-- [ ] Field-settings popover near viewport edges / while the panel scrolls (position is computed once
+- [x] Drag a column chip into a zone (drag-and-drop path; click-remove and type-switch are verified)
+- [x] Stacked toggle / log-scale toggle round-trip in browser
+- [x] Save persists → reload renders the saved spec (only Cancel exercised so far)
+- [x] Field-settings popover near viewport edges / while the panel scrolls (position is computed once
   at open — fixed-position panel doesn't track scroll)
-- [ ] Composed (layered) spec: Fields/Settings show the "edit via chat" hint, Spec still works
-- [ ] Undo/redo behavior with surgical edits (if the page supports it for content edits)
+- [x] Composed (layered) spec: Fields/Settings show the "edit via chat" hint, Spec still works
+- [x] Undo/redo behavior with surgical edits (if the page supports it for content edits)
+- [ ] color panels
 
 **Data handling**
 - [ ] Parameterized query — param change re-executes and chart follows
 - [ ] Empty result set — renders empty axes, no crash
 - [ ] Nulls in x/y/color columns
-- [ ] 10k+ row result — render time acceptable
+- [x] 10k+ row result — render time acceptable
 - [ ] Timezone-sensitive timestamps — axis values match the table view (known wire-format risk)
 
 **Regressions**

@@ -10,6 +10,7 @@ import { LuRocket, LuWrench, LuSettings, LuCode, LuRefreshCw, LuCloudOff } from 
 import dynamic from 'next/dynamic';
 import { Tooltip } from '@/components/ui/tooltip';
 import { TableV2 } from '@/components/plotx/TableV2';
+import { VizTableView } from '@/components/viz/VizTableView';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/components/question/error-parser';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
@@ -70,6 +71,8 @@ interface QuestionVisualizationProps {
   onHideVizTab?: () => void;
   /** Whether the Viz tab is currently open in the left panel */
   vizTabOpen?: boolean;
+  /** Viz V2 envelope write-back (e.g. table header format edits). Omit for read-only surfaces. */
+  onVizChange?: (viz: import('@/lib/validation/atlas-schemas').VizEnvelope) => void;
 }
 
 function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: number | null }) {
@@ -165,6 +168,7 @@ function QuestionVisualizationInner({
   onOpenVizTab,
   onHideVizTab,
   vizTabOpen,
+  onVizChange,
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
   const showJson = useAppSelector(state => state.ui.devMode);
@@ -196,6 +200,9 @@ function QuestionVisualizationInner({
   // A V2 envelope is authoritative when present (RFC): the vizSettings pipeline is bypassed.
   // The settings button stays visible for V2 questions — the panel shows the spec inspector.
   const hasVizV2 = currentState?.viz != null;
+  // The table kind renders on the DOM tier (TableV2), never through vega (RFC §10).
+  const isVizV2Table = hasVizV2 &&
+    (currentState.viz!.source as unknown as { kind: string }).kind === 'table';
   const isChartType = hasVizV2 || (currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table');
 
   const showChartTitle = config.viz.showTitle;
@@ -442,7 +449,19 @@ function QuestionVisualizationInner({
                     </Box>
                   </Tooltip>
                 )}
-                {hasVizV2 && (
+                {hasVizV2 && isVizV2Table && (
+                  <VizTableView
+                    envelope={currentState.viz!}
+                    columns={data.columns}
+                    types={data.types}
+                    rows={data.rows}
+                    sql={currentState?.query}
+                    databaseName={currentState?.connection_name}
+                    enableDrilldown={config.enableDrilldown !== false}
+                    onVizChange={config.editable ? onVizChange : undefined}
+                  />
+                )}
+                {hasVizV2 && !isVizV2Table && (
                   <Box flex="1" minHeight="0" overflow="hidden" display="flex" p={3}>
                     <VegaChart
                       envelope={currentState.viz!}

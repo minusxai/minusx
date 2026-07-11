@@ -9,6 +9,7 @@ import { MiniBarChart } from './MiniBarChart'
 import {
   type ColumnType,
   type FacetedFilterValue,
+  cssColumnClass,
   getTypeIcon,
   getTypeColor,
   isFacetedFilter,
@@ -73,6 +74,8 @@ export const TableHeaderCell = ({
   return (
     <Box
       as="th"
+      // Stable class contract for css overrides (Viz V2 table / story styling)
+      className={`mx-th ${cssColumnClass(header.id)}`}
       textAlign="left"
       py={3}
       px={4}

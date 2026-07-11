@@ -7,16 +7,19 @@
  * the long tail of styling stays with the agent. Pure view: no Redux.
  */
 import { useState } from 'react';
-import { Box, Button, HStack, Text, Switch } from '@chakra-ui/react';
+import { Box, Button, HStack, Text, Textarea, Switch } from '@chakra-ui/react';
 import { LuLayoutGrid, LuSettings2, LuBraces } from 'react-icons/lu';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { VizSettings } from '@/lib/types';
 import {
   isEnvelopeEditable, getEnvelopeVizType, setEnvelopeVizType, V2_SUPPORTED_VIZ_TYPES,
   getStacked, setStacked, getYLogScale, setYLogScale,
+  getTableConditionalFormats, setTableConditionalFormats, getTableCss, setTableCss,
   type V2VizType,
 } from '@/lib/viz/encoding-edit';
+import { sqlTypeToVizKind } from '@/lib/viz/query-data';
 import { VizTypeSelector } from '@/components/question/VizTypeSelector';
+import { TableConditionalFormatPanel } from '@/components/plotx/TableConditionalFormatPanel';
 import { VegaEncodingPanel } from './VegaEncodingPanel';
 import { VizSpecInspector } from './VizSpecInspector';
 
@@ -41,9 +44,12 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
   const [activeTab, setActiveTab] = useState<'fields' | 'settings' | 'spec'>('fields');
   const source = envelope.source as unknown as Record<string, unknown>;
   const isRecipe = source.kind === 'recipe';
-  const spec = isRecipe ? null : (source as { spec: Record<string, unknown> }).spec;
+  const isTable = source.kind === 'table';
+  const spec = isRecipe || isTable ? null : (source as { spec: Record<string, unknown> }).spec;
   const isUnit = isEnvelopeEditable(envelope);
   const vizType = getEnvelopeVizType(envelope);
+  // Draft for the table css textarea — committed to the envelope on blur.
+  const [cssDraft, setCssDraft] = useState<string | null>(null);
 
   const TABS = [
     { key: 'fields', icon: LuLayoutGrid, label: 'Fields' },
@@ -77,7 +83,10 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
           value={vizType as VizSettings['type']}
           onChange={(t) => {
             if ((V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t)) {
-              onVizChange(setEnvelopeVizType(envelope, t as V2VizType));
+              // Columns feed the fallback inference (leaving table, which has no
+              // encodings to read — classic auto-pick behavior).
+              const cols = columns.map((name, i) => ({ name, kind: sqlTypeToVizKind(types[i] ?? '') }));
+              onVizChange(setEnvelopeVizType(envelope, t as V2VizType, cols));
             }
           }}
           orientation="grouped"
@@ -105,10 +114,48 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
       </HStack>
 
       {activeTab === 'fields' && (
-        <VegaEncodingPanel envelope={envelope} columns={columns} types={types} onVizChange={onVizChange} />
+        isTable ? (
+          <Text aria-label="Table fields hint" fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
+            Table columns are managed on the table itself — sort/filter/hide via the column
+            headers and bottom toolbar, rename &amp; format via each header&apos;s ⚙.
+          </Text>
+        ) : (
+          <VegaEncodingPanel envelope={envelope} columns={columns} types={types} onVizChange={onVizChange} />
+        )
       )}
 
-      {activeTab === 'settings' && (
+      {activeTab === 'settings' && isTable && (
+        <Box display="flex" flexDirection="column" gap={3} py={1}>
+          <TableConditionalFormatPanel
+            columns={columns}
+            rules={getTableConditionalFormats(envelope)}
+            onChange={(rules) => onVizChange(setTableConditionalFormats(envelope, rules))}
+          />
+          <Box>
+            <Text fontSize="xs" color="fg.muted" mb={1}>CSS overrides</Text>
+            <Textarea
+              aria-label="Table CSS overrides"
+              size="xs"
+              fontFamily="mono"
+              fontSize="11px"
+              rows={5}
+              placeholder={'.mx-th { background: #223; }\n.mx-toolbar { display: none; }'}
+              value={cssDraft ?? getTableCss(envelope) ?? ''}
+              onChange={(e) => setCssDraft(e.target.value)}
+              onBlur={() => {
+                if (cssDraft != null) onVizChange(setTableCss(envelope, cssDraft));
+                setCssDraft(null);
+              }}
+            />
+            <Text fontSize="10px" color="fg.subtle" mt={1} lineHeight="1.5">
+              Scoped to this table. Classes: .mx-table, .mx-header-row, .mx-th, .mx-row,
+              .mx-cell, .mx-col-&lt;column&gt;, .mx-toolbar. No @import / url().
+            </Text>
+          </Box>
+        </Box>
+      )}
+
+      {activeTab === 'settings' && !isTable && (
         isRecipe ? (
           <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
             This chart is generated from the {String((envelope.source as unknown as Record<string, unknown>).recipe)} recipe —

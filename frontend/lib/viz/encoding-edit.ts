@@ -7,7 +7,7 @@
  * and everything else in the spec. Composed specs (layer/facet/concat/repeat) are not
  * editable here (isUnitVegaLiteSpec gates the panel); they're edited via chat.
  */
-import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import type { VizEnvelope, ColumnFormatConfig, ConditionalFormatRule } from '@/lib/validation/atlas-schemas';
 import type { VizColumnKind } from './types';
 import { getTemplate, VIZ_TEMPLATES } from './viz-templates';
 import { immutableSet } from '@/lib/utils/immutable-collections';
@@ -120,10 +120,10 @@ export function setStacked(envelope: VizEnvelope, stacked: boolean): VizEnvelope
 // `pie` is an encoding TRANSFORM: a naive mark swap to `arc` renders garbage because
 // arcs read theta/color, not x/y.
 
-export const V2_SUPPORTED_VIZ_TYPES = ['bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar'] as const;
+export const V2_SUPPORTED_VIZ_TYPES = ['table', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar'] as const;
 export type V2VizType = (typeof V2_SUPPORTED_VIZ_TYPES)[number];
 
-const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'row' | 'pie' | 'funnel' | 'waterfall' | 'radar'>, string> = {
+const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'row' | 'pie' | 'funnel' | 'waterfall' | 'radar'>, string> = {
   bar: 'bar', line: 'line', area: 'area', scatter: 'point',
 };
 
@@ -149,8 +149,8 @@ const withMark = (spec: Record<string, unknown>, type: string): void => {
     : { type };
 };
 
-/** Native-spec viz types (recipes route through setEnvelopeVizType instead). */
-export type SpecVizType = Exclude<V2VizType, 'funnel' | 'waterfall' | 'radar'>;
+/** Native-spec viz types (recipes and the DOM table route through setEnvelopeVizType instead). */
+export type SpecVizType = Exclude<V2VizType, 'table' | 'funnel' | 'waterfall' | 'radar'>;
 
 /** Switch a unit spec's viz type, transforming encodings where the shapes differ. */
 export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelope {
@@ -264,6 +264,7 @@ const sourceOf = (envelope: VizEnvelope): AnySource => envelope.source as unknow
 
 export function getEnvelopeVizType(envelope: VizEnvelope): V2VizType | null {
   const source = sourceOf(envelope);
+  if (source.kind === 'table') return 'table';
   if (source.kind === 'recipe') {
     return getTemplate(source.recipe as string)?.vizType ?? null;
   }
@@ -272,6 +273,7 @@ export function getEnvelopeVizType(envelope: VizEnvelope): V2VizType | null {
 
 export function isEnvelopeEditable(envelope: VizEnvelope): boolean {
   const source = sourceOf(envelope);
+  if (source.kind === 'table') return true;
   if (source.kind === 'recipe') return getTemplate(source.recipe as string) != null;
   return isUnitVegaLiteSpec((source as { spec: Record<string, unknown> }).spec);
 }
@@ -279,6 +281,8 @@ export function isEnvelopeEditable(envelope: VizEnvelope): boolean {
 /** Zone descriptors for the Fields tab: recipe bindings, or VL channels by type. */
 export function getEnvelopeZones(envelope: VizEnvelope): Array<{ channel: string; label: string }> {
   const source = sourceOf(envelope);
+  // Tables have no encodings — columns are managed on the table itself (headers/toolbar).
+  if (source.kind === 'table') return [];
   if (source.kind === 'recipe') {
     const template = getTemplate(source.recipe as string);
     return template ? template.bindings.map(b => ({ channel: b.name, label: b.label })) : [];
@@ -385,6 +389,7 @@ export function setZoneField(
 /** The bindings a template needs, inferred from whatever the current source encodes. */
 function inferBindings(envelope: VizEnvelope): { category: string | null; value: string | null } {
   const source = sourceOf(envelope);
+  if (source.kind === 'table') return { category: null, value: null }; // no encodings to read
   if (source.kind === 'recipe') {
     const bindings = (source.bindings ?? {}) as Record<string, string>;
     return {
@@ -414,21 +419,39 @@ const TEMPLATE_FOR_TYPE: Partial<Record<V2VizType, string>> = {
 
 /**
  * Envelope-level type switch. Recipe targets produce a REFERENCE source (bindings
- * inferred from the current encodings); leaving a recipe reconstructs a native
- * vega-lite source from its bindings, then applies the spec-level transform.
+ * inferred from the current encodings); the table target produces a bare DOM-table
+ * source; leaving a recipe/table reconstructs a native vega-lite source from its
+ * bindings (or, for tables — which have no encodings — from the result `columns`
+ * fallback), then applies the spec-level transform.
  */
-export function setEnvelopeVizType(envelope: VizEnvelope, type: V2VizType): VizEnvelope {
+export function setEnvelopeVizType(
+  envelope: VizEnvelope,
+  type: V2VizType,
+  columns?: Array<{ name: string; kind: VizColumnKind }>,
+): VizEnvelope {
+  if (type === 'table') {
+    return {
+      version: 2,
+      source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null },
+    } as unknown as VizEnvelope;
+  }
+
+  // Inference falls back to the result columns (first categorical / first measure)
+  // when the current source has nothing to read — the classic table→chart behavior.
+  const inferred = inferBindings(envelope);
+  const category = inferred.category ?? columns?.find(c => c.kind !== 'quantitative')?.name ?? null;
+  const value = inferred.value ?? columns?.find(c => c.kind === 'quantitative')?.name ?? null;
+
   const templateId = TEMPLATE_FOR_TYPE[type];
   if (templateId) {
-    const { category, value } = inferBindings(envelope);
     const template = getTemplate(templateId)!;
     const bindings: Record<string, string> = {};
     for (const b of template.bindings) {
       // Never auto-fill optional slots (radar's series): inferring the same column
       // for metric AND series yields degenerate single-point series polygons.
       if (b.optional) continue;
-      const inferred = b.accepts.includes('quantitative') ? value : category;
-      if (inferred) bindings[b.name] = inferred;
+      const bound = b.accepts.includes('quantitative') ? value : category;
+      if (bound) bindings[b.name] = bound;
     }
     return {
       version: 2,
@@ -437,9 +460,8 @@ export function setEnvelopeVizType(envelope: VizEnvelope, type: V2VizType): VizE
   }
 
   const source = sourceOf(envelope);
-  if (source.kind === 'recipe') {
-    // Reconstruct a plain bar from the bindings, then transform to the target type.
-    const { category, value } = inferBindings(envelope);
+  if (source.kind === 'recipe' || source.kind === 'table') {
+    // Reconstruct a plain bar from the bindings/columns, then transform to the target.
     const barEnvelope = {
       version: 2,
       source: {
@@ -461,6 +483,50 @@ export function setEnvelopeVizType(envelope: VizEnvelope, type: V2VizType): VizE
 
 /** Recipe ids currently shipped (for docs/UI). */
 export const SHIPPED_RECIPE_IDS = Object.keys(VIZ_TEMPLATES);
+
+// ── Table source (RFC §10: DOM tier) ────────────────────────────────────────────────
+//
+// Tables persist only display state — columnFormats, conditionalFormats, and the css
+// override (looks are CSS against the stable class contract; behavior/chrome are
+// per-surface). All setters are surgical envelope edits; no-ops on non-table sources.
+
+const isTableSource = (envelope: VizEnvelope): boolean => sourceOf(envelope).kind === 'table';
+
+export function getTableColumnFormats(envelope: VizEnvelope): Record<string, ColumnFormatConfig> {
+  if (!isTableSource(envelope)) return {};
+  return (sourceOf(envelope).columnFormats as Record<string, ColumnFormatConfig> | null | undefined) ?? {};
+}
+
+export function setTableColumnFormats(envelope: VizEnvelope, formats: Record<string, ColumnFormatConfig>): VizEnvelope {
+  if (!isTableSource(envelope)) return envelope;
+  const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
+  (next.source as unknown as AnySource).columnFormats = Object.keys(formats).length > 0 ? formats : null;
+  return next;
+}
+
+export function getTableConditionalFormats(envelope: VizEnvelope): ConditionalFormatRule[] {
+  if (!isTableSource(envelope)) return [];
+  return (sourceOf(envelope).conditionalFormats as ConditionalFormatRule[] | null | undefined) ?? [];
+}
+
+export function setTableConditionalFormats(envelope: VizEnvelope, rules: ConditionalFormatRule[]): VizEnvelope {
+  if (!isTableSource(envelope)) return envelope;
+  const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
+  (next.source as unknown as AnySource).conditionalFormats = rules.length > 0 ? rules : null;
+  return next;
+}
+
+export function getTableCss(envelope: VizEnvelope): string | null {
+  if (!isTableSource(envelope)) return null;
+  return (sourceOf(envelope).css as string | null | undefined) ?? null;
+}
+
+export function setTableCss(envelope: VizEnvelope, css: string): VizEnvelope {
+  if (!isTableSource(envelope)) return envelope;
+  const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
+  (next.source as unknown as AnySource).css = css.trim() === '' ? null : css;
+  return next;
+}
 
 // ── Multi-measure Y (the classic yCols case) ────────────────────────────────────────
 //

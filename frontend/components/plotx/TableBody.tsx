@@ -1,7 +1,7 @@
 import type { Row } from '@tanstack/react-table'
 import type { VirtualItem } from '@tanstack/react-virtual'
 import { getContrastText } from '@/lib/chart/conditional-format-utils'
-import { ROW_HEIGHT, type ColumnType } from './table-v2-utils'
+import { ROW_HEIGHT, cssColumnClass, type ColumnType } from './table-v2-utils'
 
 interface TableBodyProps {
   enableDrilldown?: boolean
@@ -51,7 +51,8 @@ export const TableBody = ({
           <tr
             key={row.id}
             data-row-idx={virtualRow.index}
-            className="table-v2-row"
+            // mx-row is the STABLE class contract (css overrides); table-v2-row is internal
+            className="table-v2-row mx-row"
             style={{
               height: wrapColumns?.size ? undefined : ROW_HEIGHT,
               background: virtualRow.index % 2 === 1 ? 'var(--chakra-colors-bg-emphasized)' : undefined,
@@ -66,7 +67,7 @@ export const TableBody = ({
                 <td
                   key={colId}
                   data-col-id={colId}
-                  className="table-v2-cell"
+                  className={`table-v2-cell mx-cell ${cssColumnClass(colId)}`}
                   style={{
                     width: colSizes[colId],
                     borderRight: cellIdx < lastColIdx ? '1px solid var(--chakra-colors-border-muted)' : undefined,

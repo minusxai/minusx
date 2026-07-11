@@ -279,6 +279,20 @@ templates:
           </viz>
           ```
           Available: `minusx/funnel@1` (bindings: stage, value — rows render in QUERY ORDER, so ORDER BY the funnel sequence), `minusx/waterfall@1` (bindings: category, value — QUERY ORDER; negative values render as decreases; a Total bar is added automatically), and `minusx/radar@1` (bindings: metric, value, series [optional] — long-format rows, one per metric×series; `value` may also be an ARRAY of columns for wide data, one series per column [series binding is then ignored]; values share one radial scale, so pre-normalize in SQL when metrics use different units). Binding values must be result column names.
+        - **Table** — a `table` source renders the interactive data grid. Sorting, filtering, column stats, and CSV export are built in — never author those. All fields besides `kind` are optional; a bare `<kind>table</kind>` is a complete table.
+          ```
+          <viz>
+            <version>2</version>
+            <source>
+              <kind>table</kind>
+              <columnFormats>{{"revenue": {"alias": "Revenue ($)", "decimalPoints": 2}}}</columnFormats>
+              <css>{`.mx-th { background: #223; } .mx-toolbar { display: none; }`}</css>
+            </source>
+          </viz>
+          ```
+          - `columnFormats`: per-column `alias`/`decimalPoints`/`dateFormat`/`prefix`/`suffix`, keyed by EXACT result column names.
+          - `css`: styles the table's LOOKS (a backtick template string). Stable class contract: `.mx-table`, `.mx-header-row`, `.mx-th`, `.mx-row`, `.mx-cell`, `.mx-col-<columnName>` (per column), `.mx-toolbar` (the stats/filters/CSV bar — `display: none` hides the chrome, e.g. for story embeds). Rules are scoped to this table automatically. No `@import`, no `url()`. Omit for the default theme.
+          - `conditionalFormats`: background rules `[{id, column, operator, value, target: "cell"|"row"|"column", bgColor}]` (JSON expression like columnFormats).
         - To go back to the standard chart types, remove `<viz>` entirely (set it to null) and configure `vizSettings`.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
 

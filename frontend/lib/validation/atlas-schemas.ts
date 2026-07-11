@@ -249,9 +249,27 @@ export const VizSourceRecipe = Type.Object({
 }, { title: 'VizSourceRecipe' });
 export type VizSourceRecipe = Static<typeof VizSourceRecipe>;
 
-// Discriminated on `kind`. `vega`, `table`, `pivot`, and `slippy-map` join this union
+// The DOM grid tier (RFC §10): tables never route through vega. The only persisted
+// state is display formatting — sorting/filtering/visibility are ephemeral UI state.
+export const VizSourceTable = Type.Object({
+  kind: Type.Literal('table'),
+  columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description:
+    'per-column display formatting keyed by RESULT column name (alias, decimalPoints, dateFormat, ' +
+    'prefix, suffix). Omit for sensible defaults.' })),
+  conditionalFormats: Nullable(Type.Array(ConditionalFormatRule, { description:
+    'conditional background-color rules — each paints cells/rows/columns a color when a condition ' +
+    'on a column holds. Omit for none.' })),
+  css: Nullable(Type.String({ description:
+    'CSS overrides for the table LOOKS (the DOM tier equivalent of a chart spec), scoped to this ' +
+    "table automatically. Write rules against the stable class contract: .mx-table, .mx-header-row, " +
+    '.mx-th, .mx-row, .mx-cell, .mx-col-<columnName> (per-column), .mx-toolbar (bottom bar). ' +
+    'No @import and no external url() — both are rejected. Omit for the default theme.' })),
+}, { title: 'VizSourceTable' });
+export type VizSourceTable = Static<typeof VizSourceTable>;
+
+// Discriminated on `kind`. `vega`, `pivot`, and `slippy-map` join this union
 // as they land (additive — see the RFC).
-export const VizSource = Type.Union([VizSourceVegaLite, VizSourceRecipe], { title: 'VizSource' });
+export const VizSource = Type.Union([VizSourceVegaLite, VizSourceRecipe, VizSourceTable], { title: 'VizSource' });
 export type VizSource = Static<typeof VizSource>;
 
 export const VizEnvelope = Type.Object({

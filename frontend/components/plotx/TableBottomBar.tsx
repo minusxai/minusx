@@ -37,7 +37,9 @@ export const TableBottomBar = ({
   const visibleColumnCount = colNames.filter(c => columnVisibility[c] !== false).length
 
   return (
-    <HStack justify="space-between" align="center" mt={2} px={2} flexShrink={0}>
+    // mx-toolbar: stable class contract — surfaces/css overrides hide chrome with
+    // `.mx-toolbar { display: none }` instead of a prop (no toggles by design).
+    <HStack className="mx-toolbar" justify="space-between" align="center" mt={2} px={2} flexShrink={0}>
       {/* Left: Stats, Columns, Filters */}
       <HStack gap={3}>
         <Button

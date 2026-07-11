@@ -1001,6 +1001,7 @@ export default function QuestionViewV2({
                 onTrendConfigChange={handleTrendConfigChange}
                 onMapReady={handleMapReady}
                 onSeriesCountChange={setChartSeriesCount}
+                onVizChange={(viz) => onChange({ viz })}
                 onOpenVizTab={() => {
                   if (showVizPanel) {
                     setVizPanelOpen(true);

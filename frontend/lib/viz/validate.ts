@@ -66,8 +66,17 @@ function validateEnvelopeShape(envelope: unknown): { issues: VizIssue[]; env?: V
     }
     return { issues: [], env: env as unknown as VizEnvelope };
   }
+  if (source.kind === 'table') {
+    if (source.columnFormats != null && (typeof source.columnFormats !== 'object' || Array.isArray(source.columnFormats))) {
+      return { issues: [err('E_ENVELOPE', '/source/columnFormats', 'columnFormats must be a record keyed by result column name')] };
+    }
+    if (source.css != null && typeof source.css !== 'string') {
+      return { issues: [err('E_ENVELOPE', '/source/css', 'css must be a string of CSS rules against the .mx-* class contract')] };
+    }
+    return { issues: [], env: env as unknown as VizEnvelope };
+  }
   if (source.kind !== 'vega-lite') {
-    return { issues: [err('E_ENVELOPE', '/source/kind', `unsupported source kind ${JSON.stringify(source.kind)} — available: "vega-lite", "recipe"`)] };
+    return { issues: [err('E_ENVELOPE', '/source/kind', `unsupported source kind ${JSON.stringify(source.kind)} — available: "vega-lite", "recipe", "table"`)] };
   }
   if (source.grammar !== VIZ_GRAMMAR_VEGA_LITE) {
     return { issues: [err('E_ENVELOPE', '/source/grammar', `source.grammar must be "${VIZ_GRAMMAR_VEGA_LITE}", got ${JSON.stringify(source.grammar)}`)] };
@@ -175,6 +184,28 @@ export function validateVizEnvelope(
 
   let rawSpec: Record<string, unknown>;
   const source = shape.env.source as Record<string, unknown>;
+  if (source.kind === 'table') {
+    // The DOM tier: no grammar to validate. Check columnFormats keys against the
+    // result columns (typo feedback) and sanitize the css override.
+    const known = new Set(columns.map(c => c.name));
+    const available = columns.map(c => `${c.name} (${c.kind})`).join(', ');
+    for (const key of Object.keys((source.columnFormats as Record<string, unknown> | null | undefined) ?? {})) {
+      if (!known.has(key)) {
+        issues.push(err('E_FIELD_NOT_FOUND', `/source/columnFormats/${key}`,
+          `"${key}" is not in the query result. Available fields: ${available}`));
+      }
+    }
+    const css = source.css as string | null | undefined;
+    if (css) {
+      if (/@import/i.test(css)) {
+        issues.push(err('E_CSS', '/source/css', '@import is not allowed in table css overrides'));
+      }
+      if (/url\s*\(/i.test(css)) {
+        issues.push(err('E_CSS', '/source/css', 'url() is not allowed in table css overrides — style with colors/fonts/spacing only'));
+      }
+    }
+    return { ok: !issues.some(i => i.severity === 'error'), issues };
+  }
   if (source.kind === 'recipe') {
     const recipeSource = source as unknown as { recipe: string; bindings: Record<string, string | string[]> };
     const materialized = materializeRecipe(recipeSource);

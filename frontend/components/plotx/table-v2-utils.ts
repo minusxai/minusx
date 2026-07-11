@@ -2,6 +2,15 @@ import { LuType, LuHash, LuCalendar, LuBraces } from 'react-icons/lu'
 
 export type ColumnType = 'text' | 'number' | 'date' | 'json'
 
+/**
+ * Per-column class in the table's STABLE class contract (`.mx-col-<name>`), the
+ * public styling surface for CSS overrides (Viz V2 table source / story styling).
+ * Column names are sanitized to a css-safe token. Keep the contract in sync with
+ * the `css` field docs in atlas-schemas' VizSourceTable.
+ */
+export const cssColumnClass = (name: string): string =>
+  `mx-col-${name.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+
 // Reusable format options — created once, not per call
 export const NUMBER_FORMAT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })
 export const DATE_FORMAT = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric' })

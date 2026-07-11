@@ -354,6 +354,9 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
         >
           <Box
             as="table"
+            // mx-* classes are the STABLE contract for css overrides (Viz V2 table
+            // source `css` field / story-level styling) — documented in atlas-schemas.
+            className="mx-table"
             width="100%"
             fontSize="sm"
             borderCollapse="collapse"
@@ -362,7 +365,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
           >
             {/* Header */}
             <Box as="thead" position="sticky" top={0} zIndex={2} bg="bg.muted">
-              <Box as="tr">
+              <Box as="tr" className="mx-header-row">
                 {visibleHeaders.map((header, displayIndex) => (
                   <TableHeaderCell
                     key={header.id}
