@@ -93,4 +93,39 @@ describe('renderVegaLiteToSvg', () => {
     const svg = await renderVegaLiteToSvg(BAR_SPEC, ROWS, 'dark', { width: 512, height: 256 });
     expect(svg).toContain('<svg');
   });
+
+  // A bare `mark: arc` (what an agent naturally authors) must render as the house
+  // donut — the styling lives in config.arc, not in every saved spec.
+  it('a minimal arc mark compiles with the themed responsive donut hole', async () => {
+    const { compileVegaLite } = await import('@/lib/viz/render-vega');
+    const vegaSpec = compileVegaLite({
+      mark: { type: 'arc' },
+      encoding: {
+        theta: { field: 'revenue', type: 'quantitative', aggregate: 'sum' },
+        color: { field: 'region', type: 'nominal' },
+      },
+    }, 'dark') as unknown as {
+      marks: Array<{ style: string[]; encode: { update: Record<string, unknown> } }>;
+      config: { style: { arc: Record<string, unknown> } };
+    };
+    // The expr compiles into the mark encode as a signal; the static props ride
+    // the output's style config (the mark carries style: ['arc']) and vega applies
+    // them at render.
+    expect(vegaSpec.marks[0].encode.update.innerRadius).toEqual({ signal: 'min(width,height)/2 * 0.45' });
+    expect(vegaSpec.marks[0].style).toContain('arc');
+    expect(vegaSpec.config.style.arc.cornerRadius).toBe(6);
+    expect(vegaSpec.config.style.arc.padAngle).toBe(0.015);
+  });
+
+  it('an explicit spec innerRadius overrides the theme donut (solid pie opt-out)', async () => {
+    const { compileVegaLite } = await import('@/lib/viz/render-vega');
+    const vegaSpec = compileVegaLite({
+      mark: { type: 'arc', innerRadius: 0 },
+      encoding: {
+        theta: { field: 'revenue', type: 'quantitative', aggregate: 'sum' },
+        color: { field: 'region', type: 'nominal' },
+      },
+    }, 'dark') as unknown as { marks: Array<{ encode: { update: Record<string, unknown> } }> };
+    expect(vegaSpec.marks[0].encode.update.innerRadius).toEqual({ value: 0 });
+  });
 });

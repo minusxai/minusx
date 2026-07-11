@@ -69,6 +69,15 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
     line: { strokeWidth: 2 },
     point: { filled: true, size: 60 },
     bar: { cornerRadiusEnd: 2 },
+    // House pie = responsive donut with rounded, slightly separated sectors (matches
+    // the classic ECharts pie). Lives HERE so a bare `mark: arc` — what agents and
+    // the UI transform both produce — gets the look; `innerRadius: 0` in a spec
+    // opts out to a solid pie.
+    arc: {
+      innerRadius: { expr: 'min(width,height)/2 * 0.45' },
+      cornerRadius: 6,
+      padAngle: 0.015,
+    },
   };
 }
 

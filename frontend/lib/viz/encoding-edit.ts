@@ -186,14 +186,10 @@ export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelop
     delete encoding.tooltip;
     delete encoding.detail;
     delete encoding.order;
+    // Minimal mark only — the house donut styling (responsive innerRadius, rounded,
+    // padded) is the theme's config.arc, so this saved spec stays identical to what
+    // an agent authors and both render the same.
     withMark(spec, 'arc');
-    // House style (matches the ECharts pie builder): responsive donut with rounded,
-    // slightly separated sectors (borderRadius: 6 / borderWidth: 2 over there).
-    Object.assign(spec.mark as Record<string, unknown>, {
-      innerRadius: { expr: 'min(width,height)/2 * 0.45' },
-      cornerRadius: 6,
-      padAngle: 0.015,
-    });
   } else if (type === 'row') {
     const x = encoding.x;
     encoding.x = encoding.y;

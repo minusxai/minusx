@@ -8,7 +8,7 @@
  * format internally and folded multi-Y measures share one axis (agent territory).
  */
 import { useEffect, useRef, useState } from 'react';
-import { Box, Button, HStack, Input, Text } from '@chakra-ui/react';
+import { Box, Button, HStack, Input, Portal, Text } from '@chakra-ui/react';
 import { LuSettings2 } from 'react-icons/lu';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { getChannelPresentation, setChannelPresentation } from '@/lib/viz/encoding-edit';
@@ -36,9 +36,14 @@ export interface VizFieldPopoverProps {
   onVizChange: (envelope: VizEnvelope) => void;
 }
 
+const PANEL_WIDTH = 220;
+
 export function VizFieldPopover({ envelope, channel, kind, onVizChange }: VizFieldPopoverProps) {
   const [open, setOpen] = useState(false);
+  // Anchor position for the portaled panel, computed from the gear's rect when opened.
+  const [pos, setPos] = useState({ top: 0, left: 0 });
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const current = getChannelPresentation(envelope, channel);
   const [alias, setAlias] = useState(current.title ?? '');
 
@@ -50,7 +55,9 @@ export function VizFieldPopover({ envelope, channel, kind, onVizChange }: VizFie
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -68,7 +75,12 @@ export function VizFieldPopover({ envelope, channel, kind, onVizChange }: VizFie
       <Box
         as="button"
         aria-label={`Field settings for ${channel}`}
-        onClick={(e: React.MouseEvent) => { e.stopPropagation(); setOpen(o => !o); }}
+        onClick={(e: React.MouseEvent) => {
+          e.stopPropagation();
+          const rect = e.currentTarget.getBoundingClientRect();
+          setPos({ top: rect.bottom + 6, left: Math.max(8, rect.right - PANEL_WIDTH) });
+          setOpen(o => !o);
+        }}
         color={hasCustomization ? 'accent.teal' : 'fg.subtle'}
         _hover={{ color: 'accent.teal' }}
         transition="color 0.2s"
@@ -77,19 +89,24 @@ export function VizFieldPopover({ envelope, channel, kind, onVizChange }: VizFie
         <LuSettings2 size={12} />
       </Box>
       {open && (
+        // Portaled to body: the zone chip clips its contents (overflow:hidden for name
+        // ellipsis), so an in-chip absolute panel renders invisibly. Fixed-positioned
+        // from the gear's rect instead.
+        <Portal>
         <Box
-          position="absolute"
-          top="100%"
-          right={0}
-          mt={2}
-          w="220px"
+          ref={panelRef}
+          aria-label={`Field settings panel for ${channel}`}
+          position="fixed"
+          top={`${pos.top}px`}
+          left={`${pos.left}px`}
+          w={`${PANEL_WIDTH}px`}
           p={3}
           bg="bg.panel"
           border="1px solid"
           borderColor="border.muted"
           borderRadius="md"
           boxShadow="md"
-          zIndex={20}
+          zIndex={1500}
           display="flex"
           flexDirection="column"
           gap={2}
@@ -136,6 +153,7 @@ export function VizFieldPopover({ envelope, channel, kind, onVizChange }: VizFie
             </Box>
           )}
         </Box>
+        </Portal>
       )}
     </Box>
   );

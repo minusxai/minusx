@@ -114,18 +114,31 @@ describe('setVizType', () => {
     expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar']);
   });
 
-  it('pie renders as a donut with rounded, padded sectors (ECharts house style)', () => {
+  it('pie emits a MINIMAL arc mark — the theme owns the house donut styling', () => {
+    // The saved spec stays clean (identical to what an agent authors); the donut
+    // look (responsive innerRadius, rounded, padded) is applied by config.arc at
+    // render time, so UI-created and agent-created pies converge on one spec.
     const spec = specOf(setVizType(envelope(BAR), 'pie'));
     const mark = spec.mark as Record<string, unknown>;
-    expect(mark.innerRadius).toBeDefined();
-    expect(mark.cornerRadius).toBe(6);
-    expect(mark.padAngle).toBeGreaterThan(0);
+    expect(mark.type).toBe('arc');
+    expect(mark.innerRadius).toBeUndefined();
+    expect(mark.cornerRadius).toBeUndefined();
+    expect(mark.padAngle).toBeUndefined();
   });
 
-  it('leaving pie strips the donut innerRadius from the mark', () => {
-    const pie = specOf(setVizType(envelope(BAR), 'pie'));
+  it('leaving pie strips arc-only donut props (from legacy/agent-authored marks)', () => {
+    const pie = {
+      mark: { type: 'arc', innerRadius: 55, cornerRadius: 6, padAngle: 0.015 },
+      encoding: {
+        theta: { field: 'revenue', type: 'quantitative', aggregate: 'sum' },
+        color: { field: 'region', type: 'nominal' },
+      },
+    };
     const back = specOf(setVizType(envelope(pie), 'bar'));
-    expect((back.mark as Record<string, unknown>).innerRadius).toBeUndefined();
+    const mark = back.mark as Record<string, unknown>;
+    expect(mark.innerRadius).toBeUndefined();
+    expect(mark.cornerRadius).toBeUndefined();
+    expect(mark.padAngle).toBeUndefined();
   });
 });
 

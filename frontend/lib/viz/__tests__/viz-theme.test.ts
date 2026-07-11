@@ -41,4 +41,13 @@ describe('getVegaLiteConfig', () => {
     const config = getVegaLiteConfig('dark') as Record<string, any>;
     expect(config.numberFormat).toBe('.3~s');
   });
+
+  it('styles arcs as the house donut by default (responsive hole, rounded, padded)', () => {
+    const config = getVegaLiteConfig('dark') as Record<string, any>;
+    expect(config.arc).toEqual({
+      innerRadius: { expr: 'min(width,height)/2 * 0.45' },
+      cornerRadius: 6,
+      padAngle: 0.015,
+    });
+  });
 });
