@@ -140,6 +140,10 @@ export type AxisConfig = Static<typeof AxisConfig>;
 
 export const ColumnFormatConfig = Type.Object({
   alias: Nullable(Type.String({ description: 'display name override for the column header' })),
+  format: Nullable(Type.String({ description:
+    "d3 format string for numeric values — the VEGA-TIER vocabulary (recipe sources): e.g. ',.0f', " +
+    "'$,.2f', '.2~s'. Takes precedence over decimalPoints/prefix/suffix. DOM grids (table/pivot) " +
+    'ignore it — they use the fields below.' })),
   decimalPoints: Nullable(Type.Integer({ description: 'number of decimal places (0-4) for numeric columns' })),
   dateFormat: Nullable(Type.String({ description: "date display format as a Unicode date pattern, e.g. 'yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'MMM dd, yyyy', \"MMM'yy\", 'yyyy', 'yyyy-MM-dd HH:mm', 'HH:mm:ss'. Tokens: yyyy (4-digit year), yy (2-digit year), MMMM (full month), MMM (short month), MM (month number), dd (day), HH (hours 24h), mm (minutes), ss (seconds)." })),
   prefix: Nullable(Type.String({ description: "string to prepend to displayed values (e.g. '$', '€')" })),

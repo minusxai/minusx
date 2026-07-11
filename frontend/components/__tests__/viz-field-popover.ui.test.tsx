@@ -81,4 +81,31 @@ describe('VizFieldPopover placement', () => {
 
     expect(screen.queryByLabelText('Field settings panel for y')).not.toBeInTheDocument()
   })
+
+  it('a non-preset format shows as the raw d3 pattern in the custom input', async () => {
+    const user = userEvent.setup()
+    const customEnvelope = JSON.parse(JSON.stringify(envelope)) as VizEnvelope
+    ;(customEnvelope.source as unknown as { spec: Record<string, any> }).spec.encoding.y.axis = { format: '.4~s' }
+    renderWithProviders(
+      <VegaEncodingPanel envelope={customEnvelope} columns={COLUMNS} types={TYPES} onVizChange={vi.fn()} />
+    )
+
+    await user.click(screen.getByLabelText('Field settings for y'))
+
+    const custom = await screen.findByLabelText('Custom d3 format for y')
+    expect((custom as HTMLInputElement).value).toBe('.4~s')
+  })
+
+  it('typing a custom d3 pattern commits it to the channel format', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderPanel()
+
+    await user.click(screen.getByLabelText('Field settings for y'))
+    const custom = await screen.findByLabelText('Custom d3 format for y')
+    await user.type(custom, '.2%{Enter}')
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const spec = (next.source as { spec: Record<string, any> }).spec
+    expect(spec.encoding.y.axis.format).toBe('.2%')
+  })
 })

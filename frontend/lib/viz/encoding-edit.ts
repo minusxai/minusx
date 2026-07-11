@@ -450,6 +450,10 @@ export function setEnvelopeVizType(
   const inferred = inferBindings(envelope);
   const category = inferred.category ?? columns?.find(c => c.kind !== 'quantitative')?.name ?? null;
   const value = inferred.value ?? columns?.find(c => c.kind === 'quantitative')?.name ?? null;
+  // The category's VL type comes from its COLUMN KIND — never hardcode nominal: a
+  // temporal column typed nominal band-scales into one bar per timestamp (mangled axis).
+  const categoryKind = (category != null ? columns?.find(c => c.name === category)?.kind : undefined) ?? 'nominal';
+  const categoryVlType = KIND_TO_VL_TYPE[categoryKind];
 
   if (type === 'pivot') {
     return {
@@ -495,7 +499,7 @@ export function setEnvelopeVizType(
         spec: {
           mark: { type: 'bar' },
           encoding: {
-            ...(category ? { x: { field: category, type: 'nominal' } } : {}),
+            ...(category ? { x: { field: category, type: categoryVlType } } : {}),
             ...(value ? { y: { field: value, type: 'quantitative', aggregate: 'sum' } } : {}),
           },
         },
@@ -540,7 +544,7 @@ export function setVizColumnFormats(envelope: VizEnvelope, formats: Record<strin
 }
 
 const isEmptyFormat = (cfg: ColumnFormatConfig): boolean =>
-  !cfg.alias && cfg.decimalPoints == null && !cfg.dateFormat && !cfg.prefix && !cfg.suffix;
+  !cfg.alias && !cfg.format && cfg.decimalPoints == null && !cfg.dateFormat && !cfg.prefix && !cfg.suffix;
 
 /** Upsert one column's format (an emptied config removes the key — TableV2 semantics). */
 export function mergeVizColumnFormat(envelope: VizEnvelope, column: string, config: ColumnFormatConfig): VizEnvelope {

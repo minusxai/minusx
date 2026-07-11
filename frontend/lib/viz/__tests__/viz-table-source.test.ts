@@ -81,6 +81,19 @@ describe('switching away from table (columns fallback inference)', () => {
     expect(source.bindings).toEqual({ stage: 'region', value: 'revenue' });
   });
 
+  it('table → bar types the category from its COLUMN KIND (temporal stays temporal)', () => {
+    // Regression: the rebuild hardcoded nominal — a week_start x as nominal renders
+    // one discrete band per timestamp (the mangled-axis screenshot).
+    const cols: typeof COLUMNS = [
+      { name: 'week_start', kind: 'temporal' },
+      { name: 'revenue', kind: 'quantitative' },
+    ];
+    const next = setEnvelopeVizType(tableEnvelope(), 'bar', cols);
+    const spec = (next.source as unknown as { spec: Record<string, any> }).spec;
+    expect(spec.encoding.x.field).toBe('week_start');
+    expect(spec.encoding.x.type).toBe('temporal');
+  });
+
   it('table → bar without columns yields empty encodings (user drops columns in)', () => {
     const next = setEnvelopeVizType(tableEnvelope(), 'bar');
     const spec = (next.source as unknown as { spec: Record<string, any> }).spec;

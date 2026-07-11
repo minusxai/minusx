@@ -68,6 +68,30 @@ describe('funnel formats', () => {
   });
 });
 
+describe('d3 format string (the vega-tier vocabulary)', () => {
+  it('a `format` d3 pattern drives the labels directly and wins over the legacy fields', () => {
+    const result = materializeRecipe({
+      recipe: 'minusx/waterfall@1',
+      bindings: { category: 'step', value: 'revenue' },
+      columnFormats: { revenue: { format: '$,.2f', decimalPoints: 0, prefix: 'IGNORED' } },
+    });
+    const json = JSON.stringify((result as { spec: Record<string, unknown> }).spec);
+    expect(json).toContain("format(datum.__mx_amount, '$,.2f')");
+    expect(json).toContain("format(datum.__mx_total, '$,.2f')");
+    expect(json).not.toContain('IGNORED');
+  });
+
+  it('funnel value label honors the d3 pattern', () => {
+    const result = materializeRecipe({
+      recipe: 'minusx/funnel@1',
+      bindings: { stage: 'stage', value: 'revenue' },
+      columnFormats: { revenue: { format: ',.1f' } },
+    });
+    const json = JSON.stringify((result as { spec: Record<string, unknown> }).spec);
+    expect(json).toContain("format(datum.__mx_value, ',.1f')");
+  });
+});
+
 describe('radar formats', () => {
   it('wide data: aliases rename the folded series names', () => {
     const result = materializeRecipe({

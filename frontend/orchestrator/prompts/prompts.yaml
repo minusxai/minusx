@@ -279,7 +279,7 @@ templates:
           </viz>
           ```
           Available: `minusx/funnel@1` (bindings: stage, value — rows render in QUERY ORDER, so ORDER BY the funnel sequence), `minusx/waterfall@1` (bindings: category, value — QUERY ORDER; negative values render as decreases; a Total bar is added automatically), and `minusx/radar@1` (bindings: metric, value, series [optional] — long-format rows, one per metric×series; `value` may also be an ARRAY of columns for wide data, one series per column [series binding is then ignored]; values share one radial scale, so pre-normalize in SQL when metrics use different units). Binding values must be result column names.
-          Recipes also accept an optional `<columnFormats>{{"col": {"alias": "...", "decimalPoints": 0, "prefix": "$"}}}</columnFormats>` keyed by result column names: `alias` renames column-name-derived displays (waterfall y-axis title, radar series names), and decimalPoints/prefix/suffix reshape the value labels (waterfall bars, funnel values).
+          Recipes also accept an optional `<columnFormats>{{"col": {"alias": "...", "format": "$,.0f"}}}</columnFormats>` keyed by result column names: `alias` renames column-name-derived displays (waterfall y-axis title, radar series names), and `format` is a d3 format string reshaping the value labels (waterfall bars, funnel values) — same d3 vocabulary as native spec `axis.format`.
         - **Table** — a `table` source renders the interactive data grid. Sorting, filtering, column stats, and CSV export are built in — never author those. All fields besides `kind` are optional; a bare `<kind>table</kind>` is a complete table.
           ```
           <viz>

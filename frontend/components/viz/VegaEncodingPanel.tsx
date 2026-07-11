@@ -16,6 +16,7 @@ import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import {
   isEnvelopeEditable, getEnvelopeZones, getZoneFields, addZoneField, removeZoneField,
   getVizColumnFormats, mergeVizColumnFormat,
+  getChannelPresentation, setChannelPresentation, type EditableChannel,
 } from '@/lib/viz/encoding-edit';
 import { sqlTypeToVizKind } from '@/lib/viz/query-data';
 import { VizFieldPopover } from './VizFieldPopover';
@@ -101,17 +102,27 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
                       column={field}
                       type={resolveColumnType(field, columns, types)}
                       onRemove={() => removeFromZone(channel, field)}
-                      // Recipe chips: classic format popover → source.columnFormats
-                      // (aliases/labels applied at materialization).
-                      formatConfig={isRecipe ? recipeFormats?.[field] : undefined}
-                      onFormatChange={isRecipe ? (config) => onVizChange(mergeVizColumnFormat(envelope, field, config)) : undefined}
-                      // Native single-field channels: d3-native settings (spec title/axis.format).
-                      extra={!isRecipe && (envelope.source as unknown as { kind: string }).kind === 'vega-lite' && fields.length === 1 ? (
+                      // ONE popover across the vega tier (alias + d3 format); storage
+                      // differs per source: native = surgical spec edits (channel
+                      // title / axis.format), recipe = source.columnFormats applied
+                      // at materialization. Keyed per-column for recipes (multi zones).
+                      extra={isRecipe || ((envelope.source as unknown as { kind: string }).kind === 'vega-lite' && fields.length === 1) ? (
                         <VizFieldPopover
-                          envelope={envelope}
-                          channel={channel}
+                          channel={isRecipe ? field : channel}
                           kind={sqlTypeToVizKind(types[columns.indexOf(field)] ?? '')}
-                          onVizChange={onVizChange}
+                          value={isRecipe
+                            ? { title: recipeFormats?.[field]?.alias ?? null, format: recipeFormats?.[field]?.format ?? null }
+                            : getChannelPresentation(envelope, channel)}
+                          onCommit={(next) => {
+                            if (!isRecipe) {
+                              onVizChange(setChannelPresentation(envelope, channel as EditableChannel, next));
+                              return;
+                            }
+                            const cfg = { ...recipeFormats?.[field] };
+                            if (next.title == null) delete cfg.alias; else cfg.alias = next.title;
+                            if (next.format == null) delete cfg.format; else cfg.format = next.format;
+                            onVizChange(mergeVizColumnFormat(envelope, field, cfg));
+                          }}
                         />
                       ) : undefined}
                     />

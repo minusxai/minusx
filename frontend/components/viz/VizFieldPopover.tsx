@@ -1,17 +1,19 @@
 'use client';
 
 /**
- * The zone-chip settings popover (V2): alias + format for one encoding channel.
- * Everything is a SURGICAL spec edit (lib/viz/encoding-edit — alias = channel
- * `title`, format = a d3 pattern on the axis/field), and the friendly presets
- * compile to d3 strings per the RFC. Native vega-lite sources only; recipes
- * format internally and folded multi-Y measures share one axis (agent territory).
+ * The unified vega-tier field settings popover: alias + d3 format for one field.
+ * STORAGE-AGNOSTIC — the caller supplies the current {title, format} and commits
+ * changes wherever its source keeps them: native vega-lite specs write surgical
+ * spec edits (channel `title` / `axis.format`), recipe sources write
+ * source.columnFormats (applied at materialization). One popover, one vocabulary
+ * (d3), two storage layers.
+ *
+ * A format that matches no preset shows as-is in the Custom d3 input — presets
+ * are shortcuts, the pattern is always visible and directly editable.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Box, Button, HStack, Input, Portal, Text } from '@chakra-ui/react';
 import { LuSettings2 } from 'react-icons/lu';
-import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { getChannelPresentation, setChannelPresentation } from '@/lib/viz/encoding-edit';
 import type { VizColumnKind } from '@/lib/viz/types';
 
 const NUMBER_PRESETS: Array<{ label: string; format: string | null }> = [
@@ -30,26 +32,27 @@ const DATE_PRESETS: Array<{ label: string; format: string | null }> = [
 ];
 
 export interface VizFieldPopoverProps {
-  envelope: VizEnvelope;
+  /** Display key for aria labels (native: the channel, recipes: the column). */
   channel: string;
   kind: VizColumnKind;
-  onVizChange: (envelope: VizEnvelope) => void;
+  value: { title: string | null; format: string | null };
+  onCommit: (next: { title: string | null; format: string | null }) => void;
 }
 
 const PANEL_WIDTH = 220;
 
-export function VizFieldPopover({ envelope, channel, kind, onVizChange }: VizFieldPopoverProps) {
+export function VizFieldPopover({ channel, kind, value, onCommit }: VizFieldPopoverProps) {
   const [open, setOpen] = useState(false);
   // Anchor position for the portaled panel, computed from the gear's rect when opened.
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const current = getChannelPresentation(envelope, channel);
-  const [alias, setAlias] = useState(current.title ?? '');
+  const [alias, setAlias] = useState(value.title ?? '');
+  const [formatDraft, setFormatDraft] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) setAlias(getChannelPresentation(envelope, channel).title ?? '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync draft only on open
+    if (open) { setAlias(value.title ?? ''); setFormatDraft(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync drafts only on open
   }, [open]);
 
   useEffect(() => {
@@ -64,11 +67,15 @@ export function VizFieldPopover({ envelope, channel, kind, onVizChange }: VizFie
   }, [open]);
 
   const commitAlias = () => {
-    onVizChange(setChannelPresentation(envelope, channel, { title: alias.trim() === '' ? null : alias.trim() }));
+    onCommit({ title: alias.trim() === '' ? null : alias.trim(), format: value.format });
+  };
+  const commitFormat = (raw: string) => {
+    onCommit({ title: value.title, format: raw.trim() === '' ? null : raw.trim() });
+    setFormatDraft(null);
   };
 
   const presets = kind === 'temporal' ? DATE_PRESETS : kind === 'quantitative' ? NUMBER_PRESETS : null;
-  const hasCustomization = current.title != null || current.format != null;
+  const hasCustomization = value.title != null || value.format != null;
 
   return (
     <Box position="relative" ref={rootRef} display="inline-flex">
@@ -139,16 +146,29 @@ export function VizFieldPopover({ envelope, channel, kind, onVizChange }: VizFie
                     size="2xs"
                     px={1.5}
                     fontFamily="mono"
-                    variant={current.format === format ? 'solid' : 'outline'}
-                    colorPalette={current.format === format ? 'teal' : undefined}
-                    onClick={() => onVizChange(setChannelPresentation(envelope, channel, { format }))}
+                    variant={value.format === format ? 'solid' : 'outline'}
+                    colorPalette={value.format === format ? 'teal' : undefined}
+                    onClick={() => onCommit({ title: value.title, format })}
                   >
                     {label}
                   </Button>
                 ))}
               </HStack>
+              {/* The pattern itself, always visible & editable — a non-preset value
+                  (agent-authored or hand-typed) shows here instead of hiding. */}
+              <Input
+                aria-label={`Custom d3 format for ${channel}`}
+                size="xs"
+                mt={1.5}
+                fontFamily="mono"
+                placeholder="custom d3, e.g. .2~s"
+                value={formatDraft ?? value.format ?? ''}
+                onChange={e => setFormatDraft(e.target.value)}
+                onBlur={() => { if (formatDraft != null) commitFormat(formatDraft); }}
+                onKeyDown={e => { if (e.key === 'Enter') { commitFormat((e.target as HTMLInputElement).value); } }}
+              />
               <Text fontSize="9px" color="fg.subtle" mt={1.5} lineHeight="1.4">
-                d3 format strings — ask the agent for anything custom.
+                d3 format strings — presets fill the pattern; type your own for anything custom.
               </Text>
             </Box>
           )}

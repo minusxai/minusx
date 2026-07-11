@@ -171,19 +171,35 @@ describe('VegaVizPanel — recipe column formats', () => {
     source: { kind: 'recipe', recipe: 'minusx/waterfall@1', bindings: { category: 'region', value: 'revenue' }, params: null, columnFormats: null },
   } as unknown as VizEnvelope
 
-  it('recipe zone chips expose the format gear; alias edits land in columnFormats', async () => {
+  it('recipe zone chips use the SAME d3 popover as native charts; alias edits land in columnFormats', async () => {
     const user = userEvent.setup()
     const onVizChange = vi.fn()
     renderWithProviders(
       <VegaVizPanel envelope={waterfallViz} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
     )
 
-    await user.click(screen.getByLabelText('Format column revenue'))
-    await user.type(screen.getByLabelText('Alias for revenue'), 'Rev')
+    // The recipe slot is 'value' — one unified gear + popover across the vega tier.
+    await user.click(screen.getByLabelText('Field settings for revenue'))
+    await user.type(await screen.findByLabelText('Alias for revenue'), 'Rev{Enter}')
 
     const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
     const source = next.source as unknown as { kind: string; columnFormats: Record<string, { alias?: string }> }
     expect(source.kind).toBe('recipe')
-    expect(source.columnFormats.revenue.alias).toBeTruthy()
+    expect(source.columnFormats.revenue.alias).toBe('Rev')
+  })
+
+  it('recipe format presets store a d3 format string in columnFormats', async () => {
+    const user = userEvent.setup()
+    const onVizChange = vi.fn()
+    renderWithProviders(
+      <VegaVizPanel envelope={waterfallViz} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
+    )
+
+    await user.click(screen.getByLabelText('Field settings for revenue'))
+    await user.click(await screen.findByLabelText('Format $1,234'))
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const source = next.source as unknown as { columnFormats: Record<string, { format?: string }> }
+    expect(source.columnFormats.revenue.format).toBe('$,.0f')
   })
 })

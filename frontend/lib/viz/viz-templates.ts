@@ -28,12 +28,14 @@ const aliasOf = (formats: VizFormats, column: string): string =>
   formats?.[column]?.alias || column;
 
 /**
- * A vega expression rendering `ref` as a formatted number per the column's config:
- * decimalPoints → a full-digit d3 pattern (else the SI default), prefix/suffix
- * concatenated. Strings are JSON-escaped into the expression.
+ * A vega expression rendering `ref` as a formatted number per the column's config.
+ * A d3 `format` string is the vega-tier vocabulary and wins outright; the legacy
+ * DOM-grid fields (decimalPoints/prefix/suffix) are honored as a fallback.
+ * Strings are JSON-escaped into the expression.
  */
 const numExpr = (ref: string, formats: VizFormats, column: string): string => {
   const cfg = formats?.[column];
+  if (cfg?.format) return `format(${ref}, '${cfg.format.replace(/'/g, '')}')`;
   const pattern = cfg?.decimalPoints != null ? `,.${cfg.decimalPoints}f` : '.3~s';
   const core = `format(${ref}, '${pattern}')`;
   const pre = cfg?.prefix ? `${JSON.stringify(cfg.prefix)} + ` : '';
