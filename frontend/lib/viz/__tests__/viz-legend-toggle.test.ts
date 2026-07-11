@@ -48,6 +48,14 @@ describe('legend toggle injection', () => {
     expect(names).not.toContain('mx_legend_sel');
   });
 
+  it('does not inject for composite marks (boxplot) — VL drops selections on them, leaving a dangling signal ref', () => {
+    // VL compiles the opacity condition but silently discards the point selection on
+    // composite marks, so the runtime throws `Unrecognized signal name: "mx_legend_sel"`.
+    const spec = { ...BASE, mark: 'boxplot' };
+    const vegaSpec = compileVegaLite(spec as Record<string, unknown>, 'dark');
+    expect(JSON.stringify(vegaSpec)).not.toContain('mx_legend_sel');
+  });
+
   it('does not inject into composed specs (layer/facet/concat)', () => {
     const spec = {
       layer: [

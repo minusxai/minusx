@@ -125,11 +125,11 @@ export function setStacked(envelope: VizEnvelope, stacked: boolean): VizEnvelope
 // `pie` is an encoding TRANSFORM: a naive mark swap to `arc` renders garbage because
 // arcs read theta/color, not x/y.
 
-export const V2_SUPPORTED_VIZ_TYPES = ['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap'] as const;
+export const V2_SUPPORTED_VIZ_TYPES = ['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot'] as const;
 export type V2VizType = (typeof V2_SUPPORTED_VIZ_TYPES)[number];
 
 const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie' | 'heatmap' | 'funnel' | 'waterfall' | 'radar'>, string> = {
-  bar: 'bar', line: 'line', area: 'area', scatter: 'point',
+  bar: 'bar', line: 'line', area: 'area', scatter: 'point', boxplot: 'boxplot',
 };
 
 /** Classify a unit spec into a selector viz type (null when unrecognized). */
@@ -138,6 +138,7 @@ export function getVizType(spec: Record<string, unknown>): V2VizType | null {
   if (mark === 'arc') return 'pie';
   if (mark === 'rect') return 'heatmap';
   if (mark === 'point') return 'scatter';
+  if (mark === 'boxplot') return 'boxplot';
   if (mark === 'bar') {
     const x = channelDef(spec, 'x');
     const y = channelDef(spec, 'y');
@@ -240,6 +241,14 @@ export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelop
       const x = encoding.x;
       encoding.x = encoding.y;
       encoding.y = x;
+    }
+    // The boxplot composite mark aggregates internally (q1/median/q3/whiskers) —
+    // a pre-aggregated y feeds ONE value per group (degenerate box), and stack is
+    // meaningless on it. Presentation props (axis, title…) survive.
+    if (type === 'boxplot' && encoding.y) {
+      encoding.y = { ...encoding.y };
+      delete encoding.y.aggregate;
+      delete encoding.y.stack;
     }
     withMark(spec, MARK_FOR_TYPE[type]);
   }

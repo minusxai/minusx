@@ -5,7 +5,7 @@
  * removed) — a naive mark swap to `arc` renders garbage (x/y mean nothing to arcs).
  */
 import { describe, it, expect } from 'vitest';
-import { getVizType, setVizType, V2_SUPPORTED_VIZ_TYPES } from '@/lib/viz/encoding-edit';
+import { getVizType, setVizType, setEnvelopeVizType, V2_SUPPORTED_VIZ_TYPES } from '@/lib/viz/encoding-edit';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 const envelope = (spec: Record<string, unknown>): VizEnvelope => ({
@@ -111,7 +111,57 @@ describe('setVizType', () => {
   });
 
   it('exports the supported set for the selector', () => {
-    expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap']);
+    expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot']);
+  });
+
+  it('maps the boxplot composite mark (string or mark-def) to boxplot', () => {
+    expect(getVizType({ mark: 'boxplot', encoding: BAR.encoding })).toBe('boxplot');
+    expect(getVizType({ mark: { type: 'boxplot', extent: 'min-max' }, encoding: BAR.encoding })).toBe('boxplot');
+  });
+
+  it('bar → boxplot swaps the mark and strips y aggregate/stack (boxplot computes its own stats)', () => {
+    // A pre-aggregated y feeds ONE value per group into the composite mark — a
+    // degenerate box (and VL warns on custom aggregates for the continuous axis).
+    const withAgg = { ...BAR, encoding: { ...BAR.encoding, y: { ...BAR.encoding.y, aggregate: 'sum', stack: null } } };
+    const next = setVizType(envelope(withAgg), 'boxplot');
+    const spec = specOf(next);
+    expect(getVizType(spec)).toBe('boxplot');
+    expect(spec.mark).toEqual({ type: 'boxplot' });
+    expect(spec.encoding.y.aggregate).toBeUndefined();
+    expect(spec.encoding.y.stack).toBeUndefined();
+    expect(spec.encoding.y.axis).toEqual({ format: ',.0f' }); // presentation survives
+    expect(spec.encoding.x).toEqual(BAR.encoding.x);
+    expect(spec.encoding.color).toEqual(BAR.encoding.color);
+  });
+
+  it('boxplot → bar is a pure mark swap (encodings untouched)', () => {
+    const box = { mark: { type: 'boxplot' }, encoding: BAR.encoding };
+    const back = specOf(setVizType(envelope(box), 'bar'));
+    expect(back.mark).toEqual({ type: 'bar' });
+    expect(back.encoding).toEqual(BAR.encoding);
+  });
+
+  it('boxplot → pie transforms encodings with the SUM default on theta', () => {
+    const box = { mark: { type: 'boxplot' }, encoding: BAR.encoding };
+    const spec = specOf(setVizType(envelope(box), 'pie'));
+    expect(spec.encoding.theta.field).toBe('revenue');
+    expect(spec.encoding.theta.aggregate).toBe('sum');
+  });
+
+  it('table → boxplot (envelope path) reconstructs from result columns WITHOUT a y aggregate', () => {
+    // The reconstruct path builds a SUM-aggregated bar first; the boxplot transform
+    // must strip that aggregate so the composite mark sees raw per-datum values.
+    const table = { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } } as unknown as VizEnvelope;
+    const cols = [
+      { name: 'region', kind: 'nominal' as const },
+      { name: 'revenue', kind: 'quantitative' as const },
+    ];
+    const next = setEnvelopeVizType(table, 'boxplot', cols);
+    const spec = specOf(next);
+    expect(getVizType(spec)).toBe('boxplot');
+    expect(spec.encoding.x).toEqual({ field: 'region', type: 'nominal' });
+    expect(spec.encoding.y.field).toBe('revenue');
+    expect(spec.encoding.y.aggregate).toBeUndefined();
   });
 
   it('pie emits a MINIMAL arc mark — the theme owns the house donut styling', () => {

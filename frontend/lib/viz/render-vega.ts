@@ -92,6 +92,12 @@ export function injectSingleSeriesLegend(prepared: Record<string, unknown>): voi
  */
 function injectLegendToggle(prepared: Record<string, unknown>): void {
   if ('params' in prepared) return;
+  // Composite marks (boxplot/errorbar/errorband): VL silently DROPS selection params
+  // on them but still compiles the opacity condition, leaving a dangling reference —
+  // the runtime throws `Unrecognized signal name: "mx_legend_sel"`.
+  const mark = prepared.mark;
+  const markType = typeof mark === 'string' ? mark : (mark as { type?: string } | undefined)?.type;
+  if (markType === 'boxplot' || markType === 'errorbar' || markType === 'errorband') return;
   const encoding = prepared.encoding as Record<string, Record<string, unknown>> | undefined;
   const color = encoding?.color;
   if (!encoding || !color || typeof color.field !== 'string' || 'opacity' in encoding) return;
