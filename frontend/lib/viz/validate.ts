@@ -15,6 +15,7 @@
 import Ajv from 'ajv';
 import { compile } from 'vega-lite';
 import type { TopLevelSpec } from 'vega-lite';
+import { parse as parseVega } from 'vega';
 import vegaLiteSchema from './vendor/vega-lite-v6.schema.json';
 import { VIZ_GRAMMAR_VEGA_LITE } from '@/lib/validation/atlas-schemas';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
@@ -192,6 +193,17 @@ export function validateVizEnvelope(
       }
     }
     if (issues.some(i => i.severity === 'error')) return { ok: false, issues };
+    // Native-vega recipes (e.g. radar) can't run the VL pipeline — smoke-parse the
+    // materialized Vega spec instead (shipped specs; bindings already checked above).
+    if (materialized.engine === 'vega') {
+      try {
+        parseVega(materialized.spec as never, undefined, { ast: true });
+      } catch (e) {
+        issues.push(err('E_SCHEMA', '/source/recipe', `materialized vega spec failed to parse: ${e instanceof Error ? e.message : String(e)}`));
+        return { ok: false, issues };
+      }
+      return { ok: true, issues };
+    }
     rawSpec = materialized.spec;
   } else {
     rawSpec = (source as { spec: Record<string, unknown> }).spec;

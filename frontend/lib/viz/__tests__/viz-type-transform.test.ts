@@ -111,7 +111,7 @@ describe('setVizType', () => {
   });
 
   it('exports the supported set for the selector', () => {
-    expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall']);
+    expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar']);
   });
 
   it('pie renders as a donut with rounded, padded sectors (ECharts house style)', () => {

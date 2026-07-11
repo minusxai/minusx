@@ -20,23 +20,40 @@ import type { Spec as VegaSpec } from 'vega';
 import { expressionInterpreter } from 'vega-interpreter';
 import { Handler as TooltipHandler } from 'vega-tooltip';
 import { prepareVegaLiteSpec } from './prepare';
-import { getVegaLiteConfig } from './theme';
+import { getVegaLiteConfig, getVegaParserConfig } from './theme';
 import { materializeRecipe } from './viz-templates';
 import { VIZ_DATASET_MAIN } from './types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
+export type ResolvedEnvelopeSpec =
+  | { ok: true; spec: Record<string, unknown>; engine: 'vega-lite' | 'vega' }
+  | { ok: false; error: string };
+
 /**
- * Resolve an envelope's renderable Vega-Lite spec: native sources return their spec,
- * recipe sources materialize from the shipped registry (render-time, never stored).
+ * Resolve an envelope's renderable spec + grammar engine: native sources return their
+ * spec, recipe sources materialize from the shipped registry (render-time, never stored).
  */
-export function resolveEnvelopeSpec(envelope: VizEnvelope):
-  | { ok: true; spec: Record<string, unknown> }
-  | { ok: false; error: string } {
+export function resolveEnvelopeSpec(envelope: VizEnvelope): ResolvedEnvelopeSpec {
   const source = envelope.source as unknown as Record<string, unknown>;
   if (source.kind === 'recipe') {
     return materializeRecipe(source as unknown as { recipe: string; bindings: Record<string, string> });
   }
-  return { ok: true, spec: (source as { spec: Record<string, unknown> }).spec };
+  return { ok: true, spec: (source as { spec: Record<string, unknown> }).spec, engine: 'vega-lite' };
+}
+
+/**
+ * Turn a resolved spec into the parsed-vega inputs: VL specs compile (theme embedded
+ * in the VL config); native Vega specs go straight to parse with the themed parser
+ * config. One divergence point, both tiers themed from the same tokens.
+ */
+export function toVegaSpec(
+  resolved: { spec: Record<string, unknown>; engine: 'vega-lite' | 'vega' },
+  mode: 'light' | 'dark',
+): { vegaSpec: VegaSpec; parserConfig?: Record<string, unknown> } {
+  if (resolved.engine === 'vega') {
+    return { vegaSpec: resolved.spec as unknown as VegaSpec, parserConfig: getVegaParserConfig(mode) };
+  }
+  return { vegaSpec: compileVegaLite(resolved.spec, mode) };
 }
 
 export interface VegaViewOptions {
@@ -47,6 +64,8 @@ export interface VegaViewOptions {
   height?: number;
   /** Install the styled HTML tooltip handler (browser only; styled in globals.css). */
   tooltipTheme?: 'light' | 'dark';
+  /** Vega parser config — used by the native-vega engine (VL bakes theme at compile). */
+  parserConfig?: Record<string, unknown>;
 }
 
 /**
@@ -116,7 +135,7 @@ export function createVegaView(
   rows: Record<string, unknown>[],
   opts: VegaViewOptions,
 ): View {
-  const runtime = parse(vegaSpec, undefined, { ast: true });
+  const runtime = parse(vegaSpec, (opts.parserConfig ?? undefined) as never, { ast: true });
   const view = new View(runtime, {
     expr: expressionInterpreter,
     renderer: opts.renderer,
@@ -140,6 +159,25 @@ export async function renderVegaLiteToSvg(
   size?: { width?: number; height?: number },
 ): Promise<string> {
   const view = createVegaView(compileVegaLite(spec, mode), rows, { renderer: 'none', ...size });
+  try {
+    await view.runAsync();
+    return await view.toSVG();
+  } finally {
+    view.finalize();
+  }
+}
+
+/** Headless render of a full envelope (any source kind / engine). */
+export async function renderEnvelopeToSvg(
+  envelope: VizEnvelope,
+  rows: Record<string, unknown>[],
+  mode: 'light' | 'dark',
+  size?: { width?: number; height?: number },
+): Promise<string> {
+  const resolved = resolveEnvelopeSpec(envelope);
+  if (!resolved.ok) throw new Error(resolved.error);
+  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode);
+  const view = createVegaView(vegaSpec, rows, { renderer: 'none', parserConfig, ...size });
   try {
     await view.runAsync();
     return await view.toSVG();

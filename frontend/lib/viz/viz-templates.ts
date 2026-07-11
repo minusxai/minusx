@@ -14,14 +14,20 @@ export interface VizTemplateBinding {
   label: string;
   /** Column kinds this slot accepts (drives drop-zone hints; not enforced hard). */
   accepts: ReadonlyArray<'nominal' | 'quantitative' | 'temporal'>;
+  /** Optional slots may be unbound (e.g. radar's series). */
+  optional?: boolean;
 }
+
+export type VizTemplateEngine = 'vega-lite' | 'vega';
 
 export interface VizTemplate {
   id: string;
   /** The icon-grid type this recipe implements. */
-  vizType: 'funnel' | 'waterfall';
+  vizType: 'funnel' | 'waterfall' | 'radar';
+  /** Grammar of the materialized spec ('vega' skips the VL compile). */
+  engine: VizTemplateEngine;
   bindings: ReadonlyArray<VizTemplateBinding>;
-  /** Materialize the full Vega-Lite spec from bound column names. */
+  /** Materialize the full spec from bound column names. */
   build(bindings: Record<string, string>): Record<string, unknown>;
 }
 
@@ -31,6 +37,7 @@ export interface VizTemplate {
 const funnel: VizTemplate = {
   id: 'minusx/funnel@1',
   vizType: 'funnel',
+  engine: 'vega-lite',
   bindings: [
     { name: 'stage', label: 'Stages', accepts: ['nominal', 'temporal'] },
     { name: 'value', label: 'Value', accepts: ['quantitative'] },
@@ -79,6 +86,7 @@ const funnel: VizTemplate = {
 const waterfall: VizTemplate = {
   id: 'minusx/waterfall@1',
   vizType: 'waterfall',
+  engine: 'vega-lite',
   bindings: [
     { name: 'category', label: 'Steps', accepts: ['nominal', 'temporal'] },
     { name: 'value', label: 'Value', accepts: ['quantitative'] },
@@ -145,9 +153,132 @@ const waterfall: VizTemplate = {
   },
 };
 
+
+// ── minusx/radar@1 ──────────────────────────────────────────────────────────────
+// NATIVE VEGA (no polar coordinates in vega-lite). Adapted from the official Vega
+// radar example: angular point scale over metrics, linear radial scale, closed
+// series polygons via trig, rule spokes, metric labels. Values SUM-aggregate per
+// metric×series; the radial domain is [0, max] shared across metrics (bind
+// pre-normalized values when metrics use different units — see the RFC on
+// semantic scaling).
+const radar: VizTemplate = {
+  id: 'minusx/radar@1',
+  vizType: 'radar',
+  engine: 'vega',
+  bindings: [
+    { name: 'metric', label: 'Metrics', accepts: ['nominal'] },
+    { name: 'value', label: 'Value', accepts: ['quantitative'] },
+    { name: 'series', label: 'Series', accepts: ['nominal'], optional: true },
+  ],
+  build({ metric, value, series }) {
+    const m = JSON.stringify(metric);
+    const angular = (of: string) => `scale('angular', ${of}[${m}])`;
+    const seriesExpr = series ? `datum[${JSON.stringify(series)}]` : "'all'";
+    const gridStroke = 'rgba(139, 148, 158, 0.35)'; // neutral in both modes
+    return {
+      autosize: { type: 'fit', contains: 'padding' },
+      signals: [
+        { name: 'radius', update: 'min(width, height) / 2 * 0.72' },
+      ],
+      data: [
+        { name: 'main' },
+        {
+          name: 'table',
+          source: 'main',
+          transform: [
+            { type: 'formula', as: '__mx_series', expr: seriesExpr },
+            { type: 'aggregate', groupby: [metric, '__mx_series'], fields: [value], ops: ['sum'], as: ['__mx_value'] },
+          ],
+        },
+        { name: 'keys', source: 'table', transform: [{ type: 'aggregate', groupby: [metric] }] },
+      ],
+      scales: [
+        { name: 'angular', type: 'point', range: { signal: '[-PI, PI]' }, padding: 0.5, domain: { data: 'table', field: metric } },
+        { name: 'radial', type: 'linear', range: [0, { signal: 'radius' }], zero: true, nice: false, domain: { data: 'table', field: '__mx_value' } },
+        { name: 'color', type: 'ordinal', domain: { data: 'table', field: '__mx_series' }, range: 'category' },
+      ],
+      ...(series ? { legends: [{ fill: 'color', symbolType: 'circle' }] } : {}),
+      marks: [
+        {
+          type: 'group',
+          encode: { enter: { x: { signal: 'width / 2' }, y: { signal: 'height / 2' } } },
+          marks: [
+            // outer ring
+            {
+              type: 'line',
+              from: { data: 'keys' },
+              encode: {
+                update: {
+                  interpolate: { value: 'linear-closed' },
+                  x: { signal: `radius * cos(${angular('datum')})` },
+                  y: { signal: `radius * sin(${angular('datum')})` },
+                  stroke: { value: gridStroke },
+                  strokeWidth: { value: 1 },
+                },
+              },
+            },
+            // spokes
+            {
+              type: 'rule',
+              from: { data: 'keys' },
+              encode: {
+                update: {
+                  x: { value: 0 },
+                  y: { value: 0 },
+                  x2: { signal: `radius * cos(${angular('datum')})` },
+                  y2: { signal: `radius * sin(${angular('datum')})` },
+                  stroke: { value: gridStroke },
+                  strokeWidth: { value: 1 },
+                },
+              },
+            },
+            // series polygons
+            {
+              type: 'group',
+              from: { facet: { data: 'table', name: 'facet', groupby: '__mx_series' } },
+              marks: [
+                {
+                  type: 'line',
+                  from: { data: 'facet' },
+                  encode: {
+                    update: {
+                      interpolate: { value: 'linear-closed' },
+                      x: { signal: `scale('radial', datum.__mx_value) * cos(${angular('datum')})` },
+                      y: { signal: `scale('radial', datum.__mx_value) * sin(${angular('datum')})` },
+                      stroke: { scale: 'color', field: '__mx_series' },
+                      strokeWidth: { value: 2 },
+                      fill: { scale: 'color', field: '__mx_series' },
+                      fillOpacity: { value: 0.15 },
+                    },
+                  },
+                },
+              ],
+            },
+            // metric labels
+            {
+              type: 'text',
+              from: { data: 'keys' },
+              encode: {
+                update: {
+                  x: { signal: `(radius + 10) * cos(${angular('datum')})` },
+                  y: { signal: `(radius + 10) * sin(${angular('datum')})` },
+                  text: { field: metric },
+                  align: { signal: `cos(${angular('datum')}) > 0.05 ? 'left' : (cos(${angular('datum')}) < -0.05 ? 'right' : 'center')` },
+                  baseline: { signal: `sin(${angular('datum')}) > 0.05 ? 'top' : (sin(${angular('datum')}) < -0.05 ? 'bottom' : 'middle')` },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+  },
+};
+
 export const VIZ_TEMPLATES: Record<string, VizTemplate> = {
   [funnel.id]: funnel,
   [waterfall.id]: waterfall,
+  [radar.id]: radar,
 };
 
 /** Registry lookup for a recipe source; null for unknown ids. */
@@ -156,18 +287,18 @@ export function getTemplate(recipeId: string): VizTemplate | null {
 }
 
 export type MaterializeResult =
-  | { ok: true; spec: Record<string, unknown> }
+  | { ok: true; spec: Record<string, unknown>; engine: VizTemplateEngine }
   | { ok: false; error: string };
 
-/** Materialize a recipe source into its Vega-Lite spec. */
+/** Materialize a recipe source into its grammar spec. */
 export function materializeRecipe(source: { recipe: string; bindings: Record<string, string> }): MaterializeResult {
   const template = getTemplate(source.recipe);
   if (!template) {
     return { ok: false, error: `unknown recipe "${source.recipe}" — available: ${Object.keys(VIZ_TEMPLATES).join(', ')}` };
   }
-  const missing = template.bindings.filter(b => !source.bindings[b.name]);
+  const missing = template.bindings.filter(b => !b.optional && !source.bindings[b.name]);
   if (missing.length > 0) {
     return { ok: false, error: `recipe "${source.recipe}" is missing binding${missing.length > 1 ? 's' : ''}: ${missing.map(b => b.name).join(', ')}` };
   }
-  return { ok: true, spec: template.build(source.bindings) };
+  return { ok: true, spec: template.build(source.bindings), engine: template.engine };
 }

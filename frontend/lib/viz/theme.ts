@@ -67,3 +67,28 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
     bar: { cornerRadiusEnd: 2 },
   };
 }
+
+/**
+ * Parser config for NATIVE Vega specs (the `vega` engine — e.g. minusx/radar@1).
+ * Same token source as the VL config so the tiers can't drift (RFC §7). Applied at
+ * vega.parse; spec-level properties win natively.
+ */
+export function getVegaParserConfig(mode: 'light' | 'dark'): Record<string, unknown> {
+  const colors = mode === 'light' ? LIGHT_THEME : DARK_THEME;
+  const font = getChartFontFamily();
+  return {
+    background: 'transparent',
+    range: { category: COLOR_PALETTE },
+    text: { fill: colors.fgDefault, font, fontSize: 11 },
+    legend: {
+      orient: 'top',
+      labelColor: colors.fgMuted,
+      titleColor: colors.fgDefault,
+      labelFont: font,
+      titleFont: font,
+      labelFontSize: 11,
+      titleFontSize: 12,
+    },
+    title: { color: colors.fgDefault, font, fontSize: 14 },
+  };
+}

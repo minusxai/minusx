@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, Text } from '@chakra-ui/react';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { compileVegaLite, createVegaView, setMainData, resolveEnvelopeSpec } from '@/lib/viz/render-vega';
+import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec } from '@/lib/viz/render-vega';
 
 export interface VegaChartProps {
   envelope: VizEnvelope;
@@ -77,12 +77,13 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
         if (cancelled) return;
         const resolved = resolveEnvelopeSpec(envelope);
         if (!resolved.ok) throw new Error(resolved.error);
-        const vegaSpec = compileVegaLite(resolved.spec, colorMode);
+        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode);
         if (cancelled) return;
         view = createVegaView(vegaSpec, rowsRef.current, {
           renderer: 'svg',
           container: el,
           tooltipTheme: colorMode,
+          parserConfig,
           ...sizeOf(el),
         });
         viewRef.current = view;

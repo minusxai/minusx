@@ -498,7 +498,7 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [ ] combo — agent-authorable TODAY (layers + independent y scales); no one-click UI transform yet
 - [x] funnel — shipped recipe `minusx/funnel@1` (tapered area, data-order stages, % of first stage)
 - [x] waterfall — shipped recipe `minusx/waterfall@1` (floating bars, signed labels, closing Total)
-- [ ] radar — native Vega proto-recipe; needs the `vega` source kind (phase two of this pass)
+- [x] radar — shipped recipe `minusx/radar@1`, NATIVE VEGA engine (angular/radial scales, series polygons, optional series binding) — the vega tier's first resident
 - [ ] table — stays DOM; `<GridView>` phase (RFC §10)
 - [ ] pivot — stays DOM; `<GridView>` phase (RFC §10)
 - [ ] trend — recipe-vs-DOM-widget spike decision (RFC §17)

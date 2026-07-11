@@ -119,10 +119,10 @@ export function setStacked(envelope: VizEnvelope, stacked: boolean): VizEnvelope
 // `pie` is an encoding TRANSFORM: a naive mark swap to `arc` renders garbage because
 // arcs read theta/color, not x/y.
 
-export const V2_SUPPORTED_VIZ_TYPES = ['bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall'] as const;
+export const V2_SUPPORTED_VIZ_TYPES = ['bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar'] as const;
 export type V2VizType = (typeof V2_SUPPORTED_VIZ_TYPES)[number];
 
-const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'row' | 'pie' | 'funnel' | 'waterfall'>, string> = {
+const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'row' | 'pie' | 'funnel' | 'waterfall' | 'radar'>, string> = {
   bar: 'bar', line: 'line', area: 'area', scatter: 'point',
 };
 
@@ -149,7 +149,7 @@ const withMark = (spec: Record<string, unknown>, type: string): void => {
 };
 
 /** Native-spec viz types (recipes route through setEnvelopeVizType instead). */
-export type SpecVizType = Exclude<V2VizType, 'funnel' | 'waterfall'>;
+export type SpecVizType = Exclude<V2VizType, 'funnel' | 'waterfall' | 'radar'>;
 
 /** Switch a unit spec's viz type, transforming encodings where the shapes differ. */
 export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelope {
@@ -307,9 +307,13 @@ export function setZoneField(
 ): VizEnvelope {
   const source = sourceOf(envelope);
   if (source.kind === 'recipe') {
-    if (column == null) return envelope; // recipes need every binding; re-bind instead
+    const template = getTemplate(source.recipe as string);
+    const binding = template?.bindings.find(b => b.name === channel);
+    if (column == null && !binding?.optional) return envelope; // required bindings: re-bind instead
     const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
-    ((next.source as unknown as AnySource).bindings as Record<string, string>)[channel] = column.name;
+    const bindings = (next.source as unknown as AnySource).bindings as Record<string, string>;
+    if (column == null) delete bindings[channel];
+    else bindings[channel] = column.name;
     return next;
   }
   return setChannelField(envelope, channel as EditableChannel, column);
@@ -342,6 +346,7 @@ function inferBindings(envelope: VizEnvelope): { category: string | null; value:
 const TEMPLATE_FOR_TYPE: Partial<Record<V2VizType, string>> = {
   funnel: 'minusx/funnel@1',
   waterfall: 'minusx/waterfall@1',
+  radar: 'minusx/radar@1',
 };
 
 /**
