@@ -60,15 +60,24 @@ describe('setVizType', () => {
     expect(getVizType(specOf(next))).toBe('row');
   });
 
-  it('bar → pie transforms encodings: y→theta, color kept, x/y removed', () => {
+  it('bar → pie transforms encodings: y→theta (SUM-aggregated), color kept, x/y removed', () => {
     const next = setVizType(envelope(BAR), 'pie');
     const spec = specOf(next);
     expect(getVizType(spec)).toBe('pie');
     expect(spec.encoding.theta.field).toBe('revenue');
+    // One arc per DATUM otherwise — a weekly result draws hundreds of slivers per
+    // category. The classic pipeline SUM-aggregated; pie must too.
+    expect(spec.encoding.theta.aggregate).toBe('sum');
     expect(spec.encoding.theta.axis).toBeUndefined(); // axis is meaningless on theta
     expect(spec.encoding.color.field).toBe('region');
     expect(spec.encoding.x).toBeUndefined();
     expect(spec.encoding.y).toBeUndefined();
+  });
+
+  it('pie keeps an author-specified theta aggregate (mean stays mean)', () => {
+    const withAgg = { ...BAR, encoding: { ...BAR.encoding, y: { ...BAR.encoding.y, aggregate: 'mean' } } };
+    const spec = specOf(setVizType(envelope(withAgg), 'pie'));
+    expect(spec.encoding.theta.aggregate).toBe('mean');
   });
 
   it('bar without color → pie uses x as the slice category', () => {

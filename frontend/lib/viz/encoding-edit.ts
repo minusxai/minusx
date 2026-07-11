@@ -167,6 +167,9 @@ export function setVizType(envelope: VizEnvelope, type: V2VizType): VizEnvelope 
       const theta = { ...value };
       delete theta.axis; // meaningless on theta
       delete theta.stack;
+      // VL draws one arc per DATUM — un-aggregated multi-row results become
+      // hundreds of slivers per category. SUM matches the classic pipeline.
+      if (theta.aggregate == null) theta.aggregate = 'sum';
       encoding.theta = theta;
     }
     if (slice) encoding.color = { ...slice };
