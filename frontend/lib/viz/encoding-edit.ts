@@ -398,3 +398,104 @@ export function setEnvelopeVizType(envelope: VizEnvelope, type: V2VizType): VizE
 
 /** Recipe ids currently shipped (for docs/UI). */
 export const SHIPPED_RECIPE_IDS = Object.keys(VIZ_TEMPLATES);
+
+// ── Multi-measure Y (the classic yCols case) ────────────────────────────────────────
+//
+// A second quantitative column on Y folds the measures (RFC §4: wide data → `fold`),
+// y reads the folded value and color the measure key. Agent-authored folds using the
+// default output names ('key'/'value') are recognized and extended rather than
+// wrapped in a second fold.
+
+interface FoldInfo {
+  index: number;
+  fields: string[];
+  as: [string, string];
+}
+
+const findYFold = (spec: Record<string, unknown>): FoldInfo | null => {
+  const transforms = spec.transform;
+  if (!Array.isArray(transforms)) return null;
+  const y = channelDef(spec, 'y');
+  if (!y || typeof y.field !== 'string') return null;
+  for (let i = 0; i < transforms.length; i++) {
+    const t = transforms[i] as Record<string, unknown>;
+    if (!t || !Array.isArray(t.fold)) continue;
+    const as = (Array.isArray(t.as) ? t.as : ['key', 'value']) as [string, string];
+    if (y.field === as[1]) return { index: i, fields: t.fold as string[], as };
+  }
+  return null;
+};
+
+/** The measure columns Y currently carries (folded list, or the single field). */
+export function getYFields(spec: Record<string, unknown>): string[] {
+  const fold = findYFold(spec);
+  if (fold) return fold.fields;
+  const y = channelDef(spec, 'y');
+  return y && typeof y.field === 'string' ? [y.field] : [];
+}
+
+/** Add a measure to Y: plain assign → fold-of-two → append to the fold. */
+export function addYField(envelope: VizEnvelope, column: { name: string; kind: VizColumnKind }): VizEnvelope {
+  const { next, spec } = cloneEnvelope(envelope);
+  const encoding = { ...((spec.encoding as Record<string, unknown> | undefined) ?? {}) } as Record<string, Record<string, unknown> | undefined>;
+  const y = encoding.y;
+
+  const fold = findYFold(spec);
+  if (fold) {
+    const transforms = spec.transform as Record<string, unknown>[];
+    const fields = fold.fields.includes(column.name) ? fold.fields : [...fold.fields, column.name];
+    transforms[fold.index] = { ...transforms[fold.index], fold: fields };
+    return next;
+  }
+
+  if (!y || typeof y.field !== 'string') {
+    return setChannelField(next, 'y', column);
+  }
+
+  if (y.field === column.name) return next;
+
+  // Fold the existing measure with the new one; the y def's presentation props
+  // (axis, format…) carry over to the folded value.
+  const foldTransform = { fold: [y.field, column.name], as: ['__mx_key', '__mx_value'] };
+  spec.transform = [foldTransform, ...((spec.transform as unknown[] | undefined) ?? [])];
+  encoding.y = { ...y, field: '__mx_value', type: 'quantitative' };
+  const color = encoding.color;
+  const colorIsFree = !color || typeof color.field !== 'string';
+  if (colorIsFree) {
+    encoding.color = { field: '__mx_key', type: 'nominal', title: null };
+  }
+  spec.encoding = encoding;
+  return next;
+}
+
+/** Remove a measure from Y; unfolds back to a plain field when one remains. */
+export function removeYField(envelope: VizEnvelope, name: string): VizEnvelope {
+  const { next, spec } = cloneEnvelope(envelope);
+  const encoding = { ...((spec.encoding as Record<string, unknown> | undefined) ?? {}) } as Record<string, Record<string, unknown> | undefined>;
+  const fold = findYFold(spec);
+
+  if (!fold) {
+    return setChannelField(next, 'y', null);
+  }
+
+  const fields = fold.fields.filter(f => f !== name);
+  const transforms = spec.transform as Record<string, unknown>[];
+  if (fields.length > 1) {
+    transforms[fold.index] = { ...transforms[fold.index], fold: fields };
+    return next;
+  }
+
+  // One measure left: unfold. Restore the plain field on y (presentation props kept),
+  // drop the fold transform, and drop a color channel that was only the measure key.
+  const remaining = fields[0];
+  transforms.splice(fold.index, 1);
+  if (transforms.length === 0) delete spec.transform;
+  if (remaining) {
+    encoding.y = { ...(encoding.y ?? {}), field: remaining, type: 'quantitative' };
+  } else {
+    delete encoding.y;
+  }
+  if (encoding.color?.field === fold.as[0]) delete encoding.color;
+  spec.encoding = encoding;
+  return next;
+}
