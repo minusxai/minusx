@@ -175,6 +175,12 @@ export function setVizType(envelope: VizEnvelope, type: V2VizType): VizEnvelope 
     if (slice) encoding.color = { ...slice };
     delete encoding.x;
     delete encoding.y;
+    // Any remaining non-aggregated field channel joins the aggregate groupby and
+    // re-shards the arcs (e.g. a weekly tooltip → 140 slivers per slice). Automatic
+    // tooltips (theme) cover the donut; authors can re-add a custom list via chat.
+    delete encoding.tooltip;
+    delete encoding.detail;
+    delete encoding.order;
     withMark(spec, 'arc');
     // House style (matches the ECharts pie builder): responsive donut with rounded,
     // slightly separated sectors (borderRadius: 6 / borderWidth: 2 over there).

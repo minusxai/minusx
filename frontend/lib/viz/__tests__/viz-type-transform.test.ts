@@ -74,6 +74,20 @@ describe('setVizType', () => {
     expect(spec.encoding.y).toBeUndefined();
   });
 
+  it('pie drops grouping channels (tooltip/detail) — non-aggregated fields re-shard the arcs', () => {
+    const withTooltip = {
+      ...BAR,
+      encoding: {
+        ...BAR.encoding,
+        tooltip: [{ field: 'month', type: 'temporal' }, { field: 'revenue', type: 'quantitative' }],
+        detail: { field: 'order_id', type: 'nominal' },
+      },
+    };
+    const spec = specOf(setVizType(envelope(withTooltip), 'pie'));
+    expect(spec.encoding.tooltip).toBeUndefined();
+    expect(spec.encoding.detail).toBeUndefined();
+  });
+
   it('pie keeps an author-specified theta aggregate (mean stays mean)', () => {
     const withAgg = { ...BAR, encoding: { ...BAR.encoding, y: { ...BAR.encoding.y, aggregate: 'mean' } } };
     const spec = specOf(setVizType(envelope(withAgg), 'pie'));
