@@ -484,27 +484,58 @@ Only these remain open — they require measurement, not design debate:
 
 ## Appendix A — Probe verification checklist (living)
 
-Manual verification protocol for the probe. `[x]` = verified (browser or headless, date noted);
-`[ ]` = pending. Update as items are checked; anything that fails gets a note + issue.
+Two sections: **Verified** (done, with dates) and **Remaining** (the working list).
+Move items up as they pass; anything that fails gets a note + fix before it moves.
 
-### A1. Rendering & theming
-- [x] JetBrains Mono renders AND measures correctly (2026-07-10 — root-caused: Chakra `@layer reset`
-  overrides SVG presentation attributes; fixed via inline-style promotion in `VegaChart`)
-- [x] SI number labels by default (`650k`, `2.5M`) (2026-07-10)
-- [x] Legend on top, correctly spaced, all items visible at real widths (2026-07-10)
-- [x] Axis title clear of tick labels (mono-width `titlePadding`) (2026-07-10)
-- [x] Temporal axis multi-scale labels legible (2026-07-10)
-- [x] Dark ↔ light toggle recompiles correctly (axis/legend/tooltip colors flip, no stale colors)
-- [x] Container resize re-lays-out without clipping (drag panel divider, browser resize)
-- [ ] Transparent background — chart inherits card surface in both modes
-- [x] A viz-V2 chart and a legacy ECharts chart look like siblings (palette/font parity)
+### ✅ Verified (as of 2026-07-10)
+
+**Rendering & theming**
+- JetBrains Mono renders AND measures correctly — root-caused: Chakra `@layer reset` overrides SVG
+  presentation attributes (any author rule beats them); fixed via inline-style promotion + MutationObserver
+  in `VegaChart`
+- SI number labels by default (`650k`, `2.5M`); mono-width `titlePadding`; axis title clear of ticks
+- Legend on top, correctly spaced, all items visible at real widths
+- Temporal axis multi-scale labels legible
+- Container-fill sizing: discrete-axis charts fill the card (`width/height: container` injected at compile —
+  VL step-sizing rendered a 5-category bar ~tiny otherwise); explicit spec width = author opt-out
+- Chart re-renders on hot data without rebuild (data-only view updates)
+
+**Agent authoring**
+- Simple + stacked bar from a prompt — clean multi-line JSON, tooltips/formats/titles idiomatic, no escaping
+- Split series via `color` encoding (no SQL pivot)
+- Convert an existing vizSettings question ("rewrite this in vega") — first try, clean spec
+
+**Interactions**
+- Legend click highlights series (others dim to 25%), legend entries dim too — injected
+  `mx_legend_sel` platform default with opt-outs (own params / own opacity / composed specs)
+- Automatic tooltips on all marks (`config.mark.tooltip: encoding`), styled vega-tooltip handler
+
+**UI panel (Fields / Settings / Spec)**
+- Icon grid above subtabs (classic placement); 6 types enabled (bar/line/area/row/scatter/pie),
+  9 dimmed as the live V2 coverage list
+- Fields tab reads current spec encodings into type-aware zones (pie → Slices/Value, never x/y)
+- Type switching with proper encoding transforms: bar↔line↔area↔scatter (mark swap), row (x/y def swap,
+  axis config travels), pie (y→theta SUM-aggregated, grouping channels dropped, rounded donut) — round
+  trips verified in browser
+- Mark/type edits are surgical (unknown spec content preserved); dirty state (Review/Save/Cancel) rides
+  the normal editFile path; Cancel restores
+- Zone-chip × removal persists — fixed: viz envelope now has REPLACE delta semantics in `editFile`
+  (deep-merge resurrected deleted channels from prior deltas); red-first store-level regression test
+- Spec tab shows the live envelope; copy button present
+
+**Regressions**
+- Full test suite green after every probe commit (continuous through the session)
+
+### ⬜ Remaining
+
+**Rendering & theming**
+- [ ] Dark ↔ light toggle recompiles correctly (axis/legend/tooltip colors flip, no stale colors)
+- [ ] A viz-V2 chart and a legacy ECharts chart side by side look like siblings (palette/font parity)
 - [ ] Very narrow container (dashboard-tile width) — labels thin gracefully, no overlap
 - [ ] Legend with many categories (>8) at narrow width (known: horizontal legends don't wrap;
   agent idiom `legend: {columns: N}`)
 
-### A2. Agent authoring (the probe's core evidence)
-- [x] Simple bar/stacked bar from a prompt — clean multi-line JSON, no escaping (2026-07-10)
-- [x] Split series via `color` encoding, no SQL pivot (2026-07-10)
+**Agent authoring**
 - [ ] Dual-axis combo (layers + `resolve: {scale: {y: "independent"}}`)
 - [ ] Facet / small multiples
 - [ ] Window-transform visual (rolling average) — SQL-vs-transform judgment
@@ -512,46 +543,38 @@ Manual verification protocol for the probe. `[x]` = verified (browser or headles
 - [ ] Horizontal bar + sort (`y` nominal sorted by value)
 - [ ] Custom tooltip field list overriding the automatic one
 - [ ] Explicit label formats on request ("show full numbers", "format dates as Jan '25")
-- [ ] Convert an existing vizSettings question ("rewrite this in vega") — parity + reversibility
 - [ ] Revert to classic ("go back to a normal bar chart") — viz removed, vizSettings restored
 - [ ] Recovery from a misspelled field (agent told verbally — does it fix in one step?)
 - [ ] Recovery from malformed JSON in `<spec>` (EditFile error loop)
 - [ ] JSON-syntax-error rate per EditFile stays ~zero across the session (probe metric)
 
-### A3. Interactions
-- [x] Legend click highlights series (others dim to 25%), legend entries dim too (2026-07-10,
-  DOM-dispatched click — needs one human click to confirm hit-targets feel right)
+**Interactions**
+- [ ] One human click on a legend item (automation verified via dispatched DOM click — confirm the
+  hit-target feels right)
 - [ ] Shift-click accumulates selection; click-elsewhere clears
-- [ ] Injection opt-outs respected: spec with own `params` / own `opacity` / layered spec untouched
-- [ ] Tooltips show encoded fields with titles + formats on hover, styled (mono, rounded)
+- [ ] Tooltip hover: encoded fields with titles + formats, styled (mono, rounded)
 
-### A4. UI panel (Fields / Settings / Spec)
-- [x] Fields tab reads current spec encodings into X/Y/Color zones (2026-07-10)
-- [x] Mark-type switch (bar→line) — surgical edit, dirty state appears (2026-07-10)
-- [ ] Drag a column chip into a zone — channel reassigned, other channel props (axis/format) survive
-- [ ] Remove (×) a zone chip — channel deleted, chart re-renders sensibly
-- [ ] Stacked toggle / log-scale toggle round-trip
-- [ ] Save persists; reload renders the saved spec; Cancel reverts
-- [ ] Spec tab shows live envelope; copy button works
+**UI panel**
+- [ ] Drag a column chip into a zone (drag-and-drop path; click-remove and type-switch are verified)
+- [ ] Stacked toggle / log-scale toggle round-trip in browser
+- [ ] Save persists → reload renders the saved spec (only Cancel exercised so far)
 - [ ] Composed (layered) spec: Fields/Settings show the "edit via chat" hint, Spec still works
 - [ ] Undo/redo behavior with surgical edits (if the page supports it for content edits)
 
-### A5. Data handling
-- [ ] Re-run query (data changes) — chart updates without rebuild/flicker
+**Data handling**
 - [ ] Parameterized query — param change re-executes and chart follows
 - [ ] Empty result set — renders empty axes, no crash
 - [ ] Nulls in x/y/color columns
 - [ ] 10k+ row result — render time acceptable
 - [ ] Timezone-sensitive timestamps — axis values match the table view (known wire-format risk)
 
-### A6. Regressions (legacy must be untouched)
+**Regressions**
 - [ ] Every legacy vizSettings type still renders (table, line, bar, row, area, scatter, funnel,
   pie, pivot, trend, waterfall, combo, radar, geo, single_value)
 - [ ] Legacy question editing via agent unchanged (vizSettings markup path)
 - [ ] Dashboards with legacy charts unaffected
-- [x] Full test suite green after every probe commit (2026-07-10, continuous)
 
-### A7. Known gaps (expected to fail — do not file)
+### Known gaps (expected to fail — do not file)
 - Agent gets no ValidateVisualization feedback in tool results yet (validator built + tested;
   `/api/viz/validate` route + tool wiring pending)
 - Vega charts invisible to the agent in follow-up turns (chart→LLM image path pending)
