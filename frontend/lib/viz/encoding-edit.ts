@@ -63,3 +63,67 @@ export function setChannelField(
   spec.encoding = encoding;
   return next;
 }
+
+// ── Settings-tab surgical edits (same rule: one property, everything else survives) ──
+
+const cloneEnvelope = (envelope: VizEnvelope): { next: VizEnvelope; spec: Record<string, unknown> } => {
+  const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
+  return { next, spec: (next.source as { spec: Record<string, unknown> }).spec };
+};
+
+const channelDef = (spec: Record<string, unknown>, channel: string): Record<string, unknown> | null => {
+  const def = (spec.encoding as Record<string, unknown> | undefined)?.[channel];
+  return def && typeof def === 'object' && !Array.isArray(def) ? (def as Record<string, unknown>) : null;
+};
+
+export function getMarkType(spec: Record<string, unknown>): string | null {
+  const mark = spec.mark;
+  if (typeof mark === 'string') return mark;
+  if (mark && typeof mark === 'object') {
+    const t = (mark as Record<string, unknown>).type;
+    return typeof t === 'string' ? t : null;
+  }
+  return null;
+}
+
+/** Swap the mark type; a mark-def object keeps its other props (tooltip, cornerRadius…). */
+export function setMarkType(envelope: VizEnvelope, type: string): VizEnvelope {
+  const { next, spec } = cloneEnvelope(envelope);
+  spec.mark = typeof spec.mark === 'object' && spec.mark != null
+    ? { ...(spec.mark as Record<string, unknown>), type }
+    : type;
+  return next;
+}
+
+/** VL stacks bar/area by default; only an explicit null/false unstacks. */
+export function getStacked(spec: Record<string, unknown>): boolean {
+  const y = channelDef(spec, 'y');
+  if (!y || !('stack' in y)) return true;
+  return !(y.stack === null || y.stack === false);
+}
+
+export function setStacked(envelope: VizEnvelope, stacked: boolean): VizEnvelope {
+  const { next, spec } = cloneEnvelope(envelope);
+  const y = channelDef(spec, 'y');
+  if (!y) return next;
+  if (stacked) delete y.stack;
+  else y.stack = null;
+  return next;
+}
+
+export function getYLogScale(spec: Record<string, unknown>): boolean {
+  const scale = channelDef(spec, 'y')?.scale as Record<string, unknown> | undefined;
+  return scale?.type === 'log';
+}
+
+export function setYLogScale(envelope: VizEnvelope, log: boolean): VizEnvelope {
+  const { next, spec } = cloneEnvelope(envelope);
+  const y = channelDef(spec, 'y');
+  if (!y) return next;
+  const scale = { ...((y.scale as Record<string, unknown> | undefined) ?? {}) };
+  if (log) scale.type = 'log';
+  else delete scale.type;
+  if (Object.keys(scale).length > 0) y.scale = scale;
+  else delete y.scale;
+  return next;
+}
