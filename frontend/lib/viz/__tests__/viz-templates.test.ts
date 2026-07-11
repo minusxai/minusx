@@ -106,5 +106,6 @@ describe('headless rendering of materialized recipes', () => {
     expect(svg).toContain('−200'); // d3 format uses minus sign U+2212
     expect(svg).toContain('Total'); // closing total bar
     expect(svg).toContain('720');   // 500 + 300 - 200 + 120
+    expect(svg).toContain('users'); // y axis titled with the bound value column
   });
 });

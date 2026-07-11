@@ -97,7 +97,7 @@ const waterfall: VizTemplate = {
           mark: { type: 'bar', cornerRadiusEnd: 2 },
           encoding: {
             x,
-            y: { field: '__mx_prev', type: 'quantitative', title: null },
+            y: { field: '__mx_prev', type: 'quantitative', title: value },
             y2: { field: '__mx_sum' },
             color: {
               condition: { test: 'datum.__mx_amount < 0', value: '#c0392b' },

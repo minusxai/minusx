@@ -53,6 +53,21 @@ export function VegaVizPanel({ envelope, columns, types, onVizChange }: VegaVizP
 
   return (
     <Box>
+      {/* Composed/unrecognized specs are the CUSTOM state — an operator (facet/layer)
+          or mark beyond the quick types. No icon claims them: the grid's transforms
+          are only safe on unit specs, so structural edits route through chat. */}
+      {(!isUnit || vizType == null) && (
+        <HStack gap={2} pb={2} aria-label="Custom spec indicator">
+          <Box px={2} py={0.5} bg="accent.secondary/15" borderRadius="md" border="1px solid" borderColor="accent.secondary/30">
+            <Text fontSize="10px" fontWeight="700" color="accent.secondary" letterSpacing="0.03em">CUSTOM</Text>
+          </Box>
+          <Text fontSize="10px" color="fg.subtle" lineHeight="1.4">
+            {isUnit
+              ? 'This mark type has no quick-switch equivalent — edit via chat.'
+              : 'Layered/faceted spec — beyond the quick types; edit via chat.'}
+          </Text>
+        </HStack>
+      )}
       {/* Viz-type icon grid on top — same placement as the classic panel. Disabled
           entries double as the live "not yet in V2" coverage list. */}
       {isUnit && (
