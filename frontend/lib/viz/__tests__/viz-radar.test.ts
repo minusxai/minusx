@@ -34,6 +34,21 @@ const envelope = (bindings: Record<string, string>): VizEnvelope => ({
 } as unknown as VizEnvelope);
 
 describe('minusx/radar@1', () => {
+  it('type-switching to radar never auto-fills the optional series slot', async () => {
+    const { setEnvelopeVizType } = await import('@/lib/viz/encoding-edit');
+    const bar = {
+      version: 2,
+      source: { kind: 'vega-lite', grammar: 'vega-lite@6', spec: {
+        mark: 'bar',
+        encoding: { x: { field: 'metric', type: 'nominal' }, y: { field: 'score', type: 'quantitative' } },
+      } },
+    } as unknown as VizEnvelope;
+    const next = setEnvelopeVizType(bar, 'radar');
+    const source = next.source as unknown as { recipe: string; bindings: Record<string, string> };
+    expect(source.recipe).toBe('minusx/radar@1');
+    expect(source.bindings).toEqual({ metric: 'metric', value: 'score' }); // no series
+  });
+
   it('is registered with metric/value required and series optional', () => {
     const t = getTemplate('minusx/radar@1')!;
     expect(t.engine).toBe('vega');

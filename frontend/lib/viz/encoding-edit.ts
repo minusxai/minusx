@@ -361,6 +361,9 @@ export function setEnvelopeVizType(envelope: VizEnvelope, type: V2VizType): VizE
     const template = getTemplate(templateId)!;
     const bindings: Record<string, string> = {};
     for (const b of template.bindings) {
+      // Never auto-fill optional slots (radar's series): inferring the same column
+      // for metric AND series yields degenerate single-point series polygons.
+      if (b.optional) continue;
       const inferred = b.accepts.includes('quantitative') ? value : category;
       if (inferred) bindings[b.name] = inferred;
     }
