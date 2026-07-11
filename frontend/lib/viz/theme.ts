@@ -40,6 +40,10 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
     },
     legend: {
       orient: 'top',
+      // Inline title left of the entries: one compact centered row instead of the
+      // stacked two-line default.
+      titleOrient: 'left',
+      titlePadding: 10,
       labelColor: colors.fgMuted,
       titleColor: colors.fgDefault,
       labelFontSize: 11,
@@ -83,6 +87,8 @@ export function getVegaParserConfig(mode: 'light' | 'dark'): Record<string, unkn
     legend: {
       orient: 'top',
       layout: { top: { anchor: 'middle' } },
+      titleOrient: 'left',
+      titlePadding: 10,
       labelColor: colors.fgMuted,
       titleColor: colors.fgDefault,
       labelFont: font,
