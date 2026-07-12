@@ -7,15 +7,16 @@
  * the long tail of styling stays with the agent. Pure view: no Redux.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { Box, Button, HStack, Text, Textarea, Switch } from '@chakra-ui/react';
+import { Box, Button, HStack, Input, Text, Textarea, Switch } from '@chakra-ui/react';
 import { LuLayoutGrid, LuSettings2, LuBraces } from 'react-icons/lu';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { VizSettings } from '@/lib/types';
 import {
   isEnvelopeEditable, getEnvelopeVizType, setEnvelopeVizType, V2_SUPPORTED_VIZ_TYPES,
-  getStacked, setStacked, getYLogScale, setYLogScale,
+  getStacked, setStacked, getYLogScale, setYLogScale, getMaxBins, setMaxBins,
   getTableConditionalFormats, setTableConditionalFormats, getVizCss, setVizCss,
   getPivotConfig, setPivotConfig, getVizColumnFormats, mergeVizColumnFormat,
+  getRecipeParams, setRecipeParam,
   type V2VizType,
 } from '@/lib/viz/encoding-edit';
 import { sqlTypeToVizKind } from '@/lib/viz/query-data';
@@ -60,6 +61,8 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
   const vizType = getEnvelopeVizType(envelope);
   // Draft for the DOM-tier css textarea — committed to the envelope on blur.
   const [cssDraft, setCssDraft] = useState<string | null>(null);
+  // Draft for the histogram Max-bins input — committed on blur (empty = auto).
+  const [maxBinsDraft, setMaxBinsDraft] = useState<string | null>(null);
 
   // Pivot Formulas builder inputs — the same derivation ChartBuilder does for the
   // classic panel: dimension VALUES come from aggregating the result rows.
@@ -225,7 +228,40 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
       )}
 
       {activeTab === 'settings' && !isDomTier && (
-        isRecipe ? (
+        isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/trend@1' ? (
+          <Box display="flex" flexDirection="column" gap={3} py={1}>
+            <HStack justify="space-between">
+              <Box>
+                <Text fontSize="xs" color="fg.muted">Skip partial period</Text>
+                <Text fontSize="10px" color="fg.subtle">Compare the last two COMPLETE periods (ignores the in-progress one)</Text>
+              </Box>
+              <Switch.Root
+                aria-label="Skip partial period"
+                size="sm"
+                checked={getRecipeParams(envelope).compareMode === 'previous'}
+                onCheckedChange={(e) => onVizChange(setRecipeParam(envelope, 'compareMode', e.checked ? 'previous' : undefined))}
+              >
+                <Switch.HiddenInput />
+                <Switch.Control><Switch.Thumb /></Switch.Control>
+              </Switch.Root>
+            </HStack>
+            <HStack justify="space-between">
+              <Text fontSize="xs" color="fg.muted">Sparkline</Text>
+              <Switch.Root
+                aria-label="Toggle sparkline"
+                size="sm"
+                checked={getRecipeParams(envelope).sparkline !== false}
+                onCheckedChange={(e) => onVizChange(setRecipeParam(envelope, 'sparkline', e.checked ? undefined : false))}
+              >
+                <Switch.HiddenInput />
+                <Switch.Control><Switch.Thumb /></Switch.Control>
+              </Switch.Root>
+            </HStack>
+            <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+              Font sizes and everything else — ask the agent (valueFontSize/deltaFontSize/labelFontSize/dateFontSize params).
+            </Text>
+          </Box>
+        ) : isRecipe ? (
           <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
             This chart is generated from the {String((envelope.source as unknown as Record<string, unknown>).recipe)} recipe —
             bind columns in Fields, or ask the agent for deeper customization.
@@ -258,6 +294,28 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                 <Switch.Control><Switch.Thumb /></Switch.Control>
               </Switch.Root>
             </HStack>
+            {vizType === 'histogram' && (
+              <HStack justify="space-between">
+                <Text fontSize="xs" color="fg.muted">Max bins</Text>
+                <Input
+                  aria-label="Max bins"
+                  size="xs"
+                  width="90px"
+                  type="number"
+                  placeholder="auto"
+                  value={maxBinsDraft ?? getMaxBins(spec) ?? ''}
+                  onChange={(e) => setMaxBinsDraft(e.target.value)}
+                  onBlur={() => {
+                    if (maxBinsDraft != null) {
+                      const n = parseInt(maxBinsDraft, 10);
+                      // Empty/invalid clears back to VL's automatic binning (~10 nice bins).
+                      onVizChange(setMaxBins(envelope, Number.isFinite(n) && n > 0 ? n : null));
+                    }
+                    setMaxBinsDraft(null);
+                  }}
+                />
+              </HStack>
+            )}
             <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
               Everything else (formats, colors, layers, interactions) — ask the agent; it edits the spec directly.
             </Text>

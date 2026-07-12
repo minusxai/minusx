@@ -342,6 +342,30 @@ export function zonesForVizType(type: V2VizType | null): Array<{ channel: Editab
   ];
 }
 
+/**
+ * Histogram bin cap (the Settings "Max bins" control). null = automatic: VL's
+ * default binning targets at most ~10 nice-stepped bins. Read from the x
+ * channel's `bin` — `true` or a param object without `maxbins` both read as auto.
+ */
+export function getMaxBins(spec: Record<string, unknown>): number | null {
+  const bin = channelDef(spec, 'x')?.bin;
+  if (bin == null || bin === true || bin === false || typeof bin !== 'object') return null;
+  const maxbins = (bin as Record<string, unknown>).maxbins;
+  return typeof maxbins === 'number' ? maxbins : null;
+}
+
+/** Set/clear (null) the bin cap; other author bin params (step, extent…) survive. */
+export function setMaxBins(envelope: VizEnvelope, maxbins: number | null): VizEnvelope {
+  const { next, spec } = cloneEnvelope(envelope);
+  const x = channelDef(spec, 'x');
+  if (!x || x.bin == null || x.bin === false) return next; // only binned specs
+  const bin = typeof x.bin === 'object' ? { ...(x.bin as Record<string, unknown>) } : {};
+  if (maxbins == null) delete bin.maxbins;
+  else bin.maxbins = maxbins;
+  x.bin = Object.keys(bin).length > 0 ? bin : true;
+  return next;
+}
+
 export function getYLogScale(spec: Record<string, unknown>): boolean {
   const scale = channelDef(spec, 'y')?.scale as Record<string, unknown> | undefined;
   return scale?.type === 'log';
@@ -658,6 +682,26 @@ export function setEnvelopeVizType(
 
 /** Recipe ids currently shipped (for docs/UI). */
 export const SHIPPED_RECIPE_IDS = Object.keys(VIZ_TEMPLATES);
+
+// ── Recipe params (surgical, like every other envelope edit) ────────────────────
+
+export function getRecipeParams(envelope: VizEnvelope): Record<string, unknown> {
+  const source = sourceOf(envelope);
+  if (source.kind !== 'recipe') return {};
+  return (source.params as Record<string, unknown> | null | undefined) ?? {};
+}
+
+/** Upsert one recipe param; `undefined` removes it (defaults stay clean). */
+export function setRecipeParam(envelope: VizEnvelope, key: string, value: unknown): VizEnvelope {
+  const source = sourceOf(envelope);
+  if (source.kind !== 'recipe') return envelope;
+  const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
+  const params = { ...(((next.source as unknown as AnySource).params as Record<string, unknown> | null | undefined) ?? {}) };
+  if (value === undefined) delete params[key];
+  else params[key] = value;
+  (next.source as unknown as AnySource).params = Object.keys(params).length > 0 ? params : null;
+  return next;
+}
 
 // ── DOM-tier sources (RFC §10: table + pivot) ───────────────────────────────────────
 //

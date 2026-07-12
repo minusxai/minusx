@@ -512,8 +512,14 @@ Move items up as they pass; anything that fails gets a note + fix before it move
   to y and the measure to color), agent idiom in skill_questions (`scheme: greens` = GitHub look).
   Replaces the pivot's `compact` mode (deprecated in schema, toggle hidden on the V2 panel,
   legacy pivots keep rendering it)
-- [ ] trend — recipe-vs-DOM-widget spike decision (RFC §17)
-- [ ] single_value — follows the trend decision
+- [x] trend — RECIPE WINS (§17 spike, 2026-07-11 pm): `minusx/trend@1` on the NATIVE VEGA engine.
+  One KPI card per bound measure (value multi-binding), gradient sparkline (param-removable),
+  compareMode last/previous with exact computeTrendComparison semantics computed IN-SPEC (window
+  lag + row_number — no app-owned comparison math), d3 formats + aliases, responsive font-signal
+  sizing with 4 param overrides, panel Settings toggles (Skip partial period / Sparkline).
+  Browser-verified on 52-week data incl. the partial-week trap (▼79% → ▲4.9% via the toggle)
+- [ ] single_value — follows the trend decision: build as a trend-recipe degenerate (single point,
+  no delta) or a `@1` sibling recipe; NOT a DOM widget
 - [ ] geo — Vega recipes for analytic geo; Leaflet frozen for tile basemaps (RFC §9)
 
 ### ✅ Verified (as of 2026-07-11)
@@ -593,6 +599,9 @@ Move items up as they pass; anything that fails gets a note + fix before it move
   per-issue paths + available fields in the tool result; query+viz combined edits re-check after
   auto-execute (`vizValidation`); columns-unknown paths skip field checks (no false positives).
   `POST /api/viz/validate` carries it for the browser-side handlers (schema stays server-only)
+- Column alias/format for RECIPE sources and PIVOT — RESOLVED (was: gear only on native
+  single-field channels): recipes use the unified VizFieldPopover, pivot's zone chips carry the
+  d3 FormatPopover (`d3Formats` mode); both covered by ui tests (viz-pivot / recipe formats)
 - Zebra stripe is a CSS default on parity classes (`.mx-row-odd`/`.mx-row-even`, data-index — not
   nth-child, virtualization spacers would flip parity) — overridable from the `css` field
 - Drag a column chip into a drop zone (drag-and-drop path)
@@ -608,18 +617,33 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 **Regressions**
 - Full test suite green after every probe commit (continuous through the session)
 
-### ⬜ Remaining
+### ⬜ Remaining (regrouped 2026-07-11 pm by kind of work)
 
-**Rendering & theming**
-- [ ] Legend with many categories (>8) at narrow width (known: horizontal legends don't wrap;
-  agent idiom `legend: {columns: N}`)
+**Build work — code, ready to pick up**
+- [ ] Vega chart→LLM images for UNMOUNTED files — design settled, see Known gaps (`view.toCanvas()`
+  → theme-bg composite → JPEG, dynamic import); the agent is blind to V2 charts it hasn't got on screen
+- [ ] img download — chart-image + question-level export for V2 charts (table's AND pivot's own
+  CSV buttons shipped; it's the image paths that are unwired)
+- [ ] combo — one-click UI transform (agent-authorable TODAY via layers + independent y scales)
+- [ ] geo — Vega recipes for analytic geo; Leaflet frozen for tile basemaps (RFC §9)
+- [ ] Grid merge stage 3 — sort/hide/filter semantics for pivot leaf columns; format gear ON pivot
+  leaf headers (the Fields zone-chip gear works; the in-header gear is table-only today)
+- [ ] box plot (in flight — parallel session)
 
-**Agent authoring**
-- [ ] Table and pivot from a prompt follow the skill idioms (skills updated 2026-07-11 — live agent runs)
+**Decisions needed — design first, then small code**
+- [x] trend — DECIDED: recipe (see plot coverage). single_value follows as a recipe.
+- [ ] Color controls ("color panels") — V2 equivalent of the classic per-series swatches
+  (surgical `scale.range` edit vs agent-only)
+- [ ] annotations
+- [ ] custom plot
+
+**Live agent runs — probe metrics, cheap now the machinery + skills exist**
+- [ ] Table and pivot from a prompt follow the skill idioms (skills updated 2026-07-11)
+- [ ] Heatmap from a prompt follows the skill idiom (type + GitHub theme shipped 2026-07-11 pm —
+  needs a live run: minimal rect + discrete axes, no hand-rolled colors)
 - [ ] Dual-axis combo (layers + `resolve: {scale: {y: "independent"}}`)
 - [ ] Facet / small multiples
 - [ ] Window-transform visual (rolling average) — SQL-vs-transform judgment
-- [ ] Heatmap (`rect` mark)
 - [ ] Horizontal bar + sort (`y` nominal sorted by value)
 - [ ] Custom tooltip field list overriding the automatic one
 - [ ] Revert to classic ("go back to a normal bar chart") — viz removed, vizSettings restored
@@ -627,34 +651,18 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 - [ ] Recovery from malformed JSON in `<spec>` (EditFile error loop)
 - [ ] JSON-syntax-error rate per EditFile stays ~zero across the session (probe metric)
 
-**UI panel**
-- [ ] Column alias/format for RECIPE sources (funnel/waterfall/radar) and PIVOT — reported
-  2026-07-11: the gear only exists on native single-field channels; pivot's builder has the
-  props but they're unwired. In progress.
-- [ ] Color controls ("color panels") — decide the V2 equivalent of the classic per-series
-  swatches (surgical `scale.range` edit vs agent-only)
-- [ ] annotations
-- [ ] custom plot
-- [x] heatmap table? — shipped as the colour-scale ConditionalFormatRule (see Verified)
-- [ ] img download (table's + pivot's own CSV buttons now both work; chart image export still unwired)
-- [x] table and pivot table as single table — stages 1–2 shipped (shared class contract, shared
-  toolbar, conditional formats on both; see Verified). Remaining stage 3 candidates: sort /
-  column-visibility semantics for pivot leaf columns, format gear on pivot leaf headers
-- [ ] box plot
-
-
-**Data handling**
+**Rendering & data-handling verification**
+- [ ] Legend with many categories (>8) at narrow width (known: horizontal legends don't wrap;
+  agent idiom `legend: {columns: N}`)
 - [ ] Parameterized query — param change re-executes and chart follows
 - [ ] Empty result set — renders empty axes, no crash
 - [ ] Nulls in x/y/color columns
 - [ ] Timezone-sensitive timestamps — axis values match the table view (known wire-format risk)
 
-**Surfaces**
+**Surfaces & legacy regressions — manual sweep (owner: Vivek)**
 - [ ] Dashboards / story embeds / notebook cells with V2 envelopes — they all render through the
   shared QuestionVisualization, so routing may already work; verify each, then delete the
   known-gaps line
-
-**Regressions**
 - [ ] Every legacy vizSettings type still renders (table, line, bar, row, area, scatter, funnel,
   pie, pivot, trend, waterfall, combo, radar, geo, single_value)
 - [ ] Legacy question editing via agent unchanged (vizSettings markup path)
@@ -726,6 +734,12 @@ where things live and the decisions not obvious from the code.
   The pivot's layout stays in the pure engine (`pivot-grid.ts`), not TanStack's row model —
   subtotal/formula interleaving and rowSpans aren't row-model shapes; TanStack remains the flat
   table's engine. Sorting/filter/stats on pivot leaf columns deferred (product semantics TBD).
+- **Trend spike verdict: recipe (§17, recipe-first per user).** The native-vega tier handled every
+  acceptance criterion — including the two that motivated considering a DOM widget (independent
+  font sizing → param-overridable signals; comparison semantics → in-spec window transforms), and
+  it gets SVG/image export + agent vision for free, which a DOM widget would not. Recipe params
+  got real plumbing (materializeRecipe now passes `params` to build; getRecipeParams/setRecipeParam
+  surgical edits; panel Settings toggles for trend). single_value follows as a recipe.
 - **Heatmap is a viz TYPE, not a pivot mode.** Native VL rect spec (no recipe — Fields zones work
   directly); `PivotConfig.compact` is deprecated (legacy renders keep working; V2 panel hides the
   toggle). Discrete axes only: temporal category kinds map to ordinal on heatmap axes (rect +

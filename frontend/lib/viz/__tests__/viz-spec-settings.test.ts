@@ -66,3 +66,45 @@ describe('log scale', () => {
     expect(getYLogScale(specOf(off))).toBe(false);
   });
 });
+
+describe('histogram max bins', () => {
+  const HIST = {
+    mark: { type: 'bar' },
+    encoding: {
+      x: { field: 'revenue', bin: true, type: 'quantitative', axis: { format: ',.0f' } },
+      y: { aggregate: 'count', type: 'quantitative' },
+    },
+  };
+
+  it('bin: true reads as auto (null); an explicit maxbins reads back', async () => {
+    const { getMaxBins } = await import('@/lib/viz/encoding-edit');
+    expect(getMaxBins(HIST)).toBeNull();
+    const explicit = { ...HIST, encoding: { ...HIST.encoding, x: { ...HIST.encoding.x, bin: { maxbins: 40 } } } };
+    expect(getMaxBins(explicit)).toBe(40);
+  });
+
+  it('setting maxbins turns bin into a param object; clearing returns to bin: true', async () => {
+    const { getMaxBins, setMaxBins } = await import('@/lib/viz/encoding-edit');
+    const on = setMaxBins(envelope(HIST), 25);
+    expect(specOf(on).encoding.x.bin).toEqual({ maxbins: 25 });
+    expect(specOf(on).encoding.x.axis).toEqual({ format: ',.0f' }); // presentation survives
+    expect(getMaxBins(specOf(on))).toBe(25);
+    const off = setMaxBins(on, null);
+    expect(specOf(off).encoding.x.bin).toBe(true);
+  });
+
+  it('preserves other author bin params (step, extent) when editing maxbins', async () => {
+    const { setMaxBins } = await import('@/lib/viz/encoding-edit');
+    const authored = envelope({ ...HIST, encoding: { ...HIST.encoding, x: { ...HIST.encoding.x, bin: { step: 5, maxbins: 20 } } } });
+    const changed = setMaxBins(authored, 30);
+    expect(specOf(changed).encoding.x.bin).toEqual({ step: 5, maxbins: 30 });
+    const cleared = setMaxBins(authored, null);
+    expect(specOf(cleared).encoding.x.bin).toEqual({ step: 5 }); // other params keep the object alive
+  });
+
+  it('no-op on specs without a binned x (nothing to tune)', async () => {
+    const { setMaxBins } = await import('@/lib/viz/encoding-edit');
+    const bar = envelope(UNIT);
+    expect(specOf(setMaxBins(bar, 25))).toEqual(specOf(bar));
+  });
+});

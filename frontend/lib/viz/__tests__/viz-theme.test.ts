@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getVegaLiteConfig } from '@/lib/viz/theme';
-import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
+import { getVegaLiteConfig, getVegaParserConfig } from '@/lib/viz/theme';
+import { COLOR_PALETTE, DARK_THEME, LIGHT_THEME } from '@/lib/chart/echarts-theme';
 
 describe('getVegaLiteConfig', () => {
   it('uses JetBrains Mono across text roles in both modes', () => {
@@ -63,5 +63,14 @@ describe('getVegaLiteConfig', () => {
     }
     // Mode-aware: the whisker/outlier colour must flip with the surface.
     expect(light.boxplot.rule.color).not.toEqual(dark.boxplot.rule.color);
+  });
+});
+
+describe('getVegaParserConfig', () => {
+  it('uses each mode surface color for the trend readability plate', () => {
+    const light = getVegaParserConfig('light') as Record<string, any>;
+    const dark = getVegaParserConfig('dark') as Record<string, any>;
+    expect(light.style['mx-trend-focus'].fill).toBe(LIGHT_THEME.bgSurface);
+    expect(dark.style['mx-trend-focus'].fill).toBe(DARK_THEME.bgSurface);
   });
 });

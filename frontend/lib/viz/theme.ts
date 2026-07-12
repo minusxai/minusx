@@ -123,6 +123,9 @@ export function getVegaParserConfig(mode: 'light' | 'dark'): Record<string, unkn
     background: 'transparent',
     range: { category: COLOR_PALETTE },
     text: { fill: colors.fgDefault, font, fontSize: 11 },
+    style: {
+      'mx-trend-focus': { fill: colors.bgSurface },
+    },
     legend: {
       orient: 'top',
       layout: { top: { anchor: 'middle' } },

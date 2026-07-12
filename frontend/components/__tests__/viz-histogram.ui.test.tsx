@@ -105,3 +105,63 @@ describe('VegaVizPanel — bar to histogram via the icon', () => {
     expect(screen.getByLabelText('Color / Split drop zone')).toBeInTheDocument()
   })
 })
+
+describe('VegaVizPanel — histogram bin settings', () => {
+  const histViz = {
+    version: 2,
+    source: {
+      kind: 'vega-lite',
+      grammar: 'vega-lite@6',
+      spec: {
+        mark: { type: 'bar' },
+        encoding: {
+          x: { field: 'revenue', bin: true, type: 'quantitative' },
+          y: { aggregate: 'count', type: 'quantitative' },
+        },
+      },
+    },
+  } as unknown as VizEnvelope
+
+  it('Settings hosts a Max bins input; committing a value writes bin.maxbins', async () => {
+    const user = userEvent.setup()
+    const onVizChange = vi.fn()
+    renderWithProviders(
+      <VegaVizPanel envelope={histViz} columns={['region', 'revenue']} types={['VARCHAR', 'DOUBLE']} onVizChange={onVizChange} />
+    )
+    await user.click(screen.getByLabelText('Settings tab'))
+    const input = screen.getByLabelText('Max bins')
+    await user.type(input, '25')
+    await user.tab() // commit on blur
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const spec = (next.source as unknown as { spec: Record<string, any> }).spec
+    expect(spec.encoding.x.bin).toEqual({ maxbins: 25 })
+  })
+
+  it('clearing the input returns to automatic binning (bin: true)', async () => {
+    const user = userEvent.setup()
+    const onVizChange = vi.fn()
+    const explicit = JSON.parse(JSON.stringify(histViz)) as VizEnvelope
+    ;(explicit.source as unknown as { spec: Record<string, any> }).spec.encoding.x.bin = { maxbins: 40 }
+    renderWithProviders(
+      <VegaVizPanel envelope={explicit} columns={['region', 'revenue']} types={['VARCHAR', 'DOUBLE']} onVizChange={onVizChange} />
+    )
+    await user.click(screen.getByLabelText('Settings tab'))
+    const input = screen.getByLabelText('Max bins')
+    await user.clear(input)
+    await user.tab()
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const spec = (next.source as unknown as { spec: Record<string, any> }).spec
+    expect(spec.encoding.x.bin).toBe(true)
+  })
+
+  it('non-histogram specs get no Max bins control', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <VegaVizPanel envelope={barViz} columns={['month', 'region', 'revenue']} types={['DATE', 'VARCHAR', 'DOUBLE']} onVizChange={vi.fn()} />
+    )
+    await user.click(screen.getByLabelText('Settings tab'))
+    expect(screen.queryByLabelText('Max bins')).not.toBeInTheDocument()
+  })
+})
