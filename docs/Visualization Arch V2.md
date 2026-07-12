@@ -417,7 +417,7 @@ application-owned comparison logic**; the legacy adapter preserves current behav
 | Current type | V2 implementation |
 |---|---|
 | bar, row, line, area, scatter, pie | Vega-Lite |
-| combo / dual-axis | VL layers + independent scale resolution |
+| combo / dual-axis | `minusx/combo@1`, Vega-Lite layers + independent scale resolution |
 | waterfall | VL transforms + layered marks |
 | trend | `minusx/trend@1`, native Vega recipe (decision complete) |
 | single_value | `minusx/single-value@1`, native Vega recipe; first query row, not a DOM widget |
@@ -527,8 +527,7 @@ This is the only todo list in this document. Work it top to bottom unless a prod
    concurrency, memory, result rows, mark count, and transform depth; enforce the resulting limits.
 5. **Resolve native-Vega theme updates.** Determine which specs can update stable theme signals safely and
    which require a reparse; encode the rule in the renderer and regression tests.
-6. **Finish the small high-value UI gaps.** Add the combo one-click transform and finish pivot leaf-column
-   sort/hide/filter plus header formatting.
+6. **Finish the small high-value UI gaps.** Finish pivot leaf-column sort/hide/filter plus header formatting.
 7. **Define common visual editing.** Decide and implement the V2 color-control contract, then annotations;
    defer a generic custom-plot surface until those common controls are stable.
 8. **Ship analytic geo recipes.** Add choropleth, bubble, flow, and density while keeping Leaflet restricted to
@@ -557,9 +556,9 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
 | radar | Shipped | `minusx/radar@1`, native Vega recipe |
 | trend | Shipped | `minusx/trend@1`, native Vega recipe; comparison and formatting computed in-spec |
 | single_value | Shipped | `minusx/single-value@1`, native Vega recipe; first-row KPI with responsive typography |
+| combo | Shipped | `minusx/combo@1`, layered Vega-Lite recipe with independent scales and optional shared color/split |
 | table, pivot | Shipped | DOM tier with shared grid styling, formats, conditional formats, and export |
 | heatmap | Shipped | Native Vega-Lite rect spec and V2 transform |
-| combo | Remaining (§21.6) | Agent-authorable layers exist; one-click UI transform remains |
 | analytic geo | Remaining (§21.8) | Vega/Vega-Lite recipes; Leaflet stays tile-only |
 
 ### ✅ Verified (as of 2026-07-11)

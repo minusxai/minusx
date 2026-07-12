@@ -125,10 +125,10 @@ export function setStacked(envelope: VizEnvelope, stacked: boolean): VizEnvelope
 // `pie` is an encoding TRANSFORM: a naive mark swap to `arc` renders garbage because
 // arcs read theta/color, not x/y.
 
-export const V2_SUPPORTED_VIZ_TYPES = ['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot', 'trend', 'single_value', 'histogram'] as const;
+export const V2_SUPPORTED_VIZ_TYPES = ['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'combo', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot', 'trend', 'single_value', 'histogram'] as const;
 export type V2VizType = (typeof V2_SUPPORTED_VIZ_TYPES)[number];
 
-const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie' | 'heatmap' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'histogram'>, string> = {
+const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie' | 'heatmap' | 'combo' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'histogram'>, string> = {
   bar: 'bar', line: 'line', area: 'area', scatter: 'point', boxplot: 'boxplot',
 };
 
@@ -160,7 +160,7 @@ const withMark = (spec: Record<string, unknown>, type: string): void => {
 };
 
 /** Native-spec viz types (recipes and the DOM table route through setEnvelopeVizType instead). */
-export type SpecVizType = Exclude<V2VizType, 'table' | 'pivot' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value'>;
+export type SpecVizType = Exclude<V2VizType, 'table' | 'pivot' | 'combo' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value'>;
 
 /** Switch a unit spec's viz type, transforming encodings where the shapes differ. */
 export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelope {
@@ -532,8 +532,8 @@ function inferBindings(envelope: VizEnvelope): { category: string | null; value:
   if (source.kind === 'recipe') {
     const bindings = (source.bindings ?? {}) as Record<string, string>;
     return {
-      category: bindings.stage ?? bindings.category ?? bindings.metric ?? null,
-      value: bindings.value ?? null,
+      category: bindings.stage ?? bindings.category ?? bindings.metric ?? bindings.x ?? null,
+      value: bindings.value ?? bindings.bar ?? bindings.line ?? null,
     };
   }
   const spec = (source as { spec: Record<string, unknown> }).spec;
@@ -551,6 +551,7 @@ function inferBindings(envelope: VizEnvelope): { category: string | null; value:
 }
 
 const TEMPLATE_FOR_TYPE: Partial<Record<V2VizType, string>> = {
+  combo: 'minusx/combo@1',
   funnel: 'minusx/funnel@1',
   waterfall: 'minusx/waterfall@1',
   radar: 'minusx/radar@1',
@@ -607,6 +608,21 @@ export function setEnvelopeVizType(
   if (templateId) {
     const template = getTemplate(templateId)!;
     const bindings: Record<string, string> = {};
+    if (type === 'combo') {
+      const measures = [
+        value,
+        ...(columns ?? []).filter(c => c.kind === 'quantitative').map(c => c.name),
+      ].filter((name, index, all): name is string => name != null && all.indexOf(name) === index);
+      if (category) bindings.x = category;
+      if (measures[0]) bindings.bar = measures[0];
+      // Keep the recipe renderable with a one-measure result; the Line zone remains
+      // replaceable as soon as another measure is available.
+      if (measures[1] ?? measures[0]) bindings.line = measures[1] ?? measures[0];
+      return {
+        version: 2,
+        source: { kind: 'recipe', recipe: templateId, bindings, params: null },
+      } as unknown as VizEnvelope;
+    }
     for (const b of template.bindings) {
       // Never auto-fill optional slots (radar's series): inferring the same column
       // for metric AND series yields degenerate single-point series polygons.

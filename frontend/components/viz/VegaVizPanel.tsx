@@ -282,6 +282,27 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
               Rename and format the value in Fields. For a caption, alignment, custom color, or exact font sizes, ask the agent.
             </Text>
           </Box>
+        ) : isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/combo@1' ? (
+          <Box display="flex" flexDirection="column" gap={3} py={1}>
+            <HStack justify="space-between">
+              <Box>
+                <Text fontSize="xs" color="fg.muted">Line points</Text>
+                <Text fontSize="10px" color="fg.subtle">Keep individual line values easy to inspect</Text>
+              </Box>
+              <Switch.Root
+                aria-label="Show line points"
+                size="sm"
+                checked={getRecipeParams(envelope).linePoints !== false}
+                onCheckedChange={(e) => onVizChange(setRecipeParam(envelope, 'linePoints', e.checked ? undefined : false))}
+              >
+                <Switch.HiddenInput />
+                <Switch.Control><Switch.Thumb /></Switch.Control>
+              </Switch.Root>
+            </HStack>
+            <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+              Bars use the left scale; the line uses the right. Bind Color / Split, rename, and format in Fields.
+            </Text>
+          </Box>
         ) : isRecipe ? (
           <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
             This chart is generated from the {String((envelope.source as unknown as Record<string, unknown>).recipe)} recipe —

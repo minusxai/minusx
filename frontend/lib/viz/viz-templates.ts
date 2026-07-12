@@ -50,7 +50,7 @@ export type VizParams = Record<string, unknown> | null | undefined;
 export interface VizTemplate {
   id: string;
   /** The icon-grid type this recipe implements. */
-  vizType: 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value';
+  vizType: 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'combo';
   /** Grammar of the materialized spec ('vega' skips the VL compile). */
   engine: VizTemplateEngine;
   bindings: ReadonlyArray<VizTemplateBinding>;
@@ -825,12 +825,138 @@ const singleValue: VizTemplate = {
   },
 };
 
+// ── minusx/combo@1 ─────────────────────────────────────────────────────────────
+// Canonical dual-axis composition: quiet bars establish magnitude, one crisp line
+// carries the contrasting measure. An optional categorical split colors/groups both
+// layers consistently. Both layers share an ordinal X domain and color scale while
+// their Y scales resolve independently. X is intentionally ordinal:
+// combo charts compare aligned periods/categories rather than interpolate a
+// continuous time domain (matching the classic combo behavior).
+const combo: VizTemplate = {
+  id: 'minusx/combo@1',
+  vizType: 'combo',
+  engine: 'vega-lite',
+  bindings: [
+    { name: 'x', label: 'X-Axis', accepts: ['nominal', 'temporal'] },
+    { name: 'bar', label: 'Bars', accepts: ['quantitative'] },
+    { name: 'line', label: 'Line', accepts: ['quantitative'] },
+    { name: 'series', label: 'Color / Split', accepts: ['nominal'], optional: true },
+  ],
+  build(bindings, formats, params) {
+    const x = String(bindings.x);
+    const bar = String(bindings.bar);
+    const line = String(bindings.line);
+    const series = typeof bindings.series === 'string' && bindings.series ? bindings.series : null;
+    const p = (params ?? {}) as Record<string, unknown>;
+    const barTitle = aliasOf(formats, bar);
+    const lineTitle = aliasOf(formats, line);
+    const xTitle = aliasOf(formats, x);
+    const seriesTitle = series ? aliasOf(formats, series) : null;
+    const barOpacity = typeof p.barOpacity === 'number' && Number.isFinite(p.barOpacity)
+      ? Math.min(1, Math.max(0.1, p.barOpacity))
+      : 0.72;
+    const lineWidth = typeof p.lineWidth === 'number' && Number.isFinite(p.lineWidth)
+      ? Math.min(8, Math.max(1, p.lineWidth))
+      : 3;
+    const linePoints = p.linePoints !== false;
+    const xFormat = formats?.[x]?.format;
+    const isTimeFormat = xFormat?.includes('%') === true;
+    const axis = (column: string, title: string, extra?: Record<string, unknown>) => ({
+      title,
+      ...(formats?.[column]?.format ? { format: formats[column].format } : {}),
+      ...extra,
+    });
+    // Combo deliberately uses an ordinal X scale so weekly/monthly periods keep
+    // equal spacing. Vega otherwise treats a `%b %Y` axis.format on that ordinal
+    // scale as a NUMBER format and aborts rendering. Date patterns therefore use
+    // a label expression that explicitly parses the category value as a date.
+    const xAxis = {
+      title: xTitle,
+      labelOverlap: true,
+      ...(xFormat
+        ? isTimeFormat
+          ? { labelExpr: `utcFormat(toDate(datum.value), '${xFormat.replace(/'/g, '')}')` }
+          : { format: xFormat }
+        : {}),
+    };
+    const xEncoding = {
+      field: x,
+      type: 'ordinal',
+      sort: null,
+      axis: xAxis,
+    };
+    const xTooltip = {
+      field: x,
+      type: isTimeFormat ? 'temporal' : 'ordinal',
+      title: xTitle,
+      ...(xFormat ? { format: xFormat } : {}),
+      ...(isTimeFormat ? { formatType: 'utc' } : {}),
+    };
+    const tooltip = (column: string, title: string) => [
+      xTooltip,
+      ...(series ? [{ field: series, type: 'nominal', title: seriesTitle }] : []),
+      {
+        field: column,
+        type: 'quantitative',
+        aggregate: 'sum',
+        title,
+        ...(formats?.[column]?.format ? { format: formats[column].format } : {}),
+      },
+    ];
+    const seriesColor = (title: string) => series
+      ? { field: series, type: 'nominal', title: seriesTitle, legend: { title: seriesTitle } }
+      : { datum: title, type: 'nominal', legend: { title: null } };
+
+    return {
+      layer: [
+        {
+          mark: { type: 'bar', opacity: barOpacity, tooltip: true },
+          encoding: {
+            x: xEncoding,
+            y: {
+              field: bar,
+              type: 'quantitative',
+              aggregate: 'sum',
+              axis: axis(bar, barTitle),
+            },
+            color: seriesColor(barTitle),
+            tooltip: tooltip(bar, barTitle),
+          },
+        },
+        {
+          mark: {
+            type: 'line',
+            strokeWidth: lineWidth,
+            strokeCap: 'round',
+            strokeJoin: 'round',
+            point: linePoints ? { filled: true, size: 64 } : false,
+            tooltip: true,
+          },
+          encoding: {
+            x: xEncoding,
+            y: {
+              field: line,
+              type: 'quantitative',
+              aggregate: 'sum',
+              axis: axis(line, lineTitle, { orient: 'right', grid: false }),
+            },
+            color: seriesColor(lineTitle),
+            tooltip: tooltip(line, lineTitle),
+          },
+        },
+      ],
+      resolve: { scale: { y: 'independent' } },
+    };
+  },
+};
+
 export const VIZ_TEMPLATES: Record<string, VizTemplate> = {
   [funnel.id]: funnel,
   [waterfall.id]: waterfall,
   [radar.id]: radar,
   [trend.id]: trend,
   [singleValue.id]: singleValue,
+  [combo.id]: combo,
 };
 
 /** Registry lookup for a recipe source; null for unknown ids. */
