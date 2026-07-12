@@ -26,26 +26,22 @@ export interface VegaEncodingPanelProps {
   columns: string[];
   types: string[];
   onVizChange: (envelope: VizEnvelope) => void;
+  /** The user clicked the Custom icon on a non-custom source: render the same
+   * read-only reference view a real custom spec gets, with copy explaining what
+   * Custom is (the envelope itself is untouched). */
+  customPreview?: boolean;
 }
 
-export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: VegaEncodingPanelProps) {
+export function VegaEncodingPanel({ envelope, columns, types, onVizChange, customPreview }: VegaEncodingPanelProps) {
   const isTouchDevice = useIsTouchDevice();
   const [dragged, setDragged] = useState<string | null>(null);
   const [mobileSelected, setMobileSelected] = useState<string | null>(null);
-
-  if (!isEnvelopeEditable(envelope)) {
-    return (
-      <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
-        This spec uses layers/facets — the drop zones only edit simple charts. Edit via chat,
-        or inspect the spec below.
-      </Text>
-    );
-  }
+  const editable = isEnvelopeEditable(envelope) && !customPreview;
 
   // Zones are source-aware: recipes expose their binding slots (funnel → Stages/Value);
   // native unit specs expose type-aware channels (pie → Slices/Value, never x/y).
   // Multi-capable zones (native Y via fold, recipe slots flagged `multi`) hold lists.
-  const zones = getEnvelopeZones(envelope);
+  const zones = editable ? getEnvelopeZones(envelope) : [];
   const assigned = new Set(zones.flatMap(z => getZoneFields(envelope, z.channel)));
   const isRecipe = (envelope.source as unknown as { kind: string }).kind === 'recipe';
   // Recipe chips carry the CLASSIC format popover (alias/decimals/prefix/suffix) —
@@ -65,7 +61,7 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
   };
 
   return (
-    <Box aria-label="Vega encoding drop zones" pb={2}>
+    <Box aria-label={editable ? 'Vega encoding drop zones' : 'Query result columns'} pb={2}>
       <Wrap gap={1.5} pb={4}>
         {columns.map(col => (
           <ColumnChip
@@ -76,13 +72,20 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
             isDragging={dragged === col}
             isMobileSelected={mobileSelected === col}
             isTouchDevice={isTouchDevice}
+            interactive={editable}
             onDragStart={() => setDragged(col)}
             onDragEnd={() => setDragged(null)}
             onMobileSelect={() => setMobileSelected(sel => (sel === col ? null : col))}
           />
         ))}
       </Wrap>
-      <HStack gap={2} align="stretch" flexWrap="wrap">
+      {!editable ? (
+        <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
+          {customPreview
+            ? 'Custom is where agent-authored charts live — layers, facets, annotations, anything beyond the quick types. Ask the agent to build one, or edit the JSON in Spec. Pick a chart type above to go back.'
+            : 'Query columns are shown for reference. This custom spec has no editable drop zones; use Spec or ask the agent to change its fields.'}
+        </Text>
+      ) : <HStack gap={2} align="stretch" flexWrap="wrap">
         {zones.map(({ channel, label }) => {
           const fields = getZoneFields(envelope, channel).filter(f => f !== '__mx_key');
           return (
@@ -135,7 +138,7 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange }: Veg
             </Box>
           );
         })}
-      </HStack>
+      </HStack>}
     </Box>
   );
 }

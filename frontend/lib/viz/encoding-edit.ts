@@ -93,6 +93,49 @@ export function getMarkType(spec: Record<string, unknown>): string | null {
   return null;
 }
 
+interface ComboLayerFields {
+  x: string;
+  bar: string;
+  line: string;
+}
+
+/**
+ * Recognize the conservative raw-spec equivalent of the combo recipe. This is
+ * intentionally structural rather than stylistic: colors, axis formatting, point
+ * marks, and other authored presentation do not affect classification.
+ */
+function comboLayerFields(spec: Record<string, unknown>): ComboLayerFields | null {
+  const layers = spec.layer;
+  if (!Array.isArray(layers) || layers.length !== 2) return null;
+  const resolve = spec.resolve as { scale?: { y?: unknown } } | undefined;
+  if (resolve?.scale?.y !== 'independent') return null;
+
+  const units = layers.filter((layer): layer is Record<string, unknown> =>
+    layer != null && typeof layer === 'object' && !Array.isArray(layer));
+  const bar = units.find(layer => getMarkType(layer) === 'bar');
+  const line = units.find(layer => getMarkType(layer) === 'line');
+  if (!bar || !line) return null;
+
+  const fields = (layer: Record<string, unknown>) => {
+    const encoding = layer.encoding as Record<string, Record<string, unknown>> | undefined;
+    const x = encoding?.x;
+    const y = encoding?.y;
+    return {
+      x: typeof x?.field === 'string' ? x.field : null,
+      y: typeof y?.field === 'string' && y.type === 'quantitative' ? y.field : null,
+    };
+  };
+  const barFields = fields(bar);
+  const lineFields = fields(line);
+  if (!barFields.x || !barFields.y || !lineFields.x || !lineFields.y) return null;
+  if (barFields.x !== lineFields.x) return null;
+  return { x: barFields.x, bar: barFields.y, line: lineFields.y };
+}
+
+export function isComboVegaLiteSpec(spec: Record<string, unknown>): boolean {
+  return comboLayerFields(spec) != null;
+}
+
 /** Swap the mark type; a mark-def object keeps its other props (tooltip, cornerRadius…). */
 export function setMarkType(envelope: VizEnvelope, type: string): VizEnvelope {
   const { next, spec } = cloneEnvelope(envelope);
@@ -399,7 +442,9 @@ export function getEnvelopeVizType(envelope: VizEnvelope): V2VizType | null {
   if (source.kind === 'recipe') {
     return getTemplate(source.recipe as string)?.vizType ?? null;
   }
-  return getVizType((source as { spec: Record<string, unknown> }).spec);
+  const spec = (source as { spec: Record<string, unknown> }).spec;
+  if (isComboVegaLiteSpec(spec)) return 'combo';
+  return getVizType(spec);
 }
 
 export function isEnvelopeEditable(envelope: VizEnvelope): boolean {
@@ -537,6 +582,8 @@ function inferBindings(envelope: VizEnvelope): { category: string | null; value:
     };
   }
   const spec = (source as { spec: Record<string, unknown> }).spec;
+  const combo = comboLayerFields(spec);
+  if (combo) return { category: combo.x, value: combo.bar };
   const pick = (channels: EditableChannel[], want: (def: Record<string, unknown>) => boolean): string | null => {
     for (const ch of channels) {
       const enc = (spec.encoding as Record<string, Record<string, unknown>> | undefined)?.[ch];
@@ -676,7 +723,9 @@ export function setEnvelopeVizType(
       },
     } as unknown as VizEnvelope;
   }
-  if (source.kind === 'recipe' || source.kind === 'table' || source.kind === 'pivot') {
+  const needsReconstruction = source.kind === 'recipe' || source.kind === 'table' || source.kind === 'pivot' ||
+    (source.kind === 'vega-lite' && !isUnitVegaLiteSpec((source as { spec: Record<string, unknown> }).spec));
+  if (needsReconstruction) {
     // Reconstruct a plain bar from the bindings/columns, then transform to the target.
     const barEnvelope = {
       version: 2,

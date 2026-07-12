@@ -23,6 +23,7 @@ import {
   LuChartBar,
   LuChartCandlestick,
   LuChartColumnBig,
+  LuBraces,
 } from 'react-icons/lu';
 import type { VizSettings } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -60,7 +61,7 @@ const BrickWallFireIcon = ({ size = 16 }: { size?: number }) => (
  * frozen until the ECharts pipeline is deleted). V2-only entries render solely
  * when `includeV2Only` is set (the Vega panel); classic surfaces never see them.
  */
-export type SelectableVizType = VizSettings['type'] | 'heatmap' | 'boxplot' | 'histogram';
+export type SelectableVizType = VizSettings['type'] | 'heatmap' | 'boxplot' | 'histogram' | 'custom';
 
 interface VizTypeOption {
   type: SelectableVizType;
@@ -68,6 +69,11 @@ interface VizTypeOption {
   label: string;
   /** Only offered on the V2 (Vega) panel — no classic renderer exists. */
   v2Only?: boolean;
+  /** Not a conversion target: clicking selects it in the UI without emitting a
+   * spec change — the panel decides what "viewing" the entry means. */
+  informational?: boolean;
+  /** Explanation shown when an informational entry is hovered. */
+  informationalReason?: string;
 }
 
 interface VizTypeGroup {
@@ -108,6 +114,11 @@ const ALL_VIZ_GROUPS: VizTypeGroup[] = [
       { type: 'trend', icon: <LuTrendingUp size={16} />, label: 'Trend' },
       { type: 'single_value', icon: <LuHash size={16} />, label: 'Number' },
       { type: 'geo', icon: <LuMapPinned size={16} />, label: 'Geo' },
+      {
+        type: 'custom', icon: <LuBraces size={16} />, label: 'Custom', v2Only: true,
+        informational: true,
+        informationalReason: 'Custom is selected automatically for agent-authored or unsupported specs. Ask the agent to customize.',
+      },
     ],
   },
 ];
@@ -176,7 +187,7 @@ export function VizTypeSelector({
         p={2}
         mb={2}
       >
-        {allTypes.map(({ type, icon, label }) => {
+        {allTypes.map(({ type, icon, label, informational, informationalReason }) => {
           const isActive = value === type;
           const isRecommended = recommended?.includes(type) ?? false;
           // With recommendations present, the non-fitting types recede a
@@ -209,7 +220,9 @@ export function VizTypeSelector({
               aria-label={label}
               data-recommended={isRecommended ? 'true' : undefined}
               aria-disabled={isDisabled}
-              title={isDisabled ? disabledReason : undefined}
+              aria-pressed={isActive}
+              data-informational-state={informational ? (isActive ? 'active' : 'inactive') : undefined}
+              title={informational ? informationalReason : isDisabled ? disabledReason : undefined}
             >
               {icon}
               <Text fontSize="2xs" fontFamily="mono" fontWeight={isActive ? '700' : '500'} lineHeight="1">
@@ -236,13 +249,13 @@ export function VizTypeSelector({
       h={'100%'}
       flexWrap={orientation === 'horizontal' ? 'wrap' : undefined}
     >
-      {vizTypes.map(({ type, icon, label }) => {
+      {vizTypes.map(({ type, icon, label, informational, informationalReason }) => {
         const isActive = value === type;
 
         return (
           <Tooltip
             key={type}
-            content={label}
+            content={informationalReason ?? label}
             positioning={{ placement: orientation === 'vertical' ? 'left' : 'top' }}
           >
             <IconButton
@@ -251,6 +264,8 @@ export function VizTypeSelector({
               variant={isActive ? 'solid' : 'ghost'}
               colorPalette={isActive ? 'teal' : undefined}
               onClick={() => onChange(type)}
+              aria-pressed={isActive}
+              data-informational-state={informational ? (isActive ? 'active' : 'inactive') : undefined}
             >
               {icon}
             </IconButton>

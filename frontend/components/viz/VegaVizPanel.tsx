@@ -59,6 +59,10 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
   const spec = isRecipe || isDomTier ? null : (source as { spec: Record<string, unknown> }).spec;
   const isUnit = isEnvelopeEditable(envelope);
   const vizType = getEnvelopeVizType(envelope);
+  // Clicking the Custom icon "visits" the custom state without converting anything
+  // (custom is derived from the spec, never stored). Pure UI state: any family
+  // click exits; the envelope is untouched throughout.
+  const [customPreview, setCustomPreview] = useState(false);
   // Draft for the DOM-tier css textarea — committed to the envelope on blur.
   const [cssDraft, setCssDraft] = useState<string | null>(null);
   // Draft for the histogram Max-bins input — committed on blur (empty = auto).
@@ -96,42 +100,29 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
 
   return (
     <Box>
-      {/* Composed/unrecognized specs are the CUSTOM state — an operator (facet/layer)
-          or mark beyond the quick types. No icon claims them: the grid's transforms
-          are only safe on unit specs, so structural edits route through chat. */}
-      {(!isUnit || vizType == null) && (
-        <HStack gap={2} pb={2} aria-label="Custom spec indicator">
-          <Box px={2} py={0.5} bg="accent.secondary/15" borderRadius="md" border="1px solid" borderColor="accent.secondary/30">
-            <Text fontSize="10px" fontWeight="700" color="accent.secondary" letterSpacing="0.03em">CUSTOM</Text>
-          </Box>
-          <Text fontSize="10px" color="fg.subtle" lineHeight="1.4">
-            {isUnit
-              ? 'This mark type has no quick-switch equivalent — edit via chat.'
-              : 'Layered/faceted spec — beyond the quick types; edit via chat.'}
-          </Text>
-        </HStack>
-      )}
       {/* Viz-type icon grid on top — same placement as the classic panel. Disabled
-          entries double as the live "not yet in V2" coverage list. */}
-      {isUnit && (
-        <VizTypeSelector
-          // vizType is DERIVED from the spec (never stored). null = a shape the grid
-          // doesn't recognize (rule/text marks…) — highlight nothing rather than lie.
-          value={vizType as SelectableVizType}
-          includeV2Only
-          onChange={(t) => {
-            if ((V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t)) {
-              // Columns feed the fallback inference (leaving table, which has no
-              // encodings to read — classic auto-pick behavior).
-              const cols = columns.map((name, i) => ({ name, kind: sqlTypeToVizKind(types[i] ?? '') }));
-              onVizChange(setEnvelopeVizType(envelope, t as V2VizType, cols));
-            }
-          }}
-          orientation="grouped"
-          disabledTypes={V2_DISABLED_TYPES}
-          disabledReason="Not yet supported for Vega charts — ask the agent"
-        />
-      )}
+          entries double as the live "not yet in V2" coverage list. CUSTOM keeps
+          the grid visible for authored compositions; clicking it previews the
+          custom state (info only) rather than converting. */}
+      <VizTypeSelector
+        // vizType is DERIVED from the source. Unrecognized shapes select Custom;
+        // clicking the active family is a no-op, preserving authored specs exactly.
+        value={customPreview ? 'custom' : (vizType ?? 'custom') as SelectableVizType}
+        includeV2Only
+        onChange={(t) => {
+          if (t === 'custom') { setCustomPreview(true); return; }
+          setCustomPreview(false);
+          if (t === vizType) return;
+          if ((V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t)) {
+            // Columns feed fallback inference for table/custom composed sources.
+            const cols = columns.map((name, i) => ({ name, kind: sqlTypeToVizKind(types[i] ?? '') }));
+            onVizChange(setEnvelopeVizType(envelope, t as V2VizType, cols));
+          }
+        }}
+        orientation="grouped"
+        disabledTypes={V2_DISABLED_TYPES}
+        disabledReason="Not yet supported for Vega charts — ask the agent"
+      />
       <HStack gap={1} pb={2}>
         {TABS.map(({ key, icon: Icon, label }) => (
           <Button
@@ -152,7 +143,9 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
       </HStack>
 
       {activeTab === 'fields' && (
-        isTable ? (
+        customPreview ? (
+          <VegaEncodingPanel envelope={envelope} columns={columns} types={types} onVizChange={onVizChange} customPreview />
+        ) : isTable ? (
           <Text aria-label="Table fields hint" fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
             Table columns are managed on the table itself — sort/filter/hide via the column
             headers and bottom toolbar, rename &amp; format via each header&apos;s ⚙.
@@ -175,7 +168,16 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
         )
       )}
 
-      {activeTab === 'settings' && isDomTier && (
+      {/* The Custom preview owns BOTH content tabs — showing the real type's
+          toggles under a selected Custom icon would contradict the selection. */}
+      {activeTab === 'settings' && customPreview && (
+        <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
+          Custom charts have no settings toggles — ask the agent, or edit the JSON in Spec.
+          Pick a chart type above to go back.
+        </Text>
+      )}
+
+      {activeTab === 'settings' && !customPreview && isDomTier && (
         <Box display="flex" flexDirection="column" gap={3} py={1}>
           {isPivot && (
             <PivotAxisBuilder
@@ -227,7 +229,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
         </Box>
       )}
 
-      {activeTab === 'settings' && !isDomTier && (
+      {activeTab === 'settings' && !customPreview && !isDomTier && (
         isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/trend@1' ? (
           <Box display="flex" flexDirection="column" gap={3} py={1}>
             <HStack justify="space-between">

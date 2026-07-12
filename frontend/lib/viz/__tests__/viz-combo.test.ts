@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getEnvelopeVizType, getEnvelopeZones, removeZoneField, setEnvelopeVizType,
-  setZoneField, V2_SUPPORTED_VIZ_TYPES,
+  setZoneField, isComboVegaLiteSpec, V2_SUPPORTED_VIZ_TYPES,
 } from '../encoding-edit';
 import { renderEnvelopeToSvg } from '../render-vega';
 import { getTemplate, materializeRecipe } from '../viz-templates';
@@ -225,5 +225,47 @@ describe('combo as a V2 viz type', () => {
 
     const removed = removeZoneField(bound, 'series', 'region');
     expect((removed.source as unknown as { bindings: Record<string, string> }).bindings.series).toBeUndefined();
+  });
+
+  it('recognizes an authored layered bar+line spec as combo without requiring the recipe id', () => {
+    const spec = {
+      layer: [
+        {
+          mark: { type: 'bar', color: '#65d1c7' },
+          encoding: {
+            x: { field: 'week_start', type: 'temporal', timeUnit: 'yearmonthdate' },
+            y: { field: 'revenue', type: 'quantitative', aggregate: 'sum' },
+          },
+        },
+        {
+          mark: { type: 'line', color: '#2f6fed' },
+          encoding: {
+            x: { field: 'week_start', type: 'temporal', timeUnit: 'yearmonthdate' },
+            y: { field: 'revenue2', type: 'quantitative', aggregate: 'sum' },
+          },
+        },
+      ],
+      resolve: { scale: { y: 'independent' } },
+    };
+    const authored = {
+      version: 2,
+      source: { kind: 'vega-lite', grammar: 'vega-lite@6', spec },
+    } as unknown as VizEnvelope;
+    expect(isComboVegaLiteSpec(spec)).toBe(true);
+    expect(getEnvelopeVizType(authored)).toBe('combo');
+  });
+
+  it('does not misclassify arbitrary layered specs as combo', () => {
+    expect(isComboVegaLiteSpec({
+      layer: [{ mark: 'bar' }, { mark: 'line' }],
+      resolve: { scale: { y: 'independent' } },
+    })).toBe(false); // no compatible X/Y field encodings
+    expect(isComboVegaLiteSpec({
+      layer: [
+        { mark: 'bar', encoding: { x: { field: 'month' }, y: { field: 'a', type: 'quantitative' } } },
+        { mark: 'line', encoding: { x: { field: 'week' }, y: { field: 'b', type: 'quantitative' } } },
+      ],
+      resolve: { scale: { y: 'independent' } },
+    })).toBe(false); // X fields differ
   });
 });

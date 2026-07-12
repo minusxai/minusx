@@ -647,7 +647,12 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
 - Stacked toggle / log-scale toggle round-trip in browser
 - Save persists → reload renders the saved spec
 - Field-settings popover near viewport edges / while the panel scrolls
-- Composed (layered) spec: Fields/Settings show the "edit via chat" hint, Spec still works
+- Composed spec classification: canonical bar+line+independent-Y layers select Combo; unmatched
+  compositions select the Custom icon, keep the complete icon grid, expose no drop
+  zones while retaining neutral query-column reference chips, and may be safely rebuilt by choosing
+  a supported family; Spec still works. While a known family is active, Custom stays clickable as a
+  UI-only PREVIEW (icon selects, Fields swaps to "ask the agent / edit in Spec" copy, envelope
+  untouched — custom is derived, never stored; any family click exits, same family = silent return)
 - Undo/redo behavior with surgical edits
 
 **Data handling**
@@ -679,7 +684,8 @@ that are not obvious from the code. Active priorities belong only in §21.
     of the route; FAIL-OPEN). The official schema is imported from
     `vega-lite/vega-lite-schema.json`; no repository copy is checked in.
 - **Components** — `components/viz/`: `VegaChart` (lazy via next/dynamic; promoteFontAttrs beats Chakra
-  @layer reset), `VegaVizPanel` (icon grid + Fields/Settings/Spec; DOM-tier settings = conditional
+  @layer reset), `VegaVizPanel` (persistent icon grid + informational Custom state +
+  Fields/Settings/Spec; DOM-tier settings = conditional
   formats [table] + css textarea), `VegaEncodingPanel` (zones; unified `VizFieldPopover` for native +
   recipes), `VizFieldPopover` (STORAGE-AGNOSTIC: value/onCommit; alias + d3 presets + always-visible
   custom pattern input; portals to body — chips clip overflow), `VizTableView` / `VizPivotView`

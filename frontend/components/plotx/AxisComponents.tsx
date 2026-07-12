@@ -52,6 +52,8 @@ interface ColumnChipProps {
   isDragging?: boolean
   isMobileSelected?: boolean
   isTouchDevice?: boolean
+  /** False renders an informational field chip (no drag/tap assignment). */
+  interactive?: boolean
   onDragStart?: (e: React.DragEvent) => void
   onDragEnd?: () => void
   onMobileSelect?: () => void
@@ -59,7 +61,7 @@ interface ColumnChipProps {
 
 export const ColumnChip = ({
   column, type, isAssigned, isDragging, isMobileSelected, isTouchDevice,
-  onDragStart, onDragEnd, onMobileSelect,
+  interactive = true, onDragStart, onDragEnd, onMobileSelect,
 }: ColumnChipProps) => {
   const Icon = getTypeIcon(type)
   const color = getTypeColor(type)
@@ -73,14 +75,14 @@ export const ColumnChip = ({
       borderRadius="md"
       border="1px solid"
       borderColor={isMobileSelected ? 'accent.teal' : isAssigned ? 'accent.teal' : 'border.default'}
-      cursor={isTouchDevice ? 'pointer' : 'grab'}
+      cursor={interactive ? (isTouchDevice ? 'pointer' : 'grab') : 'default'}
       opacity={isDragging ? 0.4 : 1}
-      _hover={{ bg: isMobileSelected ? 'accent.teal' : 'bg.muted', borderColor: isAssigned ? 'accent.teal' : 'border.default' }}
-      _active={{ cursor: isTouchDevice ? 'pointer' : 'grabbing' }}
-      draggable={!isTouchDevice}
+      _hover={interactive ? { bg: isMobileSelected ? 'accent.teal' : 'bg.muted', borderColor: isAssigned ? 'accent.teal' : 'border.default' } : undefined}
+      _active={interactive ? { cursor: isTouchDevice ? 'pointer' : 'grabbing' } : undefined}
+      draggable={interactive && !isTouchDevice}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      onClick={() => isTouchDevice && onMobileSelect?.()}
+      onClick={() => interactive && isTouchDevice && onMobileSelect?.()}
       userSelect="none"
       flexShrink={0}
     >
