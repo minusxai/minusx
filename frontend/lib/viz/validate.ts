@@ -4,7 +4,7 @@
  * Stages, in order (later stages only run while no errors have been found):
  *   1. envelope shape          → E_ENVELOPE
  *   2. data policy             → E_EXTERNAL_DATA / E_DATASET_NAME (url/values/foreign names)
- *   3. official grammar schema → E_SCHEMA (vendored vega-lite schema via Ajv, distilled errors)
+ *   3. official grammar schema → E_SCHEMA (package-provided Vega-Lite schema via Ajv, distilled errors)
  *   4. field references        → E_FIELD_NOT_FOUND (shared walker vs result columns, with
  *                                 available-field suggestions; transform-derived names allowed)
  *   5. vega-lite compile       → W_COMPILE (captured logger; warnings never flip ok=false)
@@ -16,7 +16,7 @@ import Ajv from 'ajv';
 import { compile } from 'vega-lite';
 import type { TopLevelSpec } from 'vega-lite';
 import { parse as parseVega } from 'vega';
-import vegaLiteSchema from './vendor/vega-lite-v6.schema.json';
+import vegaLiteSchema from 'vega-lite/vega-lite-schema.json';
 import { VIZ_GRAMMAR_VEGA_LITE } from '@/lib/validation/atlas-schemas';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { prepareVegaLiteSpec } from './prepare';
@@ -25,7 +25,7 @@ import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } 
 import { VIZ_DATASET_MAIN } from './types';
 import type { VizIssue, VizResultColumn, VizValidationResult } from './types';
 
-// The 1.4MB vendored schema compiles once per process (~400ms), then validates in <1ms.
+// Vega-Lite's package-provided schema compiles once per process (~400ms), then validates in <1ms.
 // jsonPointers gives '/layer/1/mark'-style dataPaths that align with VizIssue.path.
 let compiledVlValidator: Ajv.ValidateFunction | null = null;
 function getVlValidator(): Ajv.ValidateFunction {
