@@ -904,7 +904,7 @@ const combo: VizTemplate = {
       },
     ];
     const seriesColor = (title: string) => series
-      ? { field: series, type: 'nominal', title: seriesTitle, legend: { title: seriesTitle } }
+      ? { field: series, type: 'nominal', title: seriesTitle, legend: { title: null } }
       : { datum: title, type: 'nominal', legend: { title: null } };
 
     return {

@@ -8,11 +8,11 @@
  * RFC §7); data-only updates flow through view.data() without a rebuild; container
  * resizes update the width/height signals; every view is finalized on unmount.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Text } from '@chakra-ui/react';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec } from '@/lib/viz/render-vega';
+import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan } from '@/lib/viz/render-vega';
 
 export interface VegaChartProps {
   envelope: VizEnvelope;
@@ -54,6 +54,21 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
   const viewRef = useRef<View | null>(null);
   const rowsRef = useRef(rows);
   const [error, setError] = useState<string | null>(null);
+  // Legend wrap is a compile-time CONSTANT (computeLegendPlan) — when a
+  // resize or data change flips the decision, the view must be rebuilt (the
+  // plan is baked into the parsed runtime). The epoch re-arms the build
+  // effect only on an actual flip; plain resizes stay signal-only updates.
+  const [legendEpoch, setLegendEpoch] = useState(0);
+  const legendPlanRef = useRef<string>('null');
+  const vlSpecRef = useRef<Record<string, unknown> | null>(null);
+
+  const replanLegendWrap = useCallback(() => {
+    const el = containerRef.current;
+    const spec = vlSpecRef.current;
+    if (!el || !spec) return;
+    const next = JSON.stringify(computeLegendPlan(spec, rowsRef.current, el.clientWidth) ?? null);
+    if (next !== legendPlanRef.current) setLegendEpoch(e => e + 1);
+  }, []);
 
   // Keep the latest rows readable by the build effect without retriggering it.
   // (Declared BEFORE the build effect — effects run in declaration order.)
@@ -77,7 +92,12 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
         if (cancelled) return;
         const resolved = resolveEnvelopeSpec(envelope);
         if (!resolved.ok) throw new Error(resolved.error);
-        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode);
+        vlSpecRef.current = resolved.engine === 'vega-lite' ? resolved.spec : null;
+        const legendPlan = vlSpecRef.current
+          ? computeLegendPlan(vlSpecRef.current, rowsRef.current, el.clientWidth)
+          : null;
+        legendPlanRef.current = JSON.stringify(legendPlan ?? null);
+        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan });
         if (cancelled) return;
         el.replaceChildren(); // drop any stale chart DOM from a failed predecessor
         view = createVegaView(vegaSpec, rowsRef.current, {
@@ -91,6 +111,11 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
         await view.runAsync();
         promoteFontAttrs(el);
         if (!cancelled) setError(null);
+        // The container may not have been laid out when the plan above ran (a
+        // dashboard tile mounts at ~0 width; fonts.ready also loses the race
+        // against the first ResizeObserver tick). Re-plan against the settled
+        // width — a flip bumps the epoch and rebuilds once.
+        if (!cancelled) replanLegendWrap();
       } catch (e) {
         // Full stack to the console — the error box shows only the message.
         console.error('[VegaChart] render failed:', e);
@@ -102,15 +127,16 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
       viewRef.current = null;
       view?.finalize();
     };
-  }, [envelope, colorMode]);
+  }, [envelope, colorMode, legendEpoch]);
 
-  // Data-only updates: no rebuild.
+  // Data-only updates: no rebuild — unless the new rows change the legend plan.
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
     setMainData(view, rows);
     view.runAsync().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
-  }, [rows]);
+    replanLegendWrap();
+  }, [rows, replanLegendWrap]);
 
   // Re-promote font attrs whenever vega rewrites text nodes (data/resize re-renders).
   // 'style' is not in the filter, so our own writes can't retrigger the observer.
@@ -127,6 +153,10 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
+      // Re-plan even mid-build (view not ready yet): the initial tick carries
+      // the first REAL container width, which the in-flight build may have
+      // missed — skipping it here left a phantom 1-column legend baked in.
+      replanLegendWrap();
       const view = viewRef.current;
       if (!view) return;
       const { width, height } = sizeOf(el);
@@ -134,7 +164,7 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [replanLegendWrap]);
 
   // The container must ALWAYS stay mounted: the build effect needs containerRef on
   // every envelope change. Unmounting it on error made error states permanent (the

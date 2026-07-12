@@ -49,11 +49,12 @@ export function resolveEnvelopeSpec(envelope: VizEnvelope): ResolvedEnvelopeSpec
 export function toVegaSpec(
   resolved: { spec: Record<string, unknown>; engine: 'vega-lite' | 'vega' },
   mode: 'light' | 'dark',
+  options?: CompileVegaLiteOptions,
 ): { vegaSpec: VegaSpec; parserConfig?: Record<string, unknown> } {
   if (resolved.engine === 'vega') {
     return { vegaSpec: resolved.spec as unknown as VegaSpec, parserConfig: getVegaParserConfig(mode) };
   }
-  return { vegaSpec: compileVegaLite(resolved.spec, mode) };
+  return { vegaSpec: compileVegaLite(resolved.spec, mode, options) };
 }
 
 export interface VegaViewOptions {
@@ -141,7 +142,197 @@ export function injectHeatmapCellLayout(prepared: Record<string, unknown>): void
   }
 }
 
-export function compileVegaLite(spec: Record<string, unknown>, mode: 'light' | 'dark'): VegaSpec {
+/**
+ * Legend wrap planning. The house legend is one centered row of entries;
+ * anchored middle, a too-wide row clips on BOTH edges in a narrow
+ * container (dashboard tile) and trailing entries disappear entirely.
+ *
+ * The column count is decided HERE in plain JS, not by a Vega signal: signal
+ * expressions on `columns` are evaluated against an unsettled width and the
+ * legend layout never re-flows (probed headless: the width signal read 232
+ * regardless of the real container). The renderer knows the true container
+ * width, the entry labels come from the data, and the house font is mono, so
+ * label widths are exact — the resulting CONSTANT is baked in before parse, so
+ * the fit-autosize pass sees the final legend height (no post-layout clipping).
+ */
+// JetBrains Mono advance width is 0.6em at the 11px legend-label size.
+const LEGEND_LABEL_CHAR_PX = 6.6;
+const LEGEND_LABEL_LIMIT = 220; // theme labelLimit — vega truncates past this
+const LEGEND_ENTRY_CHROME_PX = 36; // symbol + label offset + column padding
+const LEGEND_AXIS_GUTTER_PX = 0; // y-axis labels + title the legend row can't use
+const LEGEND_PADDING_GUTTER_PX = 16; // axis-less charts (pie): view padding only
+const LEGEND_MAX_ROWS = 3; // beyond this the legend eats the chart — truncate instead
+
+export interface LegendWrapPlan {
+  /** Grid column count baked onto the legend. */
+  columns: number;
+  /** Explicit entry list when truncated to LEGEND_MAX_ROWS (display order). */
+  values?: string[];
+  /** Hidden-entry count behind `values` — shown as a "+N more" list entry. */
+  moreCount?: number;
+}
+
+/**
+ * Drop all Vega-Lite legend titles. They repeat what the chart and entry labels
+ * already communicate and consume scarce horizontal space. A channel-level
+ * `title` still renames tooltips/axes without surfacing as a legend heading.
+ */
+const LEGEND_CHANNELS = ['color', 'fill', 'stroke', 'opacity', 'shape', 'size', 'strokeDash'] as const;
+
+function suppressLegendTitles(spec: Record<string, unknown>): void {
+  const encoding = spec.encoding as Record<string, unknown> | undefined;
+  for (const channel of LEGEND_CHANNELS) {
+    const def = encoding?.[channel];
+    if (!def || typeof def !== 'object' || Array.isArray(def)) continue;
+    const d = def as Record<string, unknown>;
+    if (typeof d.field !== 'string') continue;
+    const legend = d.legend as Record<string, unknown> | null | undefined;
+    if (legend === null) continue;
+    d.legend = { ...(legend ?? {}), title: null };
+  }
+  const layers = spec.layer;
+  if (Array.isArray(layers)) {
+    for (const layer of layers) {
+      if (layer != null && typeof layer === 'object' && !Array.isArray(layer)) {
+        suppressLegendTitles(layer as Record<string, unknown>);
+      }
+    }
+  }
+}
+
+/** Whether any (sub)view positions on y — i.e. a left axis gutter exists. */
+function hasYField(spec: Record<string, unknown>): boolean {
+  const y = (spec.encoding as Record<string, Record<string, unknown>> | undefined)?.y;
+  if (y && typeof y === 'object' && 'field' in y) return true;
+  const layers = spec.layer;
+  return Array.isArray(layers) && layers.some(l =>
+    l != null && typeof l === 'object' && !Array.isArray(l) && hasYField(l as Record<string, unknown>));
+}
+
+/** The color-channel def of a unit spec, or the first color among layers. */
+function findColorDef(spec: Record<string, unknown>): Record<string, unknown> | null {
+  const own = (spec.encoding as Record<string, unknown> | undefined)?.color;
+  if (own && typeof own === 'object' && !Array.isArray(own)) return own as Record<string, unknown>;
+  const layers = spec.layer;
+  if (Array.isArray(layers)) {
+    for (const layer of layers) {
+      if (layer && typeof layer === 'object' && !Array.isArray(layer)) {
+        const found = findColorDef(layer as Record<string, unknown>);
+        if (found) return found;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Decide the top legend's wrap for `containerWidth`, or null to leave Vega's
+ * single-row default (fits, or not ours to touch: authored columns / non-top
+ * orient / gradient / no discrete color field). When even the wrapped grid
+ * would exceed LEGEND_MAX_ROWS, the plan truncates: the first columns×rows
+ * entries (display order) plus a "(+N more)" title suffix — the CHART keeps
+ * every series; only the legend elides.
+ */
+export function computeLegendPlan(
+  spec: Record<string, unknown>,
+  rows: Record<string, unknown>[],
+  containerWidth: number,
+): LegendWrapPlan | null {
+  const color = findColorDef(spec);
+  if (!color || typeof color.field !== 'string') return null;
+  if (color.type === 'quantitative' || color.type === 'temporal') return null; // gradient legend
+  const legend = color.legend as Record<string, unknown> | null | undefined;
+  if (legend === null) return null; // legend disabled
+  if (legend && ('columns' in legend || ('orient' in legend && legend.orient !== 'top'))) return null;
+
+  // Entry labels: the color field's distinct values — except under a fold
+  // (multi-Y), where the key never appears in the raw rows and the labels are
+  // the folded column names from the transform itself.
+  const field = color.field;
+  let labels: string[] | null = null;
+  const transforms = spec.transform;
+  if (Array.isArray(transforms)) {
+    for (const t of transforms) {
+      const fold = (t as Record<string, unknown>)?.fold;
+      const as = (t as Record<string, unknown>)?.as;
+      if (Array.isArray(fold) && Array.isArray(as) && as[0] === field) {
+        labels = fold.map(String);
+        break;
+      }
+    }
+  }
+  if (!labels) {
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const v = row[field];
+      if (v != null) seen.add(String(v));
+    }
+    labels = [...seen];
+  }
+  if (labels.length < 2) return null;
+
+  const labelPx = (text: string, charPx: number, limit: number) =>
+    Math.min(Math.ceil(text.length * charPx), limit);
+  const entryWidths = labels.map(l => labelPx(l, LEGEND_LABEL_CHAR_PX, LEGEND_LABEL_LIMIT) + LEGEND_ENTRY_CHROME_PX);
+  const gutter = hasYField(spec) ? LEGEND_AXIS_GUTTER_PX : LEGEND_PADDING_GUTTER_PX;
+  const available = Math.max(containerWidth - gutter, 60);
+
+  const singleRow = entryWidths.reduce((a, b) => a + b, 0);
+  if (singleRow <= available) return null;
+  // Each column is as wide as its widest entry (plan with the max so the
+  // estimate can only over-wrap, never overflow).
+  const maxEntry = Math.max(...entryWidths);
+  const columns = Math.max(1, Math.floor(available / maxEntry));
+  if (Math.ceil(labels.length / columns) <= LEGEND_MAX_ROWS) return { columns };
+  // Truncate in display order (Vega's default ascending domain sort). The
+  // "+N more" sentinel takes the grid's last slot, so it costs one real entry.
+  const visible = columns * LEGEND_MAX_ROWS - 1;
+  const sorted = [...labels].sort();
+  return { columns, values: sorted.slice(0, visible), moreCount: labels.length - visible };
+}
+
+/** Bake a wrap plan onto discrete top legends of a COMPILED spec. */
+function injectLegendPlan(vegaSpec: Record<string, unknown>, plan: LegendWrapPlan): void {
+  const legends = vegaSpec.legends as Record<string, unknown>[] | undefined;
+  if (!Array.isArray(legends)) return;
+  const scales = (vegaSpec.scales ?? []) as { name?: string; type?: string }[];
+  const DISCRETE = ['ordinal', 'band', 'point'];
+  for (const legend of legends) {
+    if ('columns' in legend) continue; // author opt-out
+    if ('orient' in legend && legend.orient !== 'top') continue;
+    const scaleName = (['fill', 'stroke', 'shape', 'size', 'opacity'] as const)
+      .map(ch => legend[ch]).find(v => typeof v === 'string');
+    const scale = scales.find(s => s.name === scaleName);
+    if (!scale || !DISCRETE.includes(scale.type ?? '')) continue;
+    legend.columns = plan.columns;
+    if (plan.values && plan.moreCount) {
+      // The "+N more" indicator is a LIST ENTRY: a sentinel value appended to
+      // the explicit entry list. It isn't in the scale domain, so its symbol is
+      // hidden (opacity 0) and its label muted — a pure text row in the grid.
+      const sentinel = `+${plan.moreCount} more`;
+      legend.values = [...plan.values, sentinel];
+      const isSentinel = `datum.value === '${sentinel}'`;
+      legend.encode = {
+        symbols: { update: { opacity: [{ test: isSentinel, value: 0 }, { value: 1 }] } },
+        labels: { update: { opacity: [{ test: isSentinel, value: 0.55 }, { value: 1 }] } },
+        ...(legend.encode as object | undefined ?? {}),
+      };
+    } else if (plan.values) {
+      legend.values = plan.values;
+    }
+  }
+}
+
+export interface CompileVegaLiteOptions {
+  /** Planned legend wrap (computeLegendPlan) — null/undefined = single row. */
+  legendPlan?: LegendWrapPlan | null;
+}
+
+export function compileVegaLite(
+  spec: Record<string, unknown>,
+  mode: 'light' | 'dark',
+  options?: CompileVegaLiteOptions,
+): VegaSpec {
   // Ownership boundary: specs arrive from Redux (immer deep-frozen) and vega-lite/vega
   // mutate their inputs (normalization, Symbol(vega_id) tagging). Never hand them
   // shared state — deep-clone here (specs are small).
@@ -164,12 +355,17 @@ export function compileVegaLite(spec: Record<string, unknown>, mode: 'light' | '
     injectLegendToggle(prepared);
     injectHeatmapCellLayout(prepared);
   }
+  // House look: legends are entry labels only, with no redundant heading.
+  if (!composed) suppressLegendTitles(prepared);
   const { spec: vegaSpec } = compile(prepared as unknown as TopLevelSpec, { config: getVegaLiteConfig(mode) });
   // Center top legends within the chart width (a Vega-level legend layout — VL's
   // config surface doesn't expose it, so it's merged into the compiled config).
   const cfg = ((vegaSpec as unknown as Record<string, unknown>).config ??= {}) as Record<string, unknown>;
   const legendCfg = (cfg.legend ??= {}) as Record<string, unknown>;
   legendCfg.layout = { top: { anchor: 'middle' }, ...(legendCfg.layout as object | undefined ?? {}) };
+  if (options?.legendPlan != null) {
+    injectLegendPlan(vegaSpec as unknown as Record<string, unknown>, options.legendPlan);
+  }
   return vegaSpec;
 }
 

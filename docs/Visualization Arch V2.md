@@ -576,8 +576,16 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
 - Dark ↔ light toggle recompiles correctly (axis/legend/tooltip colors flip, no stale colors)
 - Viz-V2 and legacy ECharts charts side by side look like siblings (palette/font parity)
 - Very narrow container (dashboard-tile width) — labels thin gracefully, no overlap
+- Legend wrap in narrow containers (2026-07-12, browser-verified on the tutorial dashboard):
+  `computeLegendPlan` decides columns in plain JS at build (true container width + actual data labels
+  + exact mono metrics) and bakes CONSTANTS into the compiled legend — a signal-driven `columns` was
+  probed and rejected (Vega laid out against an unsettled width and never re-flowed). Wrapped grids
+  omit the redundant legend title; axis-less charts (pie) reserve no y-gutter; cap at 3 rows with a
+  muted "+N more" LIST entry (hidden symbol, explicit
+  legend `values`; chart keeps all series); re-planned on resize/data via epoch rebuild only when the
+  plan flips (post-build replan + pre-view-check RO replan close the 0-width-mount race)
 - Single-series charts always get a legend (constant color datum named after the measure — ECharts parity)
-- Legend entries centered over the chart; legend title inline-left of the entries
+- Legend entries centered over the chart; no legend title
 - House donut in theme `config.arc` (responsive hole, rounded padded sectors): a bare agent-authored
   `mark: arc` renders identically to the UI transform; spec-level `innerRadius` overrides (solid pie)
 

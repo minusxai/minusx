@@ -56,15 +56,8 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
     },
     legend: {
       orient: 'top',
-      // Inline title left of the entries: one compact centered row instead of the
-      // stacked two-line default.
-      titleOrient: 'left',
-      titlePadding: 10,
       labelColor: colors.fgMuted,
-      titleColor: colors.fgDefault,
       labelFontSize: 11,
-      titleFontSize: 12,
-      titleLimit: 240,
       labelLimit: 220,
     },
     // Automatic tooltips everywhere: hovering any mark shows its encoded fields
@@ -129,14 +122,9 @@ export function getVegaParserConfig(mode: 'light' | 'dark'): Record<string, unkn
     legend: {
       orient: 'top',
       layout: { top: { anchor: 'middle' } },
-      titleOrient: 'left',
-      titlePadding: 10,
       labelColor: colors.fgMuted,
-      titleColor: colors.fgDefault,
       labelFont: font,
-      titleFont: font,
       labelFontSize: 11,
-      titleFontSize: 12,
     },
     title: { color: colors.fgDefault, font, fontSize: 14 },
   };

@@ -26,10 +26,10 @@ describe('getVegaLiteConfig', () => {
     expect(config.background).toBe('transparent');
   });
 
-  it('places legends on top with the title inline-left', () => {
+  it('places legends on top without title styling', () => {
     const config = getVegaLiteConfig('dark') as Record<string, any>;
     expect(config.legend.orient).toBe('top');
-    expect(config.legend.titleOrient).toBe('left');
+    expect(config.legend.titleOrient).toBeUndefined();
   });
 
   it('enables encoding tooltips on all marks by default', () => {
