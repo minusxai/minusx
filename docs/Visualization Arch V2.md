@@ -1,11 +1,26 @@
 # Visualization Arch V2
 
-> **Status:** Working V2 direction — merged from the two discussion documents
-> (`frontend/docs/viz_discussion.md` and the Codex counterpart, both retired to reference).
-> Decisions dated 2026-07-10. Only the four evidence questions in §19 remain open; everything
-> else here is the agreed direction unless the spike produces contrary evidence.
+> **Status (2026-07-11):** Active dual-stack implementation. The Vega/Vega-Lite render pipeline,
+> shipped recipes, table/pivot DOM tier, validation, themes, and editor panel are working. Legacy
+> `vizSettings` remains during migration. Three evidence questions remain in §19; the canonical
+> delivery roadmap is §21.
 
-## 1. Summary
+## Document map
+
+- **Parts I–IV** define the target architecture and platform contracts.
+- **Part V** records delivery strategy, unresolved evidence, decisions, and the canonical roadmap.
+- **Appendix A** is implementation evidence: plot coverage and verified behavior.
+- **Appendix B** is a code map plus dated implementation decisions. It is historical context, not
+  a second roadmap.
+
+Where the target architecture is ahead of the probe, the document says so explicitly. Current code
+must not be inferred from a target-state type example alone.
+
+---
+
+## Part I — Core contract and rendering
+
+### 1. Summary
 
 The `viz-styles-prop` branch (abandoned, salvage-later) was re-implementing a visualization grammar
 piecewise — curated style levers, a per-type capabilities matrix, a bespoke style cascade, ECharts/CSS escape
@@ -17,10 +32,17 @@ document envelope, data binding, themes, validation, security, and UI — not vi
 types stop being application-level renderer components and become data: specs and versioned recipes. A new
 chart type normally requires **zero new MinusX rendering code**.
 
-The rollout is probe-first: add a `vega-lite` source beside the current renderer, let the agent use it on real
-work, and converge the rest of the stack after seeing the results (§18).
+The rollout began probe-first and is now in the hardening phase: the `vega-lite` source runs beside the legacy
+renderer, shipped recipes exercise native Vega, and table/pivot use the DOM tier. The next gate is completing
+agent visibility, export, public surfaces, and operational evidence before family-by-family migration (§18, §21).
 
-## 2. The envelope
+**Current implementation snapshot:** persisted V2 sources are `vega-lite`, `recipe`, `table`, and `pivot`.
+Native Vega is currently reached through shipped recipe materialization. `builder`, directly-authored `vega`,
+`slippy-map`, persisted derived artifacts, workspace recipe files, shared `fieldMeta`, and typed interaction
+outputs remain target-state work. Shipped recipes currently materialize at render time from a trusted registry;
+the persisted/materialized workspace-recipe lifecycle in §5 is the target contract.
+
+### 2. The envelope
 
 MinusX owns a small envelope; grammar semantics live inside `source`:
 
@@ -37,8 +59,9 @@ MinusX owns a small envelope; grammar semantics live inside `source`:
 ```
 
 - **`grammar`** is recorded on every grammar-bearing source (and inside every derived artifact, §3), separately
-  from the envelope version — `vega-lite@6` / `vega@6`. MinusX vendors the exact JSON schemas and pins
-  runtime/compiler package versions; `$schema` is never fetched from the network. A Vega/Vega-Lite upgrade is
+  from the envelope version — `vega-lite@6` / `vega@6`. MinusX pins runtime/compiler package versions and
+  validates with the official schema exported by the installed Vega-Lite package; `$schema` is never fetched
+  from the network. A Vega/Vega-Lite upgrade is
   an explicit migration with visual regression tests — saved specs are not silently reinterpreted by a new
   major version.
 - **Placement:** a new `content.viz` key on question content. New content writes `viz`; legacy `vizSettings` is
@@ -46,13 +69,14 @@ MinusX owns a small envelope; grammar semantics live inside `source`:
   present, **`viz` is authoritative** and save-time validation rejects contradictory states.
 - **TypeBox rule:** only the MinusX envelope is TypeBox in `atlas-schemas.ts` — `version`, the `source`
   discriminator, `fieldMeta`, param namespaces, `assets`, recipe provenance, and derived-artifact metadata.
-  Spec bodies are `Type.Unknown` there and validated by the vendored official schemas plus the MinusX
+  Spec bodies are `Type.Unknown` there and validated by the package-provided official schema plus the MinusX
   field/security passes (§11–12). **Do not reproduce the Vega/VL grammars in TypeBox or paste them into
   prompts.**
 
-## 3. One authoritative source, and the render flow
+### 3. One authoritative source, and the render flow
 
-Each visualization has exactly one authoritative source:
+Each visualization has exactly one authoritative source. The union below is the **target state**; the shipped
+subset is listed in §1.
 
 ```ts
 type DerivedSpec = {
@@ -95,7 +119,7 @@ slippy-map -----------------------> tile renderer (Leaflet)
 - A Vega-Lite source is named `vega-lite`; native Vega is a separate `vega` source with its own schema and
   authoring guide. Never conflate them.
 
-### React component boundary
+#### React component boundary
 
 One public component:
 
@@ -117,10 +141,10 @@ attachments — must use this same entry point or its headless sibling.**
 
 Zero React components per chart type. `<BarPlot>`, `<LinePlot>`, `<TrendPlot>`, `<RadarPlot>`, `<ComboPlot>`, …
 disappear after migration. Surviving editor chrome is generated from metadata (builder zones, `fieldMeta`
-controls, recipe `params` controls, a generic theme panel), not written per type. (If the trend spike picks the
-DOM widget, it adds one small leaf renderer; `single_value` follows trend either way.)
+controls, recipe `params` controls, a generic theme panel), not written per type. Trend and `single_value`
+remain on the recipe path; they do not add DOM chart leaf renderers.
 
-## 4. Grammar tiers
+### 4. Grammar tiers
 
 - **`vega-lite` — the default for almost all charts.** The x/y/split vs y1/y2 distinction dissolves into the
   grammar (`color` encoding vs `fold`/layers); composition is native (`layer`, `facet`, `concat`, dual-axis via
@@ -133,9 +157,15 @@ DOM widget, it adds one small leaf renderer; `single_value` follows trend either
   silent failures on invalid options, callback-dependent advanced behavior, no grammar model. It remains the
   documented fallback if the probe fails, not the preferred surface.
 
-## 5. Recipes
+## Part II — Authoring and presentation
+
+### 5. Recipes
 
 A recipe is an authoring shortcut and reusable artifact — not another renderer or second grammar.
+
+**Current probe vs target contract:** shipped `minusx/*` recipes are trusted TypeScript build functions in the
+local registry and materialize at render time. The declarative, publishable workspace-recipe contract below is
+the required next form before recipes become user-authored files.
 
 **Contract:** immutable versioned id; a native Vega or Vega-Lite body; typed field bindings; named-signal
 params with declarative UI-control metadata; full validation at publish time; a materialize operation. No
@@ -183,7 +213,7 @@ summary — the live prompt-vars pattern) plus `SearchFiles` for workspace recip
 Neither trend nor radar meets that bar; Vega has no spec-level mark plugin API and forking the renderer is
 forbidden.
 
-## 6. Field metadata (`fieldMeta`)
+### 6. Field metadata (`fieldMeta`)
 
 One small renderer-neutral layer shared by charts, recipes, tables, and pivots:
 
@@ -204,7 +234,7 @@ One small renderer-neutral layer shared by charts, recipes, tables, and pivots:
   in-spec.
 - SQL result types are the initial type inference; an encoding may explicitly override (numeric ID as nominal).
 
-## 7. Themes
+### 7. Themes
 
 **Two separate mechanisms — never one giant precedence chain** (that would rebuild the branch's cascade under
 new names):
@@ -228,13 +258,14 @@ builder/recipe expansion → fieldMeta injection (absent-only) → recipe params
 **Dark/light from day one:** one MinusX token module *generates* all artifacts — VL light/dark configs, Vega
 parser configs, and stable theme signals (`mxForeground`, `mxBackground`, `mxPositive`, `mxNegative`,
 `mxFontSizeScale`) — so tiers cannot drift. VL views recompile on mode change; native Vega recipes built on
-theme signals may signal-update when safe, otherwise reparse (spike decides, §17). Explicit spec colors are
-never silently rewritten. Canvas/SVG marks must not depend on application CSS variables.
+theme signals may signal-update when safe, otherwise reparse; the exact boundary remains an evidence item
+(§19, §21.5). Explicit spec colors are never silently rewritten. Canvas/SVG marks must not depend on
+application CSS variables.
 
 **Deleted outright:** indexed color keys, percentage opacity controls, `dataLabelColor`, colorScale enums, and
 kin. Native colors/schemes, 0–1 opacity, native mark/encoding properties.
 
-## 8. Story & embed semantics
+### 8. Story & embed semantics
 
 - Story/embed config supplies **theme defaults only** — it cannot replace properties explicitly set inside a
   spec.
@@ -245,7 +276,9 @@ kin. Native colors/schemes, 0–1 opacity, native mark/encoding properties.
 - **Forbidden:** positional JSON Patch against a saved visualization (silently changes meaning when `/layer/1`
   reorders) and generic deep-merging of `layer`/`transform`/`params` arrays.
 
-## 9. Geographic visualization
+## Part III — Specialized surfaces
+
+### 9. Geographic visualization
 
 All analytic geo converges on Vega/VL through `<VegaRenderer>`:
 
@@ -269,7 +302,7 @@ attribution). Tiles are a product requirement, so Leaflet stays — **restricted
 the Vega recipes; a future tile-engine change must not affect the recipe contract. There is no generic "geo"
 renderer.
 
-## 10. Table & pivot
+### 10. Table & pivot
 
 Same envelope, DOM rendering — VL's `pivot` transform reshapes data but is not a production pivot grid
 (virtualized rows/columns, nested sticky headers, expand/collapse, totals, accessible grid navigation).
@@ -288,11 +321,13 @@ Same envelope, DOM rendering — VL's `pivot` transform reshapes data but is not
   templates are **out of V1** (another language plus sanitization/a11y/security obligations before the
   architecture is proven).
 
-## 11. Validation & agent feedback
+## Part IV — Platform guarantees
+
+### 11. Validation & agent feedback
 
 `ValidateVisualization` / the preview path returns, in order:
 
-1. JSON Schema errors with JSON Pointer paths (vendored schemas).
+1. JSON Schema errors with JSON Pointer paths (official package-provided schema).
 2. `E_FIELD_NOT_FOUND` — a **field-aware pass** walks all field references and compares against actual
    query-result columns and inferred types, with suggestions
    (`"margin_pct" is not in the query result. Available quantitative fields: margin_percentage, …`).
@@ -323,7 +358,7 @@ Same envelope, DOM rendering — VL's `pivot` transform reshapes data but is not
   takes over for semantic feedback. JSON-syntax-error-rate-per-EditFile is a probe metric; escalate the
   tolerance policy only if the measurement demands it.
 
-## 12. Security
+### 12. Security
 
 One policy, one module, applied identically to editing previews, saved questions, image export, and
 guest-rendered public stories:
@@ -340,7 +375,7 @@ guest-rendered public stories:
   sources unless a reviewed interaction needs them; every mounted view finalized on unmount.
 - Limits on data volume, generated marks, transform depth, and render time (numbers from the spike, §17/§19).
 
-## 13. Parameters & interactions
+### 13. Parameters & interactions
 
 Reserved envelope namespaces — never one grab-bag `params` object:
 
@@ -353,7 +388,7 @@ Reserved envelope namespaces — never one grab-bag `params` object:
   (`{"type": "filter", "field": "region", "operator": "in", "values": ["West"]}`) for future cross-filtering.
   Arbitrary Vega signals are never passed between visualizations. Reserved now, implemented later.
 
-## 14. SQL vs visualization transforms
+### 14. SQL vs visualization transforms
 
 Business semantics, joins, governed metrics, expensive calculations, and major aggregations belong in SQL.
 Presentation-oriented reshaping (`fold`, `window`, `stack`, ranking, regression, binning) belongs in the
@@ -364,7 +399,7 @@ current period" is not universally inferable (fiscal calendars, delayed ingestio
 incomplete rows or returns an explicit `is_complete` field the recipe binds/filters. **No new
 application-owned comparison logic**; the legacy adapter preserves current behavior until migration.
 
-## 15. Sizing & accessibility contracts
+### 15. Sizing & accessibility contracts
 
 - **Container sizing is a platform contract:** MinusX owns the outer card/chrome; the visualization owns its
   internal view. Builder output and recipes default to container-supplied responsive width/height with
@@ -375,21 +410,24 @@ application-owned comparison logic**; the legacy adapter preserves current behav
   query result. Recipes declare a default accessible description template. Vega's generated SVG ARIA is useful
   but not sufficient alone.
 
-## 16. Type mapping
+## Part V — Delivery, evidence, and decisions
+
+### 16. Type mapping
 
 | Current type | V2 implementation |
 |---|---|
 | bar, row, line, area, scatter, pie | Vega-Lite |
 | combo / dual-axis | VL layers + independent scale resolution |
 | waterfall | VL transforms + layered marks |
-| trend, single_value | recipe (Vega/VL) **or** DOM widget — spike decides (§17) |
+| trend | `minusx/trend@1`, native Vega recipe (decision complete) |
+| single_value | `minusx/single-value@1`, native Vega recipe; first query row, not a DOM widget |
 | radar | `minusx/radar@1`, native Vega recipe (the pure recipe-contract test; requires an explicit domain strategy — shared fixed domain, normalized values, or per-metric bounds — compiler warns on unlike scales) |
 | funnel | VL where practical; otherwise native Vega recipe |
 | geo (choropleth/points/lines/density) | VL / Vega recipes (§9) |
 | tiled maps | `slippy-map` (Leaflet), tile-backed only |
 | table, pivot | virtualized DOM grids (§10) |
 
-## 17. Spike protocol
+### 17. Evidence and benchmark protocol
 
 Parity cases:
 
@@ -403,8 +441,8 @@ Parity cases:
 7. Normalized multi-series radar recipe.
 8. Geo: choropleth + bubble overlay from recipes over registry TopoJSON, plus a full-Vega density map.
 
-**Trend acceptance criteria** (decision rule: the recipe wins unless it *materially fails* a criterion; ties go
-to the recipe; `single_value` follows): responsive at card/dashboard/story widths; independently adjustable
+**Trend result:** the native Vega recipe passed the decision rule; `single_value` follows the recipe path.
+The acceptance criteria remain regression requirements: responsive at card/dashboard/story widths; independently adjustable
 value/delta/label/date font sizes; light+dark; last-period and skip-partial-period comparison; optional
 sparkline; prefix/suffix + D3 formatting; browser/exported-SVG parity; accessible label; no clipping across
 font sizes; no application-owned comparison calculation for presentational semantics. The architectural success
@@ -422,7 +460,7 @@ fields; chart-to-agent image attachments so the agent can inspect its rendered r
 *before* data enters Vega (no heuristic per-spec parsing); distinguish date-only, local datetime, and tz-aware
 timestamps; test DST boundaries; client and server must render identical axis values.
 
-## 18. Migration path
+### 18. Migration path
 
 1. **Probe (greenlit, ships themed):** `content.viz` with a `vega-lite` source + renderer beside the legacy
    stack — named data binding, schema + field-aware validation, captured compiler warnings, CSP-safe rendering,
@@ -451,19 +489,13 @@ fallback dependence.
 **`viz-styles-prop`:** abandoned, not merged. Salvage later against the V2 contract: theme-precedence thinking,
 story-vs-embed override tests, the renderer/editor registry idea, column formatting tests.
 
-## 19. Open evidence questions
+### 19. Open evidence questions
 
-Only these remain open — they require measurement, not design debate:
+Three questions still require measurement rather than design debate: operational budgets (§21.4), the boundary
+between native-Vega theme signal updates and reparsing (§21.5), and a temporal wire contract that renders
+identically across browser, server, exports, and public stories (§21.3). They are work items only in §21.
 
-1. **Trend renderer:** does the native Vega recipe meet the §17 criteria, or is the DOM widget materially
-   better?
-2. **Operational budgets:** what result-row, mark, transform-depth, render-time, concurrent-view, and memory
-   limits follow from the production benchmark under interpreter mode?
-3. **Native Vega theme updates:** which specs can respond via theme signals and which require reparse?
-4. **Temporal normalization:** what exact wire contract yields identical timezone behavior across browser,
-   server SVG, exports, and public stories?
-
-## 20. Decision log (2026-07-10)
+### 20. Decision log (2026-07-10)
 
 - Merged RFC first; probe starts from this document.
 - Probe ships **themed** from day one.
@@ -480,47 +512,55 @@ Only these remain open — they require measurement, not design debate:
   TypeBox.
 - ECharts-options-as-contract: documented fallback only.
 
+### 21. Remaining work — one ordered list
+
+This is the only todo list in this document. Work it top to bottom unless a production issue changes the order.
+
+1. **Verify every surface and the guest path.** Exercise V2 envelopes in dashboards, stories, notebook cells,
+   and public/guest rendering; fix routing and CSP failures before expanding coverage.
+2. **Build one headless chart-artifact pipeline.** Use `View.toCanvas()`, composite the active theme surface,
+   and encode JPEG/PNG for both unmounted chart→LLM attachments and user image download. Dynamically load Vega
+   so the main application bundle does not grow.
+3. **Close the correctness matrix.** Cover parameterized queries, empty results, nulls, narrow many-series
+   legends, and timezone-sensitive temporal values; use the temporal findings to close §19.
+4. **Set operational budgets from measurements.** Benchmark interpreter-mode render time, mounted-view
+   concurrency, memory, result rows, mark count, and transform depth; enforce the resulting limits.
+5. **Resolve native-Vega theme updates.** Determine which specs can update stable theme signals safely and
+   which require a reparse; encode the rule in the renderer and regression tests.
+6. **Finish the small high-value UI gaps.** Add the combo one-click transform and finish pivot leaf-column
+   sort/hide/filter plus header formatting.
+7. **Define common visual editing.** Decide and implement the V2 color-control contract, then annotations;
+   defer a generic custom-plot surface until those common controls are stable.
+8. **Ship analytic geo recipes.** Add choropleth, bubble, flow, and density while keeping Leaflet restricted to
+   tile basemaps.
+9. **Land the shared authoring contract.** Add envelope-level `fieldMeta`, the builder source, deterministic
+   derived artifacts, and one-way detach.
+10. **Make recipes publishable.** Replace trusted TypeScript recipe builders with the declarative contract, add
+   workspace `viz_recipe` files/discovery, then expose direct native-Vega and `slippy-map` source kinds.
+11. **Migrate and delete legacy families incrementally.** Move one family at a time through §18 parity gates;
+    remove ECharts paths only when production telemetry shows no remaining fallback dependence.
+
+**Take up next:** item 1 is the fastest risk-reduction pass; item 2 is the highest-value build immediately after it.
+
 ---
 
-## Appendix A — Probe verification checklist (living)
+## Appendix A — Implementation evidence (living)
 
-Two sections: **Verified** (done, with dates) and **Remaining** (the working list).
-Move items up as they pass; anything that fails gets a note + fix before it moves.
+This appendix records what has been demonstrated. Outstanding work belongs only in §21.
 
-### Plot type coverage (cross off as they land in V2)
+### Plot coverage snapshot
 
-- [x] bar — encoding transform, UI + agent
-- [x] line — encoding transform, UI + agent
-- [x] area — encoding transform, UI + agent
-- [x] row — encoding transform (x/y def swap), UI + agent
-- [x] scatter — encoding transform (point mark), UI + agent
-- [x] pie — encoding transform (theta SUM-aggregated); house donut lives in theme `config.arc`, so the UI transform and agent both emit the same minimal `mark: arc` spec (`innerRadius: 0` = solid-pie opt-out)
-- [ ] combo — agent-authorable TODAY (layers + independent y scales); no one-click UI transform yet
-- [x] funnel — shipped recipe `minusx/funnel@1` (tapered area, data-order stages, % of first stage)
-- [x] waterfall — shipped recipe `minusx/waterfall@1` (floating bars, signed labels, closing Total)
-- [x] radar — shipped recipe `minusx/radar@1`, NATIVE VEGA engine (angular/radial scales, series polygons, optional series binding) — the vega tier's first resident
-- [x] table — `table` source kind on the DOM tier: TableV2 reused wholesale (sort/filter/visibility/
-  resize/stats/CSV/drilldown built in); persists columnFormats + conditionalFormats + `css` (looks are
-  CSS against the stable `.mx-*` class contract — no style toggles by design; chrome hides via
-  `.mx-toolbar {display: none}`); UI + agent
-- [x] pivot — `pivot` source kind on the DOM tier: PivotTable + PivotAxisBuilder reused wholesale
-  (nested headers, subtotals, collapsible groups, heatmap, formulas, drilldown built in); the typed
-  STRUCTURE persists as the classic `PivotConfig` under `source.config`; looks via the shared `css`
-  contract (`.mx-pivot` root + element selectors); UI + agent
-- [x] heatmap — NATIVE rect spec (like pie): own icon (V2-only selector entry), UI transform
-  (pivot→heatmap maps columns[0]→x / rows[0]→y / values[0]→SUM color; bar→heatmap moves the series
-  to y and the measure to color), agent idiom in skill_questions (`scheme: greens` = GitHub look).
-  Replaces the pivot's `compact` mode (deprecated in schema, toggle hidden on the V2 panel,
-  legacy pivots keep rendering it)
-- [x] trend — RECIPE WINS (§17 spike, 2026-07-11 pm): `minusx/trend@1` on the NATIVE VEGA engine.
-  One KPI card per bound measure (value multi-binding), gradient sparkline (param-removable),
-  compareMode last/previous with exact computeTrendComparison semantics computed IN-SPEC (window
-  lag + row_number — no app-owned comparison math), d3 formats + aliases, responsive font-signal
-  sizing with 4 param overrides, panel Settings toggles (Skip partial period / Sparkline).
-  Browser-verified on 52-week data incl. the partial-week trap (▼79% → ▲4.9% via the toggle)
-- [ ] single_value — follows the trend decision: build as a trend-recipe degenerate (single point,
-  no delta) or a `@1` sibling recipe; NOT a DOM widget
-- [ ] geo — Vega recipes for analytic geo; Leaflet frozen for tile basemaps (RFC §9)
+| Family | Status | V2 implementation |
+|---|---|---|
+| bar, line, area, row, scatter, pie | Shipped | Vega-Lite encodings and surgical UI transforms |
+| funnel, waterfall | Shipped | Versioned Vega-Lite recipes |
+| radar | Shipped | `minusx/radar@1`, native Vega recipe |
+| trend | Shipped | `minusx/trend@1`, native Vega recipe; comparison and formatting computed in-spec |
+| single_value | Shipped | `minusx/single-value@1`, native Vega recipe; first-row KPI with responsive typography |
+| table, pivot | Shipped | DOM tier with shared grid styling, formats, conditional formats, and export |
+| heatmap | Shipped | Native Vega-Lite rect spec and V2 transform |
+| combo | Remaining (§21.6) | Agent-authorable layers exist; one-click UI transform remains |
+| analytic geo | Remaining (§21.8) | Vega/Vega-Lite recipes; Leaflet stays tile-only |
 
 ### ✅ Verified (as of 2026-07-11)
 
@@ -617,71 +657,10 @@ Move items up as they pass; anything that fails gets a note + fix before it move
 **Regressions**
 - Full test suite green after every probe commit (continuous through the session)
 
-### ⬜ Remaining (regrouped 2026-07-11 pm by kind of work)
+## Appendix B — Implementation map and dated decisions
 
-**Build work — code, ready to pick up**
-- [ ] Vega chart→LLM images for UNMOUNTED files — design settled, see Known gaps (`view.toCanvas()`
-  → theme-bg composite → JPEG, dynamic import); the agent is blind to V2 charts it hasn't got on screen
-- [ ] img download — chart-image + question-level export for V2 charts (table's AND pivot's own
-  CSV buttons shipped; it's the image paths that are unwired)
-- [ ] combo — one-click UI transform (agent-authorable TODAY via layers + independent y scales)
-- [ ] geo — Vega recipes for analytic geo; Leaflet frozen for tile basemaps (RFC §9)
-- [ ] Grid merge stage 3 — sort/hide/filter semantics for pivot leaf columns; format gear ON pivot
-  leaf headers (the Fields zone-chip gear works; the in-header gear is table-only today)
-- [ ] box plot (in flight — parallel session)
-
-**Decisions needed — design first, then small code**
-- [x] trend — DECIDED: recipe (see plot coverage). single_value follows as a recipe.
-- [ ] Color controls ("color panels") — V2 equivalent of the classic per-series swatches
-  (surgical `scale.range` edit vs agent-only)
-- [ ] annotations
-- [ ] custom plot
-
-**Live agent runs — probe metrics, cheap now the machinery + skills exist**
-- [ ] Table and pivot from a prompt follow the skill idioms (skills updated 2026-07-11)
-- [ ] Heatmap from a prompt follows the skill idiom (type + GitHub theme shipped 2026-07-11 pm —
-  needs a live run: minimal rect + discrete axes, no hand-rolled colors)
-- [ ] Dual-axis combo (layers + `resolve: {scale: {y: "independent"}}`)
-- [ ] Facet / small multiples
-- [ ] Window-transform visual (rolling average) — SQL-vs-transform judgment
-- [ ] Horizontal bar + sort (`y` nominal sorted by value)
-- [ ] Custom tooltip field list overriding the automatic one
-- [ ] Revert to classic ("go back to a normal bar chart") — viz removed, vizSettings restored
-- [ ] Recovery from a misspelled field (agent told verbally — does it fix in one step?)
-- [ ] Recovery from malformed JSON in `<spec>` (EditFile error loop)
-- [ ] JSON-syntax-error rate per EditFile stays ~zero across the session (probe metric)
-
-**Rendering & data-handling verification**
-- [ ] Legend with many categories (>8) at narrow width (known: horizontal legends don't wrap;
-  agent idiom `legend: {columns: N}`)
-- [ ] Parameterized query — param change re-executes and chart follows
-- [ ] Empty result set — renders empty axes, no crash
-- [ ] Nulls in x/y/color columns
-- [ ] Timezone-sensitive timestamps — axis values match the table view (known wire-format risk)
-
-**Surfaces & legacy regressions — manual sweep (owner: Vivek)**
-- [ ] Dashboards / story embeds / notebook cells with V2 envelopes — they all render through the
-  shared QuestionVisualization, so routing may already work; verify each, then delete the
-  known-gaps line
-- [ ] Every legacy vizSettings type still renders (table, line, bar, row, area, scatter, funnel,
-  pie, pivot, trend, waterfall, combo, radar, geo, single_value)
-- [ ] Legacy question editing via agent unchanged (vizSettings markup path)
-- [ ] Dashboards with legacy charts unaffected
-
-### Known gaps (expected to fail — do not file)
-- Vega charts invisible to the agent for UNMOUNTED files only (chart→LLM image path — parked
-  2026-07-11 with design settled: on-page edits already reach the agent via the live file
-  screenshot; the gap is renderFileChartImageBlocks (ECharts-only) + isImageViz (legacy
-  vizSettings.type). Plan: view.toCanvas() → composite on theme bg (transparent + JPEG = black)
-  → JPEG, canvas NOT svg-rasterize (fonts), dynamic-import to keep vega out of the main bundle)
-- Public/guest story rendering with viz untested (CSP interpreter is in, path unwired)
-- Image/CSV export of viz-V2 charts unwired (table's own CSV button works — it's the chart-image
-  and question-level export paths that aren't)
-
-## Appendix B — Probe implementation map & continuation notes (2026-07-11)
-
-Written for a fresh session picking up the probe. Appendix A holds verification state; this holds
-where things live and the decisions not obvious from the code.
+Appendix A holds verification evidence. This appendix records where the implementation lives and decisions
+that are not obvious from the code. Active priorities belong only in §21.
 
 ### Implementation map (all under `frontend/`)
 
@@ -691,14 +670,15 @@ where things live and the decisions not obvious from the code.
 - **`lib/viz/`** — the probe core:
   - `types.ts` (VizIssue codes incl. `E_CSS`; `formatVizIssues`), `query-data.ts` (`toVizColumns`),
     `prepare.ts`, `field-refs.ts`, `theme.ts` (VL config + native-vega parser config; `config.arc`
-    house donut; SI `numberFormat`), `viz-templates.ts` (recipes funnel/waterfall/radar; `build(bindings,
-    formats)`; `numExpr` d3-first), `encoding-edit.ts` (ALL surgical edits: channel/type/zones/multi-Y
+    house donut; SI `numberFormat`), `viz-templates.ts` (shipped funnel/waterfall/radar/trend recipes;
+    `build(bindings, formats, params)`; `numExpr` d3-first), `encoding-edit.ts` (ALL surgical edits: channel/type/zones/multi-Y
     fold/presentation/table+pivot helpers/`mergeVizColumnFormat`; `setEnvelopeVizType(env, type, columns?)`
     — the columns fallback types categories from COLUMN KIND, never hardcodes nominal),
     `render-vega.ts` (compile → parse(ast)+interpreter → View; render-time injections: container sizing,
     single-series legend, `mx_legend_sel` toggle, centered legend layout), `validate.ts` (5-stage;
     `columns` OPTIONAL — field checks skipped when result unknown), `validate-remote.ts` (browser client
-    of the route; FAIL-OPEN), `vendor/vega-lite-v6.schema.json` (1.4MB — server-only, never bundle).
+    of the route; FAIL-OPEN). The official schema is imported from
+    `vega-lite/vega-lite-schema.json`; no repository copy is checked in.
 - **Components** — `components/viz/`: `VegaChart` (lazy via next/dynamic; promoteFontAttrs beats Chakra
   @layer reset), `VegaVizPanel` (icon grid + Fields/Settings/Spec; DOM-tier settings = conditional
   formats [table] + css textarea), `VegaEncodingPanel` (zones; unified `VizFieldPopover` for native +
@@ -713,8 +693,8 @@ where things live and the decisions not obvious from the code.
   element selectors), d3 cell formatting (`formatD3Number/formatD3Date` in `lib/chart/chart-format.ts`,
   cached, null→legacy fallback), and `d3Formats` popover mode (drilled: TableV2→TableHeaderCell;
   PivotAxisBuilder→AxisBuilder→ZoneChip→FormatPopover).
-- **Validation wiring** — `app/api/viz/validate/route.ts` (thin withAuth wrapper; the route exists ONLY
-  because EditFile handlers run in the BROWSER and the vendored schema must not ship there);
+- **Validation wiring** — `app/api/viz/validate/route.ts` (thin withAuth wrapper; the route keeps the large
+  package-provided grammar schema on the server rather than the browser bundle);
   `lib/tools/handlers/edit-file.ts` (pre-apply check: rejects atomically when the envelope CHANGED —
   deep-equality via lodash isEqual, markup round-trip reorders keys; columns only when query unchanged;
   post-auto-execute recheck vs fresh columns → `vizValidation` advisory in result);
@@ -761,26 +741,3 @@ where things live and the decisions not obvious from the code.
   table→bar hardcoded nominal → temporal week_start band-scaled into a mangled axis).
 - **Validation is inline (compiler model), not an agent-called tool.** Errors reject the write; warnings
   ride success; fail-open on route unreachability.
-
-### Session/dev facts a fresh session needs
-
-- Dev server: **http://localhost:3002** (not 3000). Test workspace `mxlocal` (kiwi@minusx.ai); scratch
-  question **/f/1017** currently holds a pivot envelope over a UNION-ALL platform/month/revenue query.
-- `npm run validate` MUST run from `frontend/`; check exit code via `> /dev/null 2>&1; echo $?` (pipes
-  mask it). Full suite ~4.3k tests; `store/__tests__/chat-listener-inflight.test.ts` is FLAKY under
-  parallel load (2.5s waitFor) — passes in isolation, unrelated to viz.
-- Browser-automation gotchas: dirty drafts persist across reload (discard via Review → Discard All);
-  `window.onbeforeunload = null` before scripted navigation; file PATCH needs `{name, path, content}`.
-- Viz test files: `lib/viz/__tests__/*` (node), `components/__tests__/viz-*.ui.test.tsx` (jsdom),
-  `lib/tools/__tests__/editfile-viz-validation.test.ts` (handler loop, fetch-stubbed to the real
-  validator), `app/api/viz/validate/__tests__/route.test.ts`.
-
-### Build queue (user-ranked, next session)
-
-1. **Surfaces sweep** — dashboards/story/notebook embeds share QuestionVisualization; verify V2 renders
-   in each, then prune the known-gaps line. Guest/public story path after.
-2. **Vega chart→LLM images for UNMOUNTED files** — parked WITH settled design (see Known gaps entry;
-   also Claude task #7): `view.toCanvas()` + theme-bg composite, never svg-rasterize, dynamic import.
-3. Trend + single_value spike decision (RFC §17); combo one-click transform; color controls
-   (surgical `scale.range` vs agent-only); live agent-run checklist items (dual-axis, facet, heatmap).
-4. Migration (RFC §18) only after the loop hardens on real usage.

@@ -235,8 +235,8 @@ export type VizSettings = Static<typeof VizSettings>;
 // Viz V2 envelope (docs/Visualization Arch V2.md)
 //
 // Only the MinusX envelope lives in TypeBox. Native Vega-Lite/Vega spec bodies are
-// deliberately opaque here (open records) — they are validated against the vendored
-// official grammar schema plus the MinusX field/security passes in lib/viz/validate.ts.
+// deliberately opaque here (open records) — they are validated against Vega-Lite's
+// package-provided official schema plus the MinusX field/security passes in lib/viz/validate.ts.
 // Do NOT reproduce the grammars in TypeBox.
 // ============================================================================
 
