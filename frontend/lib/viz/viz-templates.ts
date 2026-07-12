@@ -50,7 +50,7 @@ export type VizParams = Record<string, unknown> | null | undefined;
 export interface VizTemplate {
   id: string;
   /** The icon-grid type this recipe implements. */
-  vizType: 'funnel' | 'waterfall' | 'radar' | 'trend';
+  vizType: 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value';
   /** Grammar of the materialized spec ('vega' skips the VL compile). */
   engine: VizTemplateEngine;
   bindings: ReadonlyArray<VizTemplateBinding>;
@@ -708,11 +708,129 @@ const trend: VizTemplate = {
   },
 };
 
+// ── minusx/single-value@1 ───────────────────────────────────────────────────────
+// One bound measure rendered as a cardless data poster. The FIRST query row owns
+// the value (matching the classic single-value viz); SQL owns which row that is.
+// The field alias and numeric format come from columnFormats. Typography scales to
+// the container, while the optional params remain a compact customization surface:
+// showLabel, label, caption, align, valueFontSize, labelFontSize, captionFontSize,
+// and valueColor.
+const singleValue: VizTemplate = {
+  id: 'minusx/single-value@1',
+  vizType: 'single_value',
+  engine: 'vega',
+  bindings: [
+    { name: 'value', label: 'Value', accepts: ['quantitative'] },
+  ],
+  build(bindings, formats, params) {
+    const value = String(bindings.value);
+    const p = (params ?? {}) as Record<string, unknown>;
+    const rawLabel = typeof p.label === 'string' ? p.label : aliasOf(formats, value);
+    const label = rawLabel.toUpperCase();
+    const caption = typeof p.caption === 'string' ? p.caption : '';
+    const showLabel = p.showLabel !== false && label.length > 0;
+    const align = p.align === 'left' || p.align === 'right' ? p.align : 'center';
+    const x = align === 'left' ? 'width * 0.06' : align === 'right' ? 'width * 0.94' : 'width / 2';
+    const formattedValue = numExpr('datum.__mx_value', formats, value);
+    const displayValue = `isValid(datum.__mx_value) ? ${formattedValue} : '—'`;
+    const valueColor = typeof p.valueColor === 'string' && p.valueColor.trim()
+      ? { value: p.valueColor.trim() }
+      : { signal: `scale('color', ${JSON.stringify(label || value)})` };
+    const sizeSignal = (name: string, override: unknown, responsive: string) => ({
+      name,
+      update: typeof override === 'number' && Number.isFinite(override) ? String(override) : responsive,
+    });
+
+    return {
+      autosize: { type: 'fit', contains: 'padding' },
+      signals: [
+        sizeSignal('valueSize', p.valueFontSize, 'clamp(min(width / 5.2, height * 0.3), 28, 112)'),
+        sizeSignal('labelSize', p.labelFontSize, 'clamp(valueSize * 0.2, 10, 18)'),
+        sizeSignal('captionSize', p.captionFontSize, 'clamp(valueSize * 0.17, 9, 15)'),
+        { name: 'valueY', update: showLabel || caption ? 'height * 0.5' : 'height / 2' },
+      ],
+      data: [
+        { name: 'main' },
+        {
+          name: 'kpi',
+          source: 'main',
+          transform: [
+            { type: 'formula', as: '__mx_value', expr: `datum[${JSON.stringify(value)}]` },
+            { type: 'window', ops: ['row_number'], as: ['__mx_idx'] },
+            { type: 'filter', expr: 'datum.__mx_idx === 1' },
+          ],
+        },
+      ],
+      scales: [
+        { name: 'color', type: 'ordinal', domain: [label || value], range: 'category' },
+      ],
+      marks: [
+        ...(showLabel ? [{
+          type: 'text',
+          name: '__mx_label',
+          interactive: false,
+          encode: {
+            update: {
+              x: { signal: x },
+              y: { signal: 'valueY - valueSize * 0.78' },
+              align: { value: align },
+              baseline: { value: 'middle' },
+              text: { value: label },
+              fontSize: { signal: 'labelSize' },
+              fontWeight: { value: 650 },
+              letterSpacing: { value: 1.1 },
+              opacity: { value: 0.68 },
+            },
+          },
+        }] : []),
+        {
+          type: 'text',
+          name: '__mx_value',
+          from: { data: 'kpi' },
+          encode: {
+            update: {
+              x: { signal: x },
+              y: { signal: 'valueY' },
+              align: { value: align },
+              baseline: { value: 'middle' },
+              text: { signal: displayValue },
+              fontSize: { signal: `min(valueSize, width / max(length(${displayValue}) * 0.64, 1))` },
+              fontWeight: { value: 700 },
+              fill: valueColor,
+              tooltip: { signal: `{'Metric': ${JSON.stringify(rawLabel || value)}, 'Value': ${displayValue}}` },
+            },
+            hover: {
+              opacity: { value: 0.82 },
+            },
+          },
+        },
+        ...(caption ? [{
+          type: 'text',
+          name: '__mx_caption',
+          interactive: false,
+          encode: {
+            update: {
+              x: { signal: x },
+              y: { signal: 'valueY + valueSize * 0.82' },
+              align: { value: align },
+              baseline: { value: 'middle' },
+              text: { value: caption },
+              fontSize: { signal: 'captionSize' },
+              opacity: { value: 0.58 },
+            },
+          },
+        }] : []),
+      ],
+    };
+  },
+};
+
 export const VIZ_TEMPLATES: Record<string, VizTemplate> = {
   [funnel.id]: funnel,
   [waterfall.id]: waterfall,
   [radar.id]: radar,
   [trend.id]: trend,
+  [singleValue.id]: singleValue,
 };
 
 /** Registry lookup for a recipe source; null for unknown ids. */

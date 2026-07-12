@@ -261,6 +261,27 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
               Font sizes and everything else — ask the agent (valueFontSize/deltaFontSize/labelFontSize/dateFontSize params).
             </Text>
           </Box>
+        ) : isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/single-value@1' ? (
+          <Box display="flex" flexDirection="column" gap={3} py={1}>
+            <HStack justify="space-between">
+              <Box>
+                <Text fontSize="xs" color="fg.muted">Label</Text>
+                <Text fontSize="10px" color="fg.subtle">Uses the field alias configured in Fields</Text>
+              </Box>
+              <Switch.Root
+                aria-label="Show label"
+                size="sm"
+                checked={getRecipeParams(envelope).showLabel !== false}
+                onCheckedChange={(e) => onVizChange(setRecipeParam(envelope, 'showLabel', e.checked ? undefined : false))}
+              >
+                <Switch.HiddenInput />
+                <Switch.Control><Switch.Thumb /></Switch.Control>
+              </Switch.Root>
+            </HStack>
+            <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+              Rename and format the value in Fields. For a caption, alignment, custom color, or exact font sizes, ask the agent.
+            </Text>
+          </Box>
         ) : isRecipe ? (
           <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
             This chart is generated from the {String((envelope.source as unknown as Record<string, unknown>).recipe)} recipe —

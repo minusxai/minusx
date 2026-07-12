@@ -111,7 +111,7 @@ describe('setVizType', () => {
   });
 
   it('exports the supported set for the selector', () => {
-    expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot', 'trend', 'histogram']);
+    expect(V2_SUPPORTED_VIZ_TYPES).toEqual(['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot', 'trend', 'single_value', 'histogram']);
   });
 
   it('detects histogram as a bar with a binned x (before the row check — binned x is quantitative)', () => {

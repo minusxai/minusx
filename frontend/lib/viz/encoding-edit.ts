@@ -125,10 +125,10 @@ export function setStacked(envelope: VizEnvelope, stacked: boolean): VizEnvelope
 // `pie` is an encoding TRANSFORM: a naive mark swap to `arc` renders garbage because
 // arcs read theta/color, not x/y.
 
-export const V2_SUPPORTED_VIZ_TYPES = ['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot', 'trend', 'histogram'] as const;
+export const V2_SUPPORTED_VIZ_TYPES = ['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot', 'trend', 'single_value', 'histogram'] as const;
 export type V2VizType = (typeof V2_SUPPORTED_VIZ_TYPES)[number];
 
-const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie' | 'heatmap' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'histogram'>, string> = {
+const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie' | 'heatmap' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'histogram'>, string> = {
   bar: 'bar', line: 'line', area: 'area', scatter: 'point', boxplot: 'boxplot',
 };
 
@@ -160,7 +160,7 @@ const withMark = (spec: Record<string, unknown>, type: string): void => {
 };
 
 /** Native-spec viz types (recipes and the DOM table route through setEnvelopeVizType instead). */
-export type SpecVizType = Exclude<V2VizType, 'table' | 'pivot' | 'funnel' | 'waterfall' | 'radar' | 'trend'>;
+export type SpecVizType = Exclude<V2VizType, 'table' | 'pivot' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value'>;
 
 /** Switch a unit spec's viz type, transforming encodings where the shapes differ. */
 export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelope {
@@ -555,6 +555,7 @@ const TEMPLATE_FOR_TYPE: Partial<Record<V2VizType, string>> = {
   waterfall: 'minusx/waterfall@1',
   radar: 'minusx/radar@1',
   trend: 'minusx/trend@1',
+  single_value: 'minusx/single-value@1',
 };
 
 /**
