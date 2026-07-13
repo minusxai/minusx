@@ -175,6 +175,7 @@ export function mergeConfig(
       : defaults.chartColorPalette,
     analytics: overrides.analytics ?? defaults.analytics,
     remoteAgentsEnabled: overrides.remoteAgentsEnabled ?? defaults.remoteAgentsEnabled,
+    llm: overrides.llm ?? defaults.llm,
   };
 }
 

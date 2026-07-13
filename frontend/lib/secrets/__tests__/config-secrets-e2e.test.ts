@@ -101,6 +101,27 @@ describe('POST /api/configs → secrets boundary', () => {
   });
 });
 
+describe('llm section round-trip', () => {
+  it('POSTed llm providers come back from GET with ref keys (mergeConfig must not drop llm)', async () => {
+    const res = await postConfig({
+      branding: VALID_BRANDING,
+      llm: {
+        providers: [{ name: 'rt-anthropic', provider: 'anthropic', apiKey: 'sk-ant-roundtrip' }],
+        assignments: { analyst: { chain: [{ providerName: 'rt-anthropic', model: 'claude-sonnet-4-6' }] } },
+      },
+    });
+    expect(res.status).toBe(200);
+
+    const getBody = await (await getConfig()).json();
+    const llm = getBody.data.config.llm;
+    expect(llm).toBeTruthy();
+    expect(llm.providers[0].name).toBe('rt-anthropic');
+    expect(isSecretRef(llm.providers[0].apiKey)).toBe(true);
+    expect(llm.assignments.analyst.chain[0].model).toBe('claude-sonnet-4-6');
+    expect(JSON.stringify(getBody)).not.toContain('sk-ant-roundtrip');
+  });
+});
+
 describe('saveRawConfig (server write path, e.g. Slack install)', () => {
   it('extracts raw secrets to refs', async () => {
     await saveRawConfig('org', {

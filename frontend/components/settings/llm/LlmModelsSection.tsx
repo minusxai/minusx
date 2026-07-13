@@ -242,6 +242,7 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
                       value={entry.name}
                       placeholder={isMinusx ? 'minusx' : 'e.g. main-anthropic'}
                       onChange={(e) => setProvider(index, { name: e.target.value })}
+                      autoComplete="off"
                       aria-label={`LLM provider ${label} name`}
                     />
                   </Box>
@@ -253,6 +254,7 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
                     <Input
                       size="sm" fontSize="xs" fontFamily="mono"
                       type="password"
+                      autoComplete="new-password"
                       value={status === 'saved' ? '' : (entry.apiKey ?? '')}
                       placeholder={status === 'saved' ? '•••••••• (saved — type to replace)' : isBedrock ? 'Bedrock API key (bearer token)' : 'API key'}
                       onChange={(e) => setProvider(index, { apiKey: e.target.value || (status === 'saved' ? entry.apiKey : undefined) })}
