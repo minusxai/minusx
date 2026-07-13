@@ -26,6 +26,7 @@ import {
   LuGripVertical,
 } from 'react-icons/lu';
 import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType, type DbFile } from '@/lib/types';
+import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 import SqlEditor from '../query-builder/SqlEditor';
 import ParameterRow from '../params/ParameterRow';
 import DatabaseSelector from '../selectors/DatabaseSelector';
@@ -37,7 +38,8 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { QuestionEmptyState } from '@/components/views/shared/empty-states';
 import type { FileId, FileState } from '@/store/filesSlice';
-import { QueryBuilderRoot, QueryModeSelector, SimpleQueryBuilder, type QueryTab } from '../query-builder';
+import { QueryBuilderRoot, QueryModeSelector, SimpleQueryBuilder, SemanticQueryBuilder, type QueryTab } from '../query-builder';
+import { semanticModelsForConnection } from '@/lib/semantic/resolve';
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
@@ -143,7 +145,7 @@ export default function QuestionViewV2({
   const isPreview = mode === 'preview';
 
   // Get schema data for SQL autocomplete and GUI mode table filtering
-  const { databases: schemaData, hasContext } = useSchemaContext(filePath || '/org');
+  const { databases: schemaData, hasContext, semanticModels } = useSchemaContext(filePath || '/org');
   const whitelistedSchema = hasContext
     ? schemaData?.find(db => db.databaseName === content.connection_name)?.schemas
     : undefined;
@@ -179,8 +181,15 @@ export default function QuestionViewV2({
   const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
   const toggleCollapsedPanel = onTogglePanel;
 
-  // Query mode state (SQL, GUI, or Viz)
-  const [queryMode, setQueryMode] = useState<QueryTab>('sql');
+  // Query mode state (Semantic, Simple, GUI, SQL, or Viz). Questions built in
+  // the Semantic tier open back into it (their semanticQuery spec persists).
+  const [queryMode, setQueryMode] = useState<QueryTab>(() => (content.semanticQuery ? 'semantic' : 'sql'));
+
+  // Semantic tier gating: only when the active context defines models for this connection.
+  const connectionSemanticModels = semanticModelsForConnection(semanticModels, content.connection_name);
+  const showSemanticTab = connectionSemanticModels.length > 0;
+  // The context loads async — never strand the user on a hidden tab.
+  const effectiveQueryMode: QueryTab = queryMode === 'semantic' && !showSemanticTab ? 'sql' : queryMode;
 
   // Memoize referencedQuestions to avoid unnecessary re-renders
   const referencedQuestions = useMemo(() => {
@@ -563,12 +572,13 @@ export default function QuestionViewV2({
               <HStack px={3} py={2} gap={2} align="center">
                 <Box flex={1} minWidth={0}>
                   <QueryModeSelector
-                    mode={queryMode}
+                    mode={effectiveQueryMode}
                     onModeChange={setQueryMode}
                     canUseGUI={canUseGUI}
                     guiError={guiError ?? undefined}
                     canUseSimple={canUseSimple}
                     simpleError={simpleError ?? undefined}
+                    showSemanticTab={showSemanticTab}
                     showVizTab={showVizControls}
                     canUseViz={!!queryData}
                   />
@@ -582,7 +592,7 @@ export default function QuestionViewV2({
               </HStack>
 
               {/* Reference chips row (hide on Viz tab) */}
-              {queryMode !== 'viz' && referencedQuestions.length > 0 && (
+              {effectiveQueryMode !== 'viz' && referencedQuestions.length > 0 && (
               <HStack px={4} py={1} gap={2} flexWrap="wrap" onClick={(e) => e.stopPropagation()}>
                 {referencedQuestions.map(ref => {
                   const isSelected = sqlPreviewId === ref.id;
@@ -628,7 +638,7 @@ export default function QuestionViewV2({
 
               <Box flex={1} minHeight={0} display="flex" flexDirection="column" overflow="hidden">
                 {/* SQL Mode: Monaco Editor */}
-                {queryMode === 'sql' && (
+                {effectiveQueryMode === 'sql' && (
                   <SqlEditor
                     readOnly={isPreview || !fullMode || readOnly}
                     value={isPreview ? (originalQuery ?? content.query) : content.query}
@@ -657,8 +667,22 @@ export default function QuestionViewV2({
                   />
                 )}
 
+                {/* Semantic Mode: curated measures/dimensions from the context */}
+                {effectiveQueryMode === 'semantic' && showSemanticTab && (
+                  <Box flex={1} overflow="auto">
+                    <SemanticQueryBuilder
+                      models={connectionSemanticModels}
+                      dialect={dialect}
+                      value={content.semanticQuery}
+                      onChange={(spec: SemanticQuerySpec, sql: string) => onChange({ semanticQuery: spec, query: sql })}
+                      onExecute={handleExecute}
+                      isExecuting={queryLoading && !queryData}
+                    />
+                  </Box>
+                )}
+
                 {/* Simple Mode: Scuba-style builder */}
-                {queryMode === 'simple' && (
+                {effectiveQueryMode === 'simple' && (
                   <Box flex={1} overflow="auto">
                     <SimpleQueryBuilder
                       databaseName={content.connection_name || ''}
@@ -674,7 +698,7 @@ export default function QuestionViewV2({
                 )}
 
                 {/* GUI Mode: Visual Query Builder */}
-                {queryMode === 'gui' && (
+                {effectiveQueryMode === 'gui' && (
                   <Box flex={1} overflow="auto">
                     <QueryBuilderRoot
                       databaseName={content.connection_name || ''}
@@ -690,7 +714,7 @@ export default function QuestionViewV2({
                 )}
 
                 {/* Viz Mode: Chart type selector + axis config */}
-                {queryMode === 'viz' && queryData && (
+                {effectiveQueryMode === 'viz' && queryData && (
                   <Box flex={1} overflow="auto" px={3} py={2} display="flex" flexDirection="column" gap={0}>
                     <VizTypeSelector
                       value={content.vizSettings?.type || 'table'}

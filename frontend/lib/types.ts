@@ -99,6 +99,12 @@ export type {
   ContextContent, ResolvedContextDoc, ResolvedContextDocs, ContextInfo,
 } from './types/context';
 
+// Semantic layer domain — see lib/types/semantic.ts
+export type {
+  SemanticAggregate, SemanticTimeGrain, SemanticDimension, SemanticJoin,
+  SemanticMeasure, SemanticRatioMetric, SemanticModel,
+} from './types/semantic';
+
 // Chat/conversation domain — see lib/types/chat.ts
 export type {
   Attachment, ChatMentionData, SkillMention, SlashCommand,

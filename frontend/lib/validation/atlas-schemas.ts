@@ -262,6 +262,27 @@ export const CachePolicy = Type.Object({
 }, { title: 'CachePolicy' });
 export type CachePolicy = Static<typeof CachePolicy>;
 
+// ============================================================================
+// Semantic query (Semantic tier state, persisted alongside the generated SQL)
+// ============================================================================
+
+export const SemanticQueryFilter = Type.Object({
+  dimension: Type.String({ description: 'dimension name from the semantic model' }),
+  operator: StringEnum(['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'IN', 'IS NULL', 'IS NOT NULL']),
+  value: Nullable(Type.Union([Type.String(), Type.Number(), Type.Boolean(), Type.Array(Type.String())])),
+}, { title: 'SemanticQueryFilter' });
+export type SemanticQueryFilter = Static<typeof SemanticQueryFilter>;
+
+export const SemanticQuerySpec = Type.Object({
+  model: Type.String({ description: 'semantic model name from the active context' }),
+  measures: Type.Array(Type.String(), { description: 'measure/metric names to compute (at least one)' }),
+  dimensions: Type.Array(Type.String(), { description: 'dimension names to group by' }),
+  timeGrain: Nullable(StringEnum(['HOUR', 'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'])),
+  filters: Nullable(Type.Array(SemanticQueryFilter)),
+  limit: Nullable(Type.Integer()),
+}, { title: 'SemanticQuerySpec' });
+export type SemanticQuerySpec = Static<typeof SemanticQuerySpec>;
+
 export const QuestionContent = Type.Object({
   description: Nullable(Type.String()),
   query: Type.String({ description: 'SQL query string, may contain :paramName tokens' }),
@@ -271,6 +292,7 @@ export const QuestionContent = Type.Object({
   connection_name: Type.String({ description: 'connection name (empty string if none)' }),
   references: Nullable(Type.Array(QuestionReference)),
   cachePolicy: Nullable(CachePolicy),
+  semanticQuery: NullableD(SemanticQuerySpec, 'Semantic-tier state; query holds the compiled SQL'),
 }, { title: 'QuestionContent' });
 export type QuestionContent = Static<typeof QuestionContent>;
 

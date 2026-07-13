@@ -215,6 +215,7 @@ export default function ContextContainerV2({
       docs: sourceVersion.docs.map((doc: DocEntry) => ({ ...doc, childPaths: doc.childPaths ? [...doc.childPaths] : undefined })),
       metrics: sourceVersion.metrics ? JSON.parse(JSON.stringify(sourceVersion.metrics)) : undefined,
       annotations: sourceVersion.annotations ? JSON.parse(JSON.stringify(sourceVersion.annotations)) : undefined,
+      semanticModels: sourceVersion.semanticModels ? JSON.parse(JSON.stringify(sourceVersion.semanticModels)) : undefined,
       createdAt: new Date().toISOString(),
       createdBy: user.id,
       description: description || ''
@@ -328,7 +329,7 @@ export default function ContextContainerV2({
     if (!currentContent || !currentVersionContent || !user?.id) return;
 
     // If updating databases, docs, metrics, or annotations, update the selected version
-    if (updates.databases !== undefined || updates.docs !== undefined || updates.metrics !== undefined || updates.annotations !== undefined) {
+    if (updates.databases !== undefined || updates.docs !== undefined || updates.metrics !== undefined || updates.annotations !== undefined || updates.semanticModels !== undefined) {
       // Convert DatabaseContext[] | '*' (editor format) → Whitelist (storage format)
       const newWhitelist: Whitelist | undefined = updates.databases !== undefined
         ? updates.databases === '*'
@@ -344,6 +345,7 @@ export default function ContextContainerV2({
             docs: updates.docs ?? v.docs,
             metrics: updates.metrics ?? v.metrics,
             annotations: updates.annotations ?? v.annotations,
+            semanticModels: updates.semanticModels ?? v.semanticModels,
             lastEditedAt: new Date().toISOString(),
             lastEditedBy: user.id
           };
@@ -412,6 +414,7 @@ export default function ContextContainerV2({
       docs: currentVersionContent.docs,
       metrics: currentVersionContent.metrics,
       annotations: currentVersionContent.annotations,
+      semanticModels: currentVersionContent.semanticModels,
       published: currentContent.published // Ensure published is always present
     };
   }, [currentContent, currentVersionContent]);

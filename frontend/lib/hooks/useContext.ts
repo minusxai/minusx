@@ -7,6 +7,7 @@ import { ContextContent, ContextInfo, SkillMention } from '@/lib/types';
 import { getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
 import { resolveContextDocs } from '@/lib/sql/context-docs';
 import { mergeSkillsByName } from '@/lib/context/context-utils';
+import { resolveSemanticModels } from '@/lib/semantic/resolve';
 
 let cachedSystemSkills: SkillMention[] | null = null;
 let systemSkillsRequest: Promise<SkillMention[]> | null = null;
@@ -122,6 +123,7 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
       const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id, version);
       const resolvedDocs = resolveContextDocs(contextContent, currentUser.id, version);
       const skills = mergeSkillsByName(contextContent.fullSkills || [], contextContent.skills || []);
+      const semanticModels = resolveSemanticModels(contextContent, currentUser.id, version);
 
       return {
         contextId: loadedContext.id,
@@ -129,6 +131,7 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
         contextDocs: resolvedDocs,
         skills,
         availableSkills: toAvailableSkills(skills),
+        semanticModels,
         hasContext: true,
         contextLoading: contextLoading
       };
@@ -149,6 +152,7 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
       contextDocs: undefined,
       skills: [],
       availableSkills: systemSkills,
+      semanticModels: [],
       hasContext: false,
       contextLoading: contextLoading || connectionsLoading
     };

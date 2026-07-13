@@ -35,6 +35,7 @@ import { ContextVersionManager } from './ContextVersionManager';
 import { DatabasesTabContent } from './DatabasesTabContent';
 import { SkillsTabContent } from './SkillsTabContent';
 import { EvalsTabContent } from './EvalsTabContent';
+import { SemanticModelsTabContent } from './SemanticModelsTabContent';
 
 type DatabaseSelection = {
   databaseName: string;
@@ -111,8 +112,8 @@ export default function ContextEditorV2({
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  type TopTab = 'databases' | 'docs' | 'skills' | 'evals';
-  const validTabs: TopTab[] = ['databases', 'docs', 'skills', 'evals'];
+  type TopTab = 'databases' | 'docs' | 'semantic' | 'skills' | 'evals';
+  const validTabs: TopTab[] = ['databases', 'docs', 'semantic', 'skills', 'evals'];
   const parseTab = (val: string | null): TopTab => validTabs.includes(val as TopTab) ? val as TopTab : 'databases';
 
   const [topTab, setTopTabState] = useState<TopTab>(() => parseTab(searchParams.get('tab')));
@@ -501,6 +502,14 @@ export default function ContextEditorV2({
               </Box>
             )}
           </Tabs.Trigger>
+          <Tabs.Trigger value="semantic" fontFamily="mono" fontSize="sm">
+            Semantic
+            {(content.semanticModels?.length ?? 0) > 0 && (
+              <Badge size="xs" colorPalette="gray" variant="subtle" ml={1.5}>
+                {content.semanticModels!.length}
+              </Badge>
+            )}
+          </Tabs.Trigger>
           <Tabs.Trigger value="skills" fontFamily="mono" fontSize="sm">
             Skills
             {(content.skills?.length ?? 0) > 0 && (
@@ -578,6 +587,14 @@ export default function ContextEditorV2({
             </Box>
           )}
         </Tabs.Content>
+
+        {/* Semantic Tab */}
+        <SemanticModelsTabContent
+          content={content}
+          onChange={onChange}
+          editMode={editMode}
+          availableDatabases={availableDatabases}
+        />
 
         {/* Skills Tab */}
         <SkillsTabContent

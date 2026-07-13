@@ -93,7 +93,7 @@ export function foldContextAgentView(existing: unknown, edited: unknown): Record
 
 // Server-computed fields: re-derived on load, stripped on save — ignore them when bounding edits.
 const COMPUTED_CONTEXT_FIELDS = immutableSet([
-  'fullSchema', 'parentSchema', 'fullDocs', 'fullMetrics', 'fullAnnotations', 'fullSkills',
+  'fullSchema', 'parentSchema', 'fullDocs', 'fullMetrics', 'fullAnnotations', 'fullSemanticModels', 'fullSkills',
 ]);
 // Version fields the agent authors (folded into the live version) — ignore when bounding edits.
 // `whitelist` is NOT here: it's not in the agent's view, so the guard treats any whitelist change as
