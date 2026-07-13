@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
-import { getConfigs, validateOrgConfig, saveConfig } from '@/lib/data/configs.server';
+import { getConfigs, saveConfig } from '@/lib/data/configs.server';
+import { orgConfigValidationError } from '@/lib/validation/config-validators';
 import { redactRawConfigSecrets } from '@/lib/secrets/config-secret-specs';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { withAuth } from '@/lib/http/with-auth';
@@ -28,9 +29,10 @@ export const POST = withAuth(async (request: NextRequest, user) => {
   try {
     const body = await request.json();
 
-    // Validate config structure
-    if (!validateOrgConfig(body)) {
-      return ApiErrors.validationError('Invalid config structure. Required fields: branding.{logoLight, logoDark, displayName, agentName, favicon}');
+    // Validate config structure — surface the SPECIFIC reason, not a canned message.
+    const validationError = orgConfigValidationError(body);
+    if (validationError) {
+      return ApiErrors.validationError(validationError);
     }
 
     const { id, config } = await saveConfig(body, user);

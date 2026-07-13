@@ -135,59 +135,69 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
     }
   }
 
-  if (config.llm !== undefined && !validateLlmConfig(config.llm)) return false;
+  if (config.llm !== undefined && validateLlmConfig(config.llm) != null) return false;
 
   return true;
 }
 
-/** Validate the `llm` config section (providers + per-use-case assignment chains). */
-function validateLlmConfig(llm: unknown): boolean {
-  if (typeof llm !== 'object' || llm === null) return false;
+/**
+ * The specific reason a config is invalid, for user-facing error responses —
+ * detailed for the `llm` section, a generic structure message otherwise.
+ * Null when the config is valid.
+ */
+export function orgConfigValidationError(content: unknown): string | null {
+  if (!validateOrgConfig(content)) {
+    const llm = (content as { llm?: unknown } | null)?.llm;
+    if (llm !== undefined) {
+      const llmError = validateLlmConfig(llm);
+      if (llmError) return `Invalid LLM config: ${llmError}`;
+    }
+    return 'Invalid config structure. Required fields: branding.{logoLight, logoDark, displayName, agentName, favicon}';
+  }
+  return null;
+}
+
+/** Validate the `llm` config section; returns the failure reason or null when valid. */
+function validateLlmConfig(llm: unknown): string | null {
+  if (typeof llm !== 'object' || llm === null) return 'llm must be an object';
   const cfg = llm as Record<string, unknown>;
 
   const names = new Set<string>();
   if (cfg.providers !== undefined) {
-    if (!Array.isArray(cfg.providers)) return false;
+    if (!Array.isArray(cfg.providers)) return 'providers must be an array';
     for (const entry of cfg.providers) {
-      if (typeof entry !== 'object' || entry === null) return false;
+      if (typeof entry !== 'object' || entry === null) return 'each provider must be an object';
       const p = entry as Record<string, unknown>;
-      if (typeof p.name !== 'string' || p.name === '') return false;
-      if (typeof p.provider !== 'string' || p.provider === '') return false;
-      if (names.has(p.name)) {
-        console.warn(`[Config] Duplicate llm provider name: ${p.name}`);
-        return false;
-      }
+      if (typeof p.name !== 'string' || p.name === '') return 'every provider needs a non-empty name';
+      if (typeof p.provider !== 'string' || p.provider === '') return `provider '${p.name}' needs a provider type`;
+      if (names.has(p.name)) return `duplicate provider name '${p.name}'`;
       names.add(p.name);
       for (const field of ['apiKey', 'awsRegion', 'baseUrl'] as const) {
-        if (p[field] !== undefined && typeof p[field] !== 'string') return false;
+        if (p[field] !== undefined && typeof p[field] !== 'string') return `provider '${p.name}': ${field} must be a string`;
       }
-      if (p.headers !== undefined && (typeof p.headers !== 'object' || p.headers === null)) return false;
+      if (p.headers !== undefined && (typeof p.headers !== 'object' || p.headers === null)) return `provider '${p.name}': headers must be an object`;
     }
   }
 
   if (cfg.assignments !== undefined) {
-    if (typeof cfg.assignments !== 'object' || cfg.assignments === null) return false;
+    if (typeof cfg.assignments !== 'object' || cfg.assignments === null) return 'assignments must be an object';
     for (const [useCase, assignment] of Object.entries(cfg.assignments)) {
-      if (!(LLM_USE_CASES as readonly string[]).includes(useCase)) {
-        console.warn(`[Config] Invalid llm use case: ${useCase}`);
-        return false;
-      }
-      if (typeof assignment !== 'object' || assignment === null) return false;
+      if (!(LLM_USE_CASES as readonly string[]).includes(useCase)) return `unknown use case '${useCase}'`;
+      if (typeof assignment !== 'object' || assignment === null) return `assignment for '${useCase}' must be an object`;
       const chain = (assignment as Record<string, unknown>).chain;
-      if (!Array.isArray(chain) || chain.length === 0) return false;
+      if (!Array.isArray(chain) || chain.length === 0) return `assignment for '${useCase}' needs a non-empty chain`;
       for (const choice of chain) {
-        if (typeof choice !== 'object' || choice === null) return false;
+        if (typeof choice !== 'object' || choice === null) return `chain entries for '${useCase}' must be objects`;
         const c = choice as Record<string, unknown>;
-        if (typeof c.providerName !== 'string' || c.providerName === '') return false;
+        if (typeof c.providerName !== 'string' || c.providerName === '') return `a chain entry for '${useCase}' is missing its provider`;
         if (cfg.providers !== undefined && !names.has(c.providerName)) {
-          console.warn(`[Config] llm assignment for '${useCase}' references unknown provider '${c.providerName}'`);
-          return false;
+          return `the '${useCase}' assignment references provider '${c.providerName}', which does not exist`;
         }
-        if (c.model !== undefined && typeof c.model !== 'string') return false;
-        if (c.options !== undefined && (typeof c.options !== 'object' || c.options === null)) return false;
+        if (c.model !== undefined && typeof c.model !== 'string') return `model for '${useCase}' must be a string`;
+        if (c.options !== undefined && (typeof c.options !== 'object' || c.options === null)) return `options for '${useCase}' must be an object`;
       }
     }
   }
 
-  return true;
+  return null;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { makeStore } from '@/store/store';
@@ -63,11 +63,10 @@ describe('LlmModelsSection', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByLabelText('Add LLM provider'));
-    // New entry defaults to the managed MinusX provider.
-    const typeInput = screen.getByLabelText('LLM provider provider 1 type') as HTMLInputElement;
+    // New entry defaults to the managed MinusX provider, auto-named.
+    const typeInput = screen.getByLabelText('LLM provider minusx type') as HTMLInputElement;
     expect(typeInput.value).toBe('MinusX (managed)');
 
-    await user.type(screen.getByLabelText('LLM provider provider 1 name'), 'minusx');
     await user.type(screen.getByLabelText('LLM provider minusx API key'), 'mx-key-123');
     await user.click(screen.getByLabelText('Save LLM configuration'));
 
@@ -140,6 +139,48 @@ describe('LlmModelsSection', () => {
       const body = JSON.parse((configCall![1] as RequestInit).body as string);
       expect(body.llm.assignments.analyst.chain).toHaveLength(2);
       expect(body.llm.assignments.analyst.chain[0].providerName).toBe('a');
+    });
+  });
+
+  it('renaming a provider cascades into assignment chains (no dangling references)', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'OpenAI', provider: 'openai', apiKey: 'k' }],
+        assignments: { analyst: { chain: [{ providerName: 'OpenAI', model: 'gpt-4.1' }] } },
+      }),
+    });
+    const user = userEvent.setup();
+
+    const nameInput = await screen.findByLabelText('LLM provider OpenAI name');
+    // Single change event (paste-like) — types the new name over the old one.
+    fireEvent.change(nameInput, { target: { value: 'Default' } });
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.providers[0].name).toBe('Default');
+      expect(body.llm.assignments.analyst.chain[0].providerName).toBe('Default');
+    });
+  });
+
+  it('name is optional: a new provider gets an auto name, and a blanked name falls back on save', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, { store: storeWithLlm(undefined) });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('Add LLM provider'));
+    // Auto-named after the default provider type (minusx).
+    expect((screen.getByLabelText('LLM provider minusx name') as HTMLInputElement).value).toBe('minusx');
+
+    // Blank it out — save falls back to the auto name instead of erroring.
+    await user.clear(screen.getByLabelText('LLM provider minusx name'));
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.providers[0].name).toBe('minusx');
     });
   });
 

@@ -104,20 +104,47 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
 
   const modelsFor = useCallback((slug: string) => registry.find(p => p.slug === slug)?.models ?? [], [registry]);
 
+  /** Default (auto) name for a provider slug, unique among the other entries. */
+  const autoName = (slug: string, existing: LlmProviderEntry[], selfIndex: number): string => {
+    const taken = new Set(existing.filter((_, i) => i !== selfIndex).map(p => p.name));
+    if (!taken.has(slug)) return slug;
+    let n = 2;
+    while (taken.has(`${slug}-${n}`)) n++;
+    return `${slug}-${n}`;
+  };
+
   const setProvider = (index: number, patch: Partial<LlmProviderEntry>) => {
     setDraft(d => {
       const next = structuredClone(d);
       next.providers = next.providers ?? [];
-      next.providers[index] = { ...next.providers[index], ...patch };
+      const prev = next.providers[index];
+      // Switching the provider type refreshes an auto-generated name; a
+      // user-customized name is left alone.
+      if (patch.provider !== undefined && prev && (prev.name === '' || prev.name === autoName(prev.provider, next.providers, index))) {
+        patch = { ...patch, name: autoName(patch.provider, next.providers, index) };
+      }
+      next.providers[index] = { ...prev, ...patch };
+      // Renaming cascades into every assignment chain that referenced the old
+      // name — a dangling reference would fail validation on save.
+      if (patch.name !== undefined && prev?.name && patch.name !== prev.name && next.assignments) {
+        for (const useCase of LLM_USE_CASES) {
+          for (const step of next.assignments[useCase]?.chain ?? []) {
+            if (step.providerName === prev.name) step.providerName = patch.name;
+          }
+        }
+      }
       return next;
     });
   };
 
   const addProvider = () => {
-    setDraft(d => ({
-      ...structuredClone(d),
-      providers: [...(d.providers ?? []), { name: '', provider: minusx ? 'anthropic' : MINUSX_PROVIDER }],
-    }));
+    setDraft(d => {
+      const next = structuredClone(d);
+      next.providers = next.providers ?? [];
+      const slug = minusx ? 'anthropic' : MINUSX_PROVIDER;
+      next.providers.push({ name: autoName(slug, next.providers, -1), provider: slug });
+      return next;
+    });
   };
 
   const removeProvider = (index: number) => {
@@ -150,20 +177,19 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
   };
 
   const save = async () => {
-    for (const p of providers) {
-      if (!p.name.trim()) {
-        toaster.create({ title: 'Every provider needs a name', type: 'error' });
-        return;
-      }
-    }
-    const names = providers.map(p => p.name.trim());
+    // A blanked-out name falls back to the auto name (name is optional).
+    const toSave = structuredClone(draft);
+    toSave.providers?.forEach((p, i) => {
+      if (!p.name.trim()) p.name = autoName(p.provider, toSave.providers!, i);
+    });
+    const names = (toSave.providers ?? []).map(p => p.name.trim());
     if (new Set(names).size !== names.length) {
       toaster.create({ title: 'Provider names must be unique', type: 'error' });
       return;
     }
     setSaving(true);
     try {
-      await updateConfig({ llm: draft });
+      await updateConfig({ llm: toSave });
       toaster.create({ title: 'LLM configuration saved', type: 'success' });
     } catch (error) {
       toaster.create({ title: 'Failed to save LLM configuration', description: error instanceof Error ? error.message : undefined, type: 'error' });
@@ -236,11 +262,11 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
                     />
                   </Box>
                   <Box minW="160px">
-                    <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Name</Text>
+                    <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Name (optional)</Text>
                     <Input
                       size="sm" fontSize="xs" fontFamily="mono"
                       value={entry.name}
-                      placeholder={isMinusx ? 'minusx' : 'e.g. main-anthropic'}
+                      placeholder={entry.provider}
                       onChange={(e) => setProvider(index, { name: e.target.value })}
                       autoComplete="off"
                       aria-label={`LLM provider ${label} name`}
@@ -392,9 +418,10 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
           const stepLabel = `${meta.title} ${index === 0 ? 'primary' : `fallback ${index}`}`;
           const reasoning = (step.options?.['reasoning'] as string | undefined) ?? '';
           return (
-            <Flex key={index} gap={3} wrap="wrap" align="center">
-              <Badge size="xs" variant="surface" minW="72px" justifyContent="center">{index === 0 ? 'primary' : `fallback ${index}`}</Badge>
+            <Flex key={index} gap={3} wrap="wrap" align="flex-end">
+              <Badge size="xs" variant="surface" minW="72px" justifyContent="center" mb={2}>{index === 0 ? 'primary' : `fallback ${index}`}</Badge>
               <Box minW="200px">
+                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Provider</Text>
                 <SimpleSelect
                   value={step.providerName}
                   onChange={(providerName) => setStep(index, { providerName })}
@@ -404,28 +431,32 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
                 />
               </Box>
               {slug === MINUSX_PROVIDER ? (
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono">model routed by MinusX</Text>
-              ) : registryModels.length > 0 ? (
-                <Box minW="260px">
-                  <SimpleSelect
-                    value={step.model ?? ''}
-                    onChange={(model) => setStep(index, { model })}
-                    options={registryModels.map(m => ({ value: m.id, label: m.name === m.id ? m.id : `${m.name} (${m.id})` }))}
-                    placeholder="Search models…"
-                    ariaLabel={`${stepLabel} model`}
-                  />
-                </Box>
+                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={2}>model routed by MinusX</Text>
               ) : (
-                <Input
-                  size="sm" fontSize="xs" fontFamily="mono" maxW="260px"
-                  value={step.model ?? ''}
-                  placeholder="model id (e.g. qwen3:32b)"
-                  onChange={(e) => setStep(index, { model: e.target.value || undefined })}
-                  aria-label={`${stepLabel} model`}
-                />
+                <Box minW="260px">
+                  <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Model</Text>
+                  {registryModels.length > 0 ? (
+                    <SimpleSelect
+                      value={step.model ?? ''}
+                      onChange={(model) => setStep(index, { model })}
+                      options={registryModels.map(m => ({ value: m.id, label: m.name === m.id ? m.id : `${m.name} (${m.id})` }))}
+                      placeholder="Search models…"
+                      ariaLabel={`${stepLabel} model`}
+                    />
+                  ) : (
+                    <Input
+                      size="sm" fontSize="xs" fontFamily="mono"
+                      value={step.model ?? ''}
+                      placeholder="model id (e.g. qwen3:32b)"
+                      onChange={(e) => setStep(index, { model: e.target.value || undefined })}
+                      aria-label={`${stepLabel} model`}
+                    />
+                  )}
+                </Box>
               )}
               {slug !== MINUSX_PROVIDER && (
-                <Box minW="120px">
+                <Box minW="130px">
+                  <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Reasoning effort</Text>
                   <SimpleSelect
                     value={reasoning}
                     onChange={(value) => setStep(index, { options: value ? { ...step.options, reasoning: value } : (() => { const { reasoning: _r, ...rest } = step.options ?? {}; return Object.keys(rest).length ? rest : undefined; })() })}
@@ -435,7 +466,7 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
                   />
                 </Box>
               )}
-              <Button size="xs" variant="ghost" colorPalette="red" onClick={() => onChange(chain.filter((_, i) => i !== index))} aria-label={`Remove ${stepLabel}`}>
+              <Button size="xs" variant="ghost" colorPalette="red" mb={1} onClick={() => onChange(chain.filter((_, i) => i !== index))} aria-label={`Remove ${stepLabel}`}>
                 <LuTrash2 />
               </Button>
             </Flex>
