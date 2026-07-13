@@ -18,3 +18,4 @@ export { SummarizeSection } from './SummarizeSection';
 export { ActionToolbar } from './ActionToolbar';
 export { SimpleQueryBuilder } from './SimpleQueryBuilder';
 export { SemanticQueryBuilder } from './SemanticQueryBuilder';
+export { GuiBuilderRoot, type GuiMode } from './GuiBuilderRoot';

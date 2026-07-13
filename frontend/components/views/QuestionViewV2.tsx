@@ -38,7 +38,7 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { QuestionEmptyState } from '@/components/views/shared/empty-states';
 import type { FileId, FileState } from '@/store/filesSlice';
-import { QueryBuilderRoot, QueryModeSelector, SimpleQueryBuilder, SemanticQueryBuilder, type QueryTab } from '../query-builder';
+import { GuiBuilderRoot, QueryModeSelector, type QueryTab } from '../query-builder';
 import { semanticModelsForConnection } from '@/lib/semantic/resolve';
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
@@ -181,15 +181,14 @@ export default function QuestionViewV2({
   const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
   const toggleCollapsedPanel = onTogglePanel;
 
-  // Query mode state (Semantic, Simple, GUI, SQL, or Viz). Questions built in
-  // the Semantic tier open back into it (their semanticQuery spec persists).
-  const [queryMode, setQueryMode] = useState<QueryTab>(() => (content.semanticQuery ? 'semantic' : 'sql'));
+  // Query mode state (GUI, SQL, or Viz). Questions built in the Semantic tier
+  // open into the GUI tab (GuiBuilderRoot restores Semantic mode from the
+  // persisted semanticQuery spec).
+  const [queryMode, setQueryMode] = useState<QueryTab>(() => (content.semanticQuery ? 'gui' : 'sql'));
+  const effectiveQueryMode = queryMode;
 
-  // Semantic tier gating: only when the active context defines models for this connection.
+  // Semantic tier: models the active context defines for this connection.
   const connectionSemanticModels = semanticModelsForConnection(semanticModels, content.connection_name);
-  const showSemanticTab = connectionSemanticModels.length > 0;
-  // The context loads async — never strand the user on a hidden tab.
-  const effectiveQueryMode: QueryTab = queryMode === 'semantic' && !showSemanticTab ? 'sql' : queryMode;
 
   // Memoize referencedQuestions to avoid unnecessary re-renders
   const referencedQuestions = useMemo(() => {
@@ -576,9 +575,6 @@ export default function QuestionViewV2({
                     onModeChange={setQueryMode}
                     canUseGUI={canUseGUI}
                     guiError={guiError ?? undefined}
-                    canUseSimple={canUseSimple}
-                    simpleError={simpleError ?? undefined}
-                    showSemanticTab={showSemanticTab}
                     showVizTab={showVizControls}
                     canUseViz={!!queryData}
                   />
@@ -667,40 +663,10 @@ export default function QuestionViewV2({
                   />
                 )}
 
-                {/* Semantic Mode: curated measures/dimensions from the context */}
-                {effectiveQueryMode === 'semantic' && showSemanticTab && (
-                  <Box flex={1} overflow="auto">
-                    <SemanticQueryBuilder
-                      models={connectionSemanticModels}
-                      dialect={dialect}
-                      value={content.semanticQuery}
-                      onChange={(spec: SemanticQuerySpec, sql: string) => onChange({ semanticQuery: spec, query: sql })}
-                      onExecute={handleExecute}
-                      isExecuting={queryLoading && !queryData}
-                    />
-                  </Box>
-                )}
-
-                {/* Simple Mode: Scuba-style builder */}
-                {effectiveQueryMode === 'simple' && (
-                  <Box flex={1} overflow="auto">
-                    <SimpleQueryBuilder
-                      databaseName={content.connection_name || ''}
-                      dialect={dialect}
-                      sql={content.query}
-                      onSqlChange={handleQueryChange}
-                      onExecute={handleExecute}
-                      isExecuting={queryLoading && !queryData}
-                      availableQuestions={availableQuestions}
-                      whitelistedSchema={whitelistedSchema}
-                    />
-                  </Box>
-                )}
-
-                {/* GUI Mode: Visual Query Builder */}
+                {/* GUI Mode: Semantic / Simple / Full gradation (GuiBuilderRoot) */}
                 {effectiveQueryMode === 'gui' && (
                   <Box flex={1} overflow="auto">
-                    <QueryBuilderRoot
+                    <GuiBuilderRoot
                       databaseName={content.connection_name || ''}
                       dialect={dialect}
                       sql={content.query}
@@ -709,6 +675,11 @@ export default function QuestionViewV2({
                       isExecuting={queryLoading && !queryData}
                       availableQuestions={availableQuestions}
                       whitelistedSchema={whitelistedSchema}
+                      canUseSimple={canUseSimple}
+                      simpleError={simpleError}
+                      semanticModels={connectionSemanticModels}
+                      semanticQuery={content.semanticQuery}
+                      onSemanticChange={(spec: SemanticQuerySpec, sql: string) => onChange({ semanticQuery: spec, query: sql })}
                     />
                   </Box>
                 )}

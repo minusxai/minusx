@@ -10,8 +10,9 @@ import { connectionTypeToDialect } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
 import DatabaseSelector from '@/components/selectors/DatabaseSelector';
-import { QueryModeSelector, QueryBuilderRoot, SimpleQueryBuilder, type QueryTab } from '@/components/query-builder';
+import { QueryModeSelector, GuiBuilderRoot, type QueryTab } from '@/components/query-builder';
 import SqlEditor from '@/components/query-builder/SqlEditor';
+import { useGuiCompat } from '@/lib/hooks/use-gui-compat';
 import SimpleSelect from './SimpleSelect';
 
 interface TestSubjectEditorProps {
@@ -121,6 +122,7 @@ function InlineSubjectEditor({
   const [queryMode, setQueryMode] = useState<QueryTab>('gui');
   const { connections } = useConnections({ skip: true });
   const dialect = connectionTypeToDialect(connections[subject.connection_name]?.metadata?.type ?? '');
+  const guiCompat = useGuiCompat(subject.sql, dialect);
 
   // Auto-select first connection if none set
   useEffect(() => {
@@ -152,22 +154,15 @@ function InlineSubjectEditor({
             />
           )}
         </HStack>
-        {subject.connection_name && queryMode === 'simple' ? (
+        {subject.connection_name && queryMode === 'gui' ? (
           <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
-            <SimpleQueryBuilder
+            <GuiBuilderRoot
               databaseName={subject.connection_name}
               dialect={dialect}
               sql={subject.sql}
               onSqlChange={sql => onChange({ ...subject, sql })}
-            />
-          </Box>
-        ) : subject.connection_name && queryMode === 'gui' ? (
-          <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
-            <QueryBuilderRoot
-              databaseName={subject.connection_name}
-              dialect={dialect}
-              sql={subject.sql}
-              onSqlChange={sql => onChange({ ...subject, sql })}
+              canUseSimple={guiCompat.canUseSimple}
+              simpleError={guiCompat.simpleError}
             />
           </Box>
         ) : (

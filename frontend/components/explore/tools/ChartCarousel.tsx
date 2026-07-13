@@ -8,7 +8,7 @@ import type { QuestionContent, QueryResult, ExecuteQueryDetails } from '@/lib/ty
 import { contentToDetails, connectionTypeToDialect } from '@/lib/types';
 import { QuestionVisualization } from '@/components/question/QuestionVisualization';
 import SqlEditor from '@/components/query-builder/SqlEditor';
-import { QueryBuilderRoot, QueryModeSelector, SimpleQueryBuilder, type QueryTab } from '@/components/query-builder';
+import { GuiBuilderRoot, QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import { useGuiCompat } from '@/lib/hooks/use-gui-compat';
 import { VizTypeSelector } from '@/components/question/VizTypeSelector';
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
@@ -296,8 +296,6 @@ export default function ChartCarousel({
                 onModeChange={setQueryMode}
                 canUseGUI={canUseGUI}
                 guiError={guiError ?? undefined}
-                canUseSimple={canUseSimple}
-                simpleError={simpleError ?? undefined}
                 canUseViz={!!current?.queryResult}
               />
             </HStack>
@@ -310,20 +308,14 @@ export default function ChartCarousel({
                   showFormatButton={false}
                 />
               )}
-              {queryMode === 'simple' && current?.question?.query && (
-                <SimpleQueryBuilder
-                  databaseName={databaseName}
-                  dialect={dialect}
-                  sql={current.question.query}
-                  onSqlChange={() => {}}
-                />
-              )}
               {queryMode === 'gui' && current?.question?.query && (
-                <QueryBuilderRoot
+                <GuiBuilderRoot
                   databaseName={databaseName}
                   dialect={dialect}
                   sql={current.question.query}
                   onSqlChange={() => {}}
+                  canUseSimple={canUseSimple}
+                  simpleError={simpleError}
                 />
               )}
               {queryMode === 'viz' && localContent && current?.queryResult && (

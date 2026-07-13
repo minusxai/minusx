@@ -25,7 +25,7 @@ import DatabaseSelector from '@/components/selectors/DatabaseSelector';
 import { QuestionVisualization } from '@/components/question/QuestionVisualization';
 import { VizTypeSelector } from '@/components/question/VizTypeSelector';
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
-import { QueryBuilderRoot, QueryModeSelector, SimpleQueryBuilder, type QueryTab } from '@/components/query-builder';
+import { GuiBuilderRoot, QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import ResizablePanel from '@/components/ui/resizable-panel';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { paramTypeMap } from '@/lib/sql/sql-params';
@@ -216,8 +216,6 @@ export default function NotebookSqlCell({
             onModeChange={setQueryMode}
             canUseGUI={canUseGUI}
             guiError={guiError ?? undefined}
-            canUseSimple={canUseSimple}
-            simpleError={simpleError ?? undefined}
             canUseViz={!!data}
             size="sm"
           />
@@ -254,27 +252,10 @@ export default function NotebookSqlCell({
         </Box>
       )}
 
-      {queryMode === 'simple' && (
-        <ResizablePanel defaultHeight={300} minHeight={160} maxHeight={640}>
-          <Box p={2}>
-            <SimpleQueryBuilder
-              databaseName={cell.connection_name || ''}
-              dialect={dialect}
-              sql={cell.query}
-              onSqlChange={handleQueryChange}
-              onExecute={run}
-              isExecuting={loading && !data}
-              availableQuestions={availableQuestions}
-              whitelistedSchema={whitelistedSchema}
-            />
-          </Box>
-        </ResizablePanel>
-      )}
-
       {queryMode === 'gui' && (
         <ResizablePanel defaultHeight={300} minHeight={160} maxHeight={640}>
           <Box p={2}>
-            <QueryBuilderRoot
+            <GuiBuilderRoot
               databaseName={cell.connection_name || ''}
               dialect={dialect}
               sql={cell.query}
@@ -283,6 +264,8 @@ export default function NotebookSqlCell({
               isExecuting={loading && !data}
               availableQuestions={availableQuestions}
               whitelistedSchema={whitelistedSchema}
+              canUseSimple={canUseSimple}
+              simpleError={simpleError}
             />
           </Box>
         </ResizablePanel>
