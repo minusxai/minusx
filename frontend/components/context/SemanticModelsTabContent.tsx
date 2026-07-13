@@ -17,12 +17,13 @@
  *    model is always complete.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Tabs, Box, Grid, VStack, HStack, Text, Input, Button, IconButton, Badge } from '@chakra-ui/react';
 import { LuPlus, LuTrash2, LuSparkles, LuTable, LuTriangleAlert, LuClock, LuGroup, LuSigma, LuDivide, LuMerge } from 'react-icons/lu';
 import type { ContextContent, DatabaseWithSchema, SemanticModel, SemanticAggregate, SemanticMeasure } from '@/lib/types';
 import { validateSemanticModels } from '@/lib/semantic/validate-models';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from '@/components/query-builder';
+import { CompletionsAPI } from '@/lib/data/completions/completions';
 
 // ---------------------------------------------------------------------------
 // Column/table helpers
@@ -386,23 +387,89 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
   onChange: (next: SemanticModel) => void;
   onRemove: () => void;
 }) {
-  const set = (updates: Partial<SemanticModel>) => onChange({ ...model, ...updates });
+  // --- Buffered draft: typing edits stay local and flush debounced/on-blur.
+  // Committing per keystroke re-merges the ENTIRE context content through
+  // Redux (slow on real workspaces with large schemas) — never do that.
+  const [draft, setDraftState] = useState(model);
+  const draftRef = useRef(model);
+  const lastFlushedRef = useRef(model);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const baseTable = allTables.find((t) => tableKey(t) === tableKey(model));
-  const baseColumns = baseTable?.columns ?? [];
-  const issues = validateSemanticModels([model]);
+  useEffect(() => {
+    // External replacement (cancel / version switch): reset the draft.
+    if (JSON.stringify(model) !== JSON.stringify(lastFlushedRef.current)) {
+      draftRef.current = model;
+      lastFlushedRef.current = model;
+      setDraftState(model);
+    }
+  }, [model]);
+
+  const flush = useCallback(() => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    if (JSON.stringify(draftRef.current) !== JSON.stringify(lastFlushedRef.current)) {
+      lastFlushedRef.current = draftRef.current;
+      onChange(draftRef.current);
+    }
+  }, [onChange]);
+
+  // Flush pending edits on unmount so nothing is lost.
+  useEffect(() => () => flush(), [flush]);
+
+  const set = (updates: Partial<SemanticModel>) => {
+    const next = { ...draftRef.current, ...updates };
+    draftRef.current = next;
+    setDraftState(next);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(flush, 400);
+  };
+
+  // --- Columns: fetched on demand per table. The context document's schema is
+  // BOUNDED for large workspaces (boundFullSchema drops columns), so the local
+  // copy in allTables may be empty — the completions API always has them.
+  const [columnsByTable, setColumnsByTable] = useState<Record<string, ColumnInfo[]>>({});
+  const baseKey = draft.table ? tableKey(draft) : null;
+  const joinKeys = (draft.joins ?? [])
+    .filter((j) => j.table)
+    .map((j) => tableKey({ connection: draft.connection, schema: j.schema, table: j.table }));
+  const wantedKeys = [baseKey, ...joinKeys].filter((k): k is string => !!k).join(';');
+
+  useEffect(() => {
+    let cancelled = false;
+    for (const key of wantedKeys.split(';').filter(Boolean)) {
+      if (columnsByTable[key]) continue;
+      const [connection, schema, table] = key.split('|');
+      const local = allTables.find((t) => tableKey(t) === key)?.columns;
+      if (local && local.length > 0) {
+        setColumnsByTable((prev) => (prev[key] ? prev : { ...prev, [key]: local }));
+        continue;
+      }
+      CompletionsAPI.getColumnSuggestions({ databaseName: connection, table, schema: schema || undefined })
+        .then((res) => {
+          if (!cancelled && res.success && res.columns) {
+            setColumnsByTable((prev) => ({ ...prev, [key]: res.columns as ColumnInfo[] }));
+          }
+        })
+        .catch(() => { /* selects just stay empty */ });
+    }
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantedKeys, allTables]);
+
+  const baseTable = allTables.find((t) => baseKey && tableKey(t) === baseKey);
+  const baseColumns = (baseKey && columnsByTable[baseKey]) || [];
+  const columnsLoading = !!baseKey && !columnsByTable[baseKey];
+  const issues = validateSemanticModels([draft]);
 
   const columnsForJoin = (alias?: string): ColumnInfo[] => {
     if (!alias) return baseColumns;
-    const join = (model.joins ?? []).find((j) => j.alias === alias);
-    const t = join && allTables.find((x) =>
-      x.connection === model.connection && x.table === join.table && (x.schema ?? '') === (join.schema ?? ''));
-    return t?.columns ?? [];
+    const join = (draft.joins ?? []).find((j) => j.alias === alias);
+    if (!join?.table) return [];
+    return columnsByTable[tableKey({ connection: draft.connection, schema: join.schema, table: join.table })] ?? [];
   };
 
   // Suggestions: columns not already used by the section, classified by type.
-  const usedDimensionColumns = new Set(model.dimensions.filter((d) => !d.join).map((d) => d.column));
-  const usedMeasureColumns = new Set(model.measures.map((m) => m.column).filter(Boolean));
+  const usedDimensionColumns = new Set(draft.dimensions.filter((d) => !d.join).map((d) => d.column));
+  const usedMeasureColumns = new Set(draft.measures.map((m) => m.column).filter(Boolean));
   const temporalColumns = baseColumns.filter(isTemporal);
   const dimensionSuggestions = baseColumns
     .filter((c) => isCategorical(c) && !usedDimensionColumns.has(c.name))
@@ -412,14 +479,15 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
     // out of the suggestions (still reachable via "custom").
     .filter((c) => isNumeric(c) && !usedMeasureColumns.has(c.name) && !/(^|_)id$/i.test(c.name))
     .slice(0, 6);
-  const hasCount = model.measures.some((m) => m.agg === 'COUNT' && !m.column);
-  const namedMeasures = model.measures.filter((m) => m.name.trim());
+  const hasCount = draft.measures.some((m) => m.agg === 'COUNT' && !m.column);
+  const namedMeasures = draft.measures.filter((m) => m.name.trim());
 
   const handleTableSelect = (t: TableInfo) => {
     // Changing the base table invalidates all column-bound config; re-seed
     // with the model's name defaulted from the table and a Count measure.
-    onChange({
-      name: model.name.trim() || titleCase(t.table),
+    // Discrete action → commit immediately (no debounce).
+    set({
+      name: draftRef.current.name.trim() || titleCase(t.table),
       connection: t.connection,
       schema: t.schema,
       table: t.table,
@@ -429,10 +497,11 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
       joins: [],
       metrics: [],
     });
+    flush();
   };
 
   return (
-    <Box border="1px solid" borderColor="border.muted" borderRadius="lg" bg="bg.subtle" overflow="hidden">
+    <Box border="1px solid" borderColor="border.muted" borderRadius="lg" bg="bg.subtle" overflow="hidden" onBlurCapture={flush}>
       {/* Header: name + table + delete */}
       <HStack px={4} py={2.5} gap={2.5} borderBottom="1px solid" borderColor="border.muted" bg="bg.muted/40">
         <Box color="accent.teal" flexShrink={0}><LuSparkles size={14} /></Box>
@@ -443,7 +512,7 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
           fontFamily="mono"
           fontWeight="600"
           maxW="220px"
-          value={model.name}
+          value={draft.name}
           placeholder="Model name"
           onChange={(e) => set({ name: e.target.value })}
         />
@@ -468,7 +537,7 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
               <ToggleChip
                 label="none"
                 ariaLabel="Time column none"
-                selected={!model.timeDimension}
+                selected={!draft.timeDimension}
                 onClick={() => set({ timeDimension: undefined })}
               />
               {temporalColumns.map((c) => (
@@ -476,13 +545,17 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
                   key={c.name}
                   label={c.name}
                   ariaLabel={`Time column ${c.name}`}
-                  selected={model.timeDimension?.column === c.name}
+                  selected={draft.timeDimension?.column === c.name}
                   onClick={() => set({ timeDimension: { column: c.name } })}
                 />
               ))}
-              {temporalColumns.length === 0 && (
+              {columnsLoading ? (
                 <Text fontSize="11px" color="fg.subtle" fontFamily="mono" pt="4px">
-                  no date/time columns detected on {model.table}
+                  loading columns…
+                </Text>
+              ) : temporalColumns.length === 0 && (
+                <Text fontSize="11px" color="fg.subtle" fontFamily="mono" pt="4px">
+                  no date/time columns detected on {draft.table}
                 </Text>
               )}
             </HStack>
@@ -491,34 +564,34 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
           {/* DIMENSIONS */}
           <RailRow icon={<LuGroup size={11} />} label="Dimensions">
             <VStack align="stretch" gap={1.5}>
-              {model.dimensions.map((d, i) => (
+              {draft.dimensions.map((d, i) => (
                 <Grid key={i} templateColumns="220px 130px 1fr 28px" gap={1.5} alignItems="center">
                   <Input
                     aria-label={`Dimension name ${i + 1}`}
                     size="xs" h={CONTROL_H} fontFamily="mono" placeholder="Business name"
                     value={d.name}
-                    onChange={(e) => set({ dimensions: model.dimensions.map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
+                    onChange={(e) => set({ dimensions: draft.dimensions.map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
                   />
                   <select
                     aria-label={`Dimension join ${i + 1}`}
                     style={selectStyle}
                     value={d.join ?? ''}
-                    onChange={(e) => set({ dimensions: model.dimensions.map((x, j) => j === i ? { ...x, join: e.target.value || undefined, column: '' } : x) })}
+                    onChange={(e) => set({ dimensions: draft.dimensions.map((x, j) => j === i ? { ...x, join: e.target.value || undefined, column: '' } : x) })}
                   >
-                    <option value="">{model.table}</option>
-                    {(model.joins ?? []).map((j) => <option key={j.alias} value={j.alias}>{j.alias} ({j.table})</option>)}
+                    <option value="">{draft.table}</option>
+                    {(draft.joins ?? []).map((j) => <option key={j.alias} value={j.alias}>{j.alias} ({j.table})</option>)}
                   </select>
                   <select
                     aria-label={`Dimension column ${i + 1}`}
                     style={selectStyle}
                     value={d.column}
-                    onChange={(e) => set({ dimensions: model.dimensions.map((x, j) => j === i ? { ...x, column: e.target.value } : x) })}
+                    onChange={(e) => set({ dimensions: draft.dimensions.map((x, j) => j === i ? { ...x, column: e.target.value } : x) })}
                   >
-                    <option value="">column…</option>
+                    <option value="">{columnsForJoin(d.join).length === 0 ? 'loading columns…' : 'column…'}</option>
                     {columnsForJoin(d.join).map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
                   </select>
                   <IconButton aria-label={`Remove dimension ${i + 1}`} size="2xs" variant="ghost"
-                    onClick={() => set({ dimensions: model.dimensions.filter((_, j) => j !== i) })}>
+                    onClick={() => set({ dimensions: draft.dimensions.filter((_, j) => j !== i) })}>
                     <LuTrash2 size={12} />
                   </IconButton>
                 </Grid>
@@ -529,11 +602,11 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
                     key={c.name}
                     label={c.name}
                     ariaLabel={`Suggested dimension ${c.name}`}
-                    onClick={() => set({ dimensions: [...model.dimensions, { name: titleCase(c.name), column: c.name }] })}
+                    onClick={() => set({ dimensions: [...draft.dimensions, { name: titleCase(c.name), column: c.name }] })}
                   />
                 ))}
                 <Button aria-label="Add dimension" size="2xs" variant="ghost" color="fg.subtle"
-                  onClick={() => set({ dimensions: [...model.dimensions, { name: '', column: '' }] })}>
+                  onClick={() => set({ dimensions: [...draft.dimensions, { name: '', column: '' }] })}>
                   <LuPlus size={11} /> custom
                 </Button>
               </HStack>
@@ -543,13 +616,13 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
           {/* MEASURES */}
           <RailRow icon={<LuSigma size={11} />} label="Measures">
             <VStack align="stretch" gap={1.5}>
-              {model.measures.map((m, i) => (
-                <Grid key={i} templateColumns={m.agg === 'COUNT' ? '220px 130px 1fr 28px' : '220px 130px 1fr 28px'} gap={1.5} alignItems="center">
+              {draft.measures.map((m, i) => (
+                <Grid key={i} templateColumns="220px 130px 1fr 28px" gap={1.5} alignItems="center">
                   <Input
                     aria-label={`Measure name ${i + 1}`}
                     size="xs" h={CONTROL_H} fontFamily="mono" placeholder="Business name"
                     value={m.name}
-                    onChange={(e) => set({ measures: model.measures.map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
+                    onChange={(e) => set({ measures: draft.measures.map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
                   />
                   <select
                     aria-label={`Measure aggregation ${i + 1}`}
@@ -557,7 +630,7 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
                     value={m.agg}
                     onChange={(e) => {
                       const agg = e.target.value as SemanticAggregate;
-                      set({ measures: model.measures.map((x, j) => j === i ? { ...x, agg, ...(agg === 'COUNT' ? { column: undefined } : {}) } : x) });
+                      set({ measures: draft.measures.map((x, j) => j === i ? { ...x, agg, ...(agg === 'COUNT' ? { column: undefined } : {}) } : x) });
                     }}
                   >
                     {AGGS.map((a) => <option key={a} value={a}>{a}</option>)}
@@ -569,14 +642,14 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
                       aria-label={`Measure column ${i + 1}`}
                       style={selectStyle}
                       value={m.column ?? ''}
-                      onChange={(e) => set({ measures: model.measures.map((x, j) => j === i ? { ...x, column: e.target.value || undefined } : x) })}
+                      onChange={(e) => set({ measures: draft.measures.map((x, j) => j === i ? { ...x, column: e.target.value || undefined } : x) })}
                     >
-                      <option value="">column…</option>
+                      <option value="">{baseColumns.length === 0 ? 'loading columns…' : 'column…'}</option>
                       {baseColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
                     </select>
                   )}
                   <IconButton aria-label={`Remove measure ${i + 1}`} size="2xs" variant="ghost"
-                    onClick={() => set({ measures: model.measures.filter((_, j) => j !== i) })}>
+                    onClick={() => set({ measures: draft.measures.filter((_, j) => j !== i) })}>
                     <LuTrash2 size={12} />
                   </IconButton>
                 </Grid>
@@ -586,7 +659,7 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
                   <SuggestionChip
                     label="Count of rows"
                     ariaLabel="Suggested measure count of rows"
-                    onClick={() => set({ measures: [...model.measures, { name: 'Count', agg: 'COUNT' }] })}
+                    onClick={() => set({ measures: [...draft.measures, { name: 'Count', agg: 'COUNT' }] })}
                   />
                 )}
                 {measureSuggestions.map((c) => (
@@ -594,11 +667,11 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
                     key={c.name}
                     label={`SUM ${c.name}`}
                     ariaLabel={`Suggested measure sum of ${c.name}`}
-                    onClick={() => set({ measures: [...model.measures, { name: titleCase(c.name), agg: 'SUM', column: c.name }] })}
+                    onClick={() => set({ measures: [...draft.measures, { name: titleCase(c.name), agg: 'SUM', column: c.name }] })}
                   />
                 ))}
                 <Button aria-label="Add measure" size="2xs" variant="ghost" color="fg.subtle"
-                  onClick={() => set({ measures: [...model.measures, { name: '', agg: 'SUM' }] })}>
+                  onClick={() => set({ measures: [...draft.measures, { name: '', agg: 'SUM' }] })}>
                   <LuPlus size={11} /> custom
                 </Button>
               </HStack>
@@ -609,19 +682,19 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
           {namedMeasures.length >= 2 && (
             <RailRow icon={<LuDivide size={11} />} label="Metrics">
               <VStack align="stretch" gap={1.5}>
-                {(model.metrics ?? []).map((mt, i) => (
+                {(draft.metrics ?? []).map((mt, i) => (
                   <Grid key={i} templateColumns="220px 1fr 16px 1fr 28px" gap={1.5} alignItems="center">
                     <Input
                       aria-label={`Metric name ${i + 1}`}
                       size="xs" h={CONTROL_H} fontFamily="mono" placeholder="Business name"
                       value={mt.name}
-                      onChange={(e) => set({ metrics: (model.metrics ?? []).map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
+                      onChange={(e) => set({ metrics: (draft.metrics ?? []).map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
                     />
                     <select
                       aria-label={`Metric numerator ${i + 1}`}
                       style={selectStyle}
                       value={mt.numerator}
-                      onChange={(e) => set({ metrics: (model.metrics ?? []).map((x, j) => j === i ? { ...x, numerator: e.target.value } : x) })}
+                      onChange={(e) => set({ metrics: (draft.metrics ?? []).map((x, j) => j === i ? { ...x, numerator: e.target.value } : x) })}
                     >
                       <option value="">numerator…</option>
                       {namedMeasures.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
@@ -631,20 +704,20 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
                       aria-label={`Metric denominator ${i + 1}`}
                       style={selectStyle}
                       value={mt.denominator}
-                      onChange={(e) => set({ metrics: (model.metrics ?? []).map((x, j) => j === i ? { ...x, denominator: e.target.value } : x) })}
+                      onChange={(e) => set({ metrics: (draft.metrics ?? []).map((x, j) => j === i ? { ...x, denominator: e.target.value } : x) })}
                     >
                       <option value="">denominator…</option>
                       {namedMeasures.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
                     </select>
                     <IconButton aria-label={`Remove metric ${i + 1}`} size="2xs" variant="ghost"
-                      onClick={() => set({ metrics: (model.metrics ?? []).filter((_, j) => j !== i) })}>
+                      onClick={() => set({ metrics: (draft.metrics ?? []).filter((_, j) => j !== i) })}>
                       <LuTrash2 size={12} />
                     </IconButton>
                   </Grid>
                 ))}
                 <Box>
                   <Button aria-label="Add ratio metric" size="2xs" variant="ghost" color="fg.subtle"
-                    onClick={() => set({ metrics: [...(model.metrics ?? []), { name: '', type: 'ratio', numerator: '', denominator: '' }] })}>
+                    onClick={() => set({ metrics: [...(draft.metrics ?? []), { name: '', type: 'ratio', numerator: '', denominator: '' }] })}>
                     <LuPlus size={11} /> ratio metric (measure ÷ measure)
                   </Button>
                 </Box>
@@ -655,60 +728,58 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
           {/* JOINS — advanced, tucked behind the add affordance */}
           <RailRow icon={<LuMerge size={11} />} label="Joins">
             <VStack align="stretch" gap={1.5}>
-              {(model.joins ?? []).map((jn, i) => {
-                const joinTableInfo = allTables.find((x) =>
-                  x.connection === model.connection && x.table === jn.table && (x.schema ?? '') === (jn.schema ?? ''));
-                return (
-                  <Grid key={i} templateColumns="220px 90px 1fr 16px 1fr 28px" gap={1.5} alignItems="center">
-                    <select
-                      aria-label={`Join table ${i + 1}`}
-                      style={selectStyle}
-                      value={jn.table ? tableKey({ connection: model.connection, schema: jn.schema, table: jn.table }) : ''}
-                      onChange={(e) => {
-                        const t = allTables.find((x) => tableKey(x) === e.target.value);
-                        if (t) set({ joins: (model.joins ?? []).map((x, j) => j === i ? { ...x, table: t.table, schema: t.schema, alias: x.alias || t.table.slice(0, 2) } : x) });
-                      }}
-                    >
-                      <option value="">join table…</option>
-                      {allTables.filter((t) => t.connection === model.connection && t.table !== model.table).map((t) => (
-                        <option key={tableKey(t)} value={tableKey(t)}>{tableLabel(t)}</option>
-                      ))}
-                    </select>
-                    <Input
-                      aria-label={`Join alias ${i + 1}`}
-                      size="xs" h={CONTROL_H} fontFamily="mono" placeholder="alias"
-                      value={jn.alias}
-                      onChange={(e) => set({ joins: (model.joins ?? []).map((x, j) => j === i ? { ...x, alias: e.target.value } : x) })}
-                    />
-                    <select
-                      aria-label={`Join left column ${i + 1}`}
-                      style={selectStyle}
-                      value={jn.leftColumn}
-                      onChange={(e) => set({ joins: (model.joins ?? []).map((x, j) => j === i ? { ...x, leftColumn: e.target.value } : x) })}
-                    >
-                      <option value="">{model.table} column…</option>
-                      {baseColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-                    </select>
-                    <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center">=</Text>
-                    <select
-                      aria-label={`Join right column ${i + 1}`}
-                      style={selectStyle}
-                      value={jn.rightColumn}
-                      onChange={(e) => set({ joins: (model.joins ?? []).map((x, j) => j === i ? { ...x, rightColumn: e.target.value } : x) })}
-                    >
-                      <option value="">{jn.table || 'joined'} column…</option>
-                      {(joinTableInfo?.columns ?? []).map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-                    </select>
-                    <IconButton aria-label={`Remove join ${i + 1}`} size="2xs" variant="ghost"
-                      onClick={() => set({ joins: (model.joins ?? []).filter((_, j) => j !== i) })}>
-                      <LuTrash2 size={12} />
-                    </IconButton>
-                  </Grid>
-                );
-              })}
+              {(draft.joins ?? []).map((jn, i) => (
+                <Grid key={i} templateColumns="220px 90px 1fr 16px 1fr 28px" gap={1.5} alignItems="center">
+                  <select
+                    aria-label={`Join table ${i + 1}`}
+                    style={selectStyle}
+                    value={jn.table ? tableKey({ connection: draft.connection, schema: jn.schema, table: jn.table }) : ''}
+                    onChange={(e) => {
+                      const t = allTables.find((x) => tableKey(x) === e.target.value);
+                      if (t) set({ joins: (draft.joins ?? []).map((x, j) => j === i ? { ...x, table: t.table, schema: t.schema, alias: x.alias || t.table.slice(0, 2) } : x) });
+                    }}
+                  >
+                    <option value="">join table…</option>
+                    {allTables.filter((t) => t.connection === draft.connection && t.table !== draft.table).map((t) => (
+                      <option key={tableKey(t)} value={tableKey(t)}>{tableLabel(t)}</option>
+                    ))}
+                  </select>
+                  <Input
+                    aria-label={`Join alias ${i + 1}`}
+                    size="xs" h={CONTROL_H} fontFamily="mono" placeholder="alias"
+                    value={jn.alias}
+                    onChange={(e) => set({ joins: (draft.joins ?? []).map((x, j) => j === i ? { ...x, alias: e.target.value } : x) })}
+                  />
+                  <select
+                    aria-label={`Join left column ${i + 1}`}
+                    style={selectStyle}
+                    value={jn.leftColumn}
+                    onChange={(e) => set({ joins: (draft.joins ?? []).map((x, j) => j === i ? { ...x, leftColumn: e.target.value } : x) })}
+                  >
+                    <option value="">{draft.table} column…</option>
+                    {baseColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                  </select>
+                  <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center">=</Text>
+                  <select
+                    aria-label={`Join right column ${i + 1}`}
+                    style={selectStyle}
+                    value={jn.rightColumn}
+                    onChange={(e) => set({ joins: (draft.joins ?? []).map((x, j) => j === i ? { ...x, rightColumn: e.target.value } : x) })}
+                  >
+                    <option value="">{jn.table || 'joined'} column…</option>
+                    {(jn.table ? (columnsByTable[tableKey({ connection: draft.connection, schema: jn.schema, table: jn.table })] ?? []) : []).map((c) => (
+                      <option key={c.name} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                  <IconButton aria-label={`Remove join ${i + 1}`} size="2xs" variant="ghost"
+                    onClick={() => set({ joins: (draft.joins ?? []).filter((_, j) => j !== i) })}>
+                    <LuTrash2 size={12} />
+                  </IconButton>
+                </Grid>
+              ))}
               <Box>
                 <Button aria-label="Add join" size="2xs" variant="ghost" color="fg.subtle"
-                  onClick={() => set({ joins: [...(model.joins ?? []), { table: '', alias: '', leftColumn: '', rightColumn: '' }] })}>
+                  onClick={() => set({ joins: [...(draft.joins ?? []), { table: '', alias: '', leftColumn: '', rightColumn: '' }] })}>
                   <LuPlus size={11} /> join another table (enables cross-table dimensions)
                 </Button>
               </Box>

@@ -6,11 +6,19 @@
  *  - live validation issues render on incomplete models
  */
 import React from 'react';
-import { screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { Tabs } from '@chakra-ui/react';
 import { SemanticModelsTabContent } from '@/components/context/SemanticModelsTabContent';
 import type { ContextContent, DatabaseWithSchema, SemanticModel } from '@/lib/types';
+import { CompletionsAPI } from '@/lib/data/completions/completions';
+
+// The editor fetches columns on demand (the context document's schema is
+// bounded for large workspaces); serve them from the mock here.
+vi.mock('@/lib/data/completions/completions', () => ({
+  CompletionsAPI: { getColumnSuggestions: vi.fn() },
+}));
+const getColumnSuggestions = CompletionsAPI.getColumnSuggestions as unknown as ReturnType<typeof vi.fn>;
 
 const DATABASES: DatabaseWithSchema[] = [{
   databaseName: 'warehouse',
@@ -42,6 +50,10 @@ const content = (models: SemanticModel[]): ContextContent =>
   ({ versions: [], published: { all: 1 }, semanticModels: models } as unknown as ContextContent);
 
 const renderTab = (models: SemanticModel[], editMode: boolean, onChange = vi.fn()) => {
+  getColumnSuggestions.mockResolvedValue({
+    success: true,
+    columns: DATABASES[0].schemas[0].tables[0].columns.map((c) => ({ ...c, displayName: c.name })),
+  });
   renderWithProviders(
     <Tabs.Root value="semantic">
       <SemanticModelsTabContent
@@ -75,21 +87,23 @@ describe('SemanticModelsTabContent — edit mode', () => {
     expect(screen.queryByLabelText('Add measure')).toBeNull();
   });
 
-  it('offers time toggle chips for temporal columns and suggestion chips for the rest', () => {
+  it('offers time toggle chips for temporal columns and suggestion chips for the rest', async () => {
     renderTab([ORDERS_MODEL], true);
-    expect(screen.getByLabelText('Time column created_at').getAttribute('aria-pressed')).toBe('true');
+    expect((await screen.findByLabelText('Time column created_at')).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByLabelText('Time column none').getAttribute('aria-pressed')).toBe('false');
     // total is numeric and unused as a dimension → not suggested as dimension;
     // order_status is used → not suggested; nothing categorical remains.
     expect(screen.queryByLabelText('Suggested dimension order_status')).toBeNull();
     // Count-of-rows suggestion shows (model has no COUNT measure)
-    expect(screen.getByLabelText('Suggested measure count of rows')).toBeTruthy();
+    expect(await screen.findByLabelText('Suggested measure count of rows')).toBeTruthy();
   });
 
-  it('one-click adds a Title-Cased dimension from a suggestion chip', () => {
+  it('one-click adds a Title-Cased dimension from a suggestion chip (debounce-flushed)', async () => {
     const model: SemanticModel = { ...ORDERS_MODEL, dimensions: [] };
     const onChange = renderTab([model], true);
-    fireEvent.click(screen.getByLabelText('Suggested dimension order_status'));
+    fireEvent.click(await screen.findByLabelText('Suggested dimension order_status'));
+    // Edits buffer locally and flush debounced — wait for the flush.
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
     const next = onChange.mock.calls.at(-1)![0].semanticModels[0] as SemanticModel;
     expect(next.dimensions).toEqual([{ name: 'Order Status', column: 'order_status' }]);
   });
