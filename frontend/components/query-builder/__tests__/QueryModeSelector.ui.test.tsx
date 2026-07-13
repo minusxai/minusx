@@ -60,6 +60,51 @@ describe('QueryModeSelector', () => {
     expect(onModeChange).not.toHaveBeenCalled();
   });
 
+  it('renders a Simple tab and switches to it when enabled', () => {
+    const onModeChange = vi.fn();
+    renderWithProviders(
+      <QueryModeSelector mode="sql" onModeChange={onModeChange} canUseGUI canUseSimple />
+    );
+    const simple = screen.getByLabelText('Simple');
+    expect(simple.getAttribute('aria-disabled')).toBe('false');
+    fireEvent.click(simple);
+    expect(onModeChange).toHaveBeenCalledWith('simple');
+  });
+
+  it('disables (not hides) the Simple tab when canUseSimple is false', () => {
+    const onModeChange = vi.fn();
+    renderWithProviders(
+      <QueryModeSelector
+        mode="sql"
+        onModeChange={onModeChange}
+        canUseGUI
+        canUseSimple={false}
+        simpleError="Not available in Simple mode: joins"
+      />
+    );
+    const simple = screen.getByLabelText('Simple');
+    expect(simple.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(simple);
+    expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  it('hides the Semantic tab by default and shows it with showSemanticTab', () => {
+    const onModeChange = vi.fn();
+    const { unmount } = renderWithProviders(
+      <QueryModeSelector mode="sql" onModeChange={onModeChange} canUseGUI />
+    );
+    expect(screen.queryByLabelText('Semantic')).toBeNull();
+    unmount();
+
+    renderWithProviders(
+      <QueryModeSelector mode="sql" onModeChange={onModeChange} canUseGUI showSemanticTab />
+    );
+    const semantic = screen.getByLabelText('Semantic');
+    expect(semantic.getAttribute('aria-disabled')).toBe('false');
+    fireEvent.click(semantic);
+    expect(onModeChange).toHaveBeenCalledWith('semantic');
+  });
+
   it('allows switching to Viz when canUseViz is true (default)', () => {
     const onModeChange = vi.fn();
     renderWithProviders(

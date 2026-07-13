@@ -10,7 +10,7 @@ import { connectionTypeToDialect } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
 import DatabaseSelector from '@/components/selectors/DatabaseSelector';
-import { QueryModeSelector, QueryBuilderRoot, type QueryTab } from '@/components/query-builder';
+import { QueryModeSelector, QueryBuilderRoot, SimpleQueryBuilder, type QueryTab } from '@/components/query-builder';
 import SqlEditor from '@/components/query-builder/SqlEditor';
 import SimpleSelect from './SimpleSelect';
 
@@ -152,7 +152,16 @@ function InlineSubjectEditor({
             />
           )}
         </HStack>
-        {subject.connection_name && queryMode === 'gui' ? (
+        {subject.connection_name && queryMode === 'simple' ? (
+          <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
+            <SimpleQueryBuilder
+              databaseName={subject.connection_name}
+              dialect={dialect}
+              sql={subject.sql}
+              onSqlChange={sql => onChange({ ...subject, sql })}
+            />
+          </Box>
+        ) : subject.connection_name && queryMode === 'gui' ? (
           <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
             <QueryBuilderRoot
               databaseName={subject.connection_name}

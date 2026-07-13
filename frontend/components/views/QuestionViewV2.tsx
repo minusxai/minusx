@@ -37,7 +37,7 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { QuestionEmptyState } from '@/components/views/shared/empty-states';
 import type { FileId, FileState } from '@/store/filesSlice';
-import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '../query-builder';
+import { QueryBuilderRoot, QueryModeSelector, SimpleQueryBuilder, type QueryTab } from '../query-builder';
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
@@ -241,7 +241,7 @@ export default function QuestionViewV2({
   // Proactive GUI compatibility check: dims the GUI tab (with a tooltip reason) when
   // the query can't be parsed into the builder IR, so it's already disabled when the
   // user opens a question — no surprise on mode switch.
-  const { canUseGUI, guiError } = useGuiCompat(content.query, dialect);
+  const { canUseGUI, guiError, canUseSimple, simpleError } = useGuiCompat(content.query, dialect);
 
   // Use compact layout when container is narrow (< 700px) - stacked vertical layout
   const useCompactLayout = (containerWidth > 0 && containerWidth < 700) || !fullMode;
@@ -567,6 +567,8 @@ export default function QuestionViewV2({
                     onModeChange={setQueryMode}
                     canUseGUI={canUseGUI}
                     guiError={guiError ?? undefined}
+                    canUseSimple={canUseSimple}
+                    simpleError={simpleError ?? undefined}
                     showVizTab={showVizControls}
                     canUseViz={!!queryData}
                   />
@@ -653,6 +655,22 @@ export default function QuestionViewV2({
                     fillHeight={!useCompactLayout}
                     editWithAgent={{ fileName: filePath?.split('/').pop() ?? 'query', filePath, questionId }}
                   />
+                )}
+
+                {/* Simple Mode: Scuba-style builder */}
+                {queryMode === 'simple' && (
+                  <Box flex={1} overflow="auto">
+                    <SimpleQueryBuilder
+                      databaseName={content.connection_name || ''}
+                      dialect={dialect}
+                      sql={content.query}
+                      onSqlChange={handleQueryChange}
+                      onExecute={handleExecute}
+                      isExecuting={queryLoading && !queryData}
+                      availableQuestions={availableQuestions}
+                      whitelistedSchema={whitelistedSchema}
+                    />
+                  </Box>
                 )}
 
                 {/* GUI Mode: Visual Query Builder */}

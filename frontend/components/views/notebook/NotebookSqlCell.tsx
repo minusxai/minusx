@@ -25,7 +25,7 @@ import DatabaseSelector from '@/components/selectors/DatabaseSelector';
 import { QuestionVisualization } from '@/components/question/QuestionVisualization';
 import { VizTypeSelector } from '@/components/question/VizTypeSelector';
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
-import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '@/components/query-builder';
+import { QueryBuilderRoot, QueryModeSelector, SimpleQueryBuilder, type QueryTab } from '@/components/query-builder';
 import ResizablePanel from '@/components/ui/resizable-panel';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { paramTypeMap } from '@/lib/sql/sql-params';
@@ -120,7 +120,7 @@ export default function NotebookSqlCell({
   const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
 
   // Proactive GUI-compatibility check: dim the GUI tab when the query can't be parsed.
-  const { canUseGUI, guiError } = useGuiCompat(cell.query, dialect);
+  const { canUseGUI, guiError, canUseSimple, simpleError } = useGuiCompat(cell.query, dialect);
 
   const run = useCallback(() => {
     onExecutedChange?.({
@@ -216,6 +216,8 @@ export default function NotebookSqlCell({
             onModeChange={setQueryMode}
             canUseGUI={canUseGUI}
             guiError={guiError ?? undefined}
+            canUseSimple={canUseSimple}
+            simpleError={simpleError ?? undefined}
             canUseViz={!!data}
             size="sm"
           />
@@ -250,6 +252,23 @@ export default function NotebookSqlCell({
             connectionType={connectionType}
           />
         </Box>
+      )}
+
+      {queryMode === 'simple' && (
+        <ResizablePanel defaultHeight={300} minHeight={160} maxHeight={640}>
+          <Box p={2}>
+            <SimpleQueryBuilder
+              databaseName={cell.connection_name || ''}
+              dialect={dialect}
+              sql={cell.query}
+              onSqlChange={handleQueryChange}
+              onExecute={run}
+              isExecuting={loading && !data}
+              availableQuestions={availableQuestions}
+              whitelistedSchema={whitelistedSchema}
+            />
+          </Box>
+        </ResizablePanel>
       )}
 
       {queryMode === 'gui' && (

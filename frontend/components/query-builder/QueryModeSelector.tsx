@@ -1,20 +1,30 @@
 /**
- * QueryModeSelector - Segmented control for SQL, GUI, and Viz modes
+ * QueryModeSelector - Segmented control for Semantic, Simple, GUI, SQL, and Viz modes
+ *
+ * Tiers left→right from most to least abstracted: Semantic (curated metrics,
+ * only shown when the active context defines semantic models), Simple
+ * (Scuba-style measure/group-by/time builder), GUI (full visual builder),
+ * SQL (Monaco). Viz configures the chart.
  */
 
 'use client';
 
 import { HStack, Text } from '@chakra-ui/react';
-import { LuCode, LuMousePointerClick, LuChartColumn } from 'react-icons/lu';
+import { LuCode, LuMousePointerClick, LuChartColumn, LuGauge, LuSparkles } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 
-export type QueryTab = 'sql' | 'gui' | 'viz';
+export type QueryTab = 'semantic' | 'simple' | 'sql' | 'gui' | 'viz';
 
 interface QueryModeSelectorProps {
   mode: QueryTab;
   onModeChange: (mode: QueryTab) => void;
   canUseGUI: boolean;
   guiError?: string;
+  /** Whether the Simple tab is usable — false greys it out with simpleError as tooltip. Default true. */
+  canUseSimple?: boolean;
+  simpleError?: string;
+  /** Whether the Semantic tab is shown at all (only when the context defines semantic models). Default false. */
+  showSemanticTab?: boolean;
   /** Whether the Viz tab is shown at all (container concern). Default true. */
   showVizTab?: boolean;
   /** Whether the Viz tab is usable — false greys it out (e.g. no query results yet). Default true. */
@@ -24,9 +34,11 @@ interface QueryModeSelectorProps {
   size?: 'sm' | 'md';
 }
 
-const TAB_ITEMS: Array<{ key: QueryTab; label: string; gated?: 'gui' | 'viz'; Icon: typeof LuCode }> = [
-  { key: 'sql', label: 'SQL', Icon: LuCode },
+const TAB_ITEMS: Array<{ key: QueryTab; label: string; gated?: 'gui' | 'viz' | 'simple'; Icon: typeof LuCode }> = [
+  { key: 'semantic', label: 'Semantic', Icon: LuSparkles },
+  { key: 'simple', label: 'Simple', Icon: LuGauge, gated: 'simple' },
   { key: 'gui', label: 'GUI', Icon: LuMousePointerClick, gated: 'gui' },
+  { key: 'sql', label: 'SQL', Icon: LuCode },
   { key: 'viz', label: 'Viz', Icon: LuChartColumn, gated: 'viz' },
 ];
 
@@ -35,12 +47,17 @@ export function QueryModeSelector({
   onModeChange,
   canUseGUI,
   guiError,
+  canUseSimple = true,
+  simpleError,
+  showSemanticTab = false,
   showVizTab = true,
   canUseViz = true,
   vizError,
   size = 'md',
 }: QueryModeSelectorProps) {
-  const tabs = showVizTab ? TAB_ITEMS : TAB_ITEMS.filter(t => t.key !== 'viz');
+  const tabs = TAB_ITEMS
+    .filter(t => (t.key === 'viz' ? showVizTab : true))
+    .filter(t => (t.key === 'semantic' ? showSemanticTab : true));
   const sm = size === 'sm';
 
   return (
@@ -48,10 +65,14 @@ export function QueryModeSelector({
       {tabs.map(({ key, label, gated, Icon }) => {
         const isActive = mode === key;
         const isDisabled =
-          (gated === 'gui' && !canUseGUI) || (gated === 'viz' && !canUseViz);
+          (gated === 'gui' && !canUseGUI) ||
+          (gated === 'simple' && !canUseSimple) ||
+          (gated === 'viz' && !canUseViz);
         const tooltip =
           gated === 'gui' ? (guiError || 'Visual query builder')
+          : gated === 'simple' ? (simpleError || 'Simple query builder')
           : gated === 'viz' ? (vizError || (canUseViz ? 'Configure chart' : 'Run the query to configure a chart'))
+          : key === 'semantic' ? 'Query curated metrics and dimensions'
           : undefined;
 
         return (
