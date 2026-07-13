@@ -21,6 +21,8 @@
  */
 import {
   getModel as piGetModel,
+  getModels as piGetModels,
+  getProviders as piGetProviders,
   streamSimple as piStreamSimple,
   EventStream as PiEventStream,
 } from '@mariozechner/pi-ai';
@@ -221,6 +223,40 @@ export function getModel<P extends string, M extends string>(provider: P, model:
     );
   }
   return resolved;
+}
+
+/** Registry model summary — safe, plain fields for pickers/UI (no handle internals). */
+export interface RegistryModelInfo {
+  id: string;
+  name: string;
+  reasoning: boolean;
+  input: ('text' | 'image')[];
+  contextWindow: number;
+}
+
+/** Provider slugs known to the model registry (for provider pickers). */
+export function listProviders(): string[] {
+  return piGetProviders();
+}
+
+/** Models a registry provider serves, as plain picker-friendly summaries. */
+export function listModels(provider: string): RegistryModelInfo[] {
+  let models: unknown[];
+  try {
+    models = piGetModels(provider as never) as unknown[];
+  } catch {
+    return [];
+  }
+  return (models ?? []).map((m) => {
+    const model = m as { id: string; name?: string; reasoning?: boolean; input?: ('text' | 'image')[]; contextWindow?: number };
+    return {
+      id: model.id,
+      name: model.name ?? model.id,
+      reasoning: model.reasoning ?? false,
+      input: model.input ?? ['text'],
+      contextWindow: model.contextWindow ?? 0,
+    };
+  });
 }
 
 /**

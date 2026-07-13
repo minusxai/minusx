@@ -21,6 +21,21 @@ export interface ToolResponse<TDetails = Record<string, unknown>> {
 
 export type ToolMessage = AssistantMessage | ToolResultMessage;
 
+/**
+ * Which model assignment an agent's LLM calls consume. Mirrors the (pure)
+ * union in `lib/llm/llm-config-types.ts` — kept as a literal here so the
+ * engine has no dependency on app config modules.
+ */
+export type LlmUseCase = 'analyst' | 'micro';
+
+/** One step of a resolved LLM call plan: `[primary, ...fallbacks]`. */
+export interface LlmPlanStep {
+  model: Model<Api>;
+  /** Call-time stream options for this step (apiKey, reasoning, headers, …).
+   *  Merged OVER the agent's own callOptions. */
+  callOptions?: Record<string, unknown>;
+}
+
 // `parameters` and `context` are bivariant `any` so RegistrableClass is
 // assignable from subclasses with narrower TParams / TContext (e.g.
 // MXTool<typeof MyParams, MyContext>). The orchestrator passes objects through
@@ -145,6 +160,10 @@ export class MXAgent<
    *  `maxRetryDelayMs`, …). Subclasses set this from env config; the
    *  orchestrator never inspects individual keys. */
   static readonly callOptions: Record<string, unknown> | undefined = undefined;
+  /** Which model assignment this agent's LLM calls consume when the app has
+   *  DB-backed model config (see `Orchestrator.resolveLlmPlan`). Micro-task
+   *  agents override to 'micro'; everything else rides the analyst assignment. */
+  static readonly modelUseCase: LlmUseCase = 'analyst';
 
   threadHistory: Message[];
   toolThread: ToolMessage[];
@@ -211,7 +230,7 @@ export class MXAgent<
 
   protected async llm(): Promise<AssistantMessage> {
     const ctor = this.constructor as typeof MXAgent;
-    return this.orchestrator.callLLM(ctor.model, this.buildLLMContext(), this.id, this.resolveCallOptions());
+    return this.orchestrator.callLLM(ctor.model, this.buildLLMContext(), this.id, this.resolveCallOptions(), ctor.modelUseCase);
   }
 
   async run(): Promise<AssistantMessage> {

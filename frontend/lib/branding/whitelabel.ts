@@ -5,6 +5,7 @@
 
 import type { FileType } from '@/lib/ui/file-metadata';
 import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient, ConfigBot, VisualizationType } from '@/lib/types';
+import type { LlmConfig } from '@/lib/llm/llm-config-types';
 import { MINUSX_TAGLINE } from '@/lib/og/og-helpers';
 
 export interface SetupWizard {
@@ -78,6 +79,10 @@ export interface OrgConfig {
   /** Remote Agent Sessions ("Copy to Agent"): lets an external agent drive a chat over HTTP.
    *  OFF by default — enable in Settings → Integrations. Gates minting AND live-session auth. */
   remoteAgentsEnabled?: boolean;
+  /** In-app LLM provider config: providers + per-use-case model assignments
+   *  (see lib/llm/llm-config-types.ts). Overrides env model config when set;
+   *  `apiKey` values are @SECRETS/… refs at rest. */
+  llm?: LlmConfig;
 }
 
 /**

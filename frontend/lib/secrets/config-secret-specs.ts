@@ -28,6 +28,7 @@ export interface ConfigSecretSpec {
 /** Every secret-bearing location in the org config document. */
 export const CONFIG_SECRET_SPECS: ConfigSecretSpec[] = [
   { arrayPath: 'bots', identityField: 'name', secretFields: ['bot_token', 'signing_secret'] },
+  { arrayPath: 'llm.providers', identityField: 'name', secretFields: ['apiKey'] },
 ];
 
 /**

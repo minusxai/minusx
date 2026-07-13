@@ -3,6 +3,7 @@ import { validateWebhook } from '@/lib/messaging/webhook-executor';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import type { VisualizationType } from '@/lib/types';
+import { LLM_USE_CASES } from '@/lib/llm/llm-config-types';
 
 const VALID_VIZ_TYPES: readonly VisualizationType[] = [
   'table', 'bar', 'row', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot', 'trend', 'waterfall', 'combo', 'radar', 'geo'
@@ -131,6 +132,60 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
     const VALID_FIELDS = new Set(['status', 'step', 'connectionId', 'connectionName', 'contextFileId', 'questionnaireAnswers']);
     for (const field of Object.keys(sw)) {
       if (!VALID_FIELDS.has(field)) return false;
+    }
+  }
+
+  if (config.llm !== undefined && !validateLlmConfig(config.llm)) return false;
+
+  return true;
+}
+
+/** Validate the `llm` config section (providers + per-use-case assignment chains). */
+function validateLlmConfig(llm: unknown): boolean {
+  if (typeof llm !== 'object' || llm === null) return false;
+  const cfg = llm as Record<string, unknown>;
+
+  const names = new Set<string>();
+  if (cfg.providers !== undefined) {
+    if (!Array.isArray(cfg.providers)) return false;
+    for (const entry of cfg.providers) {
+      if (typeof entry !== 'object' || entry === null) return false;
+      const p = entry as Record<string, unknown>;
+      if (typeof p.name !== 'string' || p.name === '') return false;
+      if (typeof p.provider !== 'string' || p.provider === '') return false;
+      if (names.has(p.name)) {
+        console.warn(`[Config] Duplicate llm provider name: ${p.name}`);
+        return false;
+      }
+      names.add(p.name);
+      for (const field of ['apiKey', 'awsRegion', 'baseUrl'] as const) {
+        if (p[field] !== undefined && typeof p[field] !== 'string') return false;
+      }
+      if (p.headers !== undefined && (typeof p.headers !== 'object' || p.headers === null)) return false;
+    }
+  }
+
+  if (cfg.assignments !== undefined) {
+    if (typeof cfg.assignments !== 'object' || cfg.assignments === null) return false;
+    for (const [useCase, assignment] of Object.entries(cfg.assignments)) {
+      if (!(LLM_USE_CASES as readonly string[]).includes(useCase)) {
+        console.warn(`[Config] Invalid llm use case: ${useCase}`);
+        return false;
+      }
+      if (typeof assignment !== 'object' || assignment === null) return false;
+      const chain = (assignment as Record<string, unknown>).chain;
+      if (!Array.isArray(chain) || chain.length === 0) return false;
+      for (const choice of chain) {
+        if (typeof choice !== 'object' || choice === null) return false;
+        const c = choice as Record<string, unknown>;
+        if (typeof c.providerName !== 'string' || c.providerName === '') return false;
+        if (cfg.providers !== undefined && !names.has(c.providerName)) {
+          console.warn(`[Config] llm assignment for '${useCase}' references unknown provider '${c.providerName}'`);
+          return false;
+        }
+        if (c.model !== undefined && typeof c.model !== 'string') return false;
+        if (c.options !== undefined && (typeof c.options !== 'object' || c.options === null)) return false;
+      }
     }
   }
 
