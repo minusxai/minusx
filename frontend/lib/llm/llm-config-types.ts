@@ -1,9 +1,8 @@
 /**
  * In-app LLM provider configuration — the `llm` section of the org config
- * document (`/configs/config`). Replaces env-only model config
- * (`ANALYST_AGENT_MODEL_CONFIG` / `MICRO_AGENT_MODEL_CONFIG`), which remains as
- * the fallback tier: DB config > env config > built-in default
- * (resolved in `lib/llm/llm-plan.server.ts`).
+ * document (`/configs/config`). This is the ONLY model configuration surface
+ * (no env-var tier): DB config > managed MinusX gateway default, resolved per
+ * call in `lib/llm/llm-plan.server.ts`.
  *
  * Pure types + pure helpers only — imported by both server resolution and the
  * settings UI. `apiKey` values are `@SECRETS/…` refs at rest (see

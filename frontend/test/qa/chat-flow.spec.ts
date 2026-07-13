@@ -3,8 +3,9 @@
  *
  * Drive ACTUAL conversations (no faux channel) against a real model in tutorial
  * mode, asserting STRUCTURAL outcomes via the exposed Redux store. The whole
- * describe is skipped when no provider key is configured; CI supplies
- * ANTHROPIC_API_KEY + ANALYST_AGENT_MODEL_CONFIG via secrets.
+ * describe is skipped when the runner holds no provider credential; CI supplies
+ * ANTHROPIC_API_KEY (or a Bedrock token) via secrets, and auth.setup seeds it
+ * into the workspace's in-app LLM config (model config is DB-only).
  *
  * These exercise the post-proxy behaviour end-to-end: conversations + web search
  * keep working with recording moved out of the request path, and per-call debug

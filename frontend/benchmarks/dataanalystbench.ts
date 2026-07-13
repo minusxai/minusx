@@ -123,7 +123,7 @@ class DoubleCheckAgent extends DoubleCheckBenchmarkAgent {
 }
 // Sub-agent classes registered in DoubleCheck mode: each needs the
 // configured `benchmarkModel`, not the fallback the parent class resolves
-// at module load (faux when ANALYST_AGENT_MODEL_CONFIG is unset). The
+// at module load (faux under vitest, MinusX default otherwise). The
 // orchestrator looks up by `schema.name` (inherited from the parent), so
 // these subclasses ARE what `DoubleCheckBenchmarkAgent` invokes by name.
 class BenchmarkAnalystAgentForDoubleCheck extends BenchmarkAnalystAgent {

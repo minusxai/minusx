@@ -3,102 +3,44 @@ title: LLM Providers
 description: Configuring which model powers the agent — providers, keys, and exactly what the model sees
 ---
 
-MinusX brings its own agent but not its own model: you point it at an LLM provider with **your API key**, and all LLM traffic goes directly from your deployment to that provider (unless you pick the managed **MinusX** provider, which routes through the MinusX gateway).
+MinusX brings its own agent; the model is configured **in the app**. By default every workspace routes through the managed **MinusX** provider — add your own provider key to send LLM traffic directly from your deployment to that provider instead.
 
 ---
 
-## Quick start (in-app — recommended)
+## Configuring providers (Settings → Models)
 
-Configure everything in the app: the setup wizard's **AI Models** step, or **Settings → Models**, lets you
+The setup wizard's **AI Models** step, or **Settings → Models**, is the single place model config lives (there are no LLM environment variables):
 
-- add one or more **providers** (MinusX managed, Anthropic, OpenAI, Google, Amazon Bedrock, or any custom OpenAI-compatible endpoint) with their API keys,
+- add one or more **providers** — MinusX (managed), Anthropic, OpenAI, Google, Amazon Bedrock, ~30 other registry providers, or any custom OpenAI-compatible endpoint — each with its API key,
 - **test the connection** before saving,
 - assign a model (with optional **fallbacks**, tried in order) to each use case — **Analyst** (the main agent) and **Micro tasks** (titles/summaries).
 
-Keys are stored server-side in the workspace secrets store — the config document and the browser only ever see `@SECRETS/…` references, never the key. Selecting the **MinusX** provider is fully managed: model routing per use case is handled by the MinusX gateway, so no model/assignment/fallback setup is needed.
+Keys are stored server-side in the workspace secrets store — the config document and the browser only ever see `@SECRETS/…` references, never the key.
 
-Resolution order per use case: **in-app config → environment variables → built-in default**.
+Resolution order per use case:
 
-For Amazon Bedrock, authenticate with a [Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) (bearer token) plus the AWS region; the standard SigV4 env-credential chain also works when no key is set.
+1. The use case's explicit **assignment chain** (`[primary, …fallbacks]`)
+2. A configured **MinusX provider** — fully managed, no assignments needed (the gateway routes model, prompts, and fallbacks per use case)
+3. The **MinusX gateway default** — an unconfigured workspace routes there and gets a clear authentication error pointing back at Settings → Models
 
-## Environment-variable configuration (fallback tier)
-
-Prefer the in-app setup above. Env config remains fully supported for headless or pre-provisioned deployments. The default provider is Anthropic — set the key and you're done:
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-Two runtime environment variables control which models the agents use, both JSON:
-
-- `ANALYST_AGENT_MODEL_CONFIG` — the main analyst agent (chat, SQL, dashboards)
-- `MICRO_AGENT_MODEL_CONFIG` — small single-turn helpers (titles, summaries)
-
-```bash
-# Shape: { "provider": string, "model": string, "options"?: object }
-#     or { "customModel": {...}, "options"?: object }  — see "Local & custom endpoints" below
-ANALYST_AGENT_MODEL_CONFIG={"provider":"anthropic","model":"claude-sonnet-4-6","options":{"reasoning":"low"}}
-MICRO_AGENT_MODEL_CONFIG={"provider":"anthropic","model":"claude-haiku-4-5-20251001"}
-```
-
-`options` is passed through to the model call unchanged — use it for provider/model options like reasoning effort, temperature, or max tokens.
+For Amazon Bedrock, authenticate with a [Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) (bearer token) plus the AWS region.
 
 <Callout type="info">
-The heavier analyst model drives answer quality far more than any other setting. Use a strong frontier model for `ANALYST_AGENT_MODEL_CONFIG`; the micro agent can be a small, cheap model.
+The heavier analyst model drives answer quality far more than any other setting. Use a strong frontier model for the Analyst assignment; Micro tasks can run a small, cheap model.
 </Callout>
 
 ## Supported providers
 
-Model routing is backed by the [pi-ai](https://github.com/badlogic/pi-mono) registry. Each provider reads its standard key from the environment at call time:
-
-| Provider (`provider` value) | API key env var |
-|---|---|
-| `anthropic` | `ANTHROPIC_API_KEY` |
-| `openai` | `OPENAI_API_KEY` |
-| `google` | `GEMINI_API_KEY` |
-| `google-vertex` | `GOOGLE_APPLICATION_CREDENTIALS` (+ project/location vars) |
-| `amazon-bedrock` | standard AWS credential chain |
-| `azure-openai-responses` | `AZURE_OPENAI_API_KEY` |
-| `openrouter` | `OPENROUTER_API_KEY` |
-| `groq` | `GROQ_API_KEY` |
-| `mistral` | `MISTRAL_API_KEY` |
-| `deepseek` | `DEEPSEEK_API_KEY` |
-| `xai` | `XAI_API_KEY` |
-| `cerebras` | `CEREBRAS_API_KEY` |
-| `fireworks` | `FIREWORKS_API_KEY` |
-| `moonshotai` | `MOONSHOT_API_KEY` |
-| `zai` | `ZAI_API_KEY` |
-| `huggingface` | `HF_TOKEN` |
-| `cloudflare-ai-gateway` / `vercel-ai-gateway` | `CLOUDFLARE_API_KEY` / `AI_GATEWAY_API_KEY` |
+The provider/model pickers are backed by the [pi-ai](https://github.com/badlogic/pi-mono) registry, overlaid live with the open [models.dev](https://models.dev) catalog — newly released models appear in the pickers (and run) without waiting for an app update. Registry providers include `anthropic`, `openai`, `google`, `google-vertex`, `amazon-bedrock`, `azure-openai-responses`, `openrouter`, `groq`, `mistral`, `deepseek`, `xai`, `cerebras`, `fireworks`, and more.
 
 OpenRouter is the widest single door — one key routes to hundreds of models across vendors.
 
 ## Local & custom OpenAI-compatible endpoints
 
-Any OpenAI-compatible server — **Ollama, vLLM, llama.cpp, LM Studio, LiteLLM**, or an internal gateway — can power the agent via `customModel` instead of `provider`/`model`:
-
-```bash
-# Ollama on the same machine (no API key needed)
-ANALYST_AGENT_MODEL_CONFIG={"customModel":{"baseUrl":"http://localhost:11434/v1","id":"qwen3:32b","contextWindow":32768}}
-
-# vLLM with an API key, read from the env var you name
-ANALYST_AGENT_MODEL_CONFIG={"customModel":{"baseUrl":"http://vllm.internal:8000/v1","id":"llama-3.3-70b","apiKeyEnv":"VLLM_API_KEY"}}
-```
-
-`customModel` fields — only `baseUrl` and `id` are required:
-
-| Field | Default | Purpose |
-|---|---|---|
-| `baseUrl` | required | The endpoint, e.g. `http://localhost:11434/v1`. |
-| `id` | required | Model id the endpoint expects. |
-| `apiKeyEnv` | — | Name of the env var holding the endpoint's API key (omit for keyless local servers). |
-| `contextWindow` / `maxTokens` | `128000` / `8192` | Set to your model's real limits. |
-| `reasoning` | `false` | Whether the model emits thinking tokens. |
-| `input` | `["text"]` | Add `"image"` for vision models (chart images are sent when supported). |
-| `headers` / `compat` | — | Extra HTTP headers; OpenAI-compat quirk overrides (e.g. `maxTokensField`). |
+Any OpenAI-compatible server — **Ollama, vLLM, llama.cpp, LM Studio, LiteLLM**, or an internal gateway — can power the agent: add a provider with type **Custom**, set its base URL (e.g. `http://localhost:11434/v1`) and optional API key, then assign its model id (e.g. `qwen3:32b`) to a use case. Advanced knobs (context window, max tokens, reasoning flag, image input, extra headers, OpenAI-compat quirks) are available on the assignment's custom-model options.
 
 <Callout type="warn">
-The agent is tool-heavy: answer quality tracks the model's tool-calling ability. Large frontier models work best; small local models will noticeably degrade — local support is for when data-locality requirements demand it, not a free lunch. Point `MICRO_AGENT_MODEL_CONFIG` at a small local model freely; be more careful with the analyst.
+The agent is tool-heavy: answer quality tracks the model's tool-calling ability. Large frontier models work best; small local models will noticeably degrade — local support is for when data-locality requirements demand it, not a free lunch. Point Micro tasks at a small local model freely; be more careful with the Analyst.
 </Callout>
 
 ## What the model sees
@@ -110,4 +52,4 @@ Requests to your configured provider contain:
 - **Conversation content** — messages, and query results returned by the agent's tools
 - Chart images rendered for the conversation, where applicable
 
-Your warehouse **credentials** are never part of an LLM request. If your provider agreement matters here (retention, training), that's between you and the provider — MinusX doesn't sit in the path and cannot see this traffic.
+Your warehouse **credentials** are never part of an LLM request. With your own provider key, MinusX doesn't sit in the path and cannot see this traffic; on the managed MinusX provider, traffic routes through the MinusX gateway.

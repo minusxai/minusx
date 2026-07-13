@@ -172,21 +172,11 @@ if [ ! -f frontend/.env.example ]; then
 fi
 [ -f frontend/.env ] || { [ -f frontend/.env.example ] && cp frontend/.env.example frontend/.env || touch frontend/.env; }
 
-# LLM configuration now happens IN THE APP: the setup wizard's "AI Models"
-# step (and Settings → Models) stores providers + keys in the workspace config,
-# so no key needs to live in .env. Env vars (ANTHROPIC_API_KEY /
-# ANALYST_AGENT_MODEL_CONFIG) still work as a fallback tier for headless or
-# pre-provisioned deployments — detect and honor them, but don't prompt.
+# LLM configuration happens IN THE APP: the setup wizard's "AI Models" step
+# (and Settings → Models) stores providers + keys in the workspace config —
+# nothing LLM-related lives in .env.
 # Docs: https://docs.minusx.ai/docs/self-hosting/llm-providers
-ANTHROPIC_API_KEY=$(get_env_val frontend/.env ANTHROPIC_API_KEY)
-ANALYST_MODEL_CONFIG=$(get_env_val frontend/.env ANALYST_AGENT_MODEL_CONFIG)
-if [ -n "$ANALYST_MODEL_CONFIG" ]; then
-  success "Custom model config detected (ANALYST_AGENT_MODEL_CONFIG)"
-elif [ -n "$ANTHROPIC_API_KEY" ]; then
-  success "API key already configured (env fallback)"
-else
-  success "LLM setup happens in-app — the setup wizard will walk you through connecting a provider"
-fi
+success "LLM setup happens in-app — the setup wizard will walk you through connecting a provider"
 
 # NEXTAUTH_SECRET
 NEXTAUTH_SECRET=$(get_env_val frontend/.env NEXTAUTH_SECRET)

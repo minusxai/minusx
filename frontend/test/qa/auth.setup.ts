@@ -36,6 +36,36 @@ setup('authenticate qa user', async ({ page, request }) => {
 
   if (!EXTERNAL) {
     await page.request.post('/api/configs', { data: { setupWizard: { status: 'complete' } } });
+
+    // Model config is DB-only (no env tier in the app). When the RUNNER has a
+    // provider key (CI secrets), seed the in-app LLM config through the same
+    // /api/configs path a real admin uses, so real-LLM flows can run against
+    // the fresh workspace. The optional runner-side ANALYST_AGENT_MODEL_CONFIG
+    // JSON ({provider, model, options?} — the CI secret) picks the exact model;
+    // otherwise a sensible default per credential is used.
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const bedrockKey = process.env.AWS_BEARER_TOKEN_BEDROCK;
+    if (anthropicKey || bedrockKey) {
+      let hint: { provider?: string; model?: string; options?: Record<string, unknown> } = {};
+      try {
+        hint = JSON.parse(process.env.ANALYST_AGENT_MODEL_CONFIG || '{}');
+      } catch { /* malformed hint — fall through to defaults */ }
+      const slug = hint.provider ?? (anthropicKey ? 'anthropic' : 'amazon-bedrock');
+      const provider = {
+        name: `qa-${slug}`,
+        provider: slug,
+        apiKey: slug === 'amazon-bedrock' ? bedrockKey : anthropicKey,
+        ...(slug === 'amazon-bedrock' ? { awsRegion: process.env.AWS_REGION || 'us-east-1' } : {}),
+      };
+      const model = hint.model ?? (slug === 'amazon-bedrock' ? 'anthropic.claude-sonnet-4-6' : 'claude-sonnet-4-6');
+      const chain = [{ providerName: provider.name, model, options: hint.options ?? { reasoning: 'low' } }];
+      const llmRes = await page.request.post('/api/configs', {
+        data: { llm: { providers: [provider], assignments: { analyst: { chain }, micro: { chain } } } },
+      });
+      if (!llmRes.ok()) {
+        throw new Error(`qa llm config seed failed: ${llmRes.status()} ${await llmRes.text()}`);
+      }
+    }
   }
 
   await page.context().storageState({ path: AUTH_FILE });

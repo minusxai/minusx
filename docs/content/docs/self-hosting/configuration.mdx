@@ -12,7 +12,6 @@ All configuration is via environment variables, read from `frontend/.env` (which
 | Variable | Purpose |
 |---|---|
 | `NEXTAUTH_SECRET` | Session/JWT signing secret. Generate with `openssl rand -base64 32`. |
-| `ANTHROPIC_API_KEY` | Optional fallback LLM key — prefer configuring providers in-app (setup wizard / Settings → Models). See [LLM Providers](/docs/self-hosting/llm-providers). |
 
 ## Document database
 
@@ -27,10 +26,11 @@ MinusX stores documents (questions, dashboards, users, …) in an embedded Postg
 
 ## LLM & agent
 
+Model providers, keys, and assignments are configured **in the app** (setup wizard / Settings → Models) — there are no LLM model env vars. See [LLM Providers](/docs/self-hosting/llm-providers).
+
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANALYST_AGENT_MODEL_CONFIG` | Anthropic Sonnet | JSON `{provider, model, options?}` for the main agent — see [LLM Providers](/docs/self-hosting/llm-providers). |
-| `MICRO_AGENT_MODEL_CONFIG` | Anthropic Haiku | Same shape, for small single-turn helper tasks. |
+| `MINUSX_GATEWAY_URL` | `https://llm.minusx.ai/v1` | Base URL of the managed MinusX gateway (the default provider); override for staging gateways. |
 | `MAX_LLM_CONCURRENCY` | unlimited | Cap on concurrent in-flight LLM requests. |
 | `BOOT_WARM_CHAT` | `true` | Warm the chat runtime at boot so the first message isn't a cold start. `false` to disable. |
 

@@ -70,6 +70,13 @@ export const SEND_ERRORS_IN_DEV = process.env.NEXT_PUBLIC_SEND_ERRORS_IN_DEV ===
  */
 export const E2E_MODE = process.env.NEXT_PUBLIC_E2E === 'true';
 
+/**
+ * Base URL of the managed MinusX LLM gateway (OpenAI-compatible) — the DEFAULT
+ * model provider when a workspace has configured nothing else. Non-secret;
+ * overridable per deploy (server runtime env) for staging gateways. Client
+ * bundles just see the default — the browser never calls the gateway.
+ */
+export const MINUSX_GATEWAY_URL: string = process.env.MINUSX_GATEWAY_URL || 'https://llm.minusx.ai/v1';
 
 export const PROTECTED_FILE_PATHS = [
   // System-managed internals DuckDB connection — read-only, cannot be modified or deleted

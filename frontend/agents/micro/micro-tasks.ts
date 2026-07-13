@@ -1,7 +1,7 @@
 /**
  * Which existing model config a micro-task runs on. `micro` = the cheap default
- * (`MICRO_AGENT_MODEL_CONFIG`) for low-stakes single-turn helpers; `analyst` = the heavier
- * `ANALYST_AGENT_MODEL_CONFIG` for tasks that need a stronger model (e.g. the visual rubric judge).
+ * (the `micro` use-case assignment) for low-stakes single-turn helpers; `analyst` = the heavier
+ * analyst assignment for tasks that need a stronger model (e.g. the visual rubric judge).
  * No new env var — a task just picks one of the two configs already wired for agents.
  */
 type MicroModelSource = 'micro' | 'analyst';

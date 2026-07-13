@@ -1,12 +1,13 @@
 // DB-backed plan resolution: reads the org config's `llm` section, resolves
 // @SECRETS refs to raw keys, and maps provider entries + model choices onto
 // executable plan steps (registry / bedrock / custom / minusx).
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { saveRawConfig, getRawConfig } from '@/lib/data/configs.server';
 import { isSecretRef } from '@/lib/secrets/config-secret-specs';
 import { resolveLlmPlan, buildPlanStep } from '../llm-plan.server';
 import { MX_USE_CASE_HEADER, type LlmConfig } from '../llm-config-types';
+import { MINUSX_AUTO_MODEL } from '../minusx-default';
 
 const dbPath = getTestDbPath('llm_plan_server');
 beforeAll(async () => { await initTestDatabase(dbPath); });
@@ -18,9 +19,25 @@ async function setLlmConfig(llm: LlmConfig | undefined) {
 }
 
 describe('resolveLlmPlan', () => {
-  it('returns [] when no llm section is configured', async () => {
+  it('returns [] for an unconfigured workspace in TEST envs (agents keep faux models)', async () => {
     await setLlmConfig(undefined);
     expect(await resolveLlmPlan('org', 'analyst')).toEqual([]);
+  });
+
+  it('defaults an unconfigured workspace to the MinusX gateway in production (no env tier, no vendor default)', async () => {
+    await setLlmConfig(undefined);
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('VITEST', '');
+    try {
+      const plan = await resolveLlmPlan('org', 'micro');
+      expect(plan).toHaveLength(1);
+      const model = plan[0].model as { provider: string; id: string };
+      expect(model.provider).toBe('minusx');
+      expect(model.id).toBe(MINUSX_AUTO_MODEL);
+      expect((plan[0].callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('micro');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('resolves an assignment chain with secret-resolved API keys', async () => {

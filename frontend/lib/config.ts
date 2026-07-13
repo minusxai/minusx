@@ -324,13 +324,6 @@ export function resolveOrgResetAllowance(): number {
  */
 export const ENFORCE_CREDIT_LIMITS: boolean = process.env.ENFORCE_CREDIT_LIMITS === 'true';
 
-/**
- * Base URL of the managed MinusX LLM gateway (OpenAI-compatible). Used by the
- * built-in `minusx` LLM provider (`lib/llm/llm-plan.server.ts`); overridable
- * per deploy for staging gateways.
- */
-export const MINUSX_GATEWAY_URL: string = process.env.MINUSX_GATEWAY_URL || 'https://llm.minusx.ai/v1';
-
 /** BILLING-cycle window: CREDIT_BILLING_CYCLE env > CREDIT_CONFIG.defaultBillingCycle > default. */
 export const BILLING_CYCLE: BillingCycle = parseBillingCycle(process.env.CREDIT_BILLING_CYCLE, CREDIT_CONFIG.defaultBillingCycle, CREDIT_CONFIG.maxBillingCycleDays);
 /** RESET-cycle window: CREDIT_RESET_CYCLE env > CREDIT_CONFIG.defaultResetCycle > default. */

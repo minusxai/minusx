@@ -1,6 +1,8 @@
 // Real-LLM AnalystAgent specs. Gated behind RUN_REAL_LLM=1 to keep CI free of
-// API calls. Requires ANALYST_AGENT_MODEL_CONFIG (and a provider-specific API key
-// like ANTHROPIC_API_KEY) in frontend/.env when enabled.
+// API calls. The model is chosen via TEST-ONLY env vars (production model
+// config is DB-only — there is no runtime env tier): REAL_LLM_PROVIDER +
+// REAL_LLM_MODEL (registry pair, default anthropic/claude-sonnet-4-6), with
+// the provider's standard key (e.g. ANTHROPIC_API_KEY) in frontend/.env.
 //
 // Run with:
 //   cd frontend && RUN_REAL_LLM=1 npm run test:orchestrator -- real-llm
@@ -8,6 +10,7 @@
 // Wire-up uses STUB sources for now — replace with real adapters when available.
 
 import 'dotenv/config';
+import { getModel } from '@/orchestrator/llm';
 import { runAgentTestSpec, type TestSpec } from '@/orchestrator/__tests__/support/test-spec-runner';
 import {
   RemoteAnalystAgent,
@@ -52,6 +55,15 @@ vi.mock('@/lib/connections/run-query', () => ({
 
 const RUN_REAL = process.env.RUN_REAL_LLM === '1';
 const itIfReal = RUN_REAL ? it : it.skip;
+
+// Under vitest the agent's static model is faux — stamp a real registry model
+// onto the class for this gated run (test-only; production models come from
+// the DB plan resolver).
+if (RUN_REAL) {
+  const provider = process.env.REAL_LLM_PROVIDER || 'anthropic';
+  const modelId = process.env.REAL_LLM_MODEL || 'claude-sonnet-4-6';
+  Object.defineProperty(RemoteAnalystAgent, 'model', { value: getModel(provider, modelId), configurable: true });
+}
 
 const registrables = [ListDBConnections, SearchDBSchema, ExecuteQuery, RemoteAnalystAgent];
 

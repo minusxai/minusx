@@ -1,15 +1,17 @@
 /**
- * DB-backed LLM call-plan resolution (server-only).
- *
- * Resolves the ordered model chain (`[primary, ...fallbacks]`) for a use case
- * from the org config's `llm` section. Returns `[]` when the DB has nothing to
- * say — the orchestrator then uses the agent's static (env-config / default)
- * model exactly as before, so existing deployments and tests are unaffected.
+ * DB-backed LLM call-plan resolution (server-only). Model config is DB-ONLY —
+ * there is no env-var tier and no hardcoded provider default.
  *
  * Tier order per use case:
  *   1. `llm.assignments[useCase].chain` (explicit, may include fallbacks)
- *   2. the minusx provider, if configured (fully managed — no assignment needed)
- *   3. `[]` → static env config / built-in default
+ *   2. the minusx provider entry, if configured (fully managed, keyed)
+ *   3. the managed MinusX gateway, unkeyed — the universal default. An
+ *      unconfigured workspace routes there and gets a clear auth error
+ *      pointing at Settings → Models, instead of silently using some other
+ *      vendor's model.
+ *
+ * Test environments return `[]` (agents use their faux static models) so the
+ * suite stays deterministic and network-free.
  *
  * Provider credentials are `@SECRETS/…` refs at rest; they are resolved here,
  * at call-plan time, and injected as call options — never stored on the model.
@@ -19,12 +21,12 @@ import { getRawConfig } from '@/lib/data/configs.server';
 import { resolveConfigSecrets } from '@/lib/secrets/config-secrets.server';
 import { getModel, buildCustomModel, buildRegistryModel, type CustomModelSpec } from '@/orchestrator/llm';
 import { getModelCatalog, type ModelCatalog } from './model-catalog.server';
+import { buildMinusxModel, minusxCallOptions, MINUSX_AUTO_MODEL } from './minusx-default';
 import type { LlmPlanStep } from '@/orchestrator/types';
-import { MINUSX_GATEWAY_URL } from '@/lib/config';
 import { E2E_MODE } from '@/lib/constants';
 import type { Mode } from '@/lib/mode/mode-types';
 import {
-  MINUSX_PROVIDER, CUSTOM_PROVIDER, MX_USE_CASE_HEADER,
+  MINUSX_PROVIDER, CUSTOM_PROVIDER,
   findLlmProvider, findMinusxProvider,
   type LlmConfig, type LlmModelChoice, type LlmProviderEntry, type LlmUseCase,
 } from './llm-config-types';
@@ -41,16 +43,8 @@ export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, u
   if (entry.provider === MINUSX_PROVIDER) {
     // Managed gateway: OpenAI-compatible endpoint; the gateway owns model
     // routing + system-prompt policy per use case (X-MX-Use-Case header).
-    const model = buildCustomModel({
-      baseUrl: entry.baseUrl || MINUSX_GATEWAY_URL,
-      id: choice.model || 'minusx-auto',
-      provider: MINUSX_PROVIDER,
-      name: 'MinusX',
-      reasoning: true,
-      input: ['text', 'image'],
-    });
-    options['headers'] = { ...(entry.headers ?? {}), [MX_USE_CASE_HEADER]: useCase };
-    return { model, callOptions: options };
+    const model = buildMinusxModel(entry.baseUrl, choice.model || MINUSX_AUTO_MODEL);
+    return { model, callOptions: { ...options, ...minusxCallOptions(useCase, entry.headers) } };
   }
 
   if (entry.provider === CUSTOM_PROVIDER) {
@@ -105,21 +99,35 @@ function planFromConfig(llm: LlmConfig | undefined, useCase: LlmUseCase, catalog
   return [];
 }
 
+function isTestEnv(): boolean {
+  // eslint-disable-next-line no-restricted-syntax -- deterministic tests: unconfigured workspaces stay on faux static models under vitest
+  return process.env.NODE_ENV === 'test' || !!process.env.VITEST;
+}
+
+/** The universal default: the managed MinusX gateway, unkeyed until configured. */
+function minusxDefaultPlan(useCase: LlmUseCase): LlmPlanStep[] {
+  return [{ model: buildMinusxModel(), callOptions: minusxCallOptions(useCase) }];
+}
+
 /**
- * Resolve the LLM call plan for a use case in a mode. `[]` = nothing configured
- * in the DB — caller falls back to the agent's static model.
+ * Resolve the LLM call plan for a use case in a mode. Never empty in
+ * production — an unconfigured workspace gets the MinusX-gateway default.
+ * `[]` only in test environments (agents keep their faux static models).
  */
 export async function resolveLlmPlan(mode: Mode, useCase: LlmUseCase): Promise<LlmPlanStep[]> {
   // E2E builds force every agent onto its faux provider — DB config must not override.
   if (E2E_MODE) return [];
   const raw = await getRawConfig(mode);
   const llm = raw.llm as LlmConfig | undefined;
-  if (!llm) return [];
-  const resolved = await resolveConfigSecrets(llm);
-  // Live catalog only matters for model ids newer than the baked registry;
-  // fetch is cached in-process and null-safe (baked-only fallback).
-  const catalog = await getModelCatalog();
-  return planFromConfig(resolved, useCase, catalog);
+  if (llm) {
+    const resolved = await resolveConfigSecrets(llm);
+    // Live catalog only matters for model ids newer than the baked registry;
+    // fetch is cached in-process and null-safe (baked-only fallback).
+    const catalog = await getModelCatalog();
+    const plan = planFromConfig(resolved, useCase, catalog);
+    if (plan.length > 0) return plan;
+  }
+  return isTestEnv() ? [] : minusxDefaultPlan(useCase);
 }
 
 /** Orchestrator hook: per-call plan resolution bound to a mode. */

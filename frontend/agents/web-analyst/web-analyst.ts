@@ -5,7 +5,7 @@ import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { SearchDBSchema, ExecuteQuery, FuzzyMatch } from '@/agents/benchmark-analyst/db-tools.server';
 import { SearchFiles } from '@/agents/analyst/file-tools';
 import { CheckFileHealth } from '@/agents/analyst/health-tools';
-import { getAgentModelOrTestFallback, getAnalystModelConfig, getAnalystModelOptions } from '@/agents/analyst/model-config';
+import { getAgentModelOrTestFallback, getAnalystModelOptions } from '@/agents/analyst/model-config';
 import {
   EditFile,
   CreateFile,
@@ -68,14 +68,15 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
   ];
   static model = getAgentModelOrTestFallback(FAUX_MODEL);
   // Call-time stream options (spread blindly into `streamSimple`). Default
-  // `reasoning: 'low'` so adaptive thinking is on out of the box;
-  // `ANALYST_AGENT_MODEL_CONFIG.options` overrides per-deployment.
-  // `webSearch` enables native server-side web search via the pi patch — supported on
-  // Anthropic (Messages API) and OpenAI (Responses API). Disabled for other providers
-  // (the patch only injects the tool for these two), where it would be a silent no-op.
+  // `reasoning: 'low'` so adaptive thinking is on out of the box; the DB model
+  // plan's options merge over these per call (Settings → Models assignments).
+  // `webSearch` enables native server-side web search via the pi patch —
+  // supported on Anthropic (Messages API), OpenAI (Responses API), and the
+  // MinusX gateway (default provider); a silent no-op elsewhere. Disable per
+  // workspace via the assignment's options when routing to another provider.
   static readonly callOptions = {
     reasoning: 'low',
-    webSearch: ((p) => p === 'anthropic' || p === 'openai')(getAnalystModelConfig()?.provider ?? 'anthropic'),
+    webSearch: true,
     ...(getAnalystModelOptions() ?? {}),
   };
 

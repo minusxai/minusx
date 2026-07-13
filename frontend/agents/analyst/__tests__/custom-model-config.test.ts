@@ -1,14 +1,26 @@
+// Model config is DB-only (org config `llm` section) — these tests pin the
+// STATIC substrate under the per-call plan resolver: faux models in test envs
+// (never in production), and the MinusX-gateway default in production, plus
+// the custom-endpoint model builder used by `custom` provider entries.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { buildCustomModel, getModel } from '@/orchestrator/llm';
 import type { Api, Model } from '@/orchestrator/llm';
 import { getAgentModelOrTestFallback, getAnalystModelOptions } from '@/agents/analyst/model-config';
-import { getMicroModelOrTestFallback } from '@/agents/micro/model-config';
+import { getMicroModelOrTestFallback, getMicroModelOptions } from '@/agents/micro/model-config';
+import { MX_USE_CASE_HEADER } from '@/lib/llm/llm-config-types';
+import { MINUSX_AUTO_MODEL } from '@/lib/llm/minusx-default';
 
 const FAUX = { id: 'faux', provider: 'faux', api: 'faux' } as unknown as Model<Api>;
 
 afterEach(() => {
   vi.unstubAllEnvs();
 });
+
+/** Simulate a production process (vitest sets VITEST + NODE_ENV=test). */
+function stubProductionEnv() {
+  vi.stubEnv('NODE_ENV', 'production');
+  vi.stubEnv('VITEST', '');
+}
 
 describe('buildCustomModel', () => {
   it('builds an OpenAI-compatible model from a minimal spec with safe defaults', () => {
@@ -56,49 +68,28 @@ describe('getModel with unknown provider', () => {
   });
 });
 
-describe('agent model config with customModel', () => {
-  it('analyst config resolves a custom endpoint model', () => {
-    vi.stubEnv('ANALYST_AGENT_MODEL_CONFIG', JSON.stringify({
-      customModel: { baseUrl: 'http://localhost:11434/v1', id: 'qwen3:32b' },
-    }));
-    const model = getAgentModelOrTestFallback(FAUX);
-    expect(model.baseUrl).toBe('http://localhost:11434/v1');
-    expect(model.id).toBe('qwen3:32b');
-    expect(model.provider).toBe('custom');
+describe('static agent models (substrate under the DB plan resolver)', () => {
+  it('test environments get the faux model and no static options', () => {
+    expect(getAgentModelOrTestFallback(FAUX)).toBe(FAUX);
+    expect(getMicroModelOrTestFallback(FAUX)).toBe(FAUX);
+    expect(getAnalystModelOptions()).toBeUndefined();
+    expect(getMicroModelOptions()).toBeUndefined();
   });
 
-  it('micro config resolves a custom endpoint model', () => {
-    vi.stubEnv('MICRO_AGENT_MODEL_CONFIG', JSON.stringify({
-      customModel: { baseUrl: 'http://localhost:8000/v1', id: 'small-model' },
-    }));
-    const model = getMicroModelOrTestFallback(FAUX);
-    expect(model.baseUrl).toBe('http://localhost:8000/v1');
-    expect(model.id).toBe('small-model');
+  it('production defaults to the MinusX gateway model (never faux, never another vendor)', () => {
+    stubProductionEnv();
+    const analyst = getAgentModelOrTestFallback(FAUX);
+    expect(analyst.provider).toBe('minusx');
+    expect(analyst.id).toBe(MINUSX_AUTO_MODEL);
+    expect((analyst as { baseUrl?: string }).baseUrl).toContain('/v1');
+
+    const micro = getMicroModelOrTestFallback(FAUX);
+    expect(micro.provider).toBe('minusx');
   });
 
-  it('registry-based config still works alongside the custom path', () => {
-    vi.stubEnv('ANALYST_AGENT_MODEL_CONFIG', JSON.stringify({
-      provider: 'anthropic', model: 'claude-sonnet-4-6',
-    }));
-    const model = getAgentModelOrTestFallback(FAUX);
-    expect(model.provider).toBe('anthropic');
-  });
-
-  it('injects apiKey from customModel.apiKeyEnv into call options', () => {
-    vi.stubEnv('MY_LLM_KEY', 'sk-local-123');
-    vi.stubEnv('ANALYST_AGENT_MODEL_CONFIG', JSON.stringify({
-      customModel: { baseUrl: 'http://vllm:8000/v1', id: 'm', apiKeyEnv: 'MY_LLM_KEY' },
-      options: { temperature: 0 },
-    }));
-    expect(getAnalystModelOptions()).toEqual({ temperature: 0, apiKey: 'sk-local-123' });
-  });
-
-  it('an explicit options.apiKey wins over apiKeyEnv', () => {
-    vi.stubEnv('MY_LLM_KEY', 'sk-env');
-    vi.stubEnv('ANALYST_AGENT_MODEL_CONFIG', JSON.stringify({
-      customModel: { baseUrl: 'http://vllm:8000/v1', id: 'm', apiKeyEnv: 'MY_LLM_KEY' },
-      options: { apiKey: 'sk-explicit' },
-    }));
-    expect(getAnalystModelOptions()).toEqual({ apiKey: 'sk-explicit' });
+  it('production static options carry the use-case routing header', () => {
+    stubProductionEnv();
+    expect((getAnalystModelOptions()?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('analyst');
+    expect((getMicroModelOptions()?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('micro');
   });
 });
