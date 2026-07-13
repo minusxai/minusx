@@ -1,48 +1,22 @@
-import { buildCustomModel, getModel } from '@/orchestrator/llm';
-import type { Api, CustomModelSpec, Model } from '@/orchestrator/llm';
+/**
+ * Static agent model wiring.
+ *
+ * Model config is DB-ONLY: the org config's `llm` section (Settings → Models /
+ * setup wizard), resolved per LLM call by `Orchestrator.resolveLlmPlan`
+ * (`lib/llm/llm-plan.server.ts`). There is NO env-var model config and no
+ * hardcoded provider default — when nothing is configured, every use case
+ * routes to the managed MinusX gateway.
+ *
+ * The statics below are therefore only the SUBSTRATE under that hook:
+ *   - test environments (vitest / E2E builds) get the agent's faux model, so
+ *     the LLM is deterministic and no network is touched;
+ *   - production paths get the MinusX-default handle — matching what the plan
+ *     resolver produces for an unconfigured workspace, so hookless contexts
+ *     behave identically to tier-3 resolution.
+ */
+import type { Api, Model } from '@/orchestrator/llm';
+import { buildMinusxModel, minusxCallOptions } from '@/lib/llm/minusx-default';
 import { E2E_MODE } from '@/lib/constants';
-
-/**
- * Shape of `ANALYST_AGENT_MODEL_CONFIG` env JSON.
- *
- * Mirrors a two-layer separation:
- *   - `provider` + `model`: model identity, passed to the orchestrator's `getModel`;
- *     OR `customModel`: a {@link CustomModelSpec} for a local / custom
- *     OpenAI-compatible endpoint (Ollama, vLLM, …) not in the registry.
- *     `customModel` wins when both are present.
- *   - `options`: call-time `SimpleStreamOptions` (e.g. `reasoning`,
- *     `thinkingBudgets`, `metadata`, `maxRetryDelayMs`). The orchestrator
- *     spreads this **blindly** into the orchestrator's `streamSimple`/`callLLM` so
- *     adding a new stream option requires zero code change here — just edit
- *     the env JSON.
- *
- * Examples:
- *   { "provider": "anthropic", "model": "claude-opus-4-5",
- *     "options": { "reasoning": "low" } }
- *   { "customModel": { "baseUrl": "http://localhost:11434/v1", "id": "qwen3:32b" } }
- */
-export interface AnalystModelConfig {
-  provider?: string;
-  model?: string;
-  customModel?: CustomModelSpec;
-  options?: Record<string, unknown>;
-}
-
-/**
- * Production fallback used when `ANALYST_AGENT_MODEL_CONFIG` is not set.
- *
- * This default is deliberate: previously, an unset env caused every agent to
- * silently fall back to its faux (test) provider, which then errored at the
- * first LLM call with "No more faux responses queued". A sensible real model
- * is the safer default for any deployment that hasn't configured an LLM yet.
- *
- * Test environments do NOT apply this default — see `getAnalystModelConfig`.
- */
-const DEFAULT_ANALYST_MODEL_CONFIG: AnalystModelConfig = {
-  provider: 'anthropic',
-  model: 'claude-sonnet-4-6',
-  options: { reasoning: 'low' },
-};
 
 function isTestEnv(): boolean {
   // eslint-disable-next-line no-restricted-syntax -- intentional test-env detection so faux providers stay unreachable in production
@@ -50,82 +24,24 @@ function isTestEnv(): boolean {
 }
 
 /**
- * Returns the effective analyst model config:
- *   - parsed `ANALYST_AGENT_MODEL_CONFIG` if set;
- *   - otherwise `DEFAULT_ANALYST_MODEL_CONFIG` in production;
- *   - otherwise `null` (test environments only — lets agents use their
- *     faux registration via {@link getAgentModelOrTestFallback}).
- *
- * The API key is read by the LLM client from the provider-specific env var
- * (e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY) at call time — not part of this config.
- */
-export function getAnalystModelConfig(): AnalystModelConfig | null {
-  // E2E builds force every agent onto its faux provider (controlled via the
-  // /api/test/faux channel) — even on a real server. This is a deliberate,
-  // explicit opt-in flag, so the "no faux in production" invariant still holds.
-  if (E2E_MODE) return null;
-  // eslint-disable-next-line no-restricted-syntax -- analyst-agent module is intentionally standalone; reads its own scoped env var directly
-  const raw = process.env.ANALYST_AGENT_MODEL_CONFIG;
-  if (raw) return JSON.parse(raw) as AnalystModelConfig;
-  if (isTestEnv()) return null;
-  return DEFAULT_ANALYST_MODEL_CONFIG;
-}
-
-/**
- * Returns a typed Model from the effective config, or `null` in test
- * environments when no `ANALYST_AGENT_MODEL_CONFIG` is set.
- */
-function getAnalystModel(): Model<Api> | null {
-  const cfg = getAnalystModelConfig();
-  if (!cfg) return null;
-  if (cfg.customModel) return buildCustomModel(cfg.customModel);
-  if (!cfg.provider || !cfg.model) {
-    throw new Error('ANALYST_AGENT_MODEL_CONFIG needs either customModel or provider+model');
-  }
-  return getModel(cfg.provider, cfg.model);
-}
-
-/**
- * Resolves the model for an agent class, given the agent's faux test model
- * as the **test-only** fallback. In production this is guaranteed to return
- * the real configured model (either from `ANALYST_AGENT_MODEL_CONFIG` or the
- * built-in default). The faux fallback is reachable only when running under
- * a test environment (`NODE_ENV === 'test'` or `VITEST`); if the production
- * code path ever reaches here without a real model, this throws loudly
- * rather than silently mocking the LLM.
- *
- * This is the **only** sanctioned way an agent class should reference its
- * faux model in its static `model` field. The runtime guard inside this
- * function is what makes "no faux models in production" a code-enforced
- * invariant rather than a convention.
+ * Resolves the model for an analyst-family agent class, given the agent's faux
+ * test model as the **test-only** fallback. Production returns the MinusX
+ * default (the per-call plan resolver overrides it with the workspace's real
+ * config). This is the **only** sanctioned way an agent class should reference
+ * its faux model in its static `model` field — the runtime guard makes "no
+ * faux models in production" a code-enforced invariant.
  */
 export function getAgentModelOrTestFallback(testFallback: Model<Api>): Model<Api> {
-  const model = getAnalystModel();
-  if (model) return model;
-  if (!isTestEnv() && !E2E_MODE) {
-    throw new Error(
-      'Agent model unavailable: ANALYST_AGENT_MODEL_CONFIG is unset and ' +
-      'no production default could be resolved. Refusing to silently fall ' +
-      'back to the test faux provider in production.',
-    );
-  }
-  return testFallback;
+  if (isTestEnv() || E2E_MODE) return testFallback;
+  return buildMinusxModel();
 }
 
 /**
- * Returns the call-time options blob (or undefined). Spread directly into
- * the orchestrator's stream options at call sites — no per-key knowledge needed.
- * When the config names a custom endpoint with `apiKeyEnv`, the key is read
- * from that env var here (call time) and injected as `options.apiKey`; an
- * explicit `options.apiKey` always wins.
+ * Static call options for analyst-family agents: the MinusX use-case routing
+ * header in production, nothing in tests. Per-workspace options (reasoning,
+ * apiKey, …) come from the DB plan and merge over these at call time.
  */
 export function getAnalystModelOptions(): Record<string, unknown> | undefined {
-  const cfg = getAnalystModelConfig();
-  if (!cfg) return undefined;
-  const keyEnv = cfg.customModel?.apiKeyEnv;
-  if (keyEnv && !cfg.options?.apiKey) {
-    // eslint-disable-next-line no-restricted-syntax -- the env var NAME comes from the scoped model config; resolved at call time like the config itself
-    return { ...cfg.options, apiKey: process.env[keyEnv] };
-  }
-  return cfg.options;
+  if (isTestEnv() || E2E_MODE) return undefined;
+  return minusxCallOptions('analyst');
 }

@@ -50,15 +50,16 @@ all configuration lives in `frontend/.env` (there is no separate backend).
 cp frontend/.env.example frontend/.env
 ```
 
-Edit `frontend/.env` — add your Anthropic key and a generated NextAuth secret:
+Edit `frontend/.env` — add a generated NextAuth secret:
 
 ```bash
-# LLM provider for the in-process agent orchestrator
-ANTHROPIC_API_KEY=<your-anthropic-key>
-
 # Generate with: openssl rand -base64 32
 NEXTAUTH_SECRET=<generated-secret-here>
 ```
+
+The LLM provider is configured **in the app** after first launch — the setup
+wizard's AI Models step (or Settings → Models) stores providers and API keys in
+the workspace; see [LLM Providers](/docs/self-hosting/llm-providers).
 
 ### 3. Download sample data
 

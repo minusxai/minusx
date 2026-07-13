@@ -9,13 +9,12 @@ echo "[cloud-setup] Installing frontend dependencies..."
 cd "$ROOT/frontend" && npm install --prefer-offline
 
 echo "[cloud-setup] Writing frontend/.env..."
-# Single Next.js app — the agent orchestrator runs in-process, so all config
-# (auth secret + LLM provider key) lives in frontend/.env. NEXTAUTH_SECRET and
-# ANTHROPIC_API_KEY must be set in the cloud environment variables.
+# Single Next.js app — the agent orchestrator runs in-process. LLM providers
+# are configured IN-APP (setup wizard / Settings → Models); .env only carries
+# the auth secret. NEXTAUTH_SECRET must be set in the cloud environment vars.
 if [ ! -f "$ROOT/frontend/.env" ]; then
   cat > "$ROOT/frontend/.env" <<EOF
 NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-dev-secret-change-me}
-ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
 BASE_DUCKDB_DATA_PATH=..
 EOF
 fi

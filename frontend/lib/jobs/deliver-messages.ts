@@ -9,6 +9,7 @@ import 'server-only';
 import type { OrgConfig } from '@/lib/branding/whitelabel';
 import type { MessageAttemptLog, RunMessageRecord, SlackBotConfig } from '@/lib/types';
 import { postSlackMessage } from '@/lib/integrations/slack/api';
+import { resolveConfigSecrets } from '@/lib/secrets/config-secrets.server';
 import { sendEmailViaWebhook, sendPhoneAlertViaWebhook, sendSlackViaWebhook, type WebhookResult } from '@/lib/messaging/webhook-executor';
 import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 
@@ -116,7 +117,9 @@ export async function deliverMessages(
           msg.status = 'failed';
           msg.deliveryError = `No Slack app installation found for team ${msg.metadata.team_id}`;
         } else {
-          await postSlackMessage(bot.bot_token, {
+          // bot_token is a @SECRETS/… ref in the stored config — resolve server-side.
+          const resolvedBot = await resolveConfigSecrets(bot);
+          await postSlackMessage(resolvedBot.bot_token, {
             channel: msg.metadata.channel,
             text: msg.content,
           });

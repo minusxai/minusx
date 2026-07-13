@@ -312,12 +312,12 @@ export async function assertQuestionSaved(page: Page, questionId: number): Promi
 // generated text — so they're stable under a real model.
 // ---------------------------------------------------------------------------
 
-/** Whether real-LLM flows can run (a provider key is configured for the server). */
+/** Whether real-LLM flows can run (the RUNNER holds a provider credential). */
 export function hasLlm(): boolean {
-  // True when ANY supported provider credential is present, so the real-LLM flows
-  // run whether the agent is configured for Anthropic-direct (ANTHROPIC_API_KEY)
-  // or Bedrock (AWS_BEARER_TOKEN_BEDROCK). Lets CI drop ANTHROPIC_API_KEY once it
-  // runs on Bedrock without the flows silently skipping.
+  // Model config is DB-only in the app — auth.setup seeds the workspace's
+  // in-app LLM config from these RUNNER env credentials (CI secrets), via the
+  // same /api/configs path an admin uses. True when any supported credential
+  // is present (Anthropic-direct or Bedrock).
   return !!(process.env.ANTHROPIC_API_KEY || process.env.AWS_BEARER_TOKEN_BEDROCK);
 }
 

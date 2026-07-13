@@ -10,6 +10,7 @@ import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { E2E_HEADER } from '@/lib/auth/e2e-runtime';
 import { getConfigs, getConfigsForMode, getOrgStyles, getStylesForMode } from '@/lib/data/configs.server';
 import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, getBrandTagline } from '@/lib/branding/whitelabel';
+import { redactRawConfigSecrets } from '@/lib/secrets/config-secret-specs';
 import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES, QUERY_TIMEOUT_MS, CREDITS_ENABLED, TELEMETRY_LEVEL } from '@/lib/config';
 import { parseAnalyticsConfig } from '@/lib/constants';
 import { TELEMETRY_LEVEL_ATTR } from '@/lib/telemetry';
@@ -93,7 +94,9 @@ async function loadInitialState(): Promise<{
   }
   return {
     user,
-    config,
+    // Secrets guard: config credentials are @SECRETS/… refs (safe), but legacy
+    // docs may hold raw values — mask them before hydrating the client store.
+    config: redactRawConfigSecrets(config),
     // ANALYTICS_CONFIG is already telemetry-level-aware (lib/config.ts): the
     // image-baked default only applies at `full`, and `off` zeroes it.
     analyticsConfig: parseAnalyticsConfig(ANALYTICS_CONFIG),

@@ -1,5 +1,6 @@
 import 'server-only';
 import { getConfigsForMode, getRawConfig, saveRawConfig } from '@/lib/data/configs.server';
+import { resolveConfigSecrets } from '@/lib/secrets/config-secrets.server';
 import { createConversation, findConversationIdByMeta } from '@/lib/data/conversations.server';
 import { VALID_MODES, type Mode } from '@/lib/mode/mode-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -112,7 +113,9 @@ async function findSlackBotByTeam(
         b.type === 'slack' && b.enabled !== false && b.team_id === teamId,
     );
     if (bot) {
-      return { mode, bot, config: config as ConfigContent };
+      // Credentials are stored as @SECRETS/… refs — resolve to raw values for
+      // the Slack API calls (server-only; legacy raw values pass through).
+      return { mode, bot: await resolveConfigSecrets(bot), config: config as ConfigContent };
     }
   }
   return null;

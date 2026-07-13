@@ -9,6 +9,7 @@ import { hashPassword } from '@/lib/auth/password-utils';
 import workspaceTemplate from '@/lib/database/workspace-template.json';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { copySeedMxfoodForMode } from '@/lib/object-store';
+import { seedLlmConfigFromEnv } from '@/lib/llm/llm-env-seed.server';
 import { MXFOOD_TABLES } from '@/lib/object-store/mxfood-tables';
 
 function escapeForJson(s: string): string {
@@ -82,6 +83,15 @@ export class AuthModule implements IAuthModule {
     }).catch((err) => {
       console.warn('[AuthModule.register] mxfood tutorial seed failed (non-fatal):', err);
     });
+
+    // Env → in-app LLM config: convert legacy model-config env vars (if any)
+    // into the fresh workspace's config so a pre-provisioned install starts
+    // configured (keys land in the secrets store; editable in Settings).
+    try {
+      await seedLlmConfigFromEnv();
+    } catch (err) {
+      console.warn('[AuthModule.register] LLM env seed failed (non-fatal):', err);
+    }
 
     return { redirectUrl: '/login' };
   }

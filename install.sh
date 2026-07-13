@@ -172,34 +172,11 @@ if [ ! -f frontend/.env.example ]; then
 fi
 [ -f frontend/.env ] || { [ -f frontend/.env.example ] && cp frontend/.env.example frontend/.env || touch frontend/.env; }
 
-# LLM configuration — the in-process orchestrator reads the provider key at
-# call time. Default provider is Anthropic (ANTHROPIC_API_KEY); a custom
-# provider/endpoint via ANALYST_AGENT_MODEL_CONFIG skips the key prompt.
+# LLM configuration happens IN THE APP: the setup wizard's "AI Models" step
+# (and Settings → Models) stores providers + keys in the workspace config —
+# nothing LLM-related lives in .env.
 # Docs: https://docs.minusx.ai/docs/self-hosting/llm-providers
-ANTHROPIC_API_KEY=$(get_env_val frontend/.env ANTHROPIC_API_KEY)
-ANALYST_MODEL_CONFIG=$(get_env_val frontend/.env ANALYST_AGENT_MODEL_CONFIG)
-if [ -n "$ANALYST_MODEL_CONFIG" ]; then
-  success "Custom model config detected (ANALYST_AGENT_MODEL_CONFIG) — skipping Anthropic key"
-elif [ -n "$ANTHROPIC_API_KEY" ]; then
-  success "API key already configured"
-else
-  printf "\n  ${SPARKLE} ${BOLD}Anthropic API Key${RESET} ${GRAY}(default LLM provider)${RESET}\n"
-  printf "  ${GRAY}Get one at ${RESET}${BOLD}https://console.anthropic.com${RESET}\n"
-  printf "  ${GRAY}Press Enter to skip if you'll use another provider or a local model.${RESET}\n\n"
-  printf "  ${ARROW} Enter your key: "
-  # `|| true`: headless runs (CI, ssh without a tty) have no /dev/tty — treat
-  # that as a skip instead of dying under `set -e`.
-  read -r ANTHROPIC_API_KEY </dev/tty 2>/dev/null || ANTHROPIC_API_KEY=""
-  echo ""
-  if [ -z "$ANTHROPIC_API_KEY" ]; then
-    warn "No LLM configured yet — the agent won't work until you set ANTHROPIC_API_KEY"
-    warn "or ANALYST_AGENT_MODEL_CONFIG in frontend/.env and restart the container."
-    warn "See ${BOLD}https://docs.minusx.ai/docs/self-hosting/llm-providers${RESET}"
-  else
-    set_env_val frontend/.env ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
-    success "API key saved"
-  fi
-fi
+success "LLM setup happens in-app — the setup wizard will walk you through connecting a provider"
 
 # NEXTAUTH_SECRET
 NEXTAUTH_SECRET=$(get_env_val frontend/.env NEXTAUTH_SECRET)

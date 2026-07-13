@@ -27,6 +27,21 @@ export async function register() {
     const { registerWithModules } = await import('./lib/instrumentation/register-modules');
     await registerWithModules();
 
+    // Env → in-app LLM config seeding: legacy model-config env vars are
+    // INITIAL configuration — converted once into the workspace config (keys
+    // into the secrets store) when no `llm` section exists yet. This is the
+    // lossless upgrade path for env-configured deployments; user edits in
+    // Settings → Models are never overwritten. Best-effort, never blocks boot.
+    void (async () => {
+      try {
+        // eslint-disable-next-line no-restricted-syntax
+        const { seedLlmConfigFromEnv } = await import('./lib/llm/llm-env-seed.server');
+        await seedLlmConfigFromEnv();
+      } catch (e) {
+        console.warn('[llm-env-seed] boot seed failed (non-fatal):', e);
+      }
+    })();
+
     // Route orchestrator-tagged unhandled rejections to the conversation's
     // errors[] so the failure shows up in chat history (Cycle 8 wire).
     // Untagged rejections are ignored here (Sentry already captures them).

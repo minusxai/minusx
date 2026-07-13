@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateOrgConfig } from '@/lib/validation/config-validators';
+import { validateOrgConfig, orgConfigValidationError } from '@/lib/validation/config-validators';
 
 describe('validateOrgConfig - supportedFileTypes', () => {
   it('accepts a config without supportedFileTypes', () => {
@@ -20,5 +20,33 @@ describe('validateOrgConfig - supportedFileTypes', () => {
 
   it('rejects a non-array supportedFileTypes', () => {
     expect(validateOrgConfig({ supportedFileTypes: 'question' })).toBe(false);
+  });
+});
+
+describe('orgConfigValidationError — llm section reasons', () => {
+  it('names the dangling provider reference (the rename-without-cascade case)', () => {
+    const error = orgConfigValidationError({
+      llm: {
+        providers: [{ name: 'Default', provider: 'openai', apiKey: 'k' }],
+        assignments: { analyst: { chain: [{ providerName: 'OpenAI', model: 'gpt-4.1' }] } },
+      },
+    });
+    expect(error).toMatch(/references provider 'OpenAI', which does not exist/);
+  });
+
+  it('names a duplicate provider', () => {
+    const error = orgConfigValidationError({
+      llm: { providers: [{ name: 'a', provider: 'openai' }, { name: 'a', provider: 'anthropic' }] },
+    });
+    expect(error).toMatch(/duplicate provider name 'a'/);
+  });
+
+  it('returns null for a valid config', () => {
+    expect(orgConfigValidationError({
+      llm: {
+        providers: [{ name: 'a', provider: 'openai', apiKey: 'k' }],
+        assignments: { analyst: { chain: [{ providerName: 'a', model: 'gpt-4.1' }] } },
+      },
+    })).toBeNull();
   });
 });

@@ -186,8 +186,11 @@ jobs:
           # flows exercise the chart-image pipeline faithfully. (Prod uses S3 → HTTPS.)
           USE_BASE64_UPLOADS: 'true'
           # Real-LLM QA flows (test/qa/chat-flow.spec.ts) run when a provider
-          # credential is present. We run them on Bedrock — the SAME provider as
-          # prod — with a Haiku model to keep calls cheap + fast.
+          # credential is present. Model config is DB-only in the app: these are
+          # RUNNER-side env — auth.setup seeds them into the workspace's in-app
+          # LLM config via /api/configs. We run on Bedrock — the SAME provider as
+          # prod — with the model named by the ANALYST_AGENT_MODEL_CONFIG secret
+          # ({provider, model, options?} JSON) to keep calls cheap + fast.
           AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
           ANALYST_AGENT_MODEL_CONFIG: ${{ secrets.ANALYST_AGENT_MODEL_CONFIG }}
         run: npm run test:qa -- --shard=${{ matrix.shard }}/3

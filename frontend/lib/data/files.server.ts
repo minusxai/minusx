@@ -38,6 +38,8 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { getLoader, LoaderOptions } from './loaders';
 import { listAllConnections } from './connections.server';
 import { extractConnectionSecrets, mergeExistingSecretRefs } from '@/lib/secrets/connection-secrets.server';
+import { extractConfigSecrets, modeFromPhysicalPath } from '@/lib/secrets/config-secrets.server';
+import { restoreRedactedConfigSecrets } from '@/lib/secrets/config-secret-specs';
 import { computeSchemaFromWhitelist } from './loaders/context-loader-utils';
 import { makeDefaultContextContent, resolveVersionWhitelist } from '@/lib/context/context-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
@@ -590,6 +592,14 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // No need to compute queryResultId — it's a runtime field on FileState, not persisted
+
+    // For configs: credentials are server-managed via the secrets store. Restore any
+    // round-tripped redacted placeholders from the stored doc, then extract raw values
+    // to @SECRETS/… refs — the persisted document never contains a raw credential.
+    if (existingFile.type === 'config') {
+      const restored = restoreRedactedConfigSecrets(contentToSave, existingFile.content ?? {});
+      contentToSave = await extractConfigSecrets(modeFromPhysicalPath(existingFile.path), restored) as BaseFileContent;
+    }
 
     // For stories: compiledCss is server-managed — recomputed from the (possibly edited) markup
     // on EVERY write path (agent EditFile, WYSIWYG browser save, raw API), so the stylesheet can

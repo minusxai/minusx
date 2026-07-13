@@ -21,6 +21,8 @@
  */
 import {
   getModel as piGetModel,
+  getModels as piGetModels,
+  getProviders as piGetProviders,
   streamSimple as piStreamSimple,
   EventStream as PiEventStream,
 } from '@mariozechner/pi-ai';
@@ -221,6 +223,75 @@ export function getModel<P extends string, M extends string>(provider: P, model:
     );
   }
   return resolved;
+}
+
+/** Registry model summary — safe, plain fields for pickers/UI (no handle internals). */
+export interface RegistryModelInfo {
+  id: string;
+  name: string;
+  reasoning: boolean;
+  input: ('text' | 'image')[];
+  contextWindow: number;
+}
+
+/** Provider slugs known to the model registry (for provider pickers). */
+export function listProviders(): string[] {
+  return piGetProviders();
+}
+
+/** Models a registry provider serves, as plain picker-friendly summaries. */
+export function listModels(provider: string): RegistryModelInfo[] {
+  let models: unknown[];
+  try {
+    models = piGetModels(provider as never) as unknown[];
+  } catch {
+    return [];
+  }
+  return (models ?? []).map((m) => {
+    const model = m as { id: string; name?: string; reasoning?: boolean; input?: ('text' | 'image')[]; contextWindow?: number };
+    return {
+      id: model.id,
+      name: model.name ?? model.id,
+      reasoning: model.reasoning ?? false,
+      input: model.input ?? ['text'],
+      contextWindow: model.contextWindow ?? 0,
+    };
+  });
+}
+
+/**
+ * Build a model handle for a REGISTRY provider whose model id is newer than
+ * the baked registry (e.g. released after our pinned pi-ai version): clone the
+ * provider's wire configuration (api, baseUrl, headers) from an existing
+ * registry model and swap in the new id + live-catalog metadata. Throws when
+ * the provider itself is unknown — the wire API can't be inferred.
+ */
+export function buildRegistryModel(
+  provider: string,
+  id: string,
+  overrides?: {
+    name?: string;
+    reasoning?: boolean;
+    input?: ('text' | 'image')[];
+    contextWindow?: number;
+    maxTokens?: number;
+    cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  },
+): Model<Api> {
+  const templates = piGetModels(provider as never) as unknown as Record<string, unknown>[];
+  if (!templates || templates.length === 0) {
+    throw new Error(`Unknown LLM provider: "${provider}" — not in the model registry.`);
+  }
+  return {
+    ...templates[0],
+    id,
+    name: overrides?.name ?? id,
+    reasoning: overrides?.reasoning ?? true,
+    input: overrides?.input ?? ['text', 'image'],
+    contextWindow: overrides?.contextWindow ?? 200_000,
+    maxTokens: overrides?.maxTokens ?? 16_384,
+    cost: overrides?.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  } as unknown as Model<Api>;
 }
 
 /**

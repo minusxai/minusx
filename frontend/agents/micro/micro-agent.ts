@@ -53,13 +53,17 @@ export class MicroAgent extends RemoteAnalystAgent {
     return [{ type: 'text', text }, ...(this.microContext.images ?? [])];
   }
 
+  static override readonly modelUseCase = 'micro' as const;
+
   // A task runs on either the micro model (class default) or the analyst model — its `modelSource`
-  // picks which of the two already-wired configs to use, model AND options together.
+  // picks which of the two already-wired configs to use, model AND options together (including the
+  // DB-backed use-case plan the orchestrator resolves per call).
   protected override async llm(): Promise<AssistantMessage> {
-    const model = getMicroTask(this.microContext.taskKey).modelSource === 'analyst'
+    const useAnalyst = getMicroTask(this.microContext.taskKey).modelSource === 'analyst';
+    const model = useAnalyst
       ? getAgentModelOrTestFallback(FAUX_MODEL)
       : (this.constructor as typeof MicroAgent).model;
-    return this.orchestrator.callLLM(model, this.buildLLMContext(), this.id, this.resolveCallOptions());
+    return this.orchestrator.callLLM(model, this.buildLLMContext(), this.id, this.resolveCallOptions(), useAnalyst ? 'analyst' : 'micro');
   }
 
   protected override resolveCallOptions(): Record<string, unknown> | undefined {

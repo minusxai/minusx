@@ -28,10 +28,10 @@ openssl rand -base64 32
 Edit `frontend/.env`:
 ```bash
 NEXTAUTH_SECRET=<generated-secret-here>
-# LLM provider for the agent orchestrator:
-ANTHROPIC_API_KEY=<your-anthropic-key>
-# (or point at the mx-llm-provider proxy with MX_API_BASE_URL + MX_API_KEY)
 ```
+
+The LLM provider is configured in the app after first launch (setup wizard
+"AI Models" step, or Settings → Models) — there are no LLM env vars.
 
 ### 3. Start the App
 

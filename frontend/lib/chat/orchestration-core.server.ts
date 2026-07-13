@@ -10,6 +10,7 @@
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import { creditEnforcer } from '@/lib/analytics/credit-usage.server';
+import { buildLlmPlanResolver } from '@/lib/llm/llm-plan.server';
 import type {
   ConversationLog,
   ConversationLogEntry as PiLogEntry,
@@ -436,6 +437,10 @@ export async function setupOrchestration(
   // Enforce per-user credit limits deep at the LLM call site (no-op unless
   // ENFORCE_CREDIT_LIMITS). Covers every agent/sub-agent/resume hop in this run.
   orch.beforeLlmCall = creditEnforcer(user);
+  // DB-backed model config (workspace-level — every mode shares the org
+  // config's `llm` providers): resolve the per-use-case model chain on every
+  // call; unconfigured workspaces default to the MinusX gateway.
+  orch.resolveLlmPlan = buildLlmPlanResolver();
 
   // Resume path: frontend sends back [ToolCall, ToolMessage][] tuples.
   // ToolMessage (from Redux/executeToolCall) lacks .function — patch it from
