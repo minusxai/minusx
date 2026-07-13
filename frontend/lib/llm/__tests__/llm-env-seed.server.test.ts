@@ -1,6 +1,8 @@
-// Env → in-app LLM config seeding: the legacy env vars are INITIAL
-// configuration, converted once into the DB config (keys → secrets store)
-// and never consulted again; user-owned config is never overwritten.
+// Env → in-app LLM config seeding: ANALYST_AGENT_MODEL_CONFIG /
+// MICRO_AGENT_MODEL_CONFIG are an INTERNAL deployment mechanism (undocumented,
+// self-contained JSON with the key inline) converted once into the DB config
+// (keys → secrets store) and never consulted again; user-owned config is
+// never overwritten, and test envs never seed.
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { getRawConfig, saveRawConfig } from '@/lib/data/configs.server';
@@ -9,31 +11,28 @@ import { buildSeedLlmConfig, seedLlmConfigFromEnv } from '../llm-env-seed.server
 import type { LlmConfig } from '../llm-config-types';
 
 describe('buildSeedLlmConfig', () => {
-  it('returns null when nothing is configured', () => {
+  it('returns null when neither seed var is set', () => {
     expect(buildSeedLlmConfig({})).toBeNull();
   });
 
-  it('converts registry-shaped analyst+micro configs with keys from the standard env vars', () => {
+  it('converts registry-shaped analyst+micro configs (key inline in the JSON)', () => {
     const seed = buildSeedLlmConfig({
-      ANALYST_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'anthropic', model: 'claude-sonnet-4-6', options: { reasoning: 'low' } }),
-      MICRO_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'openai', model: 'gpt-4.1-mini' }),
-      ANTHROPIC_API_KEY: 'sk-ant-env',
-      OPENAI_API_KEY: 'sk-oa-env',
+      ANALYST_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'anthropic', model: 'claude-sonnet-4-6', apiKey: 'sk-ant-inline', options: { reasoning: 'low' } }),
+      MICRO_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'openai', model: 'gpt-4.1-mini', apiKey: 'sk-oa-inline' }),
     })!;
     expect(seed.providers).toHaveLength(2);
-    expect(seed.providers![0]).toMatchObject({ name: 'env-analyst', provider: 'anthropic', apiKey: 'sk-ant-env' });
-    expect(seed.providers![1]).toMatchObject({ name: 'env-micro', provider: 'openai', apiKey: 'sk-oa-env' });
+    expect(seed.providers![0]).toMatchObject({ name: 'env-analyst', provider: 'anthropic', apiKey: 'sk-ant-inline' });
+    expect(seed.providers![1]).toMatchObject({ name: 'env-micro', provider: 'openai', apiKey: 'sk-oa-inline' });
     expect(seed.assignments!.analyst!.chain[0]).toMatchObject({ providerName: 'env-analyst', model: 'claude-sonnet-4-6', options: { reasoning: 'low' } });
     expect(seed.assignments!.micro!.chain[0]).toMatchObject({ providerName: 'env-micro', model: 'gpt-4.1-mini' });
   });
 
-  it('converts a customModel config (endpoint key via apiKeyEnv; overrides preserved)', () => {
+  it('converts a customModel config (inline key; model overrides preserved)', () => {
     const seed = buildSeedLlmConfig({
       ANALYST_AGENT_MODEL_CONFIG: JSON.stringify({
-        customModel: { baseUrl: 'http://vllm:8000/v1', id: 'llama-3.3-70b', apiKeyEnv: 'VLLM_KEY', contextWindow: 32768 },
+        customModel: { baseUrl: 'http://vllm:8000/v1', id: 'llama-3.3-70b', apiKey: 'sk-vllm', contextWindow: 32768 },
         options: { temperature: 0 },
       }),
-      VLLM_KEY: 'sk-vllm',
     })!;
     expect(seed.providers![0]).toMatchObject({ name: 'env-analyst', provider: 'custom', baseUrl: 'http://vllm:8000/v1', apiKey: 'sk-vllm' });
     expect(seed.assignments!.analyst!.chain[0]).toMatchObject({
@@ -43,25 +42,16 @@ describe('buildSeedLlmConfig', () => {
     expect(seed.assignments!.micro!.chain[0].model).toBe('llama-3.3-70b');
   });
 
-  it('a bare ANTHROPIC_API_KEY seeds the historical defaults (sonnet analyst, haiku micro)', () => {
-    const seed = buildSeedLlmConfig({ ANTHROPIC_API_KEY: 'sk-ant-simple' })!;
-    expect(seed.providers![0]).toMatchObject({ provider: 'anthropic', apiKey: 'sk-ant-simple' });
-    expect(seed.assignments!.analyst!.chain[0].model).toBe('claude-sonnet-4-6');
-    expect(seed.assignments!.micro!.chain[0].model).toBe('claude-haiku-4-5-20251001');
-  });
-
-  it('bedrock config picks up the bearer token and region', () => {
+  it('bedrock config carries key + region inline', () => {
     const seed = buildSeedLlmConfig({
-      ANALYST_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'amazon-bedrock', model: 'anthropic.claude-sonnet-4-6' }),
-      AWS_BEARER_TOKEN_BEDROCK: 'bedrock-key',
-      AWS_REGION: 'eu-west-1',
+      ANALYST_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'amazon-bedrock', model: 'anthropic.claude-sonnet-4-6', apiKey: 'bedrock-key', awsRegion: 'eu-west-1' }),
     })!;
     expect(seed.providers![0]).toMatchObject({ provider: 'amazon-bedrock', apiKey: 'bedrock-key', awsRegion: 'eu-west-1' });
   });
 
-  it('tolerates malformed JSON (falls through to the simple form)', () => {
-    const seed = buildSeedLlmConfig({ ANALYST_AGENT_MODEL_CONFIG: '{not json', ANTHROPIC_API_KEY: 'k' });
-    expect(seed!.providers![0].provider).toBe('anthropic');
+  it('malformed or incomplete JSON yields no seed', () => {
+    expect(buildSeedLlmConfig({ ANALYST_AGENT_MODEL_CONFIG: '{not json' })).toBeNull();
+    expect(buildSeedLlmConfig({ ANALYST_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'anthropic' }) })).toBeNull();
   });
 });
 
@@ -73,14 +63,14 @@ describe('seedLlmConfigFromEnv (DB)', () => {
     // a production boot for these assertions.
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('VITEST', '');
-    vi.stubEnv('ANTHROPIC_API_KEY', 'sk-ant-seeded');
+    vi.stubEnv('ANALYST_AGENT_MODEL_CONFIG', JSON.stringify({ provider: 'anthropic', model: 'claude-sonnet-4-6', apiKey: 'sk-ant-seeded' }));
   });
   afterAll(async () => {
     vi.unstubAllEnvs();
     await cleanupTestDatabase(dbPath);
   });
 
-  it('no-ops in test envs so a dev shell key can never seed test workspaces', async () => {
+  it('no-ops in test envs so env vars can never seed test workspaces', async () => {
     vi.stubEnv('VITEST', 'true');
     expect(await seedLlmConfigFromEnv()).toBe(false);
     vi.stubEnv('VITEST', '');

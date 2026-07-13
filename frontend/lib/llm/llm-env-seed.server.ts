@@ -1,20 +1,22 @@
 /**
  * Env → in-app LLM config SEEDING (server-only).
  *
- * `ANALYST_AGENT_MODEL_CONFIG` / `MICRO_AGENT_MODEL_CONFIG` (and the simple
- * `ANTHROPIC_API_KEY` form) are INITIAL CONFIGURATION, not a runtime tier: at
- * boot and at workspace registration, when the org config has no `llm` section
- * yet, they are converted into the in-app config (keys extracted into the
- * secrets store as `@SECRETS/…` refs). From then on the app runs exclusively
- * on the DB config — users see and edit the seeded providers in Settings →
- * Models, and their edits are never overwritten by env (a present `llm`
- * section, even an empty one, means "configured" and the seed is a no-op).
+ * `ANALYST_AGENT_MODEL_CONFIG` / `MICRO_AGENT_MODEL_CONFIG` are INITIAL
+ * CONFIGURATION, not a runtime tier: at boot and at workspace registration,
+ * when the org config has no `llm` section yet, they are converted into the
+ * in-app config (keys extracted into the secrets store as `@SECRETS/…` refs).
+ * From then on the app runs exclusively on the DB config — users see and edit
+ * the seeded providers in Settings → Models, and their edits are never
+ * overwritten by env (a present `llm` section, even an empty one, means
+ * "configured" and the seed is a no-op).
  *
- * This is also the lossless upgrade path: existing env-configured deployments
- * boot once and their config materializes in the app.
- *
- * Legacy JSON shapes (both vars): `{ provider, model, options? }` or
- * `{ customModel: { baseUrl, id, apiKeyEnv?, ... }, options? }`.
+ * INTERNAL deployment mechanism — deliberately undocumented, slated for
+ * removal once deploys provision workspaces another way. The JSON is
+ * self-contained (the key travels INSIDE it, no cross-env-var indirection):
+ *   { "provider": "anthropic", "model": "...", "apiKey": "sk-...",
+ *     "awsRegion"?: "...", "options"?: {...} }
+ *   { "customModel": { "baseUrl": "...", "id": "...", "apiKey"?: "...", ... },
+ *     "options"?: {...} }
  */
 import 'server-only';
 import { getRawConfig, saveRawConfig } from '@/lib/data/configs.server';
@@ -22,32 +24,16 @@ import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { E2E_MODE } from '@/lib/constants';
 import type { LlmConfig, LlmModelChoice, LlmProviderEntry } from './llm-config-types';
 
-/** Standard key env var per registry provider slug (mirrors pi-ai's lookup). */
-const PROVIDER_KEY_ENV: Record<string, string> = {
-  anthropic: 'ANTHROPIC_API_KEY',
-  openai: 'OPENAI_API_KEY',
-  google: 'GEMINI_API_KEY',
-  'amazon-bedrock': 'AWS_BEARER_TOKEN_BEDROCK',
-  openrouter: 'OPENROUTER_API_KEY',
-  groq: 'GROQ_API_KEY',
-  mistral: 'MISTRAL_API_KEY',
-  deepseek: 'DEEPSEEK_API_KEY',
-  xai: 'XAI_API_KEY',
-  cerebras: 'CEREBRAS_API_KEY',
-  fireworks: 'FIREWORKS_API_KEY',
-  moonshotai: 'MOONSHOT_API_KEY',
-  zai: 'ZAI_API_KEY',
-  huggingface: 'HF_TOKEN',
-};
-
-interface LegacyModelConfig {
+interface SeedModelConfig {
   provider?: string;
   model?: string;
+  apiKey?: string;
+  awsRegion?: string;
   options?: Record<string, unknown>;
   customModel?: {
     baseUrl?: string;
     id?: string;
-    apiKeyEnv?: string;
+    apiKey?: string;
     headers?: Record<string, string>;
     [key: string]: unknown;
   };
@@ -55,10 +41,10 @@ interface LegacyModelConfig {
 
 type Env = Record<string, string | undefined>;
 
-function parseLegacy(raw: string | undefined): LegacyModelConfig | null {
+function parseSeed(raw: string | undefined): SeedModelConfig | null {
   if (!raw || !raw.trim()) return null;
   try {
-    const parsed = JSON.parse(raw) as LegacyModelConfig;
+    const parsed = JSON.parse(raw) as SeedModelConfig;
     return parsed && typeof parsed === 'object' ? parsed : null;
   } catch {
     console.warn('[llm-env-seed] Ignoring malformed model-config env JSON');
@@ -66,16 +52,16 @@ function parseLegacy(raw: string | undefined): LegacyModelConfig | null {
   }
 }
 
-/** One legacy config → a provider entry + model choice, or null if unusable. */
-function toSeedPiece(cfg: LegacyModelConfig, name: string, env: Env): { entry: LlmProviderEntry; choice: LlmModelChoice } | null {
+/** One seed config → a provider entry + model choice, or null if unusable. */
+function toSeedPiece(cfg: SeedModelConfig, name: string): { entry: LlmProviderEntry; choice: LlmModelChoice } | null {
   if (cfg.customModel?.baseUrl && cfg.customModel.id) {
-    const { baseUrl, id, apiKeyEnv, headers, ...modelOverrides } = cfg.customModel;
+    const { baseUrl, id, apiKey, headers, ...modelOverrides } = cfg.customModel;
     return {
       entry: {
         name,
         provider: 'custom',
         baseUrl,
-        ...(apiKeyEnv && env[apiKeyEnv] ? { apiKey: env[apiKeyEnv] } : {}),
+        ...(apiKey ? { apiKey } : {}),
         ...(headers ? { headers } : {}),
       },
       choice: {
@@ -87,13 +73,12 @@ function toSeedPiece(cfg: LegacyModelConfig, name: string, env: Env): { entry: L
     };
   }
   if (cfg.provider && cfg.model) {
-    const keyEnv = PROVIDER_KEY_ENV[cfg.provider];
     return {
       entry: {
         name,
         provider: cfg.provider,
-        ...(keyEnv && env[keyEnv] ? { apiKey: env[keyEnv] } : {}),
-        ...(cfg.provider === 'amazon-bedrock' && env['AWS_REGION'] ? { awsRegion: env['AWS_REGION'] } : {}),
+        ...(cfg.apiKey ? { apiKey: cfg.apiKey } : {}),
+        ...(cfg.awsRegion ? { awsRegion: cfg.awsRegion } : {}),
       },
       choice: { providerName: name, model: cfg.model, ...(cfg.options ? { options: cfg.options } : {}) },
     };
@@ -106,39 +91,24 @@ function toSeedPiece(cfg: LegacyModelConfig, name: string, env: Env): { entry: L
  * seed. Pure — exported for tests.
  */
 export function buildSeedLlmConfig(env: Env): LlmConfig | null {
-  const analyst = toSeedPiece(parseLegacy(env['ANALYST_AGENT_MODEL_CONFIG']) ?? {}, 'env-analyst', env);
-  const micro = toSeedPiece(parseLegacy(env['MICRO_AGENT_MODEL_CONFIG']) ?? {}, 'env-micro', env);
+  const analyst = toSeedPiece(parseSeed(env['ANALYST_AGENT_MODEL_CONFIG']) ?? {}, 'env-analyst');
+  const micro = toSeedPiece(parseSeed(env['MICRO_AGENT_MODEL_CONFIG']) ?? {}, 'env-micro');
+  if (!analyst && !micro) return null;
 
-  if (analyst || micro) {
-    const providers: LlmProviderEntry[] = [];
-    const assignments: LlmConfig['assignments'] = {};
-    if (analyst) {
-      providers.push(analyst.entry);
-      assignments.analyst = { chain: [analyst.choice] };
-    }
-    if (micro) {
-      providers.push(micro.entry);
-      assignments.micro = { chain: [micro.choice] };
-    }
-    // A lone config covers both use cases rather than leaving one unconfigured.
-    if (analyst && !micro) assignments.micro = { chain: [analyst.choice] };
-    if (micro && !analyst) assignments.analyst = { chain: [micro.choice] };
-    return { providers, assignments };
+  const providers: LlmProviderEntry[] = [];
+  const assignments: LlmConfig['assignments'] = {};
+  if (analyst) {
+    providers.push(analyst.entry);
+    assignments.analyst = { chain: [analyst.choice] };
   }
-
-  // Simple form: just an Anthropic key — the historical zero-JSON install path.
-  if (env['ANTHROPIC_API_KEY']) {
-    const name = 'env-anthropic';
-    return {
-      providers: [{ name, provider: 'anthropic', apiKey: env['ANTHROPIC_API_KEY'] }],
-      assignments: {
-        analyst: { chain: [{ providerName: name, model: 'claude-sonnet-4-6', options: { reasoning: 'low' } }] },
-        micro: { chain: [{ providerName: name, model: 'claude-haiku-4-5-20251001' }] },
-      },
-    };
+  if (micro) {
+    providers.push(micro.entry);
+    assignments.micro = { chain: [micro.choice] };
   }
-
-  return null;
+  // A lone config covers both use cases rather than leaving one unconfigured.
+  if (analyst && !micro) assignments.micro = { chain: [analyst.choice] };
+  if (micro && !analyst) assignments.analyst = { chain: [micro.choice] };
+  return { providers, assignments };
 }
 
 function isTestEnv(): boolean {

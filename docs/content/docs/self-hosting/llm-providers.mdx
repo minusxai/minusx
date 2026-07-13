@@ -25,21 +25,6 @@ Resolution order per use case:
 
 For Amazon Bedrock, authenticate with a [Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) (bearer token) plus the AWS region.
 
-## Initial configuration via environment (optional)
-
-For pre-provisioned or headless installs, env vars can supply the **initial** configuration. On first boot (or workspace registration), when no in-app LLM config exists yet, they are converted into it — keys move into the server-side secrets store, and everything shows up editable in Settings → Models. They are never read at request time and never overwrite in-app edits (this is also the lossless upgrade path for deployments configured before in-app setup existed):
-
-```bash
-# Simple form — seeds Anthropic with sensible model defaults:
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Advanced — full control per use case (both optional, JSON):
-ANALYST_AGENT_MODEL_CONFIG={"provider":"anthropic","model":"claude-sonnet-4-6","options":{"reasoning":"low"}}
-MICRO_AGENT_MODEL_CONFIG={"customModel":{"baseUrl":"http://localhost:11434/v1","id":"qwen3:8b"}}
-```
-
-Registry providers pick their key up from the standard env var (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK` + `AWS_REGION`, …); `customModel.apiKeyEnv` names the var holding a custom endpoint's key.
-
 <Callout type="info">
 The heavier analyst model drives answer quality far more than any other setting. Use a strong frontier model for the Analyst assignment; Micro tasks can run a small, cheap model.
 </Callout>
