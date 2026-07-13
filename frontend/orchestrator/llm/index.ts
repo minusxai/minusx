@@ -260,6 +260,41 @@ export function listModels(provider: string): RegistryModelInfo[] {
 }
 
 /**
+ * Build a model handle for a REGISTRY provider whose model id is newer than
+ * the baked registry (e.g. released after our pinned pi-ai version): clone the
+ * provider's wire configuration (api, baseUrl, headers) from an existing
+ * registry model and swap in the new id + live-catalog metadata. Throws when
+ * the provider itself is unknown — the wire API can't be inferred.
+ */
+export function buildRegistryModel(
+  provider: string,
+  id: string,
+  overrides?: {
+    name?: string;
+    reasoning?: boolean;
+    input?: ('text' | 'image')[];
+    contextWindow?: number;
+    maxTokens?: number;
+    cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  },
+): Model<Api> {
+  const templates = piGetModels(provider as never) as unknown as Record<string, unknown>[];
+  if (!templates || templates.length === 0) {
+    throw new Error(`Unknown LLM provider: "${provider}" — not in the model registry.`);
+  }
+  return {
+    ...templates[0],
+    id,
+    name: overrides?.name ?? id,
+    reasoning: overrides?.reasoning ?? true,
+    input: overrides?.input ?? ['text', 'image'],
+    contextWindow: overrides?.contextWindow ?? 200_000,
+    maxTokens: overrides?.maxTokens ?? 16_384,
+    cost: overrides?.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  } as unknown as Model<Api>;
+}
+
+/**
  * Spec for a model served from a custom endpoint that is NOT in the provider
  * registry — a local Ollama/vLLM/llama.cpp server or any OpenAI-compatible
  * gateway. Only `baseUrl` and `id` are required; everything else has

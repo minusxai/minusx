@@ -6,6 +6,7 @@ import { getRawConfig } from '@/lib/data/configs.server';
 import { resolveConfigSecrets } from '@/lib/secrets/config-secrets.server';
 import { isRedactedSecret } from '@/lib/secrets/config-secret-specs';
 import { buildPlanStep } from '@/lib/llm/llm-plan.server';
+import { getModelCatalog } from '@/lib/llm/model-catalog.server';
 import { findLlmProvider, type LlmConfig, type LlmProviderEntry } from '@/lib/llm/llm-config-types';
 import { streamSimple, type Model, type Api } from '@/orchestrator/llm';
 
@@ -57,7 +58,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     let model: Model<Api>;
     let callOptions: Record<string, unknown> | undefined;
     try {
-      const step = buildPlanStep(candidate, { providerName: candidate.name, model: body.model, options: body.options }, 'analyst');
+      const catalog = await getModelCatalog();
+      const step = buildPlanStep(candidate, { providerName: candidate.name, model: body.model, options: body.options }, 'analyst', catalog);
       model = step.model;
       callOptions = step.callOptions;
     } catch (err) {

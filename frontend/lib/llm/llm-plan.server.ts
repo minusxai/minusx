@@ -17,7 +17,8 @@
 import 'server-only';
 import { getRawConfig } from '@/lib/data/configs.server';
 import { resolveConfigSecrets } from '@/lib/secrets/config-secrets.server';
-import { getModel, buildCustomModel, type CustomModelSpec } from '@/orchestrator/llm';
+import { getModel, buildCustomModel, buildRegistryModel, type CustomModelSpec } from '@/orchestrator/llm';
+import { getModelCatalog, type ModelCatalog } from './model-catalog.server';
 import type { LlmPlanStep } from '@/orchestrator/types';
 import { MINUSX_GATEWAY_URL } from '@/lib/config';
 import { E2E_MODE } from '@/lib/constants';
@@ -33,7 +34,7 @@ import {
  * The entry must already have RESOLVED credentials (no refs).
  * Exported for reuse by the connection-test endpoint (`/api/llm/test`).
  */
-export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, useCase: LlmUseCase): LlmPlanStep {
+export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, useCase: LlmUseCase, catalog?: ModelCatalog | null): LlmPlanStep {
   const options: Record<string, unknown> = { ...(choice.options ?? {}) };
   if (entry.apiKey) options['apiKey'] = entry.apiKey;
 
@@ -67,7 +68,16 @@ export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, u
 
   // Registry provider (anthropic / openai / google / amazon-bedrock / …).
   if (!choice.model) throw new Error(`LLM provider '${entry.name}': model id is required`);
-  const model = getModel(entry.provider, choice.model);
+  let model;
+  try {
+    model = getModel(entry.provider, choice.model);
+  } catch (registryError) {
+    // Model id newer than the baked pi-ai registry: resolve via the live
+    // models.dev catalog (same wire API as the provider's baked models).
+    const live = catalog?.get(entry.provider)?.get(choice.model);
+    if (!live) throw registryError;
+    model = buildRegistryModel(entry.provider, choice.model, live);
+  }
   if (entry.provider === 'amazon-bedrock') {
     if (entry.awsRegion) options['region'] = entry.awsRegion;
     // Bedrock auth is a bearer-token API key, not a plain apiKey option.
@@ -80,13 +90,13 @@ export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, u
 }
 
 /** Resolve the chain for one use case from an (already secret-resolved) LlmConfig. */
-function planFromConfig(llm: LlmConfig | undefined, useCase: LlmUseCase): LlmPlanStep[] {
+function planFromConfig(llm: LlmConfig | undefined, useCase: LlmUseCase, catalog: ModelCatalog | null): LlmPlanStep[] {
   const chain = llm?.assignments?.[useCase]?.chain;
   if (chain && chain.length > 0) {
     return chain.map(choice => {
       const entry = findLlmProvider(llm, choice.providerName);
       if (!entry) throw new Error(`LLM assignment for '${useCase}' references unknown provider '${choice.providerName}'`);
-      return buildPlanStep(entry, choice, useCase);
+      return buildPlanStep(entry, choice, useCase, catalog);
     });
   }
   // No assignment: a configured minusx provider handles every use case.
@@ -106,7 +116,10 @@ export async function resolveLlmPlan(mode: Mode, useCase: LlmUseCase): Promise<L
   const llm = raw.llm as LlmConfig | undefined;
   if (!llm) return [];
   const resolved = await resolveConfigSecrets(llm);
-  return planFromConfig(resolved, useCase);
+  // Live catalog only matters for model ids newer than the baked registry;
+  // fetch is cached in-process and null-safe (baked-only fallback).
+  const catalog = await getModelCatalog();
+  return planFromConfig(resolved, useCase, catalog);
 }
 
 /** Orchestrator hook: per-call plan resolution bound to a mode. */
