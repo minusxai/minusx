@@ -126,8 +126,8 @@ export function SemanticQueryBuilder({
           />
         </SectionBox>
 
-        {/* Dimensions */}
-        <SectionBox icon={<LuGroup size={12} />} title="Group by">
+        {/* Dimensions — named to match the model config's vocabulary */}
+        <SectionBox icon={<LuGroup size={12} />} title="Dimensions">
           {spec.dimensions.map((name) => (
             <QueryChip key={name} variant="dimension" onRemove={() => update({ dimensions: spec.dimensions.filter((d) => d !== name) })}>
               {name}
