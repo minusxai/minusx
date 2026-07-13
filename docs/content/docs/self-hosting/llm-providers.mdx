@@ -3,19 +3,31 @@ title: LLM Providers
 description: Configuring which model powers the agent — providers, keys, and exactly what the model sees
 ---
 
-MinusX brings its own agent but not its own model: you point it at an LLM provider with **your API key**, and all LLM traffic goes directly from your deployment to that provider. There is no MinusX-operated proxy in the path.
+MinusX brings its own agent but not its own model: you point it at an LLM provider with **your API key**, and all LLM traffic goes directly from your deployment to that provider (unless you pick the managed **MinusX** provider, which routes through the MinusX gateway).
 
 ---
 
-## Quick start
+## Quick start (in-app — recommended)
 
-The default provider is Anthropic. Set the key and you're done:
+Configure everything in the app: the setup wizard's **AI Models** step, or **Settings → Models**, lets you
+
+- add one or more **providers** (MinusX managed, Anthropic, OpenAI, Google, Amazon Bedrock, or any custom OpenAI-compatible endpoint) with their API keys,
+- **test the connection** before saving,
+- assign a model (with optional **fallbacks**, tried in order) to each use case — **Analyst** (the main agent) and **Micro tasks** (titles/summaries).
+
+Keys are stored server-side in the workspace secrets store — the config document and the browser only ever see `@SECRETS/…` references, never the key. Selecting the **MinusX** provider is fully managed: model routing per use case is handled by the MinusX gateway, so no model/assignment/fallback setup is needed.
+
+Resolution order per use case: **in-app config → environment variables → built-in default**.
+
+For Amazon Bedrock, authenticate with a [Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) (bearer token) plus the AWS region; the standard SigV4 env-credential chain also works when no key is set.
+
+## Environment-variable configuration (fallback tier)
+
+Prefer the in-app setup above. Env config remains fully supported for headless or pre-provisioned deployments. The default provider is Anthropic — set the key and you're done:
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...
 ```
-
-## Choosing a different provider or model
 
 Two runtime environment variables control which models the agents use, both JSON:
 

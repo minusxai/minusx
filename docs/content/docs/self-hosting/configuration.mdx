@@ -12,7 +12,7 @@ All configuration is via environment variables, read from `frontend/.env` (which
 | Variable | Purpose |
 |---|---|
 | `NEXTAUTH_SECRET` | Session/JWT signing secret. Generate with `openssl rand -base64 32`. |
-| `ANTHROPIC_API_KEY` | API key for the default LLM provider. Using a different provider? See [LLM Providers](/docs/self-hosting/llm-providers). |
+| `ANTHROPIC_API_KEY` | Optional fallback LLM key — prefer configuring providers in-app (setup wizard / Settings → Models). See [LLM Providers](/docs/self-hosting/llm-providers). |
 
 ## Document database
 
