@@ -45,7 +45,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // this provider name, then resolve refs to raw values (server-side only).
     let candidate: LlmProviderEntry = { ...entry };
     if (isRedactedSecret(candidate.apiKey)) {
-      const stored = findLlmProvider((await getRawConfig(user.mode)).llm as LlmConfig | undefined, candidate.name);
+      // LLM config is workspace-level (org config) regardless of the caller's mode.
+      const stored = findLlmProvider((await getRawConfig()).llm as LlmConfig | undefined, candidate.name);
       if (!stored?.apiKey) {
         return successResponse({ ok: false, error: `No saved API key for provider '${candidate.name}'` });
       }

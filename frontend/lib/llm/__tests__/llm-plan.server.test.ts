@@ -7,7 +7,7 @@ import { saveRawConfig, getRawConfig } from '@/lib/data/configs.server';
 import { isSecretRef } from '@/lib/secrets/config-secret-specs';
 import { resolveLlmPlan, buildPlanStep } from '../llm-plan.server';
 import { MX_USE_CASE_HEADER, type LlmConfig } from '../llm-config-types';
-import { MINUSX_AUTO_MODEL } from '../minusx-default';
+import { MINUSX_AUTO_MODEL, MINUSX_UNCONFIGURED_KEY } from '../minusx-default';
 
 const dbPath = getTestDbPath('llm_plan_server');
 beforeAll(async () => { await initTestDatabase(dbPath); });
@@ -21,7 +21,7 @@ async function setLlmConfig(llm: LlmConfig | undefined) {
 describe('resolveLlmPlan', () => {
   it('returns [] for an unconfigured workspace in TEST envs (agents keep faux models)', async () => {
     await setLlmConfig(undefined);
-    expect(await resolveLlmPlan('org', 'analyst')).toEqual([]);
+    expect(await resolveLlmPlan('analyst')).toEqual([]);
   });
 
   it('defaults an unconfigured workspace to the MinusX gateway in production (no env tier, no vendor default)', async () => {
@@ -29,12 +29,15 @@ describe('resolveLlmPlan', () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('VITEST', '');
     try {
-      const plan = await resolveLlmPlan('org', 'micro');
+      const plan = await resolveLlmPlan('micro');
       expect(plan).toHaveLength(1);
       const model = plan[0].model as { provider: string; id: string };
       expect(model.provider).toBe('minusx');
       expect(model.id).toBe(MINUSX_AUTO_MODEL);
       expect((plan[0].callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('micro');
+      // Deterministic sentinel key — the request reaches the gateway (whose
+      // auth policy answers), instead of dying client-side env-dependently.
+      expect(plan[0].callOptions?.apiKey).toBe(MINUSX_UNCONFIGURED_KEY);
     } finally {
       vi.unstubAllEnvs();
     }
@@ -52,7 +55,7 @@ describe('resolveLlmPlan', () => {
     const stored = (await getRawConfig('org')).llm as LlmConfig;
     expect(isSecretRef(stored.providers![0].apiKey)).toBe(true);
 
-    const plan = await resolveLlmPlan('org', 'analyst');
+    const plan = await resolveLlmPlan('analyst');
     expect(plan).toHaveLength(1);
     expect((plan[0].model as { id: string }).id).toBe('claude-sonnet-4-6');
     expect(plan[0].callOptions?.apiKey).toBe('sk-ant-raw-key');   // resolved at plan time
@@ -72,7 +75,7 @@ describe('resolveLlmPlan', () => {
         ] },
       },
     });
-    const plan = await resolveLlmPlan('org', 'analyst');
+    const plan = await resolveLlmPlan('analyst');
     expect(plan.map(s => (s.model as { provider: string }).provider)).toEqual(['anthropic', 'openai']);
   });
 
@@ -80,7 +83,7 @@ describe('resolveLlmPlan', () => {
     await setLlmConfig({
       providers: [{ name: 'mx', provider: 'minusx', apiKey: 'mx-key' }],
     });
-    const plan = await resolveLlmPlan('org', 'micro');
+    const plan = await resolveLlmPlan('micro');
     expect(plan).toHaveLength(1);
     const model = plan[0].model as { provider: string; baseUrl: string };
     expect(model.provider).toBe('minusx');
@@ -94,7 +97,7 @@ describe('resolveLlmPlan', () => {
       providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
       assignments: { analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] } },
     });
-    expect(await resolveLlmPlan('org', 'micro')).toEqual([]);
+    expect(await resolveLlmPlan('micro')).toEqual([]);
   });
 
   it('throws a clear error for an assignment referencing an unknown provider', async () => {
@@ -102,7 +105,7 @@ describe('resolveLlmPlan', () => {
       providers: [],
       assignments: { analyst: { chain: [{ providerName: 'ghost', model: 'x' }] } },
     });
-    await expect(resolveLlmPlan('org', 'analyst')).rejects.toThrow(/unknown provider 'ghost'/);
+    await expect(resolveLlmPlan('analyst')).rejects.toThrow(/unknown provider 'ghost'/);
   });
 });
 

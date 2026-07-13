@@ -16,6 +16,15 @@ import { MINUSX_PROVIDER, MX_USE_CASE_HEADER, type LlmUseCase } from './llm-conf
 /** Model id sentinel telling the gateway to pick the model itself. */
 export const MINUSX_AUTO_MODEL = 'minusx-auto';
 
+/**
+ * API-key sentinel for a workspace that has not configured anything yet. The
+ * client lib requires SOME key (otherwise it errors locally, env-dependent);
+ * this makes the unconfigured state deterministic — the request always reaches
+ * the gateway, whose auth policy decides (e.g. reject with a message pointing
+ * at Settings → Models).
+ */
+export const MINUSX_UNCONFIGURED_KEY = 'mx-unconfigured';
+
 export function buildMinusxModel(baseUrl?: string, modelId?: string): Model<Api> {
   return buildCustomModel({
     baseUrl: baseUrl || MINUSX_GATEWAY_URL,

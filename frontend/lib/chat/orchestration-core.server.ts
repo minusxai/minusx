@@ -437,10 +437,10 @@ export async function setupOrchestration(
   // Enforce per-user credit limits deep at the LLM call site (no-op unless
   // ENFORCE_CREDIT_LIMITS). Covers every agent/sub-agent/resume hop in this run.
   orch.beforeLlmCall = creditEnforcer(user);
-  // DB-backed model config: resolve the per-use-case model chain from the org
-  // config's `llm` section on every call. Returns [] when nothing is
-  // configured, so static env-config models keep working unchanged.
-  orch.resolveLlmPlan = buildLlmPlanResolver(user.mode);
+  // DB-backed model config (workspace-level — every mode shares the org
+  // config's `llm` providers): resolve the per-use-case model chain on every
+  // call; unconfigured workspaces default to the MinusX gateway.
+  orch.resolveLlmPlan = buildLlmPlanResolver();
 
   // Resume path: frontend sends back [ToolCall, ToolMessage][] tuples.
   // ToolMessage (from Redux/executeToolCall) lacks .function — patch it from

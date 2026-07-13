@@ -21,10 +21,10 @@ import { getRawConfig } from '@/lib/data/configs.server';
 import { resolveConfigSecrets } from '@/lib/secrets/config-secrets.server';
 import { getModel, buildCustomModel, buildRegistryModel, type CustomModelSpec } from '@/orchestrator/llm';
 import { getModelCatalog, type ModelCatalog } from './model-catalog.server';
-import { buildMinusxModel, minusxCallOptions, MINUSX_AUTO_MODEL } from './minusx-default';
+import { buildMinusxModel, minusxCallOptions, MINUSX_AUTO_MODEL, MINUSX_UNCONFIGURED_KEY } from './minusx-default';
 import type { LlmPlanStep } from '@/orchestrator/types';
 import { E2E_MODE } from '@/lib/constants';
-import type { Mode } from '@/lib/mode/mode-types';
+import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import {
   MINUSX_PROVIDER, CUSTOM_PROVIDER,
   findLlmProvider, findMinusxProvider,
@@ -104,20 +104,23 @@ function isTestEnv(): boolean {
   return process.env.NODE_ENV === 'test' || !!process.env.VITEST;
 }
 
-/** The universal default: the managed MinusX gateway, unkeyed until configured. */
+/** The universal default: the managed MinusX gateway (sentinel key until configured). */
 function minusxDefaultPlan(useCase: LlmUseCase): LlmPlanStep[] {
-  return [{ model: buildMinusxModel(), callOptions: minusxCallOptions(useCase) }];
+  return [{ model: buildMinusxModel(), callOptions: { apiKey: MINUSX_UNCONFIGURED_KEY, ...minusxCallOptions(useCase) } }];
 }
 
 /**
- * Resolve the LLM call plan for a use case in a mode. Never empty in
- * production — an unconfigured workspace gets the MinusX-gateway default.
- * `[]` only in test environments (agents keep their faux static models).
+ * Resolve the LLM call plan for a use case. LLM providers are WORKSPACE-level
+ * infrastructure: always read from the org config, shared by every mode
+ * (tutorial chats run on the same providers as org chats — mode isolation is
+ * about files/content, not model credentials). Never empty in production — an
+ * unconfigured workspace gets the MinusX-gateway default. `[]` only in test
+ * environments (agents keep their faux static models).
  */
-export async function resolveLlmPlan(mode: Mode, useCase: LlmUseCase): Promise<LlmPlanStep[]> {
+export async function resolveLlmPlan(useCase: LlmUseCase): Promise<LlmPlanStep[]> {
   // E2E builds force every agent onto its faux provider — DB config must not override.
   if (E2E_MODE) return [];
-  const raw = await getRawConfig(mode);
+  const raw = await getRawConfig(DEFAULT_MODE);
   const llm = raw.llm as LlmConfig | undefined;
   if (llm) {
     const resolved = await resolveConfigSecrets(llm);
@@ -130,7 +133,7 @@ export async function resolveLlmPlan(mode: Mode, useCase: LlmUseCase): Promise<L
   return isTestEnv() ? [] : minusxDefaultPlan(useCase);
 }
 
-/** Orchestrator hook: per-call plan resolution bound to a mode. */
-export function buildLlmPlanResolver(mode: Mode): (useCase: LlmUseCase) => Promise<LlmPlanStep[]> {
-  return (useCase) => resolveLlmPlan(mode, useCase);
+/** Orchestrator hook: per-call plan resolution (workspace-level, mode-independent). */
+export function buildLlmPlanResolver(): (useCase: LlmUseCase) => Promise<LlmPlanStep[]> {
+  return (useCase) => resolveLlmPlan(useCase);
 }
