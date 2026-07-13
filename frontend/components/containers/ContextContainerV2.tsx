@@ -27,6 +27,7 @@ import {
   resolveVersionWhitelist,
   convertDatabaseContextToWhitelist,
 } from '@/lib/context/context-utils';
+import { validateSemanticModels } from '@/lib/semantic/validate-models';
 
 interface ContextContainerV2Props {
   fileId: FileId;
@@ -293,6 +294,15 @@ export default function ContextContainerV2({
     } catch (err) {
       console.error('Validation failed:', err);
       setSaveError(err instanceof Error ? err.message : 'Validation failed');
+      return;
+    }
+
+    // Semantic models must be complete before they persist (the query-time
+    // compiler trusts saved models).
+    const semanticIssues = (currentContent.versions ?? [])
+      .flatMap(v => validateSemanticModels(v.semanticModels));
+    if (semanticIssues.length > 0) {
+      setSaveError(semanticIssues[0] + (semanticIssues.length > 1 ? ` (+${semanticIssues.length - 1} more)` : ''));
       return;
     }
 

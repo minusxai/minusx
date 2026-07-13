@@ -1,53 +1,47 @@
 'use client';
 
 /**
- * SemanticModelsTabContent — context-editor tab for authoring semantic models
- * (the Semantic query tier's configuration). Models live on the context
- * version (`semanticModels`), inherited like metrics/annotations; edits flow
- * through onChange({ semanticModels }) into the selected version.
+ * SemanticModelsTabContent — context-editor tab for authoring semantic models.
  *
- * Each model card: base table + time column, then dimensions (business name →
- * column, optionally on a joined table), measures (name → agg(column)),
- * explicit joins, and ratio metrics composed from two measures.
+ * Two very different renderings:
+ *  - VIEW mode: a typography-only spec card. No form controls — each model is
+ *    shown as an aligned definition list (`Revenue = SUM(total)`,
+ *    `Status ← status`, `AOV = Revenue / Count`). Empty sections are omitted.
+ *  - EDIT mode: a progressive, guided editor. Pick the base table first
+ *    (searchable picker); the sections then appear with SUGGESTIONS derived
+ *    from column types (temporal → time chips, categorical/text → dimension
+ *    chips, numeric → measure chips) that one-click-add with Title-Cased
+ *    names. Metrics only appear once two measures exist; joins sit behind an
+ *    "add join" affordance. Live validation (validateSemanticModels) renders
+ *    at the card footer, and the same check blocks context save — a persisted
+ *    model is always complete.
  */
 
-import React from 'react';
-import { Tabs, Box, VStack, HStack, Text, Input, Button, IconButton, Badge } from '@chakra-ui/react';
-import { LuPlus, LuTrash2, LuSparkles } from 'react-icons/lu';
-import type { ContextContent, DatabaseWithSchema, SemanticModel, SemanticAggregate } from '@/lib/types';
+import React, { useMemo, useState } from 'react';
+import { Tabs, Box, Grid, VStack, HStack, Text, Input, Button, IconButton, Badge } from '@chakra-ui/react';
+import { LuPlus, LuTrash2, LuSparkles, LuTable, LuTriangleAlert, LuClock, LuGroup, LuSigma, LuDivide, LuMerge } from 'react-icons/lu';
+import type { ContextContent, DatabaseWithSchema, SemanticModel, SemanticAggregate, SemanticMeasure } from '@/lib/types';
+import { validateSemanticModels } from '@/lib/semantic/validate-models';
+import { PickerPopover, PickerHeader, PickerList, PickerItem } from '@/components/query-builder';
 
-const AGGS: SemanticAggregate[] = ['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COUNT_DISTINCT'];
+// ---------------------------------------------------------------------------
+// Column/table helpers
+// ---------------------------------------------------------------------------
 
-const selectStyle: React.CSSProperties = {
-  fontSize: '12px',
-  fontFamily: 'var(--font-jetbrains-mono), monospace',
-  padding: '3px 6px',
-  border: '1px solid var(--chakra-colors-border-muted)',
-  borderRadius: '4px',
-  background: 'var(--chakra-colors-bg-canvas)',
-  color: 'var(--chakra-colors-fg-default)',
-  outline: 'none',
-  height: '26px',
-  cursor: 'pointer',
-  maxWidth: '220px',
-};
+interface ColumnInfo { name: string; type?: string; meta?: { category?: string } }
 
 interface TableInfo {
   connection: string;
   schema?: string;
   table: string;
-  columns: Array<{ name: string; type?: string }>;
-}
-
-interface SemanticModelsTabContentProps {
-  content: ContextContent;
-  onChange: (updates: Partial<ContextContent>) => void;
-  editMode: boolean;
-  availableDatabases: DatabaseWithSchema[];
+  columns: ColumnInfo[];
 }
 
 const tableKey = (t: { connection: string; schema?: string; table: string }) =>
   `${t.connection}|${t.schema ?? ''}|${t.table}`;
+
+const tableLabel = (t: { schema?: string; table: string }) =>
+  t.schema ? `${t.schema}.${t.table}` : t.table;
 
 function collectTables(databases: DatabaseWithSchema[]): TableInfo[] {
   const tables: TableInfo[] = [];
@@ -58,7 +52,7 @@ function collectTables(databases: DatabaseWithSchema[]): TableInfo[] {
           connection: db.databaseName,
           schema: schema.schema || undefined,
           table: table.table,
-          columns: (table.columns ?? []).map((c) => ({ name: c.name, type: c.type })),
+          columns: (table.columns ?? []) as ColumnInfo[],
         });
       }
     }
@@ -66,27 +60,68 @@ function collectTables(databases: DatabaseWithSchema[]): TableInfo[] {
   return tables;
 }
 
+const isTemporal = (c: ColumnInfo) =>
+  c.meta?.category === 'temporal' || /date|time|timestamp/i.test(c.type ?? '');
+const isNumeric = (c: ColumnInfo) =>
+  c.meta?.category === 'numeric' || /int|float|double|decimal|numeric|real|number/i.test(c.type ?? '');
+const isCategorical = (c: ColumnInfo) =>
+  c.meta?.category === 'categorical' || /char|text|string|bool|enum/i.test(c.type ?? '');
+
+/** `order_status` → `Order Status` */
+const titleCase = (column: string): string =>
+  column
+    .split(/[_\-\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+
+const AGGS: SemanticAggregate[] = ['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COUNT_DISTINCT'];
+
+const measureFormula = (m: SemanticMeasure): string =>
+  m.agg === 'COUNT' && !m.column ? 'COUNT(*)'
+    : m.agg === 'COUNT_DISTINCT' ? `COUNT(DISTINCT ${m.column ?? '?'})`
+    : `${m.agg}(${m.column ?? '?'})`;
+
+// Shared control style: everything in an editing row is exactly 28px tall.
+const CONTROL_H = '28px';
+const selectStyle: React.CSSProperties = {
+  fontSize: '12px',
+  fontFamily: 'var(--font-jetbrains-mono), monospace',
+  padding: '0 6px',
+  border: '1px solid var(--chakra-colors-border-muted)',
+  borderRadius: '6px',
+  background: 'var(--chakra-colors-bg-canvas)',
+  color: 'var(--chakra-colors-fg-default)',
+  outline: 'none',
+  height: CONTROL_H,
+  cursor: 'pointer',
+  width: '100%',
+  minWidth: 0,
+};
+
+// ---------------------------------------------------------------------------
+// Tab content
+// ---------------------------------------------------------------------------
+
+interface SemanticModelsTabContentProps {
+  content: ContextContent;
+  onChange: (updates: Partial<ContextContent>) => void;
+  editMode: boolean;
+  availableDatabases: DatabaseWithSchema[];
+}
+
 export function SemanticModelsTabContent({ content, onChange, editMode, availableDatabases }: SemanticModelsTabContentProps) {
   const models = content.semanticModels ?? [];
   const inherited = content.fullSemanticModels ?? [];
-  const allTables = collectTables(availableDatabases);
+  const allTables = useMemo(() => collectTables(availableDatabases), [availableDatabases]);
 
   const setModels = (next: SemanticModel[]) => onChange({ semanticModels: next });
-  const updateModel = (idx: number, next: SemanticModel) => setModels(models.map((m, i) => (i === idx ? next : m)));
-  const removeModel = (idx: number) => setModels(models.filter((_, i) => i !== idx));
 
   const addModel = () => {
-    const first = allTables[0];
     setModels([
       ...models,
-      {
-        name: `Model ${models.length + 1}`,
-        connection: first?.connection ?? '',
-        schema: first?.schema,
-        table: first?.table ?? '',
-        dimensions: [],
-        measures: [{ name: 'Count', agg: 'COUNT' }],
-      },
+      // Deliberately empty: the editor guides table-first, then suggests the rest.
+      { name: '', connection: '', table: '', dimensions: [], measures: [] },
     ]);
   };
 
@@ -95,7 +130,7 @@ export function SemanticModelsTabContent({ content, onChange, editMode, availabl
       <VStack align="stretch" gap={3} py={2}>
         <HStack justify="space-between">
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-            Semantic models power the Semantic query tab: curated measures, dimensions and joins per table.
+            Curated measures, dimensions and joins per table — powers the Semantic query mode.
           </Text>
           {editMode && (
             <Button aria-label="Add semantic model" size="xs" variant="outline" onClick={addModel} disabled={allTables.length === 0}>
@@ -105,23 +140,36 @@ export function SemanticModelsTabContent({ content, onChange, editMode, availabl
         </HStack>
 
         {inherited.map((model, i) => (
-          <ModelCard key={`inh-${i}`} model={model} allTables={allTables} editMode={false} inherited />
+          <ModelSpecCard key={`inh-${i}`} model={model} inherited />
         ))}
-        {models.map((model, idx) => (
-          <ModelCard
-            key={idx}
-            model={model}
-            allTables={allTables}
-            editMode={editMode}
-            onChange={(next) => updateModel(idx, next)}
-            onRemove={() => removeModel(idx)}
-          />
-        ))}
+
+        {models.map((model, idx) =>
+          editMode ? (
+            <ModelEditorCard
+              key={idx}
+              model={model}
+              allTables={allTables}
+              onChange={(next) => setModels(models.map((m, i) => (i === idx ? next : m)))}
+              onRemove={() => setModels(models.filter((_, i) => i !== idx))}
+            />
+          ) : (
+            <ModelSpecCard key={idx} model={model} />
+          )
+        )}
+
         {models.length === 0 && inherited.length === 0 && (
-          <Box p={6} textAlign="center" border="1px dashed" borderColor="border.muted" borderRadius="lg">
-            <Text fontSize="sm" color="fg.muted" fontFamily="mono">
-              No semantic models yet. {editMode ? 'Add one to enable the Semantic query tab for this context.' : 'Enter edit mode to add one.'}
-            </Text>
+          <Box p={8} textAlign="center" border="1px dashed" borderColor="border.muted" borderRadius="lg">
+            <VStack gap={1}>
+              <Box color="fg.subtle"><LuSparkles size={18} /></Box>
+              <Text fontSize="sm" color="fg.muted" fontFamily="mono">
+                No semantic models yet.
+              </Text>
+              <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
+                {editMode
+                  ? 'Add a model to give a table business-named measures and dimensions — it enables the Semantic query mode for this context.'
+                  : 'Enter edit mode to add one.'}
+              </Text>
+            </VStack>
           </Box>
         )}
       </VStack>
@@ -129,307 +177,562 @@ export function SemanticModelsTabContent({ content, onChange, editMode, availabl
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+// ---------------------------------------------------------------------------
+// Shared layout: label rail + content rows
+// ---------------------------------------------------------------------------
+
+function RailRow({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
   return (
-    <HStack gap={2} align="center" flexWrap="wrap">
-      <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" w="88px" flexShrink={0} fontFamily="mono">
-        {label}
+    <Grid templateColumns="110px 1fr" gap={3} alignItems="start">
+      <HStack gap={1.5} pt="5px" color="fg.subtle">
+        {icon}
+        <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
+          {label}
+        </Text>
+      </HStack>
+      <Box minW={0}>{children}</Box>
+    </Grid>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// VIEW mode: typography-only spec card
+// ---------------------------------------------------------------------------
+
+function DefRow({ name, def }: { name: string; def: string }) {
+  return (
+    <HStack gap={2} py="2px" align="baseline">
+      <Text fontSize="xs" fontFamily="mono" fontWeight="600" color="fg.default" minW="140px">
+        {name}
       </Text>
-      {children}
+      <Text fontSize="xs" fontFamily="mono" color="fg.muted" truncate title={def}>
+        {def}
+      </Text>
     </HStack>
   );
 }
 
-function ModelCard({ model, allTables, editMode, inherited, onChange, onRemove }: {
+function ModelSpecCard({ model, inherited }: { model: SemanticModel; inherited?: boolean }) {
+  return (
+    <Box border="1px solid" borderColor="border.muted" borderRadius="lg" bg="bg.subtle" overflow="hidden" opacity={inherited ? 0.8 : 1}>
+      <HStack px={4} py={2.5} gap={2.5} borderBottom="1px solid" borderColor="border.muted" bg="bg.muted/40">
+        <Box color="accent.teal"><LuSparkles size={14} /></Box>
+        <Text fontSize="sm" fontFamily="mono" fontWeight="700">{model.name || 'Untitled model'}</Text>
+        <HStack gap={1.5} color="fg.subtle">
+          <LuTable size={12} />
+          <Text fontSize="xs" fontFamily="mono">
+            {model.connection} · {tableLabel(model)}
+          </Text>
+        </HStack>
+        <Box flex={1} />
+        {inherited && <Badge size="xs" colorPalette="teal" variant="subtle">inherited</Badge>}
+      </HStack>
+
+      <VStack align="stretch" gap={2.5} px={4} py={3}>
+        {model.timeDimension && (
+          <RailRow icon={<LuClock size={11} />} label="Time">
+            <DefRow name={model.timeDimension.label ?? titleCase(model.timeDimension.column)} def={model.timeDimension.column} />
+          </RailRow>
+        )}
+        {model.dimensions.length > 0 && (
+          <RailRow icon={<LuGroup size={11} />} label="Dimensions">
+            {model.dimensions.map((d, i) => (
+              <DefRow key={i} name={d.name} def={d.join ? `${d.join}.${d.column}` : d.column} />
+            ))}
+          </RailRow>
+        )}
+        {model.measures.length > 0 && (
+          <RailRow icon={<LuSigma size={11} />} label="Measures">
+            {model.measures.map((m, i) => (
+              <DefRow key={i} name={m.name} def={`= ${measureFormula(m)}`} />
+            ))}
+          </RailRow>
+        )}
+        {(model.metrics?.length ?? 0) > 0 && (
+          <RailRow icon={<LuDivide size={11} />} label="Metrics">
+            {model.metrics!.map((mt, i) => (
+              <DefRow key={i} name={mt.name} def={`= ${mt.numerator} / ${mt.denominator}`} />
+            ))}
+          </RailRow>
+        )}
+        {(model.joins?.length ?? 0) > 0 && (
+          <RailRow icon={<LuMerge size={11} />} label="Joins">
+            {model.joins!.map((j, i) => (
+              <DefRow
+                key={i}
+                name={`${j.alias} (${j.table})`}
+                def={`${j.type ?? 'LEFT'} JOIN ON ${model.table}.${j.leftColumn} = ${j.alias}.${j.rightColumn}`}
+              />
+            ))}
+          </RailRow>
+        )}
+      </VStack>
+    </Box>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EDIT mode: progressive guided editor
+// ---------------------------------------------------------------------------
+
+/** Small dashed suggestion chip: one click adds the suggested field. */
+function SuggestionChip({ label, ariaLabel, onClick }: { label: string; ariaLabel: string; onClick: () => void }) {
+  return (
+    <Box
+      as="button"
+      aria-label={ariaLabel}
+      px={2}
+      py={0.5}
+      border="1px dashed"
+      borderColor="border.emphasized"
+      borderRadius="md"
+      cursor="pointer"
+      transition="all 0.15s ease"
+      _hover={{ bg: 'bg.muted', borderStyle: 'solid', borderColor: 'accent.teal' }}
+      onClick={onClick}
+    >
+      <Text fontSize="11px" fontFamily="mono" color="fg.muted">+ {label}</Text>
+    </Box>
+  );
+}
+
+/** Solid toggle chip (time-column selection). */
+function ToggleChip({ label, ariaLabel, selected, onClick }: { label: string; ariaLabel: string; selected: boolean; onClick: () => void }) {
+  return (
+    <Box
+      as="button"
+      aria-label={ariaLabel}
+      aria-pressed={selected}
+      px={2}
+      py={0.5}
+      border="1px solid"
+      borderColor={selected ? 'accent.teal' : 'border.muted'}
+      bg={selected ? 'accent.teal/15' : 'transparent'}
+      borderRadius="md"
+      cursor="pointer"
+      transition="all 0.15s ease"
+      _hover={{ borderColor: 'accent.teal' }}
+      onClick={onClick}
+    >
+      <Text fontSize="11px" fontFamily="mono" color={selected ? 'accent.teal' : 'fg.muted'} fontWeight={selected ? '700' : '400'}>
+        {label}
+      </Text>
+    </Box>
+  );
+}
+
+function TablePicker({ current, allTables, onSelect }: {
+  current?: TableInfo;
+  allTables: TableInfo[];
+  onSelect: (t: TableInfo) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <PickerPopover
+      open={open}
+      onOpenChange={(details) => setOpen(details.open)}
+      trigger={
+        <Box
+          as="button"
+          aria-label="Semantic model table"
+          px={2}
+          py={0.5}
+          h={CONTROL_H}
+          display="flex"
+          alignItems="center"
+          border="1px solid"
+          borderColor={current ? 'border.muted' : 'accent.teal'}
+          borderStyle={current ? 'solid' : 'dashed'}
+          borderRadius="md"
+          cursor="pointer"
+          _hover={{ bg: 'bg.muted' }}
+          onClick={() => setOpen(true)}
+        >
+          <HStack gap={1.5}>
+            <Box color={current ? 'fg.muted' : 'accent.teal'}><LuTable size={12} /></Box>
+            <Text fontSize="xs" fontFamily="mono" color={current ? 'fg.default' : 'accent.teal'}>
+              {current ? `${current.connection} · ${tableLabel(current)}` : 'Choose a base table…'}
+            </Text>
+          </HStack>
+        </Box>
+      }
+    >
+      <PickerHeader>Base table</PickerHeader>
+      <PickerList maxH="300px" searchable searchPlaceholder="Search tables...">
+        {(query) => allTables
+          .filter((t) => !query || tableLabel(t).toLowerCase().includes(query.toLowerCase()))
+          .map((t) => (
+            <PickerItem
+              key={tableKey(t)}
+              aria-label={`Base table ${tableLabel(t)}`}
+              icon={<LuTable size={13} />}
+              selected={!!current && tableKey(t) === tableKey(current)}
+              onClick={() => { onSelect(t); setOpen(false); }}
+            >
+              <HStack justify="space-between" width="100%">
+                <Text fontFamily="mono" fontSize="xs">{tableLabel(t)}</Text>
+                <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">{t.connection}</Text>
+              </HStack>
+            </PickerItem>
+          ))}
+      </PickerList>
+    </PickerPopover>
+  );
+}
+
+function ModelEditorCard({ model, allTables, onChange, onRemove }: {
   model: SemanticModel;
   allTables: TableInfo[];
-  editMode: boolean;
-  inherited?: boolean;
-  onChange?: (next: SemanticModel) => void;
-  onRemove?: () => void;
+  onChange: (next: SemanticModel) => void;
+  onRemove: () => void;
 }) {
-  const set = (updates: Partial<SemanticModel>) => onChange?.({ ...model, ...updates });
+  const set = (updates: Partial<SemanticModel>) => onChange({ ...model, ...updates });
+
   const baseTable = allTables.find((t) => tableKey(t) === tableKey(model));
   const baseColumns = baseTable?.columns ?? [];
-  const joinTables = model.joins ?? [];
-  const columnsForJoin = (alias?: string): Array<{ name: string; type?: string }> => {
+  const issues = validateSemanticModels([model]);
+
+  const columnsForJoin = (alias?: string): ColumnInfo[] => {
     if (!alias) return baseColumns;
-    const join = joinTables.find((j) => j.alias === alias);
-    const t = join && allTables.find((x) => x.connection === model.connection && x.table === join.table && (x.schema ?? '') === (join.schema ?? ''));
+    const join = (model.joins ?? []).find((j) => j.alias === alias);
+    const t = join && allTables.find((x) =>
+      x.connection === model.connection && x.table === join.table && (x.schema ?? '') === (join.schema ?? ''));
     return t?.columns ?? [];
   };
 
-  const disabled = !editMode || inherited;
+  // Suggestions: columns not already used by the section, classified by type.
+  const usedDimensionColumns = new Set(model.dimensions.filter((d) => !d.join).map((d) => d.column));
+  const usedMeasureColumns = new Set(model.measures.map((m) => m.column).filter(Boolean));
+  const temporalColumns = baseColumns.filter(isTemporal);
+  const dimensionSuggestions = baseColumns
+    .filter((c) => isCategorical(c) && !usedDimensionColumns.has(c.name))
+    .slice(0, 6);
+  const measureSuggestions = baseColumns
+    // id-like columns are numeric but summing them is meaningless — keep them
+    // out of the suggestions (still reachable via "custom").
+    .filter((c) => isNumeric(c) && !usedMeasureColumns.has(c.name) && !/(^|_)id$/i.test(c.name))
+    .slice(0, 6);
+  const hasCount = model.measures.some((m) => m.agg === 'COUNT' && !m.column);
+  const namedMeasures = model.measures.filter((m) => m.name.trim());
+
+  const handleTableSelect = (t: TableInfo) => {
+    // Changing the base table invalidates all column-bound config; re-seed
+    // with the model's name defaulted from the table and a Count measure.
+    onChange({
+      name: model.name.trim() || titleCase(t.table),
+      connection: t.connection,
+      schema: t.schema,
+      table: t.table,
+      timeDimension: undefined,
+      dimensions: [],
+      measures: [{ name: 'Count', agg: 'COUNT' }],
+      joins: [],
+      metrics: [],
+    });
+  };
 
   return (
-    <Box border="1px solid" borderColor="border.muted" borderRadius="lg" p={3} bg="bg.subtle" opacity={inherited ? 0.75 : 1}>
-      <VStack align="stretch" gap={2.5}>
-        <HStack justify="space-between" gap={2}>
-          <HStack gap={2} flex={1} minW={0}>
-            <Box color="accent.teal"><LuSparkles size={14} /></Box>
-            <Input
-              aria-label="Semantic model name"
-              size="xs"
-              fontFamily="mono"
-              fontWeight="600"
-              maxW="220px"
-              value={model.name}
-              disabled={disabled}
-              onChange={(e) => set({ name: e.target.value })}
-            />
-            <select
-              aria-label="Semantic model table"
-              style={selectStyle}
-              value={tableKey(model)}
-              disabled={disabled}
-              onChange={(e) => {
-                const t = allTables.find((x) => tableKey(x) === e.target.value);
-                if (t) {
-                  // Changing the base table invalidates column-bound config.
-                  set({
-                    connection: t.connection, schema: t.schema, table: t.table,
-                    timeDimension: undefined, dimensions: [], measures: [{ name: 'Count', agg: 'COUNT' }], joins: [], metrics: [],
-                  });
-                }
-              }}
-            >
-              {!baseTable && <option value={tableKey(model)}>{model.table || 'select table'}</option>}
-              {allTables.map((t) => (
-                <option key={tableKey(t)} value={tableKey(t)}>
-                  {t.connection} · {t.schema ? `${t.schema}.` : ''}{t.table}
-                </option>
+    <Box border="1px solid" borderColor="border.muted" borderRadius="lg" bg="bg.subtle" overflow="hidden">
+      {/* Header: name + table + delete */}
+      <HStack px={4} py={2.5} gap={2.5} borderBottom="1px solid" borderColor="border.muted" bg="bg.muted/40">
+        <Box color="accent.teal" flexShrink={0}><LuSparkles size={14} /></Box>
+        <Input
+          aria-label="Semantic model name"
+          size="xs"
+          h={CONTROL_H}
+          fontFamily="mono"
+          fontWeight="600"
+          maxW="220px"
+          value={model.name}
+          placeholder="Model name"
+          onChange={(e) => set({ name: e.target.value })}
+        />
+        <TablePicker current={baseTable} allTables={allTables} onSelect={handleTableSelect} />
+        <Box flex={1} />
+        <IconButton aria-label="Delete semantic model" size="xs" variant="ghost" colorPalette="red" onClick={onRemove}>
+          <LuTrash2 size={14} />
+        </IconButton>
+      </HStack>
+
+      {!baseTable ? (
+        <Box px={4} py={5}>
+          <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
+            Pick the base table — measures, dimensions and the time axis are defined on its columns.
+          </Text>
+        </Box>
+      ) : (
+        <VStack align="stretch" gap={3.5} px={4} py={3.5}>
+          {/* TIME: toggle chips over temporal columns */}
+          <RailRow icon={<LuClock size={11} />} label="Time">
+            <HStack gap={1.5} flexWrap="wrap">
+              <ToggleChip
+                label="none"
+                ariaLabel="Time column none"
+                selected={!model.timeDimension}
+                onClick={() => set({ timeDimension: undefined })}
+              />
+              {temporalColumns.map((c) => (
+                <ToggleChip
+                  key={c.name}
+                  label={c.name}
+                  ariaLabel={`Time column ${c.name}`}
+                  selected={model.timeDimension?.column === c.name}
+                  onClick={() => set({ timeDimension: { column: c.name } })}
+                />
               ))}
-            </select>
-            {inherited && (
-              <Badge size="xs" colorPalette="teal" variant="subtle">inherited</Badge>
-            )}
-          </HStack>
-          {!disabled && (
-            <IconButton aria-label="Delete semantic model" size="xs" variant="ghost" colorPalette="red" onClick={onRemove}>
-              <LuTrash2 size={14} />
-            </IconButton>
-          )}
-        </HStack>
+              {temporalColumns.length === 0 && (
+                <Text fontSize="11px" color="fg.subtle" fontFamily="mono" pt="4px">
+                  no date/time columns detected on {model.table}
+                </Text>
+              )}
+            </HStack>
+          </RailRow>
 
-        {/* Time dimension */}
-        <Row label="Time">
-          <select
-            aria-label="Time dimension column"
-            style={selectStyle}
-            value={model.timeDimension?.column ?? ''}
-            disabled={disabled}
-            onChange={(e) => set({ timeDimension: e.target.value ? { column: e.target.value } : undefined })}
-          >
-            <option value="">none</option>
-            {baseColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-          </select>
-        </Row>
-
-        {/* Dimensions */}
-        <Row label="Dimensions">
-          <VStack align="stretch" gap={1} flex={1}>
-            {model.dimensions.map((d, i) => (
-              <HStack key={i} gap={1.5}>
-                <Input
-                  aria-label={`Dimension name ${i + 1}`}
-                  size="xs" fontFamily="mono" maxW="160px" placeholder="Name"
-                  value={d.name} disabled={disabled}
-                  onChange={(e) => set({ dimensions: model.dimensions.map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
-                />
-                <select
-                  aria-label={`Dimension join ${i + 1}`}
-                  style={{ ...selectStyle, maxWidth: '110px' }}
-                  value={d.join ?? ''} disabled={disabled}
-                  onChange={(e) => set({ dimensions: model.dimensions.map((x, j) => j === i ? { ...x, join: e.target.value || undefined, column: '' } : x) })}
-                >
-                  <option value="">{model.table}</option>
-                  {joinTables.map((j) => <option key={j.alias} value={j.alias}>{j.alias} ({j.table})</option>)}
-                </select>
-                <select
-                  aria-label={`Dimension column ${i + 1}`}
-                  style={selectStyle}
-                  value={d.column} disabled={disabled}
-                  onChange={(e) => set({ dimensions: model.dimensions.map((x, j) => j === i ? { ...x, column: e.target.value } : x) })}
-                >
-                  <option value="">column…</option>
-                  {columnsForJoin(d.join).map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-                </select>
-                {!disabled && (
-                  <IconButton aria-label={`Remove dimension ${i + 1}`} size="2xs" variant="ghost" onClick={() => set({ dimensions: model.dimensions.filter((_, j) => j !== i) })}>
-                    <LuTrash2 size={12} />
-                  </IconButton>
-                )}
-              </HStack>
-            ))}
-            {!disabled && (
-              <Button aria-label="Add dimension" size="2xs" variant="ghost" alignSelf="start"
-                onClick={() => set({ dimensions: [...model.dimensions, { name: '', column: '' }] })}>
-                <LuPlus size={12} /> dimension
-              </Button>
-            )}
-          </VStack>
-        </Row>
-
-        {/* Measures */}
-        <Row label="Measures">
-          <VStack align="stretch" gap={1} flex={1}>
-            {model.measures.map((m, i) => (
-              <HStack key={i} gap={1.5}>
-                <Input
-                  aria-label={`Measure name ${i + 1}`}
-                  size="xs" fontFamily="mono" maxW="160px" placeholder="Name"
-                  value={m.name} disabled={disabled}
-                  onChange={(e) => set({ measures: model.measures.map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
-                />
-                <select
-                  aria-label={`Measure aggregation ${i + 1}`}
-                  style={{ ...selectStyle, maxWidth: '150px' }}
-                  value={m.agg} disabled={disabled}
-                  onChange={(e) => {
-                    const agg = e.target.value as SemanticAggregate;
-                    set({ measures: model.measures.map((x, j) => j === i ? { ...x, agg, ...(agg === 'COUNT' ? { column: undefined } : {}) } : x) });
-                  }}
-                >
-                  {AGGS.map((a) => <option key={a} value={a}>{a}</option>)}
-                </select>
-                {m.agg !== 'COUNT' && (
+          {/* DIMENSIONS */}
+          <RailRow icon={<LuGroup size={11} />} label="Dimensions">
+            <VStack align="stretch" gap={1.5}>
+              {model.dimensions.map((d, i) => (
+                <Grid key={i} templateColumns="220px 130px 1fr 28px" gap={1.5} alignItems="center">
+                  <Input
+                    aria-label={`Dimension name ${i + 1}`}
+                    size="xs" h={CONTROL_H} fontFamily="mono" placeholder="Business name"
+                    value={d.name}
+                    onChange={(e) => set({ dimensions: model.dimensions.map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
+                  />
                   <select
-                    aria-label={`Measure column ${i + 1}`}
+                    aria-label={`Dimension join ${i + 1}`}
                     style={selectStyle}
-                    value={m.column ?? ''} disabled={disabled}
-                    onChange={(e) => set({ measures: model.measures.map((x, j) => j === i ? { ...x, column: e.target.value || undefined } : x) })}
+                    value={d.join ?? ''}
+                    onChange={(e) => set({ dimensions: model.dimensions.map((x, j) => j === i ? { ...x, join: e.target.value || undefined, column: '' } : x) })}
+                  >
+                    <option value="">{model.table}</option>
+                    {(model.joins ?? []).map((j) => <option key={j.alias} value={j.alias}>{j.alias} ({j.table})</option>)}
+                  </select>
+                  <select
+                    aria-label={`Dimension column ${i + 1}`}
+                    style={selectStyle}
+                    value={d.column}
+                    onChange={(e) => set({ dimensions: model.dimensions.map((x, j) => j === i ? { ...x, column: e.target.value } : x) })}
                   >
                     <option value="">column…</option>
-                    {baseColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                    {columnsForJoin(d.join).map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
                   </select>
-                )}
-                {!disabled && (
-                  <IconButton aria-label={`Remove measure ${i + 1}`} size="2xs" variant="ghost" onClick={() => set({ measures: model.measures.filter((_, j) => j !== i) })}>
+                  <IconButton aria-label={`Remove dimension ${i + 1}`} size="2xs" variant="ghost"
+                    onClick={() => set({ dimensions: model.dimensions.filter((_, j) => j !== i) })}>
                     <LuTrash2 size={12} />
                   </IconButton>
-                )}
+                </Grid>
+              ))}
+              <HStack gap={1.5} flexWrap="wrap">
+                {dimensionSuggestions.map((c) => (
+                  <SuggestionChip
+                    key={c.name}
+                    label={c.name}
+                    ariaLabel={`Suggested dimension ${c.name}`}
+                    onClick={() => set({ dimensions: [...model.dimensions, { name: titleCase(c.name), column: c.name }] })}
+                  />
+                ))}
+                <Button aria-label="Add dimension" size="2xs" variant="ghost" color="fg.subtle"
+                  onClick={() => set({ dimensions: [...model.dimensions, { name: '', column: '' }] })}>
+                  <LuPlus size={11} /> custom
+                </Button>
               </HStack>
-            ))}
-            {!disabled && (
-              <Button aria-label="Add measure" size="2xs" variant="ghost" alignSelf="start"
-                onClick={() => set({ measures: [...model.measures, { name: '', agg: 'SUM' }] })}>
-                <LuPlus size={12} /> measure
-              </Button>
-            )}
-          </VStack>
-        </Row>
+            </VStack>
+          </RailRow>
 
-        {/* Joins */}
-        <Row label="Joins">
-          <VStack align="stretch" gap={1} flex={1}>
-            {(model.joins ?? []).map((jn, i) => {
-              const joinTableInfo = allTables.find((x) => x.connection === model.connection && x.table === jn.table && (x.schema ?? '') === (jn.schema ?? ''));
-              return (
-                <HStack key={i} gap={1.5} flexWrap="wrap">
+          {/* MEASURES */}
+          <RailRow icon={<LuSigma size={11} />} label="Measures">
+            <VStack align="stretch" gap={1.5}>
+              {model.measures.map((m, i) => (
+                <Grid key={i} templateColumns={m.agg === 'COUNT' ? '220px 130px 1fr 28px' : '220px 130px 1fr 28px'} gap={1.5} alignItems="center">
+                  <Input
+                    aria-label={`Measure name ${i + 1}`}
+                    size="xs" h={CONTROL_H} fontFamily="mono" placeholder="Business name"
+                    value={m.name}
+                    onChange={(e) => set({ measures: model.measures.map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
+                  />
                   <select
-                    aria-label={`Join table ${i + 1}`}
+                    aria-label={`Measure aggregation ${i + 1}`}
                     style={selectStyle}
-                    value={jn.table ? tableKey({ connection: model.connection, schema: jn.schema, table: jn.table }) : ''}
-                    disabled={disabled}
+                    value={m.agg}
                     onChange={(e) => {
-                      const t = allTables.find((x) => tableKey(x) === e.target.value);
-                      if (t) set({ joins: (model.joins ?? []).map((x, j) => j === i ? { ...x, table: t.table, schema: t.schema, alias: x.alias || t.table.slice(0, 2) } : x) });
+                      const agg = e.target.value as SemanticAggregate;
+                      set({ measures: model.measures.map((x, j) => j === i ? { ...x, agg, ...(agg === 'COUNT' ? { column: undefined } : {}) } : x) });
                     }}
                   >
-                    <option value="">table…</option>
-                    {allTables.filter((t) => t.connection === model.connection).map((t) => (
-                      <option key={tableKey(t)} value={tableKey(t)}>{t.schema ? `${t.schema}.` : ''}{t.table}</option>
-                    ))}
+                    {AGGS.map((a) => <option key={a} value={a}>{a}</option>)}
                   </select>
-                  <Input
-                    aria-label={`Join alias ${i + 1}`}
-                    size="xs" fontFamily="mono" maxW="70px" placeholder="alias"
-                    value={jn.alias} disabled={disabled}
-                    onChange={(e) => set({ joins: (model.joins ?? []).map((x, j) => j === i ? { ...x, alias: e.target.value } : x) })}
-                  />
-                  <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">on</Text>
-                  <select
-                    aria-label={`Join left column ${i + 1}`}
-                    style={{ ...selectStyle, maxWidth: '150px' }}
-                    value={jn.leftColumn} disabled={disabled}
-                    onChange={(e) => set({ joins: (model.joins ?? []).map((x, j) => j === i ? { ...x, leftColumn: e.target.value } : x) })}
-                  >
-                    <option value="">{model.table}…</option>
-                    {baseColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-                  </select>
-                  <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">=</Text>
-                  <select
-                    aria-label={`Join right column ${i + 1}`}
-                    style={{ ...selectStyle, maxWidth: '150px' }}
-                    value={jn.rightColumn} disabled={disabled}
-                    onChange={(e) => set({ joins: (model.joins ?? []).map((x, j) => j === i ? { ...x, rightColumn: e.target.value } : x) })}
-                  >
-                    <option value="">{jn.table || 'table'}…</option>
-                    {(joinTableInfo?.columns ?? []).map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-                  </select>
-                  {!disabled && (
-                    <IconButton aria-label={`Remove join ${i + 1}`} size="2xs" variant="ghost" onClick={() => set({ joins: (model.joins ?? []).filter((_, j) => j !== i) })}>
-                      <LuTrash2 size={12} />
-                    </IconButton>
+                  {m.agg === 'COUNT' ? (
+                    <Text fontSize="xs" color="fg.subtle" fontFamily="mono" pl={1}>all rows</Text>
+                  ) : (
+                    <select
+                      aria-label={`Measure column ${i + 1}`}
+                      style={selectStyle}
+                      value={m.column ?? ''}
+                      onChange={(e) => set({ measures: model.measures.map((x, j) => j === i ? { ...x, column: e.target.value || undefined } : x) })}
+                    >
+                      <option value="">column…</option>
+                      {baseColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                    </select>
                   )}
-                </HStack>
-              );
-            })}
-            {!disabled && (
-              <Button aria-label="Add join" size="2xs" variant="ghost" alignSelf="start"
-                onClick={() => set({ joins: [...(model.joins ?? []), { table: '', alias: '', leftColumn: '', rightColumn: '' }] })}>
-                <LuPlus size={12} /> join
-              </Button>
-            )}
-          </VStack>
-        </Row>
-
-        {/* Ratio metrics */}
-        <Row label="Metrics">
-          <VStack align="stretch" gap={1} flex={1}>
-            {(model.metrics ?? []).map((mt, i) => (
-              <HStack key={i} gap={1.5}>
-                <Input
-                  aria-label={`Metric name ${i + 1}`}
-                  size="xs" fontFamily="mono" maxW="160px" placeholder="Name"
-                  value={mt.name} disabled={disabled}
-                  onChange={(e) => set({ metrics: (model.metrics ?? []).map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
-                />
-                <select
-                  aria-label={`Metric numerator ${i + 1}`}
-                  style={selectStyle}
-                  value={mt.numerator} disabled={disabled}
-                  onChange={(e) => set({ metrics: (model.metrics ?? []).map((x, j) => j === i ? { ...x, numerator: e.target.value } : x) })}
-                >
-                  <option value="">numerator…</option>
-                  {model.measures.filter((m) => m.name).map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-                </select>
-                <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">/</Text>
-                <select
-                  aria-label={`Metric denominator ${i + 1}`}
-                  style={selectStyle}
-                  value={mt.denominator} disabled={disabled}
-                  onChange={(e) => set({ metrics: (model.metrics ?? []).map((x, j) => j === i ? { ...x, denominator: e.target.value } : x) })}
-                >
-                  <option value="">denominator…</option>
-                  {model.measures.filter((m) => m.name).map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-                </select>
-                {!disabled && (
-                  <IconButton aria-label={`Remove metric ${i + 1}`} size="2xs" variant="ghost" onClick={() => set({ metrics: (model.metrics ?? []).filter((_, j) => j !== i) })}>
+                  <IconButton aria-label={`Remove measure ${i + 1}`} size="2xs" variant="ghost"
+                    onClick={() => set({ measures: model.measures.filter((_, j) => j !== i) })}>
                     <LuTrash2 size={12} />
                   </IconButton>
+                </Grid>
+              ))}
+              <HStack gap={1.5} flexWrap="wrap">
+                {!hasCount && (
+                  <SuggestionChip
+                    label="Count of rows"
+                    ariaLabel="Suggested measure count of rows"
+                    onClick={() => set({ measures: [...model.measures, { name: 'Count', agg: 'COUNT' }] })}
+                  />
                 )}
+                {measureSuggestions.map((c) => (
+                  <SuggestionChip
+                    key={c.name}
+                    label={`SUM ${c.name}`}
+                    ariaLabel={`Suggested measure sum of ${c.name}`}
+                    onClick={() => set({ measures: [...model.measures, { name: titleCase(c.name), agg: 'SUM', column: c.name }] })}
+                  />
+                ))}
+                <Button aria-label="Add measure" size="2xs" variant="ghost" color="fg.subtle"
+                  onClick={() => set({ measures: [...model.measures, { name: '', agg: 'SUM' }] })}>
+                  <LuPlus size={11} /> custom
+                </Button>
               </HStack>
-            ))}
-            {!disabled && (
-              <Button aria-label="Add ratio metric" size="2xs" variant="ghost" alignSelf="start"
-                onClick={() => set({ metrics: [...(model.metrics ?? []), { name: '', type: 'ratio', numerator: '', denominator: '' }] })}>
-                <LuPlus size={12} /> ratio metric
-              </Button>
-            )}
-          </VStack>
-        </Row>
-      </VStack>
+            </VStack>
+          </RailRow>
+
+          {/* METRICS — progressive: needs two named measures to compose */}
+          {namedMeasures.length >= 2 && (
+            <RailRow icon={<LuDivide size={11} />} label="Metrics">
+              <VStack align="stretch" gap={1.5}>
+                {(model.metrics ?? []).map((mt, i) => (
+                  <Grid key={i} templateColumns="220px 1fr 16px 1fr 28px" gap={1.5} alignItems="center">
+                    <Input
+                      aria-label={`Metric name ${i + 1}`}
+                      size="xs" h={CONTROL_H} fontFamily="mono" placeholder="Business name"
+                      value={mt.name}
+                      onChange={(e) => set({ metrics: (model.metrics ?? []).map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
+                    />
+                    <select
+                      aria-label={`Metric numerator ${i + 1}`}
+                      style={selectStyle}
+                      value={mt.numerator}
+                      onChange={(e) => set({ metrics: (model.metrics ?? []).map((x, j) => j === i ? { ...x, numerator: e.target.value } : x) })}
+                    >
+                      <option value="">numerator…</option>
+                      {namedMeasures.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                    </select>
+                    <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center">/</Text>
+                    <select
+                      aria-label={`Metric denominator ${i + 1}`}
+                      style={selectStyle}
+                      value={mt.denominator}
+                      onChange={(e) => set({ metrics: (model.metrics ?? []).map((x, j) => j === i ? { ...x, denominator: e.target.value } : x) })}
+                    >
+                      <option value="">denominator…</option>
+                      {namedMeasures.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                    </select>
+                    <IconButton aria-label={`Remove metric ${i + 1}`} size="2xs" variant="ghost"
+                      onClick={() => set({ metrics: (model.metrics ?? []).filter((_, j) => j !== i) })}>
+                      <LuTrash2 size={12} />
+                    </IconButton>
+                  </Grid>
+                ))}
+                <Box>
+                  <Button aria-label="Add ratio metric" size="2xs" variant="ghost" color="fg.subtle"
+                    onClick={() => set({ metrics: [...(model.metrics ?? []), { name: '', type: 'ratio', numerator: '', denominator: '' }] })}>
+                    <LuPlus size={11} /> ratio metric (measure ÷ measure)
+                  </Button>
+                </Box>
+              </VStack>
+            </RailRow>
+          )}
+
+          {/* JOINS — advanced, tucked behind the add affordance */}
+          <RailRow icon={<LuMerge size={11} />} label="Joins">
+            <VStack align="stretch" gap={1.5}>
+              {(model.joins ?? []).map((jn, i) => {
+                const joinTableInfo = allTables.find((x) =>
+                  x.connection === model.connection && x.table === jn.table && (x.schema ?? '') === (jn.schema ?? ''));
+                return (
+                  <Grid key={i} templateColumns="220px 90px 1fr 16px 1fr 28px" gap={1.5} alignItems="center">
+                    <select
+                      aria-label={`Join table ${i + 1}`}
+                      style={selectStyle}
+                      value={jn.table ? tableKey({ connection: model.connection, schema: jn.schema, table: jn.table }) : ''}
+                      onChange={(e) => {
+                        const t = allTables.find((x) => tableKey(x) === e.target.value);
+                        if (t) set({ joins: (model.joins ?? []).map((x, j) => j === i ? { ...x, table: t.table, schema: t.schema, alias: x.alias || t.table.slice(0, 2) } : x) });
+                      }}
+                    >
+                      <option value="">join table…</option>
+                      {allTables.filter((t) => t.connection === model.connection && t.table !== model.table).map((t) => (
+                        <option key={tableKey(t)} value={tableKey(t)}>{tableLabel(t)}</option>
+                      ))}
+                    </select>
+                    <Input
+                      aria-label={`Join alias ${i + 1}`}
+                      size="xs" h={CONTROL_H} fontFamily="mono" placeholder="alias"
+                      value={jn.alias}
+                      onChange={(e) => set({ joins: (model.joins ?? []).map((x, j) => j === i ? { ...x, alias: e.target.value } : x) })}
+                    />
+                    <select
+                      aria-label={`Join left column ${i + 1}`}
+                      style={selectStyle}
+                      value={jn.leftColumn}
+                      onChange={(e) => set({ joins: (model.joins ?? []).map((x, j) => j === i ? { ...x, leftColumn: e.target.value } : x) })}
+                    >
+                      <option value="">{model.table} column…</option>
+                      {baseColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                    </select>
+                    <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center">=</Text>
+                    <select
+                      aria-label={`Join right column ${i + 1}`}
+                      style={selectStyle}
+                      value={jn.rightColumn}
+                      onChange={(e) => set({ joins: (model.joins ?? []).map((x, j) => j === i ? { ...x, rightColumn: e.target.value } : x) })}
+                    >
+                      <option value="">{jn.table || 'joined'} column…</option>
+                      {(joinTableInfo?.columns ?? []).map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                    </select>
+                    <IconButton aria-label={`Remove join ${i + 1}`} size="2xs" variant="ghost"
+                      onClick={() => set({ joins: (model.joins ?? []).filter((_, j) => j !== i) })}>
+                      <LuTrash2 size={12} />
+                    </IconButton>
+                  </Grid>
+                );
+              })}
+              <Box>
+                <Button aria-label="Add join" size="2xs" variant="ghost" color="fg.subtle"
+                  onClick={() => set({ joins: [...(model.joins ?? []), { table: '', alias: '', leftColumn: '', rightColumn: '' }] })}>
+                  <LuPlus size={11} /> join another table (enables cross-table dimensions)
+                </Button>
+              </Box>
+            </VStack>
+          </RailRow>
+
+          {/* Live validation footer — same check that gates context save */}
+          {issues.length > 0 && (
+            <HStack gap={2} px={3} py={2} bg="orange.500/10" borderRadius="md" align="start">
+              <Box color="orange.400" pt="1px"><LuTriangleAlert size={13} /></Box>
+              <VStack align="start" gap={0.5}>
+                {issues.slice(0, 4).map((issue, i) => (
+                  <Text key={i} fontSize="11px" fontFamily="mono" color="orange.400">
+                    {issue.replace(/^Semantic model "[^"]*": /, '')}
+                  </Text>
+                ))}
+                {issues.length > 4 && (
+                  <Text fontSize="11px" fontFamily="mono" color="orange.400">+{issues.length - 4} more</Text>
+                )}
+              </VStack>
+            </HStack>
+          )}
+        </VStack>
+      )}
     </Box>
   );
 }
