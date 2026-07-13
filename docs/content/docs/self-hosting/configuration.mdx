@@ -26,10 +26,12 @@ MinusX stores documents (questions, dashboards, users, …) in an embedded Postg
 
 ## LLM & agent
 
-Model providers, keys, and assignments are configured **in the app** (setup wizard / Settings → Models) — there are no LLM model env vars. See [LLM Providers](/docs/self-hosting/llm-providers).
+Model providers, keys, and assignments are configured **in the app** (setup wizard / Settings → Models). Env vars are **initial configuration only** — converted into the in-app config on first boot, never read at request time. See [LLM Providers](/docs/self-hosting/llm-providers).
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `ANTHROPIC_API_KEY` | — | Initial config (simple form): seeds an Anthropic provider + default models on first boot. |
+| `ANALYST_AGENT_MODEL_CONFIG` / `MICRO_AGENT_MODEL_CONFIG` | — | Initial config (advanced, JSON) per use case — see [LLM Providers](/docs/self-hosting/llm-providers). |
 | `MINUSX_GATEWAY_URL` | `https://llm.minusx.ai/v1` | Base URL of the managed MinusX gateway (the default provider); override for staging gateways. |
 | `MAX_LLM_CONCURRENCY` | unlimited | Cap on concurrent in-flight LLM requests. |
 | `BOOT_WARM_CHAT` | `true` | Warm the chat runtime at boot so the first message isn't a cold start. `false` to disable. |

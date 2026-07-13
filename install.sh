@@ -172,11 +172,32 @@ if [ ! -f frontend/.env.example ]; then
 fi
 [ -f frontend/.env ] || { [ -f frontend/.env.example ] && cp frontend/.env.example frontend/.env || touch frontend/.env; }
 
-# LLM configuration happens IN THE APP: the setup wizard's "AI Models" step
-# (and Settings → Models) stores providers + keys in the workspace config —
-# nothing LLM-related lives in .env.
+# LLM configuration lives IN THE APP (setup wizard "AI Models" step / Settings
+# → Models). Env vars are INITIAL configuration only: a key present at first
+# boot is converted into the in-app config (secrets store) and never read
+# again. Offer the optional key prompt for one-command setups; Enter to skip
+# and configure in the wizard instead.
 # Docs: https://docs.minusx.ai/docs/self-hosting/llm-providers
-success "LLM setup happens in-app — the setup wizard will walk you through connecting a provider"
+ANTHROPIC_API_KEY=$(get_env_val frontend/.env ANTHROPIC_API_KEY)
+ANALYST_MODEL_CONFIG=$(get_env_val frontend/.env ANALYST_AGENT_MODEL_CONFIG)
+if [ -n "$ANALYST_MODEL_CONFIG" ] || [ -n "$ANTHROPIC_API_KEY" ]; then
+  success "LLM initial config detected — it will be imported into Settings → Models on first boot"
+else
+  printf "\n  ${SPARKLE} ${BOLD}Anthropic API Key${RESET} ${GRAY}(optional — seeds the in-app model config)${RESET}\n"
+  printf "  ${GRAY}Get one at ${RESET}${BOLD}https://console.anthropic.com${RESET}\n"
+  printf "  ${GRAY}Press Enter to skip and connect a provider in the setup wizard instead.${RESET}\n\n"
+  printf "  ${ARROW} Enter your key: "
+  # `|| true`: headless runs (CI, ssh without a tty) have no /dev/tty — treat
+  # that as a skip instead of dying under `set -e`.
+  read -r ANTHROPIC_API_KEY </dev/tty 2>/dev/null || ANTHROPIC_API_KEY=""
+  echo ""
+  if [ -z "$ANTHROPIC_API_KEY" ]; then
+    success "Skipped — the setup wizard will walk you through connecting a provider"
+  else
+    set_env_val frontend/.env ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
+    success "API key saved — it becomes the in-app model config on first boot"
+  fi
+fi
 
 # NEXTAUTH_SECRET
 NEXTAUTH_SECRET=$(get_env_val frontend/.env NEXTAUTH_SECRET)
