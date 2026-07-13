@@ -17,6 +17,12 @@ describe('geo asset feature extraction', () => {
     expect(features.every(f => typeof (f.properties as { name?: unknown })?.name === 'string')).toBe(true);
   });
 
+  it('converts the us-atlas counties TopoJSON into named county features', () => {
+    const features = assetFeatures('us-counties', read(GEO_ASSETS['us-counties'].file));
+    expect(features.length).toBeGreaterThan(3000); // ~3231 counties
+    expect(features.every(f => typeof (f.properties as { name?: unknown })?.name === 'string')).toBe(true);
+  });
+
   it('converts the world-atlas TopoJSON into named country features', () => {
     const features = assetFeatures('world', read(GEO_ASSETS['world'].file));
     const names = features.map(f => (f.properties as { name: string }).name);

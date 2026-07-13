@@ -47,6 +47,7 @@ export interface GeoAsset {
  */
 export const GEO_ASSETS = {
   'us-states': { label: 'US (States)', file: 'us-atlas-states-10m', nameProp: 'name', projection: 'albersUsa', topojsonObject: 'states' },
+  'us-counties': { label: 'US (Counties)', file: 'us-atlas-counties-10m', nameProp: 'name', projection: 'albersUsa', topojsonObject: 'counties' },
   'world': { label: 'World (Countries)', file: 'world-atlas-countries-110m', nameProp: 'name', projection: 'equalEarth', topojsonObject: 'countries' },
   'india-states': { label: 'India (States)', file: 'india-states', nameProp: 'name', projection: 'mercator' },
 } as const satisfies Record<string, GeoAsset>;

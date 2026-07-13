@@ -52,7 +52,7 @@ export type VizParams = Record<string, unknown> | null | undefined;
 export interface VizTemplate {
   id: string;
   /** The icon-grid type this recipe implements. */
-  vizType: 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'combo' | 'choropleth';
+  vizType: 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'combo' | 'choropleth' | 'point_map';
   /** Grammar of the materialized spec ('vega' skips the VL compile). */
   engine: VizTemplateEngine;
   bindings: ReadonlyArray<VizTemplateBinding>;
@@ -1041,6 +1041,201 @@ const choropleth: VizTemplate = {
   },
 };
 
+// The mercator scale a point map uses at zoom 1 when a `center` is set (a region /
+// large-state view). Interactive/persisted zoom is `scale / POINT_MAP_REGION_SCALE`.
+export const POINT_MAP_REGION_SCALE = 1700;
+
+// ── minusx/point-map@1 ──────────────────────────────────────────────────────────
+// Coordinate map (RFC §9): point/marker rows plotted over a vector basemap backdrop
+// via a projection. The query result is the primary data (`main`); the boundary is a
+// light outline layer beneath (injected from the asset registry — the reverse of
+// choropleth). `size` bound → bubbles; `color` bound → category palette (or a
+// sequential scheme when `colorScale` is set). Binding BOTH `lat2`/`lng2` turns each
+// row into an origin→destination flow line (rule marks) — same recipe, no mode toggle.
+//
+// Bindings: lat, lng (required), lat2, lng2 (optional destination → flows), size,
+// color (optional). Params: mapName (basemap + projection), colorScale (quantitative
+// color scheme).
+const pointMap: VizTemplate = {
+  id: 'minusx/point-map@1',
+  vizType: 'point_map',
+  engine: 'vega',
+  bindings: [
+    { name: 'lat', label: 'Latitude', accepts: ['quantitative'] },
+    { name: 'lng', label: 'Longitude', accepts: ['quantitative'] },
+    { name: 'lat2', label: 'End latitude', accepts: ['quantitative'], optional: true },
+    { name: 'lng2', label: 'End longitude', accepts: ['quantitative'], optional: true },
+    { name: 'size', label: 'Size', accepts: ['quantitative'], optional: true },
+    { name: 'color', label: 'Color', accepts: ['nominal', 'quantitative'], optional: true },
+  ],
+  assets(_bindings, params) {
+    const p = (params ?? {}) as Record<string, unknown>;
+    return { [GEO_BOUNDARY_DATASET]: resolveGeoAsset(p.mapName) };
+  },
+  build(bindings, formats, params) {
+    const str = (v: string | string[] | undefined) => (typeof v === 'string' && v ? v : null);
+    const lat = String(bindings.lat);
+    const lng = String(bindings.lng);
+    const lat2 = str(bindings.lat2);
+    const lng2 = str(bindings.lng2);
+    const size = str(bindings.size);
+    const color = str(bindings.color);
+    const p = (params ?? {}) as Record<string, unknown>;
+    const isFlow = lat2 != null && lng2 != null;
+    const scheme = typeof p.colorScale === 'string' && CHOROPLETH_SCHEMES[p.colorScale] ? CHOROPLETH_SCHEMES[p.colorScale] : null;
+    // Projection controls (RFC §9). The map is a recenterable MERCATOR driven by
+    // `scale` + `center` signals — the canonical vega zoomable-map pattern. (Vega's
+    // projection `fit` can't frame a computed box; it only fits real source geometry.)
+    // `center` [lat, lng] recenters GEOGRAPHICALLY, so it holds across basemaps
+    // (states/counties/world); `zoom` scales in. With no center the projection frames
+    // the DATA extent (where the points are). These same signals carry interactive
+    // pan/zoom later. (choropleth keeps albersUsa + its AK/HI insets — that's a static
+    // overview; a zoomable point map can't use a composite projection.)
+    const zoomVal = typeof p.zoom === 'number' && Number.isFinite(p.zoom) ? Math.min(40, Math.max(0.1, p.zoom)) : 1;
+    const center = Array.isArray(p.center) && p.center.length === 2
+      && (p.center as unknown[]).every(n => typeof n === 'number' && Number.isFinite(n))
+      ? (p.center as [number, number]) : null;
+    const colorTitle = color ? aliasOf(formats, color) : '';
+    const sizeTitle = size ? aliasOf(formats, size) : '';
+    // mercator scale ≈ width·(180/π)/longitude-span-in-degrees. `lngE`/`latE` are the
+    // data extents (computed as signals); an explicit center uses a region-level base
+    // scale. Both multiply by zoom. isValid guards the no-data case.
+    // Split each control into a reactive BASE (from data — frames the default view)
+    // and a settable USER override (`value` + `on` — drag/wheel/buttons). `update`
+    // would clobber interactive sets, so `centerLng`/`centerLat`/`scale` COMBINE them
+    // (user wins). A `center` param seeds the user override; zoom seeds the user scale.
+    const DEG = 57.29578;
+    const centerLngBaseExpr = '(isValid(lngE[0]) ? (lngE[0] + lngE[1]) / 2 : 0)';
+    const centerLatBaseExpr = '(isValid(latE[0]) ? (latE[0] + latE[1]) / 2 : 20)';
+    const scaleBaseExpr = `(isValid(lngE[0]) ? min(width * ${DEG} / max(2, lngE[1] - lngE[0]), height * ${DEG} / max(2, latE[1] - latE[0])) * 0.82 : 120)`;
+    const centerLngUserVal = center ? center[1] : null;
+    const centerLatUserVal = center ? center[0] : null;
+    const scaleUserVal = center ? Math.round(POINT_MAP_REGION_SCALE * zoomVal) : null;
+
+    // Project each row's coordinate(s) to pixel x/y (geopoint); flows add a 2nd point.
+    const geopoints: Record<string, unknown>[] = [{ type: 'geopoint', projection: 'projection', fields: [lng, lat], as: ['x', 'y'] }];
+    if (isFlow) geopoints.push({ type: 'geopoint', projection: 'projection', fields: [lng2, lat2], as: ['x2', 'y2'] });
+
+    const scales: Record<string, unknown>[] = [];
+    if (color) {
+      scales.push(scheme
+        ? { name: 'color', type: 'linear', domain: { data: 'marks_data', field: color }, range: { scheme }, zero: false, nice: true }
+        : { name: 'color', type: 'ordinal', domain: { data: 'marks_data', field: color }, range: 'category' });
+    }
+    if (size) {
+      scales.push({ name: 'size', type: 'linear', domain: { data: 'marks_data', field: size }, range: isFlow ? [1, 8] : [40, 700], zero: !isFlow, nice: true });
+    }
+
+    const legends: Record<string, unknown>[] = [];
+    if (color) legends.push({ [isFlow ? 'stroke' : 'fill']: 'color', title: colorTitle });
+    if (size && !isFlow) legends.push({ size: 'size', title: sizeTitle });
+
+    const tt = (pairs: Array<[string, string]>) =>
+      '{' + pairs.map(([label, field]) => `${JSON.stringify(label)}: datum[${JSON.stringify(field)}]`).join(', ') + '}';
+
+    let dataMark: Record<string, unknown>;
+    if (isFlow) {
+      const pairs: Array<[string, string]> = [
+        [`${aliasOf(formats, lat)} (from)`, lat], [`${aliasOf(formats, lng)} (from)`, lng],
+        [`${aliasOf(formats, lat)} (to)`, String(lat2)], [`${aliasOf(formats, lng)} (to)`, String(lng2)],
+      ];
+      if (color) pairs.push([colorTitle, color]);
+      dataMark = {
+        type: 'rule',
+        from: { data: 'marks_data' },
+        encode: { update: {
+          x: { field: 'x' }, y: { field: 'y' }, x2: { field: 'x2' }, y2: { field: 'y2' },
+          stroke: color ? { scale: 'color', field: color } : { value: '#16a085' },
+          strokeWidth: size ? { scale: 'size', field: size } : { value: 1.5 },
+          strokeOpacity: { value: 0.5 }, strokeCap: { value: 'round' },
+          tooltip: { signal: tt(pairs) },
+        } },
+      };
+    } else {
+      const pairs: Array<[string, string]> = [[aliasOf(formats, lat), lat], [aliasOf(formats, lng), lng]];
+      if (size) pairs.push([sizeTitle, size]);
+      if (color) pairs.push([colorTitle, color]);
+      dataMark = {
+        type: 'symbol',
+        from: { data: 'marks_data' },
+        encode: { update: {
+          x: { field: 'x' }, y: { field: 'y' },
+          size: size ? { scale: 'size', field: size } : { value: 90 },
+          fill: color ? { scale: 'color', field: color } : { value: '#16a085' },
+          fillOpacity: { value: 0.72 }, stroke: { value: 'white' }, strokeWidth: { value: 0.4 },
+          tooltip: { signal: tt(pairs) },
+        } },
+      };
+    }
+
+    return {
+      autosize: { type: 'none' },
+      signals: [
+        { name: 'tx', update: 'width / 2' },
+        { name: 'ty', update: 'height / 2' },
+        { name: 'lngE', update: `extent(pluck(data('main'), ${JSON.stringify(lng)}))` },
+        { name: 'latE', update: `extent(pluck(data('main'), ${JSON.stringify(lat)}))` },
+        // Reactive defaults (frame the data). These `update` freely; the effective
+        // center/scale below only fall back to them when there is no user override.
+        { name: 'centerLngBase', update: centerLngBaseExpr },
+        { name: 'centerLatBase', update: centerLatBaseExpr },
+        { name: 'scaleBase', update: scaleBaseExpr },
+        // Interactive pan (drag) + zoom (wheel). `down`/`center0` anchor the drag;
+        // `delta` is the live pixel drag; the USER signals below are settable (no
+        // `update` to clobber them) and win over the base.
+        { name: 'down', value: null, on: [
+          { events: 'pointerdown', update: 'xy()' },
+          { events: 'pointerup', update: 'null' },
+        ] },
+        { name: 'center0', value: null, on: [
+          { events: 'pointerdown', update: '[centerLng, centerLat]' },
+          { events: 'pointerup', update: 'null' },
+        ] },
+        { name: 'delta', value: [0, 0], on: [
+          { events: 'pointermove', update: 'down ? [x() - down[0], y() - down[1]] : [0, 0]' },
+        ] },
+        { name: 'centerLngUser', value: centerLngUserVal, on: [
+          // 360° spans scale·2π pixels in mercator; drag right → view moves left.
+          { events: { signal: 'delta' }, update: 'down && center0 ? center0[0] - delta[0] * 360 / (scale * 2 * PI) : centerLngUser' },
+        ] },
+        { name: 'centerLatUser', value: centerLatUserVal, on: [
+          { events: { signal: 'delta' }, update: 'down && center0 ? clamp(center0[1] + delta[1] * 360 / (scale * 2 * PI), -80, 80) : centerLatUser' },
+        ] },
+        { name: 'scaleUser', value: scaleUserVal, on: [
+          { events: { type: 'wheel', consume: true }, update: `clamp((scaleUser != null ? scaleUser : scaleBase * ${zoomVal}) * pow(1.0015, -event.deltaY), 40, 4000000)` },
+        ] },
+        // Effective view = user override if present, else the reactive base.
+        { name: 'centerLng', update: 'centerLngUser != null ? centerLngUser : centerLngBase' },
+        { name: 'centerLat', update: 'centerLatUser != null ? centerLatUser : centerLatBase' },
+        { name: 'scale', update: `scaleUser != null ? scaleUser : scaleBase * ${zoomVal}` },
+      ],
+      data: [
+        { name: 'main' },
+        { name: GEO_BOUNDARY_DATASET },
+        { name: 'marks_data', source: 'main', transform: geopoints },
+      ],
+      projections: [{
+        name: 'projection',
+        type: 'mercator',
+        scale: { signal: 'scale' },
+        center: [{ signal: 'centerLng' }, { signal: 'centerLat' }],
+        translate: [{ signal: 'tx' }, { signal: 'ty' }],
+      }],
+      scales,
+      ...(legends.length ? { legends } : {}),
+      marks: [{
+        type: 'group',
+        clip: true,
+        encode: { update: { width: { signal: 'width' }, height: { signal: 'height' } } },
+        marks: [
+          { type: 'shape', from: { data: GEO_BOUNDARY_DATASET }, encode: { update: { fill: { value: 'transparent' }, stroke: { value: 'rgba(139, 148, 158, 0.6)' }, strokeWidth: { value: 0.75 } } }, transform: [{ type: 'geoshape', projection: 'projection' }] },
+          dataMark,
+        ],
+      }],
+    };
+  },
+};
+
 export const VIZ_TEMPLATES: Record<string, VizTemplate> = {
   [funnel.id]: funnel,
   [waterfall.id]: waterfall,
@@ -1049,6 +1244,7 @@ export const VIZ_TEMPLATES: Record<string, VizTemplate> = {
   [singleValue.id]: singleValue,
   [combo.id]: combo,
   [choropleth.id]: choropleth,
+  [pointMap.id]: pointMap,
 };
 
 /** Registry lookup for a recipe source; null for unknown ids. */

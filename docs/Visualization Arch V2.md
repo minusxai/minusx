@@ -530,9 +530,13 @@ This is the only todo list in this document. Work it top to bottom unless a prod
 6. **Finish the small high-value UI gaps.** Finish pivot leaf-column sort/hide/filter plus header formatting.
 7. **Define common visual editing.** Decide and implement the V2 color-control contract, then annotations;
    defer a generic custom-plot surface until those common controls are stable.
-8. **Ship analytic geo recipes.** Choropleth shipped (`minusx/choropleth@1`, us-atlas/world-atlas boundaries).
-   Remaining: point/bubble map (with the vector↔tiles basemap toggle → `slippy-map` for Leaflet), then
-   flow and density — keeping Leaflet restricted to tile basemaps.
+8. **Ship analytic geo recipes.** Shipped: choropleth (`minusx/choropleth@1`) and point/bubble/flow
+   (`minusx/point-map@1`, optional destination → flow lines), on us-atlas/world-atlas boundaries.
+   Remaining: a density recipe; interactive projection pan/zoom + fit-to-region controls; and — only if a
+   real street-level use case appears — a **static-map image** endpoint (NOT Leaflet/tiles-in-browser, to
+   keep headless export trivial). Decision (2026-07-13): no Leaflet/deck.gl — vega vector maps keep one
+   render pipeline + clean headless image export; "map feel" (zoom/bbox/recenter) is projection config, not
+   tiles.
 9. **Land the shared authoring contract.** Add envelope-level `fieldMeta`, the builder source, deterministic
    derived artifacts, and one-way detach.
 10. **Make recipes publishable.** Replace trusted TypeScript recipe builders with the declarative contract, add
@@ -561,7 +565,8 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
 | table, pivot | Shipped | DOM tier with shared grid styling, formats, conditional formats, and export |
 | heatmap | Shipped | Native Vega-Lite rect spec and V2 transform |
 | choropleth | Shipped | `minusx/choropleth@1` — layered geoshape+lookup recipe; boundary injected from the named-asset registry, value joined by region name |
-| point / flow / density geo | Remaining (§21.8) | Vega/Vega-Lite recipes; Leaflet stays tile-only for `slippy-map` |
+| point / bubble / flow | Shipped | `minusx/point-map@1` — circle marks (bubbles when `size` bound) over a boundary backdrop; optional destination coords → `rule` flow lines |
+| density geo, tile basemaps | Remaining (§21.8) | Vega density recipe; raster tiles deferred (static-map image if ever needed — no Leaflet) |
 
 ### ✅ Verified (as of 2026-07-11)
 
@@ -683,6 +688,31 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
   the value-colored regions (lookup + `isValid` filter). Inline validation accepts the recipe's declared
   boundary dataset name (allowed alongside `main`) and skips field-ref checks for recipe specs (boundary
   `properties.name` isn't a query column).
+- **Point map (2026-07-13, browser-verified)**: `minusx/point-map@1` plots coordinate rows over a boundary
+  backdrop (backdrop geoshape beneath `main` symbol marks). `size` bound → bubbles, `color` → category
+  palette (or a sequential ramp with `colorScale`), and binding BOTH `lat2`/`lng2` switches the marks to
+  `rule` flow lines (one recipe, no mode toggle). Panel: Points icon (`LuMapPin`), Fields zones
+  (Latitude/Longitude/End lat/lng/Size/Color) with lat/lng auto-inferred by column name on type-switch,
+  Settings Map + Color-scale + **Center (lat,lng)** + Zoom.
+- **Point map is a RECENTERABLE MERCATOR (not albersUsa)** driven by `scale` + `center` + `translate`
+  signals — the canonical vega [Zoomable World Map] pattern. This pivot was empirically forced: vega's
+  projection `fit` only frames real *source* geometry (fit-to-a-region-feature works; fit to a
+  computed/inline bbox does NOT, on any projection), and a composite projection can't recenter/pan.
+  Proven headless: centering on `[-119, 37]` lands the point at exactly `(300, 200)`. Trade-off: the US
+  point map loses albersUsa's AK/HI insets (fine — a zoomable point map can't use a composite);
+  **choropleth keeps albersUsa** (static overview). Framing = geographic `center [lat,lng]` + `zoom`
+  (not fit-by-name, which breaks across basemaps — there is no county named "California"); no `center`
+  → the projection auto-frames the DATA extent. Each control is a reactive BASE (from data) + a settable
+  USER override (`value`+`on`) — `update` would clobber interactive sets — combined so user wins.
+- **Interactive pan/zoom + persist (Phase 2/3)**: drag pans (pointer delta → `centerLng/LatUser` via the
+  pixel↦degree conversion), wheel zooms (`scaleUser`), and Google-Maps-style **+/− buttons** (`VegaChart`
+  nudges `scaleUser`). After a real interaction (never on initial render), `VegaChart` reads back
+  `centerLng/centerLat/scale` (debounced) and persists `center`+`zoom` via `onViewChange` →
+  `setRecipeParam` → `onVizChange`, so Save/reload restores the exact view (`POINT_MAP_REGION_SCALE`
+  maps scale↔zoom). Verified in-browser: + zooms, "Review 1 change" registers, save persists.
+- **us-counties basemap**: `us-atlas-counties-10m.json` (3231 named counties) as a "US (Counties)"
+  basemap — a finer point-map backdrop (county *choropleth* deferred: county names aren't unique, needs
+  FIPS). Center+zoom holds across states↔counties because it's geographic.
 
 **Data handling**
 - 10k+ row result — render time acceptable

@@ -20,6 +20,7 @@ import {
   LuRadar,
   LuMapPinned,
   LuMap,
+  LuMapPin,
   LuHash,
   LuChartBar,
   LuChartCandlestick,
@@ -62,7 +63,7 @@ const BrickWallFireIcon = ({ size = 16 }: { size?: number }) => (
  * frozen until the ECharts pipeline is deleted). V2-only entries render solely
  * when `includeV2Only` is set (the Vega panel); classic surfaces never see them.
  */
-export type SelectableVizType = VizSettings['type'] | 'heatmap' | 'boxplot' | 'histogram' | 'choropleth' | 'custom';
+export type SelectableVizType = VizSettings['type'] | 'heatmap' | 'boxplot' | 'histogram' | 'choropleth' | 'point_map' | 'custom';
 
 interface VizTypeOption {
   type: SelectableVizType;
@@ -118,6 +119,8 @@ const ALL_VIZ_GROUPS: VizTypeGroup[] = [
       // The legacy combined 'geo' entry stays as the disabled coverage marker for the
       // coordinate maps (points/lines/tiles) still to migrate.
       { type: 'choropleth', icon: <LuMap size={16} />, label: 'Choropleth', v2Only: true },
+      // Coordinate map: points/bubbles, + flows when a destination is bound.
+      { type: 'point_map', icon: <LuMapPin size={16} />, label: 'Points', v2Only: true },
       { type: 'geo', icon: <LuMapPinned size={16} />, label: 'Geo' },
       {
         type: 'custom', icon: <LuBraces size={16} />, label: 'Custom', v2Only: true,

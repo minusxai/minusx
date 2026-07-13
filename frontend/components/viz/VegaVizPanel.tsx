@@ -317,38 +317,85 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
               Bars use the left scale; the line uses the right. Bind Color / Split, rename, and format in Fields.
             </Text>
           </Box>
-        ) : isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/choropleth@1' ? (
-          <Box display="flex" flexDirection="column" gap={3} py={1}>
-            <Box>
-              <Text fontSize="xs" color="fg.muted" mb={1}>Map</Text>
-              <NativeSelect.Root size="sm">
-                <NativeSelect.Field
-                  aria-label="Choropleth map"
-                  value={resolveGeoAsset(getRecipeParams(envelope).mapName)}
-                  onChange={(e) => onVizChange(setRecipeParam(envelope, 'mapName', e.currentTarget.value))}
-                >
-                  {GEO_ASSET_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </NativeSelect.Field>
-                <NativeSelect.Indicator />
-              </NativeSelect.Root>
-            </Box>
-            <Box>
-              <Text fontSize="xs" color="fg.muted" mb={1}>Color scale</Text>
-              <NativeSelect.Root size="sm">
-                <NativeSelect.Field
-                  aria-label="Choropleth color scale"
-                  value={typeof getRecipeParams(envelope).colorScale === 'string' ? String(getRecipeParams(envelope).colorScale) : 'green'}
-                  onChange={(e) => onVizChange(setRecipeParam(envelope, 'colorScale', e.currentTarget.value))}
-                >
-                  {CHOROPLETH_SCALE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </NativeSelect.Field>
-                <NativeSelect.Indicator />
-              </NativeSelect.Root>
-            </Box>
-            <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
-              Bind Region + Value in Fields. Region names must match the map (e.g. &quot;California&quot;, &quot;Tanzania&quot;).
-            </Text>
-          </Box>
+        ) : isRecipe && ['minusx/choropleth@1', 'minusx/point-map@1'].includes(String((envelope.source as unknown as Record<string, unknown>).recipe)) ? (
+          (() => {
+            const isPoints = (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/point-map@1';
+            const params = getRecipeParams(envelope);
+            // Point maps default color to a category palette (colorScale unset); the
+            // choropleth is always a sequential ramp (default green).
+            const scaleValue = typeof params.colorScale === 'string' ? String(params.colorScale) : (isPoints ? 'category' : 'green');
+            const scaleOptions = isPoints ? [{ value: 'category', label: 'By category' }, ...CHOROPLETH_SCALE_OPTIONS] : CHOROPLETH_SCALE_OPTIONS;
+            return (
+              <Box display="flex" flexDirection="column" gap={3} py={1}>
+                <Box>
+                  <Text fontSize="xs" color="fg.muted" mb={1}>Map</Text>
+                  <NativeSelect.Root size="sm">
+                    <NativeSelect.Field
+                      aria-label="Map"
+                      value={resolveGeoAsset(params.mapName)}
+                      onChange={(e) => onVizChange(setRecipeParam(envelope, 'mapName', e.currentTarget.value))}
+                    >
+                      {GEO_ASSET_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </NativeSelect.Field>
+                    <NativeSelect.Indicator />
+                  </NativeSelect.Root>
+                </Box>
+                <Box>
+                  <Text fontSize="xs" color="fg.muted" mb={1}>Color scale</Text>
+                  <NativeSelect.Root size="sm">
+                    <NativeSelect.Field
+                      aria-label="Color scale"
+                      value={scaleValue}
+                      onChange={(e) => onVizChange(setRecipeParam(envelope, 'colorScale', e.currentTarget.value === 'category' ? undefined : e.currentTarget.value))}
+                    >
+                      {scaleOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </NativeSelect.Field>
+                    <NativeSelect.Indicator />
+                  </NativeSelect.Root>
+                </Box>
+                {isPoints && (
+                  <>
+                    <Box>
+                      <Text fontSize="xs" color="fg.muted" mb={1}>Center (lat, lng)</Text>
+                      <Input
+                        size="sm"
+                        aria-label="Center lat lng"
+                        placeholder="e.g. 37, -119 — centers the map"
+                        key={JSON.stringify(params.center ?? '')}
+                        defaultValue={Array.isArray(params.center) ? (params.center as number[]).join(', ') : ''}
+                        onBlur={(e) => {
+                          const parts = e.currentTarget.value.split(',').map(s => parseFloat(s.trim()));
+                          const valid = parts.length === 2 && parts.every(n => Number.isFinite(n));
+                          onVizChange(setRecipeParam(envelope, 'center', valid ? parts : undefined));
+                        }}
+                      />
+                    </Box>
+                    <Box>
+                      <Text fontSize="xs" color="fg.muted" mb={1}>Zoom</Text>
+                      <Input
+                        size="sm"
+                        type="number"
+                        aria-label="Zoom"
+                        step="0.1"
+                        min="0.5"
+                        max="10"
+                        value={typeof params.zoom === 'number' ? String(params.zoom) : '1'}
+                        onChange={(e) => {
+                          const v = parseFloat(e.currentTarget.value);
+                          onVizChange(setRecipeParam(envelope, 'zoom', Number.isFinite(v) && v !== 1 ? v : undefined));
+                        }}
+                      />
+                    </Box>
+                  </>
+                )}
+                <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+                  {isPoints
+                    ? 'Bind Latitude + Longitude in Fields. Add Size for bubbles, Color to group, or End lat/lng for flows. Center + Zoom frame the map geographically (no SQL filter needed).'
+                    : 'Bind Region + Value in Fields. Region names must match the map (e.g. "California", "Tanzania").'}
+                </Text>
+              </Box>
+            );
+          })()
         ) : isRecipe ? (
           <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
             This chart is generated from the {String((envelope.source as unknown as Record<string, unknown>).recipe)} recipe —

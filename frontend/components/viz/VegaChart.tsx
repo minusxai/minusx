@@ -9,15 +9,23 @@
  * resizes update the width/height signals; every view is finalized on unmount.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Box, Text } from '@chakra-ui/react';
+import { Box, Text, IconButton, VStack } from '@chakra-ui/react';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, injectNamedAssets } from '@/lib/viz/render-vega';
+import { POINT_MAP_REGION_SCALE } from '@/lib/viz/viz-templates';
 
 export interface VegaChartProps {
   envelope: VizEnvelope;
   rows: Record<string, unknown>[];
   colorMode: 'light' | 'dark';
+  /**
+   * Fired after the user pans/zooms an interactive map (point_map): the settled
+   * geographic view as `{center: [lat, lng], zoom}`. The container persists it to
+   * the recipe params so Save/reload restores the view. Debounced; only fires on
+   * real interaction (never on initial render).
+   */
+  onViewChange?: (view: { center: [number, number]; zoom: number }) => void;
 }
 
 // Vega's width/height signals size the data rectangle; axes/legends draw in the
@@ -49,7 +57,10 @@ function promoteFontAttrs(root: HTMLElement): void {
   }
 }
 
-export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
+export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChartProps) {
+  // Latest callback without retriggering the build effect.
+  const onViewChangeRef = useRef(onViewChange);
+  useEffect(() => { onViewChangeRef.current = onViewChange; });
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<View | null>(null);
   const rowsRef = useRef(rows);
@@ -114,6 +125,35 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
         if (cancelled) return;
         await view.runAsync();
         promoteFontAttrs(el);
+        // Interactive point-map: persist the settled center/zoom after a real
+        // pan/drag or wheel-zoom (never on initial render). The recipe drives the
+        // projection off centerLng/centerLat/scale signals, so we read them back.
+        const src = envelope.source as unknown as { kind?: string; recipe?: string };
+        if (src?.kind === 'recipe' && src?.recipe === 'minusx/point-map@1') {
+          const v = view; // non-null here; keep it out of the nullable closure capture
+          let interacted = false;
+          let debounce: ReturnType<typeof setTimeout> | undefined;
+          v.addEventListener('pointerdown', () => { interacted = true; });
+          v.addEventListener('wheel', () => { interacted = true; });
+          const persist = () => {
+            if (!interacted) return;
+            clearTimeout(debounce);
+            debounce = setTimeout(() => {
+              const lng = v.signal('centerLng') as number;
+              const lat = v.signal('centerLat') as number;
+              const scale = v.signal('scale') as number;
+              if ([lng, lat, scale].every(n => typeof n === 'number' && Number.isFinite(n))) {
+                onViewChangeRef.current?.({
+                  center: [Math.round(lat * 1000) / 1000, Math.round(lng * 1000) / 1000],
+                  zoom: Math.round((scale / POINT_MAP_REGION_SCALE) * 100) / 100,
+                });
+              }
+            }, 500);
+          };
+          v.addSignalListener('centerLng', persist);
+          v.addSignalListener('centerLat', persist);
+          v.addSignalListener('scale', persist);
+        }
         if (!cancelled) setError(null);
         // The container may not have been laid out when the plan above ran (a
         // dashboard tile mounts at ~0 width; fonts.ready also loses the race
@@ -170,6 +210,27 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
     return () => ro.disconnect();
   }, [replanLegendWrap]);
 
+  // Interactive point maps get Google-Maps-style +/- zoom buttons (the drag/wheel
+  // signals also drive `scale`; the buttons nudge it and persist the new view).
+  const isPointMap = (envelope.source as unknown as { recipe?: string })?.recipe === 'minusx/point-map@1';
+  const zoomBy = useCallback((factor: number) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const cur = view.signal('scale') as number; // effective scale
+    if (!Number.isFinite(cur)) return;
+    const next = Math.max(40, Math.min(4_000_000, cur * factor));
+    view.signal('scaleUser', next); // the settable override (scale is derived)
+    view.runAsync().catch(() => { /* race on unmount */ });
+    const lng = view.signal('centerLng') as number;
+    const lat = view.signal('centerLat') as number;
+    if (Number.isFinite(lng) && Number.isFinite(lat)) {
+      onViewChangeRef.current?.({
+        center: [Math.round(lat * 1000) / 1000, Math.round(lng * 1000) / 1000],
+        zoom: Math.round((next / POINT_MAP_REGION_SCALE) * 100) / 100,
+      });
+    }
+  }, []);
+
   // The container must ALWAYS stay mounted: the build effect needs containerRef on
   // every envelope change. Unmounting it on error made error states permanent (the
   // effect bailed on a null ref forever). Errors overlay instead.
@@ -190,6 +251,16 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
         overflow="hidden"
         css={{ '& .vega-embed, & svg': { display: 'block' } }}
       />
+      {isPointMap && !error && (
+        <VStack position="absolute" bottom={2} right={2} zIndex={2} gap="1px" borderRadius="md" overflow="hidden" boxShadow="sm">
+          <IconButton aria-label="Zoom in" size="xs" variant="solid" bg="bg.panel" color="fg.default" borderRadius={0} onClick={() => zoomBy(1.5)}>
+            <Text fontSize="md" lineHeight="1">+</Text>
+          </IconButton>
+          <IconButton aria-label="Zoom out" size="xs" variant="solid" bg="bg.panel" color="fg.default" borderRadius={0} onClick={() => zoomBy(1 / 1.5)}>
+            <Text fontSize="md" lineHeight="1">−</Text>
+          </IconButton>
+        </VStack>
+      )}
     </Box>
   );
 }

@@ -21,6 +21,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
+import { setRecipeParam } from '@/lib/viz/encoding-edit';
 
 // Viz V2 (docs/Visualization Arch V2.md): lazy chunk — vega/vega-lite only load on
 // pages that actually render a V2 envelope (same pattern as GeoPlot/Leaflet).
@@ -478,6 +479,9 @@ function QuestionVisualizationInner({
                       envelope={currentState.viz!}
                       rows={data.rows}
                       colorMode={colorMode}
+                      onViewChange={config.editable && onVizChange
+                        ? (v) => onVizChange(setRecipeParam(setRecipeParam(currentState.viz!, 'center', v.center), 'zoom', v.zoom === 1 ? undefined : v.zoom))
+                        : undefined}
                     />
                   </Box>
                 )}

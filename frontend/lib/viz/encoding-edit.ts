@@ -168,10 +168,10 @@ export function setStacked(envelope: VizEnvelope, stacked: boolean): VizEnvelope
 // `pie` is an encoding TRANSFORM: a naive mark swap to `arc` renders garbage because
 // arcs read theta/color, not x/y.
 
-export const V2_SUPPORTED_VIZ_TYPES = ['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'combo', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot', 'trend', 'single_value', 'histogram', 'choropleth'] as const;
+export const V2_SUPPORTED_VIZ_TYPES = ['table', 'pivot', 'bar', 'line', 'area', 'scatter', 'pie', 'row', 'combo', 'funnel', 'waterfall', 'radar', 'heatmap', 'boxplot', 'trend', 'single_value', 'histogram', 'choropleth', 'point_map'] as const;
 export type V2VizType = (typeof V2_SUPPORTED_VIZ_TYPES)[number];
 
-const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie' | 'heatmap' | 'combo' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'histogram' | 'choropleth'>, string> = {
+const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie' | 'heatmap' | 'combo' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'histogram' | 'choropleth' | 'point_map'>, string> = {
   bar: 'bar', line: 'line', area: 'area', scatter: 'point', boxplot: 'boxplot',
 };
 
@@ -203,7 +203,7 @@ const withMark = (spec: Record<string, unknown>, type: string): void => {
 };
 
 /** Native-spec viz types (recipes and the DOM table route through setEnvelopeVizType instead). */
-export type SpecVizType = Exclude<V2VizType, 'table' | 'pivot' | 'combo' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'choropleth'>;
+export type SpecVizType = Exclude<V2VizType, 'table' | 'pivot' | 'combo' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'choropleth' | 'point_map'>;
 
 /** Switch a unit spec's viz type, transforming encodings where the shapes differ. */
 export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelope {
@@ -605,7 +605,17 @@ const TEMPLATE_FOR_TYPE: Partial<Record<V2VizType, string>> = {
   trend: 'minusx/trend@1',
   single_value: 'minusx/single-value@1',
   choropleth: 'minusx/choropleth@1',
+  point_map: 'minusx/point-map@1',
 };
+
+/** Guess the lat/lng columns for a point map: name-matched first, else the first two numbers. */
+function inferLatLng(columns?: Array<{ name: string; kind: VizColumnKind }>): { lat: string | null; lng: string | null } {
+  const nums = (columns ?? []).filter(c => c.kind === 'quantitative').map(c => c.name);
+  const byName = (re: RegExp) => nums.find(n => re.test(n));
+  const lat = byName(/^lat|latitude/i) ?? nums[0] ?? null;
+  const lng = byName(/^(lng|lon|long)|longitude/i) ?? nums.find(n => n !== lat) ?? null;
+  return { lat, lng };
+}
 
 /**
  * Envelope-level type switch. Recipe targets produce a REFERENCE source (bindings
@@ -666,6 +676,18 @@ export function setEnvelopeVizType(
       // Keep the recipe renderable with a one-measure result; the Line zone remains
       // replaceable as soon as another measure is available.
       if (measures[1] ?? measures[0]) bindings.line = measures[1] ?? measures[0];
+      return {
+        version: 2,
+        source: { kind: 'recipe', recipe: templateId, bindings, params: null },
+      } as unknown as VizEnvelope;
+    }
+    if (type === 'point_map') {
+      // lat/lng are two DISTINCT numbers — the generic value/category split can't
+      // infer them; guess by name (else first two numeric columns). Destination /
+      // size / color stay unbound (the user adds them in Fields).
+      const { lat, lng } = inferLatLng(columns);
+      if (lat) bindings.lat = lat;
+      if (lng) bindings.lng = lng;
       return {
         version: 2,
         source: { kind: 'recipe', recipe: templateId, bindings, params: null },
