@@ -6,6 +6,8 @@ import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, mergeConfig } from '@/lib/br
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { Mode, DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { validateOrgConfig } from '@/lib/validation/config-validators';
+import { extractConfigSecrets } from '@/lib/secrets/config-secrets.server';
+import { restoreRedactedConfigSecrets } from '@/lib/secrets/config-secret-specs';
 export { validateOrgConfig } from '@/lib/validation/config-validators';
 
 export interface GetConfigsResult {
@@ -55,7 +57,13 @@ class ConfigsDataLayerServer {
       existingContent = existing.content as Partial<OrgConfig>;
     }
 
-    const mergedContent = mergePartialConfigs(existingContent, incoming);
+    // Secrets boundary: restore any round-tripped redacted placeholders from the
+    // stored doc, then move raw credential values into the server-only secrets
+    // table — the persisted document only ever holds @SECRETS/… refs.
+    const restored = restoreRedactedConfigSecrets(incoming, existingContent);
+    const extracted = await extractConfigSecrets(user.mode, restored);
+
+    const mergedContent = mergePartialConfigs(existingContent, extracted);
 
     let id: number;
     if (existing) {
@@ -131,6 +139,8 @@ export async function getRawConfig(mode: Mode = DEFAULT_MODE): Promise<Partial<O
  */
 export async function saveRawConfig(mode: Mode, content: Partial<OrgConfig>): Promise<void> {
   const configPath = resolvePath(mode, '/configs/config');
+  // Secrets boundary: raw credentials never persist in the document (see saveConfig).
+  content = await extractConfigSecrets(mode, content);
   const existing = await DocumentDB.getByPath(configPath);
   if (existing) {
     await DocumentDB.update(existing.id, existing.name, configPath, content as any, [], hashContent({ id: existing.id, content }));

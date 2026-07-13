@@ -3,6 +3,7 @@ import { withAuth } from '@/lib/http/with-auth';
 import { ApiErrors, handleApiError, successResponse } from '@/lib/http/api-responses';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { getConfigsForMode } from '@/lib/data/configs.server';
+import { resolveConfigSecrets } from '@/lib/secrets/config-secrets.server';
 import { postSlackMessage } from '@/lib/integrations/slack/api';
 import type { SlackBotConfig } from '@/lib/types';
 
@@ -54,7 +55,9 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const appName = config.branding.agentName || 'MinusX';
     const text = body.text?.trim() ||
       `:white_check_mark: Test message from ${appName} to ${channel.name}.`;
-    const result = await postSlackMessage(bot.bot_token, {
+    // bot_token is a @SECRETS/… ref in the stored config — resolve server-side.
+    const resolvedBot = await resolveConfigSecrets(bot);
+    const result = await postSlackMessage(resolvedBot.bot_token, {
       channel: channel.channel_id,
       text,
     });
