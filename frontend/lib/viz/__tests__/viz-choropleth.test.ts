@@ -14,49 +14,58 @@ const source = (bindings: Record<string, string>, params?: Record<string, unknow
   columnFormats: null,
 });
 
-/** Find the layer that carries the lookup transform (the data-bound choropleth layer). */
-function lookupLayer(spec: Record<string, unknown>): Record<string, unknown> {
-  const layers = spec.layer as Record<string, unknown>[];
-  const found = layers.find(l => Array.isArray((l as { transform?: unknown }).transform));
-  if (!found) throw new Error('no layer with a transform');
-  return found;
-}
+type Rec = Record<string, unknown>;
+const dataset = (spec: Rec, name: string): Rec =>
+  (spec.data as Rec[]).find(d => d.name === name)!;
+const projection = (spec: Rec): Rec => (spec.projections as Rec[])[0];
+// Marks nest inside a clip group — search recursively.
+const marksOfType = (spec: Rec, type: string): Rec[] => {
+  const out: Rec[] = [];
+  const walk = (marks: Rec[] | undefined) => {
+    for (const m of marks ?? []) {
+      if (m.type === type) out.push(m);
+      if (m.type === 'group') walk(m.marks as Rec[]);
+    }
+  };
+  walk(spec.marks as Rec[]);
+  return out;
+};
 
 describe('minusx/choropleth@1', () => {
-  it('materializes a layered geoshape+lookup vega-lite spec', () => {
+  it('materializes a native-Vega geoshape+lookup spec (backdrop + value-colored regions)', () => {
     const result = materializeRecipe(source({ region: 'state', value: 'revenue' }, { mapName: 'us-states' }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.engine).toBe('vega-lite');
+    expect(result.engine).toBe('vega');
 
     // Projection frames the boundary set.
-    expect((result.spec.projection as { type?: string }).type).toBe('albersUsa');
+    expect(projection(result.spec as Rec).type).toBe('albersUsa');
 
-    // Two layers: a background outline of every region + the value-colored choropleth.
-    const layers = result.spec.layer as Record<string, unknown>[];
-    expect(Array.isArray(layers)).toBe(true);
-    expect(layers.length).toBe(2);
-
-    // Both layers render the boundary geometry (not `main`).
-    for (const layer of layers) {
-      expect((layer.data as { name?: string }).name).toBe(GEO_BOUNDARY_DATASET);
-      const mark = layer.mark as { type?: string };
-      expect(mark.type).toBe('geoshape');
+    // Two geoshape marks: a backdrop outline of every region + the value-colored choropleth.
+    const shapes = marksOfType(result.spec as Rec, 'shape');
+    expect(shapes.length).toBe(2);
+    for (const shape of shapes) {
+      expect((shape.transform as Rec[])[0].type).toBe('geoshape');
     }
+    // Backdrop renders EVERY boundary region; choropleth renders only regions WITH data.
+    const [backdrop, choro] = shapes;
+    expect((backdrop.from as { data?: string }).data).toBe(GEO_BOUNDARY_DATASET);
+    expect((choro.from as { data?: string }).data).toBe('choro');
 
-    // The choropleth layer looks the value up from the query result by region name.
-    const layer = lookupLayer(result.spec);
-    const lookup = (layer.transform as Record<string, unknown>[]).find(t => 'lookup' in t)!;
-    expect(lookup.lookup).toBe('properties.name');
-    const from = lookup.from as { data: { name: string }; key: string; fields: string[] };
-    expect(from.data.name).toBe('main');
-    expect(from.key).toBe('state');
-    expect(from.fields).toContain('revenue');
+    // The choropleth dataset looks the value up from the query result by region name.
+    const choroData = dataset(result.spec as Rec, 'choro');
+    expect((choroData.source as string)).toBe(GEO_BOUNDARY_DATASET);
+    const lookup = (choroData.transform as Rec[]).find(t => t.type === 'lookup')!;
+    expect(lookup.from).toBe('main');
+    expect(lookup.key).toBe('state');
+    expect(lookup.values).toContain('revenue');
 
-    // Fill encodes the looked-up value as a quantitative color.
-    const color = (layer.encoding as Record<string, Record<string, unknown>>).color;
-    expect(color.field).toBe('revenue');
-    expect(color.type).toBe('quantitative');
+    // Fill encodes the looked-up value through a linear color scale.
+    const fill = ((choro.encode as Rec).update as Rec).fill as Rec;
+    expect(fill.scale).toBe('color');
+    expect(fill.field).toBe('revenue');
+    const colorScale = (result.spec.scales as Rec[]).find(s => s.name === 'color')!;
+    expect(colorScale.type).toBe('linear');
   });
 
   it('declares its boundary asset for renderer injection', () => {
@@ -71,20 +80,20 @@ describe('minusx/choropleth@1', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.assets).toEqual({ [GEO_BOUNDARY_DATASET]: 'us-states' });
-    expect((result.spec.projection as { type?: string }).type).toBe('albersUsa');
+    expect(projection(result.spec as Rec).type).toBe('albersUsa');
   });
 
   it('maps mapName to the matching projection', () => {
     const world = materializeRecipe(source({ region: 'country', value: 'gdp' }, { mapName: 'world' }));
     expect(world.ok).toBe(true);
     if (!world.ok) return;
-    expect((world.spec.projection as { type?: string }).type).toBe('equalEarth');
+    expect(projection(world.spec as Rec).type).toBe('equalEarth');
     expect(world.assets).toEqual({ [GEO_BOUNDARY_DATASET]: 'world' });
 
     const india = materializeRecipe(source({ region: 'st_nm', value: 'pop' }, { mapName: 'india-states' }));
     expect(india.ok).toBe(true);
     if (!india.ok) return;
-    expect((india.spec.projection as { type?: string }).type).toBe('mercator');
+    expect(projection(india.spec as Rec).type).toBe('mercator');
   });
 
   it('falls back to the default boundary for an unknown mapName', () => {

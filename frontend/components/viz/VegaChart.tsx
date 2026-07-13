@@ -13,19 +13,35 @@ import { Box, Text, IconButton, VStack } from '@chakra-ui/react';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, injectNamedAssets } from '@/lib/viz/render-vega';
-import { POINT_MAP_REGION_SCALE } from '@/lib/viz/viz-templates';
+
+// Recipes that render an interactive map (drag pan, wheel zoom, +/- buttons) and
+// expose an `mxViewParams` signal for persistence.
+const POINT_MAP_RECIPE = 'minusx/point-map@1';
+const CHOROPLETH_RECIPE = 'minusx/choropleth@1';
+const recipeOf = (env: VizEnvelope): string | undefined => (env.source as unknown as { recipe?: string })?.recipe;
+const isInteractiveMap = (env: VizEnvelope): boolean =>
+  recipeOf(env) === POINT_MAP_RECIPE || recipeOf(env) === CHOROPLETH_RECIPE;
+const hasSignal = (view: View, name: string): boolean => {
+  try { view.signal(name); return true; } catch { return false; }
+};
+/** Round numeric view params (and numeric array members) for a small, stable payload. */
+const roundViewParams = (params: Record<string, unknown>): Record<string, unknown> => {
+  const r = (n: unknown) => (typeof n === 'number' ? Math.round(n * 1000) / 1000 : n);
+  return Object.fromEntries(Object.entries(params).map(([k, v]) => [k, Array.isArray(v) ? v.map(r) : r(v)]));
+};
 
 export interface VegaChartProps {
   envelope: VizEnvelope;
   rows: Record<string, unknown>[];
   colorMode: 'light' | 'dark';
   /**
-   * Fired after the user pans/zooms an interactive map (point_map): the settled
-   * geographic view as `{center: [lat, lng], zoom}`. The container persists it to
-   * the recipe params so Save/reload restores the view. Debounced; only fires on
-   * real interaction (never on initial render).
+   * Fired after the user pans/zooms an interactive map (point_map / choropleth): the
+   * settled view state as recipe params (point_map → `{center, zoom}`; choropleth →
+   * `{zoom, panX, panY}`), read from the recipe's `mxViewParams` signal. The container
+   * persists each via setRecipeParam so Save/reload restores the view. Debounced; only
+   * fires on real interaction (never on initial render).
    */
-  onViewChange?: (view: { center: [number, number]; zoom: number }) => void;
+  onViewChange?: (params: Record<string, unknown>) => void;
 }
 
 // Vega's width/height signals size the data rectangle; axes/legends draw in the
@@ -125,11 +141,10 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         if (cancelled) return;
         await view.runAsync();
         promoteFontAttrs(el);
-        // Interactive point-map: persist the settled center/zoom after a real
-        // pan/drag or wheel-zoom (never on initial render). The recipe drives the
-        // projection off centerLng/centerLat/scale signals, so we read them back.
-        const src = envelope.source as unknown as { kind?: string; recipe?: string };
-        if (src?.kind === 'recipe' && src?.recipe === 'minusx/point-map@1') {
+        // Interactive maps (point_map / choropleth) expose an `mxViewParams` signal —
+        // the settled view state as recipe params. Persist it after a real pan/wheel
+        // (never on initial render), debounced, rounded.
+        if (isInteractiveMap(envelope) && hasSignal(view, 'mxViewParams')) {
           const v = view; // non-null here; keep it out of the nullable closure capture
           let interacted = false;
           let debounce: ReturnType<typeof setTimeout> | undefined;
@@ -139,20 +154,11 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
             if (!interacted) return;
             clearTimeout(debounce);
             debounce = setTimeout(() => {
-              const lng = v.signal('centerLng') as number;
-              const lat = v.signal('centerLat') as number;
-              const scale = v.signal('scale') as number;
-              if ([lng, lat, scale].every(n => typeof n === 'number' && Number.isFinite(n))) {
-                onViewChangeRef.current?.({
-                  center: [Math.round(lat * 1000) / 1000, Math.round(lng * 1000) / 1000],
-                  zoom: Math.round((scale / POINT_MAP_REGION_SCALE) * 100) / 100,
-                });
-              }
+              const params = v.signal('mxViewParams') as Record<string, unknown> | undefined;
+              if (params) onViewChangeRef.current?.(roundViewParams(params));
             }, 500);
           };
-          v.addSignalListener('centerLng', persist);
-          v.addSignalListener('centerLat', persist);
-          v.addSignalListener('scale', persist);
+          v.addSignalListener('mxViewParams', persist);
         }
         if (!cancelled) setError(null);
         // The container may not have been laid out when the plan above ran (a
@@ -210,26 +216,29 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     return () => ro.disconnect();
   }, [replanLegendWrap]);
 
-  // Interactive point maps get Google-Maps-style +/- zoom buttons (the drag/wheel
-  // signals also drive `scale`; the buttons nudge it and persist the new view).
-  const isPointMap = (envelope.source as unknown as { recipe?: string })?.recipe === 'minusx/point-map@1';
+  // Interactive maps get Google-Maps-style +/- zoom buttons. point_map's zoom is an
+  // absolute `scaleUser`; choropleth's is a `zoomUser` multiplier — nudge the right
+  // override, then persist the settled view via `mxViewParams`.
+  const showZoomButtons = isInteractiveMap(envelope);
   const zoomBy = useCallback((factor: number) => {
     const view = viewRef.current;
     if (!view) return;
-    const cur = view.signal('scale') as number; // effective scale
-    if (!Number.isFinite(cur)) return;
-    const next = Math.max(40, Math.min(4_000_000, cur * factor));
-    view.signal('scaleUser', next); // the settable override (scale is derived)
-    view.runAsync().catch(() => { /* race on unmount */ });
-    const lng = view.signal('centerLng') as number;
-    const lat = view.signal('centerLat') as number;
-    if (Number.isFinite(lng) && Number.isFinite(lat)) {
-      onViewChangeRef.current?.({
-        center: [Math.round(lat * 1000) / 1000, Math.round(lng * 1000) / 1000],
-        zoom: Math.round((next / POINT_MAP_REGION_SCALE) * 100) / 100,
-      });
+    const recipe = recipeOf(envelope);
+    if (recipe === POINT_MAP_RECIPE) {
+      const cur = view.signal('scale') as number;
+      if (!Number.isFinite(cur)) return;
+      view.signal('scaleUser', Math.max(40, Math.min(4_000_000, cur * factor)));
+    } else if (recipe === CHOROPLETH_RECIPE) {
+      const cur = view.signal('zoom') as number;
+      if (!Number.isFinite(cur)) return;
+      view.signal('zoomUser', Math.max(0.2, Math.min(40, cur * factor)));
+    } else {
+      return;
     }
-  }, []);
+    view.runAsync().catch(() => { /* race on unmount */ });
+    const params = view.signal('mxViewParams') as Record<string, unknown> | undefined;
+    if (params) onViewChangeRef.current?.(roundViewParams(params));
+  }, [envelope]);
 
   // The container must ALWAYS stay mounted: the build effect needs containerRef on
   // every envelope change. Unmounting it on error made error states permanent (the
@@ -251,7 +260,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         overflow="hidden"
         css={{ '& .vega-embed, & svg': { display: 'block' } }}
       />
-      {isPointMap && !error && (
+      {showZoomButtons && !error && (
         <VStack position="absolute" bottom={2} right={2} zIndex={2} gap="1px" borderRadius="md" overflow="hidden" boxShadow="sm">
           <IconButton aria-label="Zoom in" size="xs" variant="solid" bg="bg.panel" color="fg.default" borderRadius={0} onClick={() => zoomBy(1.5)}>
             <Text fontSize="md" lineHeight="1">+</Text>

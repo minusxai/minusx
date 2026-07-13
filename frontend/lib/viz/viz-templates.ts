@@ -983,7 +983,7 @@ const CHOROPLETH_SCHEMES: Record<string, string> = {
 const choropleth: VizTemplate = {
   id: 'minusx/choropleth@1',
   vizType: 'choropleth',
-  engine: 'vega-lite',
+  engine: 'vega',
   bindings: [
     { name: 'region', label: 'Region', accepts: ['nominal'] },
     { name: 'value', label: 'Value', accepts: ['quantitative'] },
@@ -1002,41 +1002,65 @@ const choropleth: VizTemplate = {
       : 'greens';
     const valueTitle = aliasOf(formats, value);
     const regionTitle = aliasOf(formats, region);
-    // The boundary's region name lives in feature `properties` — the lookup key and
-    // the region tooltip both read that nested field.
-    const nameField = `properties.${asset.nameProp}`;
     const fmt = formats?.[value]?.format;
-    const boundary = { name: GEO_BOUNDARY_DATASET };
-    const valueFormat = fmt ? { format: fmt } : {};
+    // Interactive zoom (a multiplier) + pan (pixels). albersUsa can `scale`+`translate`
+    // but not recenter (composite), so the projection FITS the whole boundary and
+    // zoom/pan ride the `extent` (fit-to-source-boundary + extent — the proven pattern).
+    // base/user split keeps interactive sets from being clobbered.
+    const zoomVal = typeof p.zoom === 'number' && Number.isFinite(p.zoom) ? Math.min(40, Math.max(0.1, p.zoom)) : 1;
+    const panXVal = typeof p.panX === 'number' && Number.isFinite(p.panX) ? p.panX : 0;
+    const panYVal = typeof p.panY === 'number' && Number.isFinite(p.panY) ? p.panY : 0;
+    const BORDER = 'rgba(139, 148, 158, 0.55)';
+    const ttExpr = `{${JSON.stringify(regionTitle)}: datum.__mx_region, ${JSON.stringify(valueTitle)}: datum[${JSON.stringify(value)}]}`;
+
     return {
-      projection: { type: asset.projection },
-      layer: [
-        // Background: every region outlined with the themed neutral fill.
-        { data: boundary, mark: { type: 'geoshape' } },
-        // Choropleth: join the value by region name; only regions WITH a value are
-        // painted (others fall through to the neutral background beneath).
-        {
-          data: boundary,
-          transform: [
-            { lookup: nameField, from: { data: { name: VIZ_DATASET_MAIN }, key: region, fields: [value] } },
-            { filter: `isValid(datum[${JSON.stringify(value)}])` },
-          ],
-          mark: { type: 'geoshape' },
-          encoding: {
-            color: {
-              field: value,
-              type: 'quantitative',
-              scale: { scheme },
-              title: valueTitle,
-              legend: { title: valueTitle, ...valueFormat },
-            },
-            tooltip: [
-              { field: nameField, type: 'nominal', title: regionTitle },
-              { field: value, type: 'quantitative', title: valueTitle, ...valueFormat },
-            ],
-          },
-        },
+      autosize: { type: 'none' },
+      signals: [
+        { name: 'tx', update: 'width / 2' },
+        { name: 'ty', update: 'height / 2' },
+        { name: 'zoomUser', value: zoomVal !== 1 ? zoomVal : null, on: [
+          { events: { type: 'wheel', consume: true }, update: 'clamp((zoomUser != null ? zoomUser : 1) * pow(1.0015, -event.deltaY), 0.2, 40)' },
+        ] },
+        { name: 'zoom', update: 'zoomUser != null ? zoomUser : 1' },
+        { name: 'down', value: null, on: [ { events: 'pointerdown', update: 'xy()' }, { events: 'pointerup', update: 'null' } ] },
+        { name: 'panStart', value: null, on: [ { events: 'pointerdown', update: '[panX, panY]' }, { events: 'pointerup', update: 'null' } ] },
+        { name: 'delta', value: [0, 0], on: [ { events: 'pointermove', update: 'down ? [x() - down[0], y() - down[1]] : [0, 0]' } ] },
+        { name: 'panX', value: panXVal, on: [ { events: { signal: 'delta' }, update: 'down && panStart ? panStart[0] + delta[0] : panX' } ] },
+        { name: 'panY', value: panYVal, on: [ { events: { signal: 'delta' }, update: 'down && panStart ? panStart[1] + delta[1] : panY' } ] },
+        // The view state VegaChart reads back and persists after interaction.
+        { name: 'mxViewParams', update: '{zoom: zoom, panX: panX, panY: panY}' },
       ],
+      data: [
+        { name: VIZ_DATASET_MAIN },
+        { name: GEO_BOUNDARY_DATASET },
+        { name: 'fit_target', source: GEO_BOUNDARY_DATASET },
+        // Join the value onto each boundary region by name; keep only regions WITH data.
+        { name: 'choro', source: GEO_BOUNDARY_DATASET, transform: [
+          { type: 'formula', as: '__mx_region', expr: `datum.properties[${JSON.stringify(asset.nameProp)}]` },
+          { type: 'lookup', from: VIZ_DATASET_MAIN, key: region, fields: ['__mx_region'], values: [value], as: [value] },
+          { type: 'filter', expr: `isValid(datum[${JSON.stringify(value)}])` },
+        ] },
+      ],
+      projections: [{
+        name: 'projection',
+        type: asset.projection,
+        fit: { signal: "data('fit_target')" },
+        extent: { signal: '[[width/2 - width*zoom/2 + panX, height/2 - height*zoom/2 + panY], [width/2 + width*zoom/2 + panX, height/2 + height*zoom/2 + panY]]' },
+      }],
+      scales: [
+        { name: 'color', type: 'linear', domain: { data: 'choro', field: value }, range: { scheme }, zero: false, nice: true },
+      ],
+      legends: [{ fill: 'color', title: valueTitle, ...(fmt ? { format: fmt } : {}), gradientLength: { signal: 'clamp(width - 40, 60, 240)' } }],
+      marks: [{
+        type: 'group', clip: true,
+        encode: { update: { width: { signal: 'width' }, height: { signal: 'height' } } },
+        marks: [
+          // Backdrop: every region outlined (regions with no data still read).
+          { type: 'shape', from: { data: GEO_BOUNDARY_DATASET }, encode: { update: { fill: { value: 'transparent' }, stroke: { value: BORDER }, strokeWidth: { value: 0.5 } } }, transform: [{ type: 'geoshape', projection: 'projection' }] },
+          // Choropleth: the value-colored regions on top.
+          { type: 'shape', from: { data: 'choro' }, encode: { update: { fill: { scale: 'color', field: value }, stroke: { value: BORDER }, strokeWidth: { value: 0.5 }, tooltip: { signal: ttExpr } } }, transform: [{ type: 'geoshape', projection: 'projection' }] },
+        ],
+      }],
     };
   },
 };
@@ -1208,6 +1232,8 @@ const pointMap: VizTemplate = {
         { name: 'centerLng', update: 'centerLngUser != null ? centerLngUser : centerLngBase' },
         { name: 'centerLat', update: 'centerLatUser != null ? centerLatUser : centerLatBase' },
         { name: 'scale', update: `scaleUser != null ? scaleUser : scaleBase * ${zoomVal}` },
+        // The view state VegaChart reads back and persists after interaction.
+        { name: 'mxViewParams', update: `{center: [centerLat, centerLng], zoom: scale / ${POINT_MAP_REGION_SCALE}}` },
       ],
       data: [
         { name: 'main' },

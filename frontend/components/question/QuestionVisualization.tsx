@@ -480,7 +480,15 @@ function QuestionVisualizationInner({
                       rows={data.rows}
                       colorMode={colorMode}
                       onViewChange={config.editable && onVizChange
-                        ? (v) => onVizChange(setRecipeParam(setRecipeParam(currentState.viz!, 'center', v.center), 'zoom', v.zoom === 1 ? undefined : v.zoom))
+                        ? (params) => {
+                            let next = currentState.viz!;
+                            for (const [k, val] of Object.entries(params)) {
+                              // Drop defaults so the envelope stays clean (zoom 1, no pan).
+                              const isDefault = (k === 'zoom' && val === 1) || ((k === 'panX' || k === 'panY') && val === 0);
+                              next = setRecipeParam(next, k, isDefault ? undefined : val);
+                            }
+                            onVizChange(next);
+                          }
                         : undefined}
                     />
                   </Box>
