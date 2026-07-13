@@ -10,7 +10,7 @@ import { MINUSX_TAGLINE } from '@/lib/og/og-helpers';
 
 export interface SetupWizard {
   status: 'pending' | 'complete';
-  step?: 'welcome' | 'connection' | 'questionnaire' | 'context' | 'generating' | 'slack';
+  step?: 'welcome' | 'models' | 'connection' | 'questionnaire' | 'context' | 'generating' | 'slack';
   connectionId?: number;
   connectionName?: string;
   contextFileId?: number;

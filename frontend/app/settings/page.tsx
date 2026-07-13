@@ -14,6 +14,7 @@ import { CreditsUsageCards } from '@/components/settings/CreditsCard';
 import { SlackIntegration } from '@/components/settings/integrations/SlackIntegration';
 import { McpIntegration } from '@/components/settings/integrations/McpIntegration';
 import { RemoteAgentsSection } from '@/components/settings/RemoteAgentsSection';
+import { LlmModelsSection } from '@/components/settings/llm/LlmModelsSection';
 import UsersContent from '@/components/settings/UsersContent';
 import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
 import StylesContainerV2 from '@/components/containers/StylesContainerV2';
@@ -31,7 +32,7 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
 
-type TabId = 'general' | 'homepage' | 'dev' | 'data' | 'users' | 'appearance' | 'configs' | 'styles' | 'messaging' | 'integrations';
+type TabId = 'general' | 'homepage' | 'dev' | 'data' | 'users' | 'appearance' | 'configs' | 'styles' | 'messaging' | 'integrations' | 'models';
 
 interface SettingEntry {
   tab: TabId;
@@ -647,6 +648,16 @@ function SettingsContent() {
   const tabs: TabEntry[] = useMemo(() => [
     { id: 'general', label: 'General' },
     { id: 'users', label: 'Users', visible: isAdmin, custom: <UsersContent /> },
+    {
+      id: 'models',
+      label: 'Models',
+      visible: isAdmin,
+      custom: (
+        <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" p={6}>
+          <LlmModelsSection />
+        </Box>
+      ),
+    },
     {
       id: 'integrations',
       label: 'Integrations',

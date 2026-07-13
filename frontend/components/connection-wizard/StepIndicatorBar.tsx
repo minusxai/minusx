@@ -5,8 +5,7 @@ import { LuCheck } from 'react-icons/lu';
 import { type ConnectionWizardStep, WIZARD_STEP_LABELS } from './ConnectionWizardTypes';
 import { fadeInUpKeyframes } from '@/lib/ui/animations';
 
-const ALL_STEPS: ConnectionWizardStep[] = ['connection', 'context', 'generating', 'slack'];
-const STEPS_WITHOUT_SLACK: ConnectionWizardStep[] = ['connection', 'context', 'generating'];
+const BASE_STEPS: ConnectionWizardStep[] = ['connection', 'context', 'generating'];
 
 const stepperKeyframes = `
   @keyframes stepPulse {
@@ -22,12 +21,18 @@ const stepperKeyframes = `
 interface StepIndicatorBarProps {
   currentStep: ConnectionWizardStep;
   showSlackStep?: boolean;
+  showModelsStep?: boolean;
   onSkip?: () => void;
 }
 
-export default function StepIndicatorBar({ currentStep, showSlackStep = false, onSkip }: StepIndicatorBarProps) {
-  const STEPS = showSlackStep ? ALL_STEPS : STEPS_WITHOUT_SLACK;
+export default function StepIndicatorBar({ currentStep, showSlackStep = false, showModelsStep = false, onSkip }: StepIndicatorBarProps) {
+  const STEPS: ConnectionWizardStep[] = [
+    ...(showModelsStep ? (['models'] as ConnectionWizardStep[]) : []),
+    ...BASE_STEPS,
+    ...(showSlackStep ? (['slack'] as ConnectionWizardStep[]) : []),
+  ];
   const displayStep = currentStep === 'questionnaire' ? 'context' : currentStep;
+  const currentIdx = STEPS.indexOf(displayStep);
 
   return (
     <>
@@ -46,9 +51,8 @@ export default function StepIndicatorBar({ currentStep, showSlackStep = false, o
         <HStack gap={0}>
           {STEPS.map((s, idx) => {
             const info = WIZARD_STEP_LABELS[s];
-            const currentInfo = WIZARD_STEP_LABELS[displayStep];
             const isActive = s === displayStep;
-            const isPast = info.number < currentInfo.number;
+            const isPast = currentIdx >= 0 && idx < currentIdx;
             const isFuture = !isActive && !isPast;
             const isLast = idx === STEPS.length - 1;
 
@@ -113,7 +117,7 @@ export default function StepIndicatorBar({ currentStep, showSlackStep = false, o
                         filter: 'drop-shadow(0 0 4px rgba(22, 160, 133, 0.5))',
                       } : undefined}
                     >
-                      {isPast ? <LuCheck size={13} strokeWidth={3} /> : info.number}
+                      {isPast ? <LuCheck size={13} strokeWidth={3} /> : idx + 1}
                     </Box>
                   </Box>
 

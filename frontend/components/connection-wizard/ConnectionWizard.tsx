@@ -13,6 +13,7 @@ import {
 } from './ConnectionWizardTypes';
 import StepIndicatorBar from './StepIndicatorBar';
 import StepConnection from './steps/StepConnection';
+import StepModels from './steps/StepModels';
 import StepStaticUpload from './steps/StepStaticUpload';
 import StepQuestionnaire from './steps/StepQuestionnaire';
 import StepContext from './steps/StepContext';
@@ -31,6 +32,7 @@ export default function ConnectionWizard({
   showSkipConnection: _showSkipConnection = false,
   greetings,
   showSlackStep = false,
+  showModelsStep = false,
 }: ConnectionWizardProps) {
   const [step, setStep] = useState<ConnectionWizardStep>(initialStep);
   const [connectionId, setConnectionId] = useState<number | null>(initialConnectionId);
@@ -52,6 +54,11 @@ export default function ConnectionWizard({
   // from connection step to questionnaire while the schema loader runs.
   const pastQuestionnaire = step === 'context' || step === 'generating' || step === 'slack';
   const { connections, loading: connectionsLoading } = useConnections({ skip: !connectionName || !pastQuestionnaire });
+
+  const handleModelsComplete = useCallback(() => {
+    setStep('connection');
+    onStepChange?.('connection', {});
+  }, [onStepChange]);
 
   const handleConnectionComplete = useCallback((id: number, name: string) => {
     setConnectionId(id);
@@ -126,7 +133,7 @@ export default function ConnectionWizard({
   return (
     <>
       <style>{fadeInUpKeyframes}</style>
-      <StepIndicatorBar currentStep={step} showSlackStep={showSlackStep} onSkip={onComplete} />
+      <StepIndicatorBar currentStep={step} showSlackStep={showSlackStep} showModelsStep={showModelsStep} onSkip={onComplete} />
 
       <Box
         bg="bg.surface"
@@ -137,6 +144,12 @@ export default function ConnectionWizard({
         minH="500px"
         css={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
       >
+        {step === 'models' && (
+          <StepModels
+            onComplete={handleModelsComplete}
+            greeting={greeting('models')}
+          />
+        )}
         {step === 'connection' && !staticTab && (
             <StepConnection
               onComplete={handleConnectionComplete}

@@ -10,9 +10,11 @@ interface SimpleSelectProps {
   placeholder?: string;
   disabled?: boolean;
   size?: 'sm' | 'md';
+  /** Accessible label for the input (the repo's UI-test locator). */
+  ariaLabel?: string;
 }
 
-export default function SimpleSelect({ value, onChange, options, placeholder, disabled, size = 'sm' }: SimpleSelectProps) {
+export default function SimpleSelect({ value, onChange, options, placeholder, disabled, size = 'sm', ariaLabel }: SimpleSelectProps) {
   const [inputValue, setInputValue] = useState('');
 
   const filteredCollection = useMemo(() => {
@@ -36,7 +38,7 @@ export default function SimpleSelect({ value, onChange, options, placeholder, di
       disabled={disabled}
     >
       <Combobox.Control>
-        <Combobox.Input placeholder={placeholder} bg="bg.surface" fontSize="xs" />
+        <Combobox.Input placeholder={placeholder} bg="bg.surface" fontSize="xs" aria-label={ariaLabel} />
       </Combobox.Control>
       <Portal>
         <Combobox.Positioner>

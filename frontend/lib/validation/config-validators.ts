@@ -123,7 +123,7 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
     const sw = config.setupWizard as any;
     if (typeof sw !== 'object' || sw === null) return false;
     if (!['pending', 'complete'].includes(sw.status)) return false;
-    const VALID_STEPS = ['welcome', 'connection', 'questionnaire', 'context', 'generating', 'slack'];
+    const VALID_STEPS = ['welcome', 'models', 'connection', 'questionnaire', 'context', 'generating', 'slack'];
     if (sw.step !== undefined && !VALID_STEPS.includes(sw.step)) return false;
     if (sw.connectionId !== undefined && typeof sw.connectionId !== 'number') return false;
     if (sw.connectionName !== undefined && typeof sw.connectionName !== 'string') return false;

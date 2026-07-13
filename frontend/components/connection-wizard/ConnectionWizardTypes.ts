@@ -1,6 +1,7 @@
-export type ConnectionWizardStep = 'connection' | 'questionnaire' | 'context' | 'generating' | 'slack';
+export type ConnectionWizardStep = 'models' | 'connection' | 'questionnaire' | 'context' | 'generating' | 'slack';
 
 export const WIZARD_STEP_LABELS: Record<ConnectionWizardStep, { number: number; label: string }> = {
+  models: { number: 0, label: 'AI Models' },
   connection: { number: 1, label: 'Connect Data' },
   questionnaire: { number: 2, label: 'Add Context' },
   context: { number: 2, label: 'Add Context' },
@@ -43,4 +44,7 @@ export interface ConnectionWizardProps {
   greetings?: Partial<Record<ConnectionWizardStep, string>>;
   /** Whether to show the Slack integration step after generating. Default: false. */
   showSlackStep?: boolean;
+  /** Whether to show the AI-model provider step before connecting data
+   *  (shown when no LLM provider is configured yet). Default: false. */
+  showModelsStep?: boolean;
 }

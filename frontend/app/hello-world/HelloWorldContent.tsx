@@ -118,10 +118,16 @@ export function HelloWorldContent() {
     }
   }, []);
 
+  // Show the AI-model step when no LLM provider is configured yet. Captured
+  // once at mount so the step doesn't vanish from the indicator mid-wizard
+  // after the user saves a provider inside it.
+  const [includeModelsStep] = useState(() => !(config.llm?.providers?.length));
+
   const handleStartConnection = useCallback(() => {
-    setStep('connection');
-    persistStep('connection');
-  }, [persistStep]);
+    const first = includeModelsStep ? 'models' : 'connection';
+    setStep(first);
+    persistStep(first);
+  }, [persistStep, includeModelsStep]);
 
   const handleSkipToHome = useCallback(async () => {
     try {
@@ -348,7 +354,7 @@ export function HelloWorldContent() {
       {isWizard && !isComplete && (
         <Box position="relative" zIndex={1} w="100%" maxW="1060px" mx="auto">
           <ConnectionWizard
-            initialStep={(savedWizard?.step as ConnectionWizardStep) ?? 'connection'}
+            initialStep={(savedWizard?.step as ConnectionWizardStep) ?? (includeModelsStep ? 'models' : 'connection')}
             initialConnectionId={savedWizard?.connectionId}
             initialConnectionName={savedWizard?.connectionName}
             initialContextFileId={savedWizard?.contextFileId}
@@ -358,7 +364,9 @@ export function HelloWorldContent() {
             showGreetings
             showSkipConnection
             showSlackStep
+            showModelsStep={includeModelsStep}
             greetings={{
+              models: 'Connect an AI model.',
               connection: "Step 1: Let's connect your data.",
               questionnaire: "Tell us about your data.",
               context: "Step 2: Let's create a Knowledge Base.",
