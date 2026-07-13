@@ -22,6 +22,15 @@ export interface SemanticDimension {
   description?: string;
 }
 
+/**
+ * Join cardinality, declared from the BASE table's perspective. Semantic joins
+ * are dimension LOOKUPS: each base row must match at most one joined row, so
+ * measures (which always aggregate the base table) can never fan out. That is
+ * why only many_to_one/one_to_one exist — a *-to-many join would silently
+ * inflate every SUM/COUNT; those queries belong in the Full GUI / SQL tiers.
+ */
+export type SemanticJoinRelationship = 'many_to_one' | 'one_to_one';
+
 /** Explicit equi-join relationship from the base table to another table. */
 export interface SemanticJoin {
   table: string;
@@ -29,6 +38,8 @@ export interface SemanticJoin {
   /** Alias joined table is referenced by (dimension.join points here). */
   alias: string;
   type?: 'LEFT' | 'INNER';
+  /** Cardinality from the base table's perspective. Default: many_to_one. */
+  relationship?: SemanticJoinRelationship;
   /** Column on the model's base table. */
   leftColumn: string;
   /** Column on the joined table. */

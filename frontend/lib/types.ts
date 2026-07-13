@@ -101,7 +101,7 @@ export type {
 
 // Semantic layer domain — see lib/types/semantic.ts
 export type {
-  SemanticAggregate, SemanticTimeGrain, SemanticDimension, SemanticJoin,
+  SemanticAggregate, SemanticTimeGrain, SemanticDimension, SemanticJoin, SemanticJoinRelationship,
   SemanticMeasure, SemanticRatioMetric, SemanticModel,
 } from './types/semantic';
 

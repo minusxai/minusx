@@ -80,6 +80,22 @@ describe('validateSemanticModels', () => {
     expect(issues.join('; ')).toMatch(/AOV.*Nope/);
   });
 
+  it('accepts declared relationships and flags duplicate join aliases', () => {
+    expect(validateSemanticModels([{
+      ...valid,
+      joins: [{ table: 'customers', alias: 'c', relationship: 'one_to_one', leftColumn: 'customer_id', rightColumn: 'id' }],
+    }])).toEqual([]);
+
+    const issues = validateSemanticModels([{
+      ...valid,
+      joins: [
+        { table: 'customers', alias: 'c', leftColumn: 'customer_id', rightColumn: 'id' },
+        { table: 'zones', alias: 'c', leftColumn: 'zone_id', rightColumn: 'id' },
+      ],
+    }]);
+    expect(issues.join('; ')).toMatch(/duplicate.*alias.*"c"/i);
+  });
+
   it('flags incomplete joins and dimensions pointing at unknown joins', () => {
     const issues = validateSemanticModels([{
       ...valid,

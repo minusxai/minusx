@@ -27,10 +27,14 @@ export function validateSemanticModels(models: SemanticModel[] | undefined): str
     if (!model.table || !model.connection) push('needs a base table');
     if (model.measures.length === 0) push('needs at least one measure');
 
-    const joinAliases = new Set((model.joins ?? []).map((j) => j.alias));
+    const joinAliases = new Set<string>();
     (model.joins ?? []).forEach((join, i) => {
       if (!join.table || !join.alias.trim() || !join.leftColumn || !join.rightColumn) {
         push(`join ${i + 1} is incomplete (table, alias and both columns are required)`);
+      }
+      if (join.alias.trim()) {
+        if (joinAliases.has(join.alias)) push(`duplicate join alias "${join.alias}"`);
+        joinAliases.add(join.alias);
       }
     });
 

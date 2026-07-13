@@ -113,6 +113,16 @@ describe('SemanticModelsTabContent — edit mode', () => {
     expect(screen.getByText(/needs a column for SUM/)).toBeTruthy();
   });
 
+  it('join rows declare a lookup relationship (default many:one, no *-to-many offered)', async () => {
+    renderTab([{
+      ...ORDERS_MODEL,
+      joins: [{ table: 'customers', alias: 'c', leftColumn: 'customer_id', rightColumn: 'id' }],
+    }], true);
+    const select = await screen.findByLabelText('Join relationship 1') as HTMLSelectElement;
+    expect(select.value).toBe('many_to_one');
+    expect([...select.options].map((o) => o.value)).toEqual(['many_to_one', 'one_to_one']);
+  });
+
   it('only offers metrics once two named measures exist', () => {
     renderTab([{ ...ORDERS_MODEL, metrics: [] }], true);
     expect(screen.queryByLabelText('Add ratio metric')).toBeNull();

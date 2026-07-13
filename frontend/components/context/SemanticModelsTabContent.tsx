@@ -20,7 +20,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Tabs, Box, Grid, VStack, HStack, Text, Input, Button, IconButton, Badge } from '@chakra-ui/react';
 import { LuPlus, LuTrash2, LuSparkles, LuTable, LuTriangleAlert, LuClock, LuGroup, LuSigma, LuDivide, LuMerge } from 'react-icons/lu';
-import type { ContextContent, DatabaseWithSchema, SemanticModel, SemanticAggregate, SemanticMeasure } from '@/lib/types';
+import type { ContextContent, DatabaseWithSchema, SemanticModel, SemanticAggregate, SemanticMeasure, SemanticJoinRelationship } from '@/lib/types';
 import { validateSemanticModels } from '@/lib/semantic/validate-models';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from '@/components/query-builder';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
@@ -77,6 +77,14 @@ const titleCase = (column: string): string =>
     .join(' ');
 
 const AGGS: SemanticAggregate[] = ['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COUNT_DISTINCT'];
+
+// Semantic joins are dimension LOOKUPS (each base row matches at most one
+// joined row) so base-table measures can never fan out. *-to-many joins are
+// deliberately not offered — they'd silently inflate every SUM/COUNT.
+const RELATIONSHIPS: Array<{ value: SemanticJoinRelationship; label: string }> = [
+  { value: 'many_to_one', label: 'many : one' },
+  { value: 'one_to_one', label: 'one : one' },
+];
 
 const measureFormula = (m: SemanticMeasure): string =>
   m.agg === 'COUNT' && !m.column ? 'COUNT(*)'
@@ -262,7 +270,7 @@ function ModelSpecCard({ model, inherited }: { model: SemanticModel; inherited?:
               <DefRow
                 key={i}
                 name={`${j.alias} (${j.table})`}
-                def={`${j.type ?? 'LEFT'} JOIN ON ${model.table}.${j.leftColumn} = ${j.alias}.${j.rightColumn}`}
+                def={`${j.type ?? 'LEFT'} JOIN (${(j.relationship ?? 'many_to_one').replace('_', ' : ').replace('_', ' ')}) ON ${model.table}.${j.leftColumn} = ${j.alias}.${j.rightColumn}`}
               />
             ))}
           </RailRow>
@@ -729,7 +737,7 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
           <RailRow icon={<LuMerge size={11} />} label="Joins">
             <VStack align="stretch" gap={1.5}>
               {(draft.joins ?? []).map((jn, i) => (
-                <Grid key={i} templateColumns="220px 90px 1fr 16px 1fr 28px" gap={1.5} alignItems="center">
+                <Grid key={i} templateColumns="200px 80px 110px 1fr 16px 1fr 28px" gap={1.5} alignItems="center">
                   <select
                     aria-label={`Join table ${i + 1}`}
                     style={selectStyle}
@@ -750,6 +758,15 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
                     value={jn.alias}
                     onChange={(e) => set({ joins: (draft.joins ?? []).map((x, j) => j === i ? { ...x, alias: e.target.value } : x) })}
                   />
+                  <select
+                    aria-label={`Join relationship ${i + 1}`}
+                    title="Cardinality from the base table's perspective — semantic joins must be lookups (at most one joined row per base row) so measures never fan out"
+                    style={selectStyle}
+                    value={jn.relationship ?? 'many_to_one'}
+                    onChange={(e) => set({ joins: (draft.joins ?? []).map((x, j) => j === i ? { ...x, relationship: e.target.value as SemanticJoinRelationship } : x) })}
+                  >
+                    {RELATIONSHIPS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
                   <select
                     aria-label={`Join left column ${i + 1}`}
                     style={selectStyle}
@@ -782,6 +799,12 @@ function ModelEditorCard({ model, allTables, onChange, onRemove }: {
                   onClick={() => set({ joins: [...(draft.joins ?? []), { table: '', alias: '', leftColumn: '', rightColumn: '' }] })}>
                   <LuPlus size={11} /> join another table (enables cross-table dimensions)
                 </Button>
+                {(draft.joins ?? []).length > 0 && (
+                  <Text fontSize="10px" color="fg.subtle" fontFamily="mono" mt={0.5}>
+                    joins are lookups: each {draft.table} row must match at most one joined row, so measures never double-count.
+                    For one-to-many analysis, use the Full or SQL mode.
+                  </Text>
+                )}
               </Box>
             </VStack>
           </RailRow>
