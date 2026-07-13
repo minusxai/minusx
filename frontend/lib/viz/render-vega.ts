@@ -23,15 +23,17 @@ import { prepareVegaLiteSpec } from './prepare';
 import { getVegaLiteConfig, getVegaParserConfig } from './theme';
 import { materializeRecipe } from './viz-templates';
 import { VIZ_DATASET_MAIN } from './types';
+import { loadGeoFeatures } from './geo-assets';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 export type ResolvedEnvelopeSpec =
-  | { ok: true; spec: Record<string, unknown>; engine: 'vega-lite' | 'vega' }
+  | { ok: true; spec: Record<string, unknown>; engine: 'vega-lite' | 'vega'; assets?: Record<string, string> }
   | { ok: false; error: string };
 
 /**
  * Resolve an envelope's renderable spec + grammar engine: native sources return their
  * spec, recipe sources materialize from the shipped registry (render-time, never stored).
+ * A recipe's declared boundary/lookup `assets` (RFC §9) ride along for the injection step.
  */
 export function resolveEnvelopeSpec(envelope: VizEnvelope): ResolvedEnvelopeSpec {
   const source = envelope.source as unknown as Record<string, unknown>;
@@ -39,6 +41,26 @@ export function resolveEnvelopeSpec(envelope: VizEnvelope): ResolvedEnvelopeSpec
     return materializeRecipe(source as unknown as { recipe: string; bindings: Record<string, string> });
   }
   return { ok: true, spec: (source as { spec: Record<string, unknown> }).spec, engine: 'vega-lite' };
+}
+
+/**
+ * Inject a recipe's named boundary/lookup datasets into a built view (RFC §9/§12).
+ * Each `{localName: assetId}` is resolved from the geo registry and bound under its
+ * local name alongside `main` — the only path secondary geometry reaches the renderer
+ * (there is no network fetch inside the vega runtime). Features are shallow-cloned per
+ * view: vega tags each bound tuple with Symbol(vega_id), and the registry caches and
+ * shares the feature objects across every chart. `load` is injectable for tests.
+ */
+export async function injectNamedAssets(
+  view: View,
+  assets: Record<string, string> | undefined,
+  load: (assetId: string) => Promise<import('geojson').Feature[]> = loadGeoFeatures,
+): Promise<void> {
+  if (!assets) return;
+  await Promise.all(Object.entries(assets).map(async ([name, assetId]) => {
+    const features = await load(assetId);
+    view.data(name, features.map(f => ({ ...f })));
+  }));
 }
 
 /**
@@ -428,6 +450,7 @@ export async function renderEnvelopeToSvg(
   const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode);
   const view = createVegaView(vegaSpec, rows, { renderer: 'none', parserConfig, ...size });
   try {
+    await injectNamedAssets(view, resolved.assets);
     await view.runAsync();
     return await view.toSVG();
   } finally {

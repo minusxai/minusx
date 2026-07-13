@@ -47,11 +47,12 @@ describe('computeLegendPlan', () => {
     expect(plan!.columns).toBeLessThan(CATEGORIES.length);
   });
 
-  it('uses the freed title width for MORE columns (394px dashboard tile: 2 cols, all 5 entries)', () => {
+  it('uses the freed title width for MORE columns (394px dashboard tile: 3 cols, all 5 entries)', () => {
     const plan = computeLegendPlan(BASE, ROWS, 394);
     expect(plan).not.toBeNull();
-    expect(plan!.columns).toBe(2);
-    expect(plan!.values).toBeUndefined(); // 2×3 grid holds all 5 — no "+N more"
+    // widest entry 'Main Course' ≈109px; 394px holds 3 columns (4×109 overflows).
+    expect(plan!.columns).toBe(3);
+    expect(plan!.values).toBeUndefined(); // 3×2 grid holds all 5 — no "+N more"
   });
 
   it('reserves no axis gutter for axis-less charts (pie fits a single row in a 288px tile)', () => {

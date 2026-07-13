@@ -78,6 +78,13 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
     line: { strokeWidth: 2 },
     point: { filled: true, size: 60 },
     bar: { cornerRadiusEnd: 2 },
+    // Choropleth / analytic-geo regions (RFC §9): a bare `mark: geoshape` — the
+    // background outline layer of every map recipe — draws NO fill (a neutral fill
+    // washed the map out on the card and read as a solid block) and a clearly visible
+    // inter-region border, so no-data regions read as clean outlines. The choropleth
+    // layer's color encoding supplies the fill for regions that DO have data; the
+    // border stroke travels to it too.
+    geoshape: { fill: 'transparent', stroke: colors.fgSubtle, strokeWidth: 0.75 },
     // House heatmap cells = the GitHub contribution graph: rounded cells with a
     // CONSTANT pixel gap. The gap is a full-band rect stroked in the card surface
     // colour — a relative band gap scales with cell size and looks cavernous on

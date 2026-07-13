@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Text } from '@chakra-ui/react';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan } from '@/lib/viz/render-vega';
+import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, injectNamedAssets } from '@/lib/viz/render-vega';
 
 export interface VegaChartProps {
   envelope: VizEnvelope;
@@ -108,6 +108,10 @@ export function VegaChart({ envelope, rows, colorMode }: VegaChartProps) {
           ...sizeOf(el),
         });
         viewRef.current = view;
+        // Recipe boundary/lookup datasets (choropleth & analytic geo, RFC §9) are
+        // resolved from the asset registry and bound before the first layout.
+        await injectNamedAssets(view, resolved.ok ? resolved.assets : undefined);
+        if (cancelled) return;
         await view.runAsync();
         promoteFontAttrs(el);
         if (!cancelled) setError(null);

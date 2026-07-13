@@ -30,6 +30,7 @@ const NullableD = <T extends TSchema>(schema: T, description: string) =>
 const VIZ_TYPES = [
   'table', 'bar', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot',
   'trend', 'waterfall', 'combo', 'radar', 'geo', 'single_value', 'row',
+  'choropleth',
 ] as const;
 export const VisualizationType = StringEnum(VIZ_TYPES);
 export type VisualizationType = Static<typeof VisualizationType>;

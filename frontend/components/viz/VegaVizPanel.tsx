@@ -7,7 +7,7 @@
  * the long tail of styling stays with the agent. Pure view: no Redux.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { Box, Button, HStack, Input, Text, Textarea, Switch } from '@chakra-ui/react';
+import { Box, Button, HStack, Input, Text, Textarea, Switch, NativeSelect } from '@chakra-ui/react';
 import { LuLayoutGrid, LuSettings2, LuBraces } from 'react-icons/lu';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { VizSettings } from '@/lib/types';
@@ -21,6 +21,7 @@ import {
 } from '@/lib/viz/encoding-edit';
 import { sqlTypeToVizKind } from '@/lib/viz/query-data';
 import { VizTypeSelector, type SelectableVizType } from '@/components/question/VizTypeSelector';
+import { GEO_ASSET_OPTIONS, resolveGeoAsset } from '@/lib/viz/geo-assets';
 import { TableConditionalFormatPanel } from '@/components/plotx/TableConditionalFormatPanel';
 import { PivotAxisBuilder } from '@/components/plotx/PivotAxisBuilder';
 import { VegaEncodingPanel } from './VegaEncodingPanel';
@@ -38,6 +39,17 @@ const ALL_CLASSIC_TYPES: VizSettings['type'][] = [
 const V2_DISABLED_TYPES = ALL_CLASSIC_TYPES.filter(
   t => !(V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t),
 );
+
+// Choropleth sequential color scales (matches CHOROPLETH_SCHEMES in viz-templates).
+const CHOROPLETH_SCALE_OPTIONS = [
+  { value: 'green', label: 'Green' },
+  { value: 'blue', label: 'Blue' },
+  { value: 'teal', label: 'Teal' },
+  { value: 'orange', label: 'Orange' },
+  { value: 'purple', label: 'Purple' },
+  { value: 'red-yellow-green', label: 'Red → Green' },
+  { value: 'blue-orange', label: 'Blue → Orange' },
+];
 
 export interface VegaVizPanelProps {
   envelope: VizEnvelope;
@@ -303,6 +315,38 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
             </HStack>
             <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
               Bars use the left scale; the line uses the right. Bind Color / Split, rename, and format in Fields.
+            </Text>
+          </Box>
+        ) : isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/choropleth@1' ? (
+          <Box display="flex" flexDirection="column" gap={3} py={1}>
+            <Box>
+              <Text fontSize="xs" color="fg.muted" mb={1}>Map</Text>
+              <NativeSelect.Root size="sm">
+                <NativeSelect.Field
+                  aria-label="Choropleth map"
+                  value={resolveGeoAsset(getRecipeParams(envelope).mapName)}
+                  onChange={(e) => onVizChange(setRecipeParam(envelope, 'mapName', e.currentTarget.value))}
+                >
+                  {GEO_ASSET_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </NativeSelect.Field>
+                <NativeSelect.Indicator />
+              </NativeSelect.Root>
+            </Box>
+            <Box>
+              <Text fontSize="xs" color="fg.muted" mb={1}>Color scale</Text>
+              <NativeSelect.Root size="sm">
+                <NativeSelect.Field
+                  aria-label="Choropleth color scale"
+                  value={typeof getRecipeParams(envelope).colorScale === 'string' ? String(getRecipeParams(envelope).colorScale) : 'green'}
+                  onChange={(e) => onVizChange(setRecipeParam(envelope, 'colorScale', e.currentTarget.value))}
+                >
+                  {CHOROPLETH_SCALE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </NativeSelect.Field>
+                <NativeSelect.Indicator />
+              </NativeSelect.Root>
+            </Box>
+            <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+              Bind Region + Value in Fields. Region names must match the map (e.g. &quot;California&quot;, &quot;Tanzania&quot;).
             </Text>
           </Box>
         ) : isRecipe ? (

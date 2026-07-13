@@ -19,6 +19,7 @@ import {
   LuChartNoAxesCombined,
   LuRadar,
   LuMapPinned,
+  LuMap,
   LuHash,
   LuChartBar,
   LuChartCandlestick,
@@ -61,7 +62,7 @@ const BrickWallFireIcon = ({ size = 16 }: { size?: number }) => (
  * frozen until the ECharts pipeline is deleted). V2-only entries render solely
  * when `includeV2Only` is set (the Vega panel); classic surfaces never see them.
  */
-export type SelectableVizType = VizSettings['type'] | 'heatmap' | 'boxplot' | 'histogram' | 'custom';
+export type SelectableVizType = VizSettings['type'] | 'heatmap' | 'boxplot' | 'histogram' | 'choropleth' | 'custom';
 
 interface VizTypeOption {
   type: SelectableVizType;
@@ -113,6 +114,10 @@ const ALL_VIZ_GROUPS: VizTypeGroup[] = [
       { type: 'pivot', icon: <LuTable2 size={16} />, label: 'Pivot' },
       { type: 'trend', icon: <LuTrendingUp size={16} />, label: 'Trend' },
       { type: 'single_value', icon: <LuHash size={16} />, label: 'Number' },
+      // V2 analytic geo (RFC §9): choropleth ships first (region-fill, vega recipe).
+      // The legacy combined 'geo' entry stays as the disabled coverage marker for the
+      // coordinate maps (points/lines/tiles) still to migrate.
+      { type: 'choropleth', icon: <LuMap size={16} />, label: 'Choropleth', v2Only: true },
       { type: 'geo', icon: <LuMapPinned size={16} />, label: 'Geo' },
       {
         type: 'custom', icon: <LuBraces size={16} />, label: 'Custom', v2Only: true,

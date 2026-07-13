@@ -530,8 +530,9 @@ This is the only todo list in this document. Work it top to bottom unless a prod
 6. **Finish the small high-value UI gaps.** Finish pivot leaf-column sort/hide/filter plus header formatting.
 7. **Define common visual editing.** Decide and implement the V2 color-control contract, then annotations;
    defer a generic custom-plot surface until those common controls are stable.
-8. **Ship analytic geo recipes.** Add choropleth, bubble, flow, and density while keeping Leaflet restricted to
-   tile basemaps.
+8. **Ship analytic geo recipes.** Choropleth shipped (`minusx/choropleth@1`, us-atlas/world-atlas boundaries).
+   Remaining: point/bubble map (with the vector↔tiles basemap toggle → `slippy-map` for Leaflet), then
+   flow and density — keeping Leaflet restricted to tile basemaps.
 9. **Land the shared authoring contract.** Add envelope-level `fieldMeta`, the builder source, deterministic
    derived artifacts, and one-way detach.
 10. **Make recipes publishable.** Replace trusted TypeScript recipe builders with the declarative contract, add
@@ -559,7 +560,8 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
 | combo | Shipped | `minusx/combo@1`, layered Vega-Lite recipe with independent scales and optional shared color/split |
 | table, pivot | Shipped | DOM tier with shared grid styling, formats, conditional formats, and export |
 | heatmap | Shipped | Native Vega-Lite rect spec and V2 transform |
-| analytic geo | Remaining (§21.8) | Vega/Vega-Lite recipes; Leaflet stays tile-only |
+| choropleth | Shipped | `minusx/choropleth@1` — layered geoshape+lookup recipe; boundary injected from the named-asset registry, value joined by region name |
+| point / flow / density geo | Remaining (§21.8) | Vega/Vega-Lite recipes; Leaflet stays tile-only for `slippy-map` |
 
 ### ✅ Verified (as of 2026-07-11)
 
@@ -663,6 +665,25 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
   untouched — custom is derived, never stored; any family click exits, same family = silent return)
 - Undo/redo behavior with surgical edits
 
+**Analytic geo — choropleth (2026-07-12, browser-verified on the dev server)**
+- `minusx/choropleth@1` renders a US revenue-by-state map end-to-end: agent/UI-authored envelope
+  (`kind: recipe`, bindings region/value, params mapName/colorScale), boundary features injected from
+  the named-asset registry under `__mx_geo_boundary`, value joined to each polygon by region NAME via a
+  VL `lookup`, quantitative color scale + gradient legend. Icon in the V2 grid (`LuMap`, Choropleth),
+  Fields shows Region/Value zones, Settings hosts the Map + Color-scale native dropdowns (mapName /
+  colorScale params), light + dark both clean.
+- Boundary quality: swapped the v1 ECharts geojson (`/geojson/us-states.json`, `world.json`) — which was
+  built for ECharts' equirectangular geo and broke under real projections (Alaska's Aleutians at -188.9°
+  smeared across the map; phantom inset frames) — for the projection-clean **us-atlas states-10m** and
+  **world-atlas countries-110m** TopoJSON (the named atlas sources vega-datasets derives from, with
+  `properties.name` baked in). Alaska + Hawaii now render as correct albersUsa insets, no frames; empty
+  regions are transparent with a legible border. India keeps its v1 geojson. v1 files untouched (legacy
+  ECharts geo still uses them).
+- Two-layer recipe: a themed background outline of EVERY region (so no-data regions still read) beneath
+  the value-colored regions (lookup + `isValid` filter). Inline validation accepts the recipe's declared
+  boundary dataset name (allowed alongside `main`) and skips field-ref checks for recipe specs (boundary
+  `properties.name` isn't a query column).
+
 **Data handling**
 - 10k+ row result — render time acceptable
 
@@ -687,10 +708,23 @@ that are not obvious from the code. Active priorities belong only in §21.
     fold/presentation/table+pivot helpers/`mergeVizColumnFormat`; `setEnvelopeVizType(env, type, columns?)`
     — the columns fallback types categories from COLUMN KIND, never hardcodes nominal),
     `render-vega.ts` (compile → parse(ast)+interpreter → View; render-time injections: container sizing,
-    single-series legend, `mx_legend_sel` toggle, centered legend layout), `validate.ts` (5-stage;
-    `columns` OPTIONAL — field checks skipped when result unknown), `validate-remote.ts` (browser client
-    of the route; FAIL-OPEN). The official schema is imported from
-    `vega-lite/vega-lite-schema.json`; no repository copy is checked in.
+    single-series legend, `mx_legend_sel` toggle, centered legend layout, `injectNamedAssets` for geo
+    boundaries), `validate.ts` (5-stage; `columns` OPTIONAL — field checks skipped when result unknown;
+    recipe sources allow their declared boundary dataset names in the data policy and skip field-ref
+    checks), `validate-remote.ts` (browser client of the route; FAIL-OPEN). The official schema is
+    imported from `vega-lite/vega-lite-schema.json`; no repository copy is checked in.
+  - **Geo (RFC §9)** — `geo-assets.ts` = the named boundary registry: `GEO_ASSETS` (us-states →
+    us-atlas states-10m, world → world-atlas countries-110m, both TopoJSON w/ `properties.name`; india →
+    v1 geojson), `GEO_BOUNDARY_DATASET` (the reserved local dataset name the recipe references),
+    `assetFeatures` (TopoJSON→GeoJSON via topojson-client, pure/testable), `loadGeoFeatures` (fetch +
+    cache). `viz-templates.ts` `minusx/choropleth@1` is a layered geoshape+lookup recipe declaring its
+    boundary via `VizTemplate.assets()`; `materializeRecipe` surfaces `assets`, and the render pipeline
+    (`injectNamedAssets`, used by `<VegaChart>` and `renderEnvelopeToSvg`) resolves + injects the features
+    under `GEO_BOUNDARY_DATASET` alongside `main`. Boundary files ship under `public/geojson/`
+    (`us-atlas-states-10m.json`, `world-atlas-countries-110m.json`); v1 ECharts geo files untouched. The
+    empty-region look (transparent fill + `fgSubtle` border) is `config.geoshape` in `theme.ts`. Panel:
+    `VizTypeSelector` Choropleth entry (`LuMap`, v2Only), `VegaVizPanel` Settings map + color-scale native
+    dropdowns.
 - **Components** — `components/viz/`: `VegaChart` (lazy via next/dynamic; promoteFontAttrs beats Chakra
   @layer reset), `VegaVizPanel` (persistent icon grid + informational Custom state +
   Fields/Settings/Spec; DOM-tier settings = conditional

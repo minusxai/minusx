@@ -9,6 +9,8 @@
  * visually meaningful way means shipping `@2` and keeping `@1` frozen.
  */
 import type { ColumnFormatConfig } from '@/lib/validation/atlas-schemas';
+import { VIZ_DATASET_MAIN } from './types';
+import { GEO_ASSETS, GEO_BOUNDARY_DATASET, resolveGeoAsset } from './geo-assets';
 
 export interface VizTemplateBinding {
   name: string;
@@ -50,12 +52,19 @@ export type VizParams = Record<string, unknown> | null | undefined;
 export interface VizTemplate {
   id: string;
   /** The icon-grid type this recipe implements. */
-  vizType: 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'combo';
+  vizType: 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'combo' | 'choropleth';
   /** Grammar of the materialized spec ('vega' skips the VL compile). */
   engine: VizTemplateEngine;
   bindings: ReadonlyArray<VizTemplateBinding>;
   /** Materialize the full spec from bound column names (+ optional column formats and recipe params). */
   build(bindings: Record<string, string | string[]>, formats?: VizFormats, params?: VizParams): Record<string, unknown>;
+  /**
+   * Named boundary/lookup datasets this recipe references by local name (RFC §9/§12):
+   * `{localDatasetName: assetId}`. The renderer resolves each asset id from the geo
+   * registry and injects its features under the local name (alongside `main`). Only
+   * geo recipes declare assets; everything else binds `main` alone.
+   */
+  assets?(bindings: Record<string, string | string[]>, params?: VizParams): Record<string, string>;
 }
 
 // ── minusx/funnel@1 ─────────────────────────────────────────────────────────────
@@ -950,6 +959,88 @@ const combo: VizTemplate = {
   },
 };
 
+// ── minusx/choropleth@1 ─────────────────────────────────────────────────────────
+// Region-keyed thematic map (RFC §9): each boundary polygon is filled by a value
+// looked up from the query result by region NAME. The boundary geometry is the
+// primary data (one mark per region) injected from the named-asset registry under
+// GEO_BOUNDARY_DATASET — never fetched from the network (§12); the query result is
+// the lookup source under `main`. Two layers: a themed outline of EVERY region
+// (so regions with no data still show) beneath the value-colored regions.
+//
+// Bindings: region (nominal, matches the boundary's name property) + value
+// (quantitative). Params: mapName (world|us-states|india-states) picks the
+// boundary + projection; colorScale picks the sequential color scheme.
+const CHOROPLETH_SCHEMES: Record<string, string> = {
+  green: 'greens',
+  blue: 'blues',
+  teal: 'teals',
+  orange: 'oranges',
+  purple: 'purples',
+  'red-yellow-green': 'redyellowgreen',
+  'blue-orange': 'blueorange',
+};
+
+const choropleth: VizTemplate = {
+  id: 'minusx/choropleth@1',
+  vizType: 'choropleth',
+  engine: 'vega-lite',
+  bindings: [
+    { name: 'region', label: 'Region', accepts: ['nominal'] },
+    { name: 'value', label: 'Value', accepts: ['quantitative'] },
+  ],
+  assets(_bindings, params) {
+    const p = (params ?? {}) as Record<string, unknown>;
+    return { [GEO_BOUNDARY_DATASET]: resolveGeoAsset(p.mapName) };
+  },
+  build(bindings, formats, params) {
+    const region = String(bindings.region);
+    const value = String(bindings.value);
+    const p = (params ?? {}) as Record<string, unknown>;
+    const asset = GEO_ASSETS[resolveGeoAsset(p.mapName)];
+    const scheme = typeof p.colorScale === 'string' && CHOROPLETH_SCHEMES[p.colorScale]
+      ? CHOROPLETH_SCHEMES[p.colorScale]
+      : 'greens';
+    const valueTitle = aliasOf(formats, value);
+    const regionTitle = aliasOf(formats, region);
+    // The boundary's region name lives in feature `properties` — the lookup key and
+    // the region tooltip both read that nested field.
+    const nameField = `properties.${asset.nameProp}`;
+    const fmt = formats?.[value]?.format;
+    const boundary = { name: GEO_BOUNDARY_DATASET };
+    const valueFormat = fmt ? { format: fmt } : {};
+    return {
+      projection: { type: asset.projection },
+      layer: [
+        // Background: every region outlined with the themed neutral fill.
+        { data: boundary, mark: { type: 'geoshape' } },
+        // Choropleth: join the value by region name; only regions WITH a value are
+        // painted (others fall through to the neutral background beneath).
+        {
+          data: boundary,
+          transform: [
+            { lookup: nameField, from: { data: { name: VIZ_DATASET_MAIN }, key: region, fields: [value] } },
+            { filter: `isValid(datum[${JSON.stringify(value)}])` },
+          ],
+          mark: { type: 'geoshape' },
+          encoding: {
+            color: {
+              field: value,
+              type: 'quantitative',
+              scale: { scheme },
+              title: valueTitle,
+              legend: { title: valueTitle, ...valueFormat },
+            },
+            tooltip: [
+              { field: nameField, type: 'nominal', title: regionTitle },
+              { field: value, type: 'quantitative', title: valueTitle, ...valueFormat },
+            ],
+          },
+        },
+      ],
+    };
+  },
+};
+
 export const VIZ_TEMPLATES: Record<string, VizTemplate> = {
   [funnel.id]: funnel,
   [waterfall.id]: waterfall,
@@ -957,6 +1048,7 @@ export const VIZ_TEMPLATES: Record<string, VizTemplate> = {
   [trend.id]: trend,
   [singleValue.id]: singleValue,
   [combo.id]: combo,
+  [choropleth.id]: choropleth,
 };
 
 /** Registry lookup for a recipe source; null for unknown ids. */
@@ -965,7 +1057,7 @@ export function getTemplate(recipeId: string): VizTemplate | null {
 }
 
 export type MaterializeResult =
-  | { ok: true; spec: Record<string, unknown>; engine: VizTemplateEngine }
+  | { ok: true; spec: Record<string, unknown>; engine: VizTemplateEngine; assets?: Record<string, string> }
   | { ok: false; error: string };
 
 /** Materialize a recipe source into its grammar spec. */
@@ -988,5 +1080,11 @@ export function materializeRecipe(source: {
   if (badMulti) {
     return { ok: false, error: `recipe "${source.recipe}" binding "${badMulti.name}" takes a single column, not an array` };
   }
-  return { ok: true, spec: template.build(source.bindings, source.columnFormats ?? undefined, source.params), engine: template.engine };
+  const assets = template.assets?.(source.bindings, source.params);
+  return {
+    ok: true,
+    spec: template.build(source.bindings, source.columnFormats ?? undefined, source.params),
+    engine: template.engine,
+    ...(assets && Object.keys(assets).length > 0 ? { assets } : {}),
+  };
 }

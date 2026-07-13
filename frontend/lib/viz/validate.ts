@@ -97,10 +97,10 @@ function validateEnvelopeShape(envelope: unknown): { issues: VizIssue[]; env?: V
 // ---------------------------------------------------------------------------
 // Stage 2 — data policy: only the injected named dataset is allowed, anywhere
 // ---------------------------------------------------------------------------
-function validateDataPolicy(node: unknown, path: string, issues: VizIssue[]): void {
+function validateDataPolicy(node: unknown, path: string, issues: VizIssue[], allowed: Set<string>): void {
   if (node == null || typeof node !== 'object') return;
   if (Array.isArray(node)) {
-    node.forEach((child, i) => validateDataPolicy(child, `${path}/${i}`, issues));
+    node.forEach((child, i) => validateDataPolicy(child, `${path}/${i}`, issues, allowed));
     return;
   }
   const rec = node as Record<string, unknown>;
@@ -112,14 +112,14 @@ function validateDataPolicy(node: unknown, path: string, issues: VizIssue[]): vo
     } else if ('values' in data) {
       issues.push(err('E_EXTERNAL_DATA', `${path}/data/values`,
         `inline data values are not allowed — the chart always visualizes the question's query result, injected as data: {"name": "${VIZ_DATASET_MAIN}"}; omit \`data\` entirely`));
-    } else if ('name' in data && data.name !== VIZ_DATASET_MAIN) {
+    } else if ('name' in data && typeof data.name === 'string' && !allowed.has(data.name)) {
       issues.push(err('E_DATASET_NAME', `${path}/data/name`,
         `unknown dataset ${JSON.stringify(data.name)} — the only available dataset is "${VIZ_DATASET_MAIN}" (the query result)`));
     }
   }
   for (const [key, value] of Object.entries(rec)) {
     if (key === 'data') continue;
-    if (value && typeof value === 'object') validateDataPolicy(value, `${path}/${key}`, issues);
+    if (value && typeof value === 'object') validateDataPolicy(value, `${path}/${key}`, issues, allowed);
   }
 }
 
@@ -196,6 +196,10 @@ export function validateVizEnvelope(
   if (!shape.env) return { ok: false, issues };
 
   let rawSpec: Record<string, unknown>;
+  // Dataset names the spec may reference. Agent-authored specs get only `main`;
+  // recipe sources add their declared boundary/lookup assets (injected by the
+  // renderer, RFC §9). Populated in the recipe branch below.
+  const allowedDatasets = new Set<string>([VIZ_DATASET_MAIN]);
   const source = shape.env.source as Record<string, unknown>;
   if (source.kind === 'table' || source.kind === 'pivot') {
     // The DOM tier: no grammar to validate. Check every column reference against the
@@ -270,11 +274,13 @@ export function validateVizEnvelope(
       }
       return { ok: true, issues };
     }
+    for (const name of Object.keys(materialized.assets ?? {})) allowedDatasets.add(name);
     rawSpec = materialized.spec;
   } else {
     rawSpec = (source as { spec: Record<string, unknown> }).spec;
   }
-  validateDataPolicy(rawSpec, '/source/spec', issues);
+  const isRecipe = source.kind === 'recipe';
+  validateDataPolicy(rawSpec, '/source/spec', issues, allowedDatasets);
   if (issues.some(i => i.severity === 'error')) return { ok: false, issues };
 
   const spec = prepareVegaLiteSpec(rawSpec);
@@ -286,7 +292,11 @@ export function validateVizEnvelope(
     return { ok: false, issues };
   }
 
-  if (columns) validateFieldRefs(spec, columns, issues);
+  // Field-reference checks apply to agent-authored specs. Recipe bindings were
+  // already checked against the columns directly (above); a materialized recipe
+  // spec additionally references boundary geometry fields (e.g. properties.name)
+  // that aren't query columns — running the ref check here would false-positive.
+  if (columns && !isRecipe) validateFieldRefs(spec, columns, issues);
   if (issues.some(i => i.severity === 'error')) return { ok: false, issues };
 
   const captured: CapturedLog[] = [];
