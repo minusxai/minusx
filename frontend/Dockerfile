@@ -31,7 +31,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # are found, and buildkit can cache an unpatched npm ci layer that silently
 # ships broken images. This grep fails the build the instant that happens, so
 # we never silently ship an unpatched pi-ai again.
-RUN grep -q "MX PATCH" node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js \
+RUN grep -q "MX PATCH" node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js \
     || (echo "ERROR: pi-ai patch not applied — postinstall did not run or patches/ missing at npm ci time" && exit 1)
 
 # Copy application source
@@ -91,7 +91,7 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --from=builder /app/patches ./patches
 RUN npm install --ignore-scripts tsx "@tailwindcss/node@^4" "@tailwindcss/oxide@^4" "tailwindcss@^4"
 RUN npx --yes patch-package --error-on-fail && rm -rf ./patches
-RUN grep -q "MX PATCH" /app/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js \
+RUN grep -q "MX PATCH" /app/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js \
     || (echo "ERROR: pi-ai patch missing from runtime image" && exit 1)
 
 # Create data directories (docker-compose volumes mount over these; standalone runs use them directly)
