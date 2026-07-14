@@ -46,6 +46,31 @@ export interface SemanticJoin {
   rightColumn: string;
 }
 
+/**
+ * A declared FK relationship on a whitelisted table — authored in the schema
+ * whitelist UI (per table, like MetricDef), versioned and inherited the same
+ * way. This is the ONE semantic input that cannot be derived from profiled
+ * columns; everything else in a SemanticModel is derived from the schema.
+ * Lookup-only cardinality (many_to_one / one_to_one), same rationale as
+ * SemanticJoinRelationship.
+ */
+export interface TableRelationship {
+  /** Connection (database) name both tables live in. */
+  connection: string;
+  schema?: string;
+  /** Base ("many") table the FK column lives on. */
+  table: string;
+  /** FK column on the base table. */
+  column: string;
+  targetSchema?: string;
+  /** Lookup ("one") table the FK points at. */
+  targetTable: string;
+  /** Matched column on the lookup table (usually its PK). */
+  targetColumn: string;
+  /** Cardinality from the base table's perspective. Default: many_to_one. */
+  relationship?: SemanticJoinRelationship;
+}
+
 /** An aggregation over a base-table column (`column` omitted for COUNT). */
 export interface SemanticMeasure {
   name: string;

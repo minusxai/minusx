@@ -123,7 +123,7 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
       const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id, version);
       const resolvedDocs = resolveContextDocs(contextContent, currentUser.id, version);
       const skills = mergeSkillsByName(contextContent.fullSkills || [], contextContent.skills || []);
-      const semanticModels = resolveSemanticModels(contextContent, currentUser.id, version);
+      const semanticModels = resolveSemanticModels(contextContent);
 
       return {
         contextId: loadedContext.id,

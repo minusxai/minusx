@@ -27,7 +27,7 @@ import {
   resolveVersionWhitelist,
   convertDatabaseContextToWhitelist,
 } from '@/lib/context/context-utils';
-import { validateSemanticModels } from '@/lib/semantic/validate-models';
+import { validateTableRelationships } from '@/lib/semantic/derive';
 
 interface ContextContainerV2Props {
   fileId: FileId;
@@ -216,7 +216,7 @@ export default function ContextContainerV2({
       docs: sourceVersion.docs.map((doc: DocEntry) => ({ ...doc, childPaths: doc.childPaths ? [...doc.childPaths] : undefined })),
       metrics: sourceVersion.metrics ? JSON.parse(JSON.stringify(sourceVersion.metrics)) : undefined,
       annotations: sourceVersion.annotations ? JSON.parse(JSON.stringify(sourceVersion.annotations)) : undefined,
-      semanticModels: sourceVersion.semanticModels ? JSON.parse(JSON.stringify(sourceVersion.semanticModels)) : undefined,
+      relationships: sourceVersion.relationships ? JSON.parse(JSON.stringify(sourceVersion.relationships)) : undefined,
       createdAt: new Date().toISOString(),
       createdBy: user.id,
       description: description || ''
@@ -297,12 +297,12 @@ export default function ContextContainerV2({
       return;
     }
 
-    // Semantic models must be complete before they persist (the query-time
-    // compiler trusts saved models).
-    const semanticIssues = (currentContent.versions ?? [])
-      .flatMap(v => validateSemanticModels(v.semanticModels));
-    if (semanticIssues.length > 0) {
-      setSaveError(semanticIssues[0] + (semanticIssues.length > 1 ? ` (+${semanticIssues.length - 1} more)` : ''));
+    // Declared relationships must be complete before they persist (the loader
+    // derives semantic joins from them and trusts what is saved).
+    const relationshipIssues = (currentContent.versions ?? [])
+      .flatMap(v => validateTableRelationships(v.relationships));
+    if (relationshipIssues.length > 0) {
+      setSaveError(relationshipIssues[0] + (relationshipIssues.length > 1 ? ` (+${relationshipIssues.length - 1} more)` : ''));
       return;
     }
 
@@ -339,7 +339,7 @@ export default function ContextContainerV2({
     if (!currentContent || !currentVersionContent || !user?.id) return;
 
     // If updating databases, docs, metrics, or annotations, update the selected version
-    if (updates.databases !== undefined || updates.docs !== undefined || updates.metrics !== undefined || updates.annotations !== undefined || updates.semanticModels !== undefined) {
+    if (updates.databases !== undefined || updates.docs !== undefined || updates.metrics !== undefined || updates.annotations !== undefined || updates.relationships !== undefined) {
       // Convert DatabaseContext[] | '*' (editor format) → Whitelist (storage format)
       const newWhitelist: Whitelist | undefined = updates.databases !== undefined
         ? updates.databases === '*'
@@ -355,7 +355,7 @@ export default function ContextContainerV2({
             docs: updates.docs ?? v.docs,
             metrics: updates.metrics ?? v.metrics,
             annotations: updates.annotations ?? v.annotations,
-            semanticModels: updates.semanticModels ?? v.semanticModels,
+            relationships: updates.relationships ?? v.relationships,
             lastEditedAt: new Date().toISOString(),
             lastEditedBy: user.id
           };
@@ -424,7 +424,7 @@ export default function ContextContainerV2({
       docs: currentVersionContent.docs,
       metrics: currentVersionContent.metrics,
       annotations: currentVersionContent.annotations,
-      semanticModels: currentVersionContent.semanticModels,
+      relationships: currentVersionContent.relationships,
       published: currentContent.published // Ensure published is always present
     };
   }, [currentContent, currentVersionContent]);

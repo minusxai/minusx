@@ -9,7 +9,7 @@ import type { ScheduledJobContent } from './jobs';
 import type { DatabaseWithSchema } from './connections';
 import type { Test } from './evals';
 import type { SkillMention } from './chat';
-import type { SemanticModel } from './semantic';
+import type { SemanticModel, TableRelationship } from './semantic';
 
 /**
  * Recursive whitelist tree node.
@@ -113,7 +113,7 @@ export interface ContextVersion {
   docs: DocEntry[];                  // Documentation entries with optional childPaths
   metrics?: MetricDef[];             // Named metrics attached to tables
   annotations?: TableAnnotation[];   // Editorial table/column descriptions
-  semanticModels?: SemanticModel[];  // Semantic layer models (Semantic query tier)
+  relationships?: TableRelationship[]; // Declared FK relationships (semantic joins), attached to tables
   createdAt: string;                 // ISO timestamp
   createdBy: number;                 // User ID who created version
   lastEditedAt?: string;             // ISO timestamp of last edit
@@ -136,7 +136,8 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   fullDocs?: DocEntry[];               // Computed by loader - inherited docs
   fullMetrics?: MetricDef[];           // Computed by loader - inherited + own metrics
   fullAnnotations?: TableAnnotation[]; // Computed by loader - inherited + own annotations
-  fullSemanticModels?: SemanticModel[]; // Computed by loader - inherited semantic models
+  fullSemanticModels?: SemanticModel[]; // Computed by loader - DERIVED models (schema + relationships), inherited-aware
+  fullRelationships?: TableRelationship[]; // Computed by loader - inherited relationships
   fullSkills?: SkillEntry[];           // Computed by loader - inherited user-defined skills
 
   // Working fields (exposed by container for editing current version)
@@ -144,7 +145,7 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   docs?: DocEntry[];                  // Current version's docs (container only)
   metrics?: MetricDef[];             // Current version's metrics (container only)
   annotations?: TableAnnotation[];   // Current version's annotations (container only)
-  semanticModels?: SemanticModel[];  // Current version's semantic models (container only)
+  relationships?: TableRelationship[]; // Current version's relationships (container only)
 
   // Evals (stored at content level, independent of versions)
   evals?: Test[];
@@ -190,7 +191,7 @@ export interface ContextInfo {
   contextDocs?: ResolvedContextDocs;      // Resolved docs (structure); undefined if no context
   skills: SkillEntry[];                   // Resolved user-defined skills for this context
   availableSkills: SkillMention[];        // Resolved user-defined skills plus system skills for # mentions
-  semanticModels: SemanticModel[];        // Resolved semantic models (inherited + own); [] if none
+  semanticModels: SemanticModel[];        // Derived semantic models (loader-computed); [] if none
   hasContext: boolean;                    // True if context file found
   contextLoading: boolean;                // True if context file is loading
 }

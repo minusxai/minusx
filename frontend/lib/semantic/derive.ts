@@ -1,0 +1,221 @@
+/**
+ * Derived semantic models — the semantic layer WITHOUT authored model config.
+ *
+ * A SemanticModel is pure vocabulary: which columns group (dimensions), which
+ * aggregate (measures), which column is the time axis, and which equi-joins are
+ * safe lookups. All of that except joins is derivable from the whitelisted
+ * schema + profiled column metadata (`ColumnMeta.category`), so models are
+ * DERIVED server-side in the context loader — one model per whitelisted table —
+ * and the only authored input is the table's declared FK relationships
+ * (`TableRelationship`, edited in the whitelist UI).
+ *
+ * Bounded schemas: a names-only table (columns stripped by schema bounding)
+ * derives nothing; an `inherited` model for that table — derived upstream in an
+ * ancestor context where columns were available — is reused instead. Inherited
+ * models for tables no longer in the schema are dropped.
+ *
+ * Everything here is pure and connection-agnostic — dialect correctness lives
+ * entirely in the IR layer (compile/detect), never here.
+ */
+
+import type {
+  DatabaseWithSchema,
+  SemanticDimension,
+  SemanticMeasure,
+  SemanticModel,
+  TableRelationship,
+} from '@/lib/types';
+
+export type ColumnKind = 'dimension' | 'time' | 'measure' | 'id';
+
+interface SchemaColumnLike {
+  name: string;
+  type: string;
+  meta?: { category?: 'categorical' | 'numeric' | 'temporal' | 'text' | 'other' };
+}
+
+/** "order_items" / "order-items" / "WEB_EVENTS" → "Order Items" / "Web Events". */
+export function humanizeName(raw: string): string {
+  return raw
+    .split(/[_\-\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+const ID_NAME = /^(id|uuid|guid)$|(_id|_key|_uuid)$/i;
+const NUMERIC_TYPE = /int|decimal|numeric|double|float|real|number|money/i;
+const TEMPORAL_TYPE = /date|time/i;
+
+/**
+ * Classify one column into its derived vocabulary role. Id-like names win over
+ * everything (a SUM over customer_id is never meaningful); then the profiled
+ * category; then the SQL type name.
+ */
+export function classifyColumn(column: SchemaColumnLike): ColumnKind {
+  if (ID_NAME.test(column.name)) return 'id';
+  const category = column.meta?.category;
+  if (category === 'numeric') return 'measure';
+  if (category === 'temporal') return 'time';
+  if (category) return 'dimension'; // categorical | text | other
+  if (TEMPORAL_TYPE.test(column.type)) return 'time';
+  if (NUMERIC_TYPE.test(column.type)) return 'measure';
+  return 'dimension';
+}
+
+/** Preference order for the model's time axis among temporal columns. */
+function timeColumnScore(name: string): number {
+  const n = name.toLowerCase();
+  if (n === 'created_at' || n === 'created') return 0;
+  if (n.endsWith('_at')) return 1;
+  if (n.includes('date') || n.includes('time')) return 2;
+  return 3;
+}
+
+/** Strip a trailing id marker for measure naming: customer_id → "Customer". */
+function idBaseName(column: string): string {
+  const stripped = column.replace(/(_id|_key|_uuid)$/i, '');
+  return humanizeName(stripped === column ? column : stripped);
+}
+
+const tableKey = (connection: string, schema: string | undefined, table: string) =>
+  `${connection}|${schema ?? ''}|${table}`;
+
+/**
+ * Derive one semantic model per whitelisted table that has columns, merging in
+ * `inherited` models for tables whose columns were stripped by schema bounding.
+ */
+export function deriveSemanticModels(
+  databases: DatabaseWithSchema[],
+  relationships: TableRelationship[] = [],
+  inherited: SemanticModel[] = [],
+): SemanticModel[] {
+  // Index every table (for relationship targets + inherited filtering).
+  const columnsByTable = new Map<string, SchemaColumnLike[]>();
+  for (const db of databases) {
+    for (const s of db.schemas ?? []) {
+      for (const t of s.tables ?? []) {
+        columnsByTable.set(tableKey(db.databaseName, s.schema, t.table), t.columns ?? []);
+      }
+    }
+  }
+
+  const models: SemanticModel[] = [];
+  for (const db of databases) {
+    for (const s of db.schemas ?? []) {
+      for (const t of s.tables ?? []) {
+        const columns = (t.columns ?? []) as SchemaColumnLike[];
+        if (columns.length === 0) continue; // names-only (bounded) → inherited fallback below
+
+        const dimensions: SemanticDimension[] = [];
+        const measures: SemanticMeasure[] = [{ name: 'Count', agg: 'COUNT' }];
+        const temporal: SchemaColumnLike[] = [];
+
+        for (const c of columns) {
+          const kind = classifyColumn(c);
+          if (kind === 'dimension') {
+            dimensions.push({ name: humanizeName(c.name), column: c.name });
+          } else if (kind === 'time') {
+            temporal.push(c);
+            dimensions.push({ name: humanizeName(c.name), column: c.name });
+          } else if (kind === 'id') {
+            dimensions.push({ name: humanizeName(c.name), column: c.name });
+            measures.push({ name: `Unique ${idBaseName(c.name)}`, agg: 'COUNT_DISTINCT', column: c.name });
+          } else {
+            measures.push({ name: `Total ${humanizeName(c.name)}`, agg: 'SUM', column: c.name });
+            measures.push({ name: `Avg ${humanizeName(c.name)}`, agg: 'AVG', column: c.name });
+          }
+        }
+
+        temporal.sort((a, b) => timeColumnScore(a.name) - timeColumnScore(b.name));
+        const timeDimension = temporal.length > 0
+          ? { column: temporal[0].name, label: humanizeName(temporal[0].name) }
+          : undefined;
+
+        // Declared relationships on this table → lookup joins + joined dimensions.
+        const joins = relationships
+          .filter((r) =>
+            r.connection === db.databaseName &&
+            (r.schema ?? '') === (s.schema ?? '') &&
+            r.table === t.table &&
+            r.column && r.targetTable && r.targetColumn,
+          )
+          .map((r) => ({
+            table: r.targetTable,
+            schema: r.targetSchema,
+            alias: r.targetTable,
+            type: 'LEFT' as const,
+            relationship: r.relationship ?? ('many_to_one' as const),
+            leftColumn: r.column,
+            rightColumn: r.targetColumn,
+          }));
+        for (const join of joins) {
+          const targetCols = columnsByTable.get(tableKey(db.databaseName, join.schema, join.table)) ?? [];
+          for (const c of targetCols) {
+            const kind = classifyColumn(c);
+            if (kind === 'dimension' || kind === 'time') {
+              dimensions.push({
+                name: `${humanizeName(join.alias)} ${humanizeName(c.name)}`,
+                column: c.name,
+                join: join.alias,
+              });
+            }
+          }
+        }
+
+        models.push({
+          name: humanizeName(t.table),
+          connection: db.databaseName,
+          schema: s.schema,
+          table: t.table,
+          timeDimension,
+          dimensions,
+          measures,
+          ...(joins.length > 0 ? { joins } : {}),
+        });
+      }
+    }
+  }
+
+  // Disambiguate duplicate business names (same table name in two schemas/connections).
+  const nameCounts = new Map<string, number>();
+  for (const m of models) nameCounts.set(m.name, (nameCounts.get(m.name) ?? 0) + 1);
+  for (const m of models) {
+    if ((nameCounts.get(m.name) ?? 0) > 1) m.name = `${m.name} (${m.schema ?? m.connection})`;
+  }
+
+  // Names-only tables: fall back to the inherited (upstream-derived) model.
+  const derivedKeys = new Set(models.map((m) => tableKey(m.connection, m.schema, m.table)));
+  for (const im of inherited) {
+    const key = tableKey(im.connection, im.schema, im.table);
+    if (!columnsByTable.has(key)) continue; // table left the whitelist → drop
+    if (derivedKeys.has(key)) continue;     // own derivation wins
+    models.push(im);
+  }
+
+  return models;
+}
+
+/** Config-gate validation for authored relationships (save-time, whitelist UI). */
+export function validateTableRelationships(relationships: TableRelationship[] | undefined): string[] {
+  const errors: string[] = [];
+  for (const [i, r] of (relationships ?? []).entries()) {
+    const at = `Relationship ${i + 1} (${r.table || '?'} → ${r.targetTable || '?'})`;
+    if (!r.connection) errors.push(`${at}: missing connection`);
+    if (!r.table) errors.push(`${at}: missing table`);
+    if (!r.column) errors.push(`${at}: missing foreign-key column`);
+    if (!r.targetTable) errors.push(`${at}: missing target table`);
+    if (!r.targetColumn) errors.push(`${at}: missing target column`);
+    if (r.relationship && r.relationship !== 'many_to_one' && r.relationship !== 'one_to_one') {
+      errors.push(`${at}: relationship must be many_to_one or one_to_one`);
+    }
+    if (
+      r.table === r.targetTable &&
+      (r.schema ?? '') === (r.targetSchema ?? '') &&
+      r.column === r.targetColumn
+    ) {
+      errors.push(`${at}: joins the table to itself on the same column`);
+    }
+  }
+  return errors;
+}
