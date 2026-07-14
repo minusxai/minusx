@@ -178,7 +178,12 @@ export default function QuestionViewV2({
   const [userPickedMode, setUserPickedMode] = useState(false);
 
   // Semantic tier: models the active context defines for this connection.
-  const connectionSemanticModels = semanticModelsForConnection(semanticModels, content.connection_name);
+  // Memoized: a fresh array identity every render would re-fire the detection
+  // effect below in a loop (render -> new array -> effect -> setState -> render).
+  const connectionSemanticModels = useMemo(
+    () => semanticModelsForConnection(semanticModels, content.connection_name),
+    [semanticModels, content.connection_name],
+  );
 
   // Track container width for responsive layout
   useEffect(() => {

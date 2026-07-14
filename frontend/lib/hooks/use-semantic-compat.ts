@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { semanticSpecFromIr } from '@/lib/semantic/detect';
 import type { AnyQueryIR } from '@/lib/sql/ir-types';
@@ -32,6 +32,12 @@ export function useSemanticCompat(
   models: SemanticModel[],
 ): SemanticCompat {
   const [state, setState] = useState<SemanticCompat>({ detected: null, canUseSemantic: false, loading: false });
+  const stateRef = useRef(state);
+
+  // Callers commonly derive `models` per render; keying the effect on a stable
+  // serialization (not array identity) prevents a render->effect->setState loop
+  // that saturates the main thread (froze the question page in prod builds).
+  const modelsKey = useMemo(() => JSON.stringify(models), [models]);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,11 +60,22 @@ export function useSemanticCompat(
             );
 
     next.then((value) => {
-      if (!cancelled) setState(value);
+      if (cancelled) return;
+      // Value-equal updates must not re-render (guards against loops even if a
+      // caller passes unstable inputs).
+      const prev = stateRef.current;
+      if (
+        prev.loading === value.loading &&
+        prev.canUseSemantic === value.canUseSemantic &&
+        JSON.stringify(prev.detected) === JSON.stringify(value.detected)
+      ) return;
+      stateRef.current = value;
+      setState(value);
     });
 
     return () => { cancelled = true; };
-  }, [sql, dialect, models]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sql, dialect, modelsKey]);
 
   return state;
 }
