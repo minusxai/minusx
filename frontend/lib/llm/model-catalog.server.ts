@@ -39,10 +39,14 @@ export function parseModelsDevCatalog(json: unknown): ModelCatalog {
       if (!m || typeof m !== 'object') continue;
       const model = m as {
         name?: string; reasoning?: boolean;
-        modalities?: { input?: string[] };
+        modalities?: { input?: string[]; output?: string[] };
         limit?: { context?: number; output?: number };
         cost?: { input?: number; output?: number; cache_read?: number; cache_write?: number };
       };
+      // CHAT models only: image-generation / TTS entries (output without
+      // 'text') polluted the pickers and broke the Test button's default-model
+      // fallback (alphabetical order put chatgpt-image-latest first for openai).
+      if (model.modalities?.output && !model.modalities.output.includes('text')) continue;
       const input = (model.modalities?.input ?? ['text']).filter((v): v is 'text' | 'image' => v === 'text' || v === 'image');
       parsed.set(modelId, {
         id: modelId,

@@ -15,6 +15,14 @@ const MODELS_DEV_JSON = {
         cost: { input: 10, output: 60, cache_read: 1, cache_write: 12.5 },
       },
       'gpt-4.1': { id: 'gpt-4.1', name: 'GPT-4.1 (live)', reasoning: false },
+      // Non-chat models (image generation, tts) must be EXCLUDED — they broke
+      // the Test button (alphabetical fallback picked chatgpt-image-latest)
+      // and polluted the model pickers.
+      'chatgpt-image-latest': {
+        id: 'chatgpt-image-latest', name: 'ChatGPT Image',
+        modalities: { input: ['text', 'image'], output: ['image'] },
+      },
+      'tts-1': { id: 'tts-1', name: 'TTS-1', modalities: { input: ['text'], output: ['audio'] } },
     },
   },
   'not-a-pi-provider': { id: 'not-a-pi-provider', models: { 'x-1': { id: 'x-1', name: 'X-1' } } },
@@ -37,6 +45,15 @@ describe('parseModelsDevCatalog', () => {
   it('tolerates junk input', () => {
     expect(parseModelsDevCatalog(null).size).toBe(0);
     expect(parseModelsDevCatalog('nope').size).toBe(0);
+  });
+
+  it('excludes non-chat models (image/audio output) — chat pickers and test defaults only', () => {
+    const catalog = parseModelsDevCatalog(MODELS_DEV_JSON);
+    expect(catalog.get('openai')!.get('chatgpt-image-latest')).toBeUndefined();
+    expect(catalog.get('openai')!.get('tts-1')).toBeUndefined();
+    expect(catalog.get('openai')!.get('gpt-5.6')).toBeDefined();
+    // Models without modalities metadata are kept (assumed chat).
+    expect(catalog.get('openai')!.get('gpt-4.1')).toBeDefined();
   });
 });
 
