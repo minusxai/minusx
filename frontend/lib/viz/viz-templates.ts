@@ -361,7 +361,8 @@ const radar: VizTemplate = {
                       x: { signal: `scale('radial', datum.__mx_value) * cos(${angular('datum')})` },
                       y: { signal: `scale('radial', datum.__mx_value) * sin(${angular('datum')})` },
                       fill: { scale: 'color', field: '__mx_series' },
-                      size: { value: 35 },
+                      size: { value: 70 }, // bigger hit target so the vertex is easy to hover
+                      tooltip: { signal: `{${JSON.stringify(aliasOf(formats, metric))}: datum[${m}], 'Series': datum.__mx_series, 'Value': ${numExpr('datum.__mx_value', formats, values[0])}}` },
                     },
                   },
                 },

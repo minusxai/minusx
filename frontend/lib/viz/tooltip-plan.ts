@@ -63,7 +63,40 @@ const foldFields = (spec: Record<string, unknown>, yField: string): string[] | n
  * Build a shared-tooltip plan from a unit Vega-Lite spec, or null when the chart isn't a
  * shared-x cartesian (line/area/bar with a categorical/temporal x).
  */
+/** Combo recipe: layered bar+line with independent Y over a shared x → a dual-measure plan. */
+function comboPlan(spec: Record<string, unknown>): TooltipPlan | null {
+  const layers = spec.layer;
+  if (!Array.isArray(layers)) return null;
+  const resolve = (spec.resolve as { scale?: { y?: unknown } } | undefined)?.scale?.y;
+  if (resolve !== 'independent') return null;
+  const units = layers.filter((l): l is Record<string, unknown> => asRecord(l) != null);
+  const bar = units.find(l => markType(l) === 'bar');
+  const line = units.find(l => markType(l) === 'line');
+  if (!bar || !line) return null;
+  const bx = channel(bar, 'x'), by = channel(bar, 'y'), ly = channel(line, 'y');
+  if (typeof bx?.field !== 'string' || typeof by?.field !== 'string' || typeof ly?.field !== 'string') return null;
+  const label = (l: Record<string, unknown>, fallback: string): string => {
+    const datum = (l.encoding as { color?: { datum?: unknown } } | undefined)?.color?.datum;
+    return typeof datum === 'string' ? datum : fallback;
+  };
+  const bxAxis = asRecord(bx.axis);
+  return {
+    xField: bx.field,
+    xTitle: typeof bxAxis?.title === 'string' ? bxAxis.title : bx.field,
+    xFormat: typeof bxAxis?.format === 'string' ? bxAxis.format : undefined,
+    xTemporal: bx.type === 'temporal',
+    valueFormat: typeof asRecord(by.axis)?.format === 'string' ? (asRecord(by.axis)!.format as string) : undefined,
+    series: { kind: 'wide', series: [
+      { field: by.field, label: label(bar, by.field), colorKey: label(bar, by.field) },
+      { field: ly.field, label: label(line, ly.field), colorKey: label(line, ly.field) },
+    ] },
+  };
+}
+
 export function buildTooltipPlan(spec: Record<string, unknown>): TooltipPlan | null {
+  const combo = comboPlan(spec);
+  if (combo) return combo;
+
   const mark = markType(spec);
   if (mark !== 'line' && mark !== 'area' && mark !== 'bar') return null;
 

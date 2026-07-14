@@ -56,6 +56,23 @@ describe('buildTooltipPlan', () => {
     expect(plan.series).toEqual({ kind: 'long', colorField: 'platform', valueField: 'sessions' });
   });
 
+  it('combo (layered bar+line, independent Y) → two wide series labelled by their color datum', () => {
+    const combo = {
+      resolve: { scale: { y: 'independent' } },
+      layer: [
+        { mark: { type: 'bar' }, encoding: { x: { field: 'month', type: 'ordinal', axis: { title: 'Month' } }, y: { field: 'revenue', type: 'quantitative' }, color: { datum: 'Revenue' } } },
+        { mark: { type: 'line' }, encoding: { x: { field: 'month', type: 'ordinal' }, y: { field: 'orders', type: 'quantitative' }, color: { datum: 'Orders' } } },
+      ],
+    };
+    const plan = buildTooltipPlan(combo)!;
+    expect(plan.xField).toBe('month');
+    expect(plan.xTitle).toBe('Month');
+    expect(plan.series).toEqual({ kind: 'wide', series: [
+      { field: 'revenue', label: 'Revenue', colorKey: 'Revenue' },
+      { field: 'orders', label: 'Orders', colorKey: 'Orders' },
+    ] });
+  });
+
   it('returns null for non-shared charts (pie, scatter, quantitative x, no x)', () => {
     expect(buildTooltipPlan({ mark: { type: 'arc' }, encoding: { theta: { field: 'v' } } })).toBeNull();
     expect(buildTooltipPlan({ mark: { type: 'point' }, encoding: { x: { field: 'a', type: 'quantitative' }, y: { field: 'b', type: 'quantitative' } } })).toBeNull();
