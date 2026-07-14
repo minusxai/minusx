@@ -1,4 +1,4 @@
-import { LuScrollText, LuFileText, LuNotebook, LuScanSearch, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuColumns3, LuSquareFunction, LuBell, LuArrowRightLeft } from 'react-icons/lu';
+import { LuScrollText, LuFileText, LuNotebook, LuScanSearch, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuColumns3, LuSquareFunction, LuBell } from 'react-icons/lu';
 import { IconType } from 'react-icons';
 
 /**
@@ -116,14 +116,6 @@ export const FILE_TYPE_METADATA = {
     supported: true,
     h: 'none',
   },
-  transformation: {
-    label: 'Transformation',
-    icon: LuArrowRightLeft,
-    color: 'accent.success',        // Emerald green (#2ecc71)
-    category: 'analytics',
-    supported: false,
-    h: 'none',
-  },
   context_run: {
     label: 'Eval Run',
     icon: LuNotebookText,
@@ -137,15 +129,6 @@ export const FILE_TYPE_METADATA = {
     label: 'Alert Run',
     icon: LuBell,
     color: 'accent.secondary',
-    category: 'engineering',
-    supported: true,
-    h: 'none',
-    systemCreatedOnly: true,
-  },
-  transformation_run: {
-    label: 'Transformation Run',
-    icon: LuArrowRightLeft,
-    color: 'accent.success',
     category: 'engineering',
     supported: true,
     h: 'none',

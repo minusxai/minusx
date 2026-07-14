@@ -1,7 +1,7 @@
 import 'server-only';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { DbFile, BaseFileContent, FileType, QuestionContent, ConnectionContent, ContextContent, ReportContent, AlertContent, TransformationContent, CsvFileInfo } from '@/lib/types';
+import { DbFile, BaseFileContent, FileType, QuestionContent, ConnectionContent, ContextContent, ReportContent, AlertContent, CsvFileInfo } from '@/lib/types';
 import { pruneConnectionSchemaToFiles } from '@/lib/data/helpers/prune-connection-schema';
 import { IFilesDataLayer } from './files.interface';
 import {
@@ -473,7 +473,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Structural/system types are immediately visible on create. Everything else (user-created
     // content) starts as draft until the user explicitly saves.
-    const LIVE_ON_CREATE_TYPES = new Set(['folder', 'config', 'styles', 'context', 'context_run', 'alert_run', 'transformation_run', 'report_run', 'session']);
+    const LIVE_ON_CREATE_TYPES = new Set(['folder', 'config', 'styles', 'context', 'context_run', 'alert_run', 'report_run', 'session']);
     const startAsDraft = !LIVE_ON_CREATE_TYPES.has(type);
 
     // Create file in database (returns numeric ID)
@@ -797,18 +797,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
           },
           reportPrompt: '',
           recipients: []
-        };
-
-        return {
-          content,
-          fileName: ''
-        };
-      }
-
-      case 'transformation': {
-        const content: TransformationContent = {
-          description: '',
-          transforms: [],
         };
 
         return {

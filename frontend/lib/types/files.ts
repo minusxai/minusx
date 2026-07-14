@@ -11,7 +11,7 @@ import type { UsersContent } from './users';
 import type { ConfigContent } from './messaging';
 import type { ReportContent, ReportRunContent } from './reports';
 import type { AlertContent, AlertRunContent } from './alerts';
-import type { RunFileContent, TransformationContent } from './jobs';
+import type { RunFileContent } from './jobs';
 
 /**
  * Base entity interface shared by all database entities
@@ -126,5 +126,5 @@ export interface StylesContent extends BaseFileContent {
  * content can be null for metadata-only loads (Phase 2: Partial Loading)
  */
 export interface DbFile extends BaseFileMetadata {
-  content: QuestionContent | DocumentContent | StoryContent | NotebookContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | RunFileContent | TransformationContent | null;
+  content: QuestionContent | DocumentContent | StoryContent | NotebookContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | RunFileContent | null;
 }

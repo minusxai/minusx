@@ -101,7 +101,7 @@ interface TestRunResultsListProps {
   results: TestRunResult[];
   /**
    * 'default'  — standalone bordered box with summary header (evals/context)
-   * 'compact'  — no outer border; attaches inside a parent card via borderTop (transforms)
+   * 'compact'  — no outer border; attaches inside a parent card via borderTop
    * 'colored'  — rows highlighted red/green per pass/fail (alerts)
    */
   variant?: 'default' | 'compact' | 'colored';

@@ -73,12 +73,11 @@ export type {
 } from './types/connections';
 export { connectionTypeToDialect } from './types/connections';
 
-// Jobs/transforms domain — see lib/types/jobs.ts
+// Jobs domain — see lib/types/jobs.ts
 export type {
   JobSchedule, AlertRecipient, ScheduledJobContent, JobRunStatus, JobRunSource, JobRun,
   RunMessage, MessageAttemptLog, RunMessageRecord, RunFileContent, JobHandlerResult,
-  TransformOutput, Transform, TransformationContent, TransformResult,
-  TransformRunMode, TransformationOutput, ContextOutput, JobRunnerInput,
+  ContextOutput, JobRunnerInput,
 } from './types/jobs';
 
 // Alerts domain — see lib/types/alerts.ts

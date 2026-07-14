@@ -5,16 +5,15 @@
 // NOTE: AlertRecipient, RunMessage, MessageAttemptLog, RunMessageRecord,
 // RunFileContent, and JobHandlerResult are grouped here (not in
 // lib/types/alerts.ts, despite the "Alert" naming) because they are generic
-// scheduled-job/job-run infrastructure shared by alerts, reports, transforms,
+// scheduled-job/job-run infrastructure shared by alerts, reports,
 // and context evals alike (confirmed by usage: lib/jobs/job-utils.ts,
 // lib/messaging/delivery-options.ts, lib/jobs/handlers/*-handler.ts all consume
 // them independent of alerts). This avoids an otherwise-unnecessary
 // jobs.ts <-> alerts.ts import cycle.
 // ============================================================================
 
-import type { PartialBy } from '@/lib/types';
 import type { BaseFileContent } from './files';
-import type { Test, TestRunResult } from './evals';
+import type { TestRunResult } from './evals';
 
 /** Cron schedule shared by all scheduled job types. */
 export type JobSchedule = {
@@ -27,7 +26,7 @@ export type AlertRecipient =
   | { userId: number;      channel: 'email' | 'phone' }
   | { channelName: string; channel: 'email' | 'phone' | 'slack' | 'slack_app' };
 
-/** Base content for all scheduled jobs (alerts, reports, transformations, context evals). */
+/** Base content for all scheduled jobs (alerts, reports, context evals). */
 export interface ScheduledJobContent extends BaseFileContent {
   description?: string;
   status?: 'live' | 'draft';        // 'live' = runs on cron, 'draft' = manual only
@@ -95,44 +94,6 @@ export interface JobHandlerResult {
   status?: 'success' | 'failure';
 }
 
-// ============================================================================
-// Transformation types
-// ============================================================================
-
-export interface TransformOutput {
-  schema_name: string;
-  view: string;
-}
-
-export interface Transform {
-  question: number;      // file ID of the source question
-  output: TransformOutput;
-  tests?: Test[];        // tests to run after this transform executes
-}
-
-export type TransformationContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipients'> & {
-  transforms: Transform[];
-};
-
-// Per-transform execution result (stored inside RunFileContent.output)
-export interface TransformResult {
-  questionId: number;
-  questionName: string;
-  schema: string;
-  view: string;
-  sql: string;
-  status: 'success' | 'error' | 'skipped';  // 'skipped' in test_only run mode
-  error?: string;
-  testResults?: TestRunResult[];  // results of any tests attached to this transform step
-}
-
-export type TransformRunMode = 'full' | 'test_only';
-
-export interface TransformationOutput {
-  results: TransformResult[];
-  runMode?: TransformRunMode;  // defaults to 'full' if absent
-}
-
 // Context eval run output stored inside RunFileContent.output
 export interface ContextOutput {
   results: TestRunResult[];
@@ -145,5 +106,4 @@ export interface JobRunnerInput {
   jobType: string;
   file: any;
   previousRuns: JobRun[];
-  runMode?: TransformRunMode;  // for transformation jobs: 'full' (default) or 'test_only'
 }

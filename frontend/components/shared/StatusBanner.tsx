@@ -3,7 +3,7 @@
 /**
  * StatusBanner
  * Live/Draft toggle + optional suppress-until control, shared by all scheduled
- * job file types: Alert, Report, Transformation, Context (evals).
+ * job file types: Alert, Report, Context (evals).
  *
  * Suppress is always interactive — no editMode gate — so users can mute a live
  * alert without entering full edit mode.
