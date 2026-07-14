@@ -457,7 +457,7 @@ const trend: VizTemplate = {
     return {
       autosize: { type: 'fit', contains: 'padding' },
       signals: [
-        sizeSignal('valueSize', p.valueFontSize, "clamp(min(bandwidth('slot') / 4.2, height * 0.22), 24, 96)"),
+        sizeSignal('valueSize', p.valueFontSize, "clamp(min(bandwidth('slot') / 4.2, height * 0.22), 24, 80)"),
         sizeSignal('deltaSize', p.deltaFontSize, 'clamp(valueSize * 0.40, 13, 26)'),
         sizeSignal('labelSize', p.labelFontSize, 'clamp(valueSize * 0.30, 11, 17)'),
         sizeSignal('dateSize', p.dateFontSize, 'clamp(valueSize * 0.27, 11, 16)'),
@@ -647,7 +647,7 @@ const trend: VizTemplate = {
                         y: { signal: 'kpiCenter - valueSize * 1.55' },
                         y2: { signal: 'kpiCenter + valueSize * 1.68' },
                         cornerRadius: { value: 10 },
-                        fillOpacity: { value: 0.94 },
+                        fillOpacity: { value: 0.86 },
                       },
                     },
                   },
