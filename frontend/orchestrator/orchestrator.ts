@@ -73,11 +73,11 @@ export class Orchestrator {
   /**
    * Optional per-call model-plan resolver (DB-backed model config). Installed
    * by the app (orchestration-core); the engine stays config-agnostic. Returns
-   * the ordered chain `[primary, ...fallbacks]` for a use case; `[]` means
-   * "nothing configured" and the agent's static model is used unchanged.
-   * Headless/benchmark/test runs that don't set this behave exactly as before.
+   * the model + call options for a use case; `null` means "nothing configured"
+   * and the agent's static model is used unchanged. Headless/benchmark/test
+   * runs that don't set this behave exactly as before.
    */
-  resolveLlmPlan: ((useCase: LlmUseCase) => Promise<LlmPlanStep[]>) | null = null;
+  resolveLlmPlan: ((useCase: LlmUseCase) => Promise<LlmPlanStep | null>) | null = null;
   protected stream: EventStream<StreamEvent, AssistantMessage | null> | null = null;
   protected controller: AbortController | null = null;
   protected readonly registrables: RegistrableClass[];
@@ -143,19 +143,21 @@ export class Orchestrator {
     callOptions?: Record<string, unknown>,
     useCase: LlmUseCase = 'analyst',
   ): Promise<AssistantMessage> {
+    const callId = randomUUID();
+    const t0 = Date.now();
+
     // Pre-call gate (e.g. per-user credit enforcement). Runs BEFORE the
     // concurrency slot / provider socket, so a blocked call spends nothing.
     // Throwing aborts this call and the run (surfaced as a run error event).
     if (this.beforeLlmCall) await this.beforeLlmCall();
 
-    // DB-backed model plan: `[primary, ...fallbacks]` for this use case. Plan
-    // options merge OVER the agent's own callOptions (per-turn options like
-    // web-search location survive; conflicting keys follow the DB config).
-    // No resolver / empty plan → the agent's static model, exactly as before.
-    const plan = this.resolveLlmPlan ? await this.resolveLlmPlan(useCase) : [];
-    const steps: LlmPlanStep[] = plan.length > 0
-      ? plan.map(s => ({ model: s.model, callOptions: { ...(callOptions ?? {}), ...(s.callOptions ?? {}) } }))
-      : [{ model, callOptions }];
+    // DB-backed model plan for this use case. Plan options merge OVER the
+    // agent's own callOptions (per-turn options like web-search location
+    // survive; conflicting keys follow the DB config). No resolver / no plan
+    // → the agent's static model, exactly as before.
+    const plan = this.resolveLlmPlan ? await this.resolveLlmPlan(useCase) : null;
+    const effectiveModel = plan?.model ?? model;
+    const effectiveOptions = plan ? { ...(callOptions ?? {}), ...(plan.callOptions ?? {}) } : callOptions;
 
     // Optional global LLM-concurrency cap (MAX_LLM_CONCURRENCY env). No-op
     // when unset, so production code paths are unaffected. Acquire before
@@ -164,100 +166,55 @@ export class Orchestrator {
     await llmSemaphore.acquire();
     this.onActivity?.({ phase: 'llm', status: 'start' });
     try {
-      let lastError: Error | null = null;
-      for (let i = 0; i < steps.length; i++) {
-        const step = steps[i];
-        const isLastStep = i === steps.length - 1;
-        const attempt = await this.attemptLlmCall(step.model, context, agentId, step.callOptions, isLastStep);
-        if (attempt.ok) return attempt.message;
-        lastError = attempt.error;
-        // Fallback ONLY for failures where nothing streamed to the client
-        // (auth/rate-limit/setup errors). A mid-stream failure already emitted
-        // partial content — splicing a different model's output after it would
-        // corrupt the turn, so it stays a turn error.
-        if (attempt.streamedContent || isLastStep) throw attempt.error;
+      // Spread `callOptions` blindly into the model stream options. We treat it
+      // as an opaque blob (`SimpleStreamOptions`-shaped) so adding new stream
+      // options (`thinkingBudgets`, `metadata`, …) never touches this code.
+      const modelStream = streamSimple(effectiveModel, context, {
+        // Default prompt-cache retention (overridable by an explicit `callOptions.cacheRetention`,
+        // which is spread AFTER this and wins). Applies to every agent — this is the one universal
+        // LLM call site.
+        cacheRetention: DEFAULT_CACHE_RETENTION,
+        ...(effectiveOptions ?? {}),
+        headers: {
+          ...((effectiveOptions?.headers as Record<string, string> | undefined) ?? {}),
+          'X-MX-Request-Call-ID': callId,
+        },
+        signal: this.controller?.signal,
+      });
+
+      let result: AssistantMessage | null = null;
+      let errored = false;
+      try {
+        for await (const ev of modelStream) {
+          this.stream?.push({ ...ev, parent_id: agentId });
+          if (ev.type === 'done') result = ev.message;
+          else if (ev.type === 'error') {
+            result = ev.error;
+            errored = true;
+          }
+        }
+      } finally {
+        if (result) {
+          const durationSec = (Date.now() - t0) / 1000;
+          const firstTool = result.content?.find((c: unknown) => (c as { type?: string }).type === 'toolCall') as Record<string, unknown> | undefined;
+          const target = firstTool ?? (result as unknown as Record<string, unknown>);
+          target['_duration'] = durationSec;
+          target['_lllmCallId'] = callId;
+        }
       }
-      throw lastError ?? new Error(`callLLM: empty model plan (agent=${agentId})`);
+      if (!result) {
+        throw new Error(`callLLM: LLM stream ended without done/error event (agent=${agentId})`);
+      }
+      if (errored) {
+        throw new Error(
+          `callLLM: LLM stream errored (agent=${agentId}, reason='${result.stopReason}'): ${result.errorMessage ?? ''}`,
+        );
+      }
+      return result;
     } finally {
       this.onActivity?.({ phase: 'llm', status: 'end' });
       llmSemaphore.release();
     }
-  }
-
-  /**
-   * One model attempt within `callLLM`'s plan loop. Streams events to the
-   * client as they arrive; the terminal error event is forwarded only when no
-   * fallback remains (`pushErrorEvent`) or content already streamed (the turn
-   * fails anyway) — otherwise the next step retries invisibly.
-   */
-  private async attemptLlmCall(
-    model: Model<Api>,
-    context: Context,
-    agentId: string,
-    callOptions: Record<string, unknown> | undefined,
-    pushErrorEvent: boolean,
-  ): Promise<{ ok: true; message: AssistantMessage } | { ok: false; error: Error; streamedContent: boolean }> {
-    const callId = randomUUID();
-    const t0 = Date.now();
-
-    // Spread `callOptions` blindly into the model stream options. We treat it
-    // as an opaque blob (`SimpleStreamOptions`-shaped) so adding new stream
-    // options (`thinkingBudgets`, `metadata`, …) never touches this code.
-    const modelStream = streamSimple(model, context, {
-      // Default prompt-cache retention (overridable by an explicit `callOptions.cacheRetention`,
-      // which is spread AFTER this and wins). Applies to every agent — this is the one universal
-      // LLM call site.
-      cacheRetention: DEFAULT_CACHE_RETENTION,
-      ...(callOptions ?? {}),
-      headers: {
-        ...((callOptions?.headers as Record<string, string> | undefined) ?? {}),
-        'X-MX-Request-Call-ID': callId,
-      },
-      signal: this.controller?.signal,
-    });
-
-    let result: AssistantMessage | null = null;
-    let errored = false;
-    let streamedContent = false;
-    try {
-      for await (const ev of modelStream) {
-        if (ev.type === 'error') {
-          result = ev.error;
-          errored = true;
-          // The error event arrives last, so `streamedContent` is final here.
-          if (pushErrorEvent || streamedContent) this.stream?.push({ ...ev, parent_id: agentId });
-        } else {
-          if (ev.type !== 'start') streamedContent = true;
-          this.stream?.push({ ...ev, parent_id: agentId });
-          if (ev.type === 'done') result = ev.message;
-        }
-      }
-    } finally {
-      if (result) {
-        const durationSec = (Date.now() - t0) / 1000;
-        const firstTool = result.content?.find((c: unknown) => (c as { type?: string }).type === 'toolCall') as Record<string, unknown> | undefined;
-        const target = firstTool ?? (result as unknown as Record<string, unknown>);
-        target['_duration'] = durationSec;
-        target['_lllmCallId'] = callId;
-      }
-    }
-    if (!result) {
-      return {
-        ok: false,
-        error: new Error(`callLLM: LLM stream ended without done/error event (agent=${agentId})`),
-        streamedContent,
-      };
-    }
-    if (errored) {
-      return {
-        ok: false,
-        error: new Error(
-          `callLLM: LLM stream errored (agent=${agentId}, reason='${result.stopReason}'): ${result.errorMessage ?? ''}`,
-        ),
-        streamedContent,
-      };
-    }
-    return { ok: true, message: result };
   }
 
   run(root: MXAgent): EventStream<StreamEvent, AssistantMessage | null> {

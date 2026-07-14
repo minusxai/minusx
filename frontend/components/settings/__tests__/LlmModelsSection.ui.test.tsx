@@ -125,9 +125,9 @@ describe('LlmModelsSection', () => {
 
     await user.click(await screen.findByLabelText('Add Analyst model'));
     // No inline reasoning dropdown — an options gear instead.
-    expect(screen.queryByLabelText('Analyst primary reasoning')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Analyst reasoning')).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText('Analyst primary options'));
+    await user.click(screen.getByLabelText('Analyst options'));
     // 'low' is pre-selected (the default) — no ambiguous 'default' option exists.
     expect(await screen.findByLabelText('Reasoning effort low selected')).toBeInTheDocument();
     expect(screen.queryByLabelText(/Reasoning effort default/)).not.toBeInTheDocument();
@@ -159,7 +159,7 @@ describe('LlmModelsSection', () => {
     });
   });
 
-  it('builds an assignment chain with fallbacks', async () => {
+  it('assigns exactly ONE model per use case — no fallback affordance exists', async () => {
     const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
     renderWithProviders(<LlmModelsSection />, {
       store: storeWithLlm({
@@ -172,15 +172,16 @@ describe('LlmModelsSection', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByLabelText('Add Analyst model'));
-    expect(screen.getByLabelText('Analyst primary provider')).toBeInTheDocument();
-    await user.click(screen.getByLabelText('Add Analyst fallback'));
-    expect(screen.getByLabelText('Analyst fallback 1 provider')).toBeInTheDocument();
+    expect(screen.getByLabelText('Analyst provider')).toBeInTheDocument();
+    // Once a model is set, there is no way to add another (fallbacks removed).
+    expect(screen.queryByLabelText('Add Analyst fallback')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Add Analyst model')).not.toBeInTheDocument();
 
     await user.click(screen.getByLabelText('Save LLM configuration'));
     await waitFor(() => {
       const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
       const body = JSON.parse((configCall![1] as RequestInit).body as string);
-      expect(body.llm.assignments.analyst.chain).toHaveLength(2);
+      expect(body.llm.assignments.analyst.chain).toHaveLength(1);
       expect(body.llm.assignments.analyst.chain[0].providerName).toBe('a');
     });
   });

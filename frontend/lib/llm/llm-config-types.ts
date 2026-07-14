@@ -59,7 +59,11 @@ export interface LlmModelChoice {
   customModel?: Record<string, unknown>;
 }
 
-/** Ordered chain for one use case: `[primary, ...fallbacks]`. */
+/**
+ * One use case's model pick. The `chain` array is a stable storage shape;
+ * only the FIRST entry is used (fallbacks were deliberately removed — one
+ * model per use case; extra entries in hand-edited configs are ignored).
+ */
 export interface LlmUseCaseAssignment {
   chain: LlmModelChoice[];
 }

@@ -6,9 +6,8 @@
  * Two-level editor over the org config's `llm` section:
  *   1. Providers — credentialed endpoints (MinusX managed / registry providers /
  *      custom OpenAI-compatible), each testable via POST /api/llm/test.
- *   2. Assignments — per use case (analyst / micro): an ordered model chain
- *      `[primary, ...fallbacks]`, with searchable model pickers fed by
- *      GET /api/llm/registry.
+ *   2. Assignments — per use case (analyst / micro): one model each, with
+ *      searchable model pickers fed by GET /api/llm/registry.
  *
  * MinusX special-casing: the MinusX provider is pinned first in the picker and
  * needs only an API key — with no explicit assignments, the gateway handles
@@ -375,7 +374,7 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
           </Text>
         ) : (
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-            Pick the model each use case runs on, with optional fallbacks tried in order when a model is unavailable.
+            Pick the model each use case runs on.
           </Text>
         )}
         <VStack align="stretch" gap={4} mt={3}>
@@ -428,89 +427,88 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
     return { value: effective, label: needsName ? `${effective} (${providerLabel(p.provider)})` : providerLabel(p.provider) };
   });
 
-  const setStep = (index: number, patch: Partial<LlmModelChoice>) => {
-    const next = chain.map((step, i) => (i === index ? { ...step, ...patch } : step));
-    onChange(next);
+  // One model per use case: the stored `chain` array is a stable shape whose
+  // FIRST entry is the assignment (extra legacy entries are ignored).
+  const step = chain[0];
+  const setStep = (patch: Partial<LlmModelChoice>) => {
+    onChange([{ ...step, ...patch }]);
   };
 
-  // Which step's options modal is open (null = none).
-  const [optionsFor, setOptionsFor] = useState<number | null>(null);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+
+  const entry = step ? providers.find(p => (p.name || p.provider) === step.providerName) : undefined;
+  const slug = entry?.provider ?? '';
+  const registryModels = slug ? modelsFor(slug) : [];
+  const reasoning = (step?.options?.['reasoning'] as string | undefined) ?? DEFAULT_REASONING;
 
   return (
     <Box borderWidth="1px" borderColor="border.muted" borderRadius="md" p={4} aria-label={`Model assignment ${meta.title}`}>
       <Text fontSize="sm" fontWeight="medium" fontFamily="mono">{meta.title}</Text>
       <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>{meta.description}</Text>
       <VStack align="stretch" gap={2}>
-        {chain.map((step, index) => {
-          const entry = providers.find(p => (p.name || p.provider) === step.providerName);
-          const slug = entry?.provider ?? '';
-          const registryModels = slug ? modelsFor(slug) : [];
-          const stepLabel = `${meta.title} ${index === 0 ? 'primary' : `fallback ${index}`}`;
-          const reasoning = (step.options?.['reasoning'] as string | undefined) ?? DEFAULT_REASONING;
-          return (
-            <Flex key={index} gap={3} wrap="wrap" align="flex-end">
-              <Badge size="xs" variant="surface" minW="72px" justifyContent="center" mb={2}>{index === 0 ? 'primary' : `fallback ${index}`}</Badge>
-              <Box minW="200px">
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Provider</Text>
-                <SimpleSelect
-                  value={step.providerName}
-                  onChange={(providerName) => setStep(index, { providerName })}
-                  options={providerOptions}
-                  placeholder="Provider…"
-                  ariaLabel={`${stepLabel} provider`}
-                />
+        {step ? (
+          <Flex gap={3} wrap="wrap" align="flex-end">
+            <Box minW="200px">
+              <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Provider</Text>
+              <SimpleSelect
+                value={step.providerName}
+                onChange={(providerName) => setStep({ providerName })}
+                options={providerOptions}
+                placeholder="Provider…"
+                ariaLabel={`${meta.title} provider`}
+              />
+            </Box>
+            {slug === MINUSX_PROVIDER ? (
+              <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={2}>model routed by MinusX</Text>
+            ) : (
+              <Box minW="260px">
+                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Model</Text>
+                {registryModels.length > 0 ? (
+                  <SimpleSelect
+                    value={step.model ?? ''}
+                    onChange={(model) => setStep({ model })}
+                    options={registryModels.map(m => ({ value: m.id, label: m.name === m.id ? m.id : `${m.name} (${m.id})` }))}
+                    placeholder="Search models…"
+                    ariaLabel={`${meta.title} model`}
+                  />
+                ) : (
+                  <Input
+                    size="sm" fontSize="xs" fontFamily="mono"
+                    value={step.model ?? ''}
+                    placeholder="model id (e.g. qwen3:32b)"
+                    onChange={(e) => setStep({ model: e.target.value || undefined })}
+                    aria-label={`${meta.title} model`}
+                  />
+                )}
               </Box>
-              {slug === MINUSX_PROVIDER ? (
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={2}>model routed by MinusX</Text>
-              ) : (
-                <Box minW="260px">
-                  <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Model</Text>
-                  {registryModels.length > 0 ? (
-                    <SimpleSelect
-                      value={step.model ?? ''}
-                      onChange={(model) => setStep(index, { model })}
-                      options={registryModels.map(m => ({ value: m.id, label: m.name === m.id ? m.id : `${m.name} (${m.id})` }))}
-                      placeholder="Search models…"
-                      ariaLabel={`${stepLabel} model`}
-                    />
-                  ) : (
-                    <Input
-                      size="sm" fontSize="xs" fontFamily="mono"
-                      value={step.model ?? ''}
-                      placeholder="model id (e.g. qwen3:32b)"
-                      onChange={(e) => setStep(index, { model: e.target.value || undefined })}
-                      aria-label={`${stepLabel} model`}
-                    />
-                  )}
-                </Box>
-              )}
-              {slug !== MINUSX_PROVIDER && (
-                <Button size="xs" variant="ghost" mb={1} onClick={() => setOptionsFor(index)} aria-label={`${stepLabel} options`} title="Model options">
-                  <LuSettings2 />
-                </Button>
-              )}
-              <Button size="xs" variant="ghost" colorPalette="red" mb={1} onClick={() => onChange(chain.filter((_, i) => i !== index))} aria-label={`Remove ${stepLabel}`}>
-                <LuTrash2 />
+            )}
+            {slug !== MINUSX_PROVIDER && (
+              <Button size="xs" variant="ghost" mb={1} onClick={() => setOptionsOpen(true)} aria-label={`${meta.title} options`} title="Model options">
+                <LuSettings2 />
               </Button>
-              {optionsFor === index && (
-                <StepOptionsModal
-                  stepLabel={stepLabel}
-                  reasoning={reasoning}
-                  onReasoningChange={(value) => setStep(index, { options: { ...step.options, reasoning: value } })}
-                  onClose={() => setOptionsFor(null)}
-                />
-              )}
-            </Flex>
-          );
-        })}
-        <Button
-          size="xs" variant="outline" fontFamily="mono" alignSelf="flex-start"
-          onClick={() => onChange([...chain, { providerName: providerOptions[0]?.value ?? '', options: { reasoning: DEFAULT_REASONING } }])}
-          disabled={providerOptions.length === 0}
-          aria-label={`Add ${meta.title} ${chain.length === 0 ? 'model' : 'fallback'}`}
-        >
-          <LuCirclePlus /> {chain.length === 0 ? 'Set model' : 'Add fallback'}
-        </Button>
+            )}
+            <Button size="xs" variant="ghost" colorPalette="red" mb={1} onClick={() => onChange([])} aria-label={`Remove ${meta.title} model`}>
+              <LuTrash2 />
+            </Button>
+            {optionsOpen && (
+              <StepOptionsModal
+                stepLabel={meta.title}
+                reasoning={reasoning}
+                onReasoningChange={(value) => setStep({ options: { ...step.options, reasoning: value } })}
+                onClose={() => setOptionsOpen(false)}
+              />
+            )}
+          </Flex>
+        ) : (
+          <Button
+            size="xs" variant="outline" fontFamily="mono" alignSelf="flex-start"
+            onClick={() => onChange([{ providerName: providerOptions[0]?.value ?? '', options: { reasoning: DEFAULT_REASONING } }])}
+            disabled={providerOptions.length === 0}
+            aria-label={`Add ${meta.title} model`}
+          >
+            <LuCirclePlus /> Set model
+          </Button>
+        )}
       </VStack>
     </Box>
   );
