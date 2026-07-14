@@ -45,3 +45,36 @@ export async function getViewsForPath(
     return []; // no context / not readable → no views (queries against them then fail loudly)
   }
 }
+
+/**
+ * Every view defined ANYWHERE in the context tree for a connection.
+ *
+ * Uniqueness must be enforced across the whole tree, not just the ancestor
+ * chain: an ancestor taking a name a descendant already uses would retroactively
+ * break that child (whose author can't see it coming, and whose admin can't see
+ * child views).
+ */
+export async function getAllViewsInTree(
+  user: EffectiveUser,
+  connectionName: string,
+): Promise<ViewDef[]> {
+  const modePath = resolvePath(user.mode, '/');
+  const { data: contextFiles } = await FilesAPI.getFiles(
+    { type: 'context', paths: [modePath], depth: -1 },
+    user,
+  );
+  if (contextFiles.length === 0) return [];
+  const { data: loaded } = await FilesAPI.loadFiles(contextFiles.map((f) => f.id), user);
+
+  const all: ViewDef[] = [];
+  for (const file of loaded) {
+    const content = file.content as ContextContent | undefined;
+    // OWN views only, per context — fullViews would double-count inherited ones.
+    for (const version of content?.versions ?? []) {
+      for (const v of version.views ?? []) {
+        if (v.connection === connectionName) all.push(v);
+      }
+    }
+  }
+  return all;
+}

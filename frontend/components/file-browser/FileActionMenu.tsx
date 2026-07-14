@@ -1,7 +1,7 @@
 'use client';
 
-import { Box, IconButton, Menu, Portal, HStack, Icon, Button, Text, Dialog, CloseButton } from '@chakra-ui/react';
-import { LuEllipsis, LuTrash2, LuFolderInput, LuListChecks, LuGlobe, LuCopy } from 'react-icons/lu';
+import { Box, IconButton, Menu, Portal, HStack, Icon, Button, Text, Dialog, CloseButton, Input } from '@chakra-ui/react';
+import { LuEllipsis, LuTrash2, LuFolderInput, LuListChecks, LuGlobe, LuCopy, LuEye } from 'react-icons/lu';
 import { useState } from 'react';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { useStableCallback } from '@/lib/hooks/use-stable-callback';
@@ -27,6 +27,33 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const [promoteName, setPromoteName] = useState('');
+  const [promoteBusy, setPromoteBusy] = useState(false);
+  const [promoteError, setPromoteError] = useState<string | null>(null);
+
+  const handlePromote = async () => {
+    setPromoteBusy(true);
+    setPromoteError(null);
+    try {
+      const res = await fetch('/api/views/promote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questionId: fileId, name: promoteName.trim() }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body?.success) {
+        setPromoteError(body?.error?.message ?? 'Could not promote this question');
+        return;
+      }
+      setPromoteOpen(false);
+      setPromoteName('');
+    } catch {
+      setPromoteError('Could not promote this question');
+    } finally {
+      setPromoteBusy(false);
+    }
+  };
   const { canDeleteFileType, canCreateFileType } = useAccessRules();
   const canDeleteOrMove = canDeleteFileType(fileType);
   const canDuplicate = fileType !== 'folder' && canCreateFileType(fileType);
@@ -116,6 +143,26 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
                 <HStack gap={2}>
                   <Icon as={LuCopy} boxSize={4} />
                   <span>Duplicate</span>
+                </HStack>
+              </Menu.Item>
+            )}
+            {/* Promote to view: explore in a question, validate the numbers, then
+                curate. The view lands on the question's nearest knowledge base and
+                becomes a table everything else can use. */}
+            {fileType === 'question' && (
+              <Menu.Item
+                value="promote-view"
+                cursor="pointer"
+                borderRadius="sm"
+                px={3}
+                py={2}
+                _hover={{ bg: 'bg.muted' }}
+                onClick={() => setPromoteOpen(true)}
+                aria-label="Promote to view"
+              >
+                <HStack gap={2}>
+                  <Icon as={LuEye} boxSize={4} />
+                  <span>Promote to view</span>
                 </HStack>
               </Menu.Item>
             )}
@@ -231,6 +278,56 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
                 </Dialog.ActionTrigger>
                 <Button px={4} bg="fg.error" color="white" onClick={handleDeleteConfirm} _hover={{ opacity: 0.9 }} fontFamily="mono">
                   Delete
+                </Button>
+              </Dialog.Footer>
+              <Dialog.CloseTrigger asChild>
+                <CloseButton size="sm" top={4} right={4} />
+              </Dialog.CloseTrigger>
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Portal>
+      </Dialog.Root>
+
+      {/* Promote to view */}
+      <Dialog.Root open={promoteOpen} onOpenChange={(e: { open: boolean }) => setPromoteOpen(e.open)}>
+        <Portal>
+          <Dialog.Backdrop />
+          <Dialog.Positioner>
+            <Dialog.Content bg="bg.surface" borderRadius="lg" border="1px solid" borderColor="border.default" shadow="xl" p={0} my={12}>
+              <Dialog.Header px={6} py={4} borderBottom="1px solid" borderColor="border.default">
+                <Dialog.Title fontSize="lg" fontWeight="700" fontFamily="mono">Promote to view</Dialog.Title>
+              </Dialog.Header>
+              <Dialog.Body px={6} py={5}>
+                <Text fontSize="sm" lineHeight="1.6" mb={3}>
+                  Save this question&apos;s SQL as a view on its knowledge base. It becomes a table
+                  everything can use — the GUI, the agent, and other views.
+                </Text>
+                <Input
+                  aria-label="Promoted view name"
+                  size="sm"
+                  fontFamily="mono"
+                  placeholder="view_name"
+                  value={promoteName}
+                  onChange={(e) => setPromoteName(e.target.value)}
+                />
+                {promoteError && (
+                  <Text aria-label="Promote error" mt={2} fontSize="xs" fontFamily="mono" color="fg.error">
+                    {promoteError}
+                  </Text>
+                )}
+              </Dialog.Body>
+              <Dialog.Footer px={6} py={4} gap={3} borderTop="1px solid" borderColor="border.default" justifyContent="flex-end">
+                <Dialog.ActionTrigger asChild>
+                  <Button px={4} variant="outline" fontFamily="mono">Cancel</Button>
+                </Dialog.ActionTrigger>
+                <Button
+                  aria-label="Confirm promote to view"
+                  px={4} bg="accent.teal" color="white" fontFamily="mono"
+                  onClick={handlePromote}
+                  disabled={!promoteName.trim() || promoteBusy}
+                  loading={promoteBusy}
+                >
+                  Promote
                 </Button>
               </Dialog.Footer>
               <Dialog.CloseTrigger asChild>

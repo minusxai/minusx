@@ -466,7 +466,7 @@ export default function ContextEditorV2({
           persistableContent={codeViewPersistableContent}
           mergedContent={codeViewMergedContent}
           editable={editMode}
-          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullAnnotations', 'fullMetrics', 'fullRelationships', 'fullSkills']}
+          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullAnnotations', 'fullMetrics', 'fullRelationships', 'fullViews', 'fullSkills']}
           xmlContentTransform={shapeContextForAgent}
         />
       ) : (
@@ -534,6 +534,7 @@ export default function ContextEditorV2({
           toggleDatabase={toggleDatabase}
           yamlText={yamlText}
           onYamlChange={handleYamlChange}
+          contextPath={file?.path ?? ''}
         />
 
         {/* Docs Tab */}
