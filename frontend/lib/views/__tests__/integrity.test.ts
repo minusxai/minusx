@@ -1,0 +1,124 @@
+/**
+ * View integrity — the security boundary and the dependency graph, which are the
+ * same mechanism.
+ *
+ * A view may read anything the DEFINING context's PARENT offers (so it can
+ * curate an aggregate of a table this context deliberately hides from users) —
+ * and not one table more (so a child admin can never punch through the whitelist
+ * chain the org set above them).
+ *
+ * `reads` is computed from the SQL at the context-SAVE boundary, never trusted
+ * from the client — the view dialog, the raw JSON editor and the agent's EditFile
+ * all write through the same gate. Every later check is then a cheap set
+ * comparison: a parent narrowing its whitelist DISABLES the dependent view
+ * (loudly) rather than silently escalating it.
+ */
+import { describe, it, expect } from 'vitest';
+import { computeViewReads, checkViewAvailability, findViewDependents } from '../integrity';
+import type { DatabaseWithSchema, ViewDef } from '@/lib/types';
+
+const view = (name: string, sql: string, extra: Partial<ViewDef> = {}): ViewDef =>
+  ({ name, connection: 'warehouse', sql, ...extra });
+
+/** What the parent offers this context. */
+const OFFERED: DatabaseWithSchema[] = [{
+  databaseName: 'warehouse',
+  schemas: [{
+    schema: 'mxfood',
+    tables: [
+      { table: 'orders', columns: [] },
+      { table: 'zones', columns: [] },
+    ],
+  }],
+}];
+
+describe('computeViewReads', () => {
+  it('records the tables a view reads', async () => {
+    const reads = await computeViewReads(
+      'SELECT z.zone_name, SUM(o.total) FROM mxfood.orders o JOIN mxfood.zones z ON o.zone_id = z.id GROUP BY 1',
+      'duckdb',
+    );
+    expect(reads.tables).toEqual(expect.arrayContaining([
+      { schema: 'mxfood', table: 'orders' },
+      { schema: 'mxfood', table: 'zones' },
+    ]));
+    expect(reads.views).toEqual([]);
+  });
+
+  it('records views a view reads (the dependency edge)', async () => {
+    const reads = await computeViewReads('SELECT * FROM _views.zone_revenue WHERE revenue > 0', 'duckdb');
+    expect(reads.views).toEqual(['zone_revenue']);
+    expect(reads.tables).toEqual([]);
+  });
+
+  it('sees through the author\'s own CTEs (no hiding a table in a WITH)', async () => {
+    const reads = await computeViewReads(
+      'WITH x AS (SELECT * FROM mxfood.payroll) SELECT * FROM x',
+      'duckdb',
+    );
+    expect(reads.tables).toEqual([{ schema: 'mxfood', table: 'payroll' }]);
+  });
+});
+
+describe('checkViewAvailability — the whitelist chain is a real boundary', () => {
+  const zoneRevenue = view('zone_revenue',
+    'SELECT z.zone_name, o.total FROM mxfood.orders o JOIN mxfood.zones z ON o.zone_id = z.id',
+    { reads: { tables: [{ schema: 'mxfood', table: 'orders' }, { schema: 'mxfood', table: 'zones' }], views: [] } });
+
+  it('allows a table the parent OFFERS but this context did not whitelist', () => {
+    // The curation case: /org/sales hides `orders` from users but still aggregates it.
+    expect(checkViewAvailability(zoneRevenue, OFFERED, [])).toBeNull();
+  });
+
+  it('BLOCKS a table the parent does not offer at all (no escalation)', () => {
+    const payroll = view('payroll_summary', 'SELECT * FROM mxfood.payroll',
+      { reads: { tables: [{ schema: 'mxfood', table: 'payroll' }], views: [] } });
+    const problem = checkViewAvailability(payroll, OFFERED, []);
+    expect(problem).toMatch(/payroll/);
+    expect(problem).toMatch(/not offered|not available/i);
+  });
+
+  it('DISABLES a view when the parent later narrows its whitelist', () => {
+    const narrowed: DatabaseWithSchema[] = [{
+      databaseName: 'warehouse',
+      schemas: [{ schema: 'mxfood', tables: [{ table: 'zones', columns: [] }] }], // orders pulled
+    }];
+    expect(checkViewAvailability(zoneRevenue, narrowed, [])).toMatch(/orders/);
+  });
+
+  it('a view that reads another VISIBLE view is fine', () => {
+    const derived = view('top_zones', 'SELECT * FROM _views.zone_revenue',
+      { reads: { tables: [], views: ['zone_revenue'] } });
+    expect(checkViewAvailability(derived, OFFERED, [zoneRevenue])).toBeNull();
+  });
+
+  it('does NOT disable views when the connection schema is UNKNOWN (availability != policy)', () => {
+    // A transient introspection failure must not nuke every view in the workspace.
+    const payroll = view('payroll_summary', 'SELECT * FROM mxfood.payroll',
+      { reads: { tables: [{ schema: 'mxfood', table: 'payroll' }], views: [] } });
+    expect(checkViewAvailability(payroll, [], [])).toBeNull();
+    // ...but a missing view DEPENDENCY is still caught, schema or not.
+    const derived = view('top', 'SELECT * FROM _views.gone', { reads: { tables: [], views: ['gone'] } });
+    expect(checkViewAvailability(derived, [], [])).toMatch(/gone/);
+  });
+
+  it('a view whose dependency has vanished is disabled', () => {
+    const derived = view('top_zones', 'SELECT * FROM _views.zone_revenue',
+      { reads: { tables: [], views: ['zone_revenue'] } });
+    expect(checkViewAvailability(derived, OFFERED, [])).toMatch(/zone_revenue/);
+  });
+});
+
+describe('findViewDependents — who breaks if I delete this?', () => {
+  const a = view('zone_revenue', 'SELECT 1', { reads: { tables: [], views: [] } });
+  const b = view('top_zones', 'SELECT * FROM _views.zone_revenue', { reads: { tables: [], views: ['zone_revenue'] } });
+  const c = view('best_zone', 'SELECT * FROM _views.top_zones', { reads: { tables: [], views: ['top_zones'] } });
+
+  it('finds direct and TRANSITIVE dependents', () => {
+    expect(findViewDependents('zone_revenue', [a, b, c]).sort()).toEqual(['best_zone', 'top_zones']);
+  });
+
+  it('a view nothing depends on is free to delete', () => {
+    expect(findViewDependents('best_zone', [a, b, c])).toEqual([]);
+  });
+});

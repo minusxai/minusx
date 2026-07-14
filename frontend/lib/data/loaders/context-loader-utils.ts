@@ -124,8 +124,17 @@ export async function computeSchemaFromWhitelist(
   const fullAnnotations = [...(ancestorContent.fullAnnotations || []), ...(publishedVersion.annotations || [])];
   // Declared relationships inherit like metrics (ancestor's inherited + ancestor's own).
   const fullRelationships = [...(ancestorContent.fullRelationships || []), ...(publishedVersion.relationships || [])];
-  // Views inherit the same way — a child sees every view its ancestors define.
-  const fullViews = [...(ancestorContent.fullViews || []), ...(publishedVersion.views || [])];
+  // Views inherit the same way — a child sees every view its ancestors define,
+  // MINUS any the ancestor's own loader disabled (its `viewProblems`). That is
+  // what makes the guarantee recursive: each level validates only its own views,
+  // and refuses to pass on what it had to disable.
+  const ancestorBroken = new Set<string>(
+    ((ancestorContent.viewProblems ?? []) as Array<{ view: string }>).map((p) => p.view),
+  );
+  const fullViews = [
+    ...(ancestorContent.fullViews || []),
+    ...((publishedVersion.views || []) as ViewDef[]).filter((v) => !ancestorBroken.has(v.name)),
+  ];
 
   // parentOffering = what the parent makes available to this context (before own whitelist)
   return { fullSchema, parentSchema: parentOffering, fullDocs, fullMetrics, fullAnnotations, fullRelationships, fullViews, fullSkills };

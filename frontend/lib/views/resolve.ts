@@ -22,6 +22,13 @@ import { isCompoundQueryIR } from '@/lib/sql/ir-types';
 import { VIEWS_SCHEMA, type ViewDef } from '@/lib/types/views';
 import type { AnyQueryIR, QueryIR, TableReference } from '@/lib/sql/ir-types';
 
+/**
+ * A view whose SQL is known. Question-backed views are hydrated from their
+ * question before resolution (lib/views/views.server.ts) — the resolver itself
+ * never touches the database.
+ */
+export type HydratedView = ViewDef & { sql: string };
+
 export class ViewResolutionError extends Error {
   constructor(message: string) {
     super(message);
@@ -102,10 +109,17 @@ async function rewriteSql(sql: string, dialect: string): Promise<string> {
  * Resolve a view's body to SQL with its own view references rewritten to CTE
  * names — the body goes INSIDE a CTE, so its dependencies are hoisted to the
  * top-level CTE list by the caller.
+ *
+ * A column whitelist is applied by PROJECTION: the body is wrapped so only the
+ * exposed columns survive. This is real enforcement — a deselected column
+ * ceases to exist downstream (the engine itself rejects a query that names it),
+ * unlike hiding a raw table's column, which merely conceals it.
  */
-async function viewBodySql(v: ViewDef, dialect: string): Promise<string> {
-  if (!mentionsViews(v.sql)) return v.sql;
-  return rewriteSql(v.sql, dialect);
+async function viewBodySql(v: HydratedView, dialect: string): Promise<string> {
+  const body = mentionsViews(v.sql) ? await rewriteSql(v.sql, dialect) : v.sql;
+  if (!v.whitelistedColumns || v.whitelistedColumns.length === 0) return body;
+  const cols = v.whitelistedColumns.join(', ');
+  return `SELECT ${cols} FROM (\n${body}\n) AS ${cteName(v.name)}_src`;
 }
 
 /**
@@ -115,7 +129,7 @@ async function viewBodySql(v: ViewDef, dialect: string): Promise<string> {
 export async function resolveViewsInSql(
   sql: string,
   dialect: string,
-  views: ViewDef[],
+  views: HydratedView[],
 ): Promise<string> {
   if (!mentionsViews(sql)) return sql; // fast path: untouched, unparsed
 
@@ -123,7 +137,7 @@ export async function resolveViewsInSql(
 
   // Depth-first walk over the dependency graph: emits dependencies before
   // dependents (topological order) and detects cycles via the active path.
-  const ordered: ViewDef[] = [];
+  const ordered: HydratedView[] = [];
   const done = new Set<string>();
   const active: string[] = [];
 

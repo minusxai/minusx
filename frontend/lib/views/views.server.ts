@@ -13,22 +13,39 @@ import { findNearestContextPath, getPublishedVersionForUser } from '@/lib/contex
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ContextContent, ViewDef } from '@/lib/types';
+import type { HydratedView } from '@/lib/views/resolve';
 
-/** Every view a context exposes: inherited (fullViews) + its live version's own. */
+/**
+ * Every view a context exposes: inherited (fullViews) + its live version's own,
+ * MINUS any the loader disabled (`viewProblems` — e.g. an ancestor pulled a table
+ * it reads). A disabled view must not resolve: the query fails loudly instead of
+ * quietly reading data the org has since withdrawn.
+ */
 export function resolveViewsForContext(content: ContextContent | null | undefined, userId: number): ViewDef[] {
   if (!content) return [];
   const version = content.versions?.find(
     (v) => v.version === getPublishedVersionForUser(content, userId),
   ) ?? content.versions?.[0];
-  return [...(content.fullViews ?? []), ...(version?.views ?? [])];
+  const broken = new Set((content.viewProblems ?? []).map((p) => p.view));
+  return [...(content.fullViews ?? []), ...(version?.views ?? [])].filter((v) => !broken.has(v.name));
 }
 
-/** Views visible to a file at `lookupPath`, scoped to one connection. */
+/**
+ * Views are INLINE SQL: a view carries its own SQL, so nothing can change it
+ * behind the authorization that approved it. ("Promote to view" copies a
+ * question's SQL in; the question is a starting point, not a live dependency —
+ * a live link would let the question's SQL drift outside what the view was
+ * allowed to read.)
+ */
+const hydrated = (views: ViewDef[]): HydratedView[] =>
+  views.filter((v): v is HydratedView => !!v.sql?.trim());
+
+/** Views visible to a file at `lookupPath`, scoped to one connection (SQL hydrated). */
 export async function getViewsForPath(
   lookupPath: string,
   connectionName: string,
   user: EffectiveUser,
-): Promise<ViewDef[]> {
+): Promise<HydratedView[]> {
   try {
     const modePath = resolvePath(user.mode, '/');
     const { data: contextFiles } = await FilesAPI.getFiles(
@@ -39,8 +56,9 @@ export async function getViewsForPath(
     const nearest = findNearestContextPath(contextFiles.map((f) => f.path), dir);
     if (!nearest) return [];
     const { data } = await FilesAPI.loadFileByPath(nearest, user);
-    const views = resolveViewsForContext(data?.content as ContextContent, user.userId);
-    return views.filter((v) => v.connection === connectionName);
+    const views = resolveViewsForContext(data?.content as ContextContent, user.userId)
+      .filter((v) => v.connection === connectionName);
+    return hydrated(views);
   } catch {
     return []; // no context / not readable → no views (queries against them then fail loudly)
   }

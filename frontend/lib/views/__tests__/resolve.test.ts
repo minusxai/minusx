@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api';
-import { resolveViewsInSql, extractViewRefs, validateViews, ViewResolutionError } from '../resolve';
+import { resolveViewsInSql, extractViewRefs, validateViews, ViewResolutionError, type HydratedView } from '../resolve';
 import type { ViewDef } from '@/lib/types';
 
 const DDL = `
@@ -24,7 +24,7 @@ INSERT INTO mxfood.orders VALUES
 INSERT INTO mxfood.zones VALUES (10, 'North'), (20, 'South');
 `;
 
-const view = (name: string, sql: string): ViewDef => ({ name, connection: 'warehouse', sql });
+const view = (name: string, sql: string): HydratedView => ({ name, connection: 'warehouse', sql });
 
 /** revenue per zone — the multi-table join the semantic layer can't express. */
 const ZONE_REVENUE = view('zone_revenue', `
@@ -153,6 +153,39 @@ describe('resolveViewsInSql — executes correctly (real DuckDB)', () => {
       SELECT zone_name FROM big ORDER BY zone_name
     `);
     expect(rows).toEqual([['North'], ['South']]);
+  });
+});
+
+describe('column whitelist — projection is REAL enforcement', () => {
+  let db: DuckDBConnection;
+  beforeAll(async () => {
+    const instance = await DuckDBInstance.create(':memory:');
+    db = await instance.connect();
+    await db.run(DDL);
+  });
+  afterAll(() => db?.closeSync());
+
+  // zone_revenue exposes zone_name, status, revenue, orders — hide the money.
+  const RESTRICTED = { ...ZONE_REVENUE, whitelistedColumns: ['zone_name', 'orders'] };
+
+  it('projects the view to its whitelisted columns only', async () => {
+    const sql = await resolveViewsInSql('SELECT * FROM _views.zone_revenue', 'duckdb', [RESTRICTED]);
+    const reader = await db.runAndReadAll(sql);
+    expect(reader.columnNames().sort()).toEqual(['orders', 'zone_name']);
+  });
+
+  it('a deselected column genuinely does not exist — even if a query names it', async () => {
+    const sql = await resolveViewsInSql(
+      'SELECT zone_name, revenue FROM _views.zone_revenue', 'duckdb', [RESTRICTED],
+    );
+    // The engine itself rejects it: the column is gone, not merely hidden.
+    await expect(db.runAndReadAll(sql)).rejects.toThrow(/revenue/i);
+  });
+
+  it('no whitelist = every column exposed', async () => {
+    const sql = await resolveViewsInSql('SELECT * FROM _views.zone_revenue', 'duckdb', [ZONE_REVENUE]);
+    const reader = await db.runAndReadAll(sql);
+    expect(reader.columnNames()).toEqual(expect.arrayContaining(['zone_name', 'status', 'revenue', 'orders']));
   });
 });
 

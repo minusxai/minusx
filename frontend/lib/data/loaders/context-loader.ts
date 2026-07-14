@@ -4,12 +4,13 @@
  * Supports versioning - each user sees their published version
  */
 
-import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, TableRelationship, ViewDef, VIEWS_SCHEMA } from '@/lib/types';
+import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, TableRelationship, ViewDef, ViewProblem, VIEWS_SCHEMA } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getPublishedVersionForUser as getPublishedVersionForUserId, resolveVersionWhitelist } from '@/lib/context/context-utils';
 import { CustomLoader } from './types';
 import { computeSchemaFromWhitelist } from './context-loader-utils';
 import { boundSchema, boundFullSchema } from '@/lib/context/schema-bounding';
+import { checkViewAvailability } from '@/lib/views/integrity';
 
 /**
  * Context Loader - Computes fullSchema and fullDocs based on published version
@@ -79,8 +80,23 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
   // it, and the semantic layer derives a model from its columns. Views are always
   // exposed by the context that defines or inherits them — they are curated by
   // construction, so they need no separate whitelisting.
+  //
+  // A view is DISABLED here when what it reads is no longer available — most
+  // importantly when an ancestor has since narrowed its whitelist. That must
+  // fail CLOSED: the view leaves the exposed schema (so nothing can query it,
+  // and children never inherit it) and the reason is surfaced for the UI, rather
+  // than the view quietly continuing to read a table the org just pulled.
+  // Own views only: an ancestor's views were already checked when its own loader
+  // ran, which is what makes the guarantee hold recursively without a tree crawl.
   const fullViews = computed.fullViews;
-  const allViews = [...fullViews, ...(publishedVersion.views || [])];
+  const ownViews = publishedVersion.views || [];
+  const viewProblems: ViewProblem[] = [];
+  const validOwnViews = ownViews.filter((v) => {
+    const reason = checkViewAvailability(v, computed.parentSchema, [...fullViews, ...ownViews]);
+    if (reason) viewProblems.push({ view: v.name, reason });
+    return !reason;
+  });
+  const allViews = [...fullViews, ...validOwnViews];
   const withViews = injectViewsAsTables(computed.fullSchema, allViews);
 
   // Bound the columnar schema (WITH the views already injected, so they ship with columns): keep columns when small, drop the
@@ -114,6 +130,7 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         fullAnnotations,
         fullRelationships,
         fullViews,
+        viewProblems,
         fullSkills
       }
     };
@@ -132,6 +149,7 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         fullAnnotations,
         fullRelationships,
         fullViews,
+        viewProblems,
         fullSkills
       }
     };

@@ -10,7 +10,7 @@ import type { DatabaseWithSchema } from './connections';
 import type { Test } from './evals';
 import type { SkillMention } from './chat';
 import type { TableRelationship } from './semantic';
-import type { ViewDef } from './views';
+import type { ViewDef, ViewProblem } from './views';
 
 /**
  * Recursive whitelist tree node.
@@ -139,7 +139,8 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   fullMetrics?: MetricDef[];           // Computed by loader - inherited + own metrics
   fullAnnotations?: TableAnnotation[]; // Computed by loader - inherited + own annotations
   fullRelationships?: TableRelationship[]; // Computed by loader - inherited relationships
-  fullViews?: ViewDef[];               // Computed by loader - inherited views
+  fullViews?: ViewDef[];               // Computed by loader - inherited views (valid ones only)
+  viewProblems?: ViewProblem[];        // Computed by loader - views DISABLED here, and why
   fullSkills?: SkillEntry[];           // Computed by loader - inherited user-defined skills
 
   // Working fields (exposed by container for editing current version)
