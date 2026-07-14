@@ -11,7 +11,9 @@ import 'server-only'
 
 import path from 'path'
 import { renderChartToJpeg } from '@/lib/chart/render-chart'
+import { renderVizEnvelopeToJpeg } from '@/lib/chart/render-viz-image'
 import { getChartHeight } from '@/lib/chart/render-chart-svg'
+import { getEnvelopeVizType } from '@/lib/viz/encoding-edit'
 import type { IChartImageRenderer, ChartInput, ChartRenderOptions, RenderedChart } from './IChartImageRenderer'
 
 // Path that does not exist — renderChartToJpeg skips logo overlay when file not found
@@ -27,19 +29,23 @@ export const serverChartImageRenderer: IChartImageRenderer = {
       : NO_LOGO
     const results: RenderedChart[] = []
 
-    for (const { queryResult, vizSettings, titleOverride } of inputs) {
-      const height = getChartHeight(vizSettings.type, width)
-      const buf = await renderChartToJpeg(queryResult, vizSettings, {
-        width,
-        height,
-        colorMode,
-        logoPath,
-        titleOverride,
-        padding,
-      })
+    for (const { queryResult, vizSettings, viz, titleOverride } of inputs) {
+      // V2 `viz` envelope → the Vega pipeline; legacy `vizSettings` → the ECharts pipeline.
+      let buf: Buffer | null = null
+      let label = titleOverride
+      if (viz) {
+        buf = await renderVizEnvelopeToJpeg(viz, queryResult.rows, {
+          width, height: getChartHeight(getEnvelopeVizType(viz) ?? 'bar', width), colorMode, padding, logoPath,
+        })
+        label = label ?? getEnvelopeVizType(viz) ?? 'chart'
+      } else if (vizSettings) {
+        buf = await renderChartToJpeg(queryResult, vizSettings, {
+          width, height: getChartHeight(vizSettings.type, width), colorMode, logoPath, titleOverride, padding,
+        })
+        label = label ?? vizSettings.type
+      }
       if (!buf) continue
-      const label = titleOverride ?? vizSettings.type
-      results.push({ label, dataUrl: `data:image/jpeg;base64,${buf.toString('base64')}` })
+      results.push({ label: label ?? 'chart', dataUrl: `data:image/jpeg;base64,${buf.toString('base64')}` })
     }
 
     return results

@@ -120,6 +120,9 @@ export const clientChartImageRenderer: IChartImageRenderer = {
 
     const settled = await Promise.all(
       inputs.map(async ({ queryResult, vizSettings, titleOverride }) => {
+        // This renderer is the V1 (ECharts) path; V2 `viz` envelopes render via
+        // VizImageRenderer.client. Skip an input with no vizSettings.
+        if (!vizSettings) return null
         const height = getChartHeight(vizSettings.type, width)
         const rawUrl = await renderSingleChartToDataUrl(queryResult, vizSettings, colorMode, width, height, titleOverride)
         if (!rawUrl) return null

@@ -113,7 +113,7 @@ describe('minusx/trend@1 build', () => {
     expect(json).toContain('__mx_kpi_plate');
     expect(json).toContain('mx-trend-focus');
     expect(json).toContain('"cornerRadius":{"value":10}');
-    expect(json).toContain('"fillOpacity":{"value":0.94}');
+    expect(json).toContain('"fillOpacity":{"value":0.86}');
     expect(json).not.toContain('__mx_kpi_aura');
     expect(json).not.toContain('__mx_value_glow');
     expect(json).not.toContain("gradient: 'radial'");

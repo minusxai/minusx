@@ -1,7 +1,7 @@
 // The pure ReadFiles/ExecuteQuery presentation decision: image for server-renderable viz (default),
 // rows otherwise or when rawData is explicitly requested.
 import { describe, it, expect } from 'vitest';
-import { queryPresentation, shouldDropRows, isImageViz, isContentImageViz } from '../query-presentation';
+import { queryPresentation, shouldDropRows, isImageViz, isContentImageViz, selectExecuteQueryImage } from '../query-presentation';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 const barEnv = { version: 2, source: { kind: 'vega-lite', grammar: 'vega-lite@6', spec: { mark: { type: 'bar' } } } } as unknown as VizEnvelope;
@@ -32,6 +32,22 @@ describe('isContentImageViz (V2-aware)', () => {
     expect(isContentImageViz({ vizSettings: { type: 'bar' } })).toBe(true);
     expect(isContentImageViz({ vizSettings: { type: 'table' } })).toBe(false);
     expect(isContentImageViz(undefined)).toBe(false);
+  });
+});
+
+describe('selectExecuteQueryImage (V2 envelope wins over legacy vizSettings)', () => {
+  it('renders the viz envelope when it is a chart', () => {
+    expect(selectExecuteQueryImage({ viz: barEnv, vizSettings: { type: 'line' } })).toEqual({ kind: 'envelope', viz: barEnv });
+  });
+
+  it('is authoritative: a table envelope means no image even if vizSettings is a chart', () => {
+    expect(selectExecuteQueryImage({ viz: tableEnv, vizSettings: { type: 'bar' } })).toBeNull();
+  });
+
+  it('falls back to legacy vizSettings only when no envelope is present', () => {
+    expect(selectExecuteQueryImage({ vizSettings: { type: 'bar' } })).toEqual({ kind: 'vizSettings', vizSettings: { type: 'bar' } });
+    expect(selectExecuteQueryImage({ vizSettings: { type: 'pivot' } })).toBeNull();
+    expect(selectExecuteQueryImage({})).toBeNull();
   });
 });
 

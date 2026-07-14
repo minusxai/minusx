@@ -534,10 +534,14 @@ escape hatch — have moved to Appendix A. This list is now driven by **retiring
    envelope, and the row-drop gate is now `isContentImageViz` (envelope-aware) across ReadFiles/EditFile.
    The user **download menu** (image `.jpg` + data `.csv`) ships on every V2 chart via `ChartDownloadMenu` (a
    hover-revealed overlay; the image reuses the client renderer, real tiles). **Remaining (follow-up):** the Slack
-   headless path (`extractQueryCharts` + `serverChartImageRenderer` → envelopes, gated on `ExecuteQuery` emitting
-   a `viz` arg).
-3. **Default new questions to V2.** `lib/data/story/template-defaults.ts` authors a `viz` envelope (`kind:'table'`)
-   and STOPS emitting `vizSettings`. New questions are V2-only from here.
+   headless path — ✅ **shipped 2026-07-14**: `ExecuteQuery` takes an optional `viz` envelope arg (rendered via
+   `renderVizEnvelopeToJpeg`, wins over `vizSettings`); `extractQueryCharts` + `serverChartImageRenderer` surface
+   and render it, so Slack (and browser ad-hoc `ExecuteQuery` charts) post V2 images. `selectExecuteQueryImage`
+   is the shared V2-vs-V1 selector.
+3. **Default new questions to V2.** ✅ **Shipped 2026-07-14** (interim). `template-defaults.ts` scaffolds an
+   authoritative `viz` envelope (`kind:'table'`) — new questions render + edit via the V2 pipeline (VizTableView +
+   the V2 type selector / drop-zones, browser-verified). The required `vizSettings:{type:'table'}` placeholder
+   stays (schema still requires it; `viz` overrides it) until item 5 makes `viz` required and drops the field.
 4. **Backfill migration.** Bump `LATEST_DATA_VERSION` + add a `MIGRATIONS` entry that writes
    `viz = vizSettingsToEnvelope(...)` for every question still lacking one; sweep dashboard/notebook/story embeds
    (they render referenced questions through the same path); `npm run update-workspace-template`.
@@ -562,8 +566,8 @@ escape hatch — have moved to Appendix A. This list is now driven by **retiring
     and a direct `slippy-map` source kind. Detach (item shipped) is the substrate: a detached spec IS a
     fully-bound recipe; a publishable recipe is "detach + keep bindings as tokens".
 
-**Take up next:** item 2 (chart→image) — the highest-value user/LLM win, orthogonal to the V1 conversion.
-Then item 4 (the backfill migration) reuses the shipped converter to make the editable surfaces V2-native.
+**Take up next:** item 4 (the backfill migration) — reuses the shipped converter to make EXISTING editable
+questions V2-native (new ones already are, via item 3), then item 5 (bake → big-bang delete V1).
 
 ---
 

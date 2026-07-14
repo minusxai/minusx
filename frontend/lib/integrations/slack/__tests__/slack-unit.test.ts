@@ -527,7 +527,7 @@ describe('extractQueryChart', () => {
     ];
     const chart = extractQueryChart(log);
     expect(chart).not.toBeNull();
-    expect(chart!.vizSettings.type).toBe('bar');
+    expect(chart!.vizSettings!.type).toBe('bar');
     expect(chart!.queryResult.rows).toHaveLength(2);
   });
 
@@ -536,7 +536,7 @@ describe('extractQueryChart', () => {
       executeQueryTask('eq1', { type: 'line', xCols: ['month'], yCols: ['revenue'] }),
       executeQueryResult('eq1', sampleQueryResult),
     ];
-    expect(extractQueryChart(log)!.vizSettings.type).toBe('line');
+    expect(extractQueryChart(log)!.vizSettings!.type).toBe('line');
   });
 
   it('returns null for table vizSettings', () => {
@@ -579,7 +579,7 @@ describe('extractQueryChart', () => {
       executeQueryResult('eq2', sampleQueryResult),
     ];
     const chart = extractQueryChart(log);
-    expect(chart!.vizSettings.type).toBe('pie');
+    expect(chart!.vizSettings!.type).toBe('pie');
   });
 
   it('skips non-renderable and returns the last renderable', () => {
@@ -590,7 +590,7 @@ describe('extractQueryChart', () => {
       executeQueryResult('eq2', sampleQueryResult),
     ];
     const chart = extractQueryChart(log);
-    expect(chart!.vizSettings.type).toBe('bar');
+    expect(chart!.vizSettings!.type).toBe('bar');
   });
 
   it('extractQueryCharts returns max 2 charts in chronological order', () => {
@@ -604,8 +604,8 @@ describe('extractQueryChart', () => {
     ];
     const charts = extractQueryCharts(log);
     expect(charts).toHaveLength(2);
-    expect(charts[0].vizSettings.type).toBe('line');
-    expect(charts[1].vizSettings.type).toBe('pie');
+    expect(charts[0].vizSettings!.type).toBe('line');
+    expect(charts[1].vizSettings!.type).toBe('pie');
   });
 
   it('extractQueryCharts skips non-renderable types', () => {
@@ -619,8 +619,30 @@ describe('extractQueryChart', () => {
     ];
     const charts = extractQueryCharts(log);
     expect(charts).toHaveLength(2);
-    expect(charts[0].vizSettings.type).toBe('bar');
-    expect(charts[1].vizSettings.type).toBe('line');
+    expect(charts[0].vizSettings!.type).toBe('bar');
+    expect(charts[1].vizSettings!.type).toBe('line');
+  });
+
+  function executeQueryVizTask(uniqueId: string, viz: object): ConversationLogEntry {
+    return {
+      _type: 'task', agent: 'ExecuteQuery',
+      args: { query: 'SELECT * FROM t', connectionId: 'db1', viz },
+      unique_id: uniqueId, _run_id: 'run1', created_at: new Date().toISOString(),
+    } as unknown as ConversationLogEntry;
+  }
+  const barEnv = { version: 2, source: { kind: 'vega-lite', grammar: 'vega-lite@6', spec: { mark: { type: 'bar' } } } };
+  const tableEnv = { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } };
+
+  it('extracts a chart from an ExecuteQuery V2 viz envelope', () => {
+    const log = [executeQueryVizTask('eq1', barEnv), executeQueryResult('eq1', sampleQueryResult)];
+    const charts = extractQueryCharts(log);
+    expect(charts).toHaveLength(1);
+    expect(charts[0].viz).toEqual(barEnv);
+  });
+
+  it('skips a table viz envelope (not a chart)', () => {
+    const log = [executeQueryVizTask('eq1', tableEnv), executeQueryResult('eq1', sampleQueryResult)];
+    expect(extractQueryCharts(log)).toHaveLength(0);
   });
 
   it('returns null when no ExecuteQuery in log', () => {
@@ -636,6 +658,6 @@ describe('extractQueryChart', () => {
       executeQueryTask('eq1', '{"type":"scatter","xCols":["x"],"yCols":["y"]}'),
       executeQueryResult('eq1', sampleQueryResult),
     ];
-    expect(extractQueryChart(log)!.vizSettings.type).toBe('scatter');
+    expect(extractQueryChart(log)!.vizSettings!.type).toBe('scatter');
   });
 });

@@ -40,6 +40,27 @@ export function isContentImageViz(
 }
 
 /**
+ * Which viz an ExecuteQuery result should render as an IMAGE. A V2 `viz` envelope is
+ * authoritative — when present it decides outright (chart → render it, table/pivot → no
+ * image), never falling back to `vizSettings`. Only when there is no envelope does the
+ * legacy `vizSettings.type` gate apply. Null = send rows, no image.
+ */
+export type ExecuteQueryImageSource =
+  | { kind: 'envelope'; viz: VizEnvelope }
+  | { kind: 'vizSettings'; vizSettings: unknown }
+  | null;
+
+export function selectExecuteQueryImage(params: { viz?: unknown; vizSettings?: unknown }): ExecuteQueryImageSource {
+  if (params.viz != null) {
+    const viz = params.viz as VizEnvelope;
+    return isEnvelopeImageViz(viz) ? { kind: 'envelope', viz } : null;
+  }
+  const vizType = (params.vizSettings as { type?: string } | null | undefined)?.type;
+  if (params.vizSettings && isImageViz(vizType)) return { kind: 'vizSettings', vizSettings: params.vizSettings };
+  return null;
+}
+
+/**
  * The DEFAULT presentation for a result: image for a server-renderable viz, else rows. `rawData`
  * forces rows. NOTE: this folds rawData into a single 'image'|'data' verdict; the file tools instead
  * decide the image and the rows SEPARATELY (`isImageViz` for the image, `shouldDropRows` for the
