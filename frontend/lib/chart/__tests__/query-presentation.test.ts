@@ -1,7 +1,11 @@
 // The pure ReadFiles/ExecuteQuery presentation decision: image for server-renderable viz (default),
 // rows otherwise or when rawData is explicitly requested.
 import { describe, it, expect } from 'vitest';
-import { queryPresentation, shouldDropRows, isImageViz } from '../query-presentation';
+import { queryPresentation, shouldDropRows, isImageViz, isContentImageViz } from '../query-presentation';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+
+const barEnv = { version: 2, source: { kind: 'vega-lite', grammar: 'vega-lite@6', spec: { mark: { type: 'bar' } } } } as unknown as VizEnvelope;
+const tableEnv = { version: 2, source: { kind: 'table' } } as unknown as VizEnvelope;
 
 describe('isImageViz', () => {
   it('is true for every server-renderable chart viz (rawData-independent)', () => {
@@ -15,6 +19,19 @@ describe('isImageViz', () => {
       expect(isImageViz(t)).toBe(false);
     }
     expect(isImageViz(undefined)).toBe(false);
+  });
+});
+
+describe('isContentImageViz (V2-aware)', () => {
+  it('uses the viz ENVELOPE when present — chart kinds image, table/pivot do not', () => {
+    expect(isContentImageViz({ viz: barEnv })).toBe(true);
+    expect(isContentImageViz({ viz: tableEnv })).toBe(false);
+  });
+
+  it('falls back to the legacy vizSettings.type when there is no envelope', () => {
+    expect(isContentImageViz({ vizSettings: { type: 'bar' } })).toBe(true);
+    expect(isContentImageViz({ vizSettings: { type: 'table' } })).toBe(false);
+    expect(isContentImageViz(undefined)).toBe(false);
   });
 });
 

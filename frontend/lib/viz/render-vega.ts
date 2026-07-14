@@ -449,6 +449,33 @@ export async function renderVegaLiteToSvg(
   }
 }
 
+/**
+ * Browser image export: render a full envelope to a raster canvas (Viz Arch V2 §21
+ * item 2, the client path). Unlike the SVG paths this rasterizes through Vega's canvas
+ * renderer, so image marks (slippy street TILES) are captured for real — the direct
+ * analogue of the ECharts `getDataURL` off-screen render. Browser-only (needs a canvas).
+ */
+export async function renderEnvelopeToCanvas(
+  envelope: VizEnvelope,
+  rows: Record<string, unknown>[],
+  mode: 'light' | 'dark',
+  opts: { width?: number; height?: number; pixelRatio?: number } = {},
+): Promise<HTMLCanvasElement> {
+  const resolved = resolveEnvelopeSpec(envelope);
+  if (!resolved.ok) throw new Error(resolved.error);
+  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode);
+  const view = createVegaView(vegaSpec, rows, {
+    renderer: 'none', parserConfig, width: opts.width, height: opts.height,
+  });
+  try {
+    await injectNamedAssets(view, resolved.assets);
+    await view.runAsync();
+    return (await view.toCanvas(opts.pixelRatio ?? 1)) as unknown as HTMLCanvasElement;
+  } finally {
+    view.finalize();
+  }
+}
+
 /** Headless render of a full envelope (any source kind / engine). */
 export async function renderEnvelopeToSvg(
   envelope: VizEnvelope,

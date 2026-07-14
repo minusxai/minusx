@@ -526,13 +526,14 @@ escape hatch — have moved to Appendix A. This list is now driven by **retiring
    routes legacy no-`viz` charts on READ-ONLY surfaces through `<VegaChart>`. Editable surfaces keep the V1
    `ChartBuilder` (nothing persists yet — the picture re-derives from `vizSettings` each render, so V1 edits
    still flow through); the editable cutover happens when **item 4** actually writes the envelope. Unblocks 2–5.
-2. **Chart → image artifact pipeline.** Two paths, one encoder target (JPEG, reusing the S3 `uploadChartOrEmbed`
-   path): **client** — `View.toCanvas()` → `toDataURL('image/jpeg')`, the direct analogue of the ECharts
-   `clientChartImageRenderer`/`buildChartAttachments` path (runs in the browser, so it captures REAL street
-   tiles); **headless** (Slack/cron/server preview) — `renderEnvelopeToSvg` → Resvg/sharp (the `render-chart.ts`
-   rasterizer already exists; tile maps fall back to the vector boundary). Teach `isImageViz` +
-   `renderFileChartImageBlocks` to recognize a `viz` envelope, not just ECharts `vizSettings.type`. Serves both
-   chart→LLM attachments and user image download.
+2. **Chart → image artifact pipeline.** ✅ **Core shipped 2026-07-14** (see Appendix A). Both render paths reuse
+   the shared `composeSvgToJpeg` compositor (Resvg + Sharp, one background/logo/quality contract): **client** —
+   `renderEnvelopeToCanvas` (`view.toCanvas()`) → `toJpegObjectUrl`, off-screen, captures REAL street tiles
+   (`VizImageRenderer.client.ts`); **headless** — `renderVizEnvelopeToJpeg` (`renderEnvelopeToSvg` → compositor,
+   `render-viz-image.ts`). The agent-attachment path is wired: `renderFileChartImageBlocks` branches on a `viz`
+   envelope, and the row-drop gate is now `isContentImageViz` (envelope-aware) across ReadFiles/EditFile.
+   **Remaining (follow-ups):** the Slack headless path (`extractQueryCharts` + `serverChartImageRenderer` →
+   envelopes, gated on `ExecuteQuery` emitting a `viz` arg) and the user image-download button on `VegaChart`.
 3. **Default new questions to V2.** `lib/data/story/template-defaults.ts` authors a `viz` envelope (`kind:'table'`)
    and STOPS emitting `vizSettings`. New questions are V2-only from here.
 4. **Backfill migration.** Bump `LATEST_DATA_VERSION` + add a `MIGRATIONS` entry that writes
@@ -586,6 +587,7 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
 | density geo | Folded into point-map | V1 geo `heatmap` migrates to `point-map` + `size` (decided 2026-07-14); a true hexbin/density recipe is an optional future, not a migration blocker |
 | detach / custom spec | Shipped | `kind:'vega'` raw-spec source + `detachRecipe`/`reattachRecipe` (`detachedFrom` provenance) — the full-control escape hatch; "Customize freely"/"Reset to recipe" UI + the agent-side `DetachViz` tool |
 | V1→V2 converter | Shipped | `vizSettingsToEnvelope` (`lib/viz/from-vizsettings.ts`) — pure map from every legacy `VizSettings.type` (+ all geo subtypes) to a V2 envelope, reusing `setVizType`/`addYField` for cartesian and the recipe registry for the rest; `resolveLegacyRenderEnvelope` bridges read-only legacy charts through `<VegaChart>`. The function item 4's backfill migration runs (§21 items 1, 4) |
+| chart→image (V2) | Core shipped | Envelope → JPEG via the shared `composeSvgToJpeg` compositor: headless `renderVizEnvelopeToJpeg` (`renderEnvelopeToSvg`→Resvg/Sharp) and client `renderEnvelopeImageDataUrl` (`renderEnvelopeToCanvas`→`toJpegObjectUrl`, real tiles). `renderFileChartImageBlocks` renders V2 chart images for the agent; `isEnvelopeImageViz`/`isContentImageViz` are the V2 image/row-drop gates. Slack headless + download button are follow-ups (§21 item 2) |
 
 ### ✅ Verified (as of 2026-07-11)
 
@@ -759,6 +761,15 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
 - Browser-verified on the tutorial dashboard `/f/11`: 10 legacy questions with NO `viz` envelope (trend cards,
   multi-series line, stacked area, donut) render as **10 Vega SVGs, 0 ECharts canvases**, all correct; the pivot
   correctly stays on the DOM renderer (bridge excludes table/pivot); editable question pages keep V1 ChartBuilder.
+
+**Chart → image, V2 (verified 2026-07-14)**
+- Headless `renderVizEnvelopeToJpeg` unit-tested: a vega-lite bar and a native-vega funnel envelope each
+  rasterize to a real JPEG buffer (SOI `FF D8 FF`, non-trivial size); a table envelope returns null. The
+  ECharts and Vega families now share ONE compositor (`composeSvgToJpeg`) — refactor kept `render-chart` green.
+- `isEnvelopeImageViz`/`isContentImageViz` gates unit-tested (chart kinds image; table/pivot don't; envelope
+  wins over legacy `vizSettings.type`). `renderFileChartImageBlocks` branches V2→Vega, legacy→ECharts unchanged.
+- Client path (`renderEnvelopeToCanvas` → `toJpegObjectUrl`) not jsdom-unit-testable (canvas); browser-verify
+  by asking the agent to ReadFiles a V2 question — it attaches the rendered chart image.
 
 **Data handling**
 - 10k+ row result — render time acceptable

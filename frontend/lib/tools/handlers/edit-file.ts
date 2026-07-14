@@ -8,6 +8,7 @@
  * - queryResults: {queryResultId, unchanged: true} for results with same hash; full for new/changed
  */
 import type { EditFileDetails, NotebookContent, NotebookSqlCell } from '@/lib/types';
+import type { VizEnvelope, VizSettings } from '@/lib/validation/atlas-schemas';
 import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
 import { isTitleMissing, missingTitleFeedback } from '@/lib/data/story/file-title';
 import { contextEditWithinBounds } from '@/lib/context/context-agent-view';
@@ -25,7 +26,7 @@ import { compressAugmentedFile } from '@/lib/chat/compress-augmented';
 import { compressedToAugmentedFiles } from '@/lib/projection/from-compressed';
 import { stripEntryQueryData, stripEntryMarkup } from '@/lib/projection/project';
 import type { AugmentedToolDetails } from '@/lib/projection/messages';
-import { isImageViz, shouldDropRows } from '@/lib/chart/query-presentation';
+import { isContentImageViz, shouldDropRows } from '@/lib/chart/query-presentation';
 import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { selectEffectiveUser } from '@/store/authSlice';
 import type { FrontendToolHandler } from './types';
@@ -370,8 +371,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
   // Result presentation matches ReadFiles/ExecuteQuery: a renderable chart returns the IMAGE
   // regardless of rawData (the image is additive); rawData ADDITIONALLY keeps the rows. table/number/
   // no-viz → rows + summary. Markup facet is always stripped.
-  const vizType = (augmented.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
-  const showImage = isImageViz(vizType);
+  const showImage = isContentImageViz(augmented.fileState.content as { viz?: VizEnvelope | null; vizSettings?: VizSettings | null } | undefined);
 
   // Rubric v2: every successful EditFile returns the file's health review — a screenshot of the
   // live rendered view + the FULL rubric (deterministic + LLM visual judge + score) when the
@@ -388,9 +388,12 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
     const qrId = qr.id;
     return !qrId || !prevQueryResultIds.has(qrId);
   });
-  const prevVizSettings = (augmentedBefore?.fileState.content as { vizSettings?: unknown } | undefined)?.vizSettings;
-  const currVizSettings = (augmented.fileState.content as { vizSettings?: unknown } | undefined)?.vizSettings;
-  const vizSettingsChanged = JSON.stringify(prevVizSettings) !== JSON.stringify(currVizSettings);
+  // The viz can change via either the legacy `vizSettings` (V1) or the `viz` envelope (V2).
+  const vizOf = (c: unknown) => {
+    const content = c as { vizSettings?: unknown; viz?: unknown } | undefined;
+    return { vizSettings: content?.vizSettings, viz: content?.viz };
+  };
+  const vizSettingsChanged = JSON.stringify(vizOf(augmentedBefore?.fileState.content)) !== JSON.stringify(vizOf(augmented.fileState.content));
   // When a full-view screenshot was captured it already shows the rendered chart — skip the
   // separate chart image so the response doesn't carry two pictures of the same thing.
   const imageBlocks = !review.screenshotUrl && showImage && (queryResultChanged || vizSettingsChanged)

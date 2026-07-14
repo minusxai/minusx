@@ -447,6 +447,16 @@ export function getEnvelopeVizType(envelope: VizEnvelope): V2VizType | null {
   return getVizType(spec);
 }
 
+/**
+ * Whether an envelope renders to a CHART image (Viz Arch V2 §21 item 2). Everything
+ * except the DOM-tier table/pivot sources is image-able — vega-lite, native vega (incl.
+ * detached specs), and every recipe. Mirrors the ECharts `isImageViz` gate but for V2.
+ */
+export function isEnvelopeImageViz(envelope: VizEnvelope): boolean {
+  const kind = sourceOf(envelope).kind;
+  return kind !== 'table' && kind !== 'pivot';
+}
+
 export function isEnvelopeEditable(envelope: VizEnvelope): boolean {
   const source = sourceOf(envelope);
   if (source.kind === 'table' || source.kind === 'pivot') return true;

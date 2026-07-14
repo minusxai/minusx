@@ -9,11 +9,14 @@ import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, 
 import { compressedToAugmentedFiles } from '@/lib/projection/from-compressed';
 import { stripEntryQueryData } from '@/lib/projection/project';
 import type { AugmentedToolDetails } from '@/lib/projection/messages';
-import { isImageViz, shouldDropRows } from '@/lib/chart/query-presentation';
+import { isContentImageViz, shouldDropRows } from '@/lib/chart/query-presentation';
 import { takeFilesMarkup, markupTextBlocks } from '@/lib/chat/markup-blocks';
-import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
+import type { VizEnvelope, VizSettings } from '@/lib/validation/atlas-schemas';
 import type { FrontendToolHandler } from './types';
 import { renderFileChartImageBlocks } from './chart-images';
+
+/** The viz-bearing shape of a file's content read by the image-presentation gate. */
+type ContentViz = { viz?: VizEnvelope | null; vizSettings?: VizSettings | null } | undefined;
 
 export const readFilesHandler: FrontendToolHandler = async (args, context) => {
   const { fileIds, maxChars: rawMaxChars, runQueries = true, rawData = false } = args;
@@ -34,7 +37,7 @@ export const readFilesHandler: FrontendToolHandler = async (args, context) => {
   // never left with neither an image nor data. `result[i]` and `__augmented[i]` are 1:1.
   const imageByFileId = new Set(
     imageBlocks.length > 0
-      ? result.filter(f => f.queryResults?.[0]?.rows?.length && RENDERABLE_CHART_TYPES.has((f.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type as string)).map(f => f.fileState.id)
+      ? result.filter(f => f.queryResults?.[0]?.rows?.length && isContentImageViz(f.fileState.content as ContentViz)).map(f => f.fileState.id)
       : [],
   );
   // Rich payload for the projection pass (cross-turn diffing): the same files in the projector's
@@ -45,8 +48,7 @@ export const readFilesHandler: FrontendToolHandler = async (args, context) => {
   const augmented: AugmentedToolDetails = {
     __augmented: result.map(f => {
       const aug = compressedToAugmentedFiles(compressAugmentedFile(f, maxChars));
-      const vizType = (f.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
-      if (shouldDropRows({ imagePresentation: isImageViz(vizType), imageRendered: imageByFileId.has(f.fileState.id), rawData })) {
+      if (shouldDropRows({ imagePresentation: isContentImageViz(f.fileState.content as ContentViz), imageRendered: imageByFileId.has(f.fileState.id), rawData })) {
         aug.file = stripEntryQueryData(aug.file);
       }
       return aug;
