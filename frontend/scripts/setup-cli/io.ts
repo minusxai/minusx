@@ -1,6 +1,9 @@
 // Shared plumbing for setup-cli entries (`scripts/setup-cli/*.ts`) — invoked
 // by setup.sh inside the app image:
-//   docker run --rm -i <image> node --import tsx --import ./scripts/setup-cli/node-preload.mjs scripts/setup-cli/<entry>.ts
+//   docker run --rm -i <image> node setup-cli/<entry>.js
+// (precompiled at image build time by `npm run build:setup-cli` — never
+// transpiled at run time: tsx/esbuild dies under amd64 emulation on Apple
+// Silicon, which silently degraded install.sh validation.)
 // Input arrives as JSON on STDIN (never argv — argv leaks secrets to `ps`);
 // the result is a single JSON object on stdout. Exit codes: 0 = ok,
 // 1 = validation ran and failed, 2 = malformed input.

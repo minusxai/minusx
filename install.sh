@@ -12,7 +12,7 @@ set -euo pipefail
 # - The interview reads prompts metadata from compatibility.json (frontend/compatibility.json,
 #   fetched from raw.github) — the same file the app and docs consume.
 # - Answers are VALIDATED with the app's own code, run inside the pulled image
-#   (`docker run … scripts/setup-cli/*`): a real one-token LLM call and a real
+#   (`docker run … node setup-cli/*.js`): a real one-token LLM call and a real
 #   connector test — from the container network context the app will use.
 # - Everything is then submitted in ONE call to POST /api/orgs/register
 #   (first-run gated; API keys are extracted into the secrets store).
@@ -194,7 +194,7 @@ run_in_image() { # run_in_image <script> [arg]
     --add-host=host.docker.internal:host-gateway \
     --env-file frontend/.env \
     "$FRONTEND_IMAGE" \
-    node --import tsx --import ./scripts/setup-cli/node-preload.mjs "scripts/setup-cli/$1" ${2:-} 2>/dev/null
+    node "setup-cli/$1" ${2:-} 2>/dev/null
 }
 
 # Rewrite host-local DB addresses to the address the container sees.
@@ -571,7 +571,7 @@ if [ "$HAVE_TTY" = 1 ] && [ "$EXISTING_WORKSPACE" = 0 ] && [ -n "$WS_NAME" ] && 
   ATTEMPTS=0
   while [ -n "$LLM_JSON" ] && [ "$LLM_KIND" != "managed" ] && [ "$ATTEMPTS" -lt 3 ]; do
     VALIDATE_INPUT="{\"provider\":$LLM_ENTRY_JSON,\"model\":\"$(json_escape "$LLM_ANALYST_MODEL")\"}"
-    RESULT=$(printf '%s' "$VALIDATE_INPUT" | run_in_image validate-llm.ts || true)
+    RESULT=$(printf '%s' "$VALIDATE_INPUT" | run_in_image validate-llm.js || true)
     if printf '%s' "$RESULT" | grep -q '"ok":true'; then
       success "LLM connection verified ${DIM}$(printf '%s' "$RESULT" | sed -n 's/.*"latencyMs":\([0-9]*\).*/(\1ms)/p')${RESET}"
       break
@@ -589,7 +589,7 @@ if [ "$HAVE_TTY" = 1 ] && [ "$EXISTING_WORKSPACE" = 0 ] && [ -n "$WS_NAME" ] && 
 
   # Validate the database connection with the real connector.
   if [ -n "$CONNECTION_JSON" ]; then
-    RESULT=$(printf '%s' "$CONNECTION_JSON" | run_in_image validate-connection.ts || true)
+    RESULT=$(printf '%s' "$CONNECTION_JSON" | run_in_image validate-connection.js || true)
     if printf '%s' "$RESULT" | grep -q '"success":true'; then
       success "Database connection verified"
     else
@@ -600,7 +600,7 @@ if [ "$HAVE_TTY" = 1 ] && [ "$EXISTING_WORKSPACE" = 0 ] && [ -n "$WS_NAME" ] && 
         interview_connection_fields "$CONN_TYPE"
         if [ -n "$CONN_CONFIG_JSON" ]; then
           CONNECTION_JSON="{\"name\":\"$CONN_NAME\",\"type\":\"$CONN_TYPE\",\"config\":$CONN_CONFIG_JSON}"
-          RESULT=$(printf '%s' "$CONNECTION_JSON" | run_in_image validate-connection.ts || true)
+          RESULT=$(printf '%s' "$CONNECTION_JSON" | run_in_image validate-connection.js || true)
           if printf '%s' "$RESULT" | grep -q '"success":true'; then
             success "Database connection verified"
           else

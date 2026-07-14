@@ -52,6 +52,14 @@ RUN --mount=type=cache,target=/app/.next/cache \
     --mount=type=secret,id=sentry_auth_token \
     SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token 2>/dev/null || true)" npm run build
 
+# Precompile the setup-cli entries (install.sh runs them via `docker run`) to
+# plain JS. They must NOT be transpiled at run time: the published image is
+# amd64, so on Apple Silicon it runs emulated, and tsx's esbuild service dies
+# there ("The service was stopped: write EPIPE") — which silently degraded
+# install.sh's LLM/database validation to "no response". Bundling happens here,
+# natively on the build host; the container then only runs `node`.
+RUN npm run build:setup-cli
+
 # ===== RUNTIME STAGE ===== #
 FROM node:20-slim AS runner
 
@@ -75,13 +83,13 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy database scripts and lib for initialization. orchestrator/ is needed by
-# the setup-cli entries (scripts/setup-cli/*, run via `docker run` by setup.sh),
-# which import the LLM boundary (@/orchestrator/llm) through lib/llm.
+# Copy database scripts and lib for initialization.
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/lib ./lib
-COPY --from=builder /app/orchestrator ./orchestrator
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
+# The precompiled setup-cli (plain JS, no runtime transpile) — install.sh runs
+# these with `docker run … node setup-cli/<entry>.js`.
+COPY --from=builder /app/setup-cli ./setup-cli
 
 # Install tsx + re-apply pi-ai patches. The npm install restores native deps
 # (libduckdb.so) that standalone tracing can't follow, but also overwrites the
@@ -92,9 +100,8 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 # standalone tracing misses them; installing here guarantees they exist with
 # the right linux native bindings.
 COPY --from=builder /app/patches ./patches
-# @aws/lambda-invoke-store: aws-sdk transitive that standalone tracing misses
-# (routes bundle the SDK, but the setup-cli runs lib/connections from source
-# via tsx and needs it resolvable in node_modules).
+# @aws/lambda-invoke-store: aws-sdk transitive that standalone tracing misses.
+# The setup-cli bundle keeps node_modules external, so it must resolve here.
 RUN npm install --ignore-scripts tsx "@tailwindcss/node@^4" "@tailwindcss/oxide@^4" "tailwindcss@^4" "@aws/lambda-invoke-store"
 RUN npx --yes patch-package --error-on-fail && rm -rf ./patches
 RUN grep -q "MX PATCH" /app/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js \

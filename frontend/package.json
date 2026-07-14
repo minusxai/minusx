@@ -25,7 +25,8 @@
     "dump-llm-calls": "node --env-file=.env node_modules/.bin/tsx scripts/dump-llm-calls.ts",
     "migrate-conversations-to-v3": "node --env-file-if-exists=.env node_modules/.bin/tsx --conditions react-server scripts/migrate-conversations-to-v3.ts",
     "heal-stories": "node --env-file-if-exists=.env node_modules/.bin/tsx --conditions react-server scripts/heal-stories.ts",
-    "knip": "knip --no-config-hints"
+    "knip": "knip --no-config-hints",
+    "build:setup-cli": "esbuild scripts/setup-cli/validate-llm.ts scripts/setup-cli/validate-connection.ts scripts/setup-cli/list-models.ts --bundle --platform=node --format=esm --target=node20 --packages=external --alias:server-only=./scripts/setup-cli/server-only-empty.js --outdir=setup-cli"
   },
   "dependencies": {
     "@aws-sdk/client-athena": "^3.1032.0",
@@ -37,6 +38,7 @@
     "@clickhouse/client": "^1.21.0",
     "@duckdb/duckdb-wasm": "^1.30.0",
     "@duckdb/node-api": "^1.4.4-r.3",
+    "@earendil-works/pi-ai": "0.80.6",
     "@electric-sql/pglite": "^0.4.4",
     "@google-cloud/bigquery": "^8.1.1",
     "@lexical/code": "^0.40.0",
@@ -47,7 +49,6 @@
     "@lexical/rich-text": "^0.40.0",
     "@lexical/selection": "^0.40.0",
     "@lexical/table": "^0.40.0",
-    "@earendil-works/pi-ai": "0.80.6",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@monaco-editor/react": "^4.7.0",
     "@polyglot-sql/sdk": "^0.3.2",
@@ -128,6 +129,7 @@
     "@vitest/coverage-v8": "^4.1.5",
     "@zag-js/switch": "1.35.1",
     "concurrently": "^9.2.1",
+    "esbuild": "^0.27.3",
     "eslint": "^9",
     "eslint-config-next": "16.0.4",
     "eslint-import-resolver-typescript": "^4.4.4",
