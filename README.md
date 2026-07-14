@@ -22,7 +22,7 @@ MinusX is an open source agentic business intelligence platform for founders. <b
 [![Slack](https://img.shields.io/badge/slack-community-4A154B?logo=slack&logoColor=white)](https://minusx.ai/slack/)
 
 
-MinusX OSS setup cmd: `curl -fsSL https://minusx.ai/setup.sh | bash`
+MinusX OSS installation cmd: `curl -fsSL https://minusx.ai/install.sh | bash`
 </div>
 
 ---
@@ -51,7 +51,7 @@ Note: This is on top of obvious BI features like connecting to databases/warehou
 ## Quick Start
 
 ```bash
-curl -fsSL https://minusx.ai/setup.sh | bash
+curl -fsSL https://minusx.ai/install.sh | bash
 ```
 
 Requires [Docker](https://docs.docker.com/get-docker/). While the image downloads, the script walks you through setup — workspace, AI model (with a live connection test), and optionally your first database — so you just log in when it finishes.
