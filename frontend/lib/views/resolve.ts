@@ -117,7 +117,13 @@ async function rewriteSql(sql: string, dialect: string): Promise<string> {
  */
 async function viewBodySql(v: HydratedView, dialect: string): Promise<string> {
   const body = mentionsViews(v.sql) ? await rewriteSql(v.sql, dialect) : v.sql;
-  if (!v.whitelistedColumns || v.whitelistedColumns.length === 0) return body;
+  // undefined = expose all. An explicit list projects to it; an EMPTY list means
+  // the view was turned off — expose nothing (a column-less relation).
+  if (!v.whitelistedColumns) return body;
+  if (v.whitelistedColumns.length === 0) {
+    // View turned off: a valid relation that yields no rows and no usable columns.
+    return `SELECT NULL AS _off FROM (\n${body}\n) AS ${cteName(v.name)}_src WHERE 1 = 0`;
+  }
   const cols = v.whitelistedColumns.join(', ');
   return `SELECT ${cols} FROM (\n${body}\n) AS ${cteName(v.name)}_src`;
 }

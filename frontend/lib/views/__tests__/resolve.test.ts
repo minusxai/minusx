@@ -182,6 +182,13 @@ describe('column whitelist — projection is REAL enforcement', () => {
     await expect(db.runAndReadAll(sql)).rejects.toThrow(/revenue/i);
   });
 
+  it('an EMPTY whitelist (view turned off) exposes no columns', async () => {
+    const off = { ...ZONE_REVENUE, whitelistedColumns: [] as string[] };
+    const sql = await resolveViewsInSql('SELECT * FROM _views.zone_revenue', 'duckdb', [off]);
+    const reader = await db.runAndReadAll(sql);
+    expect(reader.getRows().length).toBe(0); // a view turned off yields no rows
+  });
+
   it('no whitelist = every column exposed', async () => {
     const sql = await resolveViewsInSql('SELECT * FROM _views.zone_revenue', 'duckdb', [ZONE_REVENUE]);
     const reader = await db.runAndReadAll(sql);

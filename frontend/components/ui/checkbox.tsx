@@ -10,7 +10,7 @@ export interface CheckboxProps {
   children?: React.ReactNode;
 }
 
-export function Checkbox({ checked, onCheckedChange, size = 'md', disabled, children, ...props }: CheckboxProps) {
+export function Checkbox({ checked, onCheckedChange, size = 'md', disabled, children, 'aria-label': ariaLabel, ...props }: CheckboxProps & { 'aria-label'?: string }) {
   return (
     <ChakraCheckbox.Root
       checked={checked}
@@ -21,7 +21,7 @@ export function Checkbox({ checked, onCheckedChange, size = 'md', disabled, chil
       disabled={disabled}
       {...props}
     >
-      <ChakraCheckbox.HiddenInput />
+      <ChakraCheckbox.HiddenInput aria-label={ariaLabel} />
       <ChakraCheckbox.Control
         _checked={{ bg: 'accent.teal', borderColor: 'accent.teal' }}
       />

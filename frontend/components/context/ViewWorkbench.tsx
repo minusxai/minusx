@@ -3,23 +3,26 @@
 /**
  * ViewWorkbench — the expand-in-place editor for a view.
  *
- * A view row in the whitelist UI expands into this: write SQL, run it, see real
- * rows, name it, save. On save the SQL is sent to /api/views/prepare, which
- * validates the name across the whole context tree and snapshots the output
- * columns + types (that snapshot is what makes the saved view behave like a real
- * table — semantic models, relationships, agent schema all key off it).
+ * It REUSES the question component rather than reimplementing one: the view is
+ * authored on a VIRTUAL question file (a negative id, which `loadFiles`
+ * deliberately never sends to the server), so what you get is the real editor —
+ * the GUI / SQL / Viz tabs, Run, parameters, charts — behaving exactly as it
+ * does on a question page. Saving reads that file's content back out of Redux.
  *
- * Execution goes through the CORE query path (`getQueryResult`), so views are
- * cached, whitelist-validated and streamed exactly like any other query — the
- * context's path is passed as `filePath` so nested `_views.x` references resolve.
+ * Save goes through /api/views/prepare, which validates the name across the
+ * whole context tree and snapshots the output columns + types. The actual
+ * boundary check (what a view is allowed to READ) happens server-side on the
+ * context save — see lib/views/save-gate.server.ts — because the dialog is not
+ * the only way a view can be written.
  */
 
-import React, { useCallback, useState } from 'react';
-import { Box, VStack, HStack, Text, Button, Input, Table } from '@chakra-ui/react';
-import { LuPlay, LuSave, LuTriangleAlert, LuTrash2 } from 'react-icons/lu';
-import SqlEditor from '@/components/query-builder/SqlEditor';
-import { getQueryResult } from '@/lib/file-state/file-state';
-import type { QueryResult, ViewColumn, ViewDef } from '@/lib/types';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Box, VStack, HStack, Text, Button, Input } from '@chakra-ui/react';
+import { LuSave, LuTriangleAlert, LuTrash2 } from 'react-icons/lu';
+import QuestionContainerV2 from '@/components/containers/QuestionContainerV2';
+import { setFile, selectMergedContent } from '@/store/filesSlice';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import type { DbFile, QuestionContent, ViewColumn, ViewDef } from '@/lib/types';
 
 interface ViewWorkbenchProps {
   /** The context file's path — resolves nested views + the whitelist. */
@@ -34,38 +37,57 @@ interface ViewWorkbenchProps {
   onCancel: () => void;
 }
 
-const PREVIEW_ROWS = 20;
+/**
+ * Virtual file ids are negative: `loadFiles` filters them out, so the question
+ * component renders purely from what we seed into Redux — no server round-trip,
+ * no phantom file.
+ */
+let nextVirtualId = -900_001;
 
 export default function ViewWorkbench({
   contextPath, connection, view, defaultName = '', onSave, onDelete, onCancel,
 }: ViewWorkbenchProps) {
+  const dispatch = useAppDispatch();
   const [name, setName] = useState(view?.name ?? defaultName);
   const [description, setDescription] = useState(view?.description ?? '');
-  const [sql, setSql] = useState(view?.sql ?? '');
-  const [result, setResult] = useState<QueryResult | null>(null);
-  const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const run = useCallback(async () => {
-    if (!sql.trim()) return;
-    setRunning(true);
-    setError(null);
-    try {
-      const r = await getQueryResult(
-        { query: sql, params: {}, database: connection, filePath: contextPath },
-        { forceLoad: true },
-      );
-      setResult(r);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Query failed');
-      setResult(null);
-    } finally {
-      setRunning(false);
-    }
-  }, [sql, connection, contextPath]);
+  const fileId = useMemo(() => nextVirtualId--, []);
+
+  // Seed the virtual question the editor works on.
+  useEffect(() => {
+    const content: QuestionContent = {
+      description: null,
+      query: view?.sql ?? '',
+      vizSettings: view?.vizSettings ?? { type: 'table' },
+      parameters: [],
+      parameterValues: {},
+      connection_name: connection,
+      cachePolicy: null,
+    } as QuestionContent;
+
+    const file: DbFile = {
+      id: fileId,
+      name: view?.name ?? 'New view',
+      type: 'question',
+      path: `${contextPath.substring(0, contextPath.lastIndexOf('/')) || '/'}/${view?.name ?? 'new-view'}`,
+      content,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      version: 1,
+      last_edit_id: null,
+    } as unknown as DbFile;
+
+    dispatch(setFile({ file, references: [] }));
+  }, [dispatch, fileId, contextPath, connection, view?.sql, view?.name, view?.vizSettings]);
+
+  // What the user has actually built in the editor (SQL + chart), live from Redux.
+  const edited = useAppSelector((s) => selectMergedContent(s, fileId)) as QuestionContent | undefined;
 
   const save = useCallback(async () => {
+    const sql = edited?.query ?? '';
+    if (!name.trim() || !sql.trim()) return;
     setSaving(true);
     setError(null);
     try {
@@ -88,6 +110,8 @@ export default function ViewWorkbench({
         connection,
         sql,
         columns,
+        ...(edited?.vizSettings ? { vizSettings: edited.vizSettings } : {}),
+        ...(view?.whitelistedColumns ? { whitelistedColumns: view.whitelistedColumns } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
       });
     } catch {
@@ -95,10 +119,9 @@ export default function ViewWorkbench({
     } finally {
       setSaving(false);
     }
-  }, [contextPath, connection, name, sql, description, view?.name, onSave]);
+  }, [contextPath, connection, name, description, edited, view, onSave]);
 
-  const canSave = !!name.trim() && !!sql.trim() && !saving;
-  const rows = (result?.rows ?? []).slice(0, PREVIEW_ROWS);
+  const canSave = !!name.trim() && !!edited?.query?.trim() && !saving;
 
   return (
     <VStack
@@ -123,55 +146,16 @@ export default function ViewWorkbench({
         />
       </HStack>
 
-      <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden" minH="180px">
-        <SqlEditor
-          value={sql}
-          onChange={setSql}
-          onRun={run}
-          showRunButton={false}
-          databaseName={connection}
-        />
+      {/* The real question editor — GUI / SQL / Viz, Run, charts. */}
+      <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden" minH="420px">
+        <QuestionContainerV2 fileId={fileId} />
       </Box>
-
-      <HStack gap={2}>
-        <Button aria-label="Run view query" size="xs" variant="outline" onClick={run} loading={running}>
-          <LuPlay size={12} /> <Text ml={1} fontFamily="mono">Run</Text>
-        </Button>
-        {result && (
-          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">
-            {result.rows.length} rows · {result.columns.length} columns
-          </Text>
-        )}
-      </HStack>
 
       {error && (
         <HStack aria-label="View error" gap={1.5} color="accent.danger" fontSize="xs" fontFamily="mono" align="start">
           <Box pt="2px"><LuTriangleAlert size={12} /></Box>
           <Text>{error}</Text>
         </HStack>
-      )}
-
-      {rows.length > 0 && (
-        <Box aria-label="View preview" maxH="220px" overflow="auto" border="1px solid" borderColor="border.muted" borderRadius="md">
-          <Table.Root size="sm" stickyHeader>
-            <Table.Header>
-              <Table.Row>
-                {result!.columns.map((c) => (
-                  <Table.ColumnHeader key={c} fontFamily="mono" fontSize="2xs">{c}</Table.ColumnHeader>
-                ))}
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {rows.map((row, i) => (
-                <Table.Row key={i}>
-                  {result!.columns.map((c) => (
-                    <Table.Cell key={c} fontFamily="mono" fontSize="2xs">{String((row as Record<string, unknown>)[c] ?? '')}</Table.Cell>
-                  ))}
-                </Table.Row>
-              ))}
-            </Table.Body>
-          </Table.Root>
-        </Box>
       )}
 
       <HStack justify="space-between">

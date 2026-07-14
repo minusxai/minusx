@@ -316,6 +316,7 @@ export function DatabasesTabContent({
                                 connection={database.databaseName}
                                 views={content.views || []}
                                 inheritedViews={content.fullViews || []}
+                                problems={content.viewProblems || []}
                                 onViewsChange={editMode ? (next) => onChange({ views: next }) : undefined}
                                 namePrefix={contextPath.split('/').filter(Boolean).slice(-2, -1)[0]}
                               />
