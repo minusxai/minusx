@@ -10,12 +10,14 @@ export class SharedTooltip {
   private guide: HTMLDivElement;
 
   constructor(private container: HTMLElement, private theme: 'light' | 'dark') {
-    // Both the tooltip and the guide live on <body> with FIXED positioning — decoupled
-    // from Vega's container DOM (which the renderer rebuilds), so neither gets wiped.
-    let el = document.getElementById('vg-tooltip-element');
+    // Our OWN element (not Vega's `#vg-tooltip-element`) — sharing it fought the default
+    // per-mark tooltip that pie/scatter/maps still use, leaving that one stuck hidden.
+    // Both the tooltip and the guide live on <body>, fixed-positioned, so the Vega
+    // container rebuilds can't wipe them.
+    let el = document.getElementById('mx-shared-tooltip');
     if (!el) {
       el = document.createElement('div');
-      el.id = 'vg-tooltip-element';
+      el.id = 'mx-shared-tooltip';
       document.body.appendChild(el);
     }
     this.el = el;
