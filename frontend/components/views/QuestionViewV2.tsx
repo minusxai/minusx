@@ -412,6 +412,10 @@ export default function QuestionViewV2({
 
   // Handle query change with debounced param/ref sync
   const handleQueryChange = useCallback((newQuery: string) => {
+    // Typing in the SQL editor IS choosing SQL for this session: detection may
+    // still run (tab enablement), but it must never steal the tab mid-edit —
+    // auto-promotion to the GUI is only for SQL you OPEN, not SQL you TYPE.
+    setUserPickedMode(true);
     debouncedQueryUpdate(newQuery);
 
     // Debounce the param/ref sync (300ms)
