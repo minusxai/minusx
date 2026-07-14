@@ -185,6 +185,14 @@ describe('SemanticCanvas', () => {
     });
   });
 
+  it('the table can be CHANGED after picking one', () => {
+    const { onSelectModel } = renderCanvas();
+    fireEvent.click(screen.getByLabelText('Change table'));
+    // back to the browsable tables list
+    fireEvent.click(screen.getByLabelText('Pick table: Users'));
+    expect(onSelectModel).toHaveBeenCalledWith(expect.objectContaining({ table: 'users' }));
+  });
+
   it('restores a persisted spec onto the selection panel', () => {
     renderCanvas({
       value: { model: 'Orders', table: 'orders', measures: ['Revenue', 'Orders'], dimensions: ['Status', 'Region'], timeGrain: 'WEEK' },

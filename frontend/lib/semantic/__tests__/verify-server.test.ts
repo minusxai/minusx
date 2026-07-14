@@ -40,43 +40,51 @@ describe('verifyRelationship', () => {
     await DocumentDB.update(id, 'warehouse', '/org/database/warehouse', conn, [], 'init');
   });
 
-  // Uniqueness is a single scan: COUNT(*) vs COUNT(DISTINCT col) — no GROUP BY.
-  const script = (uniq: { c: number; d: number }, total: number, matched: number) => {
+  // ONE round trip: uniqueness (single scan, COUNT vs COUNT DISTINCT — no
+  // GROUP BY) UNION ALL the match-rate join, discriminated by `chk`.
+  const script = (uniq: { a: number; b: number }, total: number, matched: number) => {
     mockQuery.mockImplementation(async (sql: string) => {
-      if (/COUNT\(DISTINCT/i.test(sql) && !/JOIN/i.test(sql)) {
-        expect(sql).not.toMatch(/GROUP BY/i); // the cheap single-scan shape
-        return { columns: ['c', 'd'], types: [], rows: [uniq] };
-      }
-      if (/LEFT JOIN/i.test(sql)) {
-        return { columns: ['total', 'matched'], types: [], rows: [{ total, matched }] };
-      }
-      throw new Error(`unexpected verification SQL: ${sql}`);
+      expect(sql).toMatch(/UNION ALL/i);
+      expect(sql).toMatch(/COUNT\(DISTINCT/i);
+      expect(sql).toMatch(/LEFT JOIN/i);
+      expect(sql).not.toMatch(/GROUP BY/i); // the cheap single-scan shape
+      return {
+        columns: ['chk', 'a', 'b'], types: [],
+        rows: [
+          { chk: 'uniqueness', a: uniq.a, b: uniq.b },
+          { chk: 'match', a: total, b: matched },
+        ],
+      };
     });
   };
 
   it('unique target + full match → clean verification', async () => {
-    script({ c: 50, d: 50 }, 1000, 1000);
+    script({ a: 50, b: 50 }, 1000, 1000);
     await expect(verifyRelationship(admin, REL)).resolves.toEqual({
       targetUnique: true, totalRows: 1000, matchedRows: 1000,
     });
-    // both checks ran, against the right tables
-    const sqls = mockQuery.mock.calls.map((c) => c[0] as string);
-    expect(sqls.some((q) => /users/.test(q) && /COUNT\(DISTINCT/i.test(q))).toBe(true);
-    expect(sqls.some((q) => /orders/.test(q) && /LEFT JOIN/i.test(q))).toBe(true);
+    // BOTH checks travel in one statement (one round trip to the warehouse)
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    const sql = mockQuery.mock.calls[0][0] as string;
+    expect(sql).toMatch(/users/);
+    expect(sql).toMatch(/orders/);
   });
 
   it('duplicated lookup values → targetUnique false (the fan-out warning)', async () => {
-    script({ c: 52, d: 50 }, 500, 480);
+    script({ a: 52, b: 50 }, 500, 480);
     await expect(verifyRelationship(admin, REL)).resolves.toEqual({
       targetUnique: false, totalRows: 500, matchedRows: 480,
     });
   });
 
   it('string-typed counts (BigQuery INT64 comes back as strings) still parse', async () => {
-    mockQuery.mockImplementation(async (sql: string) =>
-      /LEFT JOIN/i.test(sql)
-        ? { columns: ['total', 'matched'], types: [], rows: [{ total: '123', matched: '99' }] }
-        : { columns: ['c', 'd'], types: [], rows: [{ c: '10', d: '10' }] });
+    mockQuery.mockImplementation(async () => ({
+      columns: ['chk', 'a', 'b'], types: [],
+      rows: [
+        { chk: 'match', a: '123', b: '99' },      // order not guaranteed —
+        { chk: 'uniqueness', a: '10', b: '10' },  // rows keyed by chk
+      ],
+    }));
     await expect(verifyRelationship(admin, REL)).resolves.toEqual({
       targetUnique: true, totalRows: 123, matchedRows: 99,
     });

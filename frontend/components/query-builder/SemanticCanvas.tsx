@@ -102,6 +102,7 @@ export function SemanticCanvas({
   isExecuting = false,
 }: SemanticCanvasProps) {
   const [spec, setSpec] = useState<SemanticQuerySpec | null>(() => value ?? null);
+  const [browsingTables, setBrowsingTables] = useState(false);
   const [query, setQuery] = useState('');
   const [otherHits, setOtherHits] = useState<SemanticFieldHit[]>([]);
   const searchSeq = useRef(0);
@@ -189,6 +190,7 @@ export function SemanticCanvas({
   const pickStub = useCallback((stub: ModelStub) => {
     onSelectModel(stub);
     setSpec(specForStub(stub));
+    setBrowsingTables(false);
     setQuery('');
     setOtherHits([]);
   }, [onSelectModel]);
@@ -280,8 +282,25 @@ export function SemanticCanvas({
   const picker = (
     <VStack align="stretch" gap={2} w="240px" flexShrink={0} minH={0} maxH="100%">
       {searchBar}
+      {spec && (
+        <HStack
+          as="button"
+          aria-label="Change table"
+          gap={1.5} px={2} py={1}
+          borderRadius="md" border="1px solid" borderColor="border.muted"
+          bg={browsingTables ? 'bg.muted' : 'bg.surface'}
+          _hover={{ bg: 'bg.muted' }}
+          onClick={() => setBrowsingTables((b) => !b)}
+          flexShrink={0}
+          title="Pick a different table (starts a fresh query)"
+        >
+          <Icon as={LuTable} boxSize={3} color="fg.muted" flexShrink={0} />
+          <Text fontSize="xs" fontFamily="mono" truncate flex={1} textAlign="left">{spec.model}</Text>
+          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">change ▾</Text>
+        </HStack>
+      )}
       <VStack align="stretch" gap={1.5} overflowY="auto" minH={0} flex={1} pr={1}>
-        {!spec ? (
+        {!spec || browsingTables ? (
           <>
             {sectionHeader('Tables')}
             {stubs

@@ -54,17 +54,20 @@ const TEMPORAL_TYPE = /date|time/i;
 
 /**
  * Classify one column into its derived vocabulary role. Id-like names win over
- * everything (a SUM over customer_id is never meaningful); then the profiled
- * category; then the SQL type name.
+ * everything (a SUM over customer_id is never meaningful); temporal next; then
+ * the SQL TYPE is the authority for measure-worthiness — profilers tag
+ * low-cardinality integers (clicks, impressions) as "categorical" for LLM
+ * context, and that must never strip a numeric column's aggregates. A
+ * categorical-profiled numeric additionally stays groupable (derive adds a
+ * dimension for it alongside the measures).
  */
 export function classifyColumn(column: SchemaColumnLike): ColumnKind {
   if (ID_NAME.test(column.name)) return 'id';
   const category = column.meta?.category;
-  if (category === 'numeric') return 'measure';
   if (category === 'temporal') return 'time';
-  if (category) return 'dimension'; // categorical | text | other
-  if (TEMPORAL_TYPE.test(column.type)) return 'time';
+  if (!category && TEMPORAL_TYPE.test(column.type)) return 'time';
   if (NUMERIC_TYPE.test(column.type)) return 'measure';
+  if (category === 'numeric') return 'measure';
   return 'dimension';
 }
 
@@ -230,6 +233,10 @@ export function deriveSemanticModels(
           } else {
             measures.push({ name: `Total ${humanizeName(c.name)}`, agg: 'SUM', column: c.name });
             measures.push({ name: `Avg ${humanizeName(c.name)}`, agg: 'AVG', column: c.name });
+            // Profiled categorical (low-cardinality) numerics stay groupable too.
+            if (c.meta?.category === 'categorical') {
+              dimensions.push({ name: humanizeName(c.name), column: c.name });
+            }
           }
         }
 

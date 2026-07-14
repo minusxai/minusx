@@ -67,9 +67,16 @@ describe('humanizeName', () => {
 describe('classifyColumn', () => {
   it('uses profiled category when present', () => {
     expect(classifyColumn(col('status', 'VARCHAR', 'categorical'))).toBe('dimension');
-    expect(classifyColumn(col('amount', 'VARCHAR', 'numeric'))).toBe('measure'); // meta wins over type
+    expect(classifyColumn(col('amount', 'VARCHAR', 'numeric'))).toBe('measure'); // profiled numeric, odd type
     expect(classifyColumn(col('created_at', 'VARCHAR', 'temporal'))).toBe('time');
-    expect(classifyColumn(col('notes', 'DOUBLE', 'text'))).toBe('dimension');
+  });
+
+  it('a numeric SQL TYPE is always measure-worthy — profiling cannot demote it', () => {
+    // Profilers tag low-cardinality integers (clicks, impressions) as
+    // "categorical" for LLM context; that must not strip their aggregates.
+    expect(classifyColumn(col('clicks', 'BIGINT', 'categorical'))).toBe('measure');
+    expect(classifyColumn(col('spend', 'DOUBLE', 'categorical'))).toBe('measure');
+    expect(classifyColumn(col('notes', 'DOUBLE', 'text'))).toBe('measure');
   });
 
   it('falls back to the SQL type name when unprofiled', () => {
@@ -118,6 +125,19 @@ describe('deriveSemanticModels — vocabulary', () => {
     expect(dimCols).toContain('shipped_date');
     // customers has a single temporal column — it just wins
     expect(modelFor(models(), 'customers').timeDimension?.column).toBe('signup_date');
+  });
+
+  it('a categorical-profiled numeric is BOTH: measures + a groupable dimension', () => {
+    const db2 = db('warehouse', {
+      spend: [
+        col('clicks', 'BIGINT', 'categorical'),
+        col('amount', 'DOUBLE', 'numeric'),
+      ],
+    });
+    const m = modelFor(deriveSemanticModels([db2], []), 'spend');
+    expect(m.measures.map((me) => me.name)).toEqual(expect.arrayContaining(['Total Clicks', 'Avg Clicks']));
+    expect(m.dimensions.map((d) => d.column)).toContain('clicks');  // profiled groupable
+    expect(m.dimensions.map((d) => d.column)).not.toContain('amount'); // plain numeric: measure only
   });
 
   it('numeric columns derive Total/Avg measures; ids derive Unique; Count always exists', () => {

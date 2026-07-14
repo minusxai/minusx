@@ -21,7 +21,7 @@ import { isSelfJoin, validateTableRelationships } from '@/lib/semantic/derive';
 import { connectionTypeToDialect } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { TableRelationship } from '@/lib/types';
-import type { QueryIR } from '@/lib/sql/ir-types';
+import type { CompoundQueryIR, QueryIR } from '@/lib/sql/ir-types';
 
 export interface RelationshipVerification {
   /** Lookup column is unique — the many-to-one/one-to-one claim holds. */
@@ -35,29 +35,33 @@ export interface RelationshipVerification {
 const IR_VERSION = 1;
 
 /**
- * Is the lookup column unique? SELECT COUNT(*) AS c, COUNT(DISTINCT col) AS d —
- * unique iff c == d. A single scan with no GROUP BY materialization, which is
- * dramatically cheaper than GROUP BY … HAVING on large warehouse tables.
+ * Both checks in ONE round trip (UNION ALL) — warehouse latency and queueing
+ * dominate these tiny aggregate results, and some connections serialize
+ * queries, so one statement is ~2× faster than two.
+ *
+ *   SELECT 'uniqueness', COUNT(*), COUNT(DISTINCT col) FROM target
+ *     — unique iff the two counts match; a single scan with no GROUP BY
+ *       materialization (dramatically cheaper than GROUP BY … HAVING).
+ *   UNION ALL
+ *   SELECT 'match', COUNT(*), COUNT(lk.col) FROM base LEFT JOIN target lk ON …
+ *     — one aggregate row over the join being verified.
  */
-function uniquenessIr(r: TableRelationship): QueryIR {
-  return {
+function verificationIr(r: TableRelationship): CompoundQueryIR {
+  const uniqueness: QueryIR = {
     version: IR_VERSION,
     select: [
-      { type: 'aggregate', aggregate: 'COUNT', column: null, alias: 'c' },
-      { type: 'aggregate', aggregate: 'COUNT_DISTINCT', column: r.targetColumn, alias: 'd' },
+      { type: 'raw', raw_sql: "'uniqueness'", alias: 'chk' },
+      { type: 'aggregate', aggregate: 'COUNT', column: null, alias: 'a' },
+      { type: 'aggregate', aggregate: 'COUNT_DISTINCT', column: r.targetColumn, alias: 'b' },
     ],
     from: { table: r.targetTable, schema: r.targetSchema },
-    limit: 1,
   };
-}
-
-/** SELECT COUNT(*) AS total, COUNT(lk.targetColumn) AS matched FROM base LEFT JOIN target lk ON … */
-function matchRateIr(r: TableRelationship): QueryIR {
-  return {
+  const matchRate: QueryIR = {
     version: IR_VERSION,
     select: [
-      { type: 'aggregate', aggregate: 'COUNT', column: null, alias: 'total' },
-      { type: 'aggregate', aggregate: 'COUNT', column: r.targetColumn, table: 'lk', alias: 'matched' },
+      { type: 'raw', raw_sql: "'match'", alias: 'chk' },
+      { type: 'aggregate', aggregate: 'COUNT', column: null, alias: 'a' },
+      { type: 'aggregate', aggregate: 'COUNT', column: r.targetColumn, table: 'lk', alias: 'b' },
     ],
     from: { table: r.table, schema: r.schema },
     joins: [{
@@ -65,8 +69,8 @@ function matchRateIr(r: TableRelationship): QueryIR {
       table: { table: r.targetTable, schema: r.targetSchema, alias: 'lk' },
       on: [{ left_table: r.table, left_column: r.column, right_table: 'lk', right_column: r.targetColumn }],
     }],
-    limit: 1,
   };
+  return { type: 'compound', version: IR_VERSION, queries: [uniqueness, matchRate], operators: ['UNION ALL'] };
 }
 
 export async function verifyRelationship(
@@ -80,19 +84,22 @@ export async function verifyRelationship(
   const conn = await ConnectionsAPI.getRawByName(relationship.connection, user.mode);
   const dialect = connectionTypeToDialect(conn.type);
 
-  const [dupes, match] = await Promise.all([
-    runQuery(relationship.connection, irToSqlLocal(uniquenessIr(relationship), dialect), {}, user),
-    runQuery(relationship.connection, irToSqlLocal(matchRateIr(relationship), dialect), {}, user),
-  ]);
+  const result = await runQuery(
+    relationship.connection,
+    irToSqlLocal(verificationIr(relationship), dialect),
+    {},
+    user,
+  );
 
-  // Rows are keyed records per QueryResult.
+  // Two keyed rows, discriminated by `chk` (order is not guaranteed).
   const num = (v: unknown) => (typeof v === 'number' ? v : parseInt(String(v ?? 0), 10) || 0);
-  const uniq = (dupes.rows?.[0] ?? {}) as Record<string, unknown>;
-  const row = (match.rows?.[0] ?? {}) as Record<string, unknown>;
+  const rows = (result.rows ?? []) as Array<Record<string, unknown>>;
+  const uniq = rows.find((r) => String(r['chk']) === 'uniqueness') ?? {};
+  const match = rows.find((r) => String(r['chk']) === 'match') ?? {};
   return {
     // NULLs: COUNT(col) skips them on both sides consistently.
-    targetUnique: num(uniq['c']) === num(uniq['d']),
-    totalRows: num(row['total']),
-    matchedRows: num(row['matched']),
+    targetUnique: num(uniq['a']) === num(uniq['b']),
+    totalRows: num(match['a']),
+    matchedRows: num(match['b']),
   };
 }
