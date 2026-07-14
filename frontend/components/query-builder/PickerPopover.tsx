@@ -164,6 +164,7 @@ interface PickerItemProps {
   selectedBg?: string;
   onClick?: (e: React.MouseEvent) => void;
   rightElement?: React.ReactNode;
+  'aria-label'?: string;
 }
 
 export function PickerItem({
@@ -173,6 +174,7 @@ export function PickerItem({
   selectedBg = 'rgba(99, 102, 241, 0.15)',
   onClick,
   rightElement,
+  'aria-label': ariaLabel,
 }: PickerItemProps) {
   const content =
     typeof children === 'string' ? (
@@ -190,6 +192,7 @@ export function PickerItem({
       bg={selected ? selectedBg : 'transparent'}
       _hover={{ bg: 'bg.muted' }}
       onClick={onClick}
+      aria-label={ariaLabel}
     >
       {icon || rightElement ? (
         <HStack gap={2} justify={rightElement ? 'space-between' : undefined}>

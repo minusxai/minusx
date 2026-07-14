@@ -66,7 +66,7 @@ function makeNotebookFile(): DbFile {
     content: {
       description: null,
       cells: [
-        { type: 'sql', id: CELL_ID, name: null, query: 'SELECT 42', vizSettings: { type: 'table' }, parameters: [], parameterValues: {}, connection_name: 'main', references: [] },
+        { type: 'sql', id: CELL_ID, name: null, query: 'SELECT 42', vizSettings: { type: 'table' }, parameters: [], parameterValues: {}, connection_name: 'main' },
       ],
     } as NotebookContent,
     created_at: '2025-01-01T00:00:00Z',
@@ -102,7 +102,7 @@ describe('NotebookView via NotebookContainerV2 (reduxExecuted)', () => {
     store.dispatch(setNotebookCellExecuted({
       fileId: NOTEBOOK_ID,
       cellId: CELL_ID,
-      executed: { query: 'SELECT 42', params: {}, database: 'main', references: [] },
+      executed: { query: 'SELECT 42', params: {}, database: 'main' },
     }));
 
     renderWithProviders(<NotebookContainerV2 fileId={NOTEBOOK_ID} />, { store });

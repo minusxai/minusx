@@ -3,7 +3,7 @@
  *
  * Defines the TestRunner interface and shared comparison utilities.
  * Two implementations:
- *   - lib/evals/server.ts  — server-side (used by transformation-handler.ts)
+ *   - lib/evals/server.ts  — server-side (used by job handlers)
  *   - lib/evals/client.ts  — client-side (used by UI for inline test runs)
  */
 import type { Test, TestRunResult, TestAnswerType, TestOperator } from '@/lib/types';

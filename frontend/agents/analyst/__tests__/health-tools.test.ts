@@ -16,7 +16,7 @@ const ADMIN: EffectiveUser = { userId: 1, email: 'admin@example.com', name: 'Adm
 const TEST_FOLDER = '/org/health-tools-test';
 
 function question(overrides: Partial<QuestionContent>): QuestionContent {
-  return { description: 'ok', query: 'SELECT 1', vizSettings: { type: 'table' }, parameters: [], parameterValues: null, connection_name: 'test', references: null, cachePolicy: null, ...overrides };
+  return { description: 'ok', query: 'SELECT 1', vizSettings: { type: 'table' }, parameters: [], parameterValues: null, connection_name: 'test', cachePolicy: null, ...overrides };
 }
 
 function run(fileId: number, ctx: Partial<AnalystAgentContext> = { effectiveUser: ADMIN }) {

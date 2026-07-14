@@ -9,7 +9,6 @@ import { DatabaseWithSchema } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import EditWithAgentPopover from '@/components/EditWithAgentPopover';
 import { computeMonacoPopoverPosition, type MonacoPopoverPosition } from '@/lib/chat/edit-with-agent';
-import { ResolvedReference } from '@/lib/sql/query-composer';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import SqlDiffEditor from './SqlDiffEditor';
 import SqlEditorToolbar from './SqlEditorToolbar';
@@ -70,7 +69,6 @@ function debouncePromise<T extends (...args: any[]) => Promise<any>>(
 
 /**
  * Autocomplete implementation:
- * - @references: Frontend (requires DB query)
  * - Everything else: API-based (backend parses with sqlglot)
  */
 
@@ -78,14 +76,6 @@ function debouncePromise<T extends (...args: any[]) => Promise<any>>(
 const monacoSuggestStyles = `
   .monaco-editor .suggest-widget {
     border-radius: 8px !important;
-  }
-  .monaco-editor .reference-highlight {
-    color: #1abc9c !important;
-    font-weight: 600;
-  }
-  .monaco-editor .reference-unresolved {
-    text-decoration: underline wavy #e74c3c;
-    text-underline-offset: 3px;
   }
   .monaco-editor .schema-table-highlight {
     color: #c0392b !important;
@@ -118,10 +108,7 @@ interface SqlEditorProps {
   showRunButton?: boolean;
   isRunning?: boolean;
   proposedValue?: string;  // When set, shows diff editor (current vs proposed)
-  availableReferences?: ReferenceOption[];  // Questions available for @reference autocomplete
-  validReferenceAliases?: string[];  // Aliases that are currently valid (resolved) - for error squiggles
   schemaData?: DatabaseWithSchema[];  // Database schema for table/column autocomplete
-  resolvedReferences?: ResolvedReference[];  // Already loaded references for API autocomplete
   databaseName?: string;  // Database name for API autocomplete
   connectionType?: string;  // Connection type for dialect-aware autocomplete
   fillHeight?: boolean;  // When true, fills parent container height instead of fixed pixel height
@@ -137,10 +124,7 @@ export default function SqlEditor({
   showRunButton = false,
   isRunning = false,
   proposedValue,
-  availableReferences = [],
-  validReferenceAliases = [],
   schemaData = [],
-  resolvedReferences = [],
   databaseName,
   connectionType,
   fillHeight = false,
@@ -152,7 +136,6 @@ export default function SqlEditor({
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
   const completionProviderRef = useRef<any>(null);
-  const availableReferencesRef = useRef(availableReferences);
   const requestIdRef = useRef(0); // Track request IDs to ignore stale responses
   const [height, setHeight] = useState(200); // Height in pixels
   const [isResizing, setIsResizing] = useState(false);
@@ -173,17 +156,6 @@ export default function SqlEditor({
   useEffect(() => {
     onRunRef.current = onRun;
   }, [onRun]);
-
-  // Keep availableReferences ref updated
-  useEffect(() => {
-    availableReferencesRef.current = availableReferences;
-  }, [availableReferences]);
-
-  // Keep validReferenceAliases ref updated for decoration
-  const validReferenceAliasesRef = useRef(validReferenceAliases);
-  useEffect(() => {
-    validReferenceAliasesRef.current = validReferenceAliases;
-  }, [validReferenceAliases]);
 
   // Keep schemaData ref updated for schema completions
   const schemaDataRef = useRef(schemaData);
@@ -302,32 +274,6 @@ export default function SqlEditor({
         // Get full SQL text for alias extraction
         const fullText = model.getValue();
         const currentSchemaData = schemaDataRef.current;
-        const currentRefs = availableReferencesRef.current;
-
-        // 1. Check for @reference completion first (always use frontend logic)
-        const atMatch = textUntilPosition.match(/@(\w*)$/);
-        if (atMatch) {
-          const atIndex = textUntilPosition.lastIndexOf('@');
-          const range = {
-            startLineNumber: position.lineNumber,
-            startColumn: atIndex + 1,
-            endLineNumber: position.lineNumber,
-            endColumn: position.column
-          };
-
-          const suggestions = currentRefs.map((ref: ReferenceOption, index: number) => ({
-            label: ref.name,
-            kind: monaco.languages.CompletionItemKind.Value,
-            detail: `@${ref.alias}`,
-            documentation: `Insert reference to question #${ref.id}`,
-            insertText: `@${ref.alias}`,
-            filterText: '@' + ref.name,
-            range: range,
-            sortText: String(index).padStart(5, '0'),
-          }));
-
-          return { suggestions };
-        }
 
         // Skip schema completions if no schema data available
         if (!currentSchemaData || currentSchemaData.length === 0) {
@@ -354,7 +300,6 @@ export default function SqlEditor({
             {
               type: 'sql_editor',
               schemaData: currentSchemaData,
-              resolvedReferences: resolvedReferences,
               databaseName: databaseNameRef.current,
               connectionType: connectionTypeRef.current,
             },
@@ -601,54 +546,16 @@ export default function SqlEditor({
                 });
                 monaco.editor.setTheme('custom-theme');
 
-                // Function to highlight @references and schema elements in the editor
+                // Function to highlight schema elements in the editor
                 let decorations: string[] = [];
                 const updateDecorations = () => {
                   const model = editor.getModel();
                   if (!model) return;
 
                   const text = model.getValue();
-                  const validAliases = validReferenceAliasesRef.current;
-                  const availableRefs = availableReferencesRef.current;
                   const currentSchema = schemaDataRef.current;
                   const newDecorations: any[] = [];
-
-                  // Match all @word patterns (potential references)
-                  const refRegex = /@(\w+)/g;
                   let match;
-
-                  while ((match = refRegex.exec(text)) !== null) {
-                    const alias = match[1];  // The part after @
-                    const startPos = model.getPositionAt(match.index);
-                    const endPos = model.getPositionAt(match.index + match[0].length);
-                    const range = new monaco.Range(startPos.lineNumber, startPos.column, endPos.lineNumber, endPos.column);
-
-                    // Check if already in valid references (synced)
-                    const isValidSynced = validAliases.includes(alias);
-
-                    // Check if alias matches format and ID exists in available questions
-                    // This handles the case where user just selected from autocomplete but sync hasn't run yet
-                    const idMatch = alias.match(/_(\d+)$/);
-                    const isValidPending = idMatch && availableRefs.some(r => r.id === parseInt(idMatch[1], 10));
-
-                    if (isValidSynced || isValidPending) {
-                      // Valid reference - teal highlight
-                      newDecorations.push({
-                        range,
-                        options: {
-                          inlineClassName: 'reference-highlight'
-                        }
-                      });
-                    } else {
-                      // Unresolved reference - red squiggle (CSS only, no tooltip)
-                      newDecorations.push({
-                        range,
-                        options: {
-                          inlineClassName: 'reference-unresolved'
-                        }
-                      });
-                    }
-                  }
 
                   // Highlight schema elements (tables, columns, schemas) if schema data available
                   if (currentSchema && currentSchema.length > 0) {

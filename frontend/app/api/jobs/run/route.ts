@@ -9,7 +9,6 @@ import { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/http/with-auth';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
 import { runJob } from '@/lib/jobs/run-job';
-import type { TransformRunMode } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -17,19 +16,18 @@ export const runtime = 'nodejs';
 export const POST = withAuth(async (request: NextRequest, user) => {
   try {
     const body = await request.json();
-    const { job_id, job_type, force = false, send = true, run_mode } = body as {
+    const { job_id, job_type, force = false, send = true } = body as {
       job_id: string;
       job_type: string;
       force?: boolean;
       send?: boolean;
-      run_mode?: TransformRunMode;
     };
 
     if (!job_id || !job_type) {
       return ApiErrors.badRequest('job_id and job_type are required');
     }
 
-    const outcome = await runJob({ jobId: job_id, jobType: job_type, force, send, runMode: run_mode }, user);
+    const outcome = await runJob({ jobId: job_id, jobType: job_type, force, send }, user);
 
     switch (outcome.kind) {
       case 'unsupported_job_type':

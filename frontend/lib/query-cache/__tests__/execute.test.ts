@@ -181,25 +181,8 @@ describe('executeQueryCached (SWR orchestration)', () => {
     expect(exec).toHaveBeenCalledTimes(1);
   });
 
-  it('DIFFERENT references → DIFFERENT cache key (composed-query collision)', async () => {
-    // Same raw SQL + params but composed against different reference ids → different finalQuery.
-    const base = { mode: 'org', connectionName: 'duckdb', query: 'SELECT * FROM base', params: {}, policy: POLICY };
-    const store = createQueryCacheBlobStore(fakeObjectStore());
-    const execA = vi.fn(async (): Promise<QueryStream> =>
-      queryResultToStream({ columns: ['n'], types: ['number'], rows: [{ n: 5 }], finalQuery: 'via-5' }));
-    const execB = vi.fn(async (): Promise<QueryStream> =>
-      queryResultToStream({ columns: ['n'], types: ['number'], rows: [{ n: 6 }], finalQuery: 'via-6' }));
 
-    const a = await getCachedResult({ ...base, blobStore: store, execute: execA, references: [{ id: 5, alias: 'r' }] });
-    const b = await getCachedResult({ ...base, blobStore: store, execute: execB, references: [{ id: 6, alias: 'r' }] });
-
-    expect(a.result.rows).toEqual([{ n: 5 }]);
-    expect(b.result.rows).toEqual([{ n: 6 }]); // NOT a's blob
-    expect(execA).toHaveBeenCalledTimes(1);
-    expect(execB).toHaveBeenCalledTimes(1);
-  });
-
-  it('no parameterTypes / no references → key unchanged (back-compat, still one entry)', async () => {
+  it('no parameterTypes → key unchanged (back-compat, still one entry)', async () => {
     const { opts, exec } = makeOpts();
     await getCachedResult(opts);
     const second = await getCachedResult(opts);

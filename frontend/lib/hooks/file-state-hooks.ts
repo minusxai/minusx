@@ -52,7 +52,7 @@ import { CACHE_TTL } from '@/lib/constants/cache';
 import { noneifyEmptyNumericParams } from '@/lib/sql/sql-params';
 import type { LoadError } from '@/lib/types/errors';
 import type { GetFilesOptions } from '@/lib/data/types';
-import type { AugmentedFile, QuestionReference } from '@/lib/types';
+import type { AugmentedFile } from '@/lib/types';
 import { FileType } from '@/lib/ui/file-metadata';
 
 // ============================================================================
@@ -418,7 +418,6 @@ function useQueryResultSelector(
  * @param query - SQL query string
  * @param params - Query parameters
  * @param database - Database name (connection)
- * @param references - Question references (optional)
  * @param options - Hook options (ttl, skip)
  * @returns {data, loading, error, isStale}
  *
@@ -435,7 +434,6 @@ export function useQueryResult(
   query: string,
   rawParams: Record<string, any>,
   database: string,
-  references?: QuestionReference[],
   options: UseQueryResultOptions = {}
 ): UseQueryResultReturn {
   const { ttl = CACHE_TTL.QUERY, skip = false, parameterTypes, filePath, cachePolicy } = options;
@@ -448,16 +446,16 @@ export function useQueryResult(
 
   useEffect(() => {
     if (skip) return;
-    getQueryResult({ query, params, database, references, parameterTypes, filePath, cachePolicy }, { ttl }).catch(() => {});
-  }, [query, params, database, references, parameterTypes, filePath, cachePolicy, ttl, skip]);
+    getQueryResult({ query, params, database, parameterTypes, filePath, cachePolicy }, { ttl }).catch(() => {});
+  }, [query, params, database, parameterTypes, filePath, cachePolicy, ttl, skip]);
 
   // Force a fresh fetch, bypassing the TTL cache — used by retry buttons after a
   // transient network failure. Swallows rejection (error already lands in Redux).
   const refetch = useCallback(
-    () => getQueryResult({ query, params, database, references, parameterTypes, filePath }, { ttl, forceLoad: true })
+    () => getQueryResult({ query, params, database, parameterTypes, filePath }, { ttl, forceLoad: true })
       .then(() => {})
       .catch(() => {}),
-    [query, params, database, references, parameterTypes, filePath, ttl],
+    [query, params, database, parameterTypes, filePath, ttl],
   );
 
   return { ...useQueryResultSelector(query, params, database), refetch };

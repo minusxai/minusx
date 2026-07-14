@@ -4,7 +4,7 @@
  * Supports versioning - each user sees their published version
  */
 
-import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry } from '@/lib/types';
+import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, TableRelationship } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getPublishedVersionForUser as getPublishedVersionForUserId, resolveVersionWhitelist } from '@/lib/context/context-utils';
 import { CustomLoader } from './types';
@@ -84,6 +84,13 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
   const parentSchema = boundSchema(computed.parentSchema) as ContextContent['parentSchema'];
   const { fullDocs, fullMetrics, fullAnnotations, fullSkills } = computed;
 
+  // Declared relationships inherit like metrics: fullRelationships is
+  // INHERITED-ONLY (ancestor's), mirroring fullMetrics — the version's own
+  // relationships stay on the version, or the editor would show every own
+  // relationship a second time tagged "inherited". Semantic MODELS are NOT
+  // computed here: they derive on demand (lib/semantic/models.server.ts).
+  const fullRelationships = computed.fullRelationships;
+
   if (user.role === 'admin') {
     // Admins see all versions + metadata
     return {
@@ -95,6 +102,7 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         fullDocs,
         fullMetrics,
         fullAnnotations,
+        fullRelationships,
         fullSkills
       }
     };
@@ -111,6 +119,7 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         fullDocs,
         fullMetrics,
         fullAnnotations,
+        fullRelationships,
         fullSkills
       }
     };
@@ -127,11 +136,9 @@ async function computeSchemaFromVersion(
   version: ContextVersion,
   contextPath: string,
   user: EffectiveUser
-): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullMetrics: MetricDef[], fullAnnotations: TableAnnotation[], fullSkills: SkillEntry[] }> {
-  const { fullSchema, parentSchema, fullDocs, fullMetrics, fullAnnotations, fullSkills } = await computeSchemaFromWhitelist(version.whitelist, contextPath, user);
-
+): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullMetrics: MetricDef[], fullAnnotations: TableAnnotation[], fullRelationships: TableRelationship[], fullSkills: SkillEntry[] }> {
   // fullDocs/fullMetrics already include inherited values (computed in context-loader-utils)
   // Root contexts get empty inherited values (no parent to inherit from)
   // Child contexts get parent.full* + parent.own (filtered by childPaths)
-  return { fullSchema, parentSchema, fullDocs, fullMetrics, fullAnnotations, fullSkills };
+  return computeSchemaFromWhitelist(version.whitelist, contextPath, user);
 }

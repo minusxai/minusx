@@ -449,20 +449,15 @@ function parseOneSelectExpr(expr: any, dialect: string): SelectColumn {
   // Generic function node — check for known functions like DATE_TRUNC
   if (key === 'function') {
     const funcName = actual.function.name?.toUpperCase();
-    if (funcName === 'DATE_TRUNC' && actual.function.args?.length >= 2) {
-      const args = actual.function.args;
-      // BigQuery arg order: DATE_TRUNC(col, unit)
-      const colArg = args[0];
-      const unitArg = args[1];
-      const colName = colArg?.column?.name?.name;
-      const unitStr = unitArg?.var?.this?.toUpperCase() ?? unitArg?.literal?.value?.toUpperCase();
-      if (colName && unitStr && DATE_TRUNC_UNITS.has(unitStr)) {
+    if (funcName === 'DATE_TRUNC') {
+      const dt = parseGenericDateTrunc(actual.function.args);
+      if (dt) {
         return {
           type: 'expression',
           function: 'DATE_TRUNC',
-          column: colName,
-          table: colArg?.column?.table?.name ?? undefined,
-          unit: unitStr as any,
+          column: dt.column,
+          table: dt.table,
+          unit: dt.unit as any,
           alias,
         };
       }
@@ -541,6 +536,29 @@ function parseAggregateExpr(actual: any, key: string, alias: string | undefined,
 // ---------------------------------------------------------------------------
 
 const DATE_TRUNC_UNITS = immutableSet(['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'HOUR', 'MINUTE']);
+
+/**
+ * Parse a generic `function` AST node's DATE_TRUNC args in EITHER arg order:
+ * BigQuery `DATE_TRUNC(col, MONTH)` or Postgres/DuckDB `DATE_TRUNC('month', col)`.
+ */
+function parseGenericDateTrunc(args: any[]): { column: string; table?: string; unit: string } | null {
+  if (!args || args.length < 2) return null;
+  const readUnit = (arg: any): string | undefined =>
+    (arg?.var?.this ?? arg?.var?.name ?? arg?.literal?.value)?.toString().toUpperCase();
+  const readColumn = (arg: any): { column?: string; table?: string } => ({
+    column: arg?.column?.name?.name,
+    table: arg?.column?.table?.name ?? undefined,
+  });
+
+  for (const [colArg, unitArg] of [[args[0], args[1]], [args[1], args[0]]]) {
+    const { column, table } = readColumn(colArg);
+    const unit = readUnit(unitArg);
+    if (column && unit && DATE_TRUNC_UNITS.has(unit)) {
+      return { column, table, unit };
+    }
+  }
+  return null;
+}
 
 function parseDateTruncExpr(dt: any): SelectColumn | null {
   // Get unit
@@ -809,25 +827,19 @@ function parseComparison(comp: any, operator: FilterCondition['operator'], diale
     }
   }
 
-  // Generic function DATE_TRUNC on left (BigQuery style)
+  // Generic function DATE_TRUNC on left (either arg order)
   if (leftKey === 'function' && left.function?.name?.toUpperCase() === 'DATE_TRUNC') {
-    const args = left.function.args ?? [];
-    if (args.length >= 2) {
-      const colArg = args[0];
-      const unitArg = args[1];
-      const colName = colArg?.column?.name?.name;
-      const unitStr = unitArg?.var?.this?.toUpperCase() ?? unitArg?.literal?.value?.toUpperCase();
-      if (colName && unitStr && DATE_TRUNC_UNITS.has(unitStr)) {
-        const rv = parseRightValue(right, dialect);
-        return {
-          column: colName,
-          table: colArg?.column?.table?.name ?? undefined,
-          operator,
-          function: 'DATE_TRUNC',
-          unit: unitStr as any,
-          ...rv,
-        };
-      }
+    const dt = parseGenericDateTrunc(left.function.args ?? []);
+    if (dt) {
+      const rv = parseRightValue(right, dialect);
+      return {
+        column: dt.column,
+        table: dt.table,
+        operator,
+        function: 'DATE_TRUNC',
+        unit: dt.unit as any,
+        ...rv,
+      };
     }
   }
 
@@ -953,24 +965,16 @@ function parseGroupBy(selectNode: any, dialect: string): GroupByClause | undefin
         table: expr.column.table?.name ?? undefined,
       });
     } else if (key === 'function' && expr.function?.name?.toUpperCase() === 'DATE_TRUNC') {
-      // BigQuery-style generic function DATE_TRUNC
-      const args = expr.function.args ?? [];
-      if (args.length >= 2) {
-        const colArg = args[0];
-        const unitArg = args[1];
-        const colName = colArg?.column?.name?.name;
-        const unitStr = unitArg?.var?.this?.toUpperCase() ?? unitArg?.literal?.value?.toUpperCase();
-        if (colName && unitStr && DATE_TRUNC_UNITS.has(unitStr)) {
-          columns.push({
-            type: 'expression',
-            column: colName,
-            table: colArg?.column?.table?.name ?? undefined,
-            function: 'DATE_TRUNC',
-            unit: unitStr as any,
-          });
-        } else {
-          columns.push({ column: generateSqlFromAst(expr, dialect) });
-        }
+      // Generic function DATE_TRUNC (either arg order)
+      const dt = parseGenericDateTrunc(expr.function.args ?? []);
+      if (dt) {
+        columns.push({
+          type: 'expression',
+          column: dt.column,
+          table: dt.table,
+          function: 'DATE_TRUNC',
+          unit: dt.unit as any,
+        });
       } else {
         columns.push({ column: generateSqlFromAst(expr, dialect) });
       }
@@ -1070,6 +1074,21 @@ function parseOrderByExpressions(
           direction,
           function: 'DATE_TRUNC',
           unit: dt.unit,
+        });
+      } else {
+        orderBy.push({ type: 'raw', raw_sql: generateSqlFromAst(colExpr, dialect), direction });
+      }
+    } else if (key === 'function' && colExpr.function?.name?.toUpperCase() === 'DATE_TRUNC') {
+      // Generic function DATE_TRUNC (either arg order)
+      const dt = parseGenericDateTrunc(colExpr.function.args ?? []);
+      if (dt) {
+        orderBy.push({
+          type: 'expression',
+          column: dt.column,
+          table: dt.table,
+          direction,
+          function: 'DATE_TRUNC',
+          unit: dt.unit as any,
         });
       } else {
         orderBy.push({ type: 'raw', raw_sql: generateSqlFromAst(colExpr, dialect), direction });

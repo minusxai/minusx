@@ -1,7 +1,7 @@
 // What the AGENT sees + may edit on a context file.
 //
 // shapeContextForAgent: FLATTENS the live (published) version's knowledge layer + the content-level
-// evals/skills into a single working view (docs/metrics/annotations/evals/skills), dropping the
+// evals/skills into a single working view (docs/metrics/annotations/relationships/evals/skills), dropping the
 // whitelist (human-managed), version bookkeeping (versions[]/published) and the server-computed
 // schema cache (fullSchema/parentSchema/full*).
 //
@@ -38,16 +38,16 @@ const ctx = () => ({
 describe('shapeContextForAgent — flatten to the live version', () => {
   it('exposes only the flat knowledge view; drops whitelist/versions/published/computed', () => {
     const shaped: any = shapeContextForAgent(ctx());
-    expect(Object.keys(shaped).sort()).toEqual(['annotations', 'docs', 'evals', 'metrics', 'skills']);
+    expect(Object.keys(shaped).sort()).toEqual(['annotations', 'docs', 'evals', 'metrics', 'relationships', 'skills']);
     for (const noise of ['whitelist', 'versions', 'published', 'fullSchema', 'parentSchema', 'fullDocs']) {
       expect(noise in shaped).toBe(false);
     }
   });
 
-  it('always exposes all five authored fields, defaulting absent ones to [] (discoverable surface)', () => {
+  it('always exposes all six authored fields, defaulting absent ones to [] (discoverable surface)', () => {
     const minimal = { versions: [{ version: 1, whitelist: [], docs: [], createdAt: 't', createdBy: 1 }], published: { all: 1 } };
     const shaped: any = shapeContextForAgent(minimal);
-    expect(shaped).toEqual({ docs: [], metrics: [], annotations: [], skills: [], evals: [] });
+    expect(shaped).toEqual({ docs: [], metrics: [], annotations: [], relationships: [], skills: [], evals: [] });
   });
 
   it('flattens the LIVE (published) version, not the first', () => {

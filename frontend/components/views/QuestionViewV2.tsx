@@ -15,14 +15,11 @@ import { debounce } from 'lodash';
 import {
   Box,
   Text,
-  IconButton,
   HStack,
-  Code,
 } from '@chakra-ui/react';
 import {
   LuChevronLeft,
   LuChevronRight,
-  LuX,
   LuGripVertical,
 } from 'react-icons/lu';
 import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType, type DbFile } from '@/lib/types';
@@ -30,19 +27,18 @@ import SqlEditor from '../query-builder/SqlEditor';
 import ParameterRow from '../params/ParameterRow';
 import DatabaseSelector from '../selectors/DatabaseSelector';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
-import { syncReferencesWithSQL } from '@/lib/sql/sql-references';
-import { useAvailableQuestions } from '@/lib/hooks/useAvailableQuestions';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { QuestionEmptyState } from '@/components/views/shared/empty-states';
 import type { FileId, FileState } from '@/store/filesSlice';
-import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '../query-builder';
+import { QueryModeSelector, SemanticCanvas, type QueryTab } from '../query-builder';
+import { deriveModelStubs, type ModelStub } from '@/lib/semantic/derive';
+import { useSemanticModels } from '@/lib/hooks/use-semantic-models';
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
-import { FilesAPI } from '@/lib/data/files';
-import { useGuiCompat } from '@/lib/hooks/use-gui-compat';
+import { useSemanticCompat } from '@/lib/hooks/use-semantic-compat';
 
 // Which side of the split view is collapsed (or neither). Page mode persists this
 // globally in Redux (state.ui.questionCollapsedPanel); toolcall mode keeps it local
@@ -104,9 +100,6 @@ interface QuestionViewV2Props {
   fileState: Record<FileId, FileState>;
   onSetFile: (file: DbFile) => void;
 
-  // Remove a question reference (edit-mode only). Omitted where unreachable (toolcall).
-  onRemoveReference?: (referencedQuestionId: number) => void;
-
   // Handlers
   onChange: (updates: Partial<QuestionContent>) => void;
   onParameterValueChange?: (paramName: string, value: string | number | null) => void;  // Ephemeral
@@ -134,7 +127,6 @@ export default function QuestionViewV2({
   onTogglePanel,
   fileState,
   onSetFile,
-  onRemoveReference,
   onChange,
   onParameterValueChange,
   onExecute,
@@ -158,7 +150,6 @@ export default function QuestionViewV2({
   const [containerWidth, setContainerWidth] = useState(0);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
-  const [sqlPreviewId, setSqlPreviewId] = useState<number | null>(null);
 
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(45); // percentage
@@ -179,47 +170,27 @@ export default function QuestionViewV2({
   const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
   const toggleCollapsedPanel = onTogglePanel;
 
-  // Query mode state (SQL, GUI, or Viz)
+  // Query mode state (Semantic, SQL, or Viz). The Semantic tab is the default
+  // whenever the current SQL reliably detects as a semantic query (or a spec
+  // was persisted); SQL otherwise. No explicit choice needed on mount — the
+  // detection effect below promotes to Semantic exactly once.
   const [queryMode, setQueryMode] = useState<QueryTab>('sql');
+  const [userPickedMode, setUserPickedMode] = useState(false);
 
-  // Memoize referencedQuestions to avoid unnecessary re-renders
-  const referencedQuestions = useMemo(() => {
-    const refs = content.references || [];
-    return refs.map(ref => ({
-      ...ref,
-      question: fileState[ref.id]
-    }));
-  }, [content.references, fileState]);
-
-  // Get available questions for inline @reference autocomplete
-  const { questions: availableQuestions } = useAvailableQuestions(
-    questionId,
-    content.connection_name,
-    referencedQuestions.map(r => r.id)
-  );
-
-  // Load referenced questions into Redux (via the onSetFile callback supplied by the caller)
-  useEffect(() => {
-    const referencedIds = content.references?.map(ref => ref.id) || [];
-    if (referencedIds.length === 0) return;
-
-    // Check which questions need to be loaded
-    const missingIds = referencedIds.filter(id => {
-      const file = referencedQuestions.find(r => r.id === id)?.question;
-      return !file || !file.content;
-    });
-
-    if (missingIds.length === 0) return;
-
-    // Load missing questions
-    FilesAPI.loadFiles(missingIds).then(result => {
-      result.data.forEach(file => {
-        onSetFile(file);
-      });
-    }).catch(err => {
-      console.error('[QuestionViewV2] Failed to load referenced questions:', err);
-    });
-  }, [content.references, referencedQuestions, onSetFile]);
+  // Semantic tier: one derived model per whitelisted table. Stubs (names only)
+  // come from the schema already in the store; full model vocabulary is fetched
+  // ON DEMAND for the tables in play — never in bulk (multi-MB on large
+  // workspaces). Memoized: stable identities keep the detection effect quiet.
+  const semanticStubs = useMemo(() => {
+    const db = schemaData?.find((d) => d.databaseName === content.connection_name);
+    return db ? deriveModelStubs([db]) : [];
+  }, [schemaData, content.connection_name]);
+  const [pickedTables, setPickedTables] = useState<string[]>([]);
+  const semanticTables = useMemo(() => {
+    const tables = [...pickedTables];
+    if (content.semanticQuery?.table) tables.push(content.semanticQuery.table);
+    return tables;
+  }, [pickedTables, content.semanticQuery?.table]);
 
   // Track container width for responsive layout
   useEffect(() => {
@@ -241,7 +212,27 @@ export default function QuestionViewV2({
   // Proactive GUI compatibility check: dims the GUI tab (with a tooltip reason) when
   // the query can't be parsed into the builder IR, so it's already disabled when the
   // user opens a question — no surprise on mode switch.
-  const { canUseGUI, guiError } = useGuiCompat(content.query, dialect);
+  const { detected: detectedSemanticSpec, canUseSemantic } = useSemanticCompat(
+    content.query, dialect,
+    { path: filePath || '/org', connectionName: content.connection_name, hasTables: semanticStubs.length > 0 },
+  );
+  const builderTables = useMemo(
+    () => (detectedSemanticSpec?.table ? [...semanticTables, detectedSemanticSpec.table] : semanticTables),
+    [semanticTables, detectedSemanticSpec?.table],
+  );
+  const { models: semanticModels } = useSemanticModels(
+    filePath || '/org', content.connection_name, builderTables,
+  );
+  const showSemanticTab = semanticStubs.length > 0;
+  // Fully derived mode: until the user explicitly picks a tab, Semantic is the
+  // resting state whenever the query detects. A Semantic choice that loses its
+  // footing (SQL edited into something non-semantic, models removed) falls
+  // back to SQL rather than stranding the user on a dead tab.
+  const semanticAvailable = showSemanticTab && (canUseSemantic || !!content.semanticQuery);
+  const effectiveQueryMode: QueryTab =
+    !userPickedMode && queryMode === 'sql' && detectedSemanticSpec ? 'semantic'
+      : queryMode === 'semantic' && !semanticAvailable ? 'sql'
+      : queryMode;
 
   // Use compact layout when container is narrow (< 700px) - stacked vertical layout
   const useCompactLayout = (containerWidth > 0 && containerWidth < 700) || !fullMode;
@@ -406,34 +397,7 @@ export default function QuestionViewV2({
     onChange({ vizSettings: { ...content.vizSettings, axisConfig } });
   };
 
-  // Handle removing a question reference
-  const handleRemoveReference = (referencedQuestionId: number) => {
-    onRemoveReference?.(referencedQuestionId);
-  };
-
-  // Merge parameters from current question + referenced questions
-  const parameters = useMemo(() => {
-    const currentParams = content.parameters || [];
-
-    // Extract parameters from referenced questions
-    const referencedParams: QuestionParameter[] = [];
-    referencedQuestions.forEach(ref => {
-      const refContent = ref.question?.content as QuestionContent;
-      if (refContent?.parameters) {
-        refContent.parameters.forEach(param => {
-          // Only add if not already present (same name + type)
-          const exists = currentParams.some(p => p.name === param.name && p.type === param.type);
-          const alreadyAdded = referencedParams.some(p => p.name === param.name && p.type === param.type);
-          if (!exists && !alreadyAdded) {
-            referencedParams.push(param);
-          }
-        });
-      }
-    });
-
-    // Return merged list: current params first, then referenced params
-    return [...currentParams, ...referencedParams];
-  }, [content.parameters, referencedQuestions]);
+  const parameters = useMemo(() => content.parameters || [], [content.parameters]);
 
   // Handle query execution (Run button / Cmd+Enter)
   // Build effective param values dict from content.parameterValues
@@ -448,6 +412,10 @@ export default function QuestionViewV2({
 
   // Handle query change with debounced param/ref sync
   const handleQueryChange = useCallback((newQuery: string) => {
+    // Typing in the SQL editor IS choosing SQL for this session: detection may
+    // still run (tab enablement), but it must never steal the tab mid-edit —
+    // auto-promotion to the GUI is only for SQL you OPEN, not SQL you TYPE.
+    setUserPickedMode(true);
     debouncedQueryUpdate(newQuery);
 
     // Debounce the param/ref sync (300ms)
@@ -455,25 +423,12 @@ export default function QuestionViewV2({
       clearTimeout(syncTimeoutRef.current);
     }
     syncTimeoutRef.current = setTimeout(() => {
-      const updatedRefs = syncReferencesWithSQL(newQuery, content.references || []);
-
-      // Build composed SQL (current + referenced CTEs) to extract ALL parameters
-      let composedSQL = newQuery;
-      referencedQuestions.forEach(ref => {
-        const refContent = ref.question?.content as QuestionContent;
-        if (refContent?.query) {
-          // Append referenced SQL to extract its parameters too
-          composedSQL += '\n' + refContent.query;
-        }
-      });
-
-      // Sync parameters from the FULL composed query (current + referenced)
-      // Pass merged parameters to preserve user-set values
-      const updatedParams = syncParametersWithSQL(composedSQL, parameters);
-
-      onChange({ parameters: updatedParams, references: updatedRefs });
+      // Sync declared parameters with the :params present in the SQL,
+      // preserving user-set config for ones that remain.
+      const updatedParams = syncParametersWithSQL(newQuery, parameters);
+      onChange({ parameters: updatedParams });
     }, 300);
-  }, [onChange, content.parameters, content.references, parameters]);
+  }, [onChange, parameters]);
 
   return (
     <Box
@@ -563,10 +518,10 @@ export default function QuestionViewV2({
               <HStack px={3} py={2} gap={2} align="center">
                 <Box flex={1} minWidth={0}>
                   <QueryModeSelector
-                    mode={queryMode}
-                    onModeChange={setQueryMode}
-                    canUseGUI={canUseGUI}
-                    guiError={guiError ?? undefined}
+                    mode={effectiveQueryMode}
+                    onModeChange={(m: QueryTab) => { setUserPickedMode(true); setQueryMode(m); }}
+                    showSemanticTab={showSemanticTab}
+                    canUseSemantic={canUseSemantic}
                     showVizTab={showVizControls}
                     canUseViz={!!queryData}
                   />
@@ -579,54 +534,11 @@ export default function QuestionViewV2({
                 </Box>
               </HStack>
 
-              {/* Reference chips row (hide on Viz tab) */}
-              {queryMode !== 'viz' && referencedQuestions.length > 0 && (
-              <HStack px={4} py={1} gap={2} flexWrap="wrap" onClick={(e) => e.stopPropagation()}>
-                {referencedQuestions.map(ref => {
-                  const isSelected = sqlPreviewId === ref.id;
-                  return (
-                    <HStack
-                      key={ref.id}
-                      px={2}
-                      py={1}
-                      bg="transparent"
-                      borderRadius="md"
-                      border={isSelected ? '2px solid' : '1px solid'}
-                      borderColor={isSelected ? 'accent.teal' : 'accent.secondary'}
-                      gap={1}
-                      cursor="pointer"
-                      _hover={{ opacity: 0.85 }}
-                      onClick={() => setSqlPreviewId(isSelected ? null : ref.id)}
-                      aria-label={`Reference: ${ref.alias}`}
-                    >
-                      <Code fontSize="xs" color="accent.secondary" bg="transparent" fontWeight="600">
-                        @{ref.alias}
-                      </Code>
-                      {editMode && (
-                        <IconButton
-                          aria-label="Remove reference"
-                          size="2xs"
-                          variant="ghost"
-                          color="accent.secondary"
-                          _hover={{ bg: 'bg.muted' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveReference(ref.id);
-                          }}
-                        >
-                          <LuX />
-                        </IconButton>
-                      )}
-                    </HStack>
-                  );
-                })}
-              </HStack>
-              )}
             </Box>}
 
               <Box flex={1} minHeight={0} display="flex" flexDirection="column" overflow="hidden">
                 {/* SQL Mode: Monaco Editor */}
-                {queryMode === 'sql' && (
+                {effectiveQueryMode === 'sql' && (
                   <SqlEditor
                     readOnly={isPreview || !fullMode || readOnly}
                     value={isPreview ? (originalQuery ?? content.query) : content.query}
@@ -638,16 +550,7 @@ export default function QuestionViewV2({
                     proposedValue={isPreview
                       ? (originalQuery !== content.query ? content.query : undefined)
                       : proposedQuery}
-                    availableReferences={availableQuestions}
-                    validReferenceAliases={referencedQuestions.map(r => r.alias)}
                     schemaData={schemaData}
-                    resolvedReferences={referencedQuestions
-                      .filter(r => r.question?.content)
-                      .map(r => ({
-                        id: r.id,
-                        alias: r.alias,
-                        query: (r.question!.content as QuestionContent).query
-                      }))}
                     databaseName={content.connection_name}
                     connectionType={connectionType}
                     fillHeight={!useCompactLayout}
@@ -655,24 +558,44 @@ export default function QuestionViewV2({
                   />
                 )}
 
-                {/* GUI Mode: Visual Query Builder */}
-                {queryMode === 'gui' && (
-                  <Box flex={1} overflow="auto">
-                    <QueryBuilderRoot
-                      databaseName={content.connection_name || ''}
+                {/* Semantic Mode: the drag-drop canvas (fields → shelves).
+                    Prefer the spec DETECTED from the live SQL (covers
+                    agent-written queries) over the persisted one. Shelf edits
+                    imply the viz: axis columns always track the query; the
+                    chart TYPE is only auto-set while it's still in the default
+                    family (table/bar/line) — a deliberate pick like pie or
+                    pivot from the Viz tab is respected. */}
+                {effectiveQueryMode === 'semantic' && showSemanticTab && (
+                  <Box flex={1} overflow="hidden" display="flex" flexDirection="column" minHeight={0}>
+                    <SemanticCanvas
+                      models={semanticModels}
+                      stubs={semanticStubs}
+                      onSelectModel={(stub: ModelStub) => setPickedTables((prev) => prev.includes(stub.table) ? prev : [...prev, stub.table])}
                       dialect={dialect}
-                      sql={content.query}
-                      onSqlChange={handleQueryChange}
+                      path={filePath || '/org'}
+                      connectionName={content.connection_name}
+                      value={detectedSemanticSpec ?? content.semanticQuery}
+                      onChange={(spec, sql, viz) => {
+                        const autoType = ['table', 'bar', 'line'].includes(content.vizSettings?.type ?? 'table');
+                        onChange({
+                          semanticQuery: spec,
+                          query: sql,
+                          vizSettings: {
+                            ...content.vizSettings,
+                            ...(autoType ? { type: viz.type } : {}),
+                            xCols: viz.xCols,
+                            yCols: viz.yCols,
+                          },
+                        });
+                      }}
                       onExecute={handleExecute}
                       isExecuting={queryLoading && !queryData}
-                      availableQuestions={availableQuestions}
-                      whitelistedSchema={whitelistedSchema}
                     />
                   </Box>
                 )}
 
                 {/* Viz Mode: Chart type selector + axis config */}
-                {queryMode === 'viz' && queryData && (
+                {effectiveQueryMode === 'viz' && queryData && (
                   <Box flex={1} overflow="auto" px={3} py={2} display="flex" flexDirection="column" gap={0}>
                     <VizTypeSelector
                       value={content.vizSettings?.type || 'table'}
@@ -855,7 +778,6 @@ export default function QuestionViewV2({
             // my={!useCompactLayout ? 2 : 0}
             mr={!useCompactLayout ? 2 : 0}
           >
-            {/* SQL Preview - shows when reference chip is clicked */}
             {parameters.length > 0 && (
               <ParameterRow
                 parameters={parameters}
@@ -867,41 +789,7 @@ export default function QuestionViewV2({
                 database={content.connection_name}
               />
             )}
-            {sqlPreviewId ? (
-              <Box p={4} flex={1} overflow="auto">
-                <HStack justify="space-between" mb={3}>
-                  <HStack gap={2}>
-                    <Text fontSize="sm" fontWeight="600" color="fg.muted">
-                      Preview
-                    </Text>
-                    <Code fontSize="sm" colorPalette="teal" px={2} py={0.5} borderRadius="md">
-                      #{sqlPreviewId}
-                    </Code>
-                    <Text fontSize="sm" fontWeight="600">
-                      {referencedQuestions.find(r => r.id === sqlPreviewId)?.question?.name || 'Loading...'}
-                    </Text>
-                  </HStack>
-                  <IconButton
-                    aria-label="Close preview"
-                    size="xs"
-                    variant="ghost"
-                    onClick={() => setSqlPreviewId(null)}
-                  >
-                    <LuX />
-                  </IconButton>
-                </HStack>
-                <SqlEditor
-                  readOnly
-                  value={
-                    referencedQuestions.find(r => r.id === sqlPreviewId)?.question?.content
-                      ? (referencedQuestions.find(r => r.id === sqlPreviewId)?.question?.content as QuestionContent).query
-                      : '-- Loading...'
-                  }
-                  showFormatButton={false}
-                  showRunButton={false}
-                />
-              </Box>
-            ) : !content.query?.trim() && !queryData ? (
+            {!content.query?.trim() && !queryData ? (
               /* Empty state when no query written yet */
               <Box flex="1" display="flex" bg="bg.canvas" borderRadius="lg" overflow="hidden">
                 <QuestionEmptyState />

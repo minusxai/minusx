@@ -91,7 +91,7 @@ export async function getQueryResult(
   params: QueryExecutionParams,
   options: GetQueryResultOptions = {}
 ): Promise<QueryResult> {
-  const { query, params: queryParams, database, references, parameterTypes, filePath, fileId, fileVersion, cachePolicy } = params;
+  const { query, params: queryParams, database, parameterTypes, filePath, fileId, fileVersion, cachePolicy } = params;
   const { ttl = CACHE_TTL.QUERY, skip = false, forceLoad = false } = options;
 
   if (skip) {
@@ -152,7 +152,6 @@ export async function getQueryResult(
           query,
           connection_name: database,
           parameters: queryParams,
-          references: references || [],
           ...(parameterTypes && { parameterTypes }),
           ...(filePath && { filePath }),
           ...(fileId !== undefined && { fileId }),

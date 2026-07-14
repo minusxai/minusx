@@ -1112,8 +1112,7 @@ describe('readFiles - File State Manager', () => {
         body: JSON.stringify({
           query: 'SELECT * FROM users',
           connection_name: 'test_db',
-          parameters: {},
-          references: []
+          parameters: {}
         })
       }));
 

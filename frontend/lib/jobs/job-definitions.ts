@@ -26,7 +26,6 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
   { job_type: 'alert',          file_type: 'alert',          isActive: (c) => c.status === 'live', getCron: (c) => c.schedule?.cron ?? null },
   { job_type: 'context',        file_type: 'context',        isActive: (c) => c.status === 'live' },
   { job_type: 'report',         file_type: 'report',         isActive: (c) => c.status === 'live' },
-  { job_type: 'transformation', file_type: 'transformation', isActive: (c) => c.status === 'live' },
   {
     job_type: 'sheets_sync',
     file_type: 'connection',

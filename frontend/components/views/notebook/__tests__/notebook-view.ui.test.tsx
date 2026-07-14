@@ -74,7 +74,7 @@ import NotebookView from '@/components/views/NotebookView';
 function sqlCell(over: Partial<NotebookSqlCell> = {}): NotebookSqlCell {
   return {
     type: 'sql', id: 'c1', name: null, query: 'SELECT 42', vizSettings: { type: 'table' },
-    parameters: [], parameterValues: {}, connection_name: '', references: [], ...over,
+    parameters: [], parameterValues: {}, connection_name: '', ...over,
   };
 }
 function textCell(over: Partial<NotebookTextCell> = {}): NotebookTextCell {

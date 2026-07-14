@@ -14,7 +14,7 @@ export type { FileState };
 export type {
   AggregationFunction, FormulaOperator, VisualizationType, ParameterType,
   PivotValueConfig, PivotFormula, PivotConfig, ColumnFormatConfig, ConditionalFormatRule, VizSettings, AxisConfig, AxisScale, VisualizationStyleConfig, ChartAnnotation, TrendConfig, TrendCompareMode, SingleValueConfig,
-  QuestionParameter, QuestionReference,
+  QuestionParameter,
   QuestionContent,
   FileReference, InlineAsset,
   DashboardContent, DashboardLayout, DashboardLayoutItem,
@@ -73,12 +73,11 @@ export type {
 } from './types/connections';
 export { connectionTypeToDialect } from './types/connections';
 
-// Jobs/transforms domain — see lib/types/jobs.ts
+// Jobs domain — see lib/types/jobs.ts
 export type {
   JobSchedule, AlertRecipient, ScheduledJobContent, JobRunStatus, JobRunSource, JobRun,
   RunMessage, MessageAttemptLog, RunMessageRecord, RunFileContent, JobHandlerResult,
-  TransformOutput, Transform, TransformationContent, TransformResult,
-  TransformRunMode, TransformationOutput, ContextOutput, JobRunnerInput,
+  ContextOutput, JobRunnerInput,
 } from './types/jobs';
 
 // Alerts domain — see lib/types/alerts.ts
@@ -98,6 +97,12 @@ export type {
   TableAnnotation, SkillEntry, DatabaseContext, ContextVersion, PublishedVersions,
   ContextContent, ResolvedContextDoc, ResolvedContextDocs, ContextInfo,
 } from './types/context';
+
+// Semantic layer domain — see lib/types/semantic.ts
+export type {
+  SemanticAggregate, SemanticTimeGrain, SemanticDimension, SemanticJoin, SemanticJoinRelationship,
+  SemanticMeasure, SemanticRatioMetric, SemanticModel, TableRelationship,
+} from './types/semantic';
 
 // Chat/conversation domain — see lib/types/chat.ts
 export type {

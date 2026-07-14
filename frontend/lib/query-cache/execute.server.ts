@@ -88,14 +88,12 @@ function cacheKey(opts: CachedExec): string {
   const base = `${opts.mode}:${getQueryHash(opts.query, opts.params, opts.connectionName)}`;
   // Fold in the facets getQueryHash omits but that change the executed SQL/result. Omit the suffix
   // entirely when neither is present so existing keys are unchanged (back-compat, no needless
-  // cold cache for the common no-refs/no-types case). parameterTypes canonicalized (key-sorted)
-  // so map order doesn't fork the key; references kept in order (order affects composition).
+  // cold cache for the common no-types case). parameterTypes canonicalized (key-sorted)
+  // so map order doesn't fork the key.
   const hasTypes = opts.parameterTypes && Object.keys(opts.parameterTypes).length > 0;
-  const hasRefs = opts.references && opts.references.length > 0;
-  if (!hasTypes && !hasRefs) return base;
+  if (!hasTypes) return base;
   const extra = hashContent({
     t: hasTypes ? sortObjectKeysDeep(opts.parameterTypes) : null,
-    r: hasRefs ? opts.references!.map((r) => [r.id, r.alias ?? null]) : null,
   });
   return `${base}:${extra}`;
 }

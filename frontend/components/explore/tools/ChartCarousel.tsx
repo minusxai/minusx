@@ -8,8 +8,7 @@ import type { QuestionContent, QueryResult, ExecuteQueryDetails } from '@/lib/ty
 import { contentToDetails, connectionTypeToDialect } from '@/lib/types';
 import { QuestionVisualization } from '@/components/question/QuestionVisualization';
 import SqlEditor from '@/components/query-builder/SqlEditor';
-import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '@/components/query-builder';
-import { useGuiCompat } from '@/lib/hooks/use-gui-compat';
+import { QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import { VizTypeSelector } from '@/components/question/VizTypeSelector';
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
 
@@ -141,7 +140,6 @@ export default function ChartCarousel({
   // be parsed into the builder IR (this is a read-only preview, but entering GUI on
   // an unparseable query would just show a "cannot be edited" message).
   const dialect = connectionTypeToDialect('');
-  const { canUseGUI, guiError } = useGuiCompat(current?.question?.query, dialect);
 
   const [localContent, setLocalContent] = useState<QuestionContent | null>(current?.question ?? null);
   const prevQuestionRef = useRef(current?.question);
@@ -294,8 +292,6 @@ export default function ChartCarousel({
               <QueryModeSelector
                 mode={queryMode}
                 onModeChange={setQueryMode}
-                canUseGUI={canUseGUI}
-                guiError={guiError ?? undefined}
                 canUseViz={!!current?.queryResult}
               />
             </HStack>
@@ -306,14 +302,6 @@ export default function ChartCarousel({
                   readOnly
                   showRunButton={false}
                   showFormatButton={false}
-                />
-              )}
-              {queryMode === 'gui' && current?.question?.query && (
-                <QueryBuilderRoot
-                  databaseName={databaseName}
-                  dialect={dialect}
-                  sql={current.question.query}
-                  onSqlChange={() => {}}
                 />
               )}
               {queryMode === 'viz' && localContent && current?.queryResult && (

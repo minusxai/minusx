@@ -158,6 +158,5 @@ export function inlineEmbedToQuestionContent(e: InlineQuestionEmbed): QuestionCo
     vizSettings: { type: 'table', ...(e.vizSettings ?? {}) } as VizSettings,
     parameters: e.parameters ?? [],
     parameterValues: null,
-    references: null,
   };
 }

@@ -27,7 +27,6 @@ export function InlineSqlDropdownWidget({ source, paramType, currentValue, param
     source.query,
     {},
     database ?? '',
-    undefined,
     { skip: !source.query }
   );
 

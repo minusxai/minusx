@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  VStack, HStack, Text, Input, Textarea,
+  VStack, HStack, Text, Textarea,
   Box, Combobox, Portal, createListCollection
 } from '@chakra-ui/react';
 import { useState, useMemo, useEffect } from 'react';
@@ -10,8 +10,8 @@ import { connectionTypeToDialect } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
 import DatabaseSelector from '@/components/selectors/DatabaseSelector';
-import { QueryModeSelector, QueryBuilderRoot, type QueryTab } from '@/components/query-builder';
 import SqlEditor from '@/components/query-builder/SqlEditor';
+import { QueryValueSelector } from '@/components/query-value-selector';
 import SimpleSelect from './SimpleSelect';
 
 interface TestSubjectEditorProps {
@@ -82,32 +82,6 @@ function QuestionPicker({
   );
 }
 
-/**
- * Fetch inferred column names for a question via /api/infer-columns.
- * Returns [] while loading or on error.
- */
-function useQuestionColumns(questionId: number | undefined): string[] {
-  const [columns, setColumns] = useState<string[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const fetcher = questionId && questionId > 0
-      ? fetch('/api/infer-columns', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ questionId }),
-        }).then(r => r.ok ? r.json() : { columns: [] })
-      : Promise.resolve({ columns: [] });
-
-    fetcher
-      .then(data => { if (!cancelled) setColumns((data?.columns ?? []).map((c: { name: string }) => c.name)); })
-      .catch(() => { if (!cancelled) setColumns([]); });
-    return () => { cancelled = true; };
-  }, [questionId]);
-
-  return columns;
-}
-
 /** Inline SQL subject: DatabaseSelector + GUI/SQL toggle + editor + Column + Row */
 function InlineSubjectEditor({
   subject,
@@ -118,7 +92,6 @@ function InlineSubjectEditor({
   onChange: (subject: TestSubject) => void;
   disabled?: boolean;
 }) {
-  const [queryMode, setQueryMode] = useState<QueryTab>('gui');
   const { connections } = useConnections({ skip: true });
   const dialect = connectionTypeToDialect(connections[subject.connection_name]?.metadata?.type ?? '');
 
@@ -141,66 +114,24 @@ function InlineSubjectEditor({
         />
       </Box>
       <Box>
-        <HStack justify="space-between" mb={1}>
-          <Text fontSize="xs" color="fg.muted" fontWeight="500">Query</Text>
-          {subject.connection_name && (
-            <QueryModeSelector
-              mode={queryMode}
-              onModeChange={setQueryMode}
-              canUseGUI
-              showVizTab={false}
-            />
-          )}
-        </HStack>
-        {subject.connection_name && queryMode === 'gui' ? (
-          <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
-            <QueryBuilderRoot
-              databaseName={subject.connection_name}
-              dialect={dialect}
-              sql={subject.sql}
-              onSqlChange={sql => onChange({ ...subject, sql })}
-            />
-          </Box>
-        ) : (
-          <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
-            <SqlEditor
-              value={subject.sql}
-              onChange={sql => onChange({ ...subject, sql })}
-            />
-          </Box>
-        )}
+        <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Query</Text>
+        <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
+          <SqlEditor
+            value={subject.sql}
+            onChange={sql => onChange({ ...subject, sql })}
+          />
+        </Box>
       </Box>
-      <HStack gap={2}>
-        <Box flex={1}>
-          <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Column</Text>
-          <Input
-            value={subject.column ?? ''}
-            onChange={e => onChange({ ...subject, column: e.target.value || undefined })}
-            placeholder="(first column)"
-            size="sm"
-            bg="bg.surface"
-            fontSize="xs"
-            fontFamily="mono"
-            disabled={disabled}
-          />
-        </Box>
-        <Box w="80px">
-          <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Row</Text>
-          <Input
-            type="number"
-            value={subject.row ?? ''}
-            onChange={e => {
-              const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
-              onChange({ ...subject, row: v });
-            }}
-            placeholder="0"
-            size="sm"
-            bg="bg.surface"
-            fontSize="xs"
-            disabled={disabled}
-          />
-        </Box>
-      </HStack>
+      <QueryValueSelector
+        source={subject.sql.trim() && subject.connection_name
+          ? { kind: 'inline', sql: subject.sql, connectionName: subject.connection_name }
+          : null}
+        column={subject.column}
+        onColumnChange={column => onChange({ ...subject, column })}
+        row={subject.row}
+        onRowChange={row => onChange({ ...subject, row })}
+        disabled={disabled}
+      />
     </VStack>
   );
 }
@@ -210,7 +141,6 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
   const query = subject.type === 'query' && subject.source !== 'inline'
     ? subject
     : { type: 'query' as const, source: 'question' as const, question_id: defaultQuestionId ?? 0, column: undefined, row: undefined };
-  const inferredColumns = useQuestionColumns(query.question_id || undefined);
 
   // Auto-select first available connection for LLM tests when none is set
   const { connections } = useConnections({ skip: true });
@@ -222,11 +152,6 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
     const llm = subject.type === 'llm' ? subject : { type: 'llm' as const, prompt: '', context: { type: 'explore' as const } };
     onChange({ ...llm, connection_id: firstConnection });
   }, [testType, connections]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const columnOptions = useMemo(
-    () => [{ value: '', label: '-- first column --' }, ...inferredColumns.map(col => ({ value: col, label: col }))],
-    [inferredColumns],
-  );
 
   if (testType === 'llm') {
     const llm = subject.type === 'llm' ? subject : { type: 'llm' as const, prompt: '', context: { type: 'explore' as const } };
@@ -331,46 +256,14 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
               />
             </Box>
           </HStack>
-          <HStack gap={2}>
-            <Box flex={1}>
-              <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Column</Text>
-              {inferredColumns.length > 0 ? (
-                <SimpleSelect
-                  value={query.column ?? ''}
-                  onChange={v => onChange({ ...query, column: v || undefined })}
-                  options={columnOptions}
-                  disabled={disabled}
-                />
-              ) : (
-                <Input
-                  value={query.column ?? ''}
-                  onChange={e => onChange({ ...query, column: e.target.value || undefined })}
-                  placeholder="(first column)"
-                  size="sm"
-                  bg="bg.surface"
-                  fontSize="xs"
-                  fontFamily="mono"
-                  disabled={disabled}
-                />
-              )}
-            </Box>
-            <Box w="80px">
-              <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Row</Text>
-              <Input
-                type="number"
-                value={query.row ?? ''}
-                onChange={e => {
-                  const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
-                  onChange({ ...query, row: v });
-                }}
-                placeholder="0"
-                size="sm"
-                bg="bg.surface"
-                fontSize="xs"
-                disabled={disabled}
-              />
-            </Box>
-          </HStack>
+          <QueryValueSelector
+            source={query.question_id > 0 ? { kind: 'question', questionId: query.question_id } : null}
+            column={query.column}
+            onColumnChange={column => onChange({ ...query, column })}
+            row={query.row}
+            onRowChange={row => onChange({ ...query, row })}
+            disabled={disabled}
+          />
         </>
       )}
     </VStack>

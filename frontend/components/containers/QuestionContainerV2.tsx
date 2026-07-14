@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { shallowEqual } from 'react-redux';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, setEphemeral, setFile, removeReferenceFromQuestion, type FileId } from '@/store/filesSlice';
+import { selectMergedContent, setEphemeral, setFile, type FileId } from '@/store/filesSlice';
 import { clearQueryResult } from '@/store/queryResultsSlice';
 import { selectProposedQuery, selectFileEditMode, selectQuestionCollapsedPanel, setQuestionCollapsedPanel } from '@/store/uiSlice';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
@@ -87,11 +87,6 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     dispatch(setFile({ file: referencedFile, references: [] }));
   }, [dispatch]);
 
-  const onRemoveReference = useCallback((referencedQuestionId: number) => {
-    if (questionId === undefined) return;
-    dispatch(removeReferenceFromQuestion({ questionId, referencedQuestionId }));
-  }, [questionId, dispatch]);
-
   // Embedded content view (view >= content): default the full-page split to showing
   // the viz expanded (collapse the left/query panel) on mount. This sets real state
   // so the panel toggles keep working — the user can re-open the query if they want.
@@ -113,8 +108,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     // Canonical params (effective + None-coerced) so the execution cache key matches the
     // augmentation lookup / queryResultId — see buildQueryParamValues / resolveEffectiveParams.
     params: buildQueryParamValues(mergedContent?.parameters ?? [], mergedContent?.parameterValues ?? {}, {}),
-    database: mergedContent?.connection_name || '',
-    references: mergedContent?.references || []
+    database: mergedContent?.connection_name || ''
   };
 
   // Build a name→type map from the declared parameters so asyncpg can coerce date strings
@@ -163,7 +157,6 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     queryToExecute.query,
     queryToExecute.params,
     queryToExecute.database,
-    queryToExecute.references,
     { skip: !queryToExecute.query || (!!file?.draft && !lastExecuted), parameterTypes, filePath: file?.path, cachePolicy: cachePolicyOpt }
   );
 
@@ -191,8 +184,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     const newQuery = {
       query: mergedContent.query,
       params: effectiveValues,
-      database: mergedContent.connection_name,
-      references: mergedContent.references || []
+      database: mergedContent.connection_name
     };
 
     dispatch(clearQueryResult({ query: newQuery.query, params: effectiveValues, database: newQuery.database }));
@@ -238,8 +230,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
         lastExecuted: {
           query: mergedContent.query,
           params: restoredParams,
-          database: mergedContent.connection_name,
-          references: mergedContent.references || []
+          database: mergedContent.connection_name
         }
       }
     }));
@@ -296,7 +287,6 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
       onTogglePanel={onTogglePanel}
       fileState={filesState}
       onSetFile={onSetFile}
-      onRemoveReference={onRemoveReference}
       onChange={handleChange}
       onParameterValueChange={handleParameterValueChange}
       onExecute={handleExecuteForced}

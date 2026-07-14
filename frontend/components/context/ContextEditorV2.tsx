@@ -466,7 +466,7 @@ export default function ContextEditorV2({
           persistableContent={codeViewPersistableContent}
           mergedContent={codeViewMergedContent}
           editable={editMode}
-          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullAnnotations', 'fullMetrics', 'fullSkills']}
+          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullAnnotations', 'fullMetrics', 'fullRelationships', 'fullSkills']}
           xmlContentTransform={shapeContextForAgent}
         />
       ) : (

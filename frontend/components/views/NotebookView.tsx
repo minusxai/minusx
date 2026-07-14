@@ -122,7 +122,7 @@ export default function NotebookView({
     const connection_name = lastSql?.connection_name || selectDatabase(Object.values(connections));
     return {
       type: 'sql', id: newId(), name: null, query: '', vizSettings: { type: 'table' },
-      parameters: [], parameterValues: {}, connection_name, references: [],
+      parameters: [], parameterValues: {}, connection_name,
     };
   }, [connections]);
 

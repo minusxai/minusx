@@ -117,7 +117,7 @@ export default function DashboardContainerV2({ fileId, mode }: DashboardContaine
     dispatch(setEphemeral({
       fileId,
       changes: {
-        lastExecuted: { query: '', params: newParamValues, database: '', references: [] }
+        lastExecuted: { query: '', params: newParamValues, database: '' }
       }
     }));
     // In edit mode: persist to dirty state (saveable with Update)

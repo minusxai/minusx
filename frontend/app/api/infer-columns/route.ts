@@ -17,52 +17,60 @@ export const runtime = 'nodejs';
 
 export const POST = withAuth(async (request: NextRequest, user) => {
   try {
-    const body: { questionId: number } = await request.json();
-    const { questionId } = body;
+    const body: { questionId?: number; sql?: string; connectionName?: string } = await request.json();
+    const { questionId, sql, connectionName } = body;
 
-    if (!questionId || typeof questionId !== 'number') {
-      return NextResponse.json(
-        { columns: [], error: 'questionId is required' },
-        { status: 400 }
-      );
-    }
+    // Two source kinds (the QueryValueSelector contract): a saved question, or
+    // inline SQL + connection. Both resolve to (query, connection_name) below.
+    let query: string;
+    let queryConnectionName: string | undefined;
 
-    // Load the question file
-    let questionResult;
-    try {
-      questionResult = await FilesAPI.loadFile(questionId, user);
-    } catch (err) {
-      if (err instanceof FileNotFoundError) {
+    if (typeof questionId === 'number' && questionId > 0) {
+      // Load the question file
+      let questionResult;
+      try {
+        questionResult = await FilesAPI.loadFile(questionId, user);
+      } catch (err) {
+        if (err instanceof FileNotFoundError) {
+          return NextResponse.json(
+            { columns: [], error: 'Question not found' },
+            { status: 404 }
+          );
+        }
+        throw err;
+      }
+
+      if (!questionResult.data || questionResult.data.type !== 'question') {
         return NextResponse.json(
           { columns: [], error: 'Question not found' },
           { status: 404 }
         );
       }
-      throw err;
-    }
-
-    if (!questionResult.data || questionResult.data.type !== 'question') {
+      const questionContent = questionResult.data.content as QuestionContent;
+      query = questionContent.query;
+      queryConnectionName = questionContent.connection_name;
+    } else if (typeof sql === 'string' && sql.trim() && typeof connectionName === 'string') {
+      query = sql;
+      queryConnectionName = connectionName;
+    } else {
       return NextResponse.json(
-        { columns: [], error: 'Question not found' },
-        { status: 404 }
+        { columns: [], error: 'questionId or { sql, connectionName } is required' },
+        { status: 400 }
       );
     }
-
-    const questionContent = questionResult.data.content as QuestionContent;
-    const query = questionContent.query || '';
 
     if (!query.trim()) {
       return NextResponse.json({ columns: [] });
     }
 
-    // Try to load schema and dialect from the question's connection
+    // Try to load schema and dialect from the source's connection
     let schemaData: DatabaseWithSchema[] = [];
     let dialect = 'duckdb';
-    if (questionContent.connection_name) {
+    if (queryConnectionName) {
       try {
         const connectionsResult = await FilesAPI.getFiles({ type: 'connection' }, user);
         const connection = connectionsResult.data.find(
-          (f: any) => f.name === questionContent.connection_name
+          (f: any) => f.name === queryConnectionName
         );
         if (connection) {
           const fullConnection = await FilesAPI.loadFile(connection.id, user);

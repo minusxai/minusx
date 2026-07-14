@@ -19,7 +19,7 @@ import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
 import { getConfigsForMode } from '@/lib/data/configs.server';
 import { deliverMessages } from '@/lib/jobs/deliver-messages';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { RunFileContent, RunMessageRecord, TransformRunMode } from '@/lib/types';
+import type { RunFileContent, RunMessageRecord } from '@/lib/types';
 import type { FileType } from '@/lib/ui/file-metadata';
 
 export interface RunJobParams {
@@ -27,7 +27,6 @@ export interface RunJobParams {
   jobType: string;
   force?: boolean;
   send?: boolean;
-  runMode?: TransformRunMode;
 }
 
 export type RunJobOutcome =
@@ -43,7 +42,7 @@ export type RunJobOutcome =
  * for one job rather than scanning every active file.
  */
 export async function runJob(params: RunJobParams, user: EffectiveUser): Promise<RunJobOutcome> {
-  const { jobId: job_id, jobType: job_type, force = false, send = true, runMode: run_mode } = params;
+  const { jobId: job_id, jobType: job_type, force = false, send = true } = params;
 
   const handler = JOB_HANDLERS[job_type];
   if (!handler) {
@@ -110,7 +109,7 @@ export async function runJob(params: RunJobParams, user: EffectiveUser): Promise
 
   try {
     const result = await handler.execute(
-      { runFileId, jobId: job_id, jobType: job_type, file: jobFile.content, previousRuns, runMode: run_mode },
+      { runFileId, jobId: job_id, jobType: job_type, file: jobFile.content, previousRuns },
       user
     );
 
