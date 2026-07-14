@@ -1,4 +1,4 @@
-// Repo-root compatibility.json is the shared static contract consumed by the
+// frontend/compatibility.json is the shared static contract consumed by the
 // app (connection form field specs), setup.sh (interview prompts, curled from
 // raw.github), and the docs (supported-databases / supported-models tables).
 // This test keeps it honest against the code it must agree with:
@@ -6,7 +6,7 @@
 // - LLM registry providers/models ↔ the baked pi-ai registry
 // - field specs ↔ the config keys the connectors actually read
 import { describe, it, expect } from 'vitest';
-import compatibility from '../../../../compatibility.json';
+import compatibility from '@/compatibility.json';
 import { CONNECTION_TYPES } from '@/lib/ui/connection-type-options';
 import { LLM_USE_CASES, MINUSX_PROVIDER, CUSTOM_PROVIDER } from '@/lib/llm/llm-config-types';
 import { listProviders, listModels } from '@/orchestrator/llm';

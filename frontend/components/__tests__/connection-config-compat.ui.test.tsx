@@ -1,11 +1,11 @@
-// Drift guard: every `cli: true` connection type in the repo-root
+// Drift guard: every `cli: true` connection type in the shared
 // compatibility.json must expose EXACTLY its spec'd fields in the app's
 // connection form — labeled `<type> <field key>` (aria-label) so the spec,
 // the setup.sh interview, and the in-app form can never silently diverge.
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { ChakraProvider, defaultSystem } from '@chakra-ui/react';
-import compatibility from '../../../compatibility.json';
+import compatibility from '@/compatibility.json';
 import PostgreSQLConfig from '../views/connection-configs/PostgreSQLConfig';
 import BigQueryConfig from '../views/connection-configs/BigQueryConfig';
 import AthenaConfig from '../views/connection-configs/AthenaConfig';

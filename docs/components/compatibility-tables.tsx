@@ -1,7 +1,7 @@
-// Tables rendered from the repo-root compatibility.json — the same shared
+// Tables rendered from the shared compatibility.json (frontend/compatibility.json) — the same shared
 // contract the app (connection form specs) and setup.sh (CLI interview)
 // consume, so these docs never drift from what the product actually supports.
-import compatibility from '../../compatibility.json';
+import compatibility from '../../frontend/compatibility.json';
 
 interface CompatModel { id: string; name: string }
 interface CompatProvider {

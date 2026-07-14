@@ -9,7 +9,7 @@ set -euo pipefail
 #   curl -fsSL minusx.ai/setup.sh | bash -s -- --canary
 #
 # How the pieces fit:
-# - The interview reads prompts metadata from compatibility.json (repo root,
+# - The interview reads prompts metadata from compatibility.json (frontend/compatibility.json,
 #   fetched from raw.github) — the same file the app and docs consume.
 # - Answers are VALIDATED with the app's own code, run inside the pulled image
 #   (`docker run … scripts/setup-cli/*`): a real one-token LLM call and a real
@@ -302,7 +302,7 @@ fi
 COMPAT_FILE=$(mktemp "${TMPDIR:-/tmp}/minusx-compat.XXXXXX")
 HAVE_COMPAT=0
 if [ "$HAVE_TTY" = 1 ] && [ "$EXISTING_WORKSPACE" = 0 ]; then
-  if curl -fsSL -o "$COMPAT_FILE" "${REPO_RAW}/compatibility.json" 2>/dev/null && [ -n "$PYTHON_BIN" ]; then
+  if curl -fsSL -o "$COMPAT_FILE" "${REPO_RAW}/frontend/compatibility.json" 2>/dev/null && [ -n "$PYTHON_BIN" ]; then
     HAVE_COMPAT=1
   fi
 fi
