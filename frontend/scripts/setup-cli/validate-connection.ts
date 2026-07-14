@@ -2,7 +2,7 @@
 // the same `testConnection()` behind POST /api/connections/test.
 //
 //   echo '{"type":"postgresql","config":{"host":"…"}}' \
-//     | docker run --rm -i <image> node --import tsx --import ./scripts/setup-cli/node-preload.mjs scripts/setup-cli/validate-connection.ts
+//     | docker run --rm -i <image> node setup-cli/validate-connection.js
 //
 // stdin: { name?: string, type: string, config: object }
 // stdout: TestConnectionResult JSON ({ success, error?, … })
