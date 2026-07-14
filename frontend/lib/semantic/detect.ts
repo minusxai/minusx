@@ -15,7 +15,7 @@
  * negatives (a semantic-shaped query written oddly), never false positives.
  */
 
-import type { AnyQueryIR, QueryIR, SelectColumn, FilterCondition, FilterGroup } from '@/lib/sql/ir-types';
+import type { AnyQueryIR, QueryIR, FilterCondition, FilterGroup } from '@/lib/sql/ir-types';
 import type { SemanticModel } from '@/lib/types/semantic';
 import type { SemanticQuerySpec, SemanticQueryFilter } from '@/lib/validation/atlas-schemas';
 import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
@@ -161,7 +161,7 @@ function matchModel(ir: QueryIR, model: SemanticModel): SemanticQuerySpec | null
   // --- Reliability gate: recompiling the spec must reproduce this IR --------
   try {
     const recompiled = compileSemanticQuery(spec, model);
-    if (!irEquivalent(ir, recompiled, model)) return null;
+    if (!irEquivalent(ir, recompiled, model, aliasByJoin)) return null;
   } catch {
     return null;
   }
@@ -174,12 +174,24 @@ function matchModel(ir: QueryIR, model: SemanticModel): SemanticQuerySpec | null
 
 const normalizeRaw = (sql: string) => sql.replace(/\s+/g, ' ').trim().toUpperCase();
 
-/** Canonical form of a select entry for comparison (aliases normalized away
- *  when they match the compiler's generated alias). */
-function canonicalSelect(cols: SelectColumn[], model: SemanticModel): string[] {
-  return cols
+/**
+ * Normalize a column's table qualifier for comparison: joined-table qualifiers
+ * map through `aliasMap` (the SQL's own alias → the model's join alias, which
+ * is what the compiler emits); base-table qualifiers (any spelling: absent,
+ * the table name, or the FROM alias) normalize to ''.
+ */
+type AliasMap = Map<string, string>;
+const qualify = (table: string | undefined, ir: QueryIR, aliasMap: AliasMap): string => {
+  if (!table || table === ir.from.table || table === ir.from.alias) return '';
+  return aliasMap.get(table) ?? table;
+};
+
+/** Canonical form of a select entry for comparison (output aliases ignored —
+ *  SQL is free to name columns anything). */
+function canonicalSelect(ir: QueryIR, aliasMap: AliasMap): string[] {
+  return ir.select
     .map((c) => {
-      if (c.type === 'column') return `col:${c.table ?? ''}.${c.column}`;
+      if (c.type === 'column') return `col:${qualify(c.table, ir, aliasMap)}.${c.column}`;
       if (c.type === 'expression') return `expr:${c.function}:${c.unit ?? ''}:${c.column}`;
       if (c.type === 'aggregate') return `agg:${c.aggregate}:${c.column ?? ''}`;
       return `raw:${normalizeRaw(c.raw_sql ?? '')}`;
@@ -187,20 +199,21 @@ function canonicalSelect(cols: SelectColumn[], model: SemanticModel): string[] {
     .sort();
 }
 
-function canonicalGroup(ir: QueryIR): string[] {
+function canonicalGroup(ir: QueryIR, aliasMap: AliasMap): string[] {
   return (ir.group_by?.columns ?? [])
-    .map((g) => (g.function ? `expr:${g.function}:${g.unit ?? ''}:${g.column}` : `col:${g.table ?? ''}.${g.column}`))
+    .map((g) => (g.function ? `expr:${g.function}:${g.unit ?? ''}:${g.column}` : `col:${qualify(g.table, ir, aliasMap)}.${g.column}`))
     .sort();
 }
 
-function canonicalFilters(ir: QueryIR): string[] {
+function canonicalFilters(ir: QueryIR, aliasMap: AliasMap): string[] {
   if (!ir.where) return [];
   return ir.where.conditions
     .filter((c): c is FilterCondition => !isFilterGroup(c))
-    .map((c) => `${c.table ?? ''}.${c.column}:${c.operator}:${JSON.stringify(c.value ?? null)}`)
+    .map((c) => `${qualify(c.table, ir, aliasMap)}.${c.column}:${c.operator}:${JSON.stringify(c.value ?? null)}`)
     .sort();
 }
 
+/** Joins compare by table + ON columns; the alias itself is presentation. */
 function canonicalJoins(ir: QueryIR): string[] {
   return (ir.joins ?? [])
     .map((j) => `${j.type}:${j.table.schema ?? ''}.${j.table.table}:${j.on?.map((o) => `${o.left_column}=${o.right_column}`).join(',')}`)
@@ -208,19 +221,20 @@ function canonicalJoins(ir: QueryIR): string[] {
 }
 
 /**
- * Equivalence for the detection gate. ORDER BY and LIMIT are deliberately
- * compared loosely: the compiler adds a deterministic ORDER BY the source SQL
- * may not have — accepting that difference means "opening in Semantic mode"
- * may normalize row order, which is the documented behavior.
+ * Equivalence for the detection gate, alias-insensitive: the input IR's join
+ * aliases map through `aliasMap`; the recompiled IR already uses model
+ * aliases (identity in the map). ORDER BY and LIMIT are deliberately compared
+ * loosely: the compiler adds a deterministic ORDER BY the source SQL may not
+ * have — accepting that difference means "opening in Semantic mode" may
+ * normalize row order, which is the documented behavior.
  */
-function irEquivalent(a: QueryIR, b: QueryIR, model: SemanticModel): boolean {
+function irEquivalent(a: QueryIR, b: QueryIR, model: SemanticModel, aliasMap: AliasMap): boolean {
+  // The recompiled IR (b) qualifies with the model's own join aliases — map identically.
+  const identity: AliasMap = new Map((model.joins ?? []).map((j) => [j.alias, j.alias]));
   if (a.from.table !== b.from.table || (a.from.schema ?? '') !== (b.from.schema ?? '')) return false;
-  if (JSON.stringify(canonicalSelect(a.select, model)) !== JSON.stringify(canonicalSelect(b.select, model))) return false;
-  if (JSON.stringify(canonicalGroup(a)) !== JSON.stringify(canonicalGroup(b))) return false;
+  if (JSON.stringify(canonicalSelect(a, aliasMap)) !== JSON.stringify(canonicalSelect(b, identity))) return false;
+  if (JSON.stringify(canonicalGroup(a, aliasMap)) !== JSON.stringify(canonicalGroup(b, identity))) return false;
   if (JSON.stringify(canonicalJoins(a)) !== JSON.stringify(canonicalJoins(b))) return false;
-
-  // Filters: compare model-relative (the IR may qualify with a different alias).
-  const stripAlias = (s: string[]) => s.map((x) => x.replace(/^[^.]*\./, ''));
-  if (JSON.stringify(stripAlias(canonicalFilters(a))) !== JSON.stringify(stripAlias(canonicalFilters(b)))) return false;
+  if (JSON.stringify(canonicalFilters(a, aliasMap)) !== JSON.stringify(canonicalFilters(b, identity))) return false;
   return true;
 }
