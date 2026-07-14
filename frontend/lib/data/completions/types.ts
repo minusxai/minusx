@@ -4,7 +4,6 @@
  */
 
 import type { DatabaseWithSchema } from '@/lib/types';
-import type { ResolvedReference } from '@/lib/sql/query-composer';
 import type { QueryIR, AnyQueryIR } from '@/lib/sql/ir-types';
 
 /**
@@ -51,7 +50,6 @@ export interface SqlCompletionsOptions {
   context: {
     type: 'sql_editor' | 'chat';
     schemaData?: DatabaseWithSchema[];
-    resolvedReferences?: ResolvedReference[];
     databaseName?: string;
     connectionType?: string;
   };

@@ -228,7 +228,7 @@ templates:
     - **ReviewFile**: Review the current file without editing it — a rendered screenshot plus the full health rubric (deterministic errors/warnings + LLM visual judge + score). Same output as an EditFile with no changes.
 
   skill_questions:
-    description: Question file structure (query, vizSettings, parameters, references), question page behavior guidelines
+    description: Question file structure (query, vizSettings, parameters), question page behavior guidelines
     content: |
       ## Questions
 
@@ -240,7 +240,6 @@ templates:
       - A question's saved parameter default values live in `<parameterValues>` (a compact JSON object), not on the `<parameters>` items.
       - **VizSettings**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`, `combo`, `waterfall`, `trend`, `single_value`. The full viz schema — combo / dual-axis (`yRightCols` + `axisConfig.dualAxis`), pivot (`pivotConfig`), geo (`geoConfig`), trend, waterfall, single_value (`singleValueConfig`) — is in the **visualizations** instructions preloaded below; consult it before authoring any non-basic chart.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
-      - **References**: `@alias` syntax for composed questions. Use `LoadSkill("composed_questions")` for details.
 
       ### Question Page Behavior
       - Users typically expect direct edits to the question in the current page. Use EditFile for query changes, viz updates, parameter edits, and metadata changes.
@@ -580,22 +579,6 @@ templates:
       **Shared options** (all sub-types):
       - `showTiles`: `true`/`false` — show OpenStreetMap tile layer (default: false)
       - `mapName`: optional for non-choropleth — adds country/state outlines as background
-  skill_composed_questions:
-    description: Composed Questions (Question References) — @alias syntax for referencing other questions as CTEs in SQL. Read this skill for guidelines on how to use question references in your SQL queries, or if the SQL you are looking at contains question references(@alias)
-    content: |
-      ## Composed Questions
-
-      - Questions can reference other questions as composable building blocks using the @alias syntax
-      - Referenced questions become CTEs (Common Table Expressions) at execution time
-      - **CRITICAL ALIAS RULE**:
-        - **Aliases MUST end with _{{file_id}}** for uniqueness and clarity
-      - Example: If referencing question ID 456, alias must be "base_data_456" or "revenue_456" (NOT "base_data" or "revenue" , i.e ends in _{{file_id}})
-      - Pattern: "{{descriptive_name}}_{{file_id}}"
-      - SQL usage: SELECT * FROM @{{alias}} (e.g., SELECT * FROM @revenue_456)
-      - **Restrictions**:
-        - Single-level only: Referenced questions CANNOT have their own references (no nested composition)
-        - Same connection: Only reference questions with matching connection_id
-        - No circular references: A question cannot reference itself
   skill_app_guide:
     description: App guide — pages, navigation, settings, and how-to for common tasks. Load when users ask 'how do I...', 'where can I find...', or need help using the app.
     content: |
@@ -1086,7 +1069,7 @@ templates:
       {schema_notebook}
       ```
       - **cells**: ordered `<item>` list rendered top-to-bottom. Every cell has a stable string `<id>` (never reuse ids) and an optional `<name>`.
-      - **SQL cell** (`<type>sql</type>`): a full inline question — `<query>`, `<vizSettings>`, `<parameters>`, `<parameterValues>`, `<connection_name>`, and `<references>` (@alias composed questions). Same shape as a standalone question (minus description). Use `LoadSkill("visualizations")` / `LoadSkill("parameters")` / `LoadSkill("composed_questions")` as needed.
+      - **SQL cell** (`<type>sql</type>`): a full inline question — `<query>`, `<vizSettings>`, `<parameters>`, `<parameterValues>`, and `<connection_name>`. Same shape as a standalone question (minus description). Use `LoadSkill("visualizations")` / `LoadSkill("parameters")` as needed.
       - **Text cell** (`<type>text</type>`): `<content>` is markdown.
 
       ### Active cell — edit the RIGHT cell
@@ -1115,7 +1098,7 @@ templates:
        
        Follow this checklist in order before writing any new SQL:
        1. LoadContext first from the Context Library — ALWAYS, NO EXCEPTIONS, even if the question feels like a pure schema/column question. Never rationalize skipping this step. A question like "what other columns/tables do we have?" MUST trigger LoadContext before SearchDBSchema — context docs define metric meaning, units, and caveats that raw column names cannot. It will save you from inferring the wrong metric definitions or definitions from plain SearchFiles or SearchDBSchema. Context is curated by the team and is authoritative for metric definitions, table/column meanings, and business rules. It helps dispel the "unknown unknowns" problem.
-       2. SearchFiles for existing questions related to the request, second — it will save you from writing new SQL. Exact match? → Use it directly. Close match? → Adapt its SQL. Composable? → Use @alias references.
+       2. SearchFiles for existing questions related to the request, second — it will save you from writing new SQL. Exact match? → Use it directly. Close match? → Adapt its SQL.
        3. SearchDBSchema last — it may save you from guessing table/column names or relationships. If you have to write new SQL, check the schema first.
        4. Still ambiguous? → Clarify before guessing
        

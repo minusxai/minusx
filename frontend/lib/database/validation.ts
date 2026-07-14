@@ -50,26 +50,6 @@ function validateFileReferences(documents: ExportedDocument[]): ValidationResult
       }
     }
 
-    if (type === 'notebook' && 'cells' in content && Array.isArray(content.cells)) {
-      for (const cell of content.cells) {
-        if (cell?.type !== 'sql' || !Array.isArray(cell.references)) continue;
-        for (const ref of cell.references) {
-          const refId = ref?.id;
-          if (!refId) {
-            warnings.push(`Notebook '${path}' (ID: ${id}) has question reference without ID`);
-            continue;
-          }
-          if (!docMap.has(refId)) {
-            warnings.push(`Notebook '${path}' (ID: ${id}) references non-existent question ID: ${refId}`);
-            continue;
-          }
-          const refType = docMap.get(refId);
-          if (refType !== 'question') {
-            warnings.push(`Notebook '${path}' (ID: ${id}) references ID ${refId} as question, but it's type '${refType}'`);
-          }
-        }
-      }
-    }
   }
 
   return { valid: errors.length === 0, errors, warnings };

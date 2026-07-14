@@ -1,4 +1,4 @@
-import { LuTable, LuFileText, LuClock, LuMessageSquare, LuCode, LuLayoutDashboard, LuNotebookText, LuChartBar } from 'react-icons/lu';
+import { LuTable, LuFileText, LuClock, LuMessageSquare, LuCode, LuLayoutDashboard, LuNotebookText } from 'react-icons/lu';
 import { IconType } from 'react-icons';
 
 /**
@@ -6,7 +6,6 @@ import { IconType } from 'react-icons';
  */
 export type SidebarSectionId =
   | 'questions'
-  | 'question-references'
   | 'context'
   | 'chat'
   | 'databases'
@@ -35,12 +34,6 @@ const SIDEBAR_SECTION_METADATA: Record<SidebarSectionId, Omit<SidebarSectionMeta
     title: 'Add Questions',
     icon: LuLayoutDashboard,
     color: 'accent.teal',
-  },
-  'question-references': {
-    title: 'Questions in Context',
-    icon: LuChartBar,
-    color: 'accent.success',
-    maxHeight: '400px',
   },
   context: {
     title: 'Context Selector',

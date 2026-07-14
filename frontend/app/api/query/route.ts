@@ -1,12 +1,9 @@
-import type { QuestionReference, QuestionContent } from '@/lib/types';
 import type { QueryStream } from '@/lib/connections/base';
 import { connectionTypeToDialect } from '@/lib/types';
 import { handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { withAuth } from '@/lib/http/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { Readable } from 'stream';
-import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
-import { FilesAPI } from '@/lib/data/files.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { runQueryStream } from '@/lib/connections/run-query';
 import { applyNoneParams } from '@/lib/sql/none-params';
@@ -31,7 +28,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const body = await request.json();
     const {
       connection_name: bodyConnection, query: bodyQuery, parameters, parameterTypes,
-      references, filePath, fileId, fileVersion, cachePolicy: bodyPolicy, forceRefresh: bodyForceRefresh,
+      filePath, fileId, fileVersion, cachePolicy: bodyPolicy, forceRefresh: bodyForceRefresh,
     } = body;
     // Declared param types ('text'|'number'|'date'), keyed by name — advisory, used
     // by connectors that need explicit typing (BigQuery: bind a `date` param as DATE).
@@ -95,17 +92,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     // ── The execution thunk (runs only on miss / expired / background revalidate) ──
     const execute = async (): Promise<QueryStream> => {
-      let composedQuery = query;
-      if (Array.isArray(references) && references.length > 0) {
-        const resolvedRefs: ResolvedReference[] = await Promise.all(
-          (references as QuestionReference[]).map(async (ref) => {
-            const result = await FilesAPI.loadFile(ref.id, user);
-            return { id: ref.id, alias: ref.alias, query: (result.data.content as QuestionContent).query };
-          }),
-        );
-        composedQuery = CTEfyQuery(query, resolvedRefs);
-      }
-
       // Derive dialect via getRawByName (no schema-profiling loader on the hot path).
       let queryDialect = 'duckdb';
       try {
@@ -113,7 +99,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         if (type) queryDialect = connectionTypeToDialect(type);
       } catch { /* default duckdb */ }
 
-      const { sql: noneResolvedQuery, params: resolvedParams } = await applyNoneParams(composedQuery, paramValues, queryDialect);
+      const { sql: noneResolvedQuery, params: resolvedParams } = await applyNoneParams(query, paramValues, queryDialect);
 
       // Stream the result — the executor pipes it through to the object store +
       // client without materializing on the server.
@@ -124,12 +110,9 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // forceRefresh ("Run query") re-executes + refreshes the cache. NOT honored for
     // guests — public shares must stay cache-served so they can't hammer the warehouse.
     const forceRefresh = bodyForceRefresh === true && !user.guest;
-    const refsForKey = Array.isArray(references)
-      ? (references as QuestionReference[]).map((r) => ({ id: r.id, alias: r.alias }))
-      : undefined;
     const { stream, meta } = await getCachedJsonlStream({
       mode, connectionName, query, params: paramValues, policy, execute, forceRefresh,
-      parameterTypes: paramTypes, references: refsForKey,
+      parameterTypes: paramTypes,
     });
 
     // One analytics event per request, from the executor's meta (covers hit + miss).

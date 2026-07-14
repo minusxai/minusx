@@ -282,7 +282,7 @@ describe('DashboardView via DashboardContainerV2', () => {
     );
     store.dispatch(setEphemeral({
       fileId: DASH_ID,
-      changes: { lastExecuted: { query: '', params: { region: 'east' }, database: '', references: [] } },
+      changes: { lastExecuted: { query: '', params: { region: 'east' }, database: '' } },
     }));
 
     renderWithProviders(<DashboardContainerV2 fileId={DASH_ID} mode="view" />, { store });

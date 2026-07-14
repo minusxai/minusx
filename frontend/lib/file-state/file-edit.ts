@@ -118,7 +118,6 @@ export async function replaceFileState(fileId: number, targetFileObj: { name?: s
               query: finalContent.query,
               params,
               database: finalContent.connection_name,
-              references: finalContent.references || []
             }
           }
         }));

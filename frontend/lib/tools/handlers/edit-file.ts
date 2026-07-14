@@ -213,7 +213,6 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
             query: finalContent.query,
             params,
             database: finalContent.connection_name,
-            references: finalContent.references || []
           }
         }
       }));
@@ -253,7 +252,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
         || prev.query !== cell.query
         || prev.connection_name !== cell.connection_name
         || JSON.stringify(prev.parameterValues || {}) !== JSON.stringify(params)
-        || JSON.stringify(prev.references || []) !== JSON.stringify(cell.references || []);
+;
       if (!changed) continue;
 
       // Clear the cached result + record the executed snapshot before awaiting, so
@@ -262,7 +261,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
       getStore().dispatch(setNotebookCellExecuted({
         fileId: fileId as FileId,
         cellId: cell.id,
-        executed: { query: cell.query, params, database: cell.connection_name, references: cell.references || [] },
+        executed: { query: cell.query, params, database: cell.connection_name },
       }));
 
       // Best-effort: a failed execution must NOT fail the edit (already staged).

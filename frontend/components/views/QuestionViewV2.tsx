@@ -15,14 +15,11 @@ import { debounce } from 'lodash';
 import {
   Box,
   Text,
-  IconButton,
   HStack,
-  Code,
 } from '@chakra-ui/react';
 import {
   LuChevronLeft,
   LuChevronRight,
-  LuX,
   LuGripVertical,
 } from 'react-icons/lu';
 import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType, type DbFile } from '@/lib/types';
@@ -31,8 +28,6 @@ import SqlEditor from '../query-builder/SqlEditor';
 import ParameterRow from '../params/ParameterRow';
 import DatabaseSelector from '../selectors/DatabaseSelector';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
-import { syncReferencesWithSQL } from '@/lib/sql/sql-references';
-import { useAvailableQuestions } from '@/lib/hooks/useAvailableQuestions';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { QuestionVisualization } from '../question/QuestionVisualization';
@@ -43,7 +38,6 @@ import { semanticModelsForConnection } from '@/lib/semantic/resolve';
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
-import { FilesAPI } from '@/lib/data/files';
 import { useSemanticCompat } from '@/lib/hooks/use-semantic-compat';
 
 // Which side of the split view is collapsed (or neither). Page mode persists this
@@ -106,9 +100,6 @@ interface QuestionViewV2Props {
   fileState: Record<FileId, FileState>;
   onSetFile: (file: DbFile) => void;
 
-  // Remove a question reference (edit-mode only). Omitted where unreachable (toolcall).
-  onRemoveReference?: (referencedQuestionId: number) => void;
-
   // Handlers
   onChange: (updates: Partial<QuestionContent>) => void;
   onParameterValueChange?: (paramName: string, value: string | number | null) => void;  // Ephemeral
@@ -136,7 +127,6 @@ export default function QuestionViewV2({
   onTogglePanel,
   fileState,
   onSetFile,
-  onRemoveReference,
   onChange,
   onParameterValueChange,
   onExecute,
@@ -160,7 +150,6 @@ export default function QuestionViewV2({
   const [containerWidth, setContainerWidth] = useState(0);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
-  const [sqlPreviewId, setSqlPreviewId] = useState<number | null>(null);
 
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(45); // percentage
@@ -190,45 +179,6 @@ export default function QuestionViewV2({
 
   // Semantic tier: models the active context defines for this connection.
   const connectionSemanticModels = semanticModelsForConnection(semanticModels, content.connection_name);
-
-  // Memoize referencedQuestions to avoid unnecessary re-renders
-  const referencedQuestions = useMemo(() => {
-    const refs = content.references || [];
-    return refs.map(ref => ({
-      ...ref,
-      question: fileState[ref.id]
-    }));
-  }, [content.references, fileState]);
-
-  // Get available questions for inline @reference autocomplete
-  const { questions: availableQuestions } = useAvailableQuestions(
-    questionId,
-    content.connection_name,
-    referencedQuestions.map(r => r.id)
-  );
-
-  // Load referenced questions into Redux (via the onSetFile callback supplied by the caller)
-  useEffect(() => {
-    const referencedIds = content.references?.map(ref => ref.id) || [];
-    if (referencedIds.length === 0) return;
-
-    // Check which questions need to be loaded
-    const missingIds = referencedIds.filter(id => {
-      const file = referencedQuestions.find(r => r.id === id)?.question;
-      return !file || !file.content;
-    });
-
-    if (missingIds.length === 0) return;
-
-    // Load missing questions
-    FilesAPI.loadFiles(missingIds).then(result => {
-      result.data.forEach(file => {
-        onSetFile(file);
-      });
-    }).catch(err => {
-      console.error('[QuestionViewV2] Failed to load referenced questions:', err);
-    });
-  }, [content.references, referencedQuestions, onSetFile]);
 
   // Track container width for responsive layout
   useEffect(() => {
@@ -427,34 +377,7 @@ export default function QuestionViewV2({
     onChange({ vizSettings: { ...content.vizSettings, axisConfig } });
   };
 
-  // Handle removing a question reference
-  const handleRemoveReference = (referencedQuestionId: number) => {
-    onRemoveReference?.(referencedQuestionId);
-  };
-
-  // Merge parameters from current question + referenced questions
-  const parameters = useMemo(() => {
-    const currentParams = content.parameters || [];
-
-    // Extract parameters from referenced questions
-    const referencedParams: QuestionParameter[] = [];
-    referencedQuestions.forEach(ref => {
-      const refContent = ref.question?.content as QuestionContent;
-      if (refContent?.parameters) {
-        refContent.parameters.forEach(param => {
-          // Only add if not already present (same name + type)
-          const exists = currentParams.some(p => p.name === param.name && p.type === param.type);
-          const alreadyAdded = referencedParams.some(p => p.name === param.name && p.type === param.type);
-          if (!exists && !alreadyAdded) {
-            referencedParams.push(param);
-          }
-        });
-      }
-    });
-
-    // Return merged list: current params first, then referenced params
-    return [...currentParams, ...referencedParams];
-  }, [content.parameters, referencedQuestions]);
+  const parameters = useMemo(() => content.parameters || [], [content.parameters]);
 
   // Handle query execution (Run button / Cmd+Enter)
   // Build effective param values dict from content.parameterValues
@@ -476,25 +399,12 @@ export default function QuestionViewV2({
       clearTimeout(syncTimeoutRef.current);
     }
     syncTimeoutRef.current = setTimeout(() => {
-      const updatedRefs = syncReferencesWithSQL(newQuery, content.references || []);
-
-      // Build composed SQL (current + referenced CTEs) to extract ALL parameters
-      let composedSQL = newQuery;
-      referencedQuestions.forEach(ref => {
-        const refContent = ref.question?.content as QuestionContent;
-        if (refContent?.query) {
-          // Append referenced SQL to extract its parameters too
-          composedSQL += '\n' + refContent.query;
-        }
-      });
-
-      // Sync parameters from the FULL composed query (current + referenced)
-      // Pass merged parameters to preserve user-set values
-      const updatedParams = syncParametersWithSQL(composedSQL, parameters);
-
-      onChange({ parameters: updatedParams, references: updatedRefs });
+      // Sync declared parameters with the :params present in the SQL,
+      // preserving user-set config for ones that remain.
+      const updatedParams = syncParametersWithSQL(newQuery, parameters);
+      onChange({ parameters: updatedParams });
     }, 300);
-  }, [onChange, content.parameters, content.references, parameters]);
+  }, [onChange, parameters]);
 
   return (
     <Box
@@ -600,49 +510,6 @@ export default function QuestionViewV2({
                 </Box>
               </HStack>
 
-              {/* Reference chips row (hide on Viz tab) */}
-              {effectiveQueryMode !== 'viz' && referencedQuestions.length > 0 && (
-              <HStack px={4} py={1} gap={2} flexWrap="wrap" onClick={(e) => e.stopPropagation()}>
-                {referencedQuestions.map(ref => {
-                  const isSelected = sqlPreviewId === ref.id;
-                  return (
-                    <HStack
-                      key={ref.id}
-                      px={2}
-                      py={1}
-                      bg="transparent"
-                      borderRadius="md"
-                      border={isSelected ? '2px solid' : '1px solid'}
-                      borderColor={isSelected ? 'accent.teal' : 'accent.secondary'}
-                      gap={1}
-                      cursor="pointer"
-                      _hover={{ opacity: 0.85 }}
-                      onClick={() => setSqlPreviewId(isSelected ? null : ref.id)}
-                      aria-label={`Reference: ${ref.alias}`}
-                    >
-                      <Code fontSize="xs" color="accent.secondary" bg="transparent" fontWeight="600">
-                        @{ref.alias}
-                      </Code>
-                      {editMode && (
-                        <IconButton
-                          aria-label="Remove reference"
-                          size="2xs"
-                          variant="ghost"
-                          color="accent.secondary"
-                          _hover={{ bg: 'bg.muted' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveReference(ref.id);
-                          }}
-                        >
-                          <LuX />
-                        </IconButton>
-                      )}
-                    </HStack>
-                  );
-                })}
-              </HStack>
-              )}
             </Box>}
 
               <Box flex={1} minHeight={0} display="flex" flexDirection="column" overflow="hidden">
@@ -659,16 +526,7 @@ export default function QuestionViewV2({
                     proposedValue={isPreview
                       ? (originalQuery !== content.query ? content.query : undefined)
                       : proposedQuery}
-                    availableReferences={availableQuestions}
-                    validReferenceAliases={referencedQuestions.map(r => r.alias)}
                     schemaData={schemaData}
-                    resolvedReferences={referencedQuestions
-                      .filter(r => r.question?.content)
-                      .map(r => ({
-                        id: r.id,
-                        alias: r.alias,
-                        query: (r.question!.content as QuestionContent).query
-                      }))}
                     databaseName={content.connection_name}
                     connectionType={connectionType}
                     fillHeight={!useCompactLayout}
@@ -876,7 +734,6 @@ export default function QuestionViewV2({
             // my={!useCompactLayout ? 2 : 0}
             mr={!useCompactLayout ? 2 : 0}
           >
-            {/* SQL Preview - shows when reference chip is clicked */}
             {parameters.length > 0 && (
               <ParameterRow
                 parameters={parameters}
@@ -888,41 +745,7 @@ export default function QuestionViewV2({
                 database={content.connection_name}
               />
             )}
-            {sqlPreviewId ? (
-              <Box p={4} flex={1} overflow="auto">
-                <HStack justify="space-between" mb={3}>
-                  <HStack gap={2}>
-                    <Text fontSize="sm" fontWeight="600" color="fg.muted">
-                      Preview
-                    </Text>
-                    <Code fontSize="sm" colorPalette="teal" px={2} py={0.5} borderRadius="md">
-                      #{sqlPreviewId}
-                    </Code>
-                    <Text fontSize="sm" fontWeight="600">
-                      {referencedQuestions.find(r => r.id === sqlPreviewId)?.question?.name || 'Loading...'}
-                    </Text>
-                  </HStack>
-                  <IconButton
-                    aria-label="Close preview"
-                    size="xs"
-                    variant="ghost"
-                    onClick={() => setSqlPreviewId(null)}
-                  >
-                    <LuX />
-                  </IconButton>
-                </HStack>
-                <SqlEditor
-                  readOnly
-                  value={
-                    referencedQuestions.find(r => r.id === sqlPreviewId)?.question?.content
-                      ? (referencedQuestions.find(r => r.id === sqlPreviewId)?.question?.content as QuestionContent).query
-                      : '-- Loading...'
-                  }
-                  showFormatButton={false}
-                  showRunButton={false}
-                />
-              </Box>
-            ) : !content.query?.trim() && !queryData ? (
+            {!content.query?.trim() && !queryData ? (
               /* Empty state when no query written yet */
               <Box flex="1" display="flex" bg="bg.canvas" borderRadius="lg" overflow="hidden">
                 <QuestionEmptyState />

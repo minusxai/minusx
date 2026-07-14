@@ -245,12 +245,6 @@ export const QuestionParameter = Type.Object({
 }, { title: 'QuestionParameter' });
 export type QuestionParameter = Static<typeof QuestionParameter>;
 
-export const QuestionReference = Type.Object({
-  id: Type.Integer(),
-  alias: Type.String(),
-}, { title: 'QuestionReference' });
-export type QuestionReference = Static<typeof QuestionReference>;
-
 // Per-file query-cache windows (Query Execution, Cache & Params Arch V2). Both ms.
 // `revalidateMs`: results younger than this are served fresh. `expiryMs`: results
 // older than this are never served — execution blocks. Between the two, results
@@ -290,7 +284,6 @@ export const QuestionContent = Type.Object({
   parameters: Nullable(Type.Array(QuestionParameter)),
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
   connection_name: Type.String({ description: 'connection name (empty string if none)' }),
-  references: Nullable(Type.Array(QuestionReference)),
   cachePolicy: Nullable(CachePolicy),
   semanticQuery: NullableD(SemanticQuerySpec, 'Semantic-tier state; query holds the compiled SQL'),
 }, { title: 'QuestionContent' });
@@ -431,7 +424,6 @@ export const NotebookSqlCell = Type.Object({
   parameters: Nullable(Type.Array(QuestionParameter)),
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
   connection_name: Type.String({ description: 'connection name (empty string if none)' }),
-  references: Nullable(Type.Array(QuestionReference, { description: '@alias references to saved question files, composed as CTEs' })),
 }, { title: 'NotebookSqlCell' });
 export type NotebookSqlCell = Static<typeof NotebookSqlCell>;
 

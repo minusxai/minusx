@@ -102,7 +102,7 @@ function SavedNumber({ id, embed, externalParamValues, filePath }: { id: number;
   useFile(id);
   const content = useAppSelector((s) => selectMergedContent(s, id)) as QuestionContent | undefined;
   const params = buildQueryParamValues(content?.parameters ?? [], content?.parameterValues ?? {}, externalParamValues);
-  const { data, loading } = useQueryResult(content?.query ?? '', params, content?.connection_name ?? '', content?.references ?? undefined, {
+  const { data, loading } = useQueryResult(content?.query ?? '', params, content?.connection_name ?? '',  {
     skip: !content?.query || !content?.connection_name, filePath,
   });
   const col = embed.col ?? data?.columns?.[0];
@@ -124,7 +124,7 @@ function InlineQueryNumber({ embed, externalParamValues, editable, onRequestEdit
   // the story's default params drive the figure live. Same helper the augmentation uses → the
   // rendered number and the agent-seen number share a cache key.
   const params = bindReferencedParams(embed.query, externalParamValues);
-  const { data, loading } = useQueryResult(embed.query ?? '', params, embed.connection ?? '', undefined, {
+  const { data, loading } = useQueryResult(embed.query ?? '', params, embed.connection ?? '', {
     skip: !embed.query || !embed.connection, filePath,
   });
   const col = embed.col ?? data?.columns?.[0];

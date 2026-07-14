@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction, createSelector, weakMapMemoize } from '@reduxjs/toolkit';
-import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent, QuestionReference, DatabaseSchema } from '@/lib/types';
+import type { DbFile, FileType, DocumentContent, AssetReference, DatabaseSchema } from '@/lib/types';
 import type { FileInfo } from '@/lib/data/types';
 import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import type { RootState } from './store';
@@ -21,7 +21,6 @@ export interface ExecutedSnapshot {
   query: string;
   params: Record<string, any>;
   database: string;
-  references: any[];
 }
 
 export type EphemeralChanges = Partial<DbFile['content']> & {
@@ -877,26 +876,6 @@ const filesSlice = createSlice({
       };
     },
 
-    /**
-     * Remove a reference from a question
-     */
-    removeReferenceFromQuestion(state, action: PayloadAction<{
-      questionId: number;
-      referencedQuestionId: number;
-    }>) {
-      const { questionId, referencedQuestionId } = action.payload;
-      const question = state.files[questionId];
-      if (!question || question.type !== 'question') return;
-
-      const content = question.content as QuestionContent;
-      const changes = question.persistableChanges as Partial<QuestionContent> | undefined;
-      const currentRefs = changes?.references ?? content.references ?? [];
-
-      state.files[questionId].persistableChanges = {
-        ...changes,
-        references: currentRefs.filter((ref: QuestionReference) => ref.id !== referencedQuestionId)
-      };
-    },
 
   }
 });
@@ -932,7 +911,6 @@ export const {
   addQuestionToDashboard,
   addTextBlockToDashboard,
   updateTextBlockContent,
-  removeReferenceFromQuestion,
 } = filesSlice.actions;
 
 // Selectors

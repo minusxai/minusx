@@ -25,7 +25,7 @@ export function makeQuestion(overrides: Partial<QuestionContent> = {}): Question
     parameters: null,
     parameterValues: null,
     connection_name: 'warehouse',
-    references: null,
+   
     cachePolicy: null,
     ...overrides,
   };

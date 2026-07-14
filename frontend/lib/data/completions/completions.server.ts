@@ -15,11 +15,8 @@ import {
   ColumnSuggestionsOptions,
   ColumnSuggestionsResult,
 } from './types';
-import { connectionTypeToDialect, DatabaseWithSchema, QuestionContent } from '@/lib/types';
+import { DatabaseWithSchema } from '@/lib/types';
 import { FilesAPI } from '@/lib/data/files.server';
-import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
-import { extractReferencesFromSQL, parseReferenceAlias } from '@/lib/sql/sql-references';
-import { inferColumnsLocal } from '@/lib/sql/infer-columns';
 import { getCompletionsLocal } from '@/lib/sql/autocomplete';
 import { getMentionCompletionsLocal } from '@/lib/sql/mention-completions';
 import { parseSqlToIrLocal, UnsupportedSQLError } from '@/lib/sql/sql-to-ir';
@@ -113,138 +110,13 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
   async getSqlCompletions(options: SqlCompletionsOptions, user: EffectiveUser): Promise<SqlCompletionsResult> {
     const { query, cursorOffset, context } = options;
 
-    // Use already resolved references from context if provided, otherwise load dynamically
-    const resolvedReferences: ResolvedReference[] = context.resolvedReferences || [];
-
-    // If no resolved references provided, extract and load them dynamically
-    if (resolvedReferences.length === 0) {
-      const aliasesInQuery = extractReferencesFromSQL(query);
-
-      for (const alias of aliasesInQuery) {
-        const parsed = parseReferenceAlias(alias);
-        if (!parsed) {
-          continue; // Invalid alias format
-        }
-
-        try {
-          const result = await FilesAPI.loadFile(parsed.id, user);
-          if (result.data?.content && result.data.type === 'question') {
-            const content = result.data.content as QuestionContent;
-            resolvedReferences.push({
-              id: parsed.id,
-              alias: alias,
-              query: content.query
-            });
-          }
-        } catch (error) {
-          // Question not found or access denied, skip this reference
-          console.warn(`[Completions] Failed to load reference ${alias}:`, error);
-        }
-      }
-    }
-
-    // Infer columns for each resolved reference and inject as virtual schema tables
     const schemaData = [...(context.schemaData || [])];
-    for (const ref of resolvedReferences) {
-      if (!ref.inferredColumns && ref.query) {
-        try {
-          const inferDialect = connectionTypeToDialect(context.connectionType ?? '');
-          const inferResult = await inferColumnsLocal(
-            ref.query,
-            context.schemaData || [],
-            inferDialect,
-          );
-          ref.inferredColumns = inferResult.columns || [];
-        } catch (err) {
-          console.warn(`[Completions] Failed to infer columns for ref ${ref.alias}:`, err);
-        }
-
-      }
-
-      if (ref.inferredColumns && ref.inferredColumns.length > 0) {
-        // Find or create the entry for the current databaseName
-        const dbName = context.databaseName || '';
-        let dbEntry = schemaData.find(d => d.databaseName === dbName);
-        if (!dbEntry) {
-          dbEntry = { databaseName: dbName, schemas: [] };
-          schemaData.push(dbEntry);
-        }
-
-        // Find or create a schema bucket for virtual tables (use empty schema name)
-        let virtualSchema = dbEntry.schemas.find((s: any) => s.schema === '');
-        if (!virtualSchema) {
-          virtualSchema = { schema: '', tables: [] };
-          dbEntry.schemas.push(virtualSchema);
-        }
-
-        // Add virtual table for this reference (alias → columns)
-        const existingIdx = virtualSchema.tables.findIndex((t: any) => t.table === ref.alias);
-        const virtualTable = {
-          table: ref.alias,
-          columns: ref.inferredColumns.map(c => ({ name: c.name, type: c.type })),
-        };
-        if (existingIdx >= 0) {
-          virtualSchema.tables[existingIdx] = virtualTable;
-        } else {
-          virtualSchema.tables.push(virtualTable);
-        }
-
-        // Also inject virtual tables for any SQL aliases used for this reference
-        // in the original query (e.g. "FROM @revenue_1 r" → inject table "r" too).
-        // This allows the dot-completion fallback to find columns when parse fails.
-        const SQL_KEYWORDS = new Set(['on', 'where', 'join', 'inner', 'left', 'right', 'outer',
-          'full', 'cross', 'group', 'order', 'having', 'limit', 'union', 'except', 'intersect',
-          'as', 'and', 'or', 'not', 'in', 'is', 'null', 'between', 'like', 'select', 'from', 'with']);
-        const aliasPattern = new RegExp(`@${ref.alias}\\s+(\\w+)`, 'gi');
-        let aliasMatch: RegExpExecArray | null;
-        while ((aliasMatch = aliasPattern.exec(query)) !== null) {
-          const sqlAlias = aliasMatch[1];
-          if (!SQL_KEYWORDS.has(sqlAlias.toLowerCase()) && sqlAlias.toLowerCase() !== ref.alias.toLowerCase()) {
-            const existingAliasIdx = virtualSchema.tables.findIndex((t: any) => t.table === sqlAlias);
-            if (existingAliasIdx < 0) {
-              virtualSchema.tables.push({
-                table: sqlAlias,
-                columns: ref.inferredColumns!.map(c => ({ name: c.name, type: c.type })),
-              });
-            }
-          }
-        }
-      }
-    }
-
-    // Convert @references to CTEs if needed and adjust cursor offset
-    let processedQuery = query;
-    let adjustedCursorOffset = cursorOffset;
-
-    if (resolvedReferences.length > 0) {
-      processedQuery = CTEfyQuery(query, resolvedReferences);
-
-      // Adjust cursor offset:
-      // 1. CTE section is added before the query
-      // 2. Each @alias is replaced with alias (loses @ char)
-
-      // Calculate CTE section length (everything before the main query)
-      const cteSection = processedQuery.substring(0, processedQuery.lastIndexOf('\n') + 1);
-
-      // Count how many @ symbols were removed before cursor position
-      const textBeforeCursor = query.substring(0, cursorOffset);
-      let atSymbolsRemoved = 0;
-      resolvedReferences.forEach(ref => {
-        const pattern = new RegExp(`@${ref.alias}\\b`, 'g');
-        const matches = textBeforeCursor.match(pattern);
-        if (matches) {
-          atSymbolsRemoved += matches.length;
-        }
-      });
-
-      adjustedCursorOffset = cteSection.length + cursorOffset - atSymbolsRemoved;
-    }
 
     // Run autocomplete locally via WASM
     try {
       const completions = await getCompletionsLocal(
-        processedQuery,
-        adjustedCursorOffset,
+        query,
+        cursorOffset,
         schemaData,
         context.connectionType,
       );

@@ -14,7 +14,7 @@ export type { FileState };
 export type {
   AggregationFunction, FormulaOperator, VisualizationType, ParameterType,
   PivotValueConfig, PivotFormula, PivotConfig, ColumnFormatConfig, ConditionalFormatRule, VizSettings, AxisConfig, AxisScale, VisualizationStyleConfig, ChartAnnotation, TrendConfig, TrendCompareMode, SingleValueConfig,
-  QuestionParameter, QuestionReference,
+  QuestionParameter,
   QuestionContent,
   FileReference, InlineAsset,
   DashboardContent, DashboardLayout, DashboardLayoutItem,

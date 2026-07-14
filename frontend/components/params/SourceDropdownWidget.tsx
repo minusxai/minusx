@@ -31,7 +31,6 @@ export function SourceDropdownWidget({ source, paramType, currentValue, paramNam
     content?.query ?? '',
     (content?.parameterValues ?? {}) as Record<string, any>,
     content?.connection_name ?? '',
-    content?.references ?? undefined,
     { skip: !content?.query }
   );
 

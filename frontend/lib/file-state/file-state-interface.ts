@@ -9,7 +9,7 @@
  * createVirtualFile, etc.) which are client-only concepts.
  */
 
-import type { FileState, FileType, QuestionReference } from '@/lib/types';
+import type { FileState, FileType } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 
 export interface ReadFilesOptions {
@@ -48,7 +48,6 @@ export interface QueryExecutionParams {
   query: string;
   params: Record<string, any>;
   database: string;
-  references?: QuestionReference[];
   parameterTypes?: Record<string, 'text' | 'number' | 'date'>;
   /** Path of the question file — used by /api/query to resolve the correct context and validate against its whitelist */
   filePath?: string;

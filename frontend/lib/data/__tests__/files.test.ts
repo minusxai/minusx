@@ -241,7 +241,6 @@ describe('Files Data Layer - rename-only save', () => {
     const content: QuestionContent = {
       query: 'SELECT 1',
       parameters: [],
-      references: [],
       description: '',
       vizSettings: { type: 'table' },
       connection_name: 'test_db',
@@ -278,7 +277,6 @@ describe('Files Data Layer - non-array references guard at write', () => {
   const content: QuestionContent = {
     query: 'SELECT 1',
     parameters: [],
-    references: [],
     description: '',
     vizSettings: { type: 'table' },
     connection_name: 'test_db',

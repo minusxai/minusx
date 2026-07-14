@@ -19,12 +19,11 @@
  * issue real fetch() calls under jsdom. The question's `query` is left empty
  * so useQueryResult / the query-estimate effect skip (no query execution).
  */
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
 import { setFile } from '@/store/filesSlice';
-import { setFileEditMode, selectQuestionCollapsedPanel } from '@/store/uiSlice';
-import { FilesAPI } from '@/lib/data/files';
+import { selectQuestionCollapsedPanel } from '@/store/uiSlice';
 import type { QuestionContent, DbFile } from '@/lib/types';
 
 vi.mock('@/lib/hooks/useContext', () => ({
@@ -151,62 +150,4 @@ describe('QuestionViewV2 (mounted via QuestionContainerV2) — Redux integration
     expect(selectQuestionCollapsedPanel(store.getState())).toBe('none');
   });
 
-  it('loads a missing referenced question into Redux via setFile', async () => {
-    const store = setup({ references: [{ id: REF_ID, alias: 'ref_a' }] });
-    const refFile = makeQuestionFile(
-      { query: 'SELECT 2' },
-      { id: REF_ID, name: 'Ref Q', path: '/org/RefQ' },
-    );
-
-    const loadFilesSpy = vi.spyOn(FilesAPI, 'loadFiles').mockResolvedValue({
-      data: [refFile],
-      metadata: { references: [] },
-    });
-
-    renderQuestion(store);
-
-    await waitFor(() => {
-      expect(loadFilesSpy).toHaveBeenCalledWith([REF_ID]);
-      expect(store.getState().files.files[REF_ID]).toBeTruthy();
-      expect((store.getState().files.files[REF_ID].content as QuestionContent).query).toBe('SELECT 2');
-    });
-  });
-
-  it('does not re-fetch a referenced question that is already loaded in Redux', async () => {
-    const store = setup({ references: [{ id: REF_ID, alias: 'ref_a' }] });
-    const refFile = makeQuestionFile(
-      { query: 'SELECT 2' },
-      { id: REF_ID, name: 'Ref Q', path: '/org/RefQ' },
-    );
-    store.dispatch(setFile({ file: refFile, references: [] }));
-
-    const loadFilesSpy = vi.spyOn(FilesAPI, 'loadFiles');
-
-    renderQuestion(store);
-
-    // Reference chip renders using the already-loaded content — no fetch needed.
-    await screen.findByLabelText('Reference: ref_a');
-    expect(loadFilesSpy).not.toHaveBeenCalled();
-  });
-
-  it('dispatches removeReferenceFromQuestion when a reference chip is removed in edit mode', async () => {
-    const store = setup({ references: [{ id: REF_ID, alias: 'ref_a' }] });
-    const refFile = makeQuestionFile(
-      { query: 'SELECT 2' },
-      { id: REF_ID, name: 'Ref Q', path: '/org/RefQ' },
-    );
-    store.dispatch(setFile({ file: refFile, references: [] }));
-    store.dispatch(setFileEditMode({ fileId: FILE_ID, editMode: true }));
-
-    renderQuestion(store);
-
-    fireEvent.click(await screen.findByLabelText('Remove reference'));
-
-    await waitFor(() => {
-      const persisted = store.getState().files.files[FILE_ID].persistableChanges as
-        | Partial<QuestionContent>
-        | undefined;
-      expect(persisted?.references).toEqual([]);
-    });
-  });
 });

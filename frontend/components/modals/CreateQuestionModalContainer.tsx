@@ -7,7 +7,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, clearFileChanges, createDraftFile, deleteFile } from '@/lib/file-state/file-state';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
-import { selectMergedContent, selectEffectiveName, setEphemeral, setFile, removeReferenceFromQuestion } from '@/store/filesSlice';
+import { selectMergedContent, selectEffectiveName, setEphemeral, setFile } from '@/store/filesSlice';
 import { setFileEditMode, selectFileEditMode, selectQuestionCollapsedPanel, setQuestionCollapsedPanel } from '@/store/uiSlice';
 import { selectView } from '@/store/authSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
@@ -89,11 +89,6 @@ export default function CreateQuestionModalContainer({
     dispatch(setFile({ file: referencedFile, references: [] }));
   }, [dispatch]);
 
-  const onRemoveReference = useCallback((referencedQuestionId: number) => {
-    if (typeof effectiveId !== 'number') return;
-    dispatch(removeReferenceFromQuestion({ questionId: effectiveId, referencedQuestionId }));
-  }, [effectiveId, dispatch]);
-
   // Embedded content view (view >= content): default the full-page split to showing
   // the viz expanded (collapse the left/query panel) on mount.
   useEffect(() => {
@@ -111,15 +106,13 @@ export default function CreateQuestionModalContainer({
   const queryToExecute = lastExecuted || {
     query: mergedContent?.query || '',
     params: mergedContent?.parameterValues || {},
-    database: mergedContent?.connection_name,
-    references: mergedContent?.references || []
+    database: mergedContent?.connection_name
   };
 
   const { data: queryData, loading: queryLoading, error: queryError, isStale: queryStale } = useQueryResult(
     queryToExecute.query,
     queryToExecute.params,
     queryToExecute.database,
-    queryToExecute.references,
     { skip: !queryToExecute.query }
   );
 
@@ -179,8 +172,7 @@ export default function CreateQuestionModalContainer({
     const newQuery = {
       query: mergedContent.query,
       params: mergedContent.parameterValues || {},
-      database: mergedContent.connection_name,
-      references: mergedContent.references || []
+      database: mergedContent.connection_name
     };
 
     dispatch(setEphemeral({
@@ -314,8 +306,7 @@ export default function CreateQuestionModalContainer({
           onTogglePanel={onTogglePanel}
           fileState={filesState}
           onSetFile={onSetFile}
-          onRemoveReference={onRemoveReference}
-          onChange={handleChange}
+              onChange={handleChange}
           onExecute={handleExecute}
         />
       </Box>

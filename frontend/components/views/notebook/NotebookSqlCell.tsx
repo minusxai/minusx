@@ -27,20 +27,18 @@ import { VizTypeSelector } from '@/components/question/VizTypeSelector';
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
 import { QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
-import { paramTypeMap } from '@/lib/sql/sql-params';
-import { useQuestionReferences } from '@/lib/hooks/useQuestionReferences';
+import { paramTypeMap, syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { connectionTypeToDialect } from '@/lib/types';
 import type {
-  NotebookSqlCell as SqlCell, QuestionContent, QuestionReference, VizSettings, FullQuery,
+  NotebookSqlCell as SqlCell, QuestionContent, VizSettings, FullQuery,
 } from '@/lib/types';
 
 export interface Executed {
   query: string;
   params: Record<string, unknown>;
   database: string;
-  references: QuestionReference[];
 }
 
 interface NotebookSqlCellProps {
@@ -86,20 +84,14 @@ export default function NotebookSqlCell({
     executed?.query ?? '',
     executed?.params ?? EMPTY_PARAMS,
     executed?.database ?? '',
-    executed?.references,
     { skip: !executed, parameterTypes: paramTypeMap(cell.parameters ?? undefined) },
   );
 
-  const { availableQuestions, resolvedReferences, referencedQuestions, mergedParameters, handleQueryChange } =
-    useQuestionReferences(
-      {
-        query: cell.query,
-        references: cell.references ?? [],
-        parameters: cell.parameters ?? [],
-        connection_name: cell.connection_name,
-      },
-      (updates) => handleChange(updates as Partial<SqlCell>),
-    );
+  const mergedParameters = useMemo(() => cell.parameters ?? [], [cell.parameters]);
+  // Debounced param sync on SQL edits (was part of the reference hook).
+  const handleQueryChange = useCallback((query: string) => {
+    handleChange({ query, parameters: syncParametersWithSQL(query, cell.parameters ?? []) } as Partial<SqlCell>);
+  }, [handleChange, cell.parameters]);
 
   const { connections } = useConnections();
   const connectionType = cell.connection_name ? connections[cell.connection_name]?.metadata?.type : undefined;
@@ -124,11 +116,10 @@ export default function NotebookSqlCell({
       query: cell.query,
       params: cell.parameterValues ?? {},
       database: cell.connection_name,
-      references: cell.references ?? [],
     });
     // If the same query was already executed, force a fresh fetch.
     refetch();
-  }, [cell.query, cell.parameterValues, cell.connection_name, cell.references, refetch, onExecutedChange]);
+  }, [cell.query, cell.parameterValues, cell.connection_name, refetch, onExecutedChange]);
 
   // Persist a freshly-run result up to the notebook so it survives reload. The
   // capture itself no-ops when the identical data is already stored, so this
@@ -237,9 +228,6 @@ export default function NotebookSqlCell({
             showRunButton={!readOnly}
             showFormatButton={!readOnly}
             isRunning={loading && !data}
-            availableReferences={availableQuestions}
-            validReferenceAliases={referencedQuestions.map(r => r.alias)}
-            resolvedReferences={resolvedReferences}
             schemaData={schemaData}
             databaseName={cell.connection_name}
             connectionType={connectionType}
@@ -291,7 +279,7 @@ export default function NotebookSqlCell({
           onValueChange={(name, value) =>
             handleChange({ parameterValues: { ...(cell.parameterValues ?? {}), [name]: value } })}
           onSubmit={(values) => onExecutedChange?.({
-            query: cell.query, params: values, database: cell.connection_name, references: cell.references ?? [],
+            query: cell.query, params: values, database: cell.connection_name,
           })}
           onParametersChange={(parameters) => handleChange({ parameters })}
           database={cell.connection_name}

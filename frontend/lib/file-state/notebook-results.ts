@@ -96,7 +96,7 @@ export function rehydrateNotebookResults(fileId: FileId): void {
     getStore().dispatch(setNotebookCellExecuted({
       fileId,
       cellId: cell.id,
-      executed: { query: cell.query, params, database: cell.connection_name, references: cell.references ?? [] },
+      executed: { query: cell.query, params, database: cell.connection_name },
     }));
   }
 }

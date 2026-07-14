@@ -55,198 +55,6 @@ describe('Autocomplete API — E2E', () => {
     CompletionsAPI.clearCache();
   });
 
-  // -------------------------------------------------------------------------
-  // @reference / CTE resolution
-  // -------------------------------------------------------------------------
-
-  describe('@reference / CTE resolution', () => {
-    test('converts @reference to CTE before resolving completions', async () => {
-      const result = await CompletionsAPI.getSqlCompletions({
-        query: 'SELECT * FROM @revenue WHERE subtotal > 100',
-        cursorOffset: 7, // after "SELECT "
-        context: {
-          type: 'sql_editor' as const,
-          schemaData: mxfoodSchema,
-          resolvedReferences: [
-            {
-              id: 1,
-              alias: 'revenue',
-              query: 'SELECT user_id, SUM(total) as revenue FROM orders GROUP BY user_id',
-            },
-          ],
-          databaseName: 'mxfood',
-          connectionType: 'duckdb',
-        },
-      });
-
-      expect(Array.isArray(result.suggestions)).toBe(true);
-      const labels = result.suggestions.map((s: any) => s.label);
-
-      expect(labels).toContain('user_id');
-      expect(labels).toContain('revenue');
-      // Original orders columns not projected into CTE should be absent
-      expect(labels).not.toContain('subtotal');
-      expect(labels).not.toContain('order_id');
-    });
-
-    test('handles nested @reference chain', async () => {
-      const result = await CompletionsAPI.getSqlCompletions({
-        query: 'SELECT * FROM @final_report',
-        cursorOffset: 7,
-        context: {
-          type: 'sql_editor' as const,
-          schemaData: mxfoodSchema,
-          resolvedReferences: [
-            {
-              id: 3,
-              alias: 'final_report',
-              query: 'SELECT user_id, revenue, first_name FROM @enriched',
-            },
-            {
-              id: 2,
-              alias: 'enriched',
-              query: 'SELECT r.user_id, r.revenue, u.first_name FROM @revenue r JOIN users u ON r.user_id = u.user_id',
-            },
-            {
-              id: 1,
-              alias: 'revenue',
-              query: 'SELECT user_id, SUM(total) as revenue FROM orders GROUP BY user_id',
-            },
-          ],
-          databaseName: 'mxfood',
-          connectionType: 'duckdb',
-        },
-      });
-
-      const labels = result.suggestions.map((s: any) => s.label);
-
-      expect(labels).toContain('user_id');
-      expect(labels).toContain('revenue');
-      expect(labels).toContain('first_name');
-      expect(labels).not.toContain('subtotal');
-    });
-
-    test('handles multiple @references in single query', async () => {
-      const result = await CompletionsAPI.getSqlCompletions({
-        query: 'SELECT * FROM @revenue JOIN @costs ON @revenue.user_id = @costs.user_id',
-        cursorOffset: 7,
-        context: {
-          type: 'sql_editor' as const,
-          schemaData: mxfoodSchema,
-          resolvedReferences: [
-            {
-              id: 1,
-              alias: 'revenue',
-              query: 'SELECT user_id, SUM(total) as total_revenue FROM orders WHERE total > 0 GROUP BY user_id',
-            },
-            {
-              id: 2,
-              alias: 'costs',
-              query: 'SELECT user_id, SUM(discount_amount) as total_costs FROM orders GROUP BY user_id',
-            },
-          ],
-          databaseName: 'mxfood',
-          connectionType: 'duckdb',
-        },
-      });
-
-      const labels = result.suggestions.map((s: any) => s.label);
-
-      expect(labels).toContain('user_id');
-      expect(labels).toContain('total_revenue');
-      expect(labels).toContain('total_costs');
-    });
-
-    test('suggests inferred columns after @reference alias dot-notation', async () => {
-      const result = await CompletionsAPI.getSqlCompletions({
-        query: 'SELECT a. FROM @revenue_1 a',
-        cursorOffset: 9, // after "SELECT a."
-        context: {
-          type: 'sql_editor' as const,
-          schemaData: mxfoodSchema,
-          resolvedReferences: [
-            {
-              id: 1,
-              alias: 'revenue_1',
-              query: 'SELECT user_id, SUM(total) AS revenue FROM orders GROUP BY user_id',
-            },
-          ],
-          databaseName: 'mxfood',
-          connectionType: 'duckdb',
-        },
-      });
-
-      expect(Array.isArray(result.suggestions)).toBe(true);
-      const labels = result.suggestions.map((s: any) => s.label);
-
-      expect(labels).toContain('user_id');
-      expect(labels).toContain('revenue');
-      expect(labels).not.toContain('subtotal');
-      expect(labels).not.toContain('created_at');
-    });
-
-    test('merges inferred columns from multiple @references into schema', async () => {
-      const result = await CompletionsAPI.getSqlCompletions({
-        query: 'SELECT r. FROM @rev_1 r JOIN @costs_2 c ON r.user_id = c.user_id',
-        cursorOffset: 9, // after "SELECT r."
-        context: {
-          type: 'sql_editor' as const,
-          schemaData: mxfoodSchema,
-          resolvedReferences: [
-            {
-              id: 1,
-              alias: 'rev_1',
-              query: 'SELECT user_id, SUM(total) AS revenue FROM orders GROUP BY user_id',
-            },
-            {
-              id: 2,
-              alias: 'costs_2',
-              query: 'SELECT user_id, SUM(discount_amount) AS costs FROM orders GROUP BY user_id',
-            },
-          ],
-          databaseName: 'mxfood',
-          connectionType: 'duckdb',
-        },
-      });
-
-      expect(Array.isArray(result.suggestions)).toBe(true);
-      const labels = result.suggestions.map((s: any) => s.label);
-      expect(labels).toContain('user_id');
-    });
-
-    test('skips infer-columns call when inferredColumns already provided', async () => {
-      const result = await CompletionsAPI.getSqlCompletions({
-        query: 'SELECT a. FROM @cached_ref_3 a',
-        cursorOffset: 9,
-        context: {
-          type: 'sql_editor' as const,
-          schemaData: mxfoodSchema,
-          resolvedReferences: [
-            {
-              id: 3,
-              alias: 'cached_ref_3',
-              query: 'SELECT month, total FROM summary',
-              inferredColumns: [
-                { name: 'month', type: 'varchar' },
-                { name: 'total', type: 'number' },
-              ],
-            },
-          ],
-          databaseName: 'mxfood',
-          connectionType: 'duckdb',
-        },
-      });
-
-      expect(Array.isArray(result.suggestions)).toBe(true);
-      const labels = result.suggestions.map((s: any) => s.label);
-      expect(labels).toContain('month');
-      expect(labels).toContain('total');
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // Error handling / edge cases
-  // -------------------------------------------------------------------------
 
   describe('Error handling', () => {
     test('handles empty resolved references gracefully', async () => {
@@ -256,7 +64,6 @@ describe('Autocomplete API — E2E', () => {
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
-          resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
         },
@@ -276,7 +83,6 @@ describe('Autocomplete API — E2E', () => {
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
-          resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
         },
@@ -292,7 +98,6 @@ describe('Autocomplete API — E2E', () => {
         context: {
           type: 'sql_editor' as const,
           schemaData: [],
-          resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
         },
@@ -431,7 +236,6 @@ describe('Autocomplete API — E2E', () => {
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
-          resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
         },
@@ -455,7 +259,6 @@ describe('Autocomplete API — E2E', () => {
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
-          resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
         },
@@ -476,7 +279,6 @@ describe('Autocomplete API — E2E', () => {
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
-          resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
         },
@@ -498,7 +300,6 @@ describe('Autocomplete API — E2E', () => {
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
-          resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
         },
@@ -527,7 +328,6 @@ describe('Autocomplete API — E2E', () => {
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
-          resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
         },
@@ -565,7 +365,6 @@ describe('Autocomplete API — E2E', () => {
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
-          resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
         },
@@ -607,7 +406,6 @@ describe('Autocomplete API — E2E', () => {
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
-          resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
         },
@@ -650,7 +448,6 @@ describe('Autocomplete API — E2E', () => {
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
-          resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
         },
@@ -761,7 +558,6 @@ describe('Autocomplete API — E2E', () => {
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
-          resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
         },

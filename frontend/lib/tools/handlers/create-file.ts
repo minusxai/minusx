@@ -177,7 +177,6 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
             query: finalContent.query,
             params,
             database: finalContent.connection_name,
-            references: finalContent.references || []
           }
         }
       }));

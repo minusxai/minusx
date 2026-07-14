@@ -8,7 +8,6 @@ import { setRightSidebarCollapsed, setRightSidebarWidth, setActiveSidebarSection
 import { IS_DEV } from '@/lib/constants';
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from '@/store/store';
-import QuestionSchemaSection from '../question/QuestionSchemaSection';
 import { FileType, DatabaseWithSchema, type ResolvedContextDocs } from '@/lib/types';
 import SchemaTreeView from '../schema-browser/SchemaTreeView';
 import Markdown from '../Markdown';
@@ -179,12 +178,6 @@ function SectionContent({
 
     case 'dev':
       return <DevToolsPanel appState={appState} />;
-    case 'question-references':
-      return (
-        <Box p={0} maxH="calc(100vh - 200px)" overflowY="auto">
-          <QuestionSchemaSection />
-        </Box>
-      );
     default:
       return null;
   }
@@ -487,10 +480,6 @@ export default function RightSidebar({
 
   sections.push(getSidebarSection('databases'));
   sections.push(getSidebarSection('documentation'));
-
-  if (fileType === 'question') {
-    sections.push(getSidebarSection('question-references'));
-  }
 
 
   if (IS_DEV || devMode) {
