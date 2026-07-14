@@ -259,7 +259,7 @@ builder/recipe expansion → fieldMeta injection (absent-only) → recipe params
 parser configs, and stable theme signals (`mxForeground`, `mxBackground`, `mxPositive`, `mxNegative`,
 `mxFontSizeScale`) — so tiers cannot drift. VL views recompile on mode change; native Vega recipes built on
 theme signals may signal-update when safe, otherwise reparse; the exact boundary remains an evidence item
-(§19, §21.5). Explicit spec colors are never silently rewritten. Canvas/SVG marks must not depend on
+(§19, §21.8). Explicit spec colors are never silently rewritten. Canvas/SVG marks must not depend on
 application CSS variables.
 
 **Deleted outright:** indexed color keys, percentage opacity controls, `dataLabelColor`, colorScale enums, and
@@ -491,9 +491,9 @@ story-vs-embed override tests, the renderer/editor registry idea, column formatt
 
 ### 19. Open evidence questions
 
-Three questions still require measurement rather than design debate: operational budgets (§21.4), the boundary
-between native-Vega theme signal updates and reparsing (§21.5), and a temporal wire contract that renders
-identically across browser, server, exports, and public stories (§21.3). They are work items only in §21.
+Three questions still require measurement rather than design debate: operational budgets (§21.7), the boundary
+between native-Vega theme signal updates and reparsing (§21.8), and a temporal wire contract that renders
+identically across browser, server, exports, and public stories (§21.6). They are work items only in §21.
 
 ### 20. Decision log (2026-07-10)
 
@@ -515,41 +515,54 @@ identically across browser, server, exports, and public stories (§21.3). They a
 ### 21. Remaining work — one ordered list
 
 This is the only todo list in this document. Work it top to bottom unless a production issue changes the order.
+(Shipped items — all analytic geo recipes, street tiles, interactive pan/zoom + persistence, and the detach
+escape hatch — have moved to Appendix A. This list is now driven by **retiring V1** and closing the last gaps.)
 
-1. **Verify every surface and the guest path.** Exercise V2 envelopes in dashboards, stories, notebook cells,
-   and public/guest rendering; fix routing and CSP failures before expanding coverage.
-2. **Build one headless chart-artifact pipeline.** Use `View.toCanvas()`, composite the active theme surface,
-   and encode JPEG/PNG for both unmounted chart→LLM attachments and user image download. Dynamically load Vega
-   so the main application bundle does not grow.
-3. **Close the correctness matrix.** Cover parameterized queries, empty results, nulls, narrow many-series
-   legends, and timezone-sensitive temporal values; use the temporal findings to close §19.
-4. **Set operational budgets from measurements.** Benchmark interpreter-mode render time, mounted-view
-   concurrency, memory, result rows, mark count, and transform depth; enforce the resulting limits.
-5. **Resolve native-Vega theme updates.** Determine which specs can update stable theme signals safely and
-   which require a reparse; encode the rule in the renderer and regression tests.
-6. **Finish the small high-value UI gaps.** Finish pivot leaf-column sort/hide/filter plus header formatting.
-7. **Define common visual editing.** Decide and implement the V2 color-control contract, then annotations;
-   defer a generic custom-plot surface until those common controls are stable.
-8. **Ship analytic geo recipes.** Shipped: choropleth (`minusx/choropleth@1`) and point/bubble/flow
-   (`minusx/point-map@1`, optional destination → flow lines), on us-atlas/world-atlas boundaries, both with
-   interactive projection pan/zoom + persisted view. Also shipped: an opt-in **street-tile basemap** on the
-   coordinate map (`basemap: 'tiles'`) for local/city views — slippy tiles as Vega **image marks** driven
-   purely by the mercator `scale`/`center` signals (no Leaflet, no per-tile projection; Web Mercator is
-   linear in projected pixel space). Remaining: a density recipe; fit-to-region controls.
-   Decision (2026-07-13): no Leaflet/deck.gl — vega vector maps keep one render pipeline + clean headless
-   image export. **Amended (2026-07-14):** street tiles ARE worth it for local views, but added the
-   Leaflet-free way — image marks in the existing mercator projection. Trade-off accepted: tiles load over
-   the network in the BROWSER only, so headless renders (chart→LLM image, server previews) fall back to the
-   vector boundary beneath. "Map feel" (zoom/bbox/recenter) remains projection config; tiles are just an
-   optional raster backdrop layered under the same projection.
-9. **Land the shared authoring contract.** Add envelope-level `fieldMeta`, the builder source, deterministic
-   derived artifacts, and one-way detach.
-10. **Make recipes publishable.** Replace trusted TypeScript recipe builders with the declarative contract, add
-   workspace `viz_recipe` files/discovery, then expose direct native-Vega and `slippy-map` source kinds.
-11. **Migrate and delete legacy families incrementally.** Move one family at a time through §18 parity gates;
-    remove ECharts paths only when production telemetry shows no remaining fallback dependence.
+**The V1 → V2 retirement track (items 1–5) — sequence is load-bearing: migrate everything, test everything, THEN delete.**
 
-**Take up next:** item 1 is the fastest risk-reduction pass; item 2 is the highest-value build immediately after it.
+1. **V1→V2 converter + runtime fallback (the keystone).** A pure `vizSettingsToEnvelope(vizSettings)`:
+   `line/bar/area/scatter/pie` → `kind:'vega-lite'`; `funnel/waterfall/radar/trend/single_value/combo` → the
+   shipped `minusx/*` recipes; `table/pivot` → the DOM sources; `geo` → the two shipped geo recipes, all subtypes
+   covered: `choropleth`→`choropleth`, `points`→`point-map`, `lines`→`point-map` flows (`lat2`/`lng2`),
+   `heatmap`→`point-map` with `size` = value (density gets folded into sized bubbles — decided 2026-07-14, no
+   separate density recipe needed to migrate). Then render any question with no `viz` THROUGH the converter
+   (fallback) so every V1 chart already renders via `<VegaChart>` with zero deletions. Unblocks items 2–5. The
+   converter is lossless against the shipped recipes — no new recipe is a prerequisite.
+2. **Chart → image artifact pipeline.** Two paths, one encoder target (JPEG, reusing the S3 `uploadChartOrEmbed`
+   path): **client** — `View.toCanvas()` → `toDataURL('image/jpeg')`, the direct analogue of the ECharts
+   `clientChartImageRenderer`/`buildChartAttachments` path (runs in the browser, so it captures REAL street
+   tiles); **headless** (Slack/cron/server preview) — `renderEnvelopeToSvg` → Resvg/sharp (the `render-chart.ts`
+   rasterizer already exists; tile maps fall back to the vector boundary). Teach `isImageViz` +
+   `renderFileChartImageBlocks` to recognize a `viz` envelope, not just ECharts `vizSettings.type`. Serves both
+   chart→LLM attachments and user image download.
+3. **Default new questions to V2.** `lib/data/story/template-defaults.ts` authors a `viz` envelope (`kind:'table'`)
+   and STOPS emitting `vizSettings`. New questions are V2-only from here.
+4. **Backfill migration.** Bump `LATEST_DATA_VERSION` + add a `MIGRATIONS` entry that writes
+   `viz = vizSettingsToEnvelope(...)` for every question still lacking one; sweep dashboard/notebook/story embeds
+   (they render referenced questions through the same path); `npm run update-workspace-template`.
+5. **Test everything, then big-bang delete V1.** Verify every former V1 type (incl. geo) renders correctly through
+   V2 across question/dashboard/notebook/story/guest surfaces — the bake period. THEN, in one sweep: delete the
+   ~42 `components/plotx/*` (ChartBuilder, all `*Plot`, GeoPlot/Leaflet, VizConfigPanel/AxisBuilders) + the
+   geo-V1 libs (`geo-constraints`/`geo-data`/`geo-*`) + the ECharts image path; drop `vizSettings`/`VizSettings`/
+   `GeoConfig` from `QuestionContent` (make `viz` REQUIRED); simplify the validators.
+
+**Carry-over gaps (do alongside / after the retirement track):**
+
+6. **Close the correctness matrix.** Parameterized queries, empty results, nulls, narrow many-series legends,
+   timezone-sensitive temporal values; use the temporal findings to close §19.
+7. **Set operational budgets from measurements.** Interpreter-mode render time, mounted-view concurrency, memory,
+   result rows, mark count, transform depth; enforce the resulting limits.
+8. **Resolve native-Vega theme updates.** Which specs can update stable theme signals safely vs require a
+   reparse; encode the rule in the renderer + regression tests.
+9. **Finish small high-value UI + geo gaps.** Pivot leaf-column sort/hide/filter + header formatting; the V2
+   color-control contract, then annotations; fit-to-region geo control.
+10. **Make recipes publishable (§21.10, longer horizon).** Replace the trusted TypeScript recipe builders with a
+    declarative template contract (binding tokens + substitution), then workspace `viz_recipe` files/discovery
+    and a direct `slippy-map` source kind. Detach (item shipped) is the substrate: a detached spec IS a
+    fully-bound recipe; a publishable recipe is "detach + keep bindings as tokens".
+
+**Take up next:** item 1 (converter + runtime fallback) — it de-risks the entire retirement track and is a
+prerequisite for 2–5. Item 2 (chart→image) is the highest-value user/LLM win and can proceed in parallel.
 
 ---
 
@@ -572,7 +585,8 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
 | choropleth | Shipped | `minusx/choropleth@1` — layered geoshape+lookup recipe; boundary injected from the named-asset registry, value joined by region name |
 | point / bubble / flow | Shipped | `minusx/point-map@1` (UI label "Geo") — circle marks (bubbles when `size` bound) over a vector or **street-tile** basemap; optional destination coords → `rule` flow lines; interactive pan/zoom + persisted view |
 | street-tile basemap | Shipped | `basemap: 'tiles'` on `minusx/point-map@1` — slippy Carto tiles as Vega image marks off the mercator `scale`/`center` signals (browser-only; vector boundary is the headless/canvas fallback). Follows the app theme (Carto light/dark) via VegaChart; override provider via `tileUrl`. Deep zoom to street level (zoom cap raised to slippy ~z18) |
-| density geo | Remaining (§21.8) | Vega density recipe |
+| density geo | Folded into point-map | V1 geo `heatmap` migrates to `point-map` + `size` (decided 2026-07-14); a true hexbin/density recipe is an optional future, not a migration blocker |
+| detach / custom spec | Shipped | `kind:'vega'` raw-spec source + `detachRecipe`/`reattachRecipe` (`detachedFrom` provenance) — the full-control escape hatch; "Customize freely"/"Reset to recipe" UI + the agent-side `DetachViz` tool |
 
 ### ✅ Verified (as of 2026-07-11)
 
@@ -720,6 +734,25 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
   basemap — a finer point-map backdrop (county *choropleth* deferred: county names aren't unique, needs
   FIPS). Center+zoom holds across states↔counties because it's geographic.
 
+**Street tiles, deep zoom, solid color, detach (verified 2026-07-14)**
+- **Street-tile basemap** (`basemap: 'tiles'`): slippy tiles as Vega **image marks** positioned by pure
+  arithmetic off the mercator `scale`/`center`/`tx`/`ty` signals (Web Mercator is linear in projected pixel
+  space — no per-tile projection). A `tiles` dataset enumerates only the viewport tiles (sequence→grid via
+  modulo). Browser-verified: real Carto tiles render behind the markers; the vector boundary stays beneath as
+  the headless/canvas fallback. **Theme-following** (Carto light/dark) is applied by `VegaChart` keyed on the
+  `tileUrlTemplate` signal (capability, not recipe id), so a detached map keeps it; `tileUrl` overrides.
+- **Deep zoom fix**: the recipe `zoom` clamp (was 40) collapsed every zoom-in on the persistence round-trip
+  (`zoom = scale/REGION_SCALE`), capping at ~metro level. Raised so tiles reach street level (~slippy z18);
+  browser-verified click-through to individual SF street grids.
+- **`markColor`** param: a solid CSS color for all markers/flows when no data-driven `color` column is bound
+  (a bound `color` still wins) — fills the "just make the points red" gap without a fake color binding.
+- **Detach escape hatch** (RFC §21.10 substrate): `kind:'vega'` raw-spec source + `detachRecipe`/
+  `reattachRecipe` with `detachedFrom` provenance (reversible). `VegaChart` detects map capabilities by
+  SIGNAL (`mxViewParams`/`scaleUser`/`tileUrlTemplate`), so a detached map keeps pan/zoom + buttons + dark
+  tiles. Browser-verified round-trip: recipe → "Customize freely"/`DetachViz` → Custom `kind:'vega'` (buttons
+  + dark tiles intact) → "Reset to recipe" → back to the recipe. The agent-side `DetachViz` tool
+  autonomously detaches when a request exceeds recipe params (verified: "make the markers diamond-shaped").
+
 **Data handling**
 - 10k+ row result — render time acceptable
 
@@ -734,8 +767,11 @@ that are not obvious from the code. Active priorities belong only in §21.
 ### Implementation map (all under `frontend/`)
 
 - **Envelope schemas** — `lib/validation/atlas-schemas.ts`: `VizEnvelope` (version 2), `VizSource` =
-  `VizSourceVegaLite | VizSourceRecipe | VizSourceTable | VizSourcePivot`. `ColumnFormatConfig` gained
-  `format` (d3). Spec bodies stay `Type.Unknown` (RFC §2).
+  `VizSourceRecipe | VizSourceVegaLite | VizSourceVega | VizSourceTable | VizSourcePivot`. `VizSourceVega`
+  (`kind:'vega'`, `grammar:'vega@6'`, `spec`, `assets`, `detachedFrom`) is the detach target / full-control
+  escape hatch. `ColumnFormatConfig` gained `format` (d3). Spec bodies stay `Type.Unknown` (RFC §2).
+- **Detach** — `lib/viz/detach.ts`: `detachRecipe`/`reattachRecipe`/`canReattach` (pure); the agent-side
+  `DetachViz` tool (`agents/web-analyst/web-tools.ts` + `lib/tools/handlers/detach-viz.ts`).
 - **`lib/viz/`** — the probe core:
   - `types.ts` (VizIssue codes incl. `E_CSS`; `formatVizIssues`), `query-data.ts` (`toVizColumns`),
     `prepare.ts`, `field-refs.ts`, `theme.ts` (VL config + native-vega parser config; `config.arc`
