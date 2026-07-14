@@ -126,6 +126,19 @@ describe('views as tables', () => {
     expect(views.map((v) => v.name)).toEqual(['zone_revenue']);
   });
 
+  it('REGRESSION: resolves for a file path in the mode ROOT (filePath = "/org")', async () => {
+    // The query route passes the question's filePath; for a file sitting directly
+    // in the mode root the "directory" IS the root, which must still find the
+    // context at /org/context.
+    const views = await getViewsForPath('/org', 'warehouse', admin);
+    expect(views.map((v) => v.name)).toEqual(['zone_revenue']);
+  });
+
+  it('REGRESSION: resolves for a question sitting next to the context', async () => {
+    const views = await getViewsForPath('/org/some-question', 'warehouse', admin);
+    expect(views.map((v) => v.name)).toEqual(['zone_revenue']);
+  });
+
   it('views are scoped to their connection', async () => {
     expect(await getViewsForPath('/org/x', 'other-db', admin)).toEqual([]);
   });
