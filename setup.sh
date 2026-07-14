@@ -292,8 +292,10 @@ LLM_PROVIDER_ID=""; LLM_KIND=""; LLM_API_KEY=""; LLM_AWS_REGION=""; LLM_BASE_URL
 LLM_ANALYST_MODEL=""; LLM_MICRO_MODEL=""
 CONN_TYPE=""; CONN_NAME=""; CONN_CONFIG_JSON=""
 
+# -r/-w on /dev/tty only test permissions; actually OPEN it — without a
+# controlling terminal (CI, cron) the open fails with ENXIO.
 HAVE_TTY=0
-if [ "$INTERVIEW" != "off" ] && [ -r /dev/tty ] && [ -w /dev/tty ]; then
+if [ "$INTERVIEW" != "off" ] && { : < /dev/tty; } 2>/dev/null; then
   HAVE_TTY=1
 fi
 
