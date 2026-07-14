@@ -84,6 +84,33 @@ describe('validateVizEnvelope with recipe sources', () => {
   });
 });
 
+describe('recipe tooltips — no internal __mx field leaks', () => {
+  const layersOf = (recipe: string, bindings: Record<string, string>) => {
+    const m = materializeRecipe({ recipe, bindings });
+    if (!m.ok) throw new Error(m.error);
+    return (m.spec as { layer: Array<Record<string, any>> }).layer;
+  };
+
+  it('funnel: the area shows Stage + Value; text labels have tooltips OFF', () => {
+    const layers = layersOf('minusx/funnel@1', { stage: 'stage', value: 'users' });
+    const area = layers.find(l => l.mark?.type === 'area')!;
+    const fields = (area.encoding.tooltip as Array<{ field: string }>).map(t => t.field);
+    expect(fields).toContain('stage');
+    expect(fields).toContain('__mx_value');
+    expect(fields).not.toContain('__mx_x0'); // the internal geometry field never surfaces
+    for (const l of layers.filter(l => l.mark?.type === 'text')) expect(l.mark.tooltip).toBe(false);
+  });
+
+  it('waterfall: the bars show Step + Value; text labels have tooltips OFF', () => {
+    const layers = layersOf('minusx/waterfall@1', { category: 'step', value: 'delta' });
+    const bar = layers.find(l => l.mark?.type === 'bar')!;
+    const fields = (bar.encoding.tooltip as Array<{ field: string }>).map(t => t.field);
+    expect(fields).toContain('step');
+    expect(fields).not.toContain('__mx_prev'); // no running-total internals leak
+    for (const l of layers.filter(l => l.mark?.type === 'text')) expect(l.mark.tooltip).toBe(false);
+  });
+});
+
 describe('headless rendering of materialized recipes', () => {
   it('funnel renders a tapered area with stage labels and first-stage percentages', async () => {
     const m = materializeRecipe({ recipe: 'minusx/funnel@1', bindings: { stage: 'stage', value: 'users' } });

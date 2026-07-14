@@ -85,6 +85,14 @@ const funnel: VizTemplate = {
     // sequence). The tapered silhouette is a ranged area (x…x2 = ±value/2) over the
     // stage rank; linear interpolation between ranks yields the classic trapezoids.
     const y = { field: '__mx_rank', type: 'quantitative', axis: null, scale: { reverse: true, zero: false } };
+    const fmt = formats?.[value]?.format;
+    // Clean tooltip (Stage + Value + % of top) — otherwise the auto encoding tooltip
+    // leaks the recipe's internal geometry fields (__mx_x0/__mx_rank/…).
+    const tooltip = [
+      { field: stage, type: 'nominal', title: aliasOf(formats, stage) },
+      { field: '__mx_value', type: 'quantitative', title: aliasOf(formats, value), ...(fmt ? { format: fmt } : {}) },
+      { field: '__mx_pct', type: 'quantitative', title: '% of top', format: '.1f' },
+    ];
     return {
       transform: [
         { aggregate: [{ op: 'sum', field: value, as: '__mx_value' }], groupby: [stage] },
@@ -92,7 +100,8 @@ const funnel: VizTemplate = {
         { window: [{ op: 'first_value', field: '__mx_value', as: '__mx_first' }], frame: [null, null] },
         { calculate: '-datum.__mx_value / 2', as: '__mx_x0' },
         { calculate: 'datum.__mx_value / 2', as: '__mx_x1' },
-        { calculate: `${numExpr('datum.__mx_value', formats, value)} + ' (' + format(datum.__mx_value / datum.__mx_first * 100, '.1f') + '%)'`, as: '__mx_label' },
+        { calculate: 'datum.__mx_value / datum.__mx_first * 100', as: '__mx_pct' },
+        { calculate: `${numExpr('datum.__mx_value', formats, value)} + ' (' + format(datum.__mx_pct, '.1f') + '%)'`, as: '__mx_label' },
       ],
       layer: [
         {
@@ -102,14 +111,15 @@ const funnel: VizTemplate = {
             x: { field: '__mx_x0', type: 'quantitative', axis: null },
             x2: { field: '__mx_x1' },
             color: { value: '#16a085' },
+            tooltip,
           },
         },
         {
-          mark: { type: 'text', dy: -7, fontWeight: 'bold' },
+          mark: { type: 'text', dy: -7, fontWeight: 'bold', tooltip: false },
           encoding: { y, x: { datum: 0, axis: null }, text: { field: stage, type: 'nominal' } },
         },
         {
-          mark: { type: 'text', dy: 8 },
+          mark: { type: 'text', dy: 8, tooltip: false },
           encoding: { y, x: { datum: 0, axis: null }, text: { field: '__mx_label', type: 'nominal' } },
         },
       ],
@@ -133,6 +143,9 @@ const waterfall: VizTemplate = {
     const category = String(bindings.category);
     const value = String(bindings.value);
     const yTitle = aliasOf(formats, value);
+    const catTitle = aliasOf(formats, category);
+    const fmt = formats?.[value]?.format;
+    const numTip = (field: string, title: string) => ({ field, type: 'quantitative', title, ...(fmt ? { format: fmt } : {}) });
     const x = { field: category, type: 'nominal', sort: null, title: null };
     return {
       transform: [
@@ -152,10 +165,12 @@ const waterfall: VizTemplate = {
               condition: { test: 'datum.__mx_amount < 0', value: '#c0392b' },
               value: '#16a085',
             },
+            // Clean tooltip (Step + change + running total) — no __mx internals leak.
+            tooltip: [{ field: category, type: 'nominal', title: catTitle }, numTip('__mx_amount', yTitle), numTip('__mx_sum', 'Running total')],
           },
         },
         {
-          mark: { type: 'text', dy: -8 },
+          mark: { type: 'text', dy: -8, tooltip: false },
           encoding: {
             x,
             y: { field: '__mx_sum', type: 'quantitative', title: yTitle },
@@ -174,6 +189,7 @@ const waterfall: VizTemplate = {
             y: { field: '__mx_total', type: 'quantitative', title: yTitle },
             y2: { datum: 0 },
             color: { value: '#2980b9' },
+            tooltip: [{ field: category, type: 'nominal', title: catTitle }, numTip('__mx_total', yTitle)],
           },
         },
         {
@@ -182,7 +198,7 @@ const waterfall: VizTemplate = {
             { calculate: "'Total'", as: category },
             { calculate: numExpr('datum.__mx_total', formats, value), as: '__mx_total_label' },
           ],
-          mark: { type: 'text', dy: -8, fontWeight: 'bold' },
+          mark: { type: 'text', dy: -8, fontWeight: 'bold', tooltip: false },
           encoding: {
             x,
             y: { field: '__mx_total', type: 'quantitative', title: yTitle },
