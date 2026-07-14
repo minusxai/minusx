@@ -7,7 +7,7 @@
  */
 import { DocumentDB } from '@/lib/database/documents-db';
 import { FilesAPI } from '@/lib/data/files.server';
-import { getScopedSemanticModels, searchSemanticFields } from '@/lib/semantic/models.server';
+import { detectSemanticSql, getScopedSemanticModels, searchSemanticFields } from '@/lib/semantic/models.server';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 import { getModules } from '@/lib/modules/registry';
@@ -156,6 +156,20 @@ describe('getScopedSemanticModels', () => {
     const content = data.content as ContextContent;
     expect(content.fullRelationships).toEqual([]);
     expect(content.versions?.[0].relationships?.length).toBe(1); // own stays on the version
+  });
+
+  it('detectSemanticSql: full server-side detection (parse → scope → detect)', async () => {
+    const detected = await detectSemanticSql(admin, {
+      path: '/org', connection: 'warehouse',
+      sql: 'SELECT status, COUNT(*) FROM public.orders GROUP BY status',
+    });
+    expect(detected).toMatchObject({ model: 'Orders', dimensions: ['Status'], measures: ['Count'] });
+
+    const refused = await detectSemanticSql(admin, {
+      path: '/org', connection: 'warehouse',
+      sql: 'SELECT status, ROW_NUMBER() OVER (ORDER BY amount) FROM public.orders',
+    });
+    expect(refused).toBeNull();
   });
 
   it('unknown connection returns []', async () => {

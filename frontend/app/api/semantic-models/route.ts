@@ -7,18 +7,23 @@
 import { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/http/with-auth';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
-import { getScopedSemanticModels, searchSemanticFields } from '@/lib/semantic/models.server';
+import { detectSemanticSql, getScopedSemanticModels, searchSemanticFields } from '@/lib/semantic/models.server';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export const POST = withAuth(async (request: NextRequest, user) => {
   try {
-    const { path, connection, tables, q } = (await request.json()) as {
-      path?: string; connection?: string; tables?: string[]; q?: string;
+    const { path, connection, tables, q, sql } = (await request.json()) as {
+      path?: string; connection?: string; tables?: string[]; q?: string; sql?: string;
     };
     if (!path || !connection) {
       return ApiErrors.badRequest('path and connection are required');
+    }
+    // Detect mode: full server-side detection (parse → scope → detect).
+    if (typeof sql === 'string') {
+      const detected = await detectSemanticSql(user, { path, connection, sql });
+      return successResponse({ detected });
     }
     // Search mode: metrics-first typeahead over every whitelisted table's fields.
     if (typeof q === 'string') {

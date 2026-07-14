@@ -17,6 +17,10 @@ import { getPersistedConnectionSchema } from '@/lib/data/connections.server';
 import { findNearestContextPath, getPublishedVersionForUser } from '@/lib/context/context-utils';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { deriveSemanticModels } from '@/lib/semantic/derive';
+import { detectSemanticQuery } from '@/lib/semantic/detect-sql';
+import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
+import { connectionTypeToDialect } from '@/lib/types';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ContextContent, DatabaseSchema, DatabaseWithSchema, SemanticModel, TableRelationship } from '@/lib/types';
 
@@ -188,4 +192,43 @@ export async function searchSemanticFields(
         return tokens.every((t) => hay.includes(t));
       });
   return matches.slice(0, limit);
+}
+
+// ---------------------------------------------------------------------------
+// Server-side detection — parse → scope models to the SQL's tables → detect
+// ---------------------------------------------------------------------------
+
+/**
+ * The same reliability-gated detection the question page runs client-side
+ * (parse to IR, fetch models scoped to the tables the SQL touches, recompile-
+ * verify), in one server call. Returns the spec or null.
+ */
+export async function detectSemanticSql(
+  user: EffectiveUser,
+  { path, connection, sql }: { path: string; connection: string; sql: string },
+): Promise<import('@/lib/validation/atlas-schemas').SemanticQuerySpec | null> {
+  if (!sql.trim()) return null;
+  let dialect = 'duckdb';
+  try {
+    const conn = await ConnectionsAPI.getRawByName(connection, user.mode);
+    dialect = connectionTypeToDialect(conn.type);
+  } catch {
+    return null;
+  }
+  // detectSemanticQuery parses first; give it models scoped to every table the
+  // SQL names (parse once here to learn the tables).
+  let tables: string[];
+  try {
+    const ir = await parseSqlToIrLocal(sql, dialect);
+    if (!ir || (ir as { type?: string }).type === 'compound') return null;
+    const simple = ir as import('@/lib/sql/ir-types').QueryIR;
+    tables = [simple.from?.table, ...(simple.joins ?? []).map((j) => j.table?.table)]
+      .filter((t): t is string => !!t);
+  } catch {
+    return null;
+  }
+  if (tables.length === 0) return null;
+  const models = await getScopedSemanticModels(user, { path, connection, tables });
+  if (models.length === 0) return null;
+  return detectSemanticQuery(sql, models, dialect);
 }
