@@ -25,7 +25,6 @@ import { LuCheck, LuCirclePlus, LuPlug, LuSettings2, LuTrash2, LuX } from 'react
 import SimpleSelect from '@/components/evals/SimpleSelect';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { useAppSelector } from '@/store/hooks';
-import { switchMode } from '@/lib/mode/mode-utils';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { toaster } from '@/components/ui/toaster';
 import { isSecretRef } from '@/lib/secrets/config-secret-specs';
@@ -267,7 +266,9 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
           alignSelf="flex-start"
           fontFamily="mono"
           aria-label="Open workspace settings"
-          onClick={() => switchMode(DEFAULT_MODE)}
+          // Direct navigation (not switchMode, which always lands on home):
+          // org is the default mode, so a bare settings URL targets it.
+          onClick={() => { window.location.href = '/settings?tab=models'; }}
         >
           Open workspace settings
         </Button>
