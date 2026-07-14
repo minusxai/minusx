@@ -38,13 +38,13 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { QuestionEmptyState } from '@/components/views/shared/empty-states';
 import type { FileId, FileState } from '@/store/filesSlice';
-import { GuiBuilderRoot, QueryModeSelector, type QueryTab } from '../query-builder';
+import { QueryModeSelector, SemanticQueryBuilder, type QueryTab } from '../query-builder';
 import { semanticModelsForConnection } from '@/lib/semantic/resolve';
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
 import { FilesAPI } from '@/lib/data/files';
-import { useGuiCompat } from '@/lib/hooks/use-gui-compat';
+import { useSemanticCompat } from '@/lib/hooks/use-semantic-compat';
 
 // Which side of the split view is collapsed (or neither). Page mode persists this
 // globally in Redux (state.ui.questionCollapsedPanel); toolcall mode keeps it local
@@ -181,11 +181,12 @@ export default function QuestionViewV2({
   const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
   const toggleCollapsedPanel = onTogglePanel;
 
-  // Query mode state (GUI, SQL, or Viz). Questions built in the Semantic tier
-  // open into the GUI tab (GuiBuilderRoot restores Semantic mode from the
-  // persisted semanticQuery spec).
-  const [queryMode, setQueryMode] = useState<QueryTab>(() => (content.semanticQuery ? 'gui' : 'sql'));
-  const effectiveQueryMode = queryMode;
+  // Query mode state (Semantic, SQL, or Viz). The Semantic tab is the default
+  // whenever the current SQL reliably detects as a semantic query (or a spec
+  // was persisted); SQL otherwise. No explicit choice needed on mount — the
+  // detection effect below promotes to Semantic exactly once.
+  const [queryMode, setQueryMode] = useState<QueryTab>('sql');
+  const [userPickedMode, setUserPickedMode] = useState(false);
 
   // Semantic tier: models the active context defines for this connection.
   const connectionSemanticModels = semanticModelsForConnection(semanticModels, content.connection_name);
@@ -249,7 +250,19 @@ export default function QuestionViewV2({
   // Proactive GUI compatibility check: dims the GUI tab (with a tooltip reason) when
   // the query can't be parsed into the builder IR, so it's already disabled when the
   // user opens a question — no surprise on mode switch.
-  const { canUseGUI, guiError, canUseSimple, simpleError } = useGuiCompat(content.query, dialect);
+  const { detected: detectedSemanticSpec, canUseSemantic } = useSemanticCompat(
+    content.query, dialect, connectionSemanticModels,
+  );
+  const showSemanticTab = connectionSemanticModels.length > 0;
+  // Fully derived mode: until the user explicitly picks a tab, Semantic is the
+  // resting state whenever the query detects. A Semantic choice that loses its
+  // footing (SQL edited into something non-semantic, models removed) falls
+  // back to SQL rather than stranding the user on a dead tab.
+  const semanticAvailable = showSemanticTab && (canUseSemantic || !!content.semanticQuery);
+  const effectiveQueryMode: QueryTab =
+    !userPickedMode && queryMode === 'sql' && detectedSemanticSpec ? 'semantic'
+      : queryMode === 'semantic' && !semanticAvailable ? 'sql'
+      : queryMode;
 
   // Use compact layout when container is narrow (< 700px) - stacked vertical layout
   const useCompactLayout = (containerWidth > 0 && containerWidth < 700) || !fullMode;
@@ -572,9 +585,9 @@ export default function QuestionViewV2({
                 <Box flex={1} minWidth={0}>
                   <QueryModeSelector
                     mode={effectiveQueryMode}
-                    onModeChange={setQueryMode}
-                    canUseGUI={canUseGUI}
-                    guiError={guiError ?? undefined}
+                    onModeChange={(m: QueryTab) => { setUserPickedMode(true); setQueryMode(m); }}
+                    showSemanticTab={showSemanticTab}
+                    canUseSemantic={canUseSemantic}
                     showVizTab={showVizControls}
                     canUseViz={!!queryData}
                   />
@@ -663,23 +676,18 @@ export default function QuestionViewV2({
                   />
                 )}
 
-                {/* GUI Mode: Semantic / Simple / Full gradation (GuiBuilderRoot) */}
-                {effectiveQueryMode === 'gui' && (
+                {/* Semantic Mode: curated measures/dimensions from the context.
+                    Prefer the spec DETECTED from the live SQL (covers
+                    agent-written queries) over the persisted one. */}
+                {effectiveQueryMode === 'semantic' && showSemanticTab && (
                   <Box flex={1} overflow="auto">
-                    <GuiBuilderRoot
-                      databaseName={content.connection_name || ''}
+                    <SemanticQueryBuilder
+                      models={connectionSemanticModels}
                       dialect={dialect}
-                      sql={content.query}
-                      onSqlChange={handleQueryChange}
+                      value={detectedSemanticSpec ?? content.semanticQuery}
+                      onChange={(spec: SemanticQuerySpec, sql: string) => onChange({ semanticQuery: spec, query: sql })}
                       onExecute={handleExecute}
                       isExecuting={queryLoading && !queryData}
-                      availableQuestions={availableQuestions}
-                      whitelistedSchema={whitelistedSchema}
-                      canUseSimple={canUseSimple}
-                      simpleError={simpleError}
-                      semanticModels={connectionSemanticModels}
-                      semanticQuery={content.semanticQuery}
-                      onSemanticChange={(spec: SemanticQuerySpec, sql: string) => onChange({ semanticQuery: spec, query: sql })}
                     />
                   </Box>
                 )}

@@ -10,9 +10,7 @@ import { connectionTypeToDialect } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
 import DatabaseSelector from '@/components/selectors/DatabaseSelector';
-import { QueryModeSelector, GuiBuilderRoot, type QueryTab } from '@/components/query-builder';
 import SqlEditor from '@/components/query-builder/SqlEditor';
-import { useGuiCompat } from '@/lib/hooks/use-gui-compat';
 import SimpleSelect from './SimpleSelect';
 
 interface TestSubjectEditorProps {
@@ -119,10 +117,8 @@ function InlineSubjectEditor({
   onChange: (subject: TestSubject) => void;
   disabled?: boolean;
 }) {
-  const [queryMode, setQueryMode] = useState<QueryTab>('gui');
   const { connections } = useConnections({ skip: true });
   const dialect = connectionTypeToDialect(connections[subject.connection_name]?.metadata?.type ?? '');
-  const guiCompat = useGuiCompat(subject.sql, dialect);
 
   // Auto-select first connection if none set
   useEffect(() => {
@@ -143,36 +139,13 @@ function InlineSubjectEditor({
         />
       </Box>
       <Box>
-        <HStack justify="space-between" mb={1}>
-          <Text fontSize="xs" color="fg.muted" fontWeight="500">Query</Text>
-          {subject.connection_name && (
-            <QueryModeSelector
-              mode={queryMode}
-              onModeChange={setQueryMode}
-              canUseGUI
-              showVizTab={false}
-            />
-          )}
-        </HStack>
-        {subject.connection_name && queryMode === 'gui' ? (
-          <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
-            <GuiBuilderRoot
-              databaseName={subject.connection_name}
-              dialect={dialect}
-              sql={subject.sql}
-              onSqlChange={sql => onChange({ ...subject, sql })}
-              canUseSimple={guiCompat.canUseSimple}
-              simpleError={guiCompat.simpleError}
-            />
-          </Box>
-        ) : (
-          <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
-            <SqlEditor
-              value={subject.sql}
-              onChange={sql => onChange({ ...subject, sql })}
-            />
-          </Box>
-        )}
+        <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Query</Text>
+        <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
+          <SqlEditor
+            value={subject.sql}
+            onChange={sql => onChange({ ...subject, sql })}
+          />
+        </Box>
       </Box>
       <HStack gap={2}>
         <Box flex={1}>

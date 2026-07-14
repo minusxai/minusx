@@ -25,14 +25,12 @@ import DatabaseSelector from '@/components/selectors/DatabaseSelector';
 import { QuestionVisualization } from '@/components/question/QuestionVisualization';
 import { VizTypeSelector } from '@/components/question/VizTypeSelector';
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
-import { GuiBuilderRoot, QueryModeSelector, type QueryTab } from '@/components/query-builder';
-import ResizablePanel from '@/components/ui/resizable-panel';
+import { QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { paramTypeMap } from '@/lib/sql/sql-params';
 import { useQuestionReferences } from '@/lib/hooks/useQuestionReferences';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
-import { useGuiCompat } from '@/lib/hooks/use-gui-compat';
 import { connectionTypeToDialect } from '@/lib/types';
 import type {
   NotebookSqlCell as SqlCell, QuestionContent, QuestionReference, VizSettings, FullQuery,
@@ -120,7 +118,6 @@ export default function NotebookSqlCell({
   const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
 
   // Proactive GUI-compatibility check: dim the GUI tab when the query can't be parsed.
-  const { canUseGUI, guiError, canUseSimple, simpleError } = useGuiCompat(cell.query, dialect);
 
   const run = useCallback(() => {
     onExecutedChange?.({
@@ -214,8 +211,6 @@ export default function NotebookSqlCell({
           <QueryModeSelector
             mode={queryMode}
             onModeChange={setQueryMode}
-            canUseGUI={canUseGUI}
-            guiError={guiError ?? undefined}
             canUseViz={!!data}
             size="sm"
           />
@@ -250,25 +245,6 @@ export default function NotebookSqlCell({
             connectionType={connectionType}
           />
         </Box>
-      )}
-
-      {queryMode === 'gui' && (
-        <ResizablePanel defaultHeight={300} minHeight={160} maxHeight={640}>
-          <Box p={2}>
-            <GuiBuilderRoot
-              databaseName={cell.connection_name || ''}
-              dialect={dialect}
-              sql={cell.query}
-              onSqlChange={handleQueryChange}
-              onExecute={run}
-              isExecuting={loading && !data}
-              availableQuestions={availableQuestions}
-              whitelistedSchema={whitelistedSchema}
-              canUseSimple={canUseSimple}
-              simpleError={simpleError}
-            />
-          </Box>
-        </ResizablePanel>
       )}
 
       {queryMode === 'viz' && (
