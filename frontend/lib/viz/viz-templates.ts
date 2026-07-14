@@ -420,6 +420,16 @@ const trend: VizTemplate = {
     const dateFmt = dateCfg && dateCfg.includes('%') ? dateCfg.replace(/'/g, '') : '%b %d, %Y';
     const fmtDate = (ref: string) => `(toDate(${ref}) ? timeFormat(toDate(${ref}), '${dateFmt}') : '' + ${ref})`;
     const pointTooltipExpr = `{'Metric': datum.__mx_series, 'Date': ${fmtDate('datum.__mx_date')}, 'Value': ${valueTextExpr}}`;
+    // The period label under the KPI ("Nov 30, 2025 vs Oct 31, 2025"). Materialized as a
+    // field so the readability plate can measure its width (below).
+    const dateLabelExpr = `${fmtDate('datum.__mx_date')} + (isValid(datum.__mx_prev_date) ? ' vs ' + ${fmtDate('datum.__mx_prev_date')} : '')`;
+    // The plate MUST always fully cover the widest KPI line — the big value number OR the
+    // date label — else the date overflows a fixed-fraction box. JetBrains Mono is
+    // monospace (≈0.62em advance), so each line's pixel width is length × fontSize × 0.62;
+    // size the plate to whichever is wider (+12px padding), clamped to the card.
+    const MONO_ADVANCE = 0.62;
+    const plateHalfExpr =
+      `min(max(length(datum.__mx_valuetext) * valueSize, length(datum.__mx_datelabel) * dateSize) * ${MONO_ADVANCE} / 2 + 12, bandwidth('slot') / 2 - 4)`;
 
     // Folded series names ARE column names — remap aliased ones for display (same
     // chained-ternary idiom as radar). __mx_col keeps the original for formats.
@@ -495,6 +505,9 @@ const trend: VizTemplate = {
               transform: [
                 { type: 'filter', expr: baseExpr },
                 { type: 'formula', as: '__mx_pct', expr: pctExpr },
+                // Materialize the rendered value + date strings so the plate can measure them.
+                { type: 'formula', as: '__mx_valuetext', expr: valueTextExpr },
+                { type: 'formula', as: '__mx_datelabel', expr: dateLabelExpr },
               ],
             },
             {
@@ -629,8 +642,8 @@ const trend: VizTemplate = {
                     interactive: false,
                     encode: {
                       update: {
-                        x: { signal: "bandwidth('slot') * 0.28" },
-                        x2: { signal: "bandwidth('slot') * 0.72" },
+                        x: { signal: `bandwidth('slot') / 2 - (${plateHalfExpr})` },
+                        x2: { signal: `bandwidth('slot') / 2 + (${plateHalfExpr})` },
                         y: { signal: 'kpiCenter - valueSize * 1.42' },
                         y2: { signal: 'kpiCenter + valueSize * 1.48' },
                         cornerRadius: { value: 10 },
@@ -704,7 +717,7 @@ const trend: VizTemplate = {
                   y: { signal: 'kpiCenter + valueSize * 1.18' },
                   baseline: { value: 'middle' },
                   align: { value: 'center' },
-                  text: { signal: `${fmtDate('datum.__mx_date')} + (isValid(datum.__mx_prev_date) ? ' vs ' + ${fmtDate('datum.__mx_prev_date')} : '')` },
+                  text: { signal: dateLabelExpr },
                   fontSize: { signal: 'dateSize' },
                   opacity: { value: 0.62 },
                 },

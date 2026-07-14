@@ -57,6 +57,16 @@ describe('minusx/trend@1 build', () => {
     expect(json).toContain('__mx_pct');         // percent change computed in-spec
   });
 
+  it('sizes the KPI readability plate to the widest text so the date line never overflows it', () => {
+    const json = specJson(trendSource());
+    // The plate width is measured off the ACTUAL rendered text (value number + date line),
+    // not a static slot fraction that a long "Nov 30, 2025 vs Oct 31, 2025" overshoots.
+    expect(json).toContain('__mx_datelabel');               // date label is materialized as a field
+    expect(json).toContain('length(datum.__mx_datelabel)'); // …and feeds the plate width
+    expect(json).toContain('length(datum.__mx_valuetext)');  // as does the big value number
+    expect(json).not.toContain("bandwidth('slot') * 0.28");  // the fixed-fraction plate is gone
+  });
+
   it("compareMode 'last' bases on the final point; 'previous' skips the partial period (3+ points)", () => {
     const last = specJson(trendSource({ params: { compareMode: 'last' } }));
     const previous = specJson(trendSource({ params: { compareMode: 'previous' } }));
