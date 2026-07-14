@@ -562,7 +562,7 @@ export default function QuestionViewV2({
                     family (table/bar/line) — a deliberate pick like pie or
                     pivot from the Viz tab is respected. */}
                 {effectiveQueryMode === 'semantic' && showSemanticTab && (
-                  <Box flex={1} overflow="auto">
+                  <Box flex={1} overflow="hidden" display="flex" flexDirection="column" minHeight={0}>
                     <SemanticCanvas
                       models={semanticModels}
                       stubs={semanticStubs}

@@ -1,10 +1,12 @@
 /**
- * SemanticCanvas — drag-drop semantic editor: field list (measures /
- * dimensions / time) on the left, Measures / Dimensions / Time / Filter
- * shelves on the right. Every shelf edit compiles REAL SQL client-side and
- * emits the spec + SQL + the viz columns implied by it. Fields can be clicked
- * (they land on their shelf) or dragged; a metrics-first search box finds
- * fields across every whitelisted table and infers the model from the pick.
+ * SemanticCanvas — click-to-toggle semantic editor. LEFT: the picker — the
+ * full field list (measures / dimensions / time), always visible,
+ * independently scrollable, with a search bar that FILTERS it (and surfaces
+ * matches from other tables). RIGHT: static summary of what's selected
+ * (removable chips), time grain, filters, limit, execute. Clicking a field
+ * toggles it; there is no drag and drop — every field has exactly one home,
+ * so a click is unambiguous. Every edit compiles REAL SQL client-side and
+ * emits spec + SQL + viz columns.
  */
 import React from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
@@ -56,14 +58,26 @@ function renderCanvas(props: Partial<React.ComponentProps<typeof SemanticCanvas>
 }
 
 describe('SemanticCanvas', () => {
-  it('starts empty with the search box and model picker', () => {
+  it('empty state shows a BROWSABLE table list, not a blank search box', () => {
     renderCanvas({ value: null });
+    expect(screen.getByLabelText('Pick table: Orders')).toBeTruthy();
+    expect(screen.getByLabelText('Pick table: Users')).toBeTruthy();
     expect(screen.getByLabelText('Semantic field search')).toBeTruthy();
-    expect(screen.getByLabelText('Semantic model')).toBeTruthy();
   });
 
-  it('clicking a dimension fills the Dimensions shelf and emits spec + SQL + viz', async () => {
+  it('picking a table from the empty-state list loads its model', () => {
+    const { onSelectModel } = renderCanvas({ value: null });
+    fireEvent.click(screen.getByLabelText('Pick table: Users'));
+    expect(onSelectModel).toHaveBeenCalledWith(expect.objectContaining({ table: 'users' }));
+  });
+
+  it('the full field list is visible with no typing; clicking a dimension toggles it on', async () => {
     const { onChange } = renderCanvas();
+    expect(screen.getByLabelText('Field measure: Revenue')).toBeTruthy();
+    expect(screen.getByLabelText('Field measure: Orders')).toBeTruthy();
+    expect(screen.getByLabelText('Field dimension: Status')).toBeTruthy();
+    expect(screen.getByLabelText('Field time: Order date')).toBeTruthy();
+
     fireEvent.click(screen.getByLabelText('Field dimension: Status'));
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const [spec, sql, viz] = onChange.mock.calls.at(-1)!;
@@ -74,18 +88,28 @@ describe('SemanticCanvas', () => {
     expect(screen.getByLabelText('Dimensions chip: Status')).toBeTruthy();
   });
 
-  it('dimensions are unbounded (no chart-shelf cap); joins apply invisibly', async () => {
+  it('clicking an assigned field toggles it OFF again', async () => {
+    const { onChange } = renderCanvas({
+      value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },
+    });
+    fireEvent.click(screen.getByLabelText('Field dimension: Status'));
+    await waitFor(() => {
+      const [spec] = onChange.mock.calls.at(-1)!;
+      expect(spec.dimensions).toEqual([]);
+    });
+  });
+
+  it('dimensions are unbounded; joins apply invisibly', async () => {
     const { onChange } = renderCanvas();
     fireEvent.click(screen.getByLabelText('Field dimension: Status'));
     fireEvent.click(screen.getByLabelText('Field dimension: Region'));
     await waitFor(() => expect(screen.getByLabelText('Dimensions chip: Region')).toBeTruthy());
-    expect(screen.getByLabelText('Dimensions chip: Status')).toBeTruthy();
     const [spec, sql] = onChange.mock.calls.at(-1)!;
     expect(spec.dimensions).toEqual(['Status', 'Region']);
     expect(sql).toContain('LEFT JOIN customers c');
   });
 
-  it('clicking the time field fills the Time shelf and viz becomes a line chart', async () => {
+  it('clicking the time field sets a grain and viz becomes a line chart', async () => {
     const { onChange } = renderCanvas();
     fireEvent.click(screen.getByLabelText('Field time: Order date'));
     await waitFor(() => expect(onChange).toHaveBeenCalled());
@@ -93,7 +117,6 @@ describe('SemanticCanvas', () => {
     expect(spec.timeGrain).toBe('MONTH');
     expect(sql).toContain("DATE_TRUNC('MONTH', created_at)");
     expect(viz).toMatchObject({ type: 'line', xCols: ['month'] });
-    // grain is editable on the chip
     fireEvent.change(screen.getByLabelText('Time grain'), { target: { value: 'WEEK' } });
     await waitFor(() => {
       const [s2] = onChange.mock.calls.at(-1)!;
@@ -101,19 +124,33 @@ describe('SemanticCanvas', () => {
     });
   });
 
-  it('dragging a dimension onto the Dimensions shelf assigns it', async () => {
-    const { onChange } = renderCanvas({
-      value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },
-    });
-    const chip = screen.getByLabelText('Field dimension: Region');
-    fireEvent.dragStart(chip);
-    fireEvent.drop(screen.getAllByText('Dimensions').at(-1)!.closest('div')!.parentElement!);
-    await waitFor(() => expect(screen.getByLabelText('Dimensions chip: Region')).toBeTruthy());
-    const [spec] = onChange.mock.calls.at(-1)!;
-    expect(spec.dimensions).toEqual(['Status', 'Region']);
+  it('the search bar FILTERS the visible field list', async () => {
+    renderCanvas();
+    fireEvent.change(screen.getByLabelText('Semantic field search'), { target: { value: 'reven' } });
+    await waitFor(() => expect(screen.queryByLabelText('Field dimension: Status')).toBeNull());
+    expect(screen.getByLabelText('Field measure: Revenue')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Semantic field search'), { target: { value: '' } });
+    await waitFor(() => expect(screen.getByLabelText('Field dimension: Status')).toBeTruthy());
   });
 
-  it('removing a shelf chip updates the spec', async () => {
+  it('filtering also surfaces matches from OTHER tables (model inferred on pick)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: { fields: [
+        { kind: 'measure', name: 'Total Spend', model: 'Users', connection: 'warehouse', table: 'users' },
+        { kind: 'measure', name: 'Revenue', model: 'Orders', connection: 'warehouse', table: 'orders' },
+      ] } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { onSelectModel } = renderCanvas();
+
+    fireEvent.change(screen.getByLabelText('Semantic field search'), { target: { value: 'spend' } });
+    fireEvent.click(await screen.findByLabelText('Other table field measure: Total Spend (Users)', undefined, { timeout: 3000 }));
+    expect(onSelectModel).toHaveBeenCalledWith(expect.objectContaining({ table: 'users' }));
+    vi.unstubAllGlobals();
+  });
+
+  it('removing a selected chip updates the spec', async () => {
     const { onChange } = renderCanvas({
       value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },
     });
@@ -124,26 +161,7 @@ describe('SemanticCanvas', () => {
     });
   });
 
-  it('metrics-first search infers the model from the picked field', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ success: true, data: { fields: [
-        { kind: 'measure', name: 'Total Spend', model: 'Users', connection: 'warehouse', table: 'users' },
-      ] } }),
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const { onSelectModel } = renderCanvas({ value: null });
-
-    fireEvent.change(screen.getByLabelText('Semantic field search'), { target: { value: 'spend' } });
-    fireEvent.click(await screen.findByLabelText('Search result measure: Total Spend (Users)', undefined, { timeout: 3000 }));
-
-    expect(onSelectModel).toHaveBeenCalledWith(expect.objectContaining({ table: 'users' }));
-    // model not loaded yet → loading placeholder
-    expect(screen.getByText(/Loading Users/)).toBeTruthy();
-    vi.unstubAllGlobals();
-  });
-
-  it('restores a persisted spec onto the right shelves', () => {
+  it('restores a persisted spec onto the selection panel', () => {
     renderCanvas({
       value: { model: 'Orders', table: 'orders', measures: ['Revenue', 'Orders'], dimensions: ['Status', 'Region'], timeGrain: 'WEEK' },
     });
@@ -154,7 +172,7 @@ describe('SemanticCanvas', () => {
     expect(screen.getByLabelText('Dimensions chip: Region')).toBeTruthy();
   });
 
-  it('execute is wired and disabled while issues exist', async () => {
+  it('execute is wired', async () => {
     const onExecute = vi.fn();
     renderCanvas({ value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: [] }, onExecute });
     fireEvent.click(screen.getByLabelText('Execute semantic query'));
