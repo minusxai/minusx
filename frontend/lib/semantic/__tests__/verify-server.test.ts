@@ -40,10 +40,12 @@ describe('verifyRelationship', () => {
     await DocumentDB.update(id, 'warehouse', '/org/database/warehouse', conn, [], 'init');
   });
 
-  const script = (dupRows: object[], total: number, matched: number) => {
+  // Uniqueness is a single scan: COUNT(*) vs COUNT(DISTINCT col) — no GROUP BY.
+  const script = (uniq: { c: number; d: number }, total: number, matched: number) => {
     mockQuery.mockImplementation(async (sql: string) => {
-      if (/GROUP BY/i.test(sql) && /HAVING/i.test(sql)) {
-        return { columns: ['id', 'c'], types: [], rows: dupRows };
+      if (/COUNT\(DISTINCT/i.test(sql) && !/JOIN/i.test(sql)) {
+        expect(sql).not.toMatch(/GROUP BY/i); // the cheap single-scan shape
+        return { columns: ['c', 'd'], types: [], rows: [uniq] };
       }
       if (/LEFT JOIN/i.test(sql)) {
         return { columns: ['total', 'matched'], types: [], rows: [{ total, matched }] };
@@ -53,29 +55,28 @@ describe('verifyRelationship', () => {
   };
 
   it('unique target + full match → clean verification', async () => {
-    script([], 1000, 1000);
+    script({ c: 50, d: 50 }, 1000, 1000);
     await expect(verifyRelationship(admin, REL)).resolves.toEqual({
       targetUnique: true, totalRows: 1000, matchedRows: 1000,
     });
     // both checks ran, against the right tables
     const sqls = mockQuery.mock.calls.map((c) => c[0] as string);
-    expect(sqls.some((q) => /users/.test(q) && /HAVING/i.test(q))).toBe(true);
+    expect(sqls.some((q) => /users/.test(q) && /COUNT\(DISTINCT/i.test(q))).toBe(true);
     expect(sqls.some((q) => /orders/.test(q) && /LEFT JOIN/i.test(q))).toBe(true);
   });
 
   it('duplicated lookup values → targetUnique false (the fan-out warning)', async () => {
-    script([{ id: 7, c: 3 }], 500, 480);
+    script({ c: 52, d: 50 }, 500, 480);
     await expect(verifyRelationship(admin, REL)).resolves.toEqual({
       targetUnique: false, totalRows: 500, matchedRows: 480,
     });
   });
 
   it('string-typed counts (BigQuery INT64 comes back as strings) still parse', async () => {
-    script([], 0, 0);
     mockQuery.mockImplementation(async (sql: string) =>
       /LEFT JOIN/i.test(sql)
         ? { columns: ['total', 'matched'], types: [], rows: [{ total: '123', matched: '99' }] }
-        : { columns: [], types: [], rows: [] });
+        : { columns: ['c', 'd'], types: [], rows: [{ c: '10', d: '10' }] });
     await expect(verifyRelationship(admin, REL)).resolves.toEqual({
       targetUnique: true, totalRows: 123, matchedRows: 99,
     });

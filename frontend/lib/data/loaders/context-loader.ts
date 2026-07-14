@@ -84,11 +84,12 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
   const parentSchema = boundSchema(computed.parentSchema) as ContextContent['parentSchema'];
   const { fullDocs, fullMetrics, fullAnnotations, fullSkills } = computed;
 
-  // Declared relationships inherit like metrics (ancestor's + this version's own).
-  // Semantic MODELS are NOT computed here: they derive on demand, scoped to the
-  // tables in play (lib/semantic/models.server.ts) — a large workspace derives
-  // multi-MB of vocabulary, which must never ship in every context load.
-  const fullRelationships = [...computed.fullRelationships, ...(publishedVersion.relationships || [])];
+  // Declared relationships inherit like metrics: fullRelationships is
+  // INHERITED-ONLY (ancestor's), mirroring fullMetrics — the version's own
+  // relationships stay on the version, or the editor would show every own
+  // relationship a second time tagged "inherited". Semantic MODELS are NOT
+  // computed here: they derive on demand (lib/semantic/models.server.ts).
+  const fullRelationships = computed.fullRelationships;
 
   if (user.role === 'admin') {
     // Admins see all versions + metadata

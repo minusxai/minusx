@@ -124,6 +124,30 @@ describe('SemanticCanvas', () => {
     });
   });
 
+  it('ANY temporal column can be the time axis (timeColumn on non-default)', async () => {
+    const model: SemanticModel = {
+      ...ORDERS_MODEL,
+      dimensions: [
+        ...ORDERS_MODEL.dimensions,
+        { name: 'Delivered At', column: 'delivered_at', temporal: true },
+      ],
+    };
+    const { onChange } = renderCanvas({ models: [model] });
+    fireEvent.click(screen.getByLabelText('Field time: Delivered At'));
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const [spec, sql] = onChange.mock.calls.at(-1)!;
+    expect(spec.timeGrain).toBe('MONTH');
+    expect(spec.timeColumn).toBe('delivered_at');
+    expect(sql).toContain("DATE_TRUNC('MONTH', delivered_at)");
+    // clicking the default moves the axis back (timeColumn cleared)
+    fireEvent.click(screen.getByLabelText('Field time: Order date'));
+    await waitFor(() => {
+      const [s2] = onChange.mock.calls.at(-1)!;
+      expect(s2.timeColumn).toBeUndefined();
+      expect(s2.timeGrain).toBe('MONTH');
+    });
+  });
+
   it('the search bar FILTERS the visible field list', async () => {
     renderCanvas();
     fireEvent.change(screen.getByLabelText('Semantic field search'), { target: { value: 'reven' } });

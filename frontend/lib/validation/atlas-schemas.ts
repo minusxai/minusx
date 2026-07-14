@@ -274,6 +274,7 @@ export const SemanticQuerySpec = Type.Object({
   measures: Type.Array(Type.String(), { description: 'measure/metric names to compute (at least one)' }),
   dimensions: Type.Array(Type.String(), { description: 'dimension names to group by' }),
   timeGrain: Nullable(StringEnum(['HOUR', 'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'])),
+  timeColumn: Nullable(Type.String({ description: 'temporal column for the time axis; defaults to the model timeDimension' })),
   filters: Nullable(Type.Array(SemanticQueryFilter)),
   limit: Nullable(Type.Integer()),
 }, { title: 'SemanticQuerySpec' });

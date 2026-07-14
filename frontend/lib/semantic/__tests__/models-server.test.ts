@@ -6,6 +6,7 @@
  * connection's persisted schema (always full, regardless of context bounding).
  */
 import { DocumentDB } from '@/lib/database/documents-db';
+import { FilesAPI } from '@/lib/data/files.server';
 import { getScopedSemanticModels, searchSemanticFields } from '@/lib/semantic/models.server';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -143,6 +144,18 @@ describe('getScopedSemanticModels', () => {
     expect(byModel.every((h) => h.model === 'Orders')).toBe(true);
     const all = await searchSemanticFields(admin, { path: '/org', connection: 'warehouse', q: '', limit: 3 });
     expect(all.length).toBe(3);
+  });
+
+  it('fullRelationships is INHERITED-ONLY — own relationships never echo as "inherited"', async () => {
+    // The whitelist editor shows content.relationships (own) plus
+    // content.fullRelationships tagged "inherited"; if the loader folded the
+    // version's own relationships into fullRelationships, every relationship
+    // would render twice (the prod duplicate). Root context → nothing inherited.
+    const { data: files } = await FilesAPI.getFiles({ paths: ['/org'], type: 'context', depth: -1 }, admin);
+    const { data } = await FilesAPI.loadFile(files[0].id, admin);
+    const content = data.content as ContextContent;
+    expect(content.fullRelationships).toEqual([]);
+    expect(content.versions?.[0].relationships?.length).toBe(1); // own stays on the version
   });
 
   it('unknown connection returns []', async () => {

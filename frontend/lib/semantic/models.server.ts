@@ -14,7 +14,7 @@
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { getPersistedConnectionSchema } from '@/lib/data/connections.server';
-import { findNearestContextPath } from '@/lib/context/context-utils';
+import { findNearestContextPath, getPublishedVersionForUser } from '@/lib/context/context-utils';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { deriveSemanticModels } from '@/lib/semantic/derive';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -73,8 +73,15 @@ async function resolveScope(
     for (const t of s.tables ?? []) whitelisted.add(`${s.schema}|${t.table}`);
   }
 
-  const relationships: TableRelationship[] = (context?.fullRelationships ?? [])
-    .filter((r) => r.connection === connection);
+  // Inherited (fullRelationships) + the live version's own — mirrors how
+  // metrics resolve (full* fields are inherited-only).
+  const liveVersion = context?.versions?.find(
+    (v) => v.version === getPublishedVersionForUser(context, 0),
+  ) ?? context?.versions?.[0];
+  const relationships: TableRelationship[] = [
+    ...(context?.fullRelationships ?? []),
+    ...(liveVersion?.relationships ?? []),
+  ].filter((r) => r.connection === connection);
 
   return { schema, whitelisted, namingSchemas: source.schemas ?? [], relationships };
 }

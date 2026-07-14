@@ -95,6 +95,52 @@ const tableKey = (connection: string, schema: string | undefined, table: string)
 export const isSelfJoin = (r: TableRelationship): boolean =>
   r.table === r.targetTable && (r.schema ?? '') === (r.targetSchema ?? '');
 
+// ---------------------------------------------------------------------------
+// Relationship views — bidirectional display + one-to-many sugar
+// ---------------------------------------------------------------------------
+
+/**
+ * STORAGE is always normalized to the safe many→one direction (`table` is the
+ * many side) so the semantic layer can never fan out. The UI, however, shows
+ * each relationship from BOTH tables: from the many side as declared
+ * (many-to-one), and from the one side as its mirror (one-to-many). A user may
+ * also CREATE a relationship as one-to-many — sugar that normalizes on save.
+ */
+export type RelationshipCardinality = 'many_to_one' | 'one_to_one' | 'one_to_many';
+
+export type RelationshipView = Omit<TableRelationship, 'relationship'> & {
+  relationship?: RelationshipCardinality;
+};
+
+/** The same stored relationship, seen from the TARGET (one) side. */
+export function mirrorRelationshipView(r: TableRelationship): RelationshipView {
+  return {
+    connection: r.connection,
+    schema: r.targetSchema,
+    table: r.targetTable,
+    column: r.targetColumn,
+    targetSchema: r.schema,
+    targetTable: r.table,
+    targetColumn: r.column,
+    relationship: (r.relationship ?? 'many_to_one') === 'one_to_one' ? 'one_to_one' : 'one_to_many',
+  };
+}
+
+/** Normalize a view back to storage: a one_to_many view swaps sides. */
+export function normalizeRelationshipView(v: RelationshipView): TableRelationship {
+  if (v.relationship !== 'one_to_many') return v as TableRelationship;
+  return {
+    connection: v.connection,
+    schema: v.targetSchema,
+    table: v.targetTable,
+    column: v.targetColumn,
+    targetSchema: v.schema,
+    targetTable: v.table,
+    targetColumn: v.column,
+    relationship: 'many_to_one',
+  };
+}
+
 /** The cheap, global "which models exist" projection — one stub per table. */
 export interface ModelStub {
   name: string;
@@ -177,7 +223,7 @@ export function deriveSemanticModels(
             dimensions.push({ name: humanizeName(c.name), column: c.name });
           } else if (kind === 'time') {
             temporal.push(c);
-            dimensions.push({ name: humanizeName(c.name), column: c.name });
+            dimensions.push({ name: humanizeName(c.name), column: c.name, temporal: true });
           } else if (kind === 'id') {
             dimensions.push({ name: humanizeName(c.name), column: c.name });
             measures.push({ name: `Unique ${idBaseName(c.name)}`, agg: 'COUNT_DISTINCT', column: c.name });
@@ -219,6 +265,7 @@ export function deriveSemanticModels(
                 name: `${humanizeName(join.alias)} ${humanizeName(c.name)}`,
                 column: c.name,
                 join: join.alias,
+                ...(kind === 'time' ? { temporal: true } : {}),
               });
             }
           }

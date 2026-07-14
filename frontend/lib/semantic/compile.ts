@@ -84,18 +84,40 @@ export function validateSemanticQuery(spec: SemanticQuerySpec, model: SemanticMo
       issues.push(`dimension "${d}" references unknown join "${dim.join}"`);
     }
   }
-  if (spec.timeGrain && !model.timeDimension) {
-    issues.push('the model has no time dimension configured');
+  if (spec.timeGrain && !resolveTimeColumn(spec, model)) {
+    issues.push(spec.timeColumn
+      ? `"${spec.timeColumn}" is not a temporal column of this model`
+      : 'the model has no time dimension configured');
   }
 
   return issues;
 }
 
-/** Aggregate SQL fragment for a ratio metric component (base-table columns). */
-const aggSql = (m: SemanticMeasure): string =>
-  m.agg === 'COUNT' && !m.column ? 'COUNT(*)'
-    : m.agg === 'COUNT_DISTINCT' ? `COUNT(DISTINCT ${m.column})`
-    : `${m.agg}(${m.column})`;
+/**
+ * The time-axis column for a spec: spec.timeColumn when it names a BASE
+ * temporal column (any date/time column may be the axis, not just the model's
+ * default), else the model's timeDimension.
+ */
+export function resolveTimeColumn(spec: SemanticQuerySpec, model: SemanticModel): string | undefined {
+  if (spec.timeColumn) {
+    if (model.timeDimension?.column === spec.timeColumn) return spec.timeColumn;
+    const dim = model.dimensions.find((d) => d.column === spec.timeColumn && d.temporal && !d.join);
+    return dim ? spec.timeColumn : undefined;
+  }
+  return model.timeDimension?.column;
+}
+
+/**
+ * Aggregate SQL fragment for a ratio metric component (base-table columns).
+ * `qualifier` prefixes columns with the base table when the query joins —
+ * unqualified names are ambiguous the moment another table shares them.
+ */
+export const aggSql = (m: SemanticMeasure, qualifier?: string): string => {
+  const col = qualifier && m.column ? `${qualifier}.${m.column}` : m.column;
+  return m.agg === 'COUNT' && !m.column ? 'COUNT(*)'
+    : m.agg === 'COUNT_DISTINCT' ? `COUNT(DISTINCT ${col})`
+    : `${m.agg}(${col})`;
+};
 
 /** Compile a valid spec to QueryIR. Throws SemanticCompileError on invalid specs. */
 export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticModel): QueryIR {
@@ -104,12 +126,22 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
 
   const select: SelectColumn[] = [];
   const groupColumns: GroupByItem[] = [];
+
+  // Pre-pass: which joins does this query actually use? Once ANY join is in
+  // play, every base-table column MUST be qualified — an unqualified name is
+  // ambiguous the moment the joined table shares it (campaign_id, created_at,
+  // id are all common on both sides of an FK).
   const usedJoins = new Set<string>();
+  for (const name of [...spec.dimensions, ...(spec.filters ?? []).map((f) => f.dimension)]) {
+    const dim = findDimension(model, name);
+    if (dim?.join) usedJoins.add(dim.join);
+  }
+  const baseQual = usedJoins.size > 0 ? model.table : undefined;
 
   const resolveDimension = (name: string): { column: string; table?: string } => {
     const dim = findDimension(model, name)!;
-    if (dim.join) usedJoins.add(dim.join);
-    return { column: dim.column, ...(dim.join ? { table: dim.join } : {}) };
+    const table = dim.join ?? baseQual;
+    return { column: dim.column, ...(table ? { table } : {}) };
   };
 
   // Dimensions → plain columns (business name as alias) + GROUP BY entries.
@@ -119,9 +151,11 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     groupColumns.push({ column, ...(table ? { table } : {}) });
   }
 
-  // Time grain → DATE_TRUNC on the model's time dimension.
-  const time = spec.timeGrain && model.timeDimension
-    ? { column: model.timeDimension.column, unit: spec.timeGrain }
+  // Time grain → DATE_TRUNC on the spec's time column (default: the model's
+  // timeDimension; any base temporal column is allowed via spec.timeColumn).
+  const timeColumn = resolveTimeColumn(spec, model);
+  const time = spec.timeGrain && timeColumn
+    ? { column: timeColumn, unit: spec.timeGrain }
     : undefined;
   if (time) {
     select.push({
@@ -129,9 +163,13 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
       function: 'DATE_TRUNC',
       unit: time.unit,
       column: time.column,
+      ...(baseQual ? { table: baseQual } : {}),
       alias: time.unit.toLowerCase(),
     });
-    groupColumns.push({ type: 'expression', function: 'DATE_TRUNC', unit: time.unit, column: time.column });
+    groupColumns.push({
+      type: 'expression', function: 'DATE_TRUNC', unit: time.unit, column: time.column,
+      ...(baseQual ? { table: baseQual } : {}),
+    });
   }
 
   // Measures/metrics → aggregates (or NULLIF-guarded raw ratios).
@@ -145,6 +183,7 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
         type: 'aggregate',
         aggregate: found.measure.agg,
         column: found.measure.column ?? null,
+        ...(baseQual && found.measure.column ? { table: baseQual } : {}),
         alias,
       });
     } else {
@@ -152,7 +191,7 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
       const den = model.measures.find((m) => m.name === found.metric.denominator)!;
       select.push({
         type: 'raw',
-        raw_sql: `${aggSql(num)} * 1.0 / NULLIF(${aggSql(den)}, 0)`,
+        raw_sql: `${aggSql(num, baseQual)} * 1.0 / NULLIF(${aggSql(den, baseQual)}, 0)`,
         alias,
       });
     }
@@ -185,7 +224,7 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
 
   // Deterministic ordering: time ascending when present, else first measure desc.
   const orderBy: OrderByClause[] = time
-    ? [{ type: 'expression', function: 'DATE_TRUNC', unit: time.unit, column: time.column, direction: 'ASC' }]
+    ? [{ type: 'expression', function: 'DATE_TRUNC', unit: time.unit, column: time.column, ...(baseQual ? { table: baseQual } : {}), direction: 'ASC' }]
     : [{ type: 'column', column: measureAliases[0], direction: 'DESC' }];
 
   return {

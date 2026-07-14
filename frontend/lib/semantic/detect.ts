@@ -20,7 +20,7 @@
 import type { AnyQueryIR, QueryIR, FilterCondition, FilterGroup } from '@/lib/sql/ir-types';
 import type { SemanticModel } from '@/lib/types/semantic';
 import type { SemanticQuerySpec, SemanticQueryFilter } from '@/lib/validation/atlas-schemas';
-import { compileSemanticQuery } from './compile';
+import { aggSql, compileSemanticQuery } from './compile';
 
 /** Recover a spec from an already-parsed IR, or null when it doesn't map. */
 export function semanticSpecFromIr(ir: AnyQueryIR, models: SemanticModel[]): SemanticQuerySpec | null {
@@ -77,6 +77,7 @@ function matchModel(ir: QueryIR, model: SemanticModel): SemanticQuerySpec | null
   const dimensions: string[] = [];
   const measures: string[] = [];
   let timeGrain: SemanticQuerySpec['timeGrain'];
+  let timeColumn: string | undefined;
 
   for (const col of ir.select) {
     if (col.type === 'column' && col.column && col.column !== '*') {
@@ -84,9 +85,16 @@ function matchModel(ir: QueryIR, model: SemanticModel): SemanticQuerySpec | null
       if (!dim) return null;
       dimensions.push(dim.name);
     } else if (col.type === 'expression' && col.function === 'DATE_TRUNC') {
-      if (!model.timeDimension || col.column !== model.timeDimension.column || !col.unit) return null;
-      if (timeGrain) return null; // one time dimension max
+      // Any BASE temporal column can be the time axis (spec.timeColumn), not
+      // just the model's default timeDimension.
+      const isDefault = !!model.timeDimension && col.column === model.timeDimension.column;
+      const isTemporalDim = !!col.column &&
+        model.dimensions.some((d) => d.column === col.column && d.temporal && !d.join);
+      if ((!isDefault && !isTemporalDim) || !col.unit) return null;
+      if (col.table && col.table !== model.table && col.table !== ir.from.alias) return null;
+      if (timeGrain) return null; // one time axis max
       timeGrain = col.unit as SemanticQuerySpec['timeGrain'];
+      if (!isDefault) timeColumn = col.column!;
     } else if (col.type === 'aggregate' && col.aggregate) {
       const measure = model.measures.find((m) =>
         m.agg === col.aggregate && (m.column ?? null) === (col.column ?? null) && !col.wrapper_function,
@@ -95,15 +103,15 @@ function matchModel(ir: QueryIR, model: SemanticModel): SemanticQuerySpec | null
       measures.push(measure.name);
     } else if (col.type === 'raw' && col.raw_sql) {
       // Ratio metrics compile to a fixed raw shape — match by regenerating it.
+      // The compiler qualifies columns with the base table when the query has
+      // joins, so accept BOTH the qualified and unqualified renderings.
       const metric = (model.metrics ?? []).find((mt) => {
         const num = model.measures.find((m) => m.name === mt.numerator);
         const den = model.measures.find((m) => m.name === mt.denominator);
         if (!num || !den) return false;
-        const aggSql = (m: typeof num) =>
-          m.agg === 'COUNT' && !m.column ? 'COUNT(*)'
-            : m.agg === 'COUNT_DISTINCT' ? `COUNT(DISTINCT ${m.column})`
-            : `${m.agg}(${m.column})`;
-        return normalizeRaw(col.raw_sql!) === normalizeRaw(`${aggSql(num)} * 1.0 / NULLIF(${aggSql(den)}, 0)`);
+        const got = normalizeRaw(col.raw_sql!);
+        return [undefined, model.table].some((qual) =>
+          got === normalizeRaw(`${aggSql(num, qual)} * 1.0 / NULLIF(${aggSql(den, qual)}, 0)`));
       });
       if (!metric) return null;
       measures.push(metric.name);
@@ -138,6 +146,7 @@ function matchModel(ir: QueryIR, model: SemanticModel): SemanticQuerySpec | null
     measures,
     dimensions,
     ...(timeGrain ? { timeGrain } : {}),
+    ...(timeColumn ? { timeColumn } : {}),
     ...(filters.length > 0 ? { filters } : {}),
     ...(ir.limit !== undefined && ir.limit !== 1000 ? { limit: ir.limit } : {}),
   };

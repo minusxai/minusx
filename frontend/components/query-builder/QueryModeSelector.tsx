@@ -33,7 +33,7 @@ interface QueryModeSelectorProps {
 }
 
 const TAB_ITEMS: Array<{ key: QueryTab; label: string; gated?: 'semantic' | 'viz'; Icon: typeof LuCode }> = [
-  { key: 'semantic', label: 'Semantic', Icon: LuSparkles, gated: 'semantic' },
+  { key: 'semantic', label: 'GUI', Icon: LuSparkles, gated: 'semantic' },
   { key: 'sql', label: 'SQL', Icon: LuCode },
   { key: 'viz', label: 'Viz', Icon: LuChartColumn, gated: 'viz' },
 ];

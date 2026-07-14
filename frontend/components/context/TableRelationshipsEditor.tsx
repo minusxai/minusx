@@ -3,10 +3,16 @@
 /**
  * TableRelationshipsEditor — per-table FK relationship editing, rendered inside
  * the schema tree (rows above the table's columns, next to metrics). A
- * relationship declares "this table's FK column looks up that table's column"
- * with lookup-only cardinality (many_to_one / one_to_one) — the single authored
- * input the derived semantic layer needs (lib/semantic/derive.ts); dimensions,
- * measures and time axes all derive from the schema itself.
+ * relationship declares "this table's column relates to that table's column" —
+ * the single authored input the derived semantic layer needs
+ * (lib/semantic/derive.ts); dimensions, measures and time axes all derive from
+ * the schema itself.
+ *
+ * Every relationship is visible from BOTH tables: the many side shows it as
+ * declared (many-to-one), and the one side shows its MIRROR (one-to-many) —
+ * editing either edits the same stored record. Creating with one-to-many is
+ * sugar: storage always normalizes to the safe many→one direction
+ * (normalizeRelationshipView), so the semantic layer can never fan out.
  *
  * Relationships are stored on the context version (the full array is passed in
  * and emitted back via onRelationshipsChange); this view scopes to one table
@@ -18,6 +24,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Box, HStack, VStack, Text, Icon, Button, Input, Field, Popover, Portal } from '@chakra-ui/react';
 import { LuLink, LuPlus, LuCircleCheck, LuCircleX } from 'react-icons/lu';
+import { mirrorRelationshipView, normalizeRelationshipView, type RelationshipView, type RelationshipCardinality } from '@/lib/semantic/derive';
 import type { TableRelationship } from '@/lib/types';
 
 interface VerifyState {
@@ -54,6 +61,17 @@ function matchesTable(r: TableRelationship, connection: string | undefined, sche
   return (r.schema ?? '') === schema && r.table === table && (r.connection == null || r.connection === connection);
 }
 
+/** Stored on another table, but pointing AT this one → show its mirror here. */
+function matchesTarget(r: TableRelationship, connection: string | undefined, schema: string, table: string) {
+  return (r.targetSchema ?? '') === schema && r.targetTable === table && (r.connection == null || r.connection === connection);
+}
+
+const CARDINALITY_LABELS: Record<RelationshipCardinality, string> = {
+  many_to_one: 'many-to-one (many rows here → one row there)',
+  one_to_one: 'one-to-one',
+  one_to_many: 'one-to-many (one row here → many rows there)',
+};
+
 const selectStyle: React.CSSProperties = {
   fontSize: '12px',
   fontFamily: 'var(--font-jetbrains-mono), monospace',
@@ -88,11 +106,12 @@ function ColumnField({ label, options, value, onChange }: {
 }
 
 function RelationshipRow({ rel, editable, inherited, tables, columns, onChange, onDelete }: {
-  rel: TableRelationship;
+  rel: RelationshipView;
   editable: boolean;
   inherited?: boolean;
   tables: TableColumns[];
   columns: Array<{ name: string; type: string }>;
+  /** Receives NORMALIZED storage (one_to_many views swap back to many→one). */
   onChange: (next: TableRelationship) => void;
   onDelete: () => void;
 }) {
@@ -100,7 +119,7 @@ function RelationshipRow({ rel, editable, inherited, tables, columns, onChange, 
   const [column, setColumn] = useState(rel.column);
   const [target, setTarget] = useState(rel.targetTable ? `${rel.targetSchema ?? ''}.${rel.targetTable}` : '');
   const [targetColumn, setTargetColumn] = useState(rel.targetColumn);
-  const [cardinality, setCardinality] = useState(rel.relationship ?? 'many_to_one');
+  const [cardinality, setCardinality] = useState<RelationshipCardinality>(rel.relationship ?? 'many_to_one');
 
   // Auto-open the editor for a freshly added (empty) relationship.
   const didMount = useRef(false);
@@ -128,14 +147,14 @@ function RelationshipRow({ rel, editable, inherited, tables, columns, onChange, 
 
   const save = () => {
     if (!complete) return;
-    onChange({
+    onChange(normalizeRelationshipView({
       ...rel,
       column: column.trim(),
       targetSchema: targetSchema || undefined,
       targetTable: targetTable.trim(),
       targetColumn: targetColumn.trim(),
       relationship: cardinality,
-    });
+    }));
     setOpen(false);
   };
 
@@ -247,9 +266,10 @@ function RelationshipRow({ rel, editable, inherited, tables, columns, onChange, 
                 <Field.Root>
                   <Field.Label>Cardinality</Field.Label>
                   <select aria-label="Cardinality" style={selectStyle} value={cardinality}
-                    onChange={(e) => setCardinality(e.target.value as TableRelationship['relationship'] & string)}>
-                    <option value="many_to_one">many-to-one (lookup)</option>
-                    <option value="one_to_one">one-to-one</option>
+                    onChange={(e) => setCardinality(e.target.value as RelationshipCardinality)}>
+                    {(Object.keys(CARDINALITY_LABELS) as RelationshipCardinality[]).map((c) => (
+                      <option key={c} value={c}>{CARDINALITY_LABELS[c]}</option>
+                    ))}
                   </select>
                 </Field.Root>
                 {verify.status !== 'idle' && (
@@ -293,10 +313,21 @@ export default function TableRelationshipsEditor({
   // Self-joins are unsupported (lib/semantic/derive.ts) — never offer the base
   // table itself as a lookup target.
   const targetTables = tables.filter((t) => !(t.schema === schema && t.table === table));
-  const items = relationships.map((r, idx) => ({ r, idx })).filter(({ r }) => matchesTable(r, connection, schema, table));
-  const inherited = (inheritedRelationships || []).filter((r) => matchesTable(r, connection, schema, table));
+  const items: Array<{ r: RelationshipView; idx: number }> = relationships
+    .map((r, idx) => ({ r: r as RelationshipView, idx }))
+    .filter(({ r }) => matchesTable(r as TableRelationship, connection, schema, table));
+  // Relationships stored on OTHER tables that point here → their mirror view
+  // (one-to-many). Same record: editing/deleting acts on the original index.
+  const mirrors: Array<{ r: RelationshipView; idx: number }> = relationships
+    .map((r, idx) => ({ stored: r, idx }))
+    .filter(({ stored }) => matchesTarget(stored, connection, schema, table))
+    .map(({ stored, idx }) => ({ r: mirrorRelationshipView(stored), idx }));
+  const inherited: RelationshipView[] = [
+    ...(inheritedRelationships || []).filter((r) => matchesTable(r, connection, schema, table)),
+    ...(inheritedRelationships || []).filter((r) => matchesTarget(r, connection, schema, table)).map(mirrorRelationshipView),
+  ];
 
-  if (!editable && items.length === 0 && inherited.length === 0) return null;
+  if (!editable && items.length === 0 && mirrors.length === 0 && inherited.length === 0) return null;
 
   const addRelationship = () => onRelationshipsChange?.([
     ...relationships,
@@ -317,6 +348,10 @@ export default function TableRelationshipsEditor({
       ))}
       {items.map(({ r, idx }) => (
         <RelationshipRow key={idx} rel={r} editable={editable} tables={targetTables} columns={columns}
+          onChange={(n) => updateAt(idx, n)} onDelete={() => removeAt(idx)} />
+      ))}
+      {mirrors.map(({ r, idx }) => (
+        <RelationshipRow key={`mir-${idx}`} rel={r} editable={editable} tables={targetTables} columns={columns}
           onChange={(n) => updateAt(idx, n)} onDelete={() => removeAt(idx)} />
       ))}
       {editable && (

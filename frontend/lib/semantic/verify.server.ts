@@ -34,20 +34,19 @@ export interface RelationshipVerification {
 
 const IR_VERSION = 1;
 
-/** rows with a duplicated lookup value exist? → SELECT col, COUNT(*) … GROUP BY col HAVING COUNT(*) > 1 LIMIT 1 */
+/**
+ * Is the lookup column unique? SELECT COUNT(*) AS c, COUNT(DISTINCT col) AS d —
+ * unique iff c == d. A single scan with no GROUP BY materialization, which is
+ * dramatically cheaper than GROUP BY … HAVING on large warehouse tables.
+ */
 function uniquenessIr(r: TableRelationship): QueryIR {
   return {
     version: IR_VERSION,
     select: [
-      { type: 'column', column: r.targetColumn },
       { type: 'aggregate', aggregate: 'COUNT', column: null, alias: 'c' },
+      { type: 'aggregate', aggregate: 'COUNT_DISTINCT', column: r.targetColumn, alias: 'd' },
     ],
     from: { table: r.targetTable, schema: r.targetSchema },
-    group_by: { columns: [{ column: r.targetColumn }] },
-    having: {
-      operator: 'AND',
-      conditions: [{ aggregate: 'COUNT', column: null, operator: '>', value: 1 }],
-    },
     limit: 1,
   };
 }
@@ -86,11 +85,13 @@ export async function verifyRelationship(
     runQuery(relationship.connection, irToSqlLocal(matchRateIr(relationship), dialect), {}, user),
   ]);
 
-  // Rows are keyed records ({ total, matched }) per QueryResult.
-  const row = (match.rows?.[0] ?? {}) as Record<string, unknown>;
+  // Rows are keyed records per QueryResult.
   const num = (v: unknown) => (typeof v === 'number' ? v : parseInt(String(v ?? 0), 10) || 0);
+  const uniq = (dupes.rows?.[0] ?? {}) as Record<string, unknown>;
+  const row = (match.rows?.[0] ?? {}) as Record<string, unknown>;
   return {
-    targetUnique: (dupes.rows?.length ?? 0) === 0,
+    // NULLs: COUNT(col) skips them on both sides consistently.
+    targetUnique: num(uniq['c']) === num(uniq['d']),
     totalRows: num(row['total']),
     matchedRows: num(row['matched']),
   };

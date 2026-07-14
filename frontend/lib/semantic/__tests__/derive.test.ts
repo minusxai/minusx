@@ -4,7 +4,7 @@
  * against a derived model detects back into a semantic spec.
  */
 import { describe, it, expect } from 'vitest';
-import { deriveSemanticModels, deriveModelStubs, classifyColumn, humanizeName, validateTableRelationships } from '../derive';
+import { deriveSemanticModels, deriveModelStubs, classifyColumn, humanizeName, validateTableRelationships, mirrorRelationshipView, normalizeRelationshipView } from '../derive';
 import { detectSemanticQuery } from '../detect-sql';
 import type { DatabaseWithSchema, SemanticModel, TableRelationship } from '@/lib/types';
 
@@ -209,6 +209,34 @@ describe('deriveModelStubs — global naming over names-only schemas', () => {
     const models = deriveSemanticModels([scoped], [], [NAMES_ONLY]);
     expect(models).toHaveLength(1);
     expect(models[0].name).toBe('Events (prod)'); // not plain "Events" — global naming wins
+  });
+});
+
+describe('relationship views — bidirectional display + one-to-many sugar', () => {
+  const stored = ORDERS_REL[0]; // orders.user_id → users.id, many_to_one (normalized storage)
+
+  it('mirrors a stored many_to_one as one_to_many from the target table', () => {
+    const view = mirrorRelationshipView(stored);
+    expect(view).toMatchObject({
+      table: 'customers', schema: 'public', column: 'id',
+      targetTable: 'orders', targetSchema: 'public', targetColumn: 'customer_id',
+      relationship: 'one_to_many',
+    });
+  });
+
+  it('mirrors one_to_one as one_to_one (symmetric)', () => {
+    expect(mirrorRelationshipView({ ...stored, relationship: 'one_to_one' }).relationship).toBe('one_to_one');
+  });
+
+  it('normalizes a one_to_many view back to many→one storage (swap)', () => {
+    const view = mirrorRelationshipView(stored);
+    expect(normalizeRelationshipView(view)).toEqual(stored);
+  });
+
+  it('normalization is a no-op for already-normal cardinalities', () => {
+    expect(normalizeRelationshipView(stored)).toEqual(stored);
+    const oto = { ...stored, relationship: 'one_to_one' as const };
+    expect(normalizeRelationshipView(oto)).toEqual(oto);
   });
 });
 

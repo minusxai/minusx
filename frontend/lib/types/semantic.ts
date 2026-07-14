@@ -20,6 +20,8 @@ export interface SemanticDimension {
   column: string;
   join?: string;
   description?: string;
+  /** Column is date/time-typed — usable as the query's time axis (timeColumn). */
+  temporal?: boolean;
 }
 
 /**

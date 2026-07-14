@@ -140,6 +140,56 @@ describe('TableRelationshipsEditor', () => {
     expect(options).not.toContain('public.orders');
   });
 
+  it('a relationship stored on ANOTHER table shows here as its one-to-many mirror', () => {
+    // REL is stored on orders (orders.user_id → users.id). Render the USERS editor.
+    const onRelationshipsChange = vi.fn();
+    renderWithProviders(
+      <TableRelationshipsEditor
+        connection="warehouse" schema="public" table="users"
+        columns={TABLES[1].columns} tables={TABLES}
+        relationships={[REL]}
+        onRelationshipsChange={onRelationshipsChange}
+      />
+    );
+    const mirror = screen.getByLabelText('Relationship id → orders.user_id');
+    expect(mirror.textContent).toContain('one-to-many');
+    // deleting the mirror deletes the underlying stored record
+    fireEvent.click(mirror);
+    fireEvent.click(screen.getAllByLabelText('Delete relationship').at(-1)!);
+    expect(onRelationshipsChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it('creating with one-to-many normalizes storage to the safe many→one direction', async () => {
+    // On USERS (the one side): users.id ← orders.user_id, declared one-to-many.
+    const onRelationshipsChange = vi.fn();
+    function Harness() {
+      const [relationships, setRelationships] = React.useState<TableRelationship[]>([]);
+      return (
+        <TableRelationshipsEditor
+          connection="warehouse" schema="public" table="users"
+          columns={TABLES[1].columns} tables={TABLES}
+          relationships={relationships}
+          onRelationshipsChange={(next) => { onRelationshipsChange(next); setRelationships(next); }}
+        />
+      );
+    }
+    renderWithProviders(<Harness />);
+    fireEvent.click(screen.getByLabelText('Add relationship to public.users'));
+    fireEvent.change(await screen.findByLabelText('Foreign key column'), { target: { value: 'id' } });
+    fireEvent.change(screen.getByLabelText('Target table'), { target: { value: 'public.orders' } });
+    fireEvent.change(screen.getByLabelText('Target column'), { target: { value: 'user_id' } });
+    fireEvent.change(screen.getByLabelText('Cardinality'), { target: { value: 'one_to_many' } });
+    fireEvent.click(screen.getByLabelText('Save relationship'));
+
+    await waitFor(() => expect(onRelationshipsChange).toHaveBeenCalled());
+    // Stored NORMALIZED: orders is the many side.
+    expect(onRelationshipsChange).toHaveBeenLastCalledWith([expect.objectContaining({
+      table: 'orders', column: 'user_id',
+      targetTable: 'users', targetColumn: 'id',
+      relationship: 'many_to_one',
+    })]);
+  });
+
   it('renders read-only (no add button) without an onRelationshipsChange handler', () => {
     renderWithProviders(
       <TableRelationshipsEditor

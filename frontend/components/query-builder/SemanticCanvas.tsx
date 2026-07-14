@@ -145,9 +145,21 @@ export function SemanticCanvas({
     });
   }, [spec, model, update]);
 
-  const toggleTime = useCallback(() => {
-    if (!spec || !model?.timeDimension) return;
-    update({ timeGrain: spec.timeGrain ? undefined : 'MONTH' });
+  // Any BASE temporal column can be the time axis. Clicking the active one
+  // clears it; clicking another temporal column moves the axis there.
+  const toggleTime = useCallback((column?: string) => {
+    if (!spec || !model) return;
+    const target = column ?? model.timeDimension?.column;
+    if (!target) return;
+    const effective = spec.timeColumn ?? model.timeDimension?.column;
+    if (spec.timeGrain && effective === target) {
+      update({ timeGrain: undefined, timeColumn: undefined });
+    } else {
+      update({
+        timeGrain: spec.timeGrain ?? 'MONTH',
+        timeColumn: target === model.timeDimension?.column ? undefined : target,
+      });
+    }
   }, [spec, model, update]);
 
   // A freshly picked (or detected/persisted) model finishing its fetch: give
@@ -243,13 +255,24 @@ export function SemanticCanvas({
     </Text>
   );
 
-  const timeLabel = model?.timeDimension?.label ?? model?.timeDimension?.column ?? 'Time';
+  // The effective time axis (spec.timeColumn overrides the model default).
+  const effectiveTimeColumn = spec?.timeColumn ?? model?.timeDimension?.column;
+  const timeLabel = model
+    ? (model.dimensions.find((d) => d.column === effectiveTimeColumn && !d.join)?.name
+        ?? model.timeDimension?.label ?? model.timeDimension?.column ?? 'Time')
+    : 'Time';
 
-  // Model picked: full field list, filtered (shrunk) by the query.
+  // Model picked: full field list, filtered (shrunk) by the query. Temporal
+  // base columns render as time rows (clock) — clicking one makes it the axis.
   const visibleMeasures = model ? model.measures.filter((m) => matches(query, m.name)) : [];
-  const visibleTime = !!model?.timeDimension && matches(query, timeLabel);
+  const temporalDims = model ? model.dimensions.filter((d) => d.temporal && !d.join) : [];
+  const visibleTemporal = temporalDims.filter((d) => matches(query, d.name));
+  // The model default may lack a dimension entry (hand-authored models) — give it a row.
+  const defaultHasRow = !model?.timeDimension || temporalDims.some((d) => d.column === model.timeDimension!.column);
+  const defaultTimeLabel = model?.timeDimension?.label ?? model?.timeDimension?.column ?? 'Time';
+  const visibleDefaultTime = !defaultHasRow && !!model?.timeDimension && matches(query, defaultTimeLabel);
   const visibleDimensions = model
-    ? model.dimensions.filter((d) => (d.column !== model.timeDimension?.column || d.join) && matches(query, d.name))
+    ? model.dimensions.filter((d) => !(d.temporal && !d.join) && d.column !== model.timeDimension?.column && matches(query, d.name))
     : [];
   // Cross-table hits, minus the current model's own fields (already listed).
   const foreignHits = otherHits.filter((h) => h.model !== spec?.model).slice(0, 20);
@@ -283,14 +306,21 @@ export function SemanticCanvas({
               () => toggleMeasure(m.name),
               `Field measure: ${m.name}`,
             ))}
-            {(visibleDimensions.length > 0 || visibleTime) && sectionHeader('Dimensions')}
-            {visibleTime && fieldRow(
-              timeLabel,
-              !!spec.timeGrain,
+            {(visibleDimensions.length > 0 || visibleTemporal.length > 0 || visibleDefaultTime) && sectionHeader('Dimensions')}
+            {visibleDefaultTime && fieldRow(
+              defaultTimeLabel,
+              !!spec.timeGrain && effectiveTimeColumn === model.timeDimension!.column,
               <LuClock size={12} color="var(--chakra-colors-accent-secondary)" />,
-              toggleTime,
-              `Field time: ${timeLabel}`,
+              () => toggleTime(model.timeDimension!.column),
+              `Field time: ${defaultTimeLabel}`,
             )}
+            {visibleTemporal.map((d) => fieldRow(
+              d.name,
+              (!!spec.timeGrain && effectiveTimeColumn === d.column) || spec.dimensions.includes(d.name),
+              <LuClock size={12} color="var(--chakra-colors-accent-secondary)" />,
+              () => (spec.dimensions.includes(d.name) ? toggleDimension(d.name) : toggleTime(d.column)),
+              `Field time: ${d.name}`,
+            ))}
             {visibleDimensions.map((d) => fieldRow(
               d.name,
               spec.dimensions.includes(d.name),
