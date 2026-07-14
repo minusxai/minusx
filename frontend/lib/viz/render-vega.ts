@@ -40,6 +40,17 @@ export function resolveEnvelopeSpec(envelope: VizEnvelope): ResolvedEnvelopeSpec
   if (source.kind === 'recipe') {
     return materializeRecipe(source as unknown as { recipe: string; bindings: Record<string, string> });
   }
+  // Detached native-Vega spec (RFC §21.10): render as-is on the vega engine, carrying
+  // any named boundary/lookup datasets for injection (geo maps keep working post-detach).
+  if (source.kind === 'vega') {
+    const assets = source.assets as Record<string, string> | null | undefined;
+    return {
+      ok: true,
+      spec: source.spec as Record<string, unknown>,
+      engine: 'vega',
+      ...(assets && Object.keys(assets).length > 0 ? { assets } : {}),
+    };
+  }
   return { ok: true, spec: (source as { spec: Record<string, unknown> }).spec, engine: 'vega-lite' };
 }
 

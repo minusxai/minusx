@@ -15,13 +15,20 @@ import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, injectNamedAssets } from '@/lib/viz/render-vega';
 import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/viz-templates';
 
-// Recipes that render an interactive map (drag pan, wheel zoom, +/- buttons) and
-// expose an `mxViewParams` signal for persistence.
+// Interactive maps (drag pan, wheel zoom, +/- buttons, persisted view) are detected by
+// CAPABILITY — the `mxViewParams` signal — not by recipe id, so a DETACHED map (kind:
+// 'vega', no recipe) stays fully interactive. Recipe ids are still a fast path.
 const POINT_MAP_RECIPE = 'minusx/point-map@1';
 const CHOROPLETH_RECIPE = 'minusx/choropleth@1';
 const recipeOf = (env: VizEnvelope): string | undefined => (env.source as unknown as { recipe?: string })?.recipe;
+// Does a raw (detached) native-Vega spec declare this signal? Lets map capabilities
+// survive detach, when the recipe id is gone but the signals remain in the spec.
+const specHasSignal = (env: VizEnvelope, name: string): boolean => {
+  const src = env.source as unknown as { kind?: string; spec?: { signals?: Array<{ name?: string }> } };
+  return src.kind === 'vega' && Array.isArray(src.spec?.signals) && src.spec.signals.some(s => s?.name === name);
+};
 const isInteractiveMap = (env: VizEnvelope): boolean =>
-  recipeOf(env) === POINT_MAP_RECIPE || recipeOf(env) === CHOROPLETH_RECIPE;
+  recipeOf(env) === POINT_MAP_RECIPE || recipeOf(env) === CHOROPLETH_RECIPE || specHasSignal(env, 'mxViewParams');
 const hasSignal = (view: View, name: string): boolean => {
   try { view.signal(name); return true; } catch { return false; }
 };
@@ -140,10 +147,12 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         // resolved from the asset registry and bound before the first layout.
         await injectNamedAssets(view, resolved.ok ? resolved.assets : undefined);
         // Street-tile basemap follows the app theme: swap the default Carto tiles to the
-        // dark set in dark mode. Skipped when the user set an explicit `tileUrl` override.
-        if (recipeOf(envelope) === POINT_MAP_RECIPE && hasSignal(view, 'tileUrlTemplate')) {
-          const params = (envelope.source as unknown as { params?: Record<string, unknown> }).params ?? {};
-          if (!params.tileUrl) {
+        // dark set in dark mode. Capability-based (any map with a `tileUrlTemplate` signal,
+        // recipe OR detached), and only when the URL is still a Carto default — a custom
+        // `tileUrl` the user/agent set is left untouched.
+        if (hasSignal(view, 'tileUrlTemplate')) {
+          const cur = view.signal('tileUrlTemplate');
+          if (cur === POINT_MAP_DEFAULT_TILE_URL || cur === POINT_MAP_DARK_TILE_URL) {
             view.signal('tileUrlTemplate', colorMode === 'dark' ? POINT_MAP_DARK_TILE_URL : POINT_MAP_DEFAULT_TILE_URL);
           }
         }
@@ -225,19 +234,19 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     return () => ro.disconnect();
   }, [replanLegendWrap]);
 
-  // Interactive maps get Google-Maps-style +/- zoom buttons. point_map's zoom is an
-  // absolute `scaleUser`; choropleth's is a `zoomUser` multiplier — nudge the right
-  // override, then persist the settled view via `mxViewParams`.
+  // Interactive maps get Google-Maps-style +/- zoom buttons. Detected by signal, not
+  // recipe id, so DETACHED maps keep them. A point-map style has an absolute `scaleUser`;
+  // choropleth has a `zoomUser` multiplier — nudge whichever the view exposes, then
+  // persist the settled view via `mxViewParams`.
   const showZoomButtons = isInteractiveMap(envelope);
   const zoomBy = useCallback((factor: number) => {
     const view = viewRef.current;
     if (!view) return;
-    const recipe = recipeOf(envelope);
-    if (recipe === POINT_MAP_RECIPE) {
+    if (hasSignal(view, 'scaleUser')) {
       const cur = view.signal('scale') as number;
       if (!Number.isFinite(cur)) return;
       view.signal('scaleUser', Math.max(40, Math.min(8_000_000, cur * factor)));
-    } else if (recipe === CHOROPLETH_RECIPE) {
+    } else if (hasSignal(view, 'zoomUser')) {
       const cur = view.signal('zoom') as number;
       if (!Number.isFinite(cur)) return;
       view.signal('zoomUser', Math.max(0.2, Math.min(40, cur * factor)));
@@ -247,7 +256,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     view.runAsync().catch(() => { /* race on unmount */ });
     const params = view.signal('mxViewParams') as Record<string, unknown> | undefined;
     if (params) onViewChangeRef.current?.(roundViewParams(params));
-  }, [envelope]);
+  }, []);
 
   // The container must ALWAYS stay mounted: the build effect needs containerRef on
   // every envelope change. Unmounting it on error made error states permanent (the

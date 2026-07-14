@@ -8,13 +8,18 @@
  */
 import { useState } from 'react';
 import { Box, Button, HStack, Text } from '@chakra-ui/react';
-import { LuChevronDown, LuChevronRight, LuCopy, LuCheck } from 'react-icons/lu';
+import { LuChevronDown, LuChevronRight, LuCopy, LuCheck, LuUnlink, LuRotateCcw } from 'react-icons/lu';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
-export function VizSpecInspector({ envelope }: { envelope: VizEnvelope }) {
+export function VizSpecInspector({ envelope, onDetach, onReattach }: { envelope: VizEnvelope; onDetach?: () => void; onReattach?: () => void }) {
   const [open, setOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const json = JSON.stringify(envelope, null, 2);
+  const source = envelope.source as unknown as { kind?: string; detachedFrom?: unknown };
+  const kind = source.kind;
+  const isRecipe = kind === 'recipe';
+  const canReattach = source.detachedFrom != null;
+  const label = kind === 'recipe' ? 'recipe' : kind === 'vega' ? 'Vega spec' : 'Vega-Lite spec';
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(json);
@@ -35,7 +40,7 @@ export function VizSpecInspector({ envelope }: { envelope: VizEnvelope }) {
           px={1}
         >
           {open ? <LuChevronDown size={14} /> : <LuChevronRight size={14} />}
-          Advanced — Vega-Lite spec
+          Advanced — {label}
         </Button>
         {open && (
           <Button aria-label="Copy Vega spec JSON" size="xs" variant="ghost" color="fg.muted" onClick={handleCopy} px={1}>
@@ -43,6 +48,28 @@ export function VizSpecInspector({ envelope }: { envelope: VizEnvelope }) {
           </Button>
         )}
       </HStack>
+      {isRecipe && onDetach && (
+        <Box mt={1} mb={2}>
+          <Button aria-label="Customize freely" size="xs" variant="outline" colorPalette="teal" onClick={onDetach}>
+            <LuUnlink size={13} /> Customize freely
+          </Button>
+          <Text fontSize="10px" color="fg.subtle" mt={1} lineHeight="1.5">
+            Detach this recipe into its full editable spec — then ask the agent to change anything
+            (colors, layers, labels…), no preset knob needed. Reversible.
+          </Text>
+        </Box>
+      )}
+      {canReattach && onReattach && (
+        <Box mt={1} mb={2}>
+          <Button aria-label="Reset to recipe" size="xs" variant="outline" colorPalette="gray" onClick={onReattach}>
+            <LuRotateCcw size={13} /> Reset to recipe
+          </Button>
+          <Text fontSize="10px" color="fg.subtle" mt={1} lineHeight="1.5">
+            Re-attach to the original recipe — restores the preset controls and upgrades,
+            discarding your custom spec edits.
+          </Text>
+        </Box>
+      )}
       {open && (
         <Box
           aria-label="Vega spec JSON"

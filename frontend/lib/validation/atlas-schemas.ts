@@ -242,16 +242,7 @@ export type VizSettings = Static<typeof VizSettings>;
 // ============================================================================
 
 export const VIZ_GRAMMAR_VEGA_LITE = 'vega-lite@6';
-
-export const VizSourceVegaLite = Type.Object({
-  kind: Type.Literal('vega-lite'),
-  grammar: Type.Literal(VIZ_GRAMMAR_VEGA_LITE, { description: 'pinned grammar major version; never fetched from the network' }),
-  spec: Type.Record(Type.String(), Type.Unknown(), { description:
-    'a Vega-Lite spec. Omit `data` — the query result is injected as the named dataset "main" ' +
-    '(`data: {"name": "main"}`); external data URLs are rejected. Validated against the official ' +
-    'Vega-Lite schema and the query-result columns.' }),
-}, { title: 'VizSourceVegaLite' });
-export type VizSourceVegaLite = Static<typeof VizSourceVegaLite>;
+export const VIZ_GRAMMAR_VEGA = 'vega@6';
 
 export const VizSourceRecipe = Type.Object({
   kind: Type.Literal('recipe'),
@@ -269,6 +260,36 @@ export const VizSourceRecipe = Type.Object({
     'decimalPoints/prefix/suffix reshape the value labels (waterfall bars, funnel values). Omit for defaults.' })),
 }, { title: 'VizSourceRecipe' });
 export type VizSourceRecipe = Static<typeof VizSourceRecipe>;
+
+export const VizSourceVegaLite = Type.Object({
+  kind: Type.Literal('vega-lite'),
+  grammar: Type.Literal(VIZ_GRAMMAR_VEGA_LITE, { description: 'pinned grammar major version; never fetched from the network' }),
+  spec: Type.Record(Type.String(), Type.Unknown(), { description:
+    'a Vega-Lite spec. Omit `data` — the query result is injected as the named dataset "main" ' +
+    '(`data: {"name": "main"}`); external data URLs are rejected. Validated against the official ' +
+    'Vega-Lite schema and the query-result columns.' }),
+  detachedFrom: Nullable(VizSourceRecipe),
+}, { title: 'VizSourceVegaLite' });
+export type VizSourceVegaLite = Static<typeof VizSourceVegaLite>;
+
+// Raw native-Vega spec — the full-control escape hatch (RFC §21.10). A recipe is
+// "detached" into this via detachRecipe(): its materialized spec is frozen here so the
+// agent can edit ANY property (marks, signals, projections, layers) with no recipe
+// param. Native Vega expresses charts Vega-Lite can't (projections/signals/geo/tiles),
+// so this is where detached radar/trend/geo maps land; VL-engine recipes detach to
+// `kind: 'vega-lite'` instead. `assets` carries any named boundary datasets the spec
+// references (geo maps), injected at render exactly like a recipe's assets. `detachedFrom`
+// keeps the original recipe source so the chart can be RE-ATTACHED (reset), discarding edits.
+export const VizSourceVega = Type.Object({
+  kind: Type.Literal('vega'),
+  grammar: Type.Literal(VIZ_GRAMMAR_VEGA, { description: 'pinned grammar major version; never fetched from the network' }),
+  spec: Type.Record(Type.String(), Type.Unknown(), { description:
+    'a native Vega spec. The query result is bound as the named dataset "main" (`data: [{"name": "main"}]`); ' +
+    'external data URLs are rejected. Edit this directly to fully customize a detached chart.' }),
+  assets: NullableD(Type.Record(Type.String(), Type.String()), 'named boundary/lookup datasets the spec references → asset ids (geo maps), injected at render'),
+  detachedFrom: Nullable(VizSourceRecipe),
+}, { title: 'VizSourceVega' });
+export type VizSourceVega = Static<typeof VizSourceVega>;
 
 // The DOM grid tier (RFC §10): tables never route through vega. The only persisted
 // state is display formatting — sorting/filtering/visibility are ephemeral UI state.
@@ -314,7 +335,7 @@ export type VizSourcePivot = Static<typeof VizSourcePivot>;
 
 // Discriminated on `kind`. `vega` and `slippy-map` join this union as they land
 // (additive — see the RFC).
-export const VizSource = Type.Union([VizSourceVegaLite, VizSourceRecipe, VizSourceTable, VizSourcePivot], { title: 'VizSource' });
+export const VizSource = Type.Union([VizSourceVegaLite, VizSourceVega, VizSourceRecipe, VizSourceTable, VizSourcePivot], { title: 'VizSource' });
 export type VizSource = Static<typeof VizSource>;
 
 export const VizEnvelope = Type.Object({

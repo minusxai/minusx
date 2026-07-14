@@ -20,6 +20,7 @@ import {
   type V2VizType,
 } from '@/lib/viz/encoding-edit';
 import { sqlTypeToVizKind } from '@/lib/viz/query-data';
+import { detachRecipe, reattachRecipe, canReattach } from '@/lib/viz/detach';
 import { VizTypeSelector, type SelectableVizType } from '@/components/question/VizTypeSelector';
 import { GEO_ASSET_OPTIONS, resolveGeoAsset } from '@/lib/viz/geo-assets';
 import { TableConditionalFormatPanel } from '@/components/plotx/TableConditionalFormatPanel';
@@ -480,7 +481,13 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
         )
       )}
 
-      {activeTab === 'spec' && <VizSpecInspector envelope={envelope} />}
+      {activeTab === 'spec' && (
+        <VizSpecInspector
+          envelope={envelope}
+          onDetach={isRecipe ? () => onVizChange(detachRecipe(envelope)) : undefined}
+          onReattach={canReattach(envelope) ? () => onVizChange(reattachRecipe(envelope)) : undefined}
+        />
+      )}
     </Box>
   );
 }

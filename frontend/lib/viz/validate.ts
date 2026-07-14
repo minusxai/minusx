@@ -17,7 +17,7 @@ import { compile } from 'vega-lite';
 import type { TopLevelSpec } from 'vega-lite';
 import { parse as parseVega } from 'vega';
 import vegaLiteSchema from 'vega-lite/vega-lite-schema.json';
-import { VIZ_GRAMMAR_VEGA_LITE } from '@/lib/validation/atlas-schemas';
+import { VIZ_GRAMMAR_VEGA_LITE, VIZ_GRAMMAR_VEGA } from '@/lib/validation/atlas-schemas';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { prepareVegaLiteSpec } from './prepare';
 import { materializeRecipe } from './viz-templates';
@@ -82,8 +82,18 @@ function validateEnvelopeShape(envelope: unknown): { issues: VizIssue[]; env?: V
     }
     return { issues: [], env: env as unknown as VizEnvelope };
   }
+  // Detached raw native-Vega source (RFC §21.10): pinned grammar + a spec object.
+  if (source.kind === 'vega') {
+    if (source.grammar !== VIZ_GRAMMAR_VEGA) {
+      return { issues: [err('E_ENVELOPE', '/source/grammar', `source.grammar must be "${VIZ_GRAMMAR_VEGA}", got ${JSON.stringify(source.grammar)}`)] };
+    }
+    if (source.spec == null || typeof source.spec !== 'object' || Array.isArray(source.spec)) {
+      return { issues: [err('E_ENVELOPE', '/source/spec', 'source.spec must be a native Vega spec object')] };
+    }
+    return { issues: [], env: env as unknown as VizEnvelope };
+  }
   if (source.kind !== 'vega-lite') {
-    return { issues: [err('E_ENVELOPE', '/source/kind', `unsupported source kind ${JSON.stringify(source.kind)} — available: "vega-lite", "recipe", "table", "pivot"`)] };
+    return { issues: [err('E_ENVELOPE', '/source/kind', `unsupported source kind ${JSON.stringify(source.kind)} — available: "vega-lite", "vega", "recipe", "table", "pivot"`)] };
   }
   if (source.grammar !== VIZ_GRAMMAR_VEGA_LITE) {
     return { issues: [err('E_ENVELOPE', '/source/grammar', `source.grammar must be "${VIZ_GRAMMAR_VEGA_LITE}", got ${JSON.stringify(source.grammar)}`)] };
@@ -232,6 +242,36 @@ export function validateVizEnvelope(
       }
     }
     return { ok: !issues.some(i => i.severity === 'error'), issues };
+  }
+  // Detached raw native-Vega spec (RFC §21.10): the full-control escape hatch. Can't run
+  // the Vega-Lite pipeline — enforce the data policy on the native `data` array (no
+  // external urls / inline values; the query result is the injected "main" dataset) and
+  // smoke-parse the spec. Field refs aren't statically checked (same as native recipes).
+  if (source.kind === 'vega') {
+    const vegaSpec = (source as { spec: Record<string, unknown> }).spec;
+    const data = vegaSpec.data;
+    if (Array.isArray(data)) {
+      data.forEach((d, i) => {
+        if (d && typeof d === 'object' && !Array.isArray(d)) {
+          const rec = d as Record<string, unknown>;
+          if ('url' in rec) {
+            issues.push(err('E_EXTERNAL_DATA', `/source/spec/data/${i}/url`,
+              `external data urls are not allowed — the query result is injected as the "${VIZ_DATASET_MAIN}" dataset`));
+          } else if ('values' in rec) {
+            issues.push(err('E_EXTERNAL_DATA', `/source/spec/data/${i}/values`,
+              `inline data values are not allowed — the chart visualizes the query result, injected as "${VIZ_DATASET_MAIN}"`));
+          }
+        }
+      });
+    }
+    if (issues.some(i => i.severity === 'error')) return { ok: false, issues };
+    try {
+      parseVega(vegaSpec as never, undefined, { ast: true });
+    } catch (e) {
+      issues.push(err('E_SCHEMA', '/source/spec', `vega spec failed to parse: ${e instanceof Error ? e.message : String(e)}`));
+      return { ok: false, issues };
+    }
+    return { ok: true, issues };
   }
   if (source.kind === 'recipe') {
     const recipeSource = source as unknown as { recipe: string; bindings: Record<string, string | string[]> };

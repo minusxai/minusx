@@ -41,7 +41,7 @@ describe('validateVizEnvelope', () => {
 
   it('rejects an unknown source kind with E_ENVELOPE', () => {
     const result = validateVizEnvelope(
-      { version: 2, source: { kind: 'vega', grammar: 'vega@6', spec: {} } },
+      { version: 2, source: { kind: 'plotly', grammar: 'plotly@2', spec: {} } },
       COLUMNS,
     );
     expect(result.ok).toBe(false);
