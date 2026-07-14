@@ -1,13 +1,15 @@
 /**
  * Semantic query DETECTION — the reverse of compile.ts.
  *
- * Given a SQL query (or its parsed QueryIR) and the semantic models available
+ * Given a parsed QueryIR and the semantic models available
  * for a connection, recover the SemanticQuerySpec it corresponds to — or null
  * when it doesn't correspond to one.
  *
  * Everything happens in IR land; SQL only crosses the boundary through the
  * dialect-aware `sqlToIr`/`irToSql` pair in lib/sql. Detection therefore has
- * NO dialect knowledge of its own.
+ * NO dialect knowledge of its own. This module is PURE (no WASM import) so it
+ * is safe in client bundles — SQL-string detection lives in detect-sql.ts,
+ * which pulls in the WASM parser and must stay server/test-only.
  *
  * Reliability guarantee: a recovered spec is only returned after the
  * RECOMPILE-AND-COMPARE check — `compileSemanticQuery(spec, model)` must
@@ -18,7 +20,6 @@
 import type { AnyQueryIR, QueryIR, FilterCondition, FilterGroup } from '@/lib/sql/ir-types';
 import type { SemanticModel } from '@/lib/types/semantic';
 import type { SemanticQuerySpec, SemanticQueryFilter } from '@/lib/validation/atlas-schemas';
-import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
 import { compileSemanticQuery } from './compile';
 
 /** Recover a spec from an already-parsed IR, or null when it doesn't map. */
@@ -29,26 +30,6 @@ export function semanticSpecFromIr(ir: AnyQueryIR, models: SemanticModel[]): Sem
     if (spec) return spec;
   }
   return null;
-}
-
-/**
- * Detect whether a SQL string is expressible as a semantic query against the
- * given models. Parses with the connection's dialect; returns null on any
- * parse failure or mapping failure.
- */
-export async function detectSemanticQuery(
-  sql: string,
-  models: SemanticModel[],
-  dialect: string,
-): Promise<SemanticQuerySpec | null> {
-  if (!sql.trim() || models.length === 0) return null;
-  let ir: AnyQueryIR;
-  try {
-    ir = await parseSqlToIrLocal(sql, dialect);
-  } catch {
-    return null;
-  }
-  return semanticSpecFromIr(ir, models);
 }
 
 // ---------------------------------------------------------------------------

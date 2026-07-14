@@ -14,7 +14,8 @@
  *     clickhouse) — this pins parser/generator symmetry per dialect.
  */
 import { describe, it, expect } from 'vitest';
-import { detectSemanticQuery, semanticSpecFromIr } from '../detect';
+import { semanticSpecFromIr } from '../detect';
+import { detectSemanticQuery } from '../detect-sql';
 import { compileSemanticQuery } from '../compile';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import type { SemanticModel } from '@/lib/types/semantic';
