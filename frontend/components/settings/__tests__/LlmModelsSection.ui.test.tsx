@@ -165,22 +165,57 @@ describe('LlmModelsSection', () => {
     });
   });
 
-  it('name is optional: a new provider gets an auto name, and a blanked name falls back on save', async () => {
+  it('hides the name field entirely for a single provider of a type (auto-named by the type)', async () => {
     const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
     renderWithProviders(<LlmModelsSection />, { store: storeWithLlm(undefined) });
     const user = userEvent.setup();
 
     await user.click(await screen.findByLabelText('Add LLM provider'));
-    // Auto-named after the default provider type (minusx).
-    expect((screen.getByLabelText('LLM provider minusx name') as HTMLInputElement).value).toBe('minusx');
+    // Single provider of its type: no name field at all.
+    expect(screen.queryByLabelText('LLM provider minusx name')).not.toBeInTheDocument();
 
-    // Blank it out — save falls back to the auto name instead of erroring.
-    await user.clear(screen.getByLabelText('LLM provider minusx name'));
     await user.click(screen.getByLabelText('Save LLM configuration'));
     await waitFor(() => {
       const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
       const body = JSON.parse((configCall![1] as RequestInit).body as string);
-      expect(body.llm.providers[0].name).toBe('minusx');
+      expect(body.llm.providers[0].name).toBe('minusx'); // auto = provider type
+    });
+  });
+
+  it('shows name fields only when a provider type is duplicated', async () => {
+    mockFetch();
+    // One openai provider: no name field.
+    const single = renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'openai', provider: 'openai', apiKey: 'k' }] }),
+    });
+    expect(await screen.findByLabelText('LLM provider openai')).toBeInTheDocument();
+    expect(screen.queryByLabelText('LLM provider openai name')).not.toBeInTheDocument();
+    single.unmount();
+
+    // Two openai providers: BOTH entries show their name field.
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [
+          { name: 'openai', provider: 'openai', apiKey: 'k1' },
+          { name: 'openai-2', provider: 'openai', apiKey: 'k2' },
+        ],
+      }),
+    });
+    expect(await screen.findByLabelText('LLM provider openai name')).toBeInTheDocument();
+    expect(screen.getByLabelText('LLM provider openai-2 name')).toBeInTheDocument();
+  });
+
+  it('keeps a custom name visible even without duplicates (clearing it hides the field again)', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'Default', provider: 'openai', apiKey: 'k' }] }),
+    });
+    const nameInput = await screen.findByLabelText('LLM provider Default name');
+    expect((nameInput as HTMLInputElement).value).toBe('Default');
+
+    fireEvent.change(nameInput, { target: { value: '' } });
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/LLM provider .* name/)).not.toBeInTheDocument();
     });
   });
 

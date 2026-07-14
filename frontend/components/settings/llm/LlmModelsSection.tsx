@@ -97,6 +97,16 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
   const minusx = findMinusxProvider(draft);
   const hasExplicitAssignments = Object.values(draft.assignments ?? {}).some(a => (a?.chain?.length ?? 0) > 0);
 
+  // The name is an internal identity (auto = the provider type). The field
+  // only surfaces when it's actually needed: duplicate provider types, or an
+  // existing custom name (clearing it hides the field again).
+  const slugCounts = providers.reduce<Record<string, number>>((acc, p) => {
+    acc[p.provider] = (acc[p.provider] ?? 0) + 1;
+    return acc;
+  }, {});
+  const showNameField = (entry: LlmProviderEntry) =>
+    (slugCounts[entry.provider] ?? 0) > 1 || (entry.name !== '' && entry.name !== entry.provider);
+
   const providerTypeOptions = useMemo(() => {
     const rest = registry.map(p => p.slug).filter(slug => !FEATURED_PROVIDERS.includes(slug)).sort();
     return [...FEATURED_PROVIDERS, ...rest].map(slug => ({ value: slug, label: providerLabel(slug) }));
@@ -120,16 +130,22 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
       const prev = next.providers[index];
       // Switching the provider type refreshes an auto-generated name; a
       // user-customized name is left alone.
-      if (patch.provider !== undefined && prev && (prev.name === '' || prev.name === autoName(prev.provider, next.providers, index))) {
+      if (patch.provider !== undefined && prev && (prev.name === '' || prev.name === prev.provider || prev.name === autoName(prev.provider, next.providers, index))) {
         patch = { ...patch, name: autoName(patch.provider, next.providers, index) };
       }
-      next.providers[index] = { ...prev, ...patch };
-      // Renaming cascades into every assignment chain that referenced the old
-      // name — a dangling reference would fail validation on save.
-      if (patch.name !== undefined && prev?.name && patch.name !== prev.name && next.assignments) {
-        for (const useCase of LLM_USE_CASES) {
-          for (const step of next.assignments[useCase]?.chain ?? []) {
-            if (step.providerName === prev.name) step.providerName = patch.name;
+      const updated = { ...prev, ...patch };
+      next.providers[index] = updated;
+      // Cascade the EFFECTIVE name (blank name = the auto name) into every
+      // assignment chain that referenced the old one — a dangling reference
+      // would fail validation on save. Covers renames, clears, and type switches.
+      if (prev && next.assignments) {
+        const oldEffective = prev.name || autoName(prev.provider, next.providers, index);
+        const newEffective = updated.name || autoName(updated.provider, next.providers, index);
+        if (oldEffective !== newEffective) {
+          for (const useCase of LLM_USE_CASES) {
+            for (const step of next.assignments[useCase]?.chain ?? []) {
+              if (step.providerName === oldEffective) step.providerName = newEffective;
+            }
           }
         }
       }
@@ -150,7 +166,8 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
   const removeProvider = (index: number) => {
     setDraft(d => {
       const next = structuredClone(d);
-      const removed = next.providers?.[index]?.name;
+      const entry = next.providers?.[index];
+      const removed = entry ? (entry.name || entry.provider) : undefined;
       next.providers = (next.providers ?? []).filter((_, i) => i !== index);
       // Drop chain steps that referenced the removed provider.
       if (removed && next.assignments) {
@@ -201,33 +218,35 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
   /** Model used for a provider's connectivity test: its first chain use, else the registry's first model. */
   const testModelFor = (entry: LlmProviderEntry): string | undefined => {
     for (const useCase of LLM_USE_CASES) {
-      const hit = draft.assignments?.[useCase]?.chain?.find(c => c.providerName === entry.name && c.model);
+      const hit = draft.assignments?.[useCase]?.chain?.find(c => c.providerName === (entry.name || entry.provider) && c.model);
       if (hit?.model) return hit.model;
     }
     return modelsFor(entry.provider)[0]?.id;
   };
 
   const testProvider = async (entry: LlmProviderEntry) => {
-    setTesting(entry.name);
-    setTestResults(r => { const { [entry.name]: _out, ...rest } = r; return rest; });
+    const key = entry.name || entry.provider;
+    setTesting(key);
+    setTestResults(r => { const { [key]: _out, ...rest } = r; return rest; });
     try {
       const res = await fetch('/api/llm/test', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: entry, model: testModelFor(entry) }),
+        // Effective name: a blank name resolves to the provider type.
+        body: JSON.stringify({ provider: { ...entry, name: entry.name || entry.provider }, model: testModelFor(entry) }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error?.message ?? 'Test request failed');
       const ok = body.data?.ok === true;
       setTestResults(r => ({
         ...r,
-        [entry.name]: ok
+        [key]: ok
           ? { ok: true, detail: `Connected (${body.data.latencyMs}ms)` }
           : { ok: false, detail: body.data?.error ?? 'Connection failed' },
       }));
     } catch (error) {
-      setTestResults(r => ({ ...r, [entry.name]: { ok: false, detail: error instanceof Error ? error.message : 'Test request failed' } }));
+      setTestResults(r => ({ ...r, [key]: { ok: false, detail: error instanceof Error ? error.message : 'Test request failed' } }));
     } finally {
       setTesting(null);
     }
@@ -246,8 +265,8 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
             const isMinusx = entry.provider === MINUSX_PROVIDER;
             const isCustom = entry.provider === CUSTOM_PROVIDER;
             const isBedrock = entry.provider === 'amazon-bedrock';
-            const result = testResults[entry.name];
-            const label = entry.name || `provider ${index + 1}`;
+            const result = testResults[entry.name || entry.provider];
+            const label = entry.name || entry.provider || `provider ${index + 1}`;
             return (
               <Box key={index} borderWidth="1px" borderColor="border.muted" borderRadius="md" p={4} aria-label={`LLM provider ${label}`}>
                 <Flex gap={3} wrap="wrap" align="flex-end">
@@ -261,17 +280,19 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
                       ariaLabel={`LLM provider ${label} type`}
                     />
                   </Box>
-                  <Box minW="160px">
-                    <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Name (optional)</Text>
-                    <Input
-                      size="sm" fontSize="xs" fontFamily="mono"
-                      value={entry.name}
-                      placeholder={entry.provider}
-                      onChange={(e) => setProvider(index, { name: e.target.value })}
-                      autoComplete="off"
-                      aria-label={`LLM provider ${label} name`}
-                    />
-                  </Box>
+                  {showNameField(entry) && (
+                    <Box minW="160px">
+                      <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Name</Text>
+                      <Input
+                        size="sm" fontSize="xs" fontFamily="mono"
+                        value={entry.name === entry.provider ? '' : entry.name}
+                        placeholder={entry.provider}
+                        onChange={(e) => setProvider(index, { name: e.target.value })}
+                        autoComplete="off"
+                        aria-label={`LLM provider ${label} name`}
+                      />
+                    </Box>
+                  )}
                   <Box minW="220px" flex="1">
                     <HStack mb={1} gap={2}>
                       <Text fontSize="xs" color="fg.muted" fontFamily="mono">API key</Text>
@@ -315,8 +336,8 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
                     <Button
                       size="sm" variant="outline" fontFamily="mono"
                       onClick={() => testProvider(entry)}
-                      loading={testing === entry.name}
-                      disabled={!entry.name || (status === 'none' && !isCustom)}
+                      loading={testing === (entry.name || entry.provider)}
+                      disabled={status === 'none' && !isCustom}
                       aria-label={`Test LLM provider ${label}`}
                     >
                       <LuPlug /> Test
@@ -399,7 +420,17 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
   onChange: (chain: LlmModelChoice[]) => void;
 }) {
   const meta = USE_CASE_TITLES[useCase];
-  const providerOptions = providers.filter(p => p.name).map(p => ({ value: p.name, label: `${p.name} (${providerLabel(p.provider)})` }));
+  // Options key on the EFFECTIVE name (blank = the provider type). The custom
+  // name only appears in the label when it exists or the type is ambiguous.
+  const typeCounts = providers.reduce<Record<string, number>>((acc, p) => {
+    acc[p.provider] = (acc[p.provider] ?? 0) + 1;
+    return acc;
+  }, {});
+  const providerOptions = providers.map(p => {
+    const effective = p.name || p.provider;
+    const needsName = (typeCounts[p.provider] ?? 0) > 1 || (p.name !== '' && p.name !== p.provider);
+    return { value: effective, label: needsName ? `${effective} (${providerLabel(p.provider)})` : providerLabel(p.provider) };
+  });
 
   const setStep = (index: number, patch: Partial<LlmModelChoice>) => {
     const next = chain.map((step, i) => (i === index ? { ...step, ...patch } : step));
@@ -412,7 +443,7 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
       <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>{meta.description}</Text>
       <VStack align="stretch" gap={2}>
         {chain.map((step, index) => {
-          const entry = providers.find(p => p.name === step.providerName);
+          const entry = providers.find(p => (p.name || p.provider) === step.providerName);
           const slug = entry?.provider ?? '';
           const registryModels = slug ? modelsFor(slug) : [];
           const stepLabel = `${meta.title} ${index === 0 ? 'primary' : `fallback ${index}`}`;
