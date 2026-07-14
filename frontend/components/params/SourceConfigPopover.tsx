@@ -3,7 +3,7 @@
 // ─── Source Config Popover ────────────────────────────────────────────────────
 // Settings gear that opens a popover to configure parameter.source.
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Input, HStack, Text, MenuRoot, MenuTrigger, MenuContent, MenuItem,
   Portal, MenuPositioner, Box, IconButton, VStack, Popover, Button,
@@ -13,6 +13,7 @@ import { QuestionParameter } from '@/lib/types';
 import type { SqlParameterSource } from '@/lib/validation/atlas-schemas';
 import { getTypeColor, getTypeIcon } from '@/lib/sql/param-type-display';
 import { generateLabel } from '@/lib/sql/sql-params';
+import { useInferredColumns } from '@/components/query-value-selector';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import FileSearchSelect from '../shared/FileSearchSelect';
 import { ROW_H } from './paramInputShared';
@@ -33,8 +34,6 @@ interface SourceConfigPopoverProps {
 
 export function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disableTypeChange }: SourceConfigPopoverProps) {
   const [open, setOpen] = useState(false);
-  const [columns, setColumns] = useState<{ name: string; type: string }[]>([]);
-  const [loadingCols, setLoadingCols] = useState(false);
 
   // Local mode state tracks the toggle, even before config is complete.
   const isFromQuestion = parameter.source?.type === 'question';
@@ -46,56 +45,36 @@ export function SourceConfigPopover({ parameter, onParameterChange, onTypeChange
 
   const sourceQuestionId = parameter.source?.type === 'question' ? parameter.source.id : null;
 
-  // Pre-fetch columns when popover opens with an existing question source
-  useEffect(() => {
-    if (open && sourceQuestionId) {
-      fetchColumns(sourceQuestionId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
   const { files: questionFiles } = useFilesByCriteria({ criteria: { type: 'question' }, partial: true });
   const questionList = useMemo(
     () => questionFiles.map(f => ({ id: f.id, name: f.name || String(f.id) })),
     [questionFiles]
   );
 
-  async function fetchColumns(questionId: number) {
-    setLoadingCols(true);
-    try {
-      const res = await fetch('/api/infer-columns', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questionId }),
-      });
-      const data = await res.json();
-      setColumns(data.columns ?? []);
-    } catch {
-      setColumns([]);
-    } finally {
-      setLoadingCols(false);
-    }
-  }
+
+  // Local draft state for question source (not committed until Apply)
+  const [draftQuestionId, setDraftQuestionId] = useState<number | null>(sourceQuestionId);
+  const [draftColumn, setDraftColumn] = useState(parameter.source?.type === 'question' ? parameter.source.column : '');
+
+  // Columns for the drafted question — shared inference (query-value-selector).
+  const activeQuestionId = draftQuestionId ?? sourceQuestionId;
+  const { columns, loading: loadingCols } = useInferredColumns(
+    open && activeQuestionId ? { kind: 'question', questionId: activeQuestionId } : null,
+  );
 
   const filteredColumns = useMemo(() => {
     if (parameter.type === 'number') return columns.filter(c => isNumericType(c.type));
     return columns;
   }, [columns, parameter.type]);
 
-  // Local draft state for question source (not committed until Apply)
-  const [draftQuestionId, setDraftQuestionId] = useState<number | null>(sourceQuestionId);
-  const [draftColumn, setDraftColumn] = useState(parameter.source?.type === 'question' ? parameter.source.column : '');
-
   const handleModeChange = (newMode: 'manual' | 'question' | 'sql') => {
     setMode(newMode);
     if (newMode === 'manual') {
       onParameterChange({ ...parameter, source: null });
-      setColumns([]);
       setSqlQuery('');
       setDraftQuestionId(null);
       setDraftColumn('');
     } else if (newMode === 'sql') {
-      setColumns([]);
       setDraftQuestionId(null);
       setDraftColumn('');
     } else if (newMode === 'question') {
@@ -106,7 +85,6 @@ export function SourceConfigPopover({ parameter, onParameterChange, onTypeChange
   const handleQuestionSelect = (id: number) => {
     setDraftQuestionId(id);
     setDraftColumn('');
-    fetchColumns(id);
   };
 
   const handleColumnSelect = (column: string) => {
