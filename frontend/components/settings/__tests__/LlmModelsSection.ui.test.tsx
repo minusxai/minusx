@@ -116,7 +116,50 @@ describe('LlmModelsSection', () => {
     });
   });
 
-  it('builds an assignment chain with fallbacks', async () => {
+  it('model options live behind a gear button; reasoning defaults to low and is stored explicitly', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k1' }] }),
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('Add Analyst model'));
+    // No inline reasoning dropdown — an options gear instead.
+    expect(screen.queryByLabelText('Analyst reasoning')).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Analyst options'));
+    // 'low' is pre-selected (the default) — no ambiguous 'default' option exists.
+    expect(await screen.findByLabelText('Reasoning effort low selected')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Reasoning effort default/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Set reasoning effort high'));
+    await user.click(screen.getByLabelText('Close model options'));
+
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.assignments.analyst.chain[0].options.reasoning).toBe('high');
+    });
+  });
+
+  it('a new chain step stores reasoning low explicitly (what you see is what is saved)', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k1' }] }),
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('Add Analyst model'));
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.assignments.analyst.chain[0].options.reasoning).toBe('low');
+    });
+  });
+
+  it('assigns exactly ONE model per use case — no fallback affordance exists', async () => {
     const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
     renderWithProviders(<LlmModelsSection />, {
       store: storeWithLlm({
@@ -129,15 +172,16 @@ describe('LlmModelsSection', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByLabelText('Add Analyst model'));
-    expect(screen.getByLabelText('Analyst primary provider')).toBeInTheDocument();
-    await user.click(screen.getByLabelText('Add Analyst fallback'));
-    expect(screen.getByLabelText('Analyst fallback 1 provider')).toBeInTheDocument();
+    expect(screen.getByLabelText('Analyst provider')).toBeInTheDocument();
+    // Once a model is set, there is no way to add another (fallbacks removed).
+    expect(screen.queryByLabelText('Add Analyst fallback')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Add Analyst model')).not.toBeInTheDocument();
 
     await user.click(screen.getByLabelText('Save LLM configuration'));
     await waitFor(() => {
       const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
       const body = JSON.parse((configCall![1] as RequestInit).body as string);
-      expect(body.llm.assignments.analyst.chain).toHaveLength(2);
+      expect(body.llm.assignments.analyst.chain).toHaveLength(1);
       expect(body.llm.assignments.analyst.chain[0].providerName).toBe('a');
     });
   });
@@ -165,22 +209,57 @@ describe('LlmModelsSection', () => {
     });
   });
 
-  it('name is optional: a new provider gets an auto name, and a blanked name falls back on save', async () => {
+  it('hides the name field entirely for a single provider of a type (auto-named by the type)', async () => {
     const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
     renderWithProviders(<LlmModelsSection />, { store: storeWithLlm(undefined) });
     const user = userEvent.setup();
 
     await user.click(await screen.findByLabelText('Add LLM provider'));
-    // Auto-named after the default provider type (minusx).
-    expect((screen.getByLabelText('LLM provider minusx name') as HTMLInputElement).value).toBe('minusx');
+    // Single provider of its type: no name field at all.
+    expect(screen.queryByLabelText('LLM provider minusx name')).not.toBeInTheDocument();
 
-    // Blank it out — save falls back to the auto name instead of erroring.
-    await user.clear(screen.getByLabelText('LLM provider minusx name'));
     await user.click(screen.getByLabelText('Save LLM configuration'));
     await waitFor(() => {
       const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
       const body = JSON.parse((configCall![1] as RequestInit).body as string);
-      expect(body.llm.providers[0].name).toBe('minusx');
+      expect(body.llm.providers[0].name).toBe('minusx'); // auto = provider type
+    });
+  });
+
+  it('shows name fields only when a provider type is duplicated', async () => {
+    mockFetch();
+    // One openai provider: no name field.
+    const single = renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'openai', provider: 'openai', apiKey: 'k' }] }),
+    });
+    expect(await screen.findByLabelText('LLM provider openai')).toBeInTheDocument();
+    expect(screen.queryByLabelText('LLM provider openai name')).not.toBeInTheDocument();
+    single.unmount();
+
+    // Two openai providers: BOTH entries show their name field.
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [
+          { name: 'openai', provider: 'openai', apiKey: 'k1' },
+          { name: 'openai-2', provider: 'openai', apiKey: 'k2' },
+        ],
+      }),
+    });
+    expect(await screen.findByLabelText('LLM provider openai name')).toBeInTheDocument();
+    expect(screen.getByLabelText('LLM provider openai-2 name')).toBeInTheDocument();
+  });
+
+  it('keeps a custom name visible even without duplicates (clearing it hides the field again)', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'Default', provider: 'openai', apiKey: 'k' }] }),
+    });
+    const nameInput = await screen.findByLabelText('LLM provider Default name');
+    expect((nameInput as HTMLInputElement).value).toBe('Default');
+
+    fireEvent.change(nameInput, { target: { value: '' } });
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/LLM provider .* name/)).not.toBeInTheDocument();
     });
   });
 

@@ -6,9 +6,8 @@
  * Two-level editor over the org config's `llm` section:
  *   1. Providers — credentialed endpoints (MinusX managed / registry providers /
  *      custom OpenAI-compatible), each testable via POST /api/llm/test.
- *   2. Assignments — per use case (analyst / micro): an ordered model chain
- *      `[primary, ...fallbacks]`, with searchable model pickers fed by
- *      GET /api/llm/registry.
+ *   2. Assignments — per use case (analyst / micro): one model each, with
+ *      searchable model pickers fed by GET /api/llm/registry.
  *
  * MinusX special-casing: the MinusX provider is pinned first in the picker and
  * needs only an API key — with no explicit assignments, the gateway handles
@@ -21,8 +20,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, Box, Button, Flex, HStack, Input, Text, VStack } from '@chakra-ui/react';
-import { LuCheck, LuCirclePlus, LuPlug, LuTrash2, LuX } from 'react-icons/lu';
+import { Badge, Box, Button, Dialog, Flex, HStack, Input, Text, VStack } from '@chakra-ui/react';
+import { LuCheck, LuCirclePlus, LuPlug, LuSettings2, LuTrash2, LuX } from 'react-icons/lu';
 import SimpleSelect from '@/components/evals/SimpleSelect';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { toaster } from '@/components/ui/toaster';
@@ -46,14 +45,10 @@ const PROVIDER_LABELS: Record<string, string> = {
   google: 'Google',
 };
 
-const REASONING_OPTIONS = [
-  { value: '', label: 'default' },
-  { value: 'off', label: 'off' },
-  { value: 'minimal', label: 'minimal' },
-  { value: 'low', label: 'low' },
-  { value: 'medium', label: 'medium' },
-  { value: 'high', label: 'high' },
-];
+// No ambiguous 'default' entry — the default level is LOW and shows as the
+// pre-selected option, so what's selected is always what runs.
+const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'] as const;
+const DEFAULT_REASONING = 'low';
 
 const USE_CASE_TITLES: Record<LlmUseCase, { title: string; description: string }> = {
   analyst: { title: 'Analyst', description: 'The main chat/analysis agent (Explore, Question, Dashboard, Slack, reports).' },
@@ -97,6 +92,16 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
   const minusx = findMinusxProvider(draft);
   const hasExplicitAssignments = Object.values(draft.assignments ?? {}).some(a => (a?.chain?.length ?? 0) > 0);
 
+  // The name is an internal identity (auto = the provider type). The field
+  // only surfaces when it's actually needed: duplicate provider types, or an
+  // existing custom name (clearing it hides the field again).
+  const slugCounts = providers.reduce<Record<string, number>>((acc, p) => {
+    acc[p.provider] = (acc[p.provider] ?? 0) + 1;
+    return acc;
+  }, {});
+  const showNameField = (entry: LlmProviderEntry) =>
+    (slugCounts[entry.provider] ?? 0) > 1 || (entry.name !== '' && entry.name !== entry.provider);
+
   const providerTypeOptions = useMemo(() => {
     const rest = registry.map(p => p.slug).filter(slug => !FEATURED_PROVIDERS.includes(slug)).sort();
     return [...FEATURED_PROVIDERS, ...rest].map(slug => ({ value: slug, label: providerLabel(slug) }));
@@ -120,16 +125,22 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
       const prev = next.providers[index];
       // Switching the provider type refreshes an auto-generated name; a
       // user-customized name is left alone.
-      if (patch.provider !== undefined && prev && (prev.name === '' || prev.name === autoName(prev.provider, next.providers, index))) {
+      if (patch.provider !== undefined && prev && (prev.name === '' || prev.name === prev.provider || prev.name === autoName(prev.provider, next.providers, index))) {
         patch = { ...patch, name: autoName(patch.provider, next.providers, index) };
       }
-      next.providers[index] = { ...prev, ...patch };
-      // Renaming cascades into every assignment chain that referenced the old
-      // name — a dangling reference would fail validation on save.
-      if (patch.name !== undefined && prev?.name && patch.name !== prev.name && next.assignments) {
-        for (const useCase of LLM_USE_CASES) {
-          for (const step of next.assignments[useCase]?.chain ?? []) {
-            if (step.providerName === prev.name) step.providerName = patch.name;
+      const updated = { ...prev, ...patch };
+      next.providers[index] = updated;
+      // Cascade the EFFECTIVE name (blank name = the auto name) into every
+      // assignment chain that referenced the old one — a dangling reference
+      // would fail validation on save. Covers renames, clears, and type switches.
+      if (prev && next.assignments) {
+        const oldEffective = prev.name || autoName(prev.provider, next.providers, index);
+        const newEffective = updated.name || autoName(updated.provider, next.providers, index);
+        if (oldEffective !== newEffective) {
+          for (const useCase of LLM_USE_CASES) {
+            for (const step of next.assignments[useCase]?.chain ?? []) {
+              if (step.providerName === oldEffective) step.providerName = newEffective;
+            }
           }
         }
       }
@@ -150,7 +161,8 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
   const removeProvider = (index: number) => {
     setDraft(d => {
       const next = structuredClone(d);
-      const removed = next.providers?.[index]?.name;
+      const entry = next.providers?.[index];
+      const removed = entry ? (entry.name || entry.provider) : undefined;
       next.providers = (next.providers ?? []).filter((_, i) => i !== index);
       // Drop chain steps that referenced the removed provider.
       if (removed && next.assignments) {
@@ -201,33 +213,35 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
   /** Model used for a provider's connectivity test: its first chain use, else the registry's first model. */
   const testModelFor = (entry: LlmProviderEntry): string | undefined => {
     for (const useCase of LLM_USE_CASES) {
-      const hit = draft.assignments?.[useCase]?.chain?.find(c => c.providerName === entry.name && c.model);
+      const hit = draft.assignments?.[useCase]?.chain?.find(c => c.providerName === (entry.name || entry.provider) && c.model);
       if (hit?.model) return hit.model;
     }
     return modelsFor(entry.provider)[0]?.id;
   };
 
   const testProvider = async (entry: LlmProviderEntry) => {
-    setTesting(entry.name);
-    setTestResults(r => { const { [entry.name]: _out, ...rest } = r; return rest; });
+    const key = entry.name || entry.provider;
+    setTesting(key);
+    setTestResults(r => { const { [key]: _out, ...rest } = r; return rest; });
     try {
       const res = await fetch('/api/llm/test', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: entry, model: testModelFor(entry) }),
+        // Effective name: a blank name resolves to the provider type.
+        body: JSON.stringify({ provider: { ...entry, name: entry.name || entry.provider }, model: testModelFor(entry) }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error?.message ?? 'Test request failed');
       const ok = body.data?.ok === true;
       setTestResults(r => ({
         ...r,
-        [entry.name]: ok
+        [key]: ok
           ? { ok: true, detail: `Connected (${body.data.latencyMs}ms)` }
           : { ok: false, detail: body.data?.error ?? 'Connection failed' },
       }));
     } catch (error) {
-      setTestResults(r => ({ ...r, [entry.name]: { ok: false, detail: error instanceof Error ? error.message : 'Test request failed' } }));
+      setTestResults(r => ({ ...r, [key]: { ok: false, detail: error instanceof Error ? error.message : 'Test request failed' } }));
     } finally {
       setTesting(null);
     }
@@ -246,8 +260,8 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
             const isMinusx = entry.provider === MINUSX_PROVIDER;
             const isCustom = entry.provider === CUSTOM_PROVIDER;
             const isBedrock = entry.provider === 'amazon-bedrock';
-            const result = testResults[entry.name];
-            const label = entry.name || `provider ${index + 1}`;
+            const result = testResults[entry.name || entry.provider];
+            const label = entry.name || entry.provider || `provider ${index + 1}`;
             return (
               <Box key={index} borderWidth="1px" borderColor="border.muted" borderRadius="md" p={4} aria-label={`LLM provider ${label}`}>
                 <Flex gap={3} wrap="wrap" align="flex-end">
@@ -261,17 +275,19 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
                       ariaLabel={`LLM provider ${label} type`}
                     />
                   </Box>
-                  <Box minW="160px">
-                    <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Name (optional)</Text>
-                    <Input
-                      size="sm" fontSize="xs" fontFamily="mono"
-                      value={entry.name}
-                      placeholder={entry.provider}
-                      onChange={(e) => setProvider(index, { name: e.target.value })}
-                      autoComplete="off"
-                      aria-label={`LLM provider ${label} name`}
-                    />
-                  </Box>
+                  {showNameField(entry) && (
+                    <Box minW="160px">
+                      <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Name</Text>
+                      <Input
+                        size="sm" fontSize="xs" fontFamily="mono"
+                        value={entry.name === entry.provider ? '' : entry.name}
+                        placeholder={entry.provider}
+                        onChange={(e) => setProvider(index, { name: e.target.value })}
+                        autoComplete="off"
+                        aria-label={`LLM provider ${label} name`}
+                      />
+                    </Box>
+                  )}
                   <Box minW="220px" flex="1">
                     <HStack mb={1} gap={2}>
                       <Text fontSize="xs" color="fg.muted" fontFamily="mono">API key</Text>
@@ -315,8 +331,8 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
                     <Button
                       size="sm" variant="outline" fontFamily="mono"
                       onClick={() => testProvider(entry)}
-                      loading={testing === entry.name}
-                      disabled={!entry.name || (status === 'none' && !isCustom)}
+                      loading={testing === (entry.name || entry.provider)}
+                      disabled={status === 'none' && !isCustom}
                       aria-label={`Test LLM provider ${label}`}
                     >
                       <LuPlug /> Test
@@ -358,7 +374,7 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
           </Text>
         ) : (
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-            Pick the model each use case runs on, with optional fallbacks tried in order when a model is unavailable.
+            Pick the model each use case runs on.
           </Text>
         )}
         <VStack align="stretch" gap={4} mt={3}>
@@ -399,88 +415,155 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
   onChange: (chain: LlmModelChoice[]) => void;
 }) {
   const meta = USE_CASE_TITLES[useCase];
-  const providerOptions = providers.filter(p => p.name).map(p => ({ value: p.name, label: `${p.name} (${providerLabel(p.provider)})` }));
+  // Options key on the EFFECTIVE name (blank = the provider type). The custom
+  // name only appears in the label when it exists or the type is ambiguous.
+  const typeCounts = providers.reduce<Record<string, number>>((acc, p) => {
+    acc[p.provider] = (acc[p.provider] ?? 0) + 1;
+    return acc;
+  }, {});
+  const providerOptions = providers.map(p => {
+    const effective = p.name || p.provider;
+    const needsName = (typeCounts[p.provider] ?? 0) > 1 || (p.name !== '' && p.name !== p.provider);
+    return { value: effective, label: needsName ? `${effective} (${providerLabel(p.provider)})` : providerLabel(p.provider) };
+  });
 
-  const setStep = (index: number, patch: Partial<LlmModelChoice>) => {
-    const next = chain.map((step, i) => (i === index ? { ...step, ...patch } : step));
-    onChange(next);
+  // One model per use case: the stored `chain` array is a stable shape whose
+  // FIRST entry is the assignment (extra legacy entries are ignored).
+  const step = chain[0];
+  const setStep = (patch: Partial<LlmModelChoice>) => {
+    onChange([{ ...step, ...patch }]);
   };
+
+  const [optionsOpen, setOptionsOpen] = useState(false);
+
+  const entry = step ? providers.find(p => (p.name || p.provider) === step.providerName) : undefined;
+  const slug = entry?.provider ?? '';
+  const registryModels = slug ? modelsFor(slug) : [];
+  const reasoning = (step?.options?.['reasoning'] as string | undefined) ?? DEFAULT_REASONING;
 
   return (
     <Box borderWidth="1px" borderColor="border.muted" borderRadius="md" p={4} aria-label={`Model assignment ${meta.title}`}>
       <Text fontSize="sm" fontWeight="medium" fontFamily="mono">{meta.title}</Text>
       <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>{meta.description}</Text>
       <VStack align="stretch" gap={2}>
-        {chain.map((step, index) => {
-          const entry = providers.find(p => p.name === step.providerName);
-          const slug = entry?.provider ?? '';
-          const registryModels = slug ? modelsFor(slug) : [];
-          const stepLabel = `${meta.title} ${index === 0 ? 'primary' : `fallback ${index}`}`;
-          const reasoning = (step.options?.['reasoning'] as string | undefined) ?? '';
-          return (
-            <Flex key={index} gap={3} wrap="wrap" align="flex-end">
-              <Badge size="xs" variant="surface" minW="72px" justifyContent="center" mb={2}>{index === 0 ? 'primary' : `fallback ${index}`}</Badge>
-              <Box minW="200px">
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Provider</Text>
-                <SimpleSelect
-                  value={step.providerName}
-                  onChange={(providerName) => setStep(index, { providerName })}
-                  options={providerOptions}
-                  placeholder="Provider…"
-                  ariaLabel={`${stepLabel} provider`}
-                />
-              </Box>
-              {slug === MINUSX_PROVIDER ? (
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={2}>model routed by MinusX</Text>
-              ) : (
-                <Box minW="260px">
-                  <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Model</Text>
-                  {registryModels.length > 0 ? (
-                    <SimpleSelect
-                      value={step.model ?? ''}
-                      onChange={(model) => setStep(index, { model })}
-                      options={registryModels.map(m => ({ value: m.id, label: m.name === m.id ? m.id : `${m.name} (${m.id})` }))}
-                      placeholder="Search models…"
-                      ariaLabel={`${stepLabel} model`}
-                    />
-                  ) : (
-                    <Input
-                      size="sm" fontSize="xs" fontFamily="mono"
-                      value={step.model ?? ''}
-                      placeholder="model id (e.g. qwen3:32b)"
-                      onChange={(e) => setStep(index, { model: e.target.value || undefined })}
-                      aria-label={`${stepLabel} model`}
-                    />
-                  )}
-                </Box>
-              )}
-              {slug !== MINUSX_PROVIDER && (
-                <Box minW="130px">
-                  <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Reasoning effort</Text>
+        {step ? (
+          <Flex gap={3} wrap="wrap" align="flex-end">
+            <Box minW="200px">
+              <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Provider</Text>
+              <SimpleSelect
+                value={step.providerName}
+                onChange={(providerName) => setStep({ providerName })}
+                options={providerOptions}
+                placeholder="Provider…"
+                ariaLabel={`${meta.title} provider`}
+              />
+            </Box>
+            {slug === MINUSX_PROVIDER ? (
+              <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={2}>model routed by MinusX</Text>
+            ) : (
+              <Box minW="260px">
+                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Model</Text>
+                {registryModels.length > 0 ? (
                   <SimpleSelect
-                    value={reasoning}
-                    onChange={(value) => setStep(index, { options: value ? { ...step.options, reasoning: value } : (() => { const { reasoning: _r, ...rest } = step.options ?? {}; return Object.keys(rest).length ? rest : undefined; })() })}
-                    options={REASONING_OPTIONS}
-                    placeholder="reasoning"
-                    ariaLabel={`${stepLabel} reasoning`}
+                    value={step.model ?? ''}
+                    onChange={(model) => setStep({ model })}
+                    options={registryModels.map(m => ({ value: m.id, label: m.name === m.id ? m.id : `${m.name} (${m.id})` }))}
+                    placeholder="Search models…"
+                    ariaLabel={`${meta.title} model`}
                   />
-                </Box>
-              )}
-              <Button size="xs" variant="ghost" colorPalette="red" mb={1} onClick={() => onChange(chain.filter((_, i) => i !== index))} aria-label={`Remove ${stepLabel}`}>
-                <LuTrash2 />
+                ) : (
+                  <Input
+                    size="sm" fontSize="xs" fontFamily="mono"
+                    value={step.model ?? ''}
+                    placeholder="model id (e.g. qwen3:32b)"
+                    onChange={(e) => setStep({ model: e.target.value || undefined })}
+                    aria-label={`${meta.title} model`}
+                  />
+                )}
+              </Box>
+            )}
+            {slug !== MINUSX_PROVIDER && (
+              <Button size="xs" variant="ghost" mb={1} onClick={() => setOptionsOpen(true)} aria-label={`${meta.title} options`} title="Model options">
+                <LuSettings2 />
               </Button>
-            </Flex>
-          );
-        })}
-        <Button
-          size="xs" variant="outline" fontFamily="mono" alignSelf="flex-start"
-          onClick={() => onChange([...chain, { providerName: providerOptions[0]?.value ?? '' }])}
-          disabled={providerOptions.length === 0}
-          aria-label={`Add ${meta.title} ${chain.length === 0 ? 'model' : 'fallback'}`}
-        >
-          <LuCirclePlus /> {chain.length === 0 ? 'Set model' : 'Add fallback'}
-        </Button>
+            )}
+            <Button size="xs" variant="ghost" colorPalette="red" mb={1} onClick={() => onChange([])} aria-label={`Remove ${meta.title} model`}>
+              <LuTrash2 />
+            </Button>
+            {optionsOpen && (
+              <StepOptionsModal
+                stepLabel={meta.title}
+                reasoning={reasoning}
+                onReasoningChange={(value) => setStep({ options: { ...step.options, reasoning: value } })}
+                onClose={() => setOptionsOpen(false)}
+              />
+            )}
+          </Flex>
+        ) : (
+          <Button
+            size="xs" variant="outline" fontFamily="mono" alignSelf="flex-start"
+            onClick={() => onChange([{ providerName: providerOptions[0]?.value ?? '', options: { reasoning: DEFAULT_REASONING } }])}
+            disabled={providerOptions.length === 0}
+            aria-label={`Add ${meta.title} model`}
+          >
+            <LuCirclePlus /> Set model
+          </Button>
+        )}
       </VStack>
     </Box>
+  );
+}
+
+/**
+ * Per-step model options. Only reasoning effort for now; future per-model
+ * options (temperature, max tokens, …) get rows here instead of new columns
+ * in the chain row.
+ */
+function StepOptionsModal({ stepLabel, reasoning, onReasoningChange, onClose }: {
+  stepLabel: string;
+  reasoning: string;
+  onReasoningChange: (value: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog.Root open onOpenChange={(d) => { if (!d.open) onClose(); }}>
+      <Dialog.Backdrop />
+      <Dialog.Positioner>
+        <Dialog.Content maxW="420px" aria-label={`Model options for ${stepLabel}`}>
+          <Dialog.Header>
+            <Dialog.Title fontSize="md" fontFamily="mono">Model options — {stepLabel}</Dialog.Title>
+          </Dialog.Header>
+          <Dialog.Body>
+            <Text fontSize="xs" fontWeight="medium" fontFamily="mono" mb={1}>Reasoning effort</Text>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={2}>
+              How much the model thinks before answering. Higher = better on hard questions, slower and pricier.
+            </Text>
+            <HStack gap={1} wrap="wrap">
+              {REASONING_LEVELS.map(level => {
+                const selected = reasoning === level;
+                return (
+                  <Button
+                    key={level}
+                    size="xs" fontFamily="mono"
+                    variant={selected ? 'solid' : 'outline'}
+                    bg={selected ? 'accent.teal' : undefined}
+                    color={selected ? 'white' : undefined}
+                    onClick={() => onReasoningChange(level)}
+                    aria-label={selected ? `Reasoning effort ${level} selected` : `Set reasoning effort ${level}`}
+                  >
+                    {level}
+                  </Button>
+                );
+              })}
+            </HStack>
+          </Dialog.Body>
+          <Dialog.Footer>
+            <Button size="sm" fontFamily="mono" onClick={onClose} aria-label="Close model options">
+              Done
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog.Positioner>
+    </Dialog.Root>
   );
 }

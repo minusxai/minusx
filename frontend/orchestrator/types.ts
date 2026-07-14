@@ -28,10 +28,10 @@ export type ToolMessage = AssistantMessage | ToolResultMessage;
  */
 export type LlmUseCase = 'analyst' | 'micro';
 
-/** One step of a resolved LLM call plan: `[primary, ...fallbacks]`. */
+/** A resolved LLM call plan: the model + options a use case runs on. */
 export interface LlmPlanStep {
   model: Model<Api>;
-  /** Call-time stream options for this step (apiKey, reasoning, headers, …).
+  /** Call-time stream options (apiKey, reasoning, headers, …).
    *  Merged OVER the agent's own callOptions. */
   callOptions?: Record<string, unknown>;
 }

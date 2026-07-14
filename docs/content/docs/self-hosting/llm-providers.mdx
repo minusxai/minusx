@@ -13,14 +13,14 @@ The setup wizard's **AI Models** step, or **Settings → Models**, is the single
 
 - add one or more **providers** — MinusX (managed), Anthropic, OpenAI, Google, Amazon Bedrock, ~30 other registry providers, or any custom OpenAI-compatible endpoint — each with its API key,
 - **test the connection** before saving,
-- assign a model (with optional **fallbacks**, tried in order) to each use case — **Analyst** (the main agent) and **Micro tasks** (titles/summaries).
+- assign a model to each use case — **Analyst** (the main agent) and **Micro tasks** (titles/summaries).
 
 Keys are stored server-side in the workspace secrets store — the config document and the browser only ever see `@SECRETS/…` references, never the key.
 
 Resolution order per use case:
 
-1. The use case's explicit **assignment chain** (`[primary, …fallbacks]`)
-2. A configured **MinusX provider** — fully managed, no assignments needed (the gateway routes model, prompts, and fallbacks per use case)
+1. The use case's explicit **model assignment**
+2. A configured **MinusX provider** — fully managed, no assignments needed (the gateway routes models and prompts per use case)
 3. The **MinusX gateway default** — an unconfigured workspace routes there and gets a clear authentication error pointing back at Settings → Models
 
 For Amazon Bedrock, authenticate with a [Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) (bearer token) plus the AWS region.

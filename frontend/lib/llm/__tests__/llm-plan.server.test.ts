@@ -1,6 +1,7 @@
 // DB-backed plan resolution: reads the org config's `llm` section, resolves
-// @SECRETS refs to raw keys, and maps provider entries + model choices onto
-// executable plan steps (registry / bedrock / custom / minusx).
+// @SECRETS refs to raw keys, and maps the provider entry + model choice onto
+// an executable plan step (registry / bedrock / custom / minusx). One model
+// per use case — legacy multi-entry chains resolve to their first entry.
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { saveRawConfig, getRawConfig } from '@/lib/data/configs.server';
@@ -19,9 +20,9 @@ async function setLlmConfig(llm: LlmConfig | undefined) {
 }
 
 describe('resolveLlmPlan', () => {
-  it('returns [] for an unconfigured workspace in TEST envs (agents keep faux models)', async () => {
+  it('returns null for an unconfigured workspace in TEST envs (agents keep faux models)', async () => {
     await setLlmConfig(undefined);
-    expect(await resolveLlmPlan('analyst')).toEqual([]);
+    expect(await resolveLlmPlan('analyst')).toBeNull();
   });
 
   it('defaults an unconfigured workspace to the MinusX gateway in production (no env tier, no vendor default)', async () => {
@@ -29,15 +30,14 @@ describe('resolveLlmPlan', () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('VITEST', '');
     try {
-      const plan = await resolveLlmPlan('micro');
-      expect(plan).toHaveLength(1);
-      const model = plan[0].model as { provider: string; id: string };
+      const plan = (await resolveLlmPlan('micro'))!;
+      const model = plan.model as { provider: string; id: string };
       expect(model.provider).toBe('minusx');
       expect(model.id).toBe(MINUSX_AUTO_MODEL);
-      expect((plan[0].callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('micro');
+      expect((plan.callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('micro');
       // Deterministic sentinel key — the request reaches the gateway (whose
       // auth policy answers), instead of dying client-side env-dependently.
-      expect(plan[0].callOptions?.apiKey).toBe(MINUSX_UNCONFIGURED_KEY);
+      expect(plan.callOptions?.apiKey).toBe(MINUSX_UNCONFIGURED_KEY);
     } finally {
       vi.unstubAllEnvs();
     }
@@ -55,14 +55,13 @@ describe('resolveLlmPlan', () => {
     const stored = (await getRawConfig('org')).llm as LlmConfig;
     expect(isSecretRef(stored.providers![0].apiKey)).toBe(true);
 
-    const plan = await resolveLlmPlan('analyst');
-    expect(plan).toHaveLength(1);
-    expect((plan[0].model as { id: string }).id).toBe('claude-sonnet-4-6');
-    expect(plan[0].callOptions?.apiKey).toBe('sk-ant-raw-key');   // resolved at plan time
-    expect(plan[0].callOptions?.reasoning).toBe('low');
+    const plan = (await resolveLlmPlan('analyst'))!;
+    expect((plan.model as { id: string }).id).toBe('claude-sonnet-4-6');
+    expect(plan.callOptions?.apiKey).toBe('sk-ant-raw-key');   // resolved at plan time
+    expect(plan.callOptions?.reasoning).toBe('low');
   });
 
-  it('keeps chain order (primary first, fallbacks after)', async () => {
+  it('a legacy multi-entry chain resolves to its FIRST entry (fallbacks removed)', async () => {
     await setLlmConfig({
       providers: [
         { name: 'a', provider: 'anthropic', apiKey: 'k-a' },
@@ -75,29 +74,28 @@ describe('resolveLlmPlan', () => {
         ] },
       },
     });
-    const plan = await resolveLlmPlan('analyst');
-    expect(plan.map(s => (s.model as { provider: string }).provider)).toEqual(['anthropic', 'openai']);
+    const plan = (await resolveLlmPlan('analyst'))!;
+    expect((plan.model as { provider: string }).provider).toBe('anthropic');
   });
 
   it('a use case without an assignment routes to the minusx provider when configured', async () => {
     await setLlmConfig({
       providers: [{ name: 'mx', provider: 'minusx', apiKey: 'mx-key' }],
     });
-    const plan = await resolveLlmPlan('micro');
-    expect(plan).toHaveLength(1);
-    const model = plan[0].model as { provider: string; baseUrl: string };
+    const plan = (await resolveLlmPlan('micro'))!;
+    const model = plan.model as { provider: string; baseUrl: string };
     expect(model.provider).toBe('minusx');
     expect(model.baseUrl).toBeTruthy();
-    expect(plan[0].callOptions?.apiKey).toBe('mx-key');
-    expect((plan[0].callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('micro');
+    expect(plan.callOptions?.apiKey).toBe('mx-key');
+    expect((plan.callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('micro');
   });
 
-  it('a use case without an assignment and no minusx provider returns []', async () => {
+  it('a use case without an assignment and no minusx provider returns null (test env)', async () => {
     await setLlmConfig({
       providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
       assignments: { analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] } },
     });
-    expect(await resolveLlmPlan('micro')).toEqual([]);
+    expect(await resolveLlmPlan('micro')).toBeNull();
   });
 
   it('throws a clear error for an assignment referencing an unknown provider', async () => {

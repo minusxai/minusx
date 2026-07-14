@@ -15,16 +15,39 @@ describe('buildSeedLlmConfig', () => {
     expect(buildSeedLlmConfig({})).toBeNull();
   });
 
-  it('converts registry-shaped analyst+micro configs (key inline in the JSON)', () => {
+  it('converts registry-shaped analyst+micro configs (key inline; providers named by type)', () => {
     const seed = buildSeedLlmConfig({
       ANALYST_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'anthropic', model: 'claude-sonnet-4-6', apiKey: 'sk-ant-inline', options: { reasoning: 'low' } }),
       MICRO_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'openai', model: 'gpt-4.1-mini', apiKey: 'sk-oa-inline' }),
     })!;
     expect(seed.providers).toHaveLength(2);
-    expect(seed.providers![0]).toMatchObject({ name: 'env-analyst', provider: 'anthropic', apiKey: 'sk-ant-inline' });
-    expect(seed.providers![1]).toMatchObject({ name: 'env-micro', provider: 'openai', apiKey: 'sk-oa-inline' });
-    expect(seed.assignments!.analyst!.chain[0]).toMatchObject({ providerName: 'env-analyst', model: 'claude-sonnet-4-6', options: { reasoning: 'low' } });
-    expect(seed.assignments!.micro!.chain[0]).toMatchObject({ providerName: 'env-micro', model: 'gpt-4.1-mini' });
+    expect(seed.providers![0]).toMatchObject({ name: 'anthropic', provider: 'anthropic', apiKey: 'sk-ant-inline' });
+    expect(seed.providers![1]).toMatchObject({ name: 'openai', provider: 'openai', apiKey: 'sk-oa-inline' });
+    expect(seed.assignments!.analyst!.chain[0]).toMatchObject({ providerName: 'anthropic', model: 'claude-sonnet-4-6', options: { reasoning: 'low' } });
+    expect(seed.assignments!.micro!.chain[0]).toMatchObject({ providerName: 'openai', model: 'gpt-4.1-mini' });
+  });
+
+  it('dedupes to ONE provider when both configs share the same provider + key', () => {
+    const seed = buildSeedLlmConfig({
+      ANALYST_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'anthropic', model: 'claude-sonnet-4-6', apiKey: 'sk-shared', options: { reasoning: 'low' } }),
+      MICRO_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'anthropic', model: 'claude-haiku-4-5-20251001', apiKey: 'sk-shared' }),
+    })!;
+    expect(seed.providers).toHaveLength(1);
+    expect(seed.providers![0]).toMatchObject({ name: 'anthropic', provider: 'anthropic', apiKey: 'sk-shared' });
+    expect(seed.assignments!.analyst!.chain[0]).toMatchObject({ providerName: 'anthropic', model: 'claude-sonnet-4-6' });
+    expect(seed.assignments!.micro!.chain[0]).toMatchObject({ providerName: 'anthropic', model: 'claude-haiku-4-5-20251001' });
+  });
+
+  it('same provider type with DIFFERENT keys stays two entries, auto-suffixed like the UI', () => {
+    const seed = buildSeedLlmConfig({
+      ANALYST_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'anthropic', model: 'claude-sonnet-4-6', apiKey: 'sk-a' }),
+      MICRO_AGENT_MODEL_CONFIG: JSON.stringify({ provider: 'anthropic', model: 'claude-haiku-4-5-20251001', apiKey: 'sk-b' }),
+    })!;
+    expect(seed.providers).toHaveLength(2);
+    expect(seed.providers![0].name).toBe('anthropic');
+    expect(seed.providers![1].name).toBe('anthropic-2');
+    expect(seed.assignments!.analyst!.chain[0].providerName).toBe('anthropic');
+    expect(seed.assignments!.micro!.chain[0].providerName).toBe('anthropic-2');
   });
 
   it('converts a customModel config (inline key; model overrides preserved)', () => {
@@ -34,7 +57,7 @@ describe('buildSeedLlmConfig', () => {
         options: { temperature: 0 },
       }),
     })!;
-    expect(seed.providers![0]).toMatchObject({ name: 'env-analyst', provider: 'custom', baseUrl: 'http://vllm:8000/v1', apiKey: 'sk-vllm' });
+    expect(seed.providers![0]).toMatchObject({ name: 'custom', provider: 'custom', baseUrl: 'http://vllm:8000/v1', apiKey: 'sk-vllm' });
     expect(seed.assignments!.analyst!.chain[0]).toMatchObject({
       model: 'llama-3.3-70b', options: { temperature: 0 }, customModel: { contextWindow: 32768 },
     });
