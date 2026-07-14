@@ -938,7 +938,10 @@ export function addYField(envelope: VizEnvelope, column: { name: string; kind: V
   // (axis, format…) carry over to the folded value.
   const foldTransform = { fold: [y.field, column.name], as: ['__mx_key', '__mx_value'] };
   spec.transform = [foldTransform, ...((spec.transform as unknown[] | undefined) ?? [])];
-  encoding.y = { ...y, field: '__mx_value', type: 'quantitative' };
+  // Suppress the axis title: a single title over multiple folded measures is meaningless,
+  // and without this Vega-Lite auto-labels the axis "Sum of __mx_value" (the internal field
+  // name leaks). The measures are named by the color legend instead.
+  encoding.y = { ...y, field: '__mx_value', type: 'quantitative', title: null };
   const color = encoding.color;
   const colorIsFree = !color || typeof color.field !== 'string';
   if (colorIsFree) {
@@ -971,7 +974,10 @@ export function removeYField(envelope: VizEnvelope, name: string): VizEnvelope {
   transforms.splice(fold.index, 1);
   if (transforms.length === 0) delete spec.transform;
   if (remaining) {
-    encoding.y = { ...(encoding.y ?? {}), field: remaining, type: 'quantitative' };
+    const restored: Record<string, unknown> = { ...(encoding.y ?? {}), field: remaining, type: 'quantitative' };
+    // The fold suppressed the axis title (title:null); a lone measure should auto-title again.
+    if (restored.title === null) delete restored.title;
+    encoding.y = restored;
   } else {
     delete encoding.y;
   }

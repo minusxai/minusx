@@ -41,6 +41,7 @@ describe('addYField', () => {
     expect(spec.transform).toEqual([{ fold: ['revenue', 'profit'], as: ['__mx_key', '__mx_value'] }]);
     expect(spec.encoding.y.field).toBe('__mx_value');
     expect(spec.encoding.y.axis).toEqual({ format: ',.0f' }); // y props survive the fold
+    expect(spec.encoding.y.title).toBeNull(); // the internal '__mx_value' name never leaks as an axis title
     expect(spec.encoding.color).toEqual({ field: '__mx_key', type: 'nominal', title: null });
     expect(getYFields(spec)).toEqual(['revenue', 'profit']);
   });
@@ -79,6 +80,7 @@ describe('removeYField', () => {
     expect(spec.transform).toBeUndefined();
     expect(spec.encoding.y.field).toBe('revenue');
     expect(spec.encoding.y.axis).toEqual({ format: ',.0f' });
+    expect('title' in spec.encoding.y).toBe(false); // fold's title:null is cleared so the single measure auto-titles
     expect(spec.encoding.color).toBeUndefined();
   });
 

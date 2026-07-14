@@ -15,6 +15,7 @@ import { VizPivotView } from '@/components/viz/VizPivotView';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/components/question/error-parser';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { memo, useState, useEffect, useRef } from 'react';
 import isEqual from 'lodash/isEqual';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -24,6 +25,8 @@ import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 import { setRecipeParam } from '@/lib/viz/encoding-edit';
 import { resolveLegacyRenderEnvelope } from '@/lib/viz/from-vizsettings';
 import { toVizColumns } from '@/lib/viz/query-data';
+import { ChartDownloadMenu } from '@/components/viz/ChartDownloadMenu';
+import { getBrandLogoUrl } from '@/lib/branding/whitelabel';
 
 // Viz V2 (docs/Visualization Arch V2.md): lazy chunk — vega/vega-lite only load on
 // pages that actually render a V2 envelope (same pattern as GeoPlot/Leaflet).
@@ -225,6 +228,21 @@ function QuestionVisualizationInner({
     : null;
 
   const showChartTitle = config.viz.showTitle;
+
+  // Image + CSV download, revealed on hover of the chart (V1 parity). Rendered over both
+  // the V2 chart and the legacy render bridge; a subtle top-right control on every chart.
+  const chartDownloadOverlay = (envelope: VizEnvelope) => (
+    <Box className="mx-chart-dl" position="absolute" top={2} right={2} zIndex={6} opacity={0} transition="opacity 0.12s">
+      <ChartDownloadMenu
+        envelope={envelope}
+        rows={data?.rows ?? []}
+        columns={data?.columns ?? []}
+        colorMode={colorMode}
+        logoSrc={getBrandLogoUrl(appConfig.branding, colorMode)}
+      />
+    </Box>
+  );
+
   return (
     <VStack gap={0} width="full" align="stretch" flex="1" overflow="hidden"
     // borderRadius={'lg'} border={'1px solid'} borderColor={'border.muted'}
@@ -490,7 +508,7 @@ function QuestionVisualizationInner({
                   />
                 )}
                 {hasVizV2 && !isVizV2Table && !isVizV2Pivot && (
-                  <Box flex="1" minHeight="0" overflow="hidden" display="flex" p={3}>
+                  <Box position="relative" flex="1" minHeight="0" overflow="hidden" display="flex" p={3} css={{ '&:hover .mx-chart-dl, &:focus-within .mx-chart-dl': { opacity: 1 } }}>
                     <VegaChart
                       envelope={currentState.viz!}
                       rows={data.rows}
@@ -507,6 +525,7 @@ function QuestionVisualizationInner({
                           }
                         : undefined}
                     />
+                    {chartDownloadOverlay(currentState.viz!)}
                   </Box>
                 )}
                 {!hasVizV2 && currentState?.vizSettings?.type === 'table' && (
@@ -515,8 +534,9 @@ function QuestionVisualizationInner({
                   </Box>
                 )}
                 {legacyRenderViz && (
-                  <Box flex="1" minHeight="0" overflow="hidden" display="flex" p={3}>
+                  <Box position="relative" flex="1" minHeight="0" overflow="hidden" display="flex" p={3} css={{ '&:hover .mx-chart-dl, &:focus-within .mx-chart-dl': { opacity: 1 } }}>
                     <VegaChart envelope={legacyRenderViz} rows={data.rows} colorMode={colorMode} />
+                    {chartDownloadOverlay(legacyRenderViz)}
                   </Box>
                 )}
                 {!hasVizV2 && !legacyRenderViz && (currentState?.vizSettings?.type === 'line' ||

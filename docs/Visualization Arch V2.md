@@ -532,8 +532,10 @@ escape hatch — have moved to Appendix A. This list is now driven by **retiring
    (`VizImageRenderer.client.ts`); **headless** — `renderVizEnvelopeToJpeg` (`renderEnvelopeToSvg` → compositor,
    `render-viz-image.ts`). The agent-attachment path is wired: `renderFileChartImageBlocks` branches on a `viz`
    envelope, and the row-drop gate is now `isContentImageViz` (envelope-aware) across ReadFiles/EditFile.
-   **Remaining (follow-ups):** the Slack headless path (`extractQueryCharts` + `serverChartImageRenderer` →
-   envelopes, gated on `ExecuteQuery` emitting a `viz` arg) and the user image-download button on `VegaChart`.
+   The user **download menu** (image `.jpg` + data `.csv`) ships on every V2 chart via `ChartDownloadMenu` (a
+   hover-revealed overlay; the image reuses the client renderer, real tiles). **Remaining (follow-up):** the Slack
+   headless path (`extractQueryCharts` + `serverChartImageRenderer` → envelopes, gated on `ExecuteQuery` emitting
+   a `viz` arg).
 3. **Default new questions to V2.** `lib/data/story/template-defaults.ts` authors a `viz` envelope (`kind:'table'`)
    and STOPS emitting `vizSettings`. New questions are V2-only from here.
 4. **Backfill migration.** Bump `LATEST_DATA_VERSION` + add a `MIGRATIONS` entry that writes
