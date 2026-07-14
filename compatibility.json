@@ -1,0 +1,164 @@
+{
+  "$comment": "Shared static contract: what MinusX supports. Consumed by the app (connection form field specs), setup.sh (interview prompts — curled from raw.githubusercontent.com), and the docs (supported-databases / supported-models tables). Guarded by frontend/lib/compatibility/__tests__/compatibility.test.ts — model ids must exist in the baked pi-ai registry, connection types in CONNECTION_TYPES, field keys in the connector configs. Curated model lists are recommendations (free-text override is always allowed); update them when defaults change.",
+  "version": 1,
+  "llm": {
+    "providers": [
+      {
+        "id": "minusx",
+        "name": "MinusX Managed",
+        "kind": "managed",
+        "description": "Fully managed — one API key, model choice and routing handled by the MinusX gateway.",
+        "credentials": [
+          { "key": "apiKey", "label": "MinusX API key", "kind": "password", "required": true, "secret": true }
+        ]
+      },
+      {
+        "id": "anthropic",
+        "name": "Anthropic",
+        "kind": "registry",
+        "credentials": [
+          { "key": "apiKey", "label": "Anthropic API key", "kind": "password", "required": true, "secret": true }
+        ],
+        "models": [
+          { "id": "claude-sonnet-5", "name": "Claude Sonnet 5" },
+          { "id": "claude-opus-4-8", "name": "Claude Opus 4.8" },
+          { "id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6" },
+          { "id": "claude-haiku-4-5", "name": "Claude Haiku 4.5" }
+        ],
+        "defaults": { "analyst": "claude-sonnet-5", "micro": "claude-haiku-4-5" }
+      },
+      {
+        "id": "openai",
+        "name": "OpenAI",
+        "kind": "registry",
+        "credentials": [
+          { "key": "apiKey", "label": "OpenAI API key", "kind": "password", "required": true, "secret": true }
+        ],
+        "models": [
+          { "id": "gpt-5.6-luna", "name": "GPT-5.6 Luna" },
+          { "id": "gpt-5.6-sol", "name": "GPT-5.6 Sol" },
+          { "id": "gpt-5.5", "name": "GPT-5.5" },
+          { "id": "gpt-5.4", "name": "GPT-5.4" },
+          { "id": "gpt-5.4-mini", "name": "GPT-5.4 mini" },
+          { "id": "gpt-5.4-nano", "name": "GPT-5.4 nano" }
+        ],
+        "defaults": { "analyst": "gpt-5.6-luna", "micro": "gpt-5.4-nano" }
+      },
+      {
+        "id": "google",
+        "name": "Google Gemini",
+        "kind": "registry",
+        "credentials": [
+          { "key": "apiKey", "label": "Gemini API key", "kind": "password", "required": true, "secret": true }
+        ],
+        "models": [
+          { "id": "gemini-3.1-pro-preview", "name": "Gemini 3.1 Pro" },
+          { "id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash" },
+          { "id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro" },
+          { "id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash" }
+        ],
+        "defaults": { "analyst": "gemini-3.1-pro-preview", "micro": "gemini-3.5-flash" }
+      },
+      {
+        "id": "amazon-bedrock",
+        "name": "Amazon Bedrock",
+        "kind": "registry",
+        "credentials": [
+          { "key": "apiKey", "label": "Bedrock API key (bearer token)", "kind": "password", "required": true, "secret": true },
+          { "key": "awsRegion", "label": "AWS region", "kind": "text", "required": true, "default": "us-east-1" }
+        ],
+        "models": [
+          { "id": "global.anthropic.claude-sonnet-5", "name": "Claude Sonnet 5 (global)" },
+          { "id": "global.anthropic.claude-opus-4-8", "name": "Claude Opus 4.8 (global)" },
+          { "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0", "name": "Claude Haiku 4.5 (global)" },
+          { "id": "us.anthropic.claude-sonnet-5", "name": "Claude Sonnet 5 (us)" },
+          { "id": "us.anthropic.claude-haiku-4-5-20251001-v1:0", "name": "Claude Haiku 4.5 (us)" }
+        ],
+        "defaults": {
+          "analyst": "global.anthropic.claude-sonnet-5",
+          "micro": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+        }
+      },
+      {
+        "id": "custom",
+        "name": "Custom (OpenAI-compatible)",
+        "kind": "custom",
+        "description": "Self-managed OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM, …).",
+        "credentials": [
+          { "key": "baseUrl", "label": "Base URL", "kind": "text", "required": true },
+          { "key": "apiKey", "label": "API key", "kind": "password", "required": false, "secret": true }
+        ]
+      }
+    ]
+  },
+  "connections": {
+    "types": [
+      {
+        "type": "postgresql",
+        "name": "PostgreSQL",
+        "cli": true,
+        "fields": [
+          { "key": "host", "label": "Host", "kind": "text", "required": true, "default": "localhost" },
+          { "key": "port", "label": "Port", "kind": "number", "required": false, "default": 5432 },
+          { "key": "database", "label": "Database", "kind": "text", "required": true },
+          { "key": "username", "label": "Username", "kind": "text", "required": true },
+          { "key": "password", "label": "Password", "kind": "password", "required": false, "secret": true },
+          { "key": "connection_string", "label": "Connection string", "kind": "password", "required": false, "secret": true, "note": "Optional — overrides the individual fields above" }
+        ]
+      },
+      {
+        "type": "bigquery",
+        "name": "BigQuery",
+        "cli": true,
+        "fields": [
+          { "key": "project_id", "label": "GCP project id", "kind": "text", "required": true },
+          { "key": "service_account_json", "label": "Service account JSON", "kind": "json", "required": true, "secret": true, "note": "Paste the full service-account key JSON" }
+        ]
+      },
+      {
+        "type": "athena",
+        "name": "Athena",
+        "cli": true,
+        "fields": [
+          { "key": "region_name", "label": "AWS region", "kind": "text", "required": true, "default": "us-east-1" },
+          { "key": "s3_staging_dir", "label": "S3 staging directory", "kind": "text", "required": true, "note": "e.g. s3://bucket/athena-results/" },
+          { "key": "aws_access_key_id", "label": "AWS access key id", "kind": "text", "required": true },
+          { "key": "aws_secret_access_key", "label": "AWS secret access key", "kind": "password", "required": true, "secret": true },
+          { "key": "schema_name", "label": "Schema (Glue database)", "kind": "text", "required": false },
+          { "key": "work_group", "label": "Workgroup", "kind": "text", "required": false }
+        ]
+      },
+      {
+        "type": "clickhouse",
+        "name": "ClickHouse",
+        "cli": true,
+        "fields": [
+          { "key": "host", "label": "Host", "kind": "text", "required": true },
+          { "key": "port", "label": "Port", "kind": "number", "required": false, "default": 8443 },
+          { "key": "protocol", "label": "Protocol", "kind": "select", "required": false, "default": "https", "options": ["https", "http"] },
+          { "key": "database", "label": "Database", "kind": "text", "required": false, "default": "default" },
+          { "key": "username", "label": "Username", "kind": "text", "required": true, "default": "default" },
+          { "key": "password", "label": "Password", "kind": "password", "required": false, "secret": true }
+        ]
+      },
+      {
+        "type": "csv",
+        "name": "CSV",
+        "cli": false,
+        "fields": []
+      },
+      {
+        "type": "xlsx",
+        "name": "Excel Workbook",
+        "cli": false,
+        "fields": []
+      },
+      {
+        "type": "google-sheets",
+        "name": "Google Sheets",
+        "cli": false,
+        "fields": []
+      }
+    ]
+  }
+}
