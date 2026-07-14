@@ -157,8 +157,9 @@ export function orgConfigValidationError(content: unknown): string | null {
   return null;
 }
 
-/** Validate the `llm` config section; returns the failure reason or null when valid. */
-function validateLlmConfig(llm: unknown): string | null {
+/** Validate the `llm` config section; returns the failure reason or null when
+ *  valid. Exported for the register route's bootstrap `llm` payload. */
+export function validateLlmConfig(llm: unknown): string | null {
   if (typeof llm !== 'object' || llm === null) return 'llm must be an object';
   const cfg = llm as Record<string, unknown>;
 

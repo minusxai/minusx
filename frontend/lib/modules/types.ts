@@ -1,6 +1,8 @@
 import { QueryResult } from '@/lib/database/adapter/types';
 import type { NextRequest, NextResponse } from 'next/server';
 import type { AuthConfigOptions } from '@/lib/auth/auth-config-options';
+import type { LlmConfig } from '@/lib/llm/llm-config-types';
+import type { CreateConnectionInput } from '@/lib/data/connections.interface';
 
 export interface RequestContext {
   userId: number;
@@ -42,10 +44,22 @@ export interface RegisterInput {
   adminEmail: string;
   adminPassword: string;
   inviteCode?: string;
+  /**
+   * Optional bootstrap payload (setup.sh CLI interview): saved into the org
+   * config at registration — with API keys secret-extracted — so the setup
+   * wizard's Models stage is already complete on first login. Raw keys inline;
+   * pre-init callers only (registration is first-run-gated).
+   */
+  llm?: LlmConfig;
+  /** Optional first database connection, created in org mode after import.
+   *  Failure does not fail registration — it surfaces in `warnings`. */
+  connection?: CreateConnectionInput;
 }
 
 export interface RegisterResult {
   redirectUrl: string;
+  /** Non-fatal bootstrap problems (e.g. the optional connection failed). */
+  warnings?: string[];
 }
 
 /**

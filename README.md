@@ -54,7 +54,7 @@ Note: This is on top of obvious BI features like connecting to databases/warehou
 curl -fsSL https://minusx.ai/install.sh | bash
 ```
 
-Requires [Docker](https://docs.docker.com/get-docker/). The script checks for Docker, finds available ports, sets up your API keys, and starts the app.
+Requires [Docker](https://docs.docker.com/get-docker/). While the image downloads, the script walks you through setup — workspace, AI model (with a live connection test), and optionally your first database — so you just log in when it finishes.
 
 ## Local development
 For local development, check out [Local Dev Setup](./LOCAL_DEV.md) guide.

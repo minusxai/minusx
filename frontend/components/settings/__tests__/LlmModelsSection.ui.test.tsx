@@ -31,15 +31,42 @@ function mockFetch(routes: Record<string, unknown> = {}) {
   return spy;
 }
 
-function storeWithLlm(llm: OrgConfig['llm']) {
+function storeWithLlm(llm: OrgConfig['llm'], mode: string = 'org') {
   const store = makeStore();
   const config = store.getState().configs.config;
-  return makeStore({ configs: { config: { ...config, llm }, loaded: true } } as never);
+  return makeStore({
+    configs: { config: { ...config, llm }, loaded: true },
+    auth: { user: { id: 1, email: 'a@b.c', name: 'A', role: 'admin', mode }, loading: false },
+  } as never);
 }
 
 describe('LlmModelsSection', () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.unstubAllGlobals());
+
+  // LLM config is workspace-level (resolution always reads the ORG config,
+  // whatever the caller's mode) — so outside org mode the editor is replaced
+  // by a read-only notice, preventing edits landing in a per-mode config doc
+  // that resolution would silently ignore.
+  it('replaces the editor with a workspace-level notice outside org mode', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'openai', provider: 'openai' }] }, 'tutorial'),
+    });
+    expect(await screen.findByLabelText('Models workspace-level notice')).toBeInTheDocument();
+    expect(screen.getByLabelText('Open workspace settings')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Add LLM provider')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('LLM provider openai')).not.toBeInTheDocument();
+  });
+
+  it('renders the editor normally in org mode', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'openai', provider: 'openai' }] }, 'org'),
+    });
+    expect(await screen.findByLabelText('LLM provider openai')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Models workspace-level notice')).not.toBeInTheDocument();
+  });
 
   it('renders configured providers with a saved-key badge (refs, never raw keys)', async () => {
     mockFetch();

@@ -5,10 +5,8 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { getRawConfig } from '@/lib/data/configs.server';
 import { resolveConfigSecrets } from '@/lib/secrets/config-secrets.server';
 import { isRedactedSecret } from '@/lib/secrets/config-secret-specs';
-import { buildPlanStep } from '@/lib/llm/llm-plan.server';
-import { getModelCatalog } from '@/lib/llm/model-catalog.server';
+import { testLlmEntry } from '@/lib/llm/llm-test.server';
 import { findLlmProvider, type LlmConfig, type LlmProviderEntry } from '@/lib/llm/llm-config-types';
-import { streamSimple, type Model, type Api } from '@/orchestrator/llm';
 
 interface TestLlmRequest {
   provider?: LlmProviderEntry;
@@ -16,13 +14,12 @@ interface TestLlmRequest {
   options?: Record<string, unknown>;
 }
 
-const TEST_TIMEOUT_MS = 20_000;
-
 /**
  * POST /api/llm/test — one-shot connectivity test for an LLM provider entry
  * (admin-only). The key may be raw (newly typed), a `@SECRETS/…` ref, or the
  * redacted placeholder (= "test the saved key for this provider name"). The
- * key is used server-side only and never echoed back.
+ * key is used server-side only and never echoed back. The probe itself is
+ * shared with the setup-cli (`lib/llm/llm-test.server.ts`).
  */
 export const POST = withAuth(async (request: NextRequest, user) => {
   if (!isAdmin(user.role)) {
@@ -54,44 +51,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     }
     candidate = await resolveConfigSecrets(candidate);
 
-    // Build the executable step; config errors (unknown model, missing
-    // baseUrl) surface as ok:false, not a 500.
-    let model: Model<Api>;
-    let callOptions: Record<string, unknown> | undefined;
-    try {
-      const catalog = await getModelCatalog();
-      const step = buildPlanStep(candidate, { providerName: candidate.name, model: body.model, options: body.options }, 'analyst', catalog);
-      model = step.model;
-      callOptions = step.callOptions;
-    } catch (err) {
-      return successResponse({ ok: false, error: err instanceof Error ? err.message : String(err) });
-    }
-
-    const t0 = Date.now();
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-    try {
-      const stream = streamSimple(model, {
-        messages: [{ role: 'user', content: 'Connection test: reply with the single word "ok".', timestamp: Date.now() }],
-      }, {
-        ...(callOptions ?? {}),
-        signal: controller.signal,
-        // Fail fast — a connectivity test should not ride the retry ladder.
-        maxRetryDelayMs: 1_000,
-      });
-      let error: string | null = null;
-      let done = false;
-      for await (const ev of stream) {
-        if (ev.type === 'done') done = true;
-        else if (ev.type === 'error') error = ev.error.errorMessage ?? `LLM call failed (${ev.error.stopReason})`;
-      }
-      if (!done || error) {
-        return successResponse({ ok: false, error: error ?? 'LLM stream ended without a response' });
-      }
-      return successResponse({ ok: true, latencyMs: Date.now() - t0, model: model.id });
-    } finally {
-      clearTimeout(timer);
-    }
+    return successResponse(await testLlmEntry(candidate, { model: body.model, options: body.options }));
   } catch (error) {
     return handleApiError(error);
   }

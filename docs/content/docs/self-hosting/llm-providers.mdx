@@ -35,6 +35,10 @@ The provider/model pickers are backed by the [pi-ai](https://github.com/badlogic
 
 OpenRouter is the widest single door — one key routes to hundreds of models across vendors.
 
+The recommended starting points (also offered by the `install.sh` interview — this table renders from the same [compatibility.json](https://github.com/minusxai/minusx/blob/main/frontend/compatibility.json) the script uses):
+
+<SupportedModels />
+
 ## Local & custom OpenAI-compatible endpoints
 
 Any OpenAI-compatible server — **Ollama, vLLM, llama.cpp, LM Studio, LiteLLM**, or an internal gateway — can power the agent: add a provider with type **Custom**, set its base URL (e.g. `http://localhost:11434/v1`) and optional API key, then assign its model id (e.g. `qwen3:32b`) to a use case. Advanced knobs (context window, max tokens, reasoning flag, image input, extra headers, OpenAI-compat quirks) are available on the assignment's custom-model options.

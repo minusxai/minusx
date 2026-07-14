@@ -24,8 +24,11 @@ import { Badge, Box, Button, Dialog, Flex, HStack, Input, Text, VStack } from '@
 import { LuCheck, LuCirclePlus, LuPlug, LuSettings2, LuTrash2, LuX } from 'react-icons/lu';
 import SimpleSelect from '@/components/evals/SimpleSelect';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
+import { useAppSelector } from '@/store/hooks';
+import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { toaster } from '@/components/ui/toaster';
 import { isSecretRef } from '@/lib/secrets/config-secret-specs';
+import compatibility from '@/compatibility.json';
 import {
   CUSTOM_PROVIDER, LLM_USE_CASES, MINUSX_PROVIDER, findMinusxProvider,
   type LlmConfig, type LlmModelChoice, type LlmProviderEntry, type LlmUseCase,
@@ -33,17 +36,16 @@ import {
 
 interface RegistryProvider { slug: string; models: { id: string; name: string }[] }
 
-/** Curated head of the provider picker; the rest of the registry follows alphabetically. */
-const FEATURED_PROVIDERS = [MINUSX_PROVIDER, 'anthropic', 'openai', 'google', 'amazon-bedrock', CUSTOM_PROVIDER];
-
-const PROVIDER_LABELS: Record<string, string> = {
-  [MINUSX_PROVIDER]: 'MinusX (managed)',
-  [CUSTOM_PROVIDER]: 'Custom (OpenAI-compatible)',
-  'amazon-bedrock': 'Amazon Bedrock',
-  anthropic: 'Anthropic',
-  openai: 'OpenAI',
-  google: 'Google',
-};
+/**
+ * Curated head of the provider picker + display labels — derived from the
+ * shared compatibility.json (frontend/compatibility.json) (the shared contract also driving setup.sh
+ * and the docs tables), so the featured set is defined exactly once.
+ * The rest of the registry follows alphabetically.
+ */
+const FEATURED_PROVIDERS = compatibility.llm.providers.map(p => p.id);
+const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
+  compatibility.llm.providers.map(p => [p.id, p.name]),
+);
 
 // No ambiguous 'default' entry — the default level is LOW and shows as the
 // pre-selected option, so what's selected is always what runs.
@@ -66,6 +68,7 @@ function keyStatus(entry: LlmProviderEntry): 'saved' | 'new' | 'none' {
 
 export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings' | 'wizard' }) {
   const { config } = useConfigs();
+  const userMode = useAppSelector((state) => state.auth.user?.mode);
   const [draft, setDraft] = useState<LlmConfig>(() => structuredClone(config.llm ?? {}));
   const [registry, setRegistry] = useState<RegistryProvider[]>([]);
   const [saving, setSaving] = useState(false);
@@ -246,6 +249,32 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
       setTesting(null);
     }
   };
+
+  // LLM config is workspace-level: resolution always reads the ORG config
+  // regardless of the caller's mode (lib/llm/llm-plan.server.ts). Outside org
+  // mode, editing here would write a per-mode config doc that resolution
+  // ignores — show a pointer to the workspace settings instead.
+  if (userMode && userMode !== DEFAULT_MODE) {
+    return (
+      <VStack align="stretch" gap={3} aria-label="Models workspace-level notice">
+        <Text fontSize="sm" fontFamily="mono">
+          AI models are configured once for the whole workspace — every mode (including this one) uses the same providers.
+        </Text>
+        <Button
+          size="sm"
+          variant="outline"
+          alignSelf="flex-start"
+          fontFamily="mono"
+          aria-label="Open workspace settings"
+          // Direct navigation (not switchMode, which always lands on home):
+          // org is the default mode, so a bare settings URL targets it.
+          onClick={() => { window.location.href = '/settings?tab=models'; }}
+        >
+          Open workspace settings
+        </Button>
+      </VStack>
+    );
+  }
 
   return (
     <VStack align="stretch" gap={6} aria-label="LLM models settings">

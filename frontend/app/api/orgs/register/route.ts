@@ -8,6 +8,7 @@ import {
   validatePassword,
   validateFullName,
 } from '@/lib/validation/validators';
+import { validateLlmConfig } from '@/lib/validation/config-validators';
 
 export async function POST(request: NextRequest) {
   if (!ENABLE_ORG_CREATION) return ApiErrors.forbidden('Organization creation is disabled');
@@ -27,12 +28,24 @@ export async function POST(request: NextRequest) {
     const passwordVal = validatePassword(body.adminPassword);
     if (!passwordVal.valid) return ApiErrors.validationError(passwordVal.error!);
 
+    // Optional setup.sh bootstrap payload (LLM config + first connection).
+    if (body.llm !== undefined) {
+      const llmError = validateLlmConfig(body.llm);
+      if (llmError) return ApiErrors.validationError(`Invalid LLM config: ${llmError}`);
+    }
+    if (body.connection !== undefined
+        && (typeof body.connection !== 'object' || !body.connection.name || !body.connection.type || !body.connection.config)) {
+      return ApiErrors.validationError('connection requires name, type, and config');
+    }
+
     const result = await getModules().auth.register({
       workspaceName: body.workspaceName,
       adminName: body.adminName,
       adminEmail: body.adminEmail,
       adminPassword: body.adminPassword,
       inviteCode: body.inviteCode,
+      llm: body.llm,
+      connection: body.connection,
     });
 
     return successResponse(result);

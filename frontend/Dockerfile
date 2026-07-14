@@ -75,9 +75,12 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy database scripts and lib for initialization
+# Copy database scripts and lib for initialization. orchestrator/ is needed by
+# the setup-cli entries (scripts/setup-cli/*, run via `docker run` by setup.sh),
+# which import the LLM boundary (@/orchestrator/llm) through lib/llm.
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/orchestrator ./orchestrator
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 # Install tsx + re-apply pi-ai patches. The npm install restores native deps
@@ -89,7 +92,10 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 # standalone tracing misses them; installing here guarantees they exist with
 # the right linux native bindings.
 COPY --from=builder /app/patches ./patches
-RUN npm install --ignore-scripts tsx "@tailwindcss/node@^4" "@tailwindcss/oxide@^4" "tailwindcss@^4"
+# @aws/lambda-invoke-store: aws-sdk transitive that standalone tracing misses
+# (routes bundle the SDK, but the setup-cli runs lib/connections from source
+# via tsx and needs it resolvable in node_modules).
+RUN npm install --ignore-scripts tsx "@tailwindcss/node@^4" "@tailwindcss/oxide@^4" "tailwindcss@^4" "@aws/lambda-invoke-store"
 RUN npx --yes patch-package --error-on-fail && rm -rf ./patches
 RUN grep -q "MX PATCH" /app/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js \
     || (echo "ERROR: pi-ai patch missing from runtime image" && exit 1)

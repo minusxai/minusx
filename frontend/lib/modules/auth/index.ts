@@ -11,6 +11,9 @@ import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { copySeedMxfoodForMode } from '@/lib/object-store';
 import { seedLlmConfigFromEnv } from '@/lib/llm/llm-env-seed.server';
 import { MXFOOD_TABLES } from '@/lib/object-store/mxfood-tables';
+import { getRawConfig, saveRawConfig } from '@/lib/data/configs.server';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
+import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 
 function escapeForJson(s: string): string {
   return JSON.stringify(s).slice(1, -1);
@@ -84,6 +87,16 @@ export class AuthModule implements IAuthModule {
       console.warn('[AuthModule.register] mxfood tutorial seed failed (non-fatal):', err);
     });
 
+    const warnings: string[] = [];
+
+    // setup.sh bootstrap: an interview-provided LLM config wins over any env
+    // seed — save it FIRST (extract-on-write moves keys into the secrets
+    // store), so seedLlmConfigFromEnv below sees `llm` present and no-ops.
+    if (input.llm) {
+      const raw = await getRawConfig(DEFAULT_MODE);
+      await saveRawConfig(DEFAULT_MODE, { ...raw, llm: input.llm });
+    }
+
     // Env → in-app LLM config: convert legacy model-config env vars (if any)
     // into the fresh workspace's config so a pre-provisioned install starts
     // configured (keys land in the secrets store; editable in Settings).
@@ -93,6 +106,25 @@ export class AuthModule implements IAuthModule {
       console.warn('[AuthModule.register] LLM env seed failed (non-fatal):', err);
     }
 
-    return { redirectUrl: '/login' };
+    // setup.sh bootstrap: create the interview-provided first connection in
+    // org mode. `create` re-tests the connection itself; failure surfaces as
+    // a warning rather than failing the (already-committed) registration —
+    // the user finishes it in the app's connection wizard.
+    if (input.connection) {
+      try {
+        await ConnectionsAPI.create(input.connection, {
+          userId: 0,
+          email: input.adminEmail,
+          name: input.adminName,
+          role: 'admin',
+          home_folder: '',
+          mode: DEFAULT_MODE,
+        });
+      } catch (err) {
+        warnings.push(`Connection '${input.connection.name}' was not created: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    return warnings.length > 0 ? { redirectUrl: '/login', warnings } : { redirectUrl: '/login' };
   }
 }
