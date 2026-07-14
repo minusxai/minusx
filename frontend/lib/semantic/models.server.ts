@@ -24,6 +24,7 @@ import { ConnectionsAPI } from '@/lib/data/connections.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { VIEWS_SCHEMA } from '@/lib/types';
 import { resolveViewsForContext } from '@/lib/views/views.server';
+import { exposedColumns } from '@/lib/types/views';
 import type { ContextContent, DatabaseSchema, DatabaseWithSchema, SemanticModel, TableRelationship } from '@/lib/types';
 
 export interface ScopedModelsParams {
@@ -77,7 +78,15 @@ async function resolveScope(
     ...schema,
     schemas: [
       ...(schema.schemas ?? []).filter((s) => s.schema !== VIEWS_SCHEMA),
-      { schema: VIEWS_SCHEMA, tables: views.map((v) => ({ table: v.name, columns: (v.columns ?? []).map((c) => ({ ...c })) })) },
+      // exposedColumns applies the view's column whitelist — a deselected column
+      // must not surface as a semantic measure/dimension, matching what query
+      // execution already projects away.
+      {
+        schema: VIEWS_SCHEMA,
+        tables: views
+          .filter((v) => exposedColumns(v).length > 0)
+          .map((v) => ({ table: v.name, columns: exposedColumns(v).map((c) => ({ ...c })) })),
+      },
     ],
   };
 

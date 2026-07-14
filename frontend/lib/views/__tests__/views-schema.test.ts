@@ -109,6 +109,29 @@ describe('views as tables', () => {
     expect(db!.schemas.some((s) => s.schema === 'mxfood')).toBe(true);
   });
 
+  it('SECURITY: a column whitelist hides the column from the SEMANTIC model too, not just queries', async () => {
+    // Deselect `revenue` on the view — it must not surface as a measure in the GUI.
+    const restricted = { ...ZONE_REVENUE, whitelistedColumns: ['zone_name', 'created_at'] };
+    const version: ContextVersion = {
+      version: 1, whitelist: [{ name: 'warehouse', type: 'connection' }], docs: [],
+      views: [restricted], createdAt: new Date().toISOString(), createdBy: 1,
+    };
+    await getModules().db.exec("DELETE FROM files WHERE type = 'context'", []);
+    await mkPublished('context', '/org/context', 'context',
+      { versions: [version], published: { all: 1 } } as ContextContent);
+
+    const models = await getScopedSemanticModels(admin, {
+      path: '/org', connection: 'warehouse', tables: ['zone_revenue'],
+    });
+    const m = models[0];
+    // revenue is gone → no "Total Revenue" measure, no revenue dimension.
+    expect(m.measures.map((x) => x.name)).not.toContain('Total Revenue');
+    expect(m.dimensions.map((d) => d.column)).not.toContain('revenue');
+    // the exposed ones remain
+    expect(m.dimensions.map((d) => d.column)).toContain('zone_name');
+    expect(m.timeDimension?.column).toBe('created_at');
+  });
+
   it('a view derives a full semantic model from its columns (no config)', async () => {
     const models = await getScopedSemanticModels(admin, {
       path: '/org', connection: 'warehouse', tables: ['zone_revenue'],
