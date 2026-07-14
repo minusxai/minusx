@@ -347,6 +347,17 @@ export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelop
     delete mark.padAngle;
   }
 
+  // Channel hygiene: a def moved between channels must not carry a property that's invalid
+  // on its new channel. `legend` belongs to color/size/shape, NOT positional x/y (Vega-Lite
+  // silently renders NOTHING for `x: {…, legend}` — e.g. the pie→bar switch, whose x is
+  // copied from the pie's `color`). `axis` is the reverse (positional-only) on color.
+  for (const ch of ['x', 'y'] as const) {
+    const d = encoding[ch];
+    if (d && typeof d === 'object' && !Array.isArray(d)) delete (d as Record<string, unknown>).legend;
+  }
+  const colorDef = encoding.color;
+  if (colorDef && typeof colorDef === 'object' && !Array.isArray(colorDef)) delete (colorDef as Record<string, unknown>).axis;
+
   for (const key of Object.keys(encoding)) if (encoding[key] === undefined) delete encoding[key];
   spec.encoding = encoding;
   return next;

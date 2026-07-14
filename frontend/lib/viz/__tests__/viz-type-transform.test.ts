@@ -39,6 +39,31 @@ describe('getVizType', () => {
   });
 });
 
+describe('setVizType channel hygiene', () => {
+  // A pie authored with a color legend (the house pie) → bar copies color into x. `legend`
+  // is invalid on a positional channel and makes Vega-Lite render NOTHING — strip it.
+  const PIE_WITH_LEGEND = {
+    mark: { type: 'arc' },
+    encoding: {
+      color: { field: 'platform', type: 'nominal', legend: { orient: 'top' } },
+      theta: { field: 'revenue', type: 'quantitative' },
+    },
+  };
+
+  it('pie → bar strips the (invalid) legend from the x channel', () => {
+    const spec = specOf(setVizType(envelope(PIE_WITH_LEGEND), 'bar'));
+    expect(spec.encoding.x.field).toBe('platform');
+    expect('legend' in spec.encoding.x).toBe(false); // would blank the chart otherwise
+    expect(spec.encoding.y.field).toBe('revenue');
+  });
+
+  it('never leaves a legend on x/y or an axis on color', () => {
+    const spec = specOf(setVizType(envelope(PIE_WITH_LEGEND), 'line'));
+    expect('legend' in spec.encoding.x).toBe(false);
+    if (spec.encoding.color) expect('axis' in spec.encoding.color).toBe(false);
+  });
+});
+
 describe('setVizType', () => {
   it('cartesian → cartesian is a pure mark swap (encodings untouched)', () => {
     const next = setVizType(envelope(BAR), 'area');
