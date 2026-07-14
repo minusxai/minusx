@@ -976,6 +976,8 @@ const CHOROPLETH_SCHEMES: Record<string, string> = {
   teal: 'teals',
   orange: 'oranges',
   purple: 'purples',
+  red: 'reds',
+  grey: 'greys',
   'red-yellow-green': 'redyellowgreen',
   'blue-orange': 'blueorange',
 };
@@ -1069,6 +1071,17 @@ const choropleth: VizTemplate = {
 // large-state view). Interactive/persisted zoom is `scale / POINT_MAP_REGION_SCALE`.
 export const POINT_MAP_REGION_SCALE = 1700;
 
+// Default street-tile basemap (opt-in via `basemap: 'tiles'`). Carto's "light_all"
+// is muted — designed as a data-viz backdrop so points/flows stay legible. Free, no
+// key; requires the OSM+CARTO attribution the recipe renders. Override with `tileUrl`
+// ({z}/{x}/{y} template) to point at a keyed provider (MapTiler/Stadia/…).
+// NOTE: tiles load over the network in the BROWSER only — headless renders (the
+// chart→LLM image, server previews) get the vector boundary fallback beneath instead.
+export const POINT_MAP_DEFAULT_TILE_URL = 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
+// Dark-mode counterpart (Carto "dark matter"). VegaChart swaps the default to this
+// when the chart renders in dark mode and no explicit `tileUrl` override is set.
+export const POINT_MAP_DARK_TILE_URL = 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
+
 // ── minusx/point-map@1 ──────────────────────────────────────────────────────────
 // Coordinate map (RFC §9): point/marker rows plotted over a vector basemap backdrop
 // via a projection. The query result is the primary data (`main`); the boundary is a
@@ -1107,6 +1120,10 @@ const pointMap: VizTemplate = {
     const p = (params ?? {}) as Record<string, unknown>;
     const isFlow = lat2 != null && lng2 != null;
     const scheme = typeof p.colorScale === 'string' && CHOROPLETH_SCHEMES[p.colorScale] ? CHOROPLETH_SCHEMES[p.colorScale] : null;
+    // Solid marker color (all points/flows one color) — used when NO data-driven `color`
+    // column is bound. A bound `color` wins (it drives the category/ramp scale). Accepts
+    // any CSS color (hex or name). Default MinusX teal.
+    const markColorVal = typeof p.markColor === 'string' && p.markColor ? p.markColor : '#16a085';
     // Projection controls (RFC §9). The map is a recenterable MERCATOR driven by
     // `scale` + `center` signals — the canonical vega zoomable-map pattern. (Vega's
     // projection `fit` can't frame a computed box; it only fits real source geometry.)
@@ -1115,10 +1132,18 @@ const pointMap: VizTemplate = {
     // the DATA extent (where the points are). These same signals carry interactive
     // pan/zoom later. (choropleth keeps albersUsa + its AK/HI insets — that's a static
     // overview; a zoomable point map can't use a composite projection.)
-    const zoomVal = typeof p.zoom === 'number' && Number.isFinite(p.zoom) ? Math.min(40, Math.max(0.1, p.zoom)) : 1;
+    // Zoom is a scale MULTIPLIER (1 = region view). Cap high enough to reach street/
+    // building level with tiles (scale ≈ REGION_SCALE·zoom; the wheel/buttons cap scale
+    // at ~8M ≈ slippy z18, so zoom up to ~4700 is reachable). A low cap here collapses
+    // the view on every zoom-in, because persistence round-trips zoom as scale/REGION_SCALE.
+    const zoomVal = typeof p.zoom === 'number' && Number.isFinite(p.zoom) ? Math.min(6000, Math.max(0.05, p.zoom)) : 1;
     const center = Array.isArray(p.center) && p.center.length === 2
       && (p.center as unknown[]).every(n => typeof n === 'number' && Number.isFinite(n))
       ? (p.center as [number, number]) : null;
+    // Street-tile basemap (opt-in). When on, a slippy-tile image layer renders under
+    // the data; the vector boundary stays beneath it as the headless/canvas fallback.
+    const tilesOn = p.basemap === 'tiles';
+    const tileUrlVal = typeof p.tileUrl === 'string' && p.tileUrl ? p.tileUrl : POINT_MAP_DEFAULT_TILE_URL;
     const colorTitle = color ? aliasOf(formats, color) : '';
     const sizeTitle = size ? aliasOf(formats, size) : '';
     // mercator scale ≈ width·(180/π)/longitude-span-in-degrees. `lngE`/`latE` are the
@@ -1169,7 +1194,7 @@ const pointMap: VizTemplate = {
         from: { data: 'marks_data' },
         encode: { update: {
           x: { field: 'x' }, y: { field: 'y' }, x2: { field: 'x2' }, y2: { field: 'y2' },
-          stroke: color ? { scale: 'color', field: color } : { value: '#16a085' },
+          stroke: color ? { scale: 'color', field: color } : { value: markColorVal },
           strokeWidth: size ? { scale: 'size', field: size } : { value: 1.5 },
           strokeOpacity: { value: 0.5 }, strokeCap: { value: 'round' },
           tooltip: { signal: tt(pairs) },
@@ -1185,12 +1210,73 @@ const pointMap: VizTemplate = {
         encode: { update: {
           x: { field: 'x' }, y: { field: 'y' },
           size: size ? { scale: 'size', field: size } : { value: 90 },
-          fill: color ? { scale: 'color', field: color } : { value: '#16a085' },
+          fill: color ? { scale: 'color', field: color } : { value: markColorVal },
           fillOpacity: { value: 0.72 }, stroke: { value: 'white' }, strokeWidth: { value: 0.4 },
           tooltip: { signal: tt(pairs) },
         } },
       };
     }
+
+    // ── Street-tile basemap (opt-in) ────────────────────────────────────────
+    // Web Mercator is LINEAR in the projection's pixel space, so tiles position by
+    // pure arithmetic off the existing `scale`/`center`/`tx`/`ty` signals — no
+    // per-tile geopoint projection. A tile at slippy (X,Y,Z) covers normalized
+    // mercator [X/2^Z … (X+1)/2^Z]; multiply by the world pixel width and offset by
+    // the projected center to get its top-left pixel. The `tiles` dataset enumerates
+    // just the tiles overlapping the viewport (sequence → grid via modulo).
+    const tileSignals: Record<string, unknown>[] = tilesOn ? [
+      { name: 'worldPx', update: 'scale * 2 * PI' },              // full-world px width
+      { name: 'cx', update: '(centerLng + 180) / 360' },          // center normalized X
+      { name: 'cy', update: '0.5 - log(tan(PI / 4 + centerLat * PI / 360)) / (2 * PI)' }, // normalized Y (mercator)
+      { name: 'tileZ', update: 'clamp(round(log(worldPx / 256) / log(2)), 0, 19)' },
+      { name: 'nTiles', update: 'pow(2, tileZ)' },
+      { name: 'tilePx', update: 'worldPx / nTiles' },             // on-screen px per tile
+      { name: 'cTileX', update: 'cx * nTiles' },
+      { name: 'cTileY', update: 'cy * nTiles' },
+      { name: 'tileX0', update: 'floor(cTileX - tx / tilePx) - 1' },
+      { name: 'tileX1', update: 'ceil(cTileX + (width - tx) / tilePx) + 1' },
+      { name: 'tileY0', update: 'max(0, floor(cTileY - ty / tilePx) - 1)' },
+      { name: 'tileY1', update: 'min(nTiles, ceil(cTileY + (height - ty) / tilePx) + 1)' },
+      { name: 'nx', update: 'max(0, tileX1 - tileX0)' },
+      { name: 'ny', update: 'max(0, tileY1 - tileY0)' },
+      { name: 'tileCount', update: 'nx * ny' },
+      { name: 'tileUrlTemplate', value: tileUrlVal },
+    ] : [];
+    const tileData: Record<string, unknown>[] = tilesOn ? [{
+      name: 'tiles',
+      transform: [
+        { type: 'sequence', start: 0, stop: { signal: 'tileCount' }, as: 'i' },
+        { type: 'formula', as: 'gx', expr: 'tileX0 + (datum.i % nx)' },
+        { type: 'formula', as: 'gy', expr: 'tileY0 + floor(datum.i / nx)' },
+        { type: 'formula', as: 'wx', expr: '((round(datum.gx) % nTiles) + nTiles) % nTiles' }, // wrap E–W
+        { type: 'formula', as: 'x', expr: 'tx + (datum.gx - cTileX) * tilePx' },
+        { type: 'formula', as: 'y', expr: 'ty + (datum.gy - cTileY) * tilePx' },
+        { type: 'formula', as: 'url', expr: "replace(replace(replace(tileUrlTemplate, '{z}', '' + tileZ), '{x}', '' + round(datum.wx)), '{y}', '' + round(datum.gy))" },
+      ],
+    }] : [];
+    // +1px on size closes sub-pixel seams between adjacent tiles.
+    const tileImageMark: Record<string, unknown> = {
+      type: 'image', from: { data: 'tiles' },
+      encode: { update: {
+        url: { field: 'url' }, x: { field: 'x' }, y: { field: 'y' },
+        width: { signal: 'tilePx + 1' }, height: { signal: 'tilePx + 1' },
+        aspect: { value: false }, smooth: { value: true },
+      } },
+    };
+    const attributionMark: Record<string, unknown> = {
+      type: 'text',
+      encode: { update: {
+        x: { signal: 'width - 4' }, y: { signal: 'height - 3' },
+        align: { value: 'right' }, baseline: { value: 'bottom' },
+        text: { value: '© OpenStreetMap  © CARTO' },
+        fontSize: { value: 9 }, fill: { value: 'rgba(60, 60, 60, 0.85)' },
+      } },
+    };
+    const boundaryMark: Record<string, unknown> = {
+      type: 'shape', from: { data: GEO_BOUNDARY_DATASET },
+      encode: { update: { fill: { value: 'transparent' }, stroke: { value: 'rgba(139, 148, 158, 0.6)' }, strokeWidth: { value: 0.75 } } },
+      transform: [{ type: 'geoshape', projection: 'projection' }],
+    };
 
     return {
       autosize: { type: 'none' },
@@ -1226,7 +1312,7 @@ const pointMap: VizTemplate = {
           { events: { signal: 'delta' }, update: 'down && center0 ? clamp(center0[1] + delta[1] * 360 / (scale * 2 * PI), -80, 80) : centerLatUser' },
         ] },
         { name: 'scaleUser', value: scaleUserVal, on: [
-          { events: { type: 'wheel', consume: true }, update: `clamp((scaleUser != null ? scaleUser : scaleBase * ${zoomVal}) * pow(1.0015, -event.deltaY), 40, 4000000)` },
+          { events: { type: 'wheel', consume: true }, update: `clamp((scaleUser != null ? scaleUser : scaleBase * ${zoomVal}) * pow(1.0015, -event.deltaY), 40, 8000000)` },
         ] },
         // Effective view = user override if present, else the reactive base.
         { name: 'centerLng', update: 'centerLngUser != null ? centerLngUser : centerLngBase' },
@@ -1234,11 +1320,13 @@ const pointMap: VizTemplate = {
         { name: 'scale', update: `scaleUser != null ? scaleUser : scaleBase * ${zoomVal}` },
         // The view state VegaChart reads back and persists after interaction.
         { name: 'mxViewParams', update: `{center: [centerLat, centerLng], zoom: scale / ${POINT_MAP_REGION_SCALE}}` },
+        ...tileSignals,
       ],
       data: [
         { name: 'main' },
         { name: GEO_BOUNDARY_DATASET },
         { name: 'marks_data', source: 'main', transform: geopoints },
+        ...tileData,
       ],
       projections: [{
         name: 'projection',
@@ -1253,9 +1341,14 @@ const pointMap: VizTemplate = {
         type: 'group',
         clip: true,
         encode: { update: { width: { signal: 'width' }, height: { signal: 'height' } } },
+        // Boundary drawn FIRST (bottom): tiles cover it in the browser, but it survives
+        // as the fallback wherever tiles can't load (headless PNG, offline). Then tiles,
+        // then the data marks, then attribution on top.
         marks: [
-          { type: 'shape', from: { data: GEO_BOUNDARY_DATASET }, encode: { update: { fill: { value: 'transparent' }, stroke: { value: 'rgba(139, 148, 158, 0.6)' }, strokeWidth: { value: 0.75 } } }, transform: [{ type: 'geoshape', projection: 'projection' }] },
+          boundaryMark,
+          ...(tilesOn ? [tileImageMark] : []),
           dataMark,
+          ...(tilesOn ? [attributionMark] : []),
         ],
       }],
     };

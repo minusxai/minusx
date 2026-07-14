@@ -356,6 +356,20 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                 {isPoints && (
                   <>
                     <Box>
+                      <Text fontSize="xs" color="fg.muted" mb={1}>Basemap</Text>
+                      <NativeSelect.Root size="sm">
+                        <NativeSelect.Field
+                          aria-label="Basemap"
+                          value={params.basemap === 'tiles' ? 'tiles' : 'vector'}
+                          onChange={(e) => onVizChange(setRecipeParam(envelope, 'basemap', e.currentTarget.value === 'tiles' ? 'tiles' : undefined))}
+                        >
+                          <option value="vector">Vector outline</option>
+                          <option value="tiles">Street tiles</option>
+                        </NativeSelect.Field>
+                        <NativeSelect.Indicator />
+                      </NativeSelect.Root>
+                    </Box>
+                    <Box>
                       <Text fontSize="xs" color="fg.muted" mb={1}>Center (lat, lng)</Text>
                       <Input
                         size="sm"
@@ -390,7 +404,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                 )}
                 <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
                   {isPoints
-                    ? 'Bind Latitude + Longitude in Fields. Add Size for bubbles, Color to group, or End lat/lng for flows. Center + Zoom frame the map geographically (no SQL filter needed).'
+                    ? 'Bind Latitude + Longitude in Fields. Add Size for bubbles, Color to group, or End lat/lng for flows. Center + Zoom frame the map geographically (no SQL filter needed). Street-tile basemap shows real streets for local/city views (browser only — exports fall back to the vector outline).'
                     : 'Bind Region + Value in Fields. Region names must match the map (e.g. "California", "Tanzania").'}
                 </Text>
               </Box>

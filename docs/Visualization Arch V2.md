@@ -531,12 +531,17 @@ This is the only todo list in this document. Work it top to bottom unless a prod
 7. **Define common visual editing.** Decide and implement the V2 color-control contract, then annotations;
    defer a generic custom-plot surface until those common controls are stable.
 8. **Ship analytic geo recipes.** Shipped: choropleth (`minusx/choropleth@1`) and point/bubble/flow
-   (`minusx/point-map@1`, optional destination → flow lines), on us-atlas/world-atlas boundaries.
-   Remaining: a density recipe; interactive projection pan/zoom + fit-to-region controls; and — only if a
-   real street-level use case appears — a **static-map image** endpoint (NOT Leaflet/tiles-in-browser, to
-   keep headless export trivial). Decision (2026-07-13): no Leaflet/deck.gl — vega vector maps keep one
-   render pipeline + clean headless image export; "map feel" (zoom/bbox/recenter) is projection config, not
-   tiles.
+   (`minusx/point-map@1`, optional destination → flow lines), on us-atlas/world-atlas boundaries, both with
+   interactive projection pan/zoom + persisted view. Also shipped: an opt-in **street-tile basemap** on the
+   coordinate map (`basemap: 'tiles'`) for local/city views — slippy tiles as Vega **image marks** driven
+   purely by the mercator `scale`/`center` signals (no Leaflet, no per-tile projection; Web Mercator is
+   linear in projected pixel space). Remaining: a density recipe; fit-to-region controls.
+   Decision (2026-07-13): no Leaflet/deck.gl — vega vector maps keep one render pipeline + clean headless
+   image export. **Amended (2026-07-14):** street tiles ARE worth it for local views, but added the
+   Leaflet-free way — image marks in the existing mercator projection. Trade-off accepted: tiles load over
+   the network in the BROWSER only, so headless renders (chart→LLM image, server previews) fall back to the
+   vector boundary beneath. "Map feel" (zoom/bbox/recenter) remains projection config; tiles are just an
+   optional raster backdrop layered under the same projection.
 9. **Land the shared authoring contract.** Add envelope-level `fieldMeta`, the builder source, deterministic
    derived artifacts, and one-way detach.
 10. **Make recipes publishable.** Replace trusted TypeScript recipe builders with the declarative contract, add
@@ -565,8 +570,9 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
 | table, pivot | Shipped | DOM tier with shared grid styling, formats, conditional formats, and export |
 | heatmap | Shipped | Native Vega-Lite rect spec and V2 transform |
 | choropleth | Shipped | `minusx/choropleth@1` — layered geoshape+lookup recipe; boundary injected from the named-asset registry, value joined by region name |
-| point / bubble / flow | Shipped | `minusx/point-map@1` — circle marks (bubbles when `size` bound) over a boundary backdrop; optional destination coords → `rule` flow lines |
-| density geo, tile basemaps | Remaining (§21.8) | Vega density recipe; raster tiles deferred (static-map image if ever needed — no Leaflet) |
+| point / bubble / flow | Shipped | `minusx/point-map@1` (UI label "Geo") — circle marks (bubbles when `size` bound) over a vector or **street-tile** basemap; optional destination coords → `rule` flow lines; interactive pan/zoom + persisted view |
+| street-tile basemap | Shipped | `basemap: 'tiles'` on `minusx/point-map@1` — slippy Carto tiles as Vega image marks off the mercator `scale`/`center` signals (browser-only; vector boundary is the headless/canvas fallback). Follows the app theme (Carto light/dark) via VegaChart; override provider via `tileUrl`. Deep zoom to street level (zoom cap raised to slippy ~z18) |
+| density geo | Remaining (§21.8) | Vega density recipe |
 
 ### ✅ Verified (as of 2026-07-11)
 

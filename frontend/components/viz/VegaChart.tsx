@@ -13,6 +13,7 @@ import { Box, Text, IconButton, VStack } from '@chakra-ui/react';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, injectNamedAssets } from '@/lib/viz/render-vega';
+import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/viz-templates';
 
 // Recipes that render an interactive map (drag pan, wheel zoom, +/- buttons) and
 // expose an `mxViewParams` signal for persistence.
@@ -138,6 +139,14 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         // Recipe boundary/lookup datasets (choropleth & analytic geo, RFC §9) are
         // resolved from the asset registry and bound before the first layout.
         await injectNamedAssets(view, resolved.ok ? resolved.assets : undefined);
+        // Street-tile basemap follows the app theme: swap the default Carto tiles to the
+        // dark set in dark mode. Skipped when the user set an explicit `tileUrl` override.
+        if (recipeOf(envelope) === POINT_MAP_RECIPE && hasSignal(view, 'tileUrlTemplate')) {
+          const params = (envelope.source as unknown as { params?: Record<string, unknown> }).params ?? {};
+          if (!params.tileUrl) {
+            view.signal('tileUrlTemplate', colorMode === 'dark' ? POINT_MAP_DARK_TILE_URL : POINT_MAP_DEFAULT_TILE_URL);
+          }
+        }
         if (cancelled) return;
         await view.runAsync();
         promoteFontAttrs(el);
@@ -227,7 +236,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     if (recipe === POINT_MAP_RECIPE) {
       const cur = view.signal('scale') as number;
       if (!Number.isFinite(cur)) return;
-      view.signal('scaleUser', Math.max(40, Math.min(4_000_000, cur * factor)));
+      view.signal('scaleUser', Math.max(40, Math.min(8_000_000, cur * factor)));
     } else if (recipe === CHOROPLETH_RECIPE) {
       const cur = view.signal('zoom') as number;
       if (!Number.isFinite(cur)) return;

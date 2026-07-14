@@ -20,7 +20,6 @@ import {
   LuRadar,
   LuMapPinned,
   LuMap,
-  LuMapPin,
   LuHash,
   LuChartBar,
   LuChartCandlestick,
@@ -115,13 +114,13 @@ const ALL_VIZ_GROUPS: VizTypeGroup[] = [
       { type: 'pivot', icon: <LuTable2 size={16} />, label: 'Pivot' },
       { type: 'trend', icon: <LuTrendingUp size={16} />, label: 'Trend' },
       { type: 'single_value', icon: <LuHash size={16} />, label: 'Number' },
-      // V2 analytic geo (RFC §9): choropleth ships first (region-fill, vega recipe).
-      // The legacy combined 'geo' entry stays as the disabled coverage marker for the
-      // coordinate maps (points/lines/tiles) still to migrate.
+      // V2 analytic geo (RFC §9), authored as native-Vega recipes: choropleth (region
+      // fill) + the coordinate map (points/bubbles/flows over a vector or street-tile
+      // basemap). These supersede the legacy combined ECharts `geo` type, which is no
+      // longer offered here (existing `geo` questions still render).
       { type: 'choropleth', icon: <LuMap size={16} />, label: 'Choropleth', v2Only: true },
       // Coordinate map: points/bubbles, + flows when a destination is bound.
-      { type: 'point_map', icon: <LuMapPin size={16} />, label: 'Points', v2Only: true },
-      { type: 'geo', icon: <LuMapPinned size={16} />, label: 'Geo' },
+      { type: 'point_map', icon: <LuMapPinned size={16} />, label: 'Geo', v2Only: true },
       {
         type: 'custom', icon: <LuBraces size={16} />, label: 'Custom', v2Only: true,
         informational: true,
