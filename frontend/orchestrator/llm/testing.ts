@@ -1,6 +1,6 @@
 /**
  * LLM BOUNDARY — test support. Part of the pi-ai isolation boundary
- * (`orchestrator/llm/`); allowed to import `@mariozechner/pi-ai`.
+ * (`orchestrator/llm/`); allowed to import `@earendil-works/pi-ai`.
  *
  * The faux provider lets tests inject deterministic LLM responses. It is also
  * used by production agent modules (each exports a `fauxRegistration` fallback
@@ -10,8 +10,8 @@ import {
   registerFauxProvider as piRegisterFauxProvider,
   fauxAssistantMessage as piFauxAssistantMessage,
   fauxToolCall as piFauxToolCall,
-} from '@mariozechner/pi-ai';
-import type { FauxResponseStep as PiFauxResponseStep } from '@mariozechner/pi-ai';
+} from '@earendil-works/pi-ai/compat';
+import type { FauxResponseStep as PiFauxResponseStep } from '@earendil-works/pi-ai/compat';
 import { fauxMatcher, type FauxMatch } from './faux-matcher';
 
 /** A queued faux response: a full assistant message or a factory producing one. */

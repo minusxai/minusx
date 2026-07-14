@@ -1,8 +1,8 @@
-diff --git a/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js b/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js
-index 3f0cc9a..b15009b 100644
---- a/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js
-+++ b/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js
-@@ -86,13 +86,17 @@ function convertContentBlocks(content) {
+diff --git a/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js b/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
+index 2eda248..715b1da 100644
+--- a/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
+@@ -85,13 +85,17 @@ function convertContentBlocks(content) {
                  text: sanitizeSurrogates(block.text),
              };
          }
@@ -25,7 +25,7 @@ index 3f0cc9a..b15009b 100644
          };
      });
      // If only images (no text), add placeholder text block
-@@ -347,6 +351,7 @@ export const streamAnthropic = (model, context, options) => {
+@@ -374,6 +378,7 @@ export const stream = (model, context, options) => {
                          const block = {
                              type: "text",
                              text: "",
@@ -33,7 +33,7 @@ index 3f0cc9a..b15009b 100644
                              index: event.index,
                          };
                          output.content.push(block);
-@@ -387,6 +392,30 @@ export const streamAnthropic = (model, context, options) => {
+@@ -414,6 +419,30 @@ export const stream = (model, context, options) => {
                          output.content.push(block);
                          stream.push({ type: "toolcall_start", contentIndex: output.content.length - 1, partial: output });
                      }
@@ -64,7 +64,7 @@ index 3f0cc9a..b15009b 100644
                  }
                  else if (event.type === "content_block_delta") {
                      if (event.delta.type === "text_delta") {
-@@ -428,6 +457,12 @@ export const streamAnthropic = (model, context, options) => {
+@@ -455,6 +484,12 @@ export const stream = (model, context, options) => {
                                  partial: output,
                              });
                          }
@@ -77,7 +77,7 @@ index 3f0cc9a..b15009b 100644
                      }
                      else if (event.delta.type === "signature_delta") {
                          const index = blocks.findIndex((b) => b.index === event.index);
-@@ -437,6 +472,14 @@ export const streamAnthropic = (model, context, options) => {
+@@ -464,6 +499,14 @@ export const stream = (model, context, options) => {
                              block.thinkingSignature += event.delta.signature;
                          }
                      }
@@ -92,7 +92,7 @@ index 3f0cc9a..b15009b 100644
                  }
                  else if (event.type === "content_block_stop") {
                      const index = blocks.findIndex((b) => b.index === event.index);
-@@ -471,6 +514,11 @@ export const streamAnthropic = (model, context, options) => {
+@@ -498,6 +541,11 @@ export const stream = (model, context, options) => {
                                  partial: output,
                              });
                          }
@@ -104,9 +104,9 @@ index 3f0cc9a..b15009b 100644
                      }
                  }
                  else if (event.type === "message_delta") {
-@@ -697,6 +745,19 @@ function buildParams(model, context, isOAuthToken, options) {
+@@ -711,6 +759,19 @@ function buildParams(model, context, isOAuthToken, options) {
      if (context.tools && context.tools.length > 0) {
-         params.tools = convertTools(context.tools, isOAuthToken, getAnthropicCompat(model).supportsEagerToolInputStreaming, cacheControl);
+         params.tools = convertTools(context.tools, isOAuthToken, compat.supportsEagerToolInputStreaming, compat.supportsCacheControlOnTools ? cacheControl : undefined);
      }
 +    // [MX PATCH] Anthropic native web search (server-side tool). Enabled via
 +    // options.webSearch (boolean or { maxUses, userLocation: { city } }).
@@ -121,10 +121,10 @@ index 3f0cc9a..b15009b 100644
 +        }
 +        params.tools = [...(params.tools ?? []), webSearchTool];
 +    }
-     // Configure thinking mode: adaptive (Opus 4.6+ and Sonnet 4.6),
-     // budget-based (older models), or explicitly disabled.
+     // Configure thinking mode: adaptive, budget-based, or explicitly disabled.
      if (model.reasoning) {
-@@ -772,13 +833,16 @@ function convertMessages(messages, model, isOAuthToken, cacheControl) {
+         if (options?.thinkingEnabled) {
+@@ -785,13 +846,16 @@ function convertMessages(messages, model, isOAuthToken, cacheControl, allowEmpty
                          };
                      }
                      else {
@@ -146,7 +146,7 @@ index 3f0cc9a..b15009b 100644
                          };
                      }
                  });
-@@ -843,6 +907,24 @@ function convertMessages(messages, model, isOAuthToken, cacheControl) {
+@@ -864,6 +928,24 @@ function convertMessages(messages, model, isOAuthToken, cacheControl, allowEmpty
                          input: block.arguments ?? {},
                      });
                  }
@@ -171,62 +171,63 @@ index 3f0cc9a..b15009b 100644
              }
              if (blocks.length === 0)
                  continue;
-diff --git a/node_modules/@mariozechner/pi-ai/dist/providers/openai-responses-shared.js b/node_modules/@mariozechner/pi-ai/dist/providers/openai-responses-shared.js
-index 3081455..b043d4b 100644
---- a/node_modules/@mariozechner/pi-ai/dist/providers/openai-responses-shared.js
-+++ b/node_modules/@mariozechner/pi-ai/dist/providers/openai-responses-shared.js
-@@ -232,7 +232,10 @@ export async function processResponsesStream(openaiStream, output, stream, model
-             }
-             else if (item.type === "message") {
-                 currentItem = item;
--                currentBlock = { type: "text", text: "" };
-+                // [MX PATCH] `citations` accumulates web-search url_citation annotations
-+                // (see response.output_text.annotation.added below), mirroring the
-+                // Anthropic web-search patch so the frontend renders source chips.
-+                currentBlock = { type: "text", text: "", citations: [] };
-                 output.content.push(currentBlock);
-                 stream.push({ type: "text_start", contentIndex: blockIndex(), partial: output });
-             }
-@@ -314,6 +317,21 @@ export async function processResponsesStream(openaiStream, output, stream, model
-                 }
-             }
+diff --git a/node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js b/node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
+index cd76bb3..c098515 100644
+--- a/node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
+@@ -235,7 +235,10 @@ export async function processResponsesStream(openaiStream, output, stream, model
+             return slot;
+         }
+         if (item.type === "message") {
+-            const block = { type: "text", text: "" };
++            // [MX PATCH] `citations` accumulates web-search url_citation annotations
++            // (see response.output_text.annotation.added below), mirroring the
++            // Anthropic web-search patch so the frontend renders source chips.
++            const block = { type: "text", text: "", citations: [] };
+             output.content.push(block);
+             const slot = { type: "text", block, contentIndex: output.content.length - 1 };
+             outputSlots.set(outputIndex, slot);
+@@ -353,6 +356,22 @@ export async function processResponsesStream(openaiStream, output, stream, model
+                 partial: output,
+             });
          }
 +        // [MX PATCH] Web-search url_citation annotations → text-block citations in the
 +        // unified Anthropic-native shape (web_search_result_location) the frontend renders.
 +        else if (event.type === "response.output_text.annotation.added") {
++            const slot = getSlot(event.output_index, "text");
 +            const ann = event.annotation;
-+            if (currentBlock?.type === "text" && ann && ann.type === "url_citation") {
-+                (currentBlock.citations = currentBlock.citations || []).push({
++            if (slot && ann && ann.type === "url_citation") {
++                (slot.block.citations = slot.block.citations || []).push({
 +                    type: "web_search_result_location",
 +                    url: ann.url,
 +                    title: ann.title,
 +                    cited_text: typeof ann.start_index === "number" && typeof ann.end_index === "number"
-+                        ? currentBlock.text.slice(ann.start_index, ann.end_index)
++                        ? slot.block.text.slice(ann.start_index, ann.end_index)
 +                        : undefined,
 +                });
 +            }
 +        }
          else if (event.type === "response.refusal.delta") {
-             if (currentItem?.type === "message" && currentBlock?.type === "text") {
-                 if (!currentItem.content || currentItem.content.length === 0) {
-@@ -378,6 +396,29 @@ export async function processResponsesStream(openaiStream, output, stream, model
-             else if (item.type === "message" && currentBlock?.type === "text") {
-                 currentBlock.text = item.content.map((c) => (c.type === "output_text" ? c.text : c.refusal)).join("");
-                 currentBlock.textSignature = encodeTextSignatureV1(item.id, item.phase ?? undefined);
+             const slot = getSlot(event.output_index, "text");
+             if (!slot)
+@@ -416,6 +435,29 @@ export async function processResponsesStream(openaiStream, output, stream, model
+             else if (item.type === "message" && slot?.type === "text") {
+                 slot.block.text = item.content?.map((c) => (c.type === "output_text" ? c.text : c.refusal)).join("") || "";
+                 slot.block.textSignature = encodeTextSignatureV1(item.id, item.phase ?? undefined);
 +                // [MX PATCH] Merge web-search url_citation annotations from the final message
 +                // content (authoritative + complete), deduped against any captured while
 +                // streaming. Robust whether or not annotation.added events were emitted.
 +                {
-+                    const cites = (currentBlock.citations = currentBlock.citations || []);
++                    const cites = (slot.block.citations = slot.block.citations || []);
 +                    const seen = new Set(cites.map((c) => `${c.url}#${c.cited_text ?? ""}`));
-+                    for (const part of item.content) {
++                    for (const part of item.content ?? []) {
 +                        if (part.type !== "output_text" || !Array.isArray(part.annotations))
 +                            continue;
 +                        for (const ann of part.annotations) {
 +                            if (!ann || ann.type !== "url_citation")
 +                                continue;
 +                            const cited_text = typeof ann.start_index === "number" && typeof ann.end_index === "number"
-+                                ? currentBlock.text.slice(ann.start_index, ann.end_index)
++                                ? slot.block.text.slice(ann.start_index, ann.end_index)
 +                                : undefined;
 +                            const key = `${ann.url}#${cited_text ?? ""}`;
 +                            if (seen.has(key))
@@ -238,12 +239,12 @@ index 3081455..b043d4b 100644
 +                }
                  stream.push({
                      type: "text_end",
-                     contentIndex: blockIndex(),
-diff --git a/node_modules/@mariozechner/pi-ai/dist/providers/openai-responses.js b/node_modules/@mariozechner/pi-ai/dist/providers/openai-responses.js
-index 0c7ec02..7097b66 100644
---- a/node_modules/@mariozechner/pi-ai/dist/providers/openai-responses.js
-+++ b/node_modules/@mariozechner/pi-ai/dist/providers/openai-responses.js
-@@ -178,6 +178,16 @@ function buildParams(model, context, options) {
+                     contentIndex: slot.contentIndex,
+diff --git a/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js b/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
+index b1a536b..1aa0a40 100644
+--- a/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
+@@ -186,6 +186,16 @@ function buildParams(model, context, options) {
      if (context.tools && context.tools.length > 0) {
          params.tools = convertResponsesTools(context.tools);
      }
@@ -260,17 +261,33 @@ index 0c7ec02..7097b66 100644
      if (model.reasoning) {
          if (options?.reasoningEffort || options?.reasoningSummary) {
              const effort = options?.reasoningEffort
-diff --git a/node_modules/@mariozechner/pi-ai/dist/providers/simple-options.js b/node_modules/@mariozechner/pi-ai/dist/providers/simple-options.js
-index 64c0447..43c89e3 100644
---- a/node_modules/@mariozechner/pi-ai/dist/providers/simple-options.js
-+++ b/node_modules/@mariozechner/pi-ai/dist/providers/simple-options.js
-@@ -14,6 +14,9 @@ export function buildBaseOptions(model, options, apiKey) {
+diff --git a/node_modules/@earendil-works/pi-ai/dist/api/simple-options.js b/node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
+index 7b08245..9c7399e 100644
+--- a/node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
+@@ -24,6 +24,9 @@ export function buildBaseOptions(model, context, options, apiKey) {
          maxRetries: options?.maxRetries,
          maxRetryDelayMs: options?.maxRetryDelayMs,
          metadata: options?.metadata,
 +        // [MX PATCH] Forward web search through the simple-options path so the
 +        // Anthropic provider's buildParams can inject the web_search tool.
 +        webSearch: options?.webSearch,
+         env: options?.env,
      };
  }
- export function clampReasoning(effort) {
+diff --git a/node_modules/@earendil-works/pi-ai/dist/utils/estimate.js b/node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
+index 17ef451..12dea36 100644
+--- a/node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
++++ b/node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
+@@ -39,7 +39,10 @@ export function estimateMessageTokens(message) {
+             chars += block.thinking.length;
+         }
+         else {
+-            chars += block.name.length + safeJsonStringify(block.arguments).length;
++            // [MX PATCH] Null-safe for web-search blocks (server_tool_use /
++            // web_search_tool_result) carried on assistant messages by the
++            // web-search patch — they don't have the toolCall shape.
++            chars += (block.name?.length ?? 0) + safeJsonStringify(block.arguments ?? block.content ?? block.input ?? {}).length;
+         }
+     }
+     return Math.ceil(chars / CHARS_PER_TOKEN);

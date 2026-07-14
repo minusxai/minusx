@@ -1,4 +1,4 @@
-// Validates the pi web-search patch (patches/@mariozechner+pi-ai+0.73.0.patch):
+// Validates the pi web-search patch (patches/@earendil-works+pi-ai+0.80.6.patch):
 //  - request: the web_search server tool is injected when options.webSearch is set
 //  - response: web_search_tool_result blocks + text-block citations are parsed,
 //    and server_tool_use is dropped

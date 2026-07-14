@@ -34,11 +34,17 @@ const RESTRICT_ADAPTER_FACTORY = {
 // is allowed). Flat config replaces this rule per file, so a block that omits it
 // silently reopens a hole.
 const RESTRICT_PI_AI = {
-  name: "@mariozechner/pi-ai",
+  name: "@earendil-works/pi-ai",
   message:
-    "Do not import @mariozechner/pi-ai directly. It is isolated to orchestrator/llm/. " +
+    "Do not import @earendil-works/pi-ai directly. It is isolated to orchestrator/llm/. " +
     "Import LLM types + runtime from @/orchestrator/llm (faux/test helpers from @/orchestrator/llm/testing), " +
     "and import Type/TSchema/Static directly from 'typebox'.",
+};
+// Subpath entrypoints (/compat, /api/*, /providers/*) need their own pattern —
+// `name` only blocks the exact specifier.
+const RESTRICT_PI_AI_SUBPATHS = {
+  group: ["@earendil-works/pi-ai/*"],
+  message: RESTRICT_PI_AI.message,
 };
 
 // Container/View convention (CLAUDE.md "Component Patterns"):
@@ -186,6 +192,7 @@ const eslintConfig = defineConfig([
             RESTRICT_ADAPTER_FACTORY,
             RESTRICT_PI_AI,
           ],
+          patterns: [RESTRICT_PI_AI_SUBPATHS],
         },
       ],
       // Prevent inline/dynamic imports (code smell indicating circular dependencies)
@@ -256,7 +263,7 @@ const eslintConfig = defineConfig([
       "test/**",
     ],
     rules: {
-      "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI] }],
+      "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI], patterns: [RESTRICT_PI_AI_SUBPATHS] }],
     },
   },
   // lib/modules/db/** — adapter allowed (it IS the module), DocumentDB still restricted.
@@ -264,7 +271,7 @@ const eslintConfig = defineConfig([
   {
     files: ["lib/modules/db/**"],
     rules: {
-      "no-restricted-imports": ["error", { paths: [RESTRICT_DOCUMENTS_DB, RESTRICT_PI_AI] }],
+      "no-restricted-imports": ["error", { paths: [RESTRICT_DOCUMENTS_DB, RESTRICT_PI_AI], patterns: [RESTRICT_PI_AI_SUBPATHS] }],
     },
   },
   // lib/database/** — database internals; factory + adapter allowed. pi-ai still
@@ -272,7 +279,7 @@ const eslintConfig = defineConfig([
   {
     files: ["lib/database/**"],
     rules: {
-      "no-restricted-imports": ["error", { paths: [RESTRICT_PI_AI] }],
+      "no-restricted-imports": ["error", { paths: [RESTRICT_PI_AI], patterns: [RESTRICT_PI_AI_SUBPATHS] }],
     },
   },
   // scripts/** — DocumentDB allowed (scripts seed the DB), adapter still restricted.
@@ -280,7 +287,7 @@ const eslintConfig = defineConfig([
   {
     files: ["scripts/**"],
     rules: {
-      "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI] }],
+      "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI], patterns: [RESTRICT_PI_AI_SUBPATHS] }],
     },
   },
   // Container/View convention (CLAUDE.md "Component Patterns") — these views were
@@ -301,7 +308,7 @@ const eslintConfig = defineConfig([
     rules: {
       "no-restricted-imports": [
         "error",
-        { paths: [RESTRICT_DOCUMENTS_DB, RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI, ...RESTRICT_VIEW_REDUX] },
+        { paths: [RESTRICT_DOCUMENTS_DB, RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI, ...RESTRICT_VIEW_REDUX], patterns: [RESTRICT_PI_AI_SUBPATHS] },
       ],
     },
   },
@@ -318,6 +325,7 @@ const eslintConfig = defineConfig([
       "no-restricted-imports": ["error", {
         paths: [RESTRICT_PI_AI],
         patterns: [
+          RESTRICT_PI_AI_SUBPATHS,
           {
             group: ["@/lib/**", "@/app/**", "@/store/**", "@/components/**", "@/agents/**"],
             message:
@@ -328,7 +336,7 @@ const eslintConfig = defineConfig([
     },
   },
   // orchestrator/llm/** — THE pi-ai isolation boundary. This is the only place
-  // allowed to import @mariozechner/pi-ai. It also bridges to deployment config
+  // allowed to import @earendil-works/pi-ai. It also bridges to deployment config
   // (the MX proxy URL), so @/lib/config is permitted here (the app-agnostic
   // pattern ban is intentionally not applied). Must come AFTER the orchestrator/**
   // block so it wins (flat-config: last matching config replaces the rule).
