@@ -108,10 +108,21 @@ export function deriveModelStubs(databases: DatabaseWithSchema[]): ModelStub[] {
       }
     }
   }
-  const nameCounts = new Map<string, number>();
-  for (const st of stubs) nameCounts.set(st.name, (nameCounts.get(st.name) ?? 0) + 1);
+  // Names must be STRICTLY unique — they become spec references and React
+  // keys. Disambiguate in widening steps: schema suffix, then the raw table
+  // name (unique per connection.schema by construction).
+  const count = (list: ModelStub[]) => {
+    const c = new Map<string, number>();
+    for (const st of list) c.set(st.name, (c.get(st.name) ?? 0) + 1);
+    return c;
+  };
+  let counts = count(stubs);
   for (const st of stubs) {
-    if ((nameCounts.get(st.name) ?? 0) > 1) st.name = `${st.name} (${st.schema ?? st.connection})`;
+    if ((counts.get(st.name) ?? 0) > 1) st.name = `${st.name} (${st.schema ?? st.connection})`;
+  }
+  counts = count(stubs);
+  for (const st of stubs) {
+    if ((counts.get(st.name) ?? 0) > 1) st.name = `${humanizeName(st.table)} (${st.schema ?? st.connection}.${st.table})`;
   }
   return stubs;
 }

@@ -179,6 +179,22 @@ describe('deriveModelStubs — global naming over names-only schemas', () => {
     ],
   };
 
+  it('same-humanization collisions WITHIN one schema still get unique names', () => {
+    const oneSchema: DatabaseWithSchema = {
+      databaseName: 'warehouse',
+      schemas: [{ schema: 'habuild', tables: [
+        { table: 'cid_72', columns: [] },
+        { table: 'CID-72', columns: [] },
+        { table: 'Cid 72', columns: [] },
+      ]}],
+    };
+    const names = deriveModelStubs([oneSchema]).map((st) => st.name);
+    expect(new Set(names).size).toBe(3); // strictly unique — they become React keys and spec references
+    for (const st of deriveModelStubs([oneSchema])) {
+      expect(st.name).toContain('Cid 72');
+    }
+  });
+
   it('produces one stub per table (columns not required) with disambiguated names', () => {
     const stubs = deriveModelStubs([NAMES_ONLY]);
     expect(stubs.map((st) => st.name).sort()).toEqual(['Events (prod)', 'Events (staging)', 'Orders']);
