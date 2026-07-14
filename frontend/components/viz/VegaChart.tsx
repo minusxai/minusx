@@ -27,6 +27,30 @@ const makeXFormatter = (plan: TooltipPlan) => (raw: unknown): string => {
   return Number.isNaN(+d) ? String(raw) : d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 };
 
+// Shared-tooltip guide: a native Vega `rule` mark injected BEHIND the data marks (so bars
+// occlude it) and driven by signals — `mxGuidePx` is the data-rect pixel x (same space as
+// the marks, so it lands exactly on the point), `mxGuideOn` toggles visibility. A subtle
+// grey band. Tune stroke/width/opacity here.
+const GUIDE_STROKE = '#9aa4b2';
+const GUIDE_WIDTH = 5;
+const GUIDE_OPACITY = 0.28;
+function injectGuideMark(vegaSpec: Record<string, unknown>): boolean {
+  const marks = vegaSpec.marks;
+  if (!Array.isArray(marks) || marks.length === 0) return false; // composed/empty → no guide
+  const signals = (Array.isArray(vegaSpec.signals) ? vegaSpec.signals : []) as Array<Record<string, unknown>>;
+  signals.push({ name: 'mxGuidePx', value: -1 }, { name: 'mxGuideOn', value: 0 });
+  vegaSpec.signals = signals;
+  marks.unshift({
+    type: 'rule', interactive: false, clip: true,
+    encode: { update: {
+      x: { signal: 'mxGuidePx' }, y: { value: 0 }, y2: { signal: 'height' },
+      stroke: { value: GUIDE_STROKE }, strokeWidth: { value: GUIDE_WIDTH },
+      opacity: { signal: `mxGuideOn * ${GUIDE_OPACITY}` },
+    } },
+  });
+  return true;
+}
+
 // Interactive maps (drag pan, wheel zoom, +/- buttons, persisted view) are detected by
 // CAPABILITY — the `mxViewParams` signal — not by recipe id, so a DETACHED map (kind:
 // 'vega', no recipe) stays fully interactive. Recipe ids are still a fast path.
@@ -147,6 +171,9 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           : null;
         legendPlanRef.current = JSON.stringify(legendPlan ?? null);
         const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan });
+        // Shared-tooltip charts get a guide-line rule injected BEHIND the data (before parse).
+        const tooltipPlan = vlSpecRef.current ? buildTooltipPlan(vlSpecRef.current) : null;
+        const hasGuide = tooltipPlan ? injectGuideMark(vegaSpec as Record<string, unknown>) : false;
         if (cancelled) return;
         el.replaceChildren(); // drop any stale chart DOM from a failed predecessor
         view = createVegaView(vegaSpec, rowsRef.current, {
@@ -178,30 +205,39 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         // vertical guide line. Overrides the default per-mark tooltip; other charts (pie,
         // scatter, maps) keep it. `data` is re-indexed on row change (see the data effect).
         if (cancelled) return;
-        const plan = vlSpecRef.current ? buildTooltipPlan(vlSpecRef.current) : null;
-        if (plan) {
+        if (tooltipPlan) {
+          const plan = tooltipPlan;
           // Capture LOCALS in the handler (not tooltipRef) so a StrictMode/rebuild race can't
           // null it out. `holder.data` is re-indexed on row change.
-          const controller = new SharedTooltip(el, colorMode);
+          const controller = new SharedTooltip(colorMode);
           const holder = { data: buildTooltipData(rowsRef.current, plan) };
           const formatX = makeXFormatter(plan);
           const v = view;
           v.tooltip(() => {}); // suppress the default per-mark tooltip; we drive our own
 
-          // ECharts-style AXIS trigger: hovering ANYWHERE in the plot snaps to the nearest x
-          // (no need to land on a thin line). Cursor px → data-rect px (minus the padding
-          // origin) → nearest x by pixel; the guide snaps to that x, the tooltip rides the cursor.
-          const onMove = (e: PointerEvent) => {
+          const setGuide = (on: boolean, px = -1) => {
+            if (!hasGuide) return;
+            v.signal('mxGuideOn', on ? 1 : 0);
+            if (on) v.signal('mxGuidePx', px);
+            v.runAsync().catch(() => { /* race on unmount */ });
+          };
+          const hideAll = () => { controller.hide(); setGuide(false); };
+
+          // ECharts-style AXIS trigger: hovering ANYWHERE in the plot snaps to the nearest x.
+          // The guide is a Vega rule at `mxGuidePx` (data-rect px) so it lands EXACTLY on the
+          // point and renders behind the bars; the tooltip card rides the cursor. rAF-throttled.
+          let raf = 0, pending: PointerEvent | null = null;
+          const process = (e: PointerEvent) => {
             const svg = el.querySelector('svg');
             const xs = v.scale('x') as (((d: unknown) => number) & { bandwidth?: () => number }) | undefined;
-            if (!svg || typeof xs !== 'function') { controller.hide(); return; }
+            if (!svg || typeof xs !== 'function') { hideAll(); return; }
             const rect = svg.getBoundingClientRect();
             const origin = (v as unknown as { _origin?: [number, number] })._origin ?? [0, 0];
             const width = Number(v.width());
             const height = Number(v.height());
             const dataX = e.clientX - rect.left - origin[0];
             const dataY = e.clientY - rect.top - origin[1];
-            if (dataX < -6 || dataX > width + 6 || dataY < -6 || dataY > height + 6) { controller.hide(); return; }
+            if (dataX < -6 || dataX > width + 6 || dataY < -6 || dataY > height + 6) { hideAll(); return; }
             let best: TooltipEntry | null = null, bestDist = Infinity, bestPx = 0;
             for (const entry of holder.data.values()) {
               const sv = plan.xTemporal ? new Date(entry.xRaw as string | number | Date) : entry.xRaw;
@@ -211,19 +247,21 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
               const d = Math.abs(px - dataX);
               if (d < bestDist) { bestDist = d; best = entry; bestPx = px; }
             }
-            if (!best) { controller.hide(); return; }
+            if (!best) { hideAll(); return; }
             const scale = v.scale('color') as ((k: string) => string) | undefined;
             const colorFor = (k: string) => { try { return scale ? String(scale(k)) : '#8b949e'; } catch { return '#8b949e'; } };
-            const html = renderSharedTooltipHtml(best, { xTitle: plan.xTitle, colorFor, formatX, formatValue: fmtTooltipValue });
-            controller.show(html, {
-              cursorX: e.clientX, cursorY: e.clientY,
-              guideX: rect.left + origin[0] + bestPx, guideTop: rect.top + origin[1], guideHeight: height,
-            });
+            controller.show(renderSharedTooltipHtml(best, { xTitle: plan.xTitle, colorFor, formatX, formatValue: fmtTooltipValue }), e.clientX, e.clientY);
+            setGuide(true, bestPx);
           };
-          const onLeave = () => controller.hide();
+          const onMove = (e: PointerEvent) => {
+            pending = e;
+            if (!raf) raf = requestAnimationFrame(() => { raf = 0; if (pending) process(pending); });
+          };
+          const onLeave = () => { if (raf) { cancelAnimationFrame(raf); raf = 0; } pending = null; hideAll(); };
           el.addEventListener('pointermove', onMove);
           el.addEventListener('pointerleave', onLeave);
           tooltipRef.current = { plan, controller, holder, cleanup: () => {
+            if (raf) cancelAnimationFrame(raf);
             el.removeEventListener('pointermove', onMove);
             el.removeEventListener('pointerleave', onLeave);
           } };

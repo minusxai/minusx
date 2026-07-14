@@ -291,5 +291,5 @@ html.dark .login-card {
 .mx-tt-shared .mx-tt-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; margin-right: 8px; }
 .mx-tt-shared .mx-tt-name { opacity: 0.82; }
 .mx-tt-shared .mx-tt-val { margin-left: auto; padding-left: 20px; font-weight: 600; }
-/* Vertical guide line at the hovered x (fixed-positioned on <body>; JS sets top/height). */
-.mx-tt-guide { position: fixed; width: 10px; background: rgba(139, 148, 158, 0.5); pointer-events: none; display: none; }
+/* NOTE: the vertical guide line is now a native Vega `rule` mark (behind the data), not a
+   DOM element — styled by GUIDE_STROKE/WIDTH/OPACITY in components/viz/VegaChart.tsx. */
