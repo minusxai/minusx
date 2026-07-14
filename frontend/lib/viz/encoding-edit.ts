@@ -211,9 +211,11 @@ export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelop
   const encoding = { ...((spec.encoding as Record<string, unknown> | undefined) ?? {}) } as Record<string, Record<string, unknown> | undefined>;
   const from = getVizType(spec);
 
-  // Leaving pie: restore positional channels from theta/color before anything else.
+  // Leaving pie: the slice category (color) becomes the x-axis and theta becomes y. MOVE
+  // color → x (don't copy): keeping color === x splits a line/area into single-point series
+  // (one dot per category, no connecting line) — the classic "why is my line just dots".
   if (from === 'pie' && type !== 'pie') {
-    if (encoding.color && !encoding.x) encoding.x = { ...encoding.color };
+    if (encoding.color && !encoding.x) { encoding.x = { ...encoding.color }; delete encoding.color; }
     if (encoding.theta && !encoding.y) encoding.y = { ...encoding.theta };
     delete encoding.theta;
   }

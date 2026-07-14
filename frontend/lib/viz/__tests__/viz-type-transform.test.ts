@@ -62,6 +62,12 @@ describe('setVizType channel hygiene', () => {
     expect('legend' in spec.encoding.x).toBe(false);
     if (spec.encoding.color) expect('axis' in spec.encoding.color).toBe(false);
   });
+
+  it('pie → line MOVES color to x (no redundant color) so the line connects, not dots', () => {
+    const spec = specOf(setVizType(envelope(PIE_WITH_LEGEND), 'line'));
+    expect(spec.encoding.x.field).toBe('platform');
+    expect(spec.encoding.color).toBeUndefined(); // color===x would split into single-point series
+  });
 });
 
 describe('setVizType', () => {
