@@ -1,10 +1,10 @@
 /**
- * SemanticCanvas — the PygWalker-style semantic editor: field list (measures /
- * dimensions / time) on the left, X-Axis / Y-Axis / Color / Filter shelves on
- * the right. Every shelf edit compiles REAL SQL client-side and emits the
- * spec + SQL + the viz assignment implied by the shelves. Fields can be
- * clicked (default shelf) or dragged; a metrics-first search box finds fields
- * across every whitelisted table and infers the model from the pick.
+ * SemanticCanvas — drag-drop semantic editor: field list (measures /
+ * dimensions / time) on the left, Measures / Dimensions / Time / Filter
+ * shelves on the right. Every shelf edit compiles REAL SQL client-side and
+ * emits the spec + SQL + the viz columns implied by it. Fields can be clicked
+ * (they land on their shelf) or dragged; a metrics-first search box finds
+ * fields across every whitelisted table and infers the model from the pick.
  */
 import React from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
@@ -62,7 +62,7 @@ describe('SemanticCanvas', () => {
     expect(screen.getByLabelText('Semantic model')).toBeTruthy();
   });
 
-  it('clicking a dimension fills the X shelf and emits spec + SQL + viz', async () => {
+  it('clicking a dimension fills the Dimensions shelf and emits spec + SQL + viz', async () => {
     const { onChange } = renderCanvas();
     fireEvent.click(screen.getByLabelText('Field dimension: Status'));
     await waitFor(() => expect(onChange).toHaveBeenCalled());
@@ -71,20 +71,21 @@ describe('SemanticCanvas', () => {
     expect(sql).toContain('GROUP BY');
     expect(sql).toContain('SUM(amount) AS revenue');
     expect(viz).toMatchObject({ type: 'bar', xCols: ['status'], yCols: ['revenue'] });
-    expect(screen.getByLabelText('X-Axis chip: Status')).toBeTruthy();
+    expect(screen.getByLabelText('Dimensions chip: Status')).toBeTruthy();
   });
 
-  it('a second dimension click lands on Color; the join is applied invisibly', async () => {
+  it('dimensions are unbounded (no chart-shelf cap); joins apply invisibly', async () => {
     const { onChange } = renderCanvas();
     fireEvent.click(screen.getByLabelText('Field dimension: Status'));
     fireEvent.click(screen.getByLabelText('Field dimension: Region'));
-    await waitFor(() => expect(screen.getByLabelText('Color chip: Region')).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText('Dimensions chip: Region')).toBeTruthy());
+    expect(screen.getByLabelText('Dimensions chip: Status')).toBeTruthy();
     const [spec, sql] = onChange.mock.calls.at(-1)!;
     expect(spec.dimensions).toEqual(['Status', 'Region']);
     expect(sql).toContain('LEFT JOIN customers c');
   });
 
-  it('clicking the time field puts a grain on X and viz becomes a line chart', async () => {
+  it('clicking the time field fills the Time shelf and viz becomes a line chart', async () => {
     const { onChange } = renderCanvas();
     fireEvent.click(screen.getByLabelText('Field time: Order date'));
     await waitFor(() => expect(onChange).toHaveBeenCalled());
@@ -100,32 +101,23 @@ describe('SemanticCanvas', () => {
     });
   });
 
-  it('dragging a dimension onto Color assigns it there (X stays put)', async () => {
+  it('dragging a dimension onto the Dimensions shelf assigns it', async () => {
     const { onChange } = renderCanvas({
       value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },
     });
     const chip = screen.getByLabelText('Field dimension: Region');
     fireEvent.dragStart(chip);
-    fireEvent.drop(screen.getByText('Color').closest('div')!.parentElement!);
-    await waitFor(() => expect(screen.getByLabelText('Color chip: Region')).toBeTruthy());
-    expect(screen.getByLabelText('X-Axis chip: Status')).toBeTruthy();
+    fireEvent.drop(screen.getAllByText('Dimensions').at(-1)!.closest('div')!.parentElement!);
+    await waitFor(() => expect(screen.getByLabelText('Dimensions chip: Region')).toBeTruthy());
     const [spec] = onChange.mock.calls.at(-1)!;
     expect(spec.dimensions).toEqual(['Status', 'Region']);
-  });
-
-  it('a color-drop with an empty X lands on X (color is meaningless without an X)', async () => {
-    renderCanvas();
-    const chip = screen.getByLabelText('Field dimension: Status');
-    fireEvent.dragStart(chip);
-    fireEvent.drop(screen.getByText('Color').closest('div')!.parentElement!);
-    await waitFor(() => expect(screen.getByLabelText('X-Axis chip: Status')).toBeTruthy());
   });
 
   it('removing a shelf chip updates the spec', async () => {
     const { onChange } = renderCanvas({
       value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },
     });
-    fireEvent.click(screen.getByLabelText('Remove Status from X-Axis'));
+    fireEvent.click(screen.getByLabelText('Remove Status from Dimensions'));
     await waitFor(() => {
       const [spec] = onChange.mock.calls.at(-1)!;
       expect(spec.dimensions).toEqual([]);
@@ -155,11 +147,11 @@ describe('SemanticCanvas', () => {
     renderCanvas({
       value: { model: 'Orders', table: 'orders', measures: ['Revenue', 'Orders'], dimensions: ['Status', 'Region'], timeGrain: 'WEEK' },
     });
-    expect(screen.getByLabelText('Y-Axis chip: Revenue')).toBeTruthy();
-    expect(screen.getByLabelText('Y-Axis chip: Orders')).toBeTruthy();
-    // time wins X; first dimension goes to Color
-    expect(screen.getByLabelText('X-Axis chip: Order date')).toBeTruthy();
-    expect(screen.getByLabelText('Color chip: Status')).toBeTruthy();
+    expect(screen.getByLabelText('Measures chip: Revenue')).toBeTruthy();
+    expect(screen.getByLabelText('Measures chip: Orders')).toBeTruthy();
+    expect(screen.getByLabelText('Time chip: Order date')).toBeTruthy();
+    expect(screen.getByLabelText('Dimensions chip: Status')).toBeTruthy();
+    expect(screen.getByLabelText('Dimensions chip: Region')).toBeTruthy();
   });
 
   it('execute is wired and disabled while issues exist', async () => {

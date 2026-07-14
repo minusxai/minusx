@@ -1,21 +1,17 @@
 'use client';
 
 /**
- * SemanticCanvas — the PygWalker-style semantic query editor (the Semantic tab).
+ * SemanticCanvas — the drag-drop semantic query editor (the Semantic tab).
  *
  * Field list on the left (measures / dimensions / time, from the derived
- * SemanticModel), shelves on the right: X-Axis (one dimension OR the time
- * grain), Y-Axis (measures), Color (a second dimension), Filter, Limit.
- * Fields can be clicked (they land on their natural shelf) or dragged onto a
- * specific shelf. Every edit compiles the spec to dialect SQL client-side
- * (compileSemanticQuery → irToSqlLocal) and emits `(spec, sql, viz)` — the viz
- * assignment (chart type + axis columns) is implied by the shelves, so
- * building the query IS building the chart.
- *
- * Shelf ⟷ spec mapping (canonical both ways):
- *   X-Axis  = spec.timeGrain (wins) else spec.dimensions[0]
- *   Color   = the remaining dimension (dimensions[1], or [0] when time is on X)
- *   Y-Axis  = spec.measures
+ * SemanticModel); shelves on the right mirror the semantic spec directly:
+ * MEASURES (any number), DIMENSIONS (any number, ordered), TIME (the model's
+ * time dimension with a grain), FILTER, Limit. Fields can be clicked (they
+ * land on their shelf) or dragged. Every edit compiles the spec to dialect
+ * SQL client-side (compileSemanticQuery → irToSqlLocal) and emits
+ * `(spec, sql, viz)` — the viz columns are implied (x = time else first
+ * dimension, remaining dimensions group the series, y = measures), so
+ * building the query keeps the chart in sync without any chart-speak here.
  *
  * Models load on demand: the model picker lists cheap `stubs`, and the
  * metrics-first search box finds measures/dimensions across EVERY whitelisted
@@ -65,6 +61,7 @@ interface SemanticCanvasProps {
 }
 
 type DragItem = { kind: 'measure' | 'dimension' | 'time'; name: string };
+type Shelf = 'measures' | 'dimensions' | 'time';
 
 const specForStub = (stub: ModelStub): SemanticQuerySpec => ({
   model: stub.name,
@@ -74,21 +71,13 @@ const specForStub = (stub: ModelStub): SemanticQuerySpec => ({
   dimensions: [],
 });
 
-/** Shelf decomposition of a spec (see file comment). */
-const shelvesOf = (spec: SemanticQuerySpec) => ({
-  x: spec.timeGrain ? null : spec.dimensions[0] ?? null,
-  time: spec.timeGrain ?? null,
-  color: spec.timeGrain ? spec.dimensions[0] ?? null : spec.dimensions[1] ?? null,
-});
-
 const vizOf = (spec: SemanticQuerySpec): SemanticVizAssignment => {
-  const { x, time, color } = shelvesOf(spec);
   const xCols = [
-    ...(time ? [time.toLowerCase()] : x ? [semanticAlias(x)] : []),
-    ...(color ? [semanticAlias(color)] : []),
+    ...(spec.timeGrain ? [spec.timeGrain.toLowerCase()] : []),
+    ...spec.dimensions.map(semanticAlias),
   ];
   return {
-    type: time ? 'line' : xCols.length > 0 ? 'bar' : 'table',
+    type: spec.timeGrain ? 'line' : xCols.length > 0 ? 'bar' : 'table',
     xCols,
     yCols: spec.measures.map(semanticAlias),
   };
@@ -111,7 +100,6 @@ export function SemanticCanvas({
 
   const model = spec ? models.find((m) => m.name === spec.model) : undefined;
   const issues = spec && model ? validateSemanticQuery(spec, model) : [];
-  const shelves = spec ? shelvesOf(spec) : { x: null, time: null, color: null };
 
   const apply = useCallback((next: SemanticQuerySpec, nextModel: SemanticModel) => {
     setSpec(next);
@@ -135,48 +123,28 @@ export function SemanticCanvas({
     update({ measures: [...spec.measures, name] });
   }, [spec, model, update]);
 
-  const addDimension = useCallback((name: string, shelf: 'x' | 'color' | 'auto') => {
-    if (!spec || !model) return;
-    const { x, time, color } = shelvesOf(spec);
-    if (spec.dimensions.includes(name)) return;
-    const target = shelf === 'auto' ? ((x || time) ? 'color' : 'x') : shelf;
-    let dimensions: string[];
-    if (spec.timeGrain) {
-      // time owns X: the single dimension slot is Color
-      dimensions = [name];
-    } else if (target === 'x') {
-      dimensions = [name, ...(color ? [color] : [])];
-    } else {
-      dimensions = [...(x ? [x] : []), name];
-    }
-    update({ dimensions });
+  const addDimension = useCallback((name: string) => {
+    if (!spec || !model || spec.dimensions.includes(name)) return;
+    update({ dimensions: [...spec.dimensions, name] });
   }, [spec, model, update]);
 
   const addTime = useCallback((grain: SemanticTimeGrain = 'MONTH') => {
-    if (!spec || !model?.timeDimension) return;
-    // time takes X; keep at most one dimension (it becomes Color)
-    update({ timeGrain: grain, dimensions: spec.dimensions.slice(0, 1) });
+    if (!spec || !model?.timeDimension || spec.timeGrain) return;
+    update({ timeGrain: grain });
   }, [spec, model, update]);
 
-  const removeFromShelf = useCallback((slot: 'x' | 'time' | 'color', name?: string) => {
-    if (!spec) return;
-    if (slot === 'time') { update({ timeGrain: undefined }); return; }
-    update({ dimensions: spec.dimensions.filter((d) => d !== name) });
-  }, [spec, update]);
-
-  const handleDrop = useCallback((shelf: 'x' | 'y' | 'color') => {
+  const handleDrop = useCallback((shelf: Shelf) => {
     if (!dragging) return;
-    if (shelf === 'y' && dragging.kind === 'measure') addMeasure(dragging.name);
-    if (shelf === 'x' && dragging.kind === 'dimension') addDimension(dragging.name, 'x');
-    if (shelf === 'x' && dragging.kind === 'time') addTime();
-    if (shelf === 'color' && dragging.kind === 'dimension') addDimension(dragging.name, 'color');
+    if (shelf === 'measures' && dragging.kind === 'measure') addMeasure(dragging.name);
+    if (shelf === 'dimensions' && dragging.kind === 'dimension') addDimension(dragging.name);
+    if (shelf === 'time' && dragging.kind === 'time') addTime();
     setDragging(null);
   }, [dragging, addMeasure, addDimension, addTime]);
 
   const clickField = useCallback((item: DragItem) => {
     if (item.kind === 'measure') addMeasure(item.name);
     else if (item.kind === 'time') addTime();
-    else addDimension(item.name, 'auto');
+    else addDimension(item.name);
   }, [addMeasure, addDimension, addTime]);
 
   // A freshly picked (or detected/persisted) model finishing its fetch: give
@@ -211,7 +179,7 @@ export function SemanticCanvas({
     };
     if (spec && model && hit.model === spec.model) {
       if (hit.kind === 'measure') addMeasure(hit.name);
-      else addDimension(hit.name, 'auto');
+      else addDimension(hit.name);
       return;
     }
     onSelectModel({ name: hit.model, connection: hit.connection, schema: hit.schema, table: hit.table });
@@ -305,38 +273,14 @@ export function SemanticCanvas({
           </VStack>
         </VStack>
 
-        {/* Shelves */}
+        {/* Shelves — mirror the semantic spec directly */}
         <VStack align="stretch" gap={3} flex={1} minW={0}>
-          <DropZone label="X-Axis" onDrop={() => handleDrop('x')}>
-            <HStack gap={1.5} flexWrap="wrap">
-              {shelves.time && (
-                <ShelfChip label={`X-Axis chip: ${timeLabel}`} onRemove={() => removeFromShelf('time')}>
-                  <Text fontSize="xs" fontFamily="mono">{timeLabel}</Text>
-                  <select
-                    aria-label="Time grain"
-                    value={spec.timeGrain ?? 'MONTH'}
-                    onChange={(e) => update({ timeGrain: e.target.value as SemanticTimeGrain })}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{ fontSize: '11px', fontFamily: 'var(--font-jetbrains-mono), monospace', background: 'transparent', color: 'inherit', border: 'none', outline: 'none', cursor: 'pointer' }}
-                  >
-                    {TIME_GRAINS.map((g) => <option key={g} value={g}>per {g}</option>)}
-                  </select>
-                </ShelfChip>
-              )}
-              {shelves.x && (
-                <ShelfChip label={`X-Axis chip: ${shelves.x}`} onRemove={() => removeFromShelf('x', shelves.x!)}>
-                  <Text fontSize="xs" fontFamily="mono">{shelves.x}</Text>
-                </ShelfChip>
-              )}
-            </HStack>
-          </DropZone>
-
-          <DropZone label="Y-Axis" onDrop={() => handleDrop('y')}>
+          <DropZone label="Measures" onDrop={() => handleDrop('measures')}>
             <HStack gap={1.5} flexWrap="wrap">
               {spec.measures.map((name) => (
                 <ShelfChip
                   key={name}
-                  label={`Y-Axis chip: ${name}`}
+                  label={`Measures chip: ${name}`}
                   onRemove={spec.measures.length > 1 ? () => update({ measures: spec.measures.filter((m) => m !== name) }) : undefined}
                 >
                   <Text fontSize="xs" fontFamily="mono">{name}</Text>
@@ -345,15 +289,40 @@ export function SemanticCanvas({
             </HStack>
           </DropZone>
 
-          <DropZone label="Color" onDrop={() => handleDrop('color')}>
+          <DropZone label="Dimensions" onDrop={() => handleDrop('dimensions')}>
             <HStack gap={1.5} flexWrap="wrap">
-              {shelves.color && (
-                <ShelfChip label={`Color chip: ${shelves.color}`} onRemove={() => removeFromShelf('color', shelves.color!)}>
-                  <Text fontSize="xs" fontFamily="mono">{shelves.color}</Text>
+              {spec.dimensions.map((name) => (
+                <ShelfChip
+                  key={name}
+                  label={`Dimensions chip: ${name}`}
+                  onRemove={() => update({ dimensions: spec.dimensions.filter((d) => d !== name) })}
+                >
+                  <Text fontSize="xs" fontFamily="mono">{name}</Text>
                 </ShelfChip>
-              )}
+              ))}
             </HStack>
           </DropZone>
+
+          {model.timeDimension && (
+            <DropZone label="Time" onDrop={() => handleDrop('time')}>
+              <HStack gap={1.5} flexWrap="wrap">
+                {spec.timeGrain && (
+                  <ShelfChip label={`Time chip: ${timeLabel}`} onRemove={() => update({ timeGrain: undefined })}>
+                    <Text fontSize="xs" fontFamily="mono">{timeLabel}</Text>
+                    <select
+                      aria-label="Time grain"
+                      value={spec.timeGrain ?? 'MONTH'}
+                      onChange={(e) => update({ timeGrain: e.target.value as SemanticTimeGrain })}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ fontSize: '11px', fontFamily: 'var(--font-jetbrains-mono), monospace', background: 'transparent', color: 'inherit', border: 'none', outline: 'none', cursor: 'pointer' }}
+                    >
+                      {TIME_GRAINS.map((g) => <option key={g} value={g}>per {g}</option>)}
+                    </select>
+                  </ShelfChip>
+                )}
+              </HStack>
+            </DropZone>
+          )}
 
           {/* Filters */}
           <Box>
