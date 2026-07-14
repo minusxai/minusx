@@ -6,6 +6,6 @@
  */
 
 export { QueryModeSelector, type QueryTab } from './QueryModeSelector';
-export { SemanticQueryBuilder } from './SemanticQueryBuilder';
+export { SemanticCanvas } from './SemanticCanvas';
 export { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
 export { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';

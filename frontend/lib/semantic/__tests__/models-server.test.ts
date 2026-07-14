@@ -6,7 +6,7 @@
  * connection's persisted schema (always full, regardless of context bounding).
  */
 import { DocumentDB } from '@/lib/database/documents-db';
-import { getScopedSemanticModels } from '@/lib/semantic/models.server';
+import { getScopedSemanticModels, searchSemanticFields } from '@/lib/semantic/models.server';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 import { getModules } from '@/lib/modules/registry';
@@ -119,6 +119,30 @@ describe('getScopedSemanticModels', () => {
       path: '/org', connection: 'warehouse', tables: ['secrets', 'users'],
     });
     expect(models.map((m) => m.table).sort()).toEqual(['secrets', 'users']);
+  });
+
+  it('searchSemanticFields finds measures and dimensions across every whitelisted table', async () => {
+    const hits = await searchSemanticFields(admin, { path: '/org', connection: 'warehouse', q: 'amount' });
+    expect(hits).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'measure', name: 'Total Amount', model: 'Orders', table: 'orders' }),
+      expect.objectContaining({ kind: 'measure', name: 'Avg Amount', model: 'Orders' }),
+    ]));
+    // dimension search reaches other tables too
+    const dims = await searchSemanticFields(admin, { path: '/org', connection: 'warehouse', q: 'country' });
+    expect(dims).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'dimension', name: 'Country', model: 'Users', table: 'users' }),
+    ]));
+    // whitelist still applies — nothing from `secrets`
+    const none = await searchSemanticFields(admin, { path: '/org', connection: 'warehouse', q: 'token' });
+    expect(none).toEqual([]);
+  });
+
+  it('searchSemanticFields matches model names and caps results', async () => {
+    const byModel = await searchSemanticFields(admin, { path: '/org', connection: 'warehouse', q: 'orders' });
+    expect(byModel.length).toBeGreaterThan(0);
+    expect(byModel.every((h) => h.model === 'Orders')).toBe(true);
+    const all = await searchSemanticFields(admin, { path: '/org', connection: 'warehouse', q: '', limit: 3 });
+    expect(all.length).toBe(3);
   });
 
   it('unknown connection returns []', async () => {

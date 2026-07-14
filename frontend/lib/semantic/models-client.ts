@@ -10,6 +10,9 @@
  */
 
 import type { SemanticModel } from '@/lib/types';
+import type { SemanticFieldHit } from '@/lib/semantic/models.server';
+
+export type { SemanticFieldHit };
 
 // eslint-disable-next-line no-restricted-syntax -- module-level session cache; vocabulary is stable per page load
 const cache = new Map<string, Promise<SemanticModel[]>>();
@@ -37,4 +40,25 @@ export async function fetchScopedModels(
     });
   cache.set(key, load);
   return load;
+}
+
+/** Metrics-first typeahead: search measures/dimensions across the whitelist. */
+export async function searchFields(
+  path: string,
+  connection: string,
+  q: string,
+): Promise<SemanticFieldHit[]> {
+  if (!path || !connection) return [];
+  try {
+    const r = await fetch('/api/semantic-models', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, connection, q }),
+    });
+    if (!r.ok) return [];
+    const body = await r.json();
+    return (body?.data?.fields ?? []) as SemanticFieldHit[];
+  } catch {
+    return [];
+  }
 }

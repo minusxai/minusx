@@ -86,6 +86,15 @@ function idBaseName(column: string): string {
 const tableKey = (connection: string, schema: string | undefined, table: string) =>
   `${connection}|${schema ?? ''}|${table}`;
 
+/**
+ * Self-joins (same schema + table) are NOT supported: the derived join alias
+ * is the target table's name, which would collide with the base table in the
+ * generated SQL. Blocked at validation, filtered defensively at derivation,
+ * and excluded from the target picker in the whitelist UI.
+ */
+export const isSelfJoin = (r: TableRelationship): boolean =>
+  r.table === r.targetTable && (r.schema ?? '') === (r.targetSchema ?? '');
+
 /** The cheap, global "which models exist" projection — one stub per table. */
 export interface ModelStub {
   name: string;
@@ -189,7 +198,8 @@ export function deriveSemanticModels(
             r.connection === db.databaseName &&
             (r.schema ?? '') === (s.schema ?? '') &&
             r.table === t.table &&
-            r.column && r.targetTable && r.targetColumn,
+            r.column && r.targetTable && r.targetColumn &&
+            !isSelfJoin(r),
           )
           .map((r) => ({
             table: r.targetTable,
@@ -244,12 +254,8 @@ export function validateTableRelationships(relationships: TableRelationship[] | 
     if (r.relationship && r.relationship !== 'many_to_one' && r.relationship !== 'one_to_one') {
       errors.push(`${at}: relationship must be many_to_one or one_to_one`);
     }
-    if (
-      r.table === r.targetTable &&
-      (r.schema ?? '') === (r.targetSchema ?? '') &&
-      r.column === r.targetColumn
-    ) {
-      errors.push(`${at}: joins the table to itself on the same column`);
+    if (isSelfJoin(r)) {
+      errors.push(`${at}: self-joins are not supported — the lookup must be a different table`);
     }
   }
   return errors;

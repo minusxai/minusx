@@ -23,7 +23,6 @@ import {
   LuGripVertical,
 } from 'react-icons/lu';
 import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType, type DbFile } from '@/lib/types';
-import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 import SqlEditor from '../query-builder/SqlEditor';
 import ParameterRow from '../params/ParameterRow';
 import DatabaseSelector from '../selectors/DatabaseSelector';
@@ -33,7 +32,7 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { QuestionEmptyState } from '@/components/views/shared/empty-states';
 import type { FileId, FileState } from '@/store/filesSlice';
-import { QueryModeSelector, SemanticQueryBuilder, type QueryTab } from '../query-builder';
+import { QueryModeSelector, SemanticCanvas, type QueryTab } from '../query-builder';
 import { deriveModelStubs, type ModelStub } from '@/lib/semantic/derive';
 import { useSemanticModels } from '@/lib/hooks/use-semantic-models';
 import { VizTypeSelector } from '../question/VizTypeSelector';
@@ -555,18 +554,36 @@ export default function QuestionViewV2({
                   />
                 )}
 
-                {/* Semantic Mode: curated measures/dimensions from the context.
+                {/* Semantic Mode: the drag-drop canvas (fields → shelves).
                     Prefer the spec DETECTED from the live SQL (covers
-                    agent-written queries) over the persisted one. */}
+                    agent-written queries) over the persisted one. Shelf edits
+                    imply the viz: axis columns always track the query; the
+                    chart TYPE is only auto-set while it's still in the default
+                    family (table/bar/line) — a deliberate pick like pie or
+                    pivot from the Viz tab is respected. */}
                 {effectiveQueryMode === 'semantic' && showSemanticTab && (
                   <Box flex={1} overflow="auto">
-                    <SemanticQueryBuilder
+                    <SemanticCanvas
                       models={semanticModels}
                       stubs={semanticStubs}
                       onSelectModel={(stub: ModelStub) => setPickedTables((prev) => prev.includes(stub.table) ? prev : [...prev, stub.table])}
                       dialect={dialect}
+                      path={filePath || '/org'}
+                      connectionName={content.connection_name}
                       value={detectedSemanticSpec ?? content.semanticQuery}
-                      onChange={(spec: SemanticQuerySpec, sql: string) => onChange({ semanticQuery: spec, query: sql })}
+                      onChange={(spec, sql, viz) => {
+                        const autoType = ['table', 'bar', 'line'].includes(content.vizSettings?.type ?? 'table');
+                        onChange({
+                          semanticQuery: spec,
+                          query: sql,
+                          vizSettings: {
+                            ...content.vizSettings,
+                            ...(autoType ? { type: viz.type } : {}),
+                            xCols: viz.xCols,
+                            yCols: viz.yCols,
+                          },
+                        });
+                      }}
                       onExecute={handleExecute}
                       isExecuting={queryLoading && !queryData}
                     />

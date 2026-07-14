@@ -18,7 +18,7 @@ import { findNearestContextPath } from '@/lib/context/context-utils';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { deriveSemanticModels } from '@/lib/semantic/derive';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { ContextContent, DatabaseWithSchema, SemanticModel, TableRelationship } from '@/lib/types';
+import type { ContextContent, DatabaseSchema, DatabaseWithSchema, SemanticModel, TableRelationship } from '@/lib/types';
 
 export interface ScopedModelsParams {
   /** Folder the requesting file lives in (context resolution anchor), e.g. "/org". */
@@ -41,14 +41,21 @@ async function loadNearestContext(user: EffectiveUser, basePath: string): Promis
   return (data?.content as ContextContent) ?? null;
 }
 
-export async function getScopedSemanticModels(
-  user: EffectiveUser,
-  { path, connection, tables }: ScopedModelsParams,
-): Promise<SemanticModel[]> {
-  if (tables.length === 0) return [];
+interface ConnectionScope {
+  schema: DatabaseSchema;
+  whitelisted: Set<string>;                 // `${schema}|${table}` of every in-scope table
+  namingSchemas: DatabaseWithSchema['schemas'];  // whitelisted names-only list (global naming)
+  relationships: TableRelationship[];
+}
 
+/** Shared resolution: connection columns + context whitelist + relationships. */
+async function resolveScope(
+  user: EffectiveUser,
+  path: string,
+  connection: string,
+): Promise<ConnectionScope | null> {
   const schema = await getPersistedConnectionSchema(connection, user);
-  if (!schema) return [];
+  if (!schema) return null;
 
   let context: ContextContent | null = null;
   try {
@@ -60,14 +67,27 @@ export async function getScopedSemanticModels(
   // Whitelisted table names for this connection (names survive bounding).
   // Without a context, every table in the connection is in scope.
   const contextDb = context?.fullSchema?.find((db) => db.databaseName === connection);
-  const whitelisted = new Set<string>();
   const source = contextDb ?? { databaseName: connection, schemas: schema.schemas };
+  const whitelisted = new Set<string>();
   for (const s of source.schemas ?? []) {
     for (const t of s.tables ?? []) whitelisted.add(`${s.schema}|${t.table}`);
   }
 
   const relationships: TableRelationship[] = (context?.fullRelationships ?? [])
     .filter((r) => r.connection === connection);
+
+  return { schema, whitelisted, namingSchemas: source.schemas ?? [], relationships };
+}
+
+export async function getScopedSemanticModels(
+  user: EffectiveUser,
+  { path, connection, tables }: ScopedModelsParams,
+): Promise<SemanticModel[]> {
+  if (tables.length === 0) return [];
+
+  const scope = await resolveScope(user, path, connection);
+  if (!scope) return [];
+  const { schema, whitelisted, namingSchemas, relationships } = scope;
 
   // Requested tables (∩ whitelist) plus their relationship targets (∩ whitelist)
   // — targets contribute join dimensions without getting models of their own.
@@ -95,8 +115,70 @@ export async function getScopedSemanticModels(
       .filter((s) => s.tables.length > 0),
   };
   // Global naming scope: all whitelisted tables (names-only is fine).
-  const naming: DatabaseWithSchema = { databaseName: connection, schemas: source.schemas ?? [] };
+  const naming: DatabaseWithSchema = { databaseName: connection, schemas: namingSchemas };
 
   return deriveSemanticModels([scoped], relationships, [naming])
     .filter((m) => requested.has(`${m.schema ?? ''}|${m.table}`));
+}
+
+// ---------------------------------------------------------------------------
+// Metrics-first search — find measures/dimensions across the WHOLE whitelist
+// ---------------------------------------------------------------------------
+
+export interface SemanticFieldHit {
+  kind: 'measure' | 'dimension';
+  name: string;
+  model: string;
+  connection: string;
+  schema?: string;
+  table: string;
+}
+
+// Deriving every whitelisted table's vocabulary is CPU work proportional to the
+// schema, and search fires per keystroke — cache the flattened field list
+// briefly per (mode, connection, schema freshness). 30s staleness after a
+// whitelist/relationship edit is acceptable for a typeahead.
+// eslint-disable-next-line no-restricted-syntax -- server-side per-process typeahead cache; entries expire in 30s
+const fieldCache = new Map<string, { at: number; fields: SemanticFieldHit[] }>();
+const FIELD_CACHE_TTL_MS = 30_000;
+
+export async function searchSemanticFields(
+  user: EffectiveUser,
+  { path, connection, q, limit = 50 }: { path: string; connection: string; q: string; limit?: number },
+): Promise<SemanticFieldHit[]> {
+  const scope = await resolveScope(user, path, connection);
+  if (!scope) return [];
+
+  const cacheKey = `${user.mode}|${connection}|${scope.schema.updated_at}|${scope.whitelisted.size}|${JSON.stringify(scope.relationships)}`;
+  let entry = fieldCache.get(cacheKey);
+  if (!entry || Date.now() - entry.at > FIELD_CACHE_TTL_MS) {
+    const all: DatabaseWithSchema = {
+      databaseName: connection,
+      schemas: (scope.schema.schemas ?? [])
+        .map((s) => ({ ...s, tables: (s.tables ?? []).filter((t) => scope.whitelisted.has(`${s.schema}|${t.table}`)) }))
+        .filter((s) => s.tables.length > 0),
+    };
+    const models = deriveSemanticModels([all], scope.relationships);
+    const fields: SemanticFieldHit[] = [];
+    for (const m of models) {
+      for (const me of m.measures) {
+        fields.push({ kind: 'measure', name: me.name, model: m.name, connection, schema: m.schema, table: m.table });
+      }
+      for (const d of m.dimensions) {
+        fields.push({ kind: 'dimension', name: d.name, model: m.name, connection, schema: m.schema, table: m.table });
+      }
+    }
+    entry = { at: Date.now(), fields };
+    fieldCache.set(cacheKey, entry);
+    if (fieldCache.size > 8) fieldCache.delete(fieldCache.keys().next().value!); // tiny LRU-ish bound
+  }
+
+  const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const matches = tokens.length === 0
+    ? entry.fields
+    : entry.fields.filter((f) => {
+        const hay = `${f.name} ${f.model}`.toLowerCase();
+        return tokens.every((t) => hay.includes(t));
+      });
+  return matches.slice(0, limit);
 }

@@ -105,6 +105,41 @@ describe('TableRelationshipsEditor', () => {
     expect(target.tagName).toBe('INPUT');
   });
 
+  it('Verify runs the live checks and reports the verdict', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: { targetUnique: true, totalRows: 1000, matchedRows: 980 } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderEditor({ relationships: [REL] });
+    fireEvent.click(screen.getByLabelText('Relationship user_id → users.id'));
+    fireEvent.click(await screen.findByLabelText('Verify relationship'));
+    await waitFor(() => expect(screen.getByLabelText('Verification result').textContent).toContain('98% match'));
+    expect(fetchMock).toHaveBeenCalledWith('/api/relationships/verify', expect.objectContaining({ method: 'POST' }));
+    vi.unstubAllGlobals();
+  });
+
+  it('Verify flags a non-unique target (fan-out warning)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: { targetUnique: false, totalRows: 10, matchedRows: 10 } }),
+    }));
+    renderEditor({ relationships: [REL] });
+    fireEvent.click(screen.getByLabelText('Relationship user_id → users.id'));
+    fireEvent.click(await screen.findByLabelText('Verify relationship'));
+    await waitFor(() => expect(screen.getByLabelText('Verification result').textContent).toMatch(/not unique/i));
+    vi.unstubAllGlobals();
+  });
+
+  it('excludes the base table itself from the target list (self-joins unsupported)', async () => {
+    renderEditor();
+    fireEvent.click(screen.getByLabelText('Add relationship to public.orders'));
+    const target = await screen.findByLabelText('Target table') as HTMLSelectElement;
+    const options = [...target.options].map((o) => o.value);
+    expect(options).toContain('public.users');
+    expect(options).not.toContain('public.orders');
+  });
+
   it('renders read-only (no add button) without an onRelationshipsChange handler', () => {
     renderWithProviders(
       <TableRelationshipsEditor

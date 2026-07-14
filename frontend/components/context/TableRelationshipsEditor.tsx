@@ -17,8 +17,16 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Box, HStack, VStack, Text, Icon, Button, Input, Field, Popover, Portal } from '@chakra-ui/react';
-import { LuLink, LuPlus } from 'react-icons/lu';
+import { LuLink, LuPlus, LuCircleCheck, LuCircleX } from 'react-icons/lu';
 import type { TableRelationship } from '@/lib/types';
+
+interface VerifyState {
+  status: 'idle' | 'running' | 'done' | 'error';
+  targetUnique?: boolean;
+  totalRows?: number;
+  matchedRows?: number;
+  message?: string;
+}
 
 interface TableColumns {
   schema: string;
@@ -136,6 +144,37 @@ function RelationshipRow({ rel, editable, inherited, tables, columns, onChange, 
     setOpen(false);
   };
 
+  // Verify runs the CURRENT form values against the live connection (target
+  // uniqueness + FK match rate) — a claim check, not a save.
+  const [verify, setVerify] = useState<VerifyState>({ status: 'idle' });
+  const runVerify = async () => {
+    setVerify({ status: 'running' });
+    try {
+      const res = await fetch('/api/relationships/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          relationship: {
+            ...rel,
+            column: column.trim(),
+            targetSchema: targetSchema || undefined,
+            targetTable: targetTable.trim(),
+            targetColumn: targetColumn.trim(),
+            relationship: cardinality,
+          },
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body?.success) {
+        setVerify({ status: 'error', message: body?.error?.message ?? body?.error ?? 'Verification failed' });
+        return;
+      }
+      setVerify({ status: 'done', ...body.data });
+    } catch {
+      setVerify({ status: 'error', message: 'Verification failed' });
+    }
+  };
+
   const label = `Relationship ${rel.column || '?'} → ${rel.targetTable || '?'}.${rel.targetColumn || '?'}`;
   const row = (
     <HStack
@@ -213,9 +252,27 @@ function RelationshipRow({ rel, editable, inherited, tables, columns, onChange, 
                     <option value="one_to_one">one-to-one</option>
                   </select>
                 </Field.Root>
+                {verify.status !== 'idle' && (
+                  <HStack aria-label="Verification result" gap={1.5} fontSize="xs" fontFamily="mono"
+                    color={verify.status === 'running' ? 'fg.muted' : verify.status === 'error' || verify.targetUnique === false ? 'accent.danger' : 'accent.teal'}>
+                    {verify.status === 'running' ? (
+                      <Text>Verifying against the database…</Text>
+                    ) : verify.status === 'error' ? (
+                      <><LuCircleX size={12} /><Text>{verify.message}</Text></>
+                    ) : verify.targetUnique === false ? (
+                      <><LuCircleX size={12} /><Text>Target column is not unique — measures would fan out through this join.</Text></>
+                    ) : (
+                      <><LuCircleCheck size={12} /><Text>
+                        Valid lookup · {verify.totalRows ? `${Math.round(((verify.matchedRows ?? 0) / verify.totalRows) * 100)}% match (${verify.matchedRows}/${verify.totalRows} rows)` : 'no base rows'}
+                      </Text></>
+                    )}
+                  </HStack>
+                )}
                 <HStack justify="space-between">
                   <Button aria-label="Delete relationship" size="xs" variant="ghost" colorPalette="red" onClick={onDelete}>Delete</Button>
                   <HStack gap={2}>
+                    <Button aria-label="Verify relationship" size="xs" variant="outline" onClick={runVerify}
+                      disabled={!complete} loading={verify.status === 'running'}>Verify</Button>
                     <Button aria-label="Cancel relationship" size="xs" variant="outline" onClick={cancel}>Cancel</Button>
                     <Button aria-label="Save relationship" size="xs" bg="accent.teal" color="white" onClick={save} disabled={!complete}>Save</Button>
                   </HStack>
@@ -233,6 +290,9 @@ export default function TableRelationshipsEditor({
   connection, schema, table, columns, tables, relationships, onRelationshipsChange, inheritedRelationships,
 }: TableRelationshipsEditorProps) {
   const editable = !!onRelationshipsChange;
+  // Self-joins are unsupported (lib/semantic/derive.ts) — never offer the base
+  // table itself as a lookup target.
+  const targetTables = tables.filter((t) => !(t.schema === schema && t.table === table));
   const items = relationships.map((r, idx) => ({ r, idx })).filter(({ r }) => matchesTable(r, connection, schema, table));
   const inherited = (inheritedRelationships || []).filter((r) => matchesTable(r, connection, schema, table));
 
@@ -252,11 +312,11 @@ export default function TableRelationshipsEditor({
         <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.02em">Relationships</Text>
       </Box>
       {inherited.map((r, i) => (
-        <RelationshipRow key={`inh-${i}`} rel={r} editable={false} inherited tables={tables} columns={columns}
+        <RelationshipRow key={`inh-${i}`} rel={r} editable={false} inherited tables={targetTables} columns={columns}
           onChange={() => {}} onDelete={() => {}} />
       ))}
       {items.map(({ r, idx }) => (
-        <RelationshipRow key={idx} rel={r} editable={editable} tables={tables} columns={columns}
+        <RelationshipRow key={idx} rel={r} editable={editable} tables={targetTables} columns={columns}
           onChange={(n) => updateAt(idx, n)} onDelete={() => removeAt(idx)} />
       ))}
       {editable && (

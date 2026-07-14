@@ -7,18 +7,26 @@
 import { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/http/with-auth';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
-import { getScopedSemanticModels } from '@/lib/semantic/models.server';
+import { getScopedSemanticModels, searchSemanticFields } from '@/lib/semantic/models.server';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export const POST = withAuth(async (request: NextRequest, user) => {
   try {
-    const { path, connection, tables } = (await request.json()) as {
-      path?: string; connection?: string; tables?: string[];
+    const { path, connection, tables, q } = (await request.json()) as {
+      path?: string; connection?: string; tables?: string[]; q?: string;
     };
-    if (!path || !connection || !Array.isArray(tables)) {
-      return ApiErrors.badRequest('path, connection and tables are required');
+    if (!path || !connection) {
+      return ApiErrors.badRequest('path and connection are required');
+    }
+    // Search mode: metrics-first typeahead over every whitelisted table's fields.
+    if (typeof q === 'string') {
+      const fields = await searchSemanticFields(user, { path, connection, q });
+      return successResponse({ fields });
+    }
+    if (!Array.isArray(tables)) {
+      return ApiErrors.badRequest('tables (or q) is required');
     }
     const models = await getScopedSemanticModels(user, {
       path,

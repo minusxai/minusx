@@ -224,8 +224,18 @@ describe('validateTableRelationships', () => {
     expect(validateTableRelationships([{ ...base, targetTable: '' }]).length).toBeGreaterThan(0);
     expect(validateTableRelationships([{ ...base, relationship: 'one_to_many' as never }]).length).toBeGreaterThan(0);
   });
-  it('flags a self-join to the same column', () => {
+  it('rejects ANY self-join — the compiler cannot alias a table against itself', () => {
+    // same column (degenerate)
     expect(validateTableRelationships([{ ...base, targetTable: 'orders', targetColumn: 'customer_id' }]).length).toBeGreaterThan(0);
+    // different column (hierarchies like manager_id → id): still rejected for now
+    expect(validateTableRelationships([{ ...base, targetTable: 'orders', targetColumn: 'id' }]).length).toBeGreaterThan(0);
+    // same table name in a DIFFERENT schema is a normal join, not a self-join
+    expect(validateTableRelationships([{ ...base, targetSchema: 'staging', targetTable: 'orders', targetColumn: 'id' }])).toEqual([]);
+  });
+
+  it('derivation ignores self-join relationships defensively', () => {
+    const models = deriveSemanticModels([ORDERS], [{ ...base, targetTable: 'orders', targetColumn: 'id' }]);
+    expect(models.find((m) => m.table === 'orders')?.joins ?? []).toEqual([]);
   });
 });
 
