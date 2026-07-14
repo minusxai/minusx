@@ -63,10 +63,20 @@ describe('setVizType channel hygiene', () => {
     if (spec.encoding.color) expect('axis' in spec.encoding.color).toBe(false);
   });
 
-  it('pie → line MOVES color to x (no redundant color) so the line connects, not dots', () => {
-    const spec = specOf(setVizType(envelope(PIE_WITH_LEGEND), 'line'));
-    expect(spec.encoding.x.field).toBe('platform');
-    expect(spec.encoding.color).toBeUndefined(); // color===x would split into single-point series
+  it('drops a color that duplicates x for line/area (else the line is single-point dots)', () => {
+    // pie → line, AND the general bar → line path (a color === x from any prior transform).
+    const pieLine = specOf(setVizType(envelope(PIE_WITH_LEGEND), 'line'));
+    expect(pieLine.encoding.x.field).toBe('platform');
+    expect(pieLine.encoding.color).toBeUndefined();
+
+    const barDupColor = { mark: { type: 'bar' }, encoding: { x: { field: 'platform', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' }, color: { field: 'platform', type: 'nominal' } } };
+    expect(specOf(setVizType(envelope(barDupColor), 'area')).encoding.color).toBeUndefined();
+  });
+
+  it('KEEPS a color that duplicates x for bar (coloured-by-category is fine there)', () => {
+    const spec = specOf(setVizType(envelope(PIE_WITH_LEGEND), 'bar'));
+    expect(spec.encoding.color?.field).toBe('platform'); // 3 coloured bars
+    expect('legend' in spec.encoding.x).toBe(false);
   });
 });
 

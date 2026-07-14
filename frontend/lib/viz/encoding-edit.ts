@@ -211,11 +211,11 @@ export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelop
   const encoding = { ...((spec.encoding as Record<string, unknown> | undefined) ?? {}) } as Record<string, Record<string, unknown> | undefined>;
   const from = getVizType(spec);
 
-  // Leaving pie: the slice category (color) becomes the x-axis and theta becomes y. MOVE
-  // color → x (don't copy): keeping color === x splits a line/area into single-point series
-  // (one dot per category, no connecting line) — the classic "why is my line just dots".
+  // Leaving pie: the slice category (color) becomes the x-axis, theta becomes y. Keep the
+  // color too (bar/scatter render nicely coloured by category); the redundant-color cleanup
+  // below drops it for line/area, where color === x would break the connecting line.
   if (from === 'pie' && type !== 'pie') {
-    if (encoding.color && !encoding.x) { encoding.x = { ...encoding.color }; delete encoding.color; }
+    if (encoding.color && !encoding.x) encoding.x = { ...encoding.color };
     if (encoding.theta && !encoding.y) encoding.y = { ...encoding.theta };
     delete encoding.theta;
   }
@@ -357,8 +357,16 @@ export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelop
     const d = encoding[ch];
     if (d && typeof d === 'object' && !Array.isArray(d)) delete (d as Record<string, unknown>).legend;
   }
-  const colorDef = encoding.color;
-  if (colorDef && typeof colorDef === 'object' && !Array.isArray(colorDef)) delete (colorDef as Record<string, unknown>).axis;
+  const colorDef = encoding.color as Record<string, unknown> | undefined;
+  if (colorDef && typeof colorDef === 'object' && !Array.isArray(colorDef)) delete colorDef.axis;
+
+  // A color that duplicates the x field is redundant everywhere and BREAKS line/area:
+  // color === x splits the data into single-point series → isolated dots, no line. Drop it
+  // for line/area (bar/scatter keep it — coloured-by-category is a fine look there).
+  if ((type === 'line' || type === 'area') && colorDef?.field != null
+    && colorDef.field === (encoding.x as Record<string, unknown> | undefined)?.field) {
+    delete encoding.color;
+  }
 
   for (const key of Object.keys(encoding)) if (encoding[key] === undefined) delete encoding[key];
   spec.encoding = encoding;
