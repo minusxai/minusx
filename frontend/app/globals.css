@@ -245,16 +245,37 @@ html.dark .login-card {
 }
 
 /* Viz V2 (docs/Visualization Arch V2.md): vega-tooltip element (appended to <body>,
-   so it can't be styled from the chart's scoped css). Font + spacing to match the app;
-   colors come from vega-tooltip's built-in light/dark theme classes. */
+   so it can't be styled from the chart's scoped css). Borderless "floating card" look —
+   a soft shadow + hairline ring replace vega-tooltip's built-in 1px border. */
 #vg-tooltip-element {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
   font-size: 11px;
-  border-radius: 6px;
-  padding: 6px 8px;
-  line-height: 1.5;
+  line-height: 1.6;
+  border: none !important;
+  border-radius: 9px;
+  padding: 9px 12px;
+  color: inherit;
 }
+/* Dark: near-opaque surface, soft depth shadow + faint light ring (no hard border). */
+#vg-tooltip-element.dark-theme {
+  background: rgba(22, 27, 34, 0.96);
+  color: #e6edf3;
+  box-shadow: 0 8px 28px -8px rgba(0, 0, 0, 0.65), inset 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(3px);
+}
+/* Light: crisp white card with a subtle drop shadow + faint dark ring. */
+#vg-tooltip-element:not(.dark-theme) {
+  background: rgba(255, 255, 255, 0.98);
+  color: #1f2328;
+  box-shadow: 0 8px 28px -8px rgba(20, 27, 45, 0.22), inset 0 0 0 0.5px rgba(20, 27, 45, 0.08);
+  backdrop-filter: blur(3px);
+}
+#vg-tooltip-element table { border-collapse: collapse; }
+#vg-tooltip-element table tr td { padding-top: 1px; padding-bottom: 1px; }
 #vg-tooltip-element table tr td.key {
-  opacity: 0.65;
-  padding-right: 8px;
+  opacity: 0.55;
+  padding-right: 12px;
+  font-weight: 500;
+  text-align: right;
 }
+#vg-tooltip-element table tr td.value { font-weight: 600; }
