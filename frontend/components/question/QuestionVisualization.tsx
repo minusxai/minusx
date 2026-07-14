@@ -232,7 +232,7 @@ function QuestionVisualizationInner({
   // Image + CSV download, revealed on hover of the chart (V1 parity). Rendered over both
   // the V2 chart and the legacy render bridge; a subtle top-right control on every chart.
   const chartDownloadOverlay = (envelope: VizEnvelope) => (
-    <Box className="mx-chart-dl" position="absolute" top={2} right={2} zIndex={6} opacity={0} transition="opacity 0.12s">
+    <Box className="mx-chart-dl" position="absolute" bottom={2} right={2} zIndex={6} opacity={0} transition="opacity 0.12s">
       <ChartDownloadMenu
         envelope={envelope}
         rows={data?.rows ?? []}

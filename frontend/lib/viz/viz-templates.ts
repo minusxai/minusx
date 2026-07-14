@@ -457,10 +457,10 @@ const trend: VizTemplate = {
     return {
       autosize: { type: 'fit', contains: 'padding' },
       signals: [
-        sizeSignal('valueSize', p.valueFontSize, "clamp(min(bandwidth('slot') / 5.2, height * 0.17), 20, 72)"),
-        sizeSignal('deltaSize', p.deltaFontSize, 'clamp(valueSize * 0.36, 11, 20)'),
-        sizeSignal('labelSize', p.labelFontSize, 'clamp(valueSize * 0.28, 10, 15)'),
-        sizeSignal('dateSize', p.dateFontSize, 'clamp(valueSize * 0.24, 9, 12)'),
+        sizeSignal('valueSize', p.valueFontSize, "clamp(min(bandwidth('slot') / 4.2, height * 0.22), 24, 96)"),
+        sizeSignal('deltaSize', p.deltaFontSize, 'clamp(valueSize * 0.40, 13, 26)'),
+        sizeSignal('labelSize', p.labelFontSize, 'clamp(valueSize * 0.30, 11, 17)'),
+        sizeSignal('dateSize', p.dateFontSize, 'clamp(valueSize * 0.27, 11, 16)'),
         { name: 'plotTop', update: 'max(18, height * 0.08)' },
         { name: 'plotBottom', update: 'min(height - 22, height * 0.9)' },
         { name: 'kpiCenter', update: 'height * 0.42' },
@@ -644,8 +644,8 @@ const trend: VizTemplate = {
                       update: {
                         x: { signal: `bandwidth('slot') / 2 - (${plateHalfExpr})` },
                         x2: { signal: `bandwidth('slot') / 2 + (${plateHalfExpr})` },
-                        y: { signal: 'kpiCenter - valueSize * 1.42' },
-                        y2: { signal: 'kpiCenter + valueSize * 1.48' },
+                        y: { signal: 'kpiCenter - valueSize * 1.55' },
+                        y2: { signal: 'kpiCenter + valueSize * 1.68' },
                         cornerRadius: { value: 10 },
                         fillOpacity: { value: 0.94 },
                       },
