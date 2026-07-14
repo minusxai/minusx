@@ -22,7 +22,10 @@ set -euo pipefail
 
 # ── config ───────────────────────────────────────────────────────────────────
 
-REPO_RAW="https://raw.githubusercontent.com/minusxai/minusx/main"
+# MX_REPO_RAW override: point at a branch for testing pre-merge setup flows.
+REPO_RAW="${MX_REPO_RAW:-https://raw.githubusercontent.com/minusxai/minusx/main}"
+# Published images are amd64; MX_PLATFORM overrides for locally built images.
+PLATFORM="${MX_PLATFORM:-linux/amd64}"
 
 STABLE_IMAGE="ghcr.io/minusxai/minusx-frontend:latest"
 CANARY_IMAGE="ghcr.io/minusxai/minusx-frontend-canary:latest"
@@ -132,7 +135,7 @@ ask() { # ask <prompt> <default> -> REPLY_VALUE
   [ -n "$default" ] && suffix=" ${DIM}[$default]${RESET}"
   printf "  ${WHITE}%b${RESET}%b: " "$prompt" "$suffix" > /dev/tty
   IFS= read -r REPLY_VALUE < /dev/tty || REPLY_VALUE=""
-  [ -z "$REPLY_VALUE" ] && REPLY_VALUE="$default"
+  if [ -z "$REPLY_VALUE" ]; then REPLY_VALUE="$default"; fi
 }
 
 ask_secret() { # ask_secret <prompt> -> REPLY_VALUE (never echoed)
@@ -279,7 +282,7 @@ step "Pulling Docker image (${CHANNEL}) — answering setup questions meanwhile"
 
 info "Image: ${DIM}${FRONTEND_IMAGE}${RESET}"
 PULL_LOG=$(mktemp "${TMPDIR:-/tmp}/minusx-pull.XXXXXX")
-docker pull --platform linux/amd64 "$FRONTEND_IMAGE" > "$PULL_LOG" 2>&1 &
+docker pull --platform "$PLATFORM" "$FRONTEND_IMAGE" > "$PULL_LOG" 2>&1 &
 PULL_PID=$!
 
 # Interview state (empty = not collected)
@@ -401,7 +404,13 @@ for f in t['fields']:
 
 if [ "$HAVE_TTY" = 1 ] && [ "$EXISTING_WORKSPACE" = 0 ]; then
   printf "\n  ${BOLD}${WHITE}Workspace${RESET}\n"
-  while [ -z "$WS_NAME" ]; do ask "Workspace name" ""; WS_NAME="$REPLY_VALUE"; done
+  while [ -z "$WS_NAME" ]; do
+    ask "Workspace name ${DIM}(letters, numbers, hyphens, underscores)${RESET}" ""
+    case "$REPLY_VALUE" in
+      *[!A-Za-z0-9_-]*) warn "Only letters, numbers, hyphens, and underscores" > /dev/tty ;;
+      *) WS_NAME="$REPLY_VALUE" ;;
+    esac
+  done
   while [ -z "$ADMIN_NAME" ]; do ask "Your full name" ""; ADMIN_NAME="$REPLY_VALUE"; done
   while [ -z "$ADMIN_EMAIL" ]; do ask "Admin email" ""; ADMIN_EMAIL="$REPLY_VALUE"; done
   while true; do
@@ -475,16 +484,22 @@ fi
 
 # ── step 5: wait for pull, start service ────────────────────────────────────
 
+PULL_OK=1
 if kill -0 "$PULL_PID" 2>/dev/null; then
-  if ! spin "$PULL_PID" "Waiting for image pull to finish..."; then
-    fail "Image pull failed"
-    printf "\n${DIM}"; tail -5 "$PULL_LOG"; printf "${RESET}\n"
-    exit 1
-  fi
+  spin "$PULL_PID" "Waiting for image pull to finish..." || PULL_OK=0
 else
-  wait "$PULL_PID" || { fail "Image pull failed"; printf "\n${DIM}"; tail -5 "$PULL_LOG"; printf "${RESET}\n"; exit 1; }
+  wait "$PULL_PID" || PULL_OK=0
 fi
-success "Image pulled"
+if [ "$PULL_OK" = 1 ]; then
+  success "Image pulled"
+elif docker image inspect "$FRONTEND_IMAGE" > /dev/null 2>&1; then
+  # Offline upgrade / locally built image: run what we already have.
+  warn "Image pull failed — using the local copy of ${DIM}${FRONTEND_IMAGE}${RESET}"
+else
+  fail "Image pull failed"
+  printf "\n${DIM}"; tail -5 "$PULL_LOG"; printf "${RESET}\n"
+  exit 1
+fi
 
 step "Starting MinusX"
 
@@ -497,7 +512,7 @@ fi
 
 docker run -d \
   --name mx-frontend \
-  --platform linux/amd64 \
+  --platform "$PLATFORM" \
   --restart unless-stopped \
   --add-host=host.docker.internal:host-gateway \
   -v "$(pwd)/data:/app/data" \
@@ -627,7 +642,8 @@ if [ "$HAVE_TTY" = 1 ] && [ "$EXISTING_WORKSPACE" = 0 ] && [ -n "$WS_NAME" ] && 
   elif [ "$HTTP_CODE" = "409" ]; then
     warn "A workspace already exists — log in with your existing credentials"
   else
-    warn "Automatic workspace creation failed (HTTP $HTTP_CODE) — create it in the browser instead"
+    REG_ERR=$(sed -n 's/.*"message":"\([^"]*\)".*/\1/p' /tmp/minusx-register-response.json 2>/dev/null | head -1)
+    warn "Automatic workspace creation failed (HTTP $HTTP_CODE${REG_ERR:+: $REG_ERR}) — create it in the browser instead"
   fi
   rm -f /tmp/minusx-register-response.json
 else

@@ -24,6 +24,9 @@ import { Badge, Box, Button, Dialog, Flex, HStack, Input, Text, VStack } from '@
 import { LuCheck, LuCirclePlus, LuPlug, LuSettings2, LuTrash2, LuX } from 'react-icons/lu';
 import SimpleSelect from '@/components/evals/SimpleSelect';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
+import { useAppSelector } from '@/store/hooks';
+import { switchMode } from '@/lib/mode/mode-utils';
+import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { toaster } from '@/components/ui/toaster';
 import { isSecretRef } from '@/lib/secrets/config-secret-specs';
 import {
@@ -66,6 +69,7 @@ function keyStatus(entry: LlmProviderEntry): 'saved' | 'new' | 'none' {
 
 export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings' | 'wizard' }) {
   const { config } = useConfigs();
+  const userMode = useAppSelector((state) => state.auth.user?.mode);
   const [draft, setDraft] = useState<LlmConfig>(() => structuredClone(config.llm ?? {}));
   const [registry, setRegistry] = useState<RegistryProvider[]>([]);
   const [saving, setSaving] = useState(false);
@@ -246,6 +250,30 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
       setTesting(null);
     }
   };
+
+  // LLM config is workspace-level: resolution always reads the ORG config
+  // regardless of the caller's mode (lib/llm/llm-plan.server.ts). Outside org
+  // mode, editing here would write a per-mode config doc that resolution
+  // ignores — show a pointer to the workspace settings instead.
+  if (userMode && userMode !== DEFAULT_MODE) {
+    return (
+      <VStack align="stretch" gap={3} aria-label="Models workspace-level notice">
+        <Text fontSize="sm" fontFamily="mono">
+          AI models are configured once for the whole workspace — every mode (including this one) uses the same providers.
+        </Text>
+        <Button
+          size="sm"
+          variant="outline"
+          alignSelf="flex-start"
+          fontFamily="mono"
+          aria-label="Open workspace settings"
+          onClick={() => switchMode(DEFAULT_MODE)}
+        >
+          Open workspace settings
+        </Button>
+      </VStack>
+    );
+  }
 
   return (
     <VStack align="stretch" gap={6} aria-label="LLM models settings">
