@@ -190,6 +190,34 @@ describe('TableRelationshipsEditor', () => {
     })]);
   });
 
+  it('Verify on a one-to-many mirror posts the NORMALIZED many→one relationship', async () => {
+    // REL is stored on orders; render USERS where it appears as a one-to-many mirror.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: { targetUnique: true, totalRows: 10, matchedRows: 10 } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWithProviders(
+      <TableRelationshipsEditor
+        connection="warehouse" schema="public" table="users"
+        columns={TABLES[1].columns} tables={TABLES}
+        relationships={[REL]}
+        onRelationshipsChange={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByLabelText('Relationship id → orders.user_id'));
+    fireEvent.click(await screen.findByLabelText('Verify relationship'));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    // The wire format is ALWAYS normalized storage — never a one_to_many view.
+    expect(body.relationship).toMatchObject({
+      table: 'orders', column: 'user_id',
+      targetTable: 'users', targetColumn: 'id',
+      relationship: 'many_to_one',
+    });
+    vi.unstubAllGlobals();
+  });
+
   it('renders read-only (no add button) without an onRelationshipsChange handler', () => {
     renderWithProviders(
       <TableRelationshipsEditor

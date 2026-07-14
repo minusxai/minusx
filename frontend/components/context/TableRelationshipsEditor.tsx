@@ -172,15 +172,18 @@ function RelationshipRow({ rel, editable, inherited, tables, columns, onChange, 
       const res = await fetch('/api/relationships/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // The wire format is ALWAYS normalized storage: a one-to-many view
+        // (this side is the "one") swaps back to the many→one record before
+        // validation/queries — same rule as Save.
         body: JSON.stringify({
-          relationship: {
+          relationship: normalizeRelationshipView({
             ...rel,
             column: column.trim(),
             targetSchema: targetSchema || undefined,
             targetTable: targetTable.trim(),
             targetColumn: targetColumn.trim(),
             relationship: cardinality,
-          },
+          }),
         }),
       });
       const body = await res.json();
