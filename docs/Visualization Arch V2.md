@@ -520,14 +520,12 @@ escape hatch — have moved to Appendix A. This list is now driven by **retiring
 
 **The V1 → V2 retirement track (items 1–5) — sequence is load-bearing: migrate everything, test everything, THEN delete.**
 
-1. **V1→V2 converter + runtime fallback (the keystone).** A pure `vizSettingsToEnvelope(vizSettings)`:
-   `line/bar/area/scatter/pie` → `kind:'vega-lite'`; `funnel/waterfall/radar/trend/single_value/combo` → the
-   shipped `minusx/*` recipes; `table/pivot` → the DOM sources; `geo` → the two shipped geo recipes, all subtypes
-   covered: `choropleth`→`choropleth`, `points`→`point-map`, `lines`→`point-map` flows (`lat2`/`lng2`),
-   `heatmap`→`point-map` with `size` = value (density gets folded into sized bubbles — decided 2026-07-14, no
-   separate density recipe needed to migrate). Then render any question with no `viz` THROUGH the converter
-   (fallback) so every V1 chart already renders via `<VegaChart>` with zero deletions. Unblocks items 2–5. The
-   converter is lossless against the shipped recipes — no new recipe is a prerequisite.
+1. **V1→V2 converter + runtime fallback (the keystone).** ✅ **Shipped 2026-07-14** (see Appendix A). The pure
+   `vizSettingsToEnvelope(vizSettings, columns?)` (`lib/viz/from-vizsettings.ts`) covers every V1 type and all
+   geo subtypes; the render-only bridge (`resolveLegacyRenderEnvelope`, wired into `QuestionVisualization`)
+   routes legacy no-`viz` charts on READ-ONLY surfaces through `<VegaChart>`. Editable surfaces keep the V1
+   `ChartBuilder` (nothing persists yet — the picture re-derives from `vizSettings` each render, so V1 edits
+   still flow through); the editable cutover happens when **item 4** actually writes the envelope. Unblocks 2–5.
 2. **Chart → image artifact pipeline.** Two paths, one encoder target (JPEG, reusing the S3 `uploadChartOrEmbed`
    path): **client** — `View.toCanvas()` → `toDataURL('image/jpeg')`, the direct analogue of the ECharts
    `clientChartImageRenderer`/`buildChartAttachments` path (runs in the browser, so it captures REAL street
@@ -561,8 +559,8 @@ escape hatch — have moved to Appendix A. This list is now driven by **retiring
     and a direct `slippy-map` source kind. Detach (item shipped) is the substrate: a detached spec IS a
     fully-bound recipe; a publishable recipe is "detach + keep bindings as tokens".
 
-**Take up next:** item 1 (converter + runtime fallback) — it de-risks the entire retirement track and is a
-prerequisite for 2–5. Item 2 (chart→image) is the highest-value user/LLM win and can proceed in parallel.
+**Take up next:** item 2 (chart→image) — the highest-value user/LLM win, orthogonal to the V1 conversion.
+Then item 4 (the backfill migration) reuses the shipped converter to make the editable surfaces V2-native.
 
 ---
 
@@ -587,6 +585,7 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
 | street-tile basemap | Shipped | `basemap: 'tiles'` on `minusx/point-map@1` — slippy Carto tiles as Vega image marks off the mercator `scale`/`center` signals (browser-only; vector boundary is the headless/canvas fallback). Follows the app theme (Carto light/dark) via VegaChart; override provider via `tileUrl`. Deep zoom to street level (zoom cap raised to slippy ~z18) |
 | density geo | Folded into point-map | V1 geo `heatmap` migrates to `point-map` + `size` (decided 2026-07-14); a true hexbin/density recipe is an optional future, not a migration blocker |
 | detach / custom spec | Shipped | `kind:'vega'` raw-spec source + `detachRecipe`/`reattachRecipe` (`detachedFrom` provenance) — the full-control escape hatch; "Customize freely"/"Reset to recipe" UI + the agent-side `DetachViz` tool |
+| V1→V2 converter | Shipped | `vizSettingsToEnvelope` (`lib/viz/from-vizsettings.ts`) — pure map from every legacy `VizSettings.type` (+ all geo subtypes) to a V2 envelope, reusing `setVizType`/`addYField` for cartesian and the recipe registry for the rest; `resolveLegacyRenderEnvelope` bridges read-only legacy charts through `<VegaChart>`. The function item 4's backfill migration runs (§21 items 1, 4) |
 
 ### ✅ Verified (as of 2026-07-11)
 
@@ -752,6 +751,14 @@ This appendix records what has been demonstrated. Outstanding work belongs only 
   tiles. Browser-verified round-trip: recipe → "Customize freely"/`DetachViz` → Custom `kind:'vega'` (buttons
   + dark tiles intact) → "Reset to recipe" → back to the recipe. The agent-side `DetachViz` tool
   autonomously detaches when a request exceeds recipe params (verified: "make the markers diamond-shaped").
+
+**V1→V2 converter + render bridge (verified 2026-07-14)**
+- `vizSettingsToEnvelope` covers every legacy `VizSettings.type` and all four geo subtypes; cartesian output is
+  built by reusing `setVizType`/`addYField` so it is byte-identical to the icon selector, and recipe/table/pivot
+  sources carry their formats through. 27 unit tests (converter + `resolveLegacyRenderEnvelope` gating), red-first.
+- Browser-verified on the tutorial dashboard `/f/11`: 10 legacy questions with NO `viz` envelope (trend cards,
+  multi-series line, stacked area, donut) render as **10 Vega SVGs, 0 ECharts canvases**, all correct; the pivot
+  correctly stays on the DOM renderer (bridge excludes table/pivot); editable question pages keep V1 ChartBuilder.
 
 **Data handling**
 - 10k+ row result — render time acceptable

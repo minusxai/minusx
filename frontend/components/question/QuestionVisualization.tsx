@@ -22,6 +22,8 @@ import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSec
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 import { setRecipeParam } from '@/lib/viz/encoding-edit';
+import { resolveLegacyRenderEnvelope } from '@/lib/viz/from-vizsettings';
+import { toVizColumns } from '@/lib/viz/query-data';
 
 // Viz V2 (docs/Visualization Arch V2.md): lazy chunk — vega/vega-lite only load on
 // pages that actually render a V2 envelope (same pattern as GeoPlot/Leaflet).
@@ -207,6 +209,20 @@ function QuestionVisualizationInner({
   const isVizV2Table = vizV2Kind === 'table';
   const isVizV2Pivot = vizV2Kind === 'pivot';
   const isChartType = hasVizV2 || (currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table');
+
+  // Render-only V1→V2 bridge (Viz Arch V2 §21 item 1): on READ-ONLY surfaces, a legacy
+  // chart with no `viz` envelope renders through <VegaChart> via the converter. Editable
+  // surfaces keep the V1 ChartBuilder (until the item-4 backfill writes a real `viz`);
+  // table/pivot keep their DOM renderers. Pure — recomputed from vizSettings each render,
+  // so V1 edits still flow to the picture.
+  const legacyRenderViz = data
+    ? resolveLegacyRenderEnvelope({
+        hasVizEnvelope: hasVizV2,
+        editable: config.editable,
+        vizSettings: currentState?.vizSettings,
+        columns: toVizColumns(data.columns, data.types),
+      })
+    : null;
 
   const showChartTitle = config.viz.showTitle;
   return (
@@ -498,7 +514,12 @@ function QuestionVisualizationInner({
                     <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.connection_name} enableDrilldown={config.enableDrilldown !== false} columnFormats={currentState.vizSettings?.columnFormats ?? undefined} onColumnFormatsChange={config.editable ? onColumnFormatsChange : undefined} conditionalFormats={currentState.vizSettings?.conditionalFormats ?? undefined} />
                   </Box>
                 )}
-                {!hasVizV2 && (currentState?.vizSettings?.type === 'line' ||
+                {legacyRenderViz && (
+                  <Box flex="1" minHeight="0" overflow="hidden" display="flex" p={3}>
+                    <VegaChart envelope={legacyRenderViz} rows={data.rows} colorMode={colorMode} />
+                  </Box>
+                )}
+                {!hasVizV2 && !legacyRenderViz && (currentState?.vizSettings?.type === 'line' ||
                   currentState?.vizSettings?.type === 'bar' ||
                   currentState?.vizSettings?.type === 'area' ||
                   currentState?.vizSettings?.type === 'scatter' ||
