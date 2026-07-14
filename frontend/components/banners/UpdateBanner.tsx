@@ -9,7 +9,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
-const INSTALL_CMD = 'curl -fsSL https://minusx.ai/install.sh | bash';
+const INSTALL_CMD = 'curl -fsSL https://minusx.ai/setup.sh | bash';
 const CACHE_KEY = 'minusx-update-check';
 const TTL_MS = 24 * 60 * 60 * 1000;
 const MIN_AGE_MS = 10 * 24 * 60 * 60 * 1000;
