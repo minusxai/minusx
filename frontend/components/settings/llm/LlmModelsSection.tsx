@@ -28,6 +28,7 @@ import { useAppSelector } from '@/store/hooks';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { toaster } from '@/components/ui/toaster';
 import { isSecretRef } from '@/lib/secrets/config-secret-specs';
+import compatibility from '../../../../compatibility.json';
 import {
   CUSTOM_PROVIDER, LLM_USE_CASES, MINUSX_PROVIDER, findMinusxProvider,
   type LlmConfig, type LlmModelChoice, type LlmProviderEntry, type LlmUseCase,
@@ -35,17 +36,16 @@ import {
 
 interface RegistryProvider { slug: string; models: { id: string; name: string }[] }
 
-/** Curated head of the provider picker; the rest of the registry follows alphabetically. */
-const FEATURED_PROVIDERS = [MINUSX_PROVIDER, 'anthropic', 'openai', 'google', 'amazon-bedrock', CUSTOM_PROVIDER];
-
-const PROVIDER_LABELS: Record<string, string> = {
-  [MINUSX_PROVIDER]: 'MinusX (managed)',
-  [CUSTOM_PROVIDER]: 'Custom (OpenAI-compatible)',
-  'amazon-bedrock': 'Amazon Bedrock',
-  anthropic: 'Anthropic',
-  openai: 'OpenAI',
-  google: 'Google',
-};
+/**
+ * Curated head of the provider picker + display labels — derived from the
+ * repo-root compatibility.json (the shared contract also driving setup.sh
+ * and the docs tables), so the featured set is defined exactly once.
+ * The rest of the registry follows alphabetically.
+ */
+const FEATURED_PROVIDERS = compatibility.llm.providers.map(p => p.id);
+const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
+  compatibility.llm.providers.map(p => [p.id, p.name]),
+);
 
 // No ambiguous 'default' entry — the default level is LOW and shows as the
 // pre-selected option, so what's selected is always what runs.
