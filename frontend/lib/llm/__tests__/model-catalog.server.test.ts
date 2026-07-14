@@ -15,14 +15,18 @@ const MODELS_DEV_JSON = {
         cost: { input: 10, output: 60, cache_read: 1, cache_write: 12.5 },
       },
       'gpt-4.1': { id: 'gpt-4.1', name: 'GPT-4.1 (live)', reasoning: false },
-      // Non-chat models (image generation, tts) must be EXCLUDED — they broke
-      // the Test button (alphabetical fallback picked chatgpt-image-latest)
-      // and polluted the model pickers.
+      // Non-agent models (image generation, tts, embeddings) must be EXCLUDED —
+      // they broke the Test button (alphabetical fallback picked
+      // chatgpt-image-latest) and polluted the model pickers. models.dev lists
+      // chatgpt-image-latest with output ['text','image'], so output modality
+      // alone is NOT enough — tool_call: false is the discriminator (our agents
+      // all require tool calling).
       'chatgpt-image-latest': {
-        id: 'chatgpt-image-latest', name: 'ChatGPT Image',
-        modalities: { input: ['text', 'image'], output: ['image'] },
+        id: 'chatgpt-image-latest', name: 'chatgpt-image-latest', tool_call: false,
+        modalities: { input: ['text', 'image'], output: ['text', 'image'] },
       },
       'tts-1': { id: 'tts-1', name: 'TTS-1', modalities: { input: ['text'], output: ['audio'] } },
+      'text-embedding-3-large': { id: 'text-embedding-3-large', name: 'Embedding', tool_call: false },
     },
   },
   'not-a-pi-provider': { id: 'not-a-pi-provider', models: { 'x-1': { id: 'x-1', name: 'X-1' } } },
@@ -47,12 +51,13 @@ describe('parseModelsDevCatalog', () => {
     expect(parseModelsDevCatalog('nope').size).toBe(0);
   });
 
-  it('excludes non-chat models (image/audio output) — chat pickers and test defaults only', () => {
+  it('excludes non-agent models (no tool calling / non-text output) — pickers and test defaults only', () => {
     const catalog = parseModelsDevCatalog(MODELS_DEV_JSON);
-    expect(catalog.get('openai')!.get('chatgpt-image-latest')).toBeUndefined();
-    expect(catalog.get('openai')!.get('tts-1')).toBeUndefined();
+    expect(catalog.get('openai')!.get('chatgpt-image-latest')).toBeUndefined(); // tool_call: false (output includes text!)
+    expect(catalog.get('openai')!.get('tts-1')).toBeUndefined();                // audio output
+    expect(catalog.get('openai')!.get('text-embedding-3-large')).toBeUndefined(); // tool_call: false
     expect(catalog.get('openai')!.get('gpt-5.6')).toBeDefined();
-    // Models without modalities metadata are kept (assumed chat).
+    // Models without modalities/tool_call metadata are kept (assumed chat).
     expect(catalog.get('openai')!.get('gpt-4.1')).toBeDefined();
   });
 });
