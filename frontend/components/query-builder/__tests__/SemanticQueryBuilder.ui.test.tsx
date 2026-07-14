@@ -30,29 +30,44 @@ const ORDERS_MODEL: SemanticModel = {
   metrics: [{ name: 'AOV', type: 'ratio', numerator: 'Revenue', denominator: 'Orders' }],
 };
 
+const STUBS = [{ name: 'Orders', connection: 'warehouse', table: 'orders' }];
+
+const STARTED: SemanticQuerySpec = { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: [] };
+
 const renderBuilder = (props: Partial<React.ComponentProps<typeof SemanticQueryBuilder>> = {}) => {
   const onChange = vi.fn();
+  const onSelectModel = vi.fn();
   renderWithProviders(
     <SemanticQueryBuilder
       models={[ORDERS_MODEL]}
+      stubs={STUBS}
+      onSelectModel={onSelectModel}
       dialect="duckdb"
-      value={null}
+      value={STARTED}
       onChange={onChange}
       {...props}
     />
   );
-  return onChange;
+  return { onChange, onSelectModel };
 };
 
 describe('SemanticQueryBuilder', () => {
-  it('defaults to the first model and measure, showing curated names', () => {
+  it('starts on the model picker when nothing is picked; picking a stub requests its model', async () => {
+    const { onSelectModel } = renderBuilder({ value: null });
+    expect(screen.getByText('Pick a table to start a semantic query.')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Semantic model').querySelector('button')!);
+    fireEvent.click(await screen.findByLabelText('Semantic models: Orders'));
+    expect(onSelectModel).toHaveBeenCalledWith(STUBS[0]);
+  });
+
+  it('shows the picked model and measure with curated names', () => {
     renderBuilder();
     expect(screen.getAllByText('Orders').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Revenue').length).toBeGreaterThan(0);
   });
 
   it('adding a dimension emits the spec and SQL with the join applied invisibly', async () => {
-    const onChange = renderBuilder();
+    const { onChange } = renderBuilder();
 
     fireEvent.click(screen.getByLabelText('Add semantic dimension').querySelector('button')!);
     fireEvent.click(await screen.findByLabelText('Dimensions: Region'));
@@ -67,7 +82,7 @@ describe('SemanticQueryBuilder', () => {
   });
 
   it('picking a time grain emits DATE_TRUNC SQL ordered by time', async () => {
-    const onChange = renderBuilder();
+    const { onChange } = renderBuilder();
 
     fireEvent.click(screen.getByLabelText('Add time grain').querySelector('button')!);
     fireEvent.click(await screen.findByLabelText('Time grain: MONTH'));
@@ -80,7 +95,7 @@ describe('SemanticQueryBuilder', () => {
   });
 
   it('adding a ratio metric emits NULLIF-guarded SQL', async () => {
-    const onChange = renderBuilder();
+    const { onChange } = renderBuilder();
 
     fireEvent.click(screen.getByLabelText('Add semantic measure').querySelector('button')!);
     fireEvent.click(await screen.findByLabelText('Measures & metrics: AOV'));
@@ -93,7 +108,7 @@ describe('SemanticQueryBuilder', () => {
 
   it('restores a persisted spec (question re-opens where it was built)', () => {
     renderBuilder({
-      value: { model: 'Orders', measures: ['Revenue'], dimensions: ['Status'], timeGrain: 'WEEK' },
+      value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'], timeGrain: 'WEEK' },
     });
     expect(screen.getAllByText('Status').length).toBeGreaterThan(0);
     expect(screen.getByText('per WEEK')).toBeTruthy();

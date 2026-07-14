@@ -4,13 +4,12 @@
  * Supports versioning - each user sees their published version
  */
 
-import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, SemanticModel, TableRelationship } from '@/lib/types';
+import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, TableRelationship } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getPublishedVersionForUser as getPublishedVersionForUserId, resolveVersionWhitelist } from '@/lib/context/context-utils';
 import { CustomLoader } from './types';
 import { computeSchemaFromWhitelist } from './context-loader-utils';
 import { boundSchema, boundFullSchema } from '@/lib/context/schema-bounding';
-import { deriveSemanticModels } from '@/lib/semantic/derive';
 
 /**
  * Context Loader - Computes fullSchema and fullDocs based on published version
@@ -85,16 +84,11 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
   const parentSchema = boundSchema(computed.parentSchema) as ContextContent['parentSchema'];
   const { fullDocs, fullMetrics, fullAnnotations, fullSkills } = computed;
 
-  // Semantic models are DERIVED, never authored: one model per whitelisted table,
-  // from the UNBOUNDED schema (columns intact) + declared relationships (inherited
-  // + this version's own). Inherited models cover tables whose columns were
-  // stripped upstream by schema bounding; derivation must run before bounding.
+  // Declared relationships inherit like metrics (ancestor's + this version's own).
+  // Semantic MODELS are NOT computed here: they derive on demand, scoped to the
+  // tables in play (lib/semantic/models.server.ts) — a large workspace derives
+  // multi-MB of vocabulary, which must never ship in every context load.
   const fullRelationships = [...computed.fullRelationships, ...(publishedVersion.relationships || [])];
-  const fullSemanticModels = deriveSemanticModels(
-    computed.fullSchema,
-    fullRelationships,
-    computed.inheritedSemanticModels,
-  );
 
   if (user.role === 'admin') {
     // Admins see all versions + metadata
@@ -107,7 +101,6 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         fullDocs,
         fullMetrics,
         fullAnnotations,
-        fullSemanticModels,
         fullRelationships,
         fullSkills
       }
@@ -125,7 +118,6 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         fullDocs,
         fullMetrics,
         fullAnnotations,
-        fullSemanticModels,
         fullRelationships,
         fullSkills
       }
@@ -143,7 +135,7 @@ async function computeSchemaFromVersion(
   version: ContextVersion,
   contextPath: string,
   user: EffectiveUser
-): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullMetrics: MetricDef[], fullAnnotations: TableAnnotation[], inheritedSemanticModels: SemanticModel[], fullRelationships: TableRelationship[], fullSkills: SkillEntry[] }> {
+): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullMetrics: MetricDef[], fullAnnotations: TableAnnotation[], fullRelationships: TableRelationship[], fullSkills: SkillEntry[] }> {
   // fullDocs/fullMetrics already include inherited values (computed in context-loader-utils)
   // Root contexts get empty inherited values (no parent to inherit from)
   // Child contexts get parent.full* + parent.own (filtered by childPaths)

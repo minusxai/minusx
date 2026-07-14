@@ -5,14 +5,19 @@
  * aggregate (measures), which column is the time axis, and which equi-joins are
  * safe lookups. All of that except joins is derivable from the whitelisted
  * schema + profiled column metadata (`ColumnMeta.category`), so models are
- * DERIVED server-side in the context loader — one model per whitelisted table —
- * and the only authored input is the table's declared FK relationships
- * (`TableRelationship`, edited in the whitelist UI).
+ * DERIVED on demand — one model per whitelisted table — and the only authored
+ * input is the table's declared FK relationships (`TableRelationship`, edited
+ * in the whitelist UI).
  *
- * Bounded schemas: a names-only table (columns stripped by schema bounding)
- * derives nothing; an `inherited` model for that table — derived upstream in an
- * ancestor context where columns were available — is reused instead. Inherited
- * models for tables no longer in the schema are dropped.
+ * Models are deliberately NOT stored on the context content: a large workspace
+ * derives multi-MB of vocabulary (measured: 4.2 MB for one production
+ * workspace), which would ship in every context load — the exact payload class
+ * schema bounding exists to prevent. Instead, `deriveModelStubs` provides the
+ * cheap global name list (works on names-only bounded schemas), and full
+ * models are derived server-side per request, scoped to the tables in play
+ * (lib/semantic/models.server.ts → POST /api/semantic-models). Pass the full
+ * names-only schema as `namingDatabases` so scoped derivation names agree with
+ * the global stubs.
  *
  * Everything here is pure and connection-agnostic — dialect correctness lives
  * entirely in the IR layer (compile/detect), never here.
@@ -81,15 +86,50 @@ function idBaseName(column: string): string {
 const tableKey = (connection: string, schema: string | undefined, table: string) =>
   `${connection}|${schema ?? ''}|${table}`;
 
+/** The cheap, global "which models exist" projection — one stub per table. */
+export interface ModelStub {
+  name: string;
+  connection: string;
+  schema?: string;
+  table: string;
+}
+
 /**
- * Derive one semantic model per whitelisted table that has columns, merging in
- * `inherited` models for tables whose columns were stripped by schema bounding.
+ * One stub per table with GLOBALLY disambiguated business names (same table
+ * name in two schemas → "Events (prod)" / "Events (staging)"). Works on
+ * names-only bounded schemas — columns are not needed for naming.
+ */
+export function deriveModelStubs(databases: DatabaseWithSchema[]): ModelStub[] {
+  const stubs: ModelStub[] = [];
+  for (const db of databases) {
+    for (const s of db.schemas ?? []) {
+      for (const t of s.tables ?? []) {
+        stubs.push({ name: humanizeName(t.table), connection: db.databaseName, schema: s.schema, table: t.table });
+      }
+    }
+  }
+  const nameCounts = new Map<string, number>();
+  for (const st of stubs) nameCounts.set(st.name, (nameCounts.get(st.name) ?? 0) + 1);
+  for (const st of stubs) {
+    if ((nameCounts.get(st.name) ?? 0) > 1) st.name = `${st.name} (${st.schema ?? st.connection})`;
+  }
+  return stubs;
+}
+
+/**
+ * Derive one semantic model per table (with columns) in `databases`.
+ * `namingDatabases` (default: `databases`) supplies the GLOBAL table list used
+ * for business-name disambiguation — pass the full whitelisted names-only
+ * schema when deriving a scoped subset so names match `deriveModelStubs`.
  */
 export function deriveSemanticModels(
   databases: DatabaseWithSchema[],
   relationships: TableRelationship[] = [],
-  inherited: SemanticModel[] = [],
+  namingDatabases?: DatabaseWithSchema[],
 ): SemanticModel[] {
+  const stubNames = new Map(
+    deriveModelStubs(namingDatabases ?? databases).map((st) => [tableKey(st.connection, st.schema, st.table), st.name]),
+  );
   // Index every table (for relationship targets + inherited filtering).
   const columnsByTable = new Map<string, SchemaColumnLike[]>();
   for (const db of databases) {
@@ -164,7 +204,7 @@ export function deriveSemanticModels(
         }
 
         models.push({
-          name: humanizeName(t.table),
+          name: stubNames.get(tableKey(db.databaseName, s.schema, t.table)) ?? humanizeName(t.table),
           connection: db.databaseName,
           schema: s.schema,
           table: t.table,
@@ -175,22 +215,6 @@ export function deriveSemanticModels(
         });
       }
     }
-  }
-
-  // Disambiguate duplicate business names (same table name in two schemas/connections).
-  const nameCounts = new Map<string, number>();
-  for (const m of models) nameCounts.set(m.name, (nameCounts.get(m.name) ?? 0) + 1);
-  for (const m of models) {
-    if ((nameCounts.get(m.name) ?? 0) > 1) m.name = `${m.name} (${m.schema ?? m.connection})`;
-  }
-
-  // Names-only tables: fall back to the inherited (upstream-derived) model.
-  const derivedKeys = new Set(models.map((m) => tableKey(m.connection, m.schema, m.table)));
-  for (const im of inherited) {
-    const key = tableKey(im.connection, im.schema, im.table);
-    if (!columnsByTable.has(key)) continue; // table left the whitelist → drop
-    if (derivedKeys.has(key)) continue;     // own derivation wins
-    models.push(im);
   }
 
   return models;

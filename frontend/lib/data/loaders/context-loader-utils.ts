@@ -4,7 +4,7 @@
  * Used by both context loader and file template generation
  */
 
-import { DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, Whitelist, SemanticModel, TableRelationship } from '@/lib/types';
+import { DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, Whitelist, TableRelationship } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
 import { applyWhitelistToConnections } from '@/lib/sql/schema-filter';
@@ -58,7 +58,7 @@ export async function computeSchemaFromWhitelist(
   whitelist: Whitelist,
   contextPath: string,
   user: EffectiveUser
-): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullMetrics: MetricDef[], fullAnnotations: TableAnnotation[], inheritedSemanticModels: SemanticModel[], fullRelationships: TableRelationship[], fullSkills: SkillEntry[] }> {
+): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullMetrics: MetricDef[], fullAnnotations: TableAnnotation[], fullRelationships: TableRelationship[], fullSkills: SkillEntry[] }> {
   const contextDir = contextPath.substring(0, contextPath.lastIndexOf('/')) || '/';
   const pathSegments = contextPath.split('/').filter(Boolean);
   const isRoot = pathSegments.length === 2; // e.g., /org/context
@@ -70,7 +70,7 @@ export async function computeSchemaFromWhitelist(
     // Apply own whitelist (no currentPath for root — childPaths has no effect at root level)
     const fullSchema = applyWhitelistToConnections(allConnections, whitelist);
     // parentSchema for root = all connections (what is available to select from)
-    return { fullSchema, parentSchema: allConnections, fullDocs: [], fullMetrics: [], fullAnnotations: [], inheritedSemanticModels: [], fullRelationships: [], fullSkills: [] };
+    return { fullSchema, parentSchema: allConnections, fullDocs: [], fullMetrics: [], fullAnnotations: [], fullRelationships: [], fullSkills: [] };
   }
 
   // Child: Find nearest ancestor context
@@ -83,7 +83,7 @@ export async function computeSchemaFromWhitelist(
 
   if (!ancestorContext) {
     // No ancestor found — nothing to inherit
-    return { fullSchema: [], parentSchema: [], fullDocs: [], fullMetrics: [], fullAnnotations: [], inheritedSemanticModels: [], fullRelationships: [], fullSkills: [] };
+    return { fullSchema: [], parentSchema: [], fullDocs: [], fullMetrics: [], fullAnnotations: [], fullRelationships: [], fullSkills: [] };
   }
 
   // Load ancestor (triggers its own loader recursively)
@@ -97,7 +97,7 @@ export async function computeSchemaFromWhitelist(
   );
 
   if (!publishedVersion) {
-    return { fullSchema: [], parentSchema: [], fullDocs: [], fullMetrics: [], fullAnnotations: [], inheritedSemanticModels: [], fullRelationships: [], fullSkills: [] };
+    return { fullSchema: [], parentSchema: [], fullDocs: [], fullMetrics: [], fullAnnotations: [], fullRelationships: [], fullSkills: [] };
   }
 
   // The ancestor's fullSchema is what the ancestor exposes (already filtered by its own whitelist).
@@ -122,14 +122,11 @@ export async function computeSchemaFromWhitelist(
   // Accumulate inherited metrics (parent's inherited + parent's own).
   const fullMetrics = [...(ancestorContent.fullMetrics || []), ...(publishedVersion.metrics || [])];
   const fullAnnotations = [...(ancestorContent.fullAnnotations || []), ...(publishedVersion.annotations || [])];
-  // Semantic layer inheritance: the ancestor's DERIVED models (this context
-  // re-derives where it has columns, and falls back to these for bounded
-  // names-only tables) plus accumulated declared relationships.
-  const inheritedSemanticModels = ancestorContent.fullSemanticModels || [];
+  // Declared relationships inherit like metrics (ancestor's inherited + ancestor's own).
   const fullRelationships = [...(ancestorContent.fullRelationships || []), ...(publishedVersion.relationships || [])];
 
   // parentOffering = what the parent makes available to this context (before own whitelist)
-  return { fullSchema, parentSchema: parentOffering, fullDocs, fullMetrics, fullAnnotations, inheritedSemanticModels, fullRelationships, fullSkills };
+  return { fullSchema, parentSchema: parentOffering, fullDocs, fullMetrics, fullAnnotations, fullRelationships, fullSkills };
 }
 
 /**

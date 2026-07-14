@@ -268,7 +268,9 @@ export const SemanticQueryFilter = Type.Object({
 export type SemanticQueryFilter = Static<typeof SemanticQueryFilter>;
 
 export const SemanticQuerySpec = Type.Object({
-  model: Type.String({ description: 'semantic model name from the active context' }),
+  model: Type.String({ description: 'semantic model name (derived per table from the whitelisted schema)' }),
+  table: Nullable(Type.String({ description: 'base table the model derives from (scopes on-demand model loading)' })),
+  schema: Nullable(Type.String({ description: 'schema of the base table' })),
   measures: Type.Array(Type.String(), { description: 'measure/metric names to compute (at least one)' }),
   dimensions: Type.Array(Type.String(), { description: 'dimension names to group by' }),
   timeGrain: Nullable(StringEnum(['HOUR', 'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'])),

@@ -1,24 +1,27 @@
 /**
  * SemanticQueryBuilder — the Semantic tier query editor.
  *
- * Users pick curated measures/metrics, dimensions, a time grain and filters
- * from a SemanticModel (defined in the active context); the builder compiles
- * the SemanticQuerySpec to QueryIR (compileSemanticQuery) and to dialect SQL
- * (irToSqlLocal) entirely client-side, emitting both the spec (persisted as
- * `content.semanticQuery`) and the generated SQL (`content.query`).
+ * Users pick derived measures, dimensions, a time grain and filters from a
+ * SemanticModel; the builder compiles the SemanticQuerySpec to QueryIR
+ * (compileSemanticQuery) and to dialect SQL (irToSqlLocal) entirely
+ * client-side, emitting both the spec (persisted as `content.semanticQuery`)
+ * and the generated SQL (`content.query`).
  *
- * The tab only renders when the context defines models for the current
- * connection — no models, no Semantic tier.
+ * Models are derived on demand per table (never shipped in bulk): the model
+ * picker lists cheap `stubs` (one per whitelisted table); picking one calls
+ * `onSelectModel`, which makes the parent fetch that table's full model into
+ * `models`. Until the fetch lands the builder shows a loading placeholder.
  */
 
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Box, VStack, HStack, Text, Button, Input } from '@chakra-ui/react';
 import { LuPlay, LuClock, LuSigma, LuGroup, LuFilter, LuDatabase, LuTriangleAlert } from 'react-icons/lu';
 import { compileSemanticQuery, validateSemanticQuery } from '@/lib/semantic/compile';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import type { SemanticModel, SemanticTimeGrain } from '@/lib/types';
+import type { ModelStub } from '@/lib/semantic/derive';
 import type { SemanticQuerySpec, SemanticQueryFilter } from '@/lib/validation/atlas-schemas';
 import { QueryChip, AddChipButton } from './QueryChip';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
@@ -27,8 +30,12 @@ const TIME_GRAINS: SemanticTimeGrain[] = ['HOUR', 'DAY', 'WEEK', 'MONTH', 'QUART
 const OPERATORS: SemanticQueryFilter['operator'][] = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'IN', 'IS NULL', 'IS NOT NULL'];
 
 interface SemanticQueryBuilderProps {
-  /** Models available for the current connection (non-empty — gates the tab). */
+  /** Full models loaded for the tables in play (fetched on demand). */
   models: SemanticModel[];
+  /** One cheap stub per whitelisted table — the model picker's item list. */
+  stubs: ModelStub[];
+  /** Ask the parent to load the full model for a picked stub. */
+  onSelectModel: (stub: ModelStub) => void;
   dialect: string;
   /** Persisted spec from content.semanticQuery, if any. */
   value: SemanticQuerySpec | null | undefined;
@@ -40,25 +47,34 @@ interface SemanticQueryBuilderProps {
 
 const defaultSpec = (model: SemanticModel): SemanticQuerySpec => ({
   model: model.name,
+  table: model.table,
+  ...(model.schema ? { schema: model.schema } : {}),
   measures: model.measures.length > 0 ? [model.measures[0].name] : [],
+  dimensions: [],
+});
+
+const specForStub = (stub: ModelStub): SemanticQuerySpec => ({
+  model: stub.name,
+  table: stub.table,
+  ...(stub.schema ? { schema: stub.schema } : {}),
+  measures: [],
   dimensions: [],
 });
 
 export function SemanticQueryBuilder({
   models,
+  stubs,
+  onSelectModel,
   dialect,
   value,
   onChange,
   onExecute,
   isExecuting = false,
 }: SemanticQueryBuilderProps) {
-  const [spec, setSpec] = useState<SemanticQuerySpec>(() => {
-    if (value && models.some((m) => m.name === value.model)) return value;
-    return defaultSpec(models[0]);
-  });
+  const [spec, setSpec] = useState<SemanticQuerySpec | null>(() => value ?? null);
 
-  const model = models.find((m) => m.name === spec.model) ?? models[0];
-  const issues = validateSemanticQuery(spec, model);
+  const model = spec ? models.find((m) => m.name === spec.model) : undefined;
+  const issues = spec && model ? validateSemanticQuery(spec, model) : [];
 
   const apply = useCallback((next: SemanticQuerySpec, nextModel: SemanticModel) => {
     setSpec(next);
@@ -72,32 +88,83 @@ export function SemanticQueryBuilder({
   }, [dialect, onChange]);
 
   const update = useCallback((updates: Partial<SemanticQuerySpec>) => {
-    apply({ ...spec, ...updates }, model);
+    if (spec && model) apply({ ...spec, ...updates }, model);
   }, [apply, spec, model]);
 
   const handleModelChange = useCallback((name: string) => {
-    const nextModel = models.find((m) => m.name === name);
-    if (nextModel && name !== spec.model) apply(defaultSpec(nextModel), nextModel);
-  }, [apply, models, spec.model]);
+    const stub = stubs.find((st) => st.name === name);
+    if (!stub || name === spec?.model) return;
+    onSelectModel(stub); // parent fetches the full model
+    const loaded = models.find((m) => m.name === name);
+    if (loaded) {
+      apply(defaultSpec(loaded), loaded);
+    } else {
+      setSpec(specForStub(stub)); // placeholder until the model lands
+    }
+  }, [apply, models, stubs, onSelectModel, spec?.model]);
 
-  const measurables = [
+  // A freshly picked (or detected/persisted) model finishing its fetch: give
+  // the spec its default measure so the query is immediately runnable.
+  useEffect(() => {
+    if (!spec || spec.measures.length > 0) return;
+    const loaded = models.find((m) => m.name === spec.model);
+    if (loaded && loaded.measures.length > 0) {
+      // Deferred so the compile+onChange happens outside the render pass.
+      Promise.resolve().then(() => apply({ ...spec, measures: [loaded.measures[0].name] }, loaded));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [models, spec?.model, spec?.measures.length]);
+
+  const measurables = model ? [
     ...model.measures.map((m) => ({ name: m.name, description: m.description, kind: 'measure' as const })),
     ...(model.metrics ?? []).map((m) => ({ name: m.name, description: m.description, kind: 'metric' as const })),
-  ];
+  ] : [];
+
+  const modelPicker = (
+    <ChipPicker
+      ariaLabel="Semantic model"
+      header="Semantic models"
+      chipLabel={spec ? spec.model : undefined}
+      chipVariant="table"
+      items={stubs.map((st) => ({ name: st.name, selected: st.name === spec?.model }))}
+      onSelect={handleModelChange}
+    />
+  );
+
+  // Nothing picked yet (fresh question): just the model picker.
+  if (!spec) {
+    return (
+      <Box>
+        <VStack align="stretch" gap={3} p={4}>
+          <SectionBox icon={<LuDatabase size={12} />} title="Model">
+            {modelPicker}
+            <Text fontSize="xs" color="fg.subtle" fontFamily="mono">Pick a table to start a semantic query.</Text>
+          </SectionBox>
+        </VStack>
+      </Box>
+    );
+  }
+
+  // Model picked but its vocabulary is still loading.
+  if (!model) {
+    return (
+      <Box>
+        <VStack align="stretch" gap={3} p={4}>
+          <SectionBox icon={<LuDatabase size={12} />} title="Model">
+            {modelPicker}
+            <Text fontSize="xs" color="fg.subtle" fontFamily="mono">Loading {spec.model}…</Text>
+          </SectionBox>
+        </VStack>
+      </Box>
+    );
+  }
 
   return (
     <Box>
       <VStack align="stretch" gap={3} p={4}>
         {/* Model */}
         <SectionBox icon={<LuDatabase size={12} />} title="Model">
-          <ChipPicker
-            ariaLabel="Semantic model"
-            header="Semantic models"
-            chipLabel={model.name}
-            chipVariant="table"
-            items={models.map((m) => ({ name: m.name, description: m.description, selected: m.name === model.name }))}
-            onSelect={handleModelChange}
-          />
+          {modelPicker}
           {model.description && (
             <Text fontSize="xs" color="fg.subtle" fontFamily="mono">{model.description}</Text>
           )}

@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { semanticSpecFromIr } from '@/lib/semantic/detect';
-import type { AnyQueryIR } from '@/lib/sql/ir-types';
-import type { SemanticModel } from '@/lib/types';
+import { fetchScopedModels } from '@/lib/semantic/models-client';
+import type { AnyQueryIR, QueryIR } from '@/lib/sql/ir-types';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 
 export interface SemanticCompat {
@@ -16,11 +16,21 @@ export interface SemanticCompat {
   loading: boolean;
 }
 
+export interface SemanticCompatSource {
+  /** Anchor for context resolution (the file's path/folder). */
+  path: string | undefined;
+  connectionName: string | undefined;
+  /** Whether any semantic vocabulary exists at all (whitelisted tables). */
+  hasTables: boolean;
+}
+
 /**
- * Detects whether the current SQL is expressible as a semantic query against
- * the given models. Parsing happens server-side (CompletionsAPI.sqlToIR — the
- * same dialect-aware parser everything else uses); the vocabulary mapping and
- * recompile-verification run locally (pure, lib/semantic/detect).
+ * Detects whether the current SQL is expressible as a semantic query. Parsing
+ * happens server-side (CompletionsAPI.sqlToIR — the same dialect-aware parser
+ * everything else uses); models are fetched ON DEMAND scoped to the tables the
+ * SQL actually touches (fetchScopedModels — models are never shipped in bulk);
+ * the vocabulary mapping and recompile-verification run locally (pure,
+ * lib/semantic/detect).
  *
  * Empty SQL counts as semantic-capable (a fresh question can start semantic);
  * SQL that doesn't detect leaves the Semantic tab disabled so it can never
@@ -29,31 +39,31 @@ export interface SemanticCompat {
 export function useSemanticCompat(
   sql: string | undefined,
   dialect: string,
-  models: SemanticModel[],
+  { path, connectionName, hasTables }: SemanticCompatSource,
 ): SemanticCompat {
   const [state, setState] = useState<SemanticCompat>({ detected: null, canUseSemantic: false, loading: false });
   const stateRef = useRef(state);
 
-  // Callers commonly derive `models` per render; keying the effect on a stable
-  // serialization (not array identity) prevents a render->effect->setState loop
-  // that saturates the main thread (froze the question page in prod builds).
-  const modelsKey = useMemo(() => JSON.stringify(models), [models]);
+  const sourceKey = useMemo(() => `${path ?? ''}|${connectionName ?? ''}|${hasTables}`, [path, connectionName, hasTables]);
 
   useEffect(() => {
     let cancelled = false;
+    const [anchor, connection] = sourceKey.split('|');
 
-    // Resolve off the effect body so all setState happens in async callbacks
-    // (avoids the cascading-render lint; same pattern the other compat hooks use).
     const next: Promise<SemanticCompat> =
-      models.length === 0
+      !hasTables || !connection
         ? Promise.resolve({ detected: null, canUseSemantic: false, loading: false })
         : !sql?.trim()
           ? Promise.resolve({ detected: null, canUseSemantic: true, loading: false })
           : CompletionsAPI.sqlToIR({ sql, dialect }).then(
-              (result) => {
-                const detected = result.success && result.ir
-                  ? semanticSpecFromIr(result.ir as AnyQueryIR, models)
-                  : null;
+              async (result) => {
+                if (!result.success || !result.ir) return { detected: null, canUseSemantic: false, loading: false };
+                const ir = result.ir as QueryIR;
+                const tables = [ir.from?.table, ...(ir.joins ?? []).map((j) => j.table?.table)]
+                  .filter((t): t is string => !!t);
+                if (tables.length === 0) return { detected: null, canUseSemantic: false, loading: false };
+                const models = await fetchScopedModels(anchor, connection, tables);
+                const detected = semanticSpecFromIr(result.ir as AnyQueryIR, models);
                 return { detected, canUseSemantic: !!detected, loading: false };
               },
               () => ({ detected: null, canUseSemantic: false, loading: false }),
@@ -75,7 +85,7 @@ export function useSemanticCompat(
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sql, dialect, modelsKey]);
+  }, [sql, dialect, sourceKey]);
 
   return state;
 }

@@ -9,7 +9,7 @@ import type { ScheduledJobContent } from './jobs';
 import type { DatabaseWithSchema } from './connections';
 import type { Test } from './evals';
 import type { SkillMention } from './chat';
-import type { SemanticModel, TableRelationship } from './semantic';
+import type { TableRelationship } from './semantic';
 
 /**
  * Recursive whitelist tree node.
@@ -136,7 +136,6 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   fullDocs?: DocEntry[];               // Computed by loader - inherited docs
   fullMetrics?: MetricDef[];           // Computed by loader - inherited + own metrics
   fullAnnotations?: TableAnnotation[]; // Computed by loader - inherited + own annotations
-  fullSemanticModels?: SemanticModel[]; // Computed by loader - DERIVED models (schema + relationships), inherited-aware
   fullRelationships?: TableRelationship[]; // Computed by loader - inherited relationships
   fullSkills?: SkillEntry[];           // Computed by loader - inherited user-defined skills
 
@@ -191,7 +190,6 @@ export interface ContextInfo {
   contextDocs?: ResolvedContextDocs;      // Resolved docs (structure); undefined if no context
   skills: SkillEntry[];                   // Resolved user-defined skills for this context
   availableSkills: SkillMention[];        // Resolved user-defined skills plus system skills for # mentions
-  semanticModels: SemanticModel[];        // Derived semantic models (loader-computed); [] if none
   hasContext: boolean;                    // True if context file found
   contextLoading: boolean;                // True if context file is loading
 }

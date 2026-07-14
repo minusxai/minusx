@@ -132,6 +132,9 @@ function matchModel(ir: QueryIR, model: SemanticModel): SemanticQuerySpec | null
 
   const spec: SemanticQuerySpec = {
     model: model.name,
+    // Scope hints so the client can re-fetch this model on demand later.
+    table: model.table,
+    ...(model.schema ? { schema: model.schema } : {}),
     measures,
     dimensions,
     ...(timeGrain ? { timeGrain } : {}),

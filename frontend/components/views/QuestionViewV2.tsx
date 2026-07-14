@@ -34,7 +34,8 @@ import { QuestionVisualization } from '../question/QuestionVisualization';
 import { QuestionEmptyState } from '@/components/views/shared/empty-states';
 import type { FileId, FileState } from '@/store/filesSlice';
 import { QueryModeSelector, SemanticQueryBuilder, type QueryTab } from '../query-builder';
-import { semanticModelsForConnection } from '@/lib/semantic/resolve';
+import { deriveModelStubs, type ModelStub } from '@/lib/semantic/derive';
+import { useSemanticModels } from '@/lib/hooks/use-semantic-models';
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
@@ -135,7 +136,7 @@ export default function QuestionViewV2({
   const isPreview = mode === 'preview';
 
   // Get schema data for SQL autocomplete and GUI mode table filtering
-  const { databases: schemaData, hasContext, semanticModels } = useSchemaContext(filePath || '/org');
+  const { databases: schemaData, hasContext } = useSchemaContext(filePath || '/org');
   const whitelistedSchema = hasContext
     ? schemaData?.find(db => db.databaseName === content.connection_name)?.schemas
     : undefined;
@@ -177,13 +178,20 @@ export default function QuestionViewV2({
   const [queryMode, setQueryMode] = useState<QueryTab>('sql');
   const [userPickedMode, setUserPickedMode] = useState(false);
 
-  // Semantic tier: models the active context defines for this connection.
-  // Memoized: a fresh array identity every render would re-fire the detection
-  // effect below in a loop (render -> new array -> effect -> setState -> render).
-  const connectionSemanticModels = useMemo(
-    () => semanticModelsForConnection(semanticModels, content.connection_name),
-    [semanticModels, content.connection_name],
-  );
+  // Semantic tier: one derived model per whitelisted table. Stubs (names only)
+  // come from the schema already in the store; full model vocabulary is fetched
+  // ON DEMAND for the tables in play — never in bulk (multi-MB on large
+  // workspaces). Memoized: stable identities keep the detection effect quiet.
+  const semanticStubs = useMemo(() => {
+    const db = schemaData?.find((d) => d.databaseName === content.connection_name);
+    return db ? deriveModelStubs([db]) : [];
+  }, [schemaData, content.connection_name]);
+  const [pickedTables, setPickedTables] = useState<string[]>([]);
+  const semanticTables = useMemo(() => {
+    const tables = [...pickedTables];
+    if (content.semanticQuery?.table) tables.push(content.semanticQuery.table);
+    return tables;
+  }, [pickedTables, content.semanticQuery?.table]);
 
   // Track container width for responsive layout
   useEffect(() => {
@@ -206,9 +214,17 @@ export default function QuestionViewV2({
   // the query can't be parsed into the builder IR, so it's already disabled when the
   // user opens a question — no surprise on mode switch.
   const { detected: detectedSemanticSpec, canUseSemantic } = useSemanticCompat(
-    content.query, dialect, connectionSemanticModels,
+    content.query, dialect,
+    { path: filePath || '/org', connectionName: content.connection_name, hasTables: semanticStubs.length > 0 },
   );
-  const showSemanticTab = connectionSemanticModels.length > 0;
+  const builderTables = useMemo(
+    () => (detectedSemanticSpec?.table ? [...semanticTables, detectedSemanticSpec.table] : semanticTables),
+    [semanticTables, detectedSemanticSpec?.table],
+  );
+  const { models: semanticModels } = useSemanticModels(
+    filePath || '/org', content.connection_name, builderTables,
+  );
+  const showSemanticTab = semanticStubs.length > 0;
   // Fully derived mode: until the user explicitly picks a tab, Semantic is the
   // resting state whenever the query detects. A Semantic choice that loses its
   // footing (SQL edited into something non-semantic, models removed) falls
@@ -545,7 +561,9 @@ export default function QuestionViewV2({
                 {effectiveQueryMode === 'semantic' && showSemanticTab && (
                   <Box flex={1} overflow="auto">
                     <SemanticQueryBuilder
-                      models={connectionSemanticModels}
+                      models={semanticModels}
+                      stubs={semanticStubs}
+                      onSelectModel={(stub: ModelStub) => setPickedTables((prev) => prev.includes(stub.table) ? prev : [...prev, stub.table])}
                       dialect={dialect}
                       value={detectedSemanticSpec ?? content.semanticQuery}
                       onChange={(spec: SemanticQuerySpec, sql: string) => onChange({ semanticQuery: spec, query: sql })}

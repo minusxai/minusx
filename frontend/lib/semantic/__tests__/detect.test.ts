@@ -117,6 +117,13 @@ const SPECS: Array<[string, SemanticQuerySpec]> = [
   }],
 ];
 
+// Detection stamps scope hints (table/schema) onto the spec so clients can
+// re-fetch the model on demand — expected specs gain them here.
+const scoped = (spec: SemanticQuerySpec): SemanticQuerySpec => {
+  const model = MODELS.find((m) => m.name === spec.model)!;
+  return { ...spec, table: model.table, ...(model.schema ? { schema: model.schema } : {}) };
+};
+
 // ---------------------------------------------------------------------------
 // 1. IR round trips
 // ---------------------------------------------------------------------------
@@ -126,7 +133,7 @@ describe('semanticSpecFromIr — IR round trips (dialect-free)', () => {
     it(`recovers the spec: ${name}`, () => {
       const model = MODELS.find((m) => m.name === spec.model)!;
       const ir = compileSemanticQuery(spec, model);
-      expect(semanticSpecFromIr(ir, MODELS)).toEqual(spec);
+      expect(semanticSpecFromIr(ir, MODELS)).toEqual(scoped(spec));
     });
   }
 
@@ -148,28 +155,28 @@ describe('detectSemanticQuery — hand-written SQL variants', () => {
       WHERE status != 'cancelled'
       GROUP BY status, DATE_TRUNC('month', created_at)
       ORDER BY month`;
-    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual({
+    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
       model: 'Orders',
       measures: ['Count', 'Revenue'],
       dimensions: ['Status'],
       timeGrain: 'MONTH',
       filters: [{ dimension: 'Status', operator: '!=', value: 'cancelled' }],
-    });
+    }));
   });
 
   it('measures listed before dimensions (select order is free)', async () => {
     const sql = `SELECT SUM(total) AS revenue, COUNT(*) AS n, platform
       FROM mxfood.orders GROUP BY platform`;
-    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual({
+    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
       model: 'Orders', measures: ['Revenue', 'Count'], dimensions: ['Platform'],
-    });
+    }));
   });
 
   it('positional GROUP BY (GROUP BY 1, 2)', async () => {
     const sql = `SELECT status, platform, COUNT(*) AS n FROM mxfood.orders GROUP BY 1, 2`;
-    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual({
+    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
       model: 'Orders', measures: ['Count'], dimensions: ['Status', 'Platform'],
-    });
+    }));
   });
 
   it('join with a DIFFERENT alias than the model declares', async () => {
@@ -177,9 +184,9 @@ describe('detectSemanticQuery — hand-written SQL variants', () => {
       FROM mxfood.orders
       LEFT JOIN mxfood.customers cust ON orders.customer_id = cust.id
       GROUP BY cust.region`;
-    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual({
+    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
       model: 'Orders', measures: ['Buyers'], dimensions: ['Region'],
-    });
+    }));
   });
 
   it('INNER join matching a declared INNER lookup', async () => {
@@ -196,41 +203,41 @@ describe('detectSemanticQuery — hand-written SQL variants', () => {
       LEFT JOIN mxfood.customers c2 ON orders.customer_id = c2.id
       WHERE c2.tier = 'gold'
       GROUP BY c2.region`;
-    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual({
+    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
       model: 'Orders', measures: ['Count'], dimensions: ['Region'],
       filters: [{ dimension: 'Customer Tier', operator: '=', value: 'gold' }],
-    });
+    }));
   });
 
   it('LIMIT 1000 is treated as the default (omitted from the spec)', async () => {
     const sql = `SELECT COUNT(*) AS n FROM mxfood.orders LIMIT 1000`;
-    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual({
+    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
       model: 'Orders', measures: ['Count'], dimensions: [],
-    });
+    }));
   });
 
   it('schemaless model table (events)', async () => {
     const sql = `SELECT event_name, COUNT(DISTINCT session_id) AS s FROM events GROUP BY event_name`;
-    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual({
+    expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
       model: 'Events', measures: ['Sessions'], dimensions: ['Event Name'],
-    });
+    }));
   });
 
   it('bigquery-style DATE_TRUNC(col, MONTH)', async () => {
     const sql = `SELECT DATE_TRUNC(created_at, MONTH) AS month, SUM(total) AS revenue
       FROM mxfood.orders GROUP BY DATE_TRUNC(created_at, MONTH)`;
-    expect(await detectSemanticQuery(sql, MODELS, 'bigquery')).toEqual({
+    expect(await detectSemanticQuery(sql, MODELS, 'bigquery')).toEqual(scoped({
       model: 'Orders', measures: ['Revenue'], dimensions: [], timeGrain: 'MONTH',
-    });
+    }));
   });
 
   it('postgres-written SQL with IN filter', async () => {
     const sql = `SELECT status, COUNT(*) AS n FROM mxfood.orders
       WHERE status IN ('completed', 'shipped') GROUP BY status`;
-    expect(await detectSemanticQuery(sql, MODELS, 'postgres')).toEqual({
+    expect(await detectSemanticQuery(sql, MODELS, 'postgres')).toEqual(scoped({
       model: 'Orders', measures: ['Count'], dimensions: ['Status'],
       filters: [{ dimension: 'Status', operator: 'IN', value: ['completed', 'shipped'] }],
-    });
+    }));
   });
 });
 
@@ -300,7 +307,7 @@ describe('dialect matrix — compile → SQL → parse → detect round trip', (
         const model = MODELS.find((m) => m.name === spec.model)!;
         const sql = irToSqlLocal(compileSemanticQuery(spec, model), dialect);
         const detected = await detectSemanticQuery(sql, MODELS, dialect);
-        expect(detected).toEqual(spec);
+        expect(detected).toEqual(scoped(spec));
       });
     }
   }

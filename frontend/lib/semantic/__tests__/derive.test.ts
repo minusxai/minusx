@@ -4,7 +4,7 @@
  * against a derived model detects back into a semantic spec.
  */
 import { describe, it, expect } from 'vitest';
-import { deriveSemanticModels, classifyColumn, humanizeName, validateTableRelationships } from '../derive';
+import { deriveSemanticModels, deriveModelStubs, classifyColumn, humanizeName, validateTableRelationships } from '../derive';
 import { detectSemanticQuery } from '../detect-sql';
 import type { DatabaseWithSchema, SemanticModel, TableRelationship } from '@/lib/types';
 
@@ -170,38 +170,29 @@ describe('deriveSemanticModels — vocabulary', () => {
   });
 });
 
-describe('deriveSemanticModels — bounded schemas + inheritance', () => {
+describe('deriveModelStubs — global naming over names-only schemas', () => {
   const NAMES_ONLY: DatabaseWithSchema = {
     databaseName: 'warehouse',
-    schemas: [{ schema: 'public', tables: [{ table: 'orders', columns: [] }] }],
-  };
-  const INHERITED: SemanticModel = {
-    name: 'Orders',
-    connection: 'warehouse',
-    schema: 'public',
-    table: 'orders',
-    dimensions: [{ name: 'Status', column: 'status' }],
-    measures: [{ name: 'Count', agg: 'COUNT' }],
+    schemas: [
+      { schema: 'prod', tables: [{ table: 'events', columns: [] }, { table: 'orders', columns: [] }] },
+      { schema: 'staging', tables: [{ table: 'events', columns: [] }] },
+    ],
   };
 
-  it('a names-only table derives nothing on its own', () => {
-    expect(deriveSemanticModels([NAMES_ONLY], [])).toEqual([]);
+  it('produces one stub per table (columns not required) with disambiguated names', () => {
+    const stubs = deriveModelStubs([NAMES_ONLY]);
+    expect(stubs.map((st) => st.name).sort()).toEqual(['Events (prod)', 'Events (staging)', 'Orders']);
+    expect(stubs.find((st) => st.name === 'Orders')).toMatchObject({ connection: 'warehouse', schema: 'prod', table: 'orders' });
   });
 
-  it('reuses the inherited model for a names-only table', () => {
-    const m = deriveSemanticModels([NAMES_ONLY], [], [INHERITED]);
-    expect(m).toEqual([INHERITED]);
-  });
-
-  it('own derivation wins over inherited when columns are available', () => {
-    const m = deriveSemanticModels([ORDERS], [], [{ ...INHERITED, dimensions: [] }]);
-    expect(modelFor(m, 'orders').dimensions.length).toBeGreaterThan(0);
-  });
-
-  it('drops inherited models whose table left the whitelist', () => {
-    const stray: SemanticModel = { ...INHERITED, table: 'gone', name: 'Gone' };
-    const m = deriveSemanticModels([NAMES_ONLY], [], [stray]);
-    expect(m).toEqual([]);
+  it('scoped derivation names match global stub names via namingDatabases', () => {
+    const scoped: DatabaseWithSchema = {
+      databaseName: 'warehouse',
+      schemas: [{ schema: 'prod', tables: [{ table: 'events', columns: [col('kind', 'VARCHAR', 'categorical')] }] }],
+    };
+    const models = deriveSemanticModels([scoped], [], [NAMES_ONLY]);
+    expect(models).toHaveLength(1);
+    expect(models[0].name).toBe('Events (prod)'); // not plain "Events" — global naming wins
   });
 });
 
