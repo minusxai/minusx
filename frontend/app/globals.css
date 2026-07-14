@@ -279,3 +279,13 @@ html.dark .login-card {
   text-align: right;
 }
 #vg-tooltip-element table tr td.value { font-weight: 600; }
+
+/* Shared multi-series tooltip (all series at the hovered x + color swatches). */
+#vg-tooltip-element.mx-tt-shared { min-width: 132px; }
+.mx-tt-shared .mx-tt-head { opacity: 0.5; font-size: 10.5px; margin-bottom: 5px; letter-spacing: 0.2px; }
+.mx-tt-shared .mx-tt-row { display: flex; align-items: center; padding: 1.5px 0; }
+.mx-tt-shared .mx-tt-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; margin-right: 8px; }
+.mx-tt-shared .mx-tt-name { opacity: 0.82; }
+.mx-tt-shared .mx-tt-val { margin-left: auto; padding-left: 20px; font-weight: 600; }
+/* Vertical guide line at the hovered x (fixed-positioned on <body>; JS sets top/height). */
+.mx-tt-guide { position: fixed; width: 1px; background: rgba(139, 148, 158, 0.5); pointer-events: none; display: none; }

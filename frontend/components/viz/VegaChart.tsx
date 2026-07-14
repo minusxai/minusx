@@ -14,6 +14,18 @@ import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, injectNamedAssets } from '@/lib/viz/render-vega';
 import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/viz-templates';
+import { buildTooltipPlan, buildTooltipData, tooltipXKey, renderSharedTooltipHtml, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
+import { SharedTooltip } from '@/lib/viz/shared-tooltip';
+
+// Tooltip value/x formatters. Tooltips show the FULL number ("2,574", not the axis's
+// "2.6k") and a readable date — the chart's own d3 format is for the axis, not here.
+const fmtTooltipValue = (v: number): string =>
+  Number.isInteger(v) ? v.toLocaleString('en-US') : v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+const makeXFormatter = (plan: TooltipPlan) => (raw: unknown): string => {
+  if (!plan.xTemporal) return String(raw);
+  const d = new Date(raw as string | number | Date);
+  return Number.isNaN(+d) ? String(raw) : d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+};
 
 // Interactive maps (drag pan, wheel zoom, +/- buttons, persisted view) are detected by
 // CAPABILITY — the `mxViewParams` signal — not by recipe id, so a DETACHED map (kind:
@@ -96,6 +108,8 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
   const [legendEpoch, setLegendEpoch] = useState(0);
   const legendPlanRef = useRef<string>('null');
   const vlSpecRef = useRef<Record<string, unknown> | null>(null);
+  // Shared multi-series tooltip state (rebuilt per view; data re-indexed on row change).
+  const tooltipRef = useRef<{ plan: TooltipPlan; controller: SharedTooltip; holder: { data: Map<string, TooltipEntry> } } | null>(null);
 
   const replanLegendWrap = useCallback(() => {
     const el = containerRef.current;
@@ -159,6 +173,32 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         if (cancelled) return;
         await view.runAsync();
         promoteFontAttrs(el);
+        // Shared multi-series tooltip (ECharts-style axis tooltip): for cartesian charts
+        // with a shared x, hovering shows EVERY series at that x with a color swatch + a
+        // vertical guide line. Overrides the default per-mark tooltip; other charts (pie,
+        // scatter, maps) keep it. `data` is re-indexed on row change (see the data effect).
+        if (cancelled) return;
+        const plan = vlSpecRef.current ? buildTooltipPlan(vlSpecRef.current) : null;
+        if (plan) {
+          // Capture LOCALS in the handler (not tooltipRef) so a StrictMode/rebuild race can't
+          // null it out from under the live view. `holder.data` is re-indexed on row change.
+          const controller = new SharedTooltip(el, colorMode);
+          const holder = { data: buildTooltipData(rowsRef.current, plan) };
+          tooltipRef.current = { plan, controller, holder };
+          const formatX = makeXFormatter(plan);
+          const v = view;
+          v.tooltip((_handler, event, item) => {
+            const datum = (item as { datum?: Record<string, unknown> } | null)?.datum;
+            if (!datum) { controller.hide(); return; }
+            const entry = holder.data.get(tooltipXKey(datum, plan));
+            if (!entry) { controller.hide(); return; }
+            const scale = v.scale('color') as ((k: string) => string) | undefined;
+            const colorFor = (k: string) => { try { return scale ? String(scale(k)) : '#8b949e'; } catch { return '#8b949e'; } };
+            controller.show(event as MouseEvent, renderSharedTooltipHtml(entry, {
+              xTitle: plan.xTitle, colorFor, formatX, formatValue: fmtTooltipValue,
+            }));
+          });
+        }
         // Interactive maps (point_map / choropleth) expose an `mxViewParams` signal —
         // the settled view state as recipe params. Persist it after a real pan/wheel
         // (never on initial render), debounced, rounded.
@@ -193,6 +233,8 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     return () => {
       cancelled = true;
       viewRef.current = null;
+      tooltipRef.current?.controller.destroy();
+      tooltipRef.current = null;
       view?.finalize();
     };
   }, [envelope, colorMode, legendEpoch]);
@@ -202,6 +244,8 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     const view = viewRef.current;
     if (!view) return;
     setMainData(view, rows);
+    // Keep the shared-tooltip index in sync with the live rows (no view rebuild).
+    if (tooltipRef.current) tooltipRef.current.holder.data = buildTooltipData(rows, tooltipRef.current.plan);
     view.runAsync().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
     replanLegendWrap();
   }, [rows, replanLegendWrap]);
