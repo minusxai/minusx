@@ -91,24 +91,47 @@ function toSeedPiece(cfg: SeedModelConfig, name: string): { entry: LlmProviderEn
  * seed. Pure — exported for tests.
  */
 export function buildSeedLlmConfig(env: Env): LlmConfig | null {
-  const analyst = toSeedPiece(parseSeed(env['ANALYST_AGENT_MODEL_CONFIG']) ?? {}, 'env-analyst');
-  const micro = toSeedPiece(parseSeed(env['MICRO_AGENT_MODEL_CONFIG']) ?? {}, 'env-micro');
+  const analystCfg = parseSeed(env['ANALYST_AGENT_MODEL_CONFIG']);
+  const microCfg = parseSeed(env['MICRO_AGENT_MODEL_CONFIG']);
+  // Providers are named by their TYPE (matching the UI's auto-naming, so a
+  // seeded config shows no name field); a suffix appears only when both use
+  // cases genuinely need distinct entries of the same type.
+  const analyst = toSeedPiece(analystCfg ?? {}, analystCfg?.customModel ? 'custom' : analystCfg?.provider ?? '');
+  const micro = toSeedPiece(microCfg ?? {}, microCfg?.customModel ? 'custom' : microCfg?.provider ?? '');
   if (!analyst && !micro) return null;
 
-  const providers: LlmProviderEntry[] = [];
-  const assignments: LlmConfig['assignments'] = {};
-  if (analyst) {
-    providers.push(analyst.entry);
-    assignments.analyst = { chain: [analyst.choice] };
-  }
-  if (micro) {
-    providers.push(micro.entry);
-    assignments.micro = { chain: [micro.choice] };
-  }
   // A lone config covers both use cases rather than leaving one unconfigured.
-  if (analyst && !micro) assignments.micro = { chain: [analyst.choice] };
-  if (micro && !analyst) assignments.analyst = { chain: [micro.choice] };
-  return { providers, assignments };
+  if (analyst && !micro) {
+    return { providers: [analyst.entry], assignments: { analyst: { chain: [analyst.choice] }, micro: { chain: [analyst.choice] } } };
+  }
+  if (micro && !analyst) {
+    return { providers: [micro.entry], assignments: { analyst: { chain: [micro.choice] }, micro: { chain: [micro.choice] } } };
+  }
+
+  // Both present: dedupe to ONE provider when the endpoints are identical
+  // (same type, key, and endpoint details) — the assignments just pick
+  // different models on it.
+  const sameEndpoint = (a: LlmProviderEntry, b: LlmProviderEntry) =>
+    JSON.stringify({ ...a, name: '' }) === JSON.stringify({ ...b, name: '' });
+  if (sameEndpoint(analyst!.entry, micro!.entry)) {
+    return {
+      providers: [analyst!.entry],
+      assignments: {
+        analyst: { chain: [analyst!.choice] },
+        micro: { chain: [{ ...micro!.choice, providerName: analyst!.entry.name }] },
+      },
+    };
+  }
+
+  // Distinct endpoints of the same type need distinct names (UI convention: type, type-2).
+  if (micro!.entry.name === analyst!.entry.name) {
+    micro!.entry.name = `${micro!.entry.name}-2`;
+    micro!.choice.providerName = micro!.entry.name;
+  }
+  return {
+    providers: [analyst!.entry, micro!.entry],
+    assignments: { analyst: { chain: [analyst!.choice] }, micro: { chain: [micro!.choice] } },
+  };
 }
 
 function isTestEnv(): boolean {
