@@ -104,6 +104,10 @@ export type {
   SemanticMeasure, SemanticRatioMetric, SemanticModel, TableRelationship,
 } from './types/semantic';
 
+// Views domain — see lib/types/views.ts
+export type { ViewColumn, ViewDef } from './types/views';
+export { VIEWS_SCHEMA } from './types/views';
+
 // Chat/conversation domain — see lib/types/chat.ts
 export type {
   Attachment, ChatMentionData, SkillMention, SlashCommand,

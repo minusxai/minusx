@@ -4,7 +4,7 @@
  * Supports versioning - each user sees their published version
  */
 
-import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, TableRelationship } from '@/lib/types';
+import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, TableRelationship, ViewDef, VIEWS_SCHEMA } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getPublishedVersionForUser as getPublishedVersionForUserId, resolveVersionWhitelist } from '@/lib/context/context-utils';
 import { CustomLoader } from './types';
@@ -73,14 +73,24 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
     user
   );
 
-  // Bound the columnar schema before it's stored/serialized/shipped: keep columns when small, drop the
+  // Views (inherited + this version's own) surface as ORDINARY TABLES under the
+  // `_views` schema. One injection here is what makes a view work everywhere:
+  // the whitelist validator accepts `_views.x`, the agent sees it, the GUI lists
+  // it, and the semantic layer derives a model from its columns. Views are always
+  // exposed by the context that defines or inherits them — they are curated by
+  // construction, so they need no separate whitelisting.
+  const fullViews = computed.fullViews;
+  const allViews = [...fullViews, ...(publishedVersion.views || [])];
+  const withViews = injectViewsAsTables(computed.fullSchema, allViews);
+
+  // Bound the columnar schema (WITH the views already injected, so they ship with columns): keep columns when small, drop the
   // columnar bulk when huge. This is what keeps a 1963-table connection from putting ~8 MB into every
   // context load, API response, Redux store, and chat payload — the production OOM.
   //
   // fullSchema vs parentSchema differ in ONE way: fullSchema is the RESOLVED own schema that CHILD
   // contexts inherit from, so it must never lose a table (boundFullSchema = names-only, no table cap).
   // parentSchema is only the editor's available-to-whitelist menu, so it may also cap the table list.
-  const fullSchema = boundFullSchema(computed.fullSchema) as ContextContent['fullSchema'];
+  const fullSchema = boundFullSchema(withViews) as ContextContent['fullSchema'];
   const parentSchema = boundSchema(computed.parentSchema) as ContextContent['parentSchema'];
   const { fullDocs, fullMetrics, fullAnnotations, fullSkills } = computed;
 
@@ -103,6 +113,7 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         fullMetrics,
         fullAnnotations,
         fullRelationships,
+        fullViews,
         fullSkills
       }
     };
@@ -120,10 +131,29 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         fullMetrics,
         fullAnnotations,
         fullRelationships,
+        fullViews,
         fullSkills
       }
     };
   }
+}
+
+/**
+ * Add each view to its connection's schema as a table under `_views`.
+ * A view with no column snapshot yet (never successfully saved) still appears —
+ * as a names-only table — so it is at least visible and referenceable.
+ */
+function injectViewsAsTables(schema: DatabaseWithSchema[], views: ViewDef[]): DatabaseWithSchema[] {
+  if (views.length === 0) return schema;
+  return schema.map((db) => {
+    const mine = views.filter((v) => v.connection === db.databaseName);
+    if (mine.length === 0) return db;
+    const tables = mine.map((v) => ({ table: v.name, columns: (v.columns ?? []).map((c) => ({ ...c })) }));
+    return {
+      ...db,
+      schemas: [...db.schemas.filter((s) => s.schema !== VIEWS_SCHEMA), { schema: VIEWS_SCHEMA, tables }],
+    };
+  });
 }
 
 
@@ -136,7 +166,7 @@ async function computeSchemaFromVersion(
   version: ContextVersion,
   contextPath: string,
   user: EffectiveUser
-): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullMetrics: MetricDef[], fullAnnotations: TableAnnotation[], fullRelationships: TableRelationship[], fullSkills: SkillEntry[] }> {
+): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullMetrics: MetricDef[], fullAnnotations: TableAnnotation[], fullRelationships: TableRelationship[], fullViews: ViewDef[], fullSkills: SkillEntry[] }> {
   // fullDocs/fullMetrics already include inherited values (computed in context-loader-utils)
   // Root contexts get empty inherited values (no parent to inherit from)
   // Child contexts get parent.full* + parent.own (filtered by childPaths)
