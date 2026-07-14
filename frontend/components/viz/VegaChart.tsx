@@ -14,7 +14,7 @@ import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, injectNamedAssets } from '@/lib/viz/render-vega';
 import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/viz-templates';
-import { buildTooltipPlan, buildTooltipData, tooltipXKey, renderSharedTooltipHtml, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
+import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
 import { SharedTooltip } from '@/lib/viz/shared-tooltip';
 
 // Tooltip value/x formatters. Tooltips show the FULL number ("2,574", not the axis's
@@ -109,7 +109,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
   const legendPlanRef = useRef<string>('null');
   const vlSpecRef = useRef<Record<string, unknown> | null>(null);
   // Shared multi-series tooltip state (rebuilt per view; data re-indexed on row change).
-  const tooltipRef = useRef<{ plan: TooltipPlan; controller: SharedTooltip; holder: { data: Map<string, TooltipEntry> } } | null>(null);
+  const tooltipRef = useRef<{ plan: TooltipPlan; controller: SharedTooltip; holder: { data: Map<string, TooltipEntry> }; cleanup: () => void } | null>(null);
 
   const replanLegendWrap = useCallback(() => {
     const el = containerRef.current;
@@ -181,23 +181,52 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         const plan = vlSpecRef.current ? buildTooltipPlan(vlSpecRef.current) : null;
         if (plan) {
           // Capture LOCALS in the handler (not tooltipRef) so a StrictMode/rebuild race can't
-          // null it out from under the live view. `holder.data` is re-indexed on row change.
+          // null it out. `holder.data` is re-indexed on row change.
           const controller = new SharedTooltip(el, colorMode);
           const holder = { data: buildTooltipData(rowsRef.current, plan) };
-          tooltipRef.current = { plan, controller, holder };
           const formatX = makeXFormatter(plan);
           const v = view;
-          v.tooltip((_handler, event, item) => {
-            const datum = (item as { datum?: Record<string, unknown> } | null)?.datum;
-            if (!datum) { controller.hide(); return; }
-            const entry = holder.data.get(tooltipXKey(datum, plan));
-            if (!entry) { controller.hide(); return; }
+          v.tooltip(() => {}); // suppress the default per-mark tooltip; we drive our own
+
+          // ECharts-style AXIS trigger: hovering ANYWHERE in the plot snaps to the nearest x
+          // (no need to land on a thin line). Cursor px → data-rect px (minus the padding
+          // origin) → nearest x by pixel; the guide snaps to that x, the tooltip rides the cursor.
+          const onMove = (e: PointerEvent) => {
+            const svg = el.querySelector('svg');
+            const xs = v.scale('x') as (((d: unknown) => number) & { bandwidth?: () => number }) | undefined;
+            if (!svg || typeof xs !== 'function') { controller.hide(); return; }
+            const rect = svg.getBoundingClientRect();
+            const origin = (v as unknown as { _origin?: [number, number] })._origin ?? [0, 0];
+            const width = Number(v.width());
+            const height = Number(v.height());
+            const dataX = e.clientX - rect.left - origin[0];
+            const dataY = e.clientY - rect.top - origin[1];
+            if (dataX < -6 || dataX > width + 6 || dataY < -6 || dataY > height + 6) { controller.hide(); return; }
+            let best: TooltipEntry | null = null, bestDist = Infinity, bestPx = 0;
+            for (const entry of holder.data.values()) {
+              const sv = plan.xTemporal ? new Date(entry.xRaw as string | number | Date) : entry.xRaw;
+              let px = xs(sv);
+              if (typeof px !== 'number' || Number.isNaN(px)) continue;
+              if (typeof xs.bandwidth === 'function') px += xs.bandwidth() / 2;
+              const d = Math.abs(px - dataX);
+              if (d < bestDist) { bestDist = d; best = entry; bestPx = px; }
+            }
+            if (!best) { controller.hide(); return; }
             const scale = v.scale('color') as ((k: string) => string) | undefined;
             const colorFor = (k: string) => { try { return scale ? String(scale(k)) : '#8b949e'; } catch { return '#8b949e'; } };
-            controller.show(event as MouseEvent, renderSharedTooltipHtml(entry, {
-              xTitle: plan.xTitle, colorFor, formatX, formatValue: fmtTooltipValue,
-            }));
-          });
+            const html = renderSharedTooltipHtml(best, { xTitle: plan.xTitle, colorFor, formatX, formatValue: fmtTooltipValue });
+            controller.show(html, {
+              cursorX: e.clientX, cursorY: e.clientY,
+              guideX: rect.left + origin[0] + bestPx, guideTop: rect.top + origin[1], guideHeight: height,
+            });
+          };
+          const onLeave = () => controller.hide();
+          el.addEventListener('pointermove', onMove);
+          el.addEventListener('pointerleave', onLeave);
+          tooltipRef.current = { plan, controller, holder, cleanup: () => {
+            el.removeEventListener('pointermove', onMove);
+            el.removeEventListener('pointerleave', onLeave);
+          } };
         }
         // Interactive maps (point_map / choropleth) expose an `mxViewParams` signal —
         // the settled view state as recipe params. Persist it after a real pan/wheel
@@ -233,6 +262,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     return () => {
       cancelled = true;
       viewRef.current = null;
+      tooltipRef.current?.cleanup();
       tooltipRef.current?.controller.destroy();
       tooltipRef.current = null;
       view?.finalize();

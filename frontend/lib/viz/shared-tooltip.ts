@@ -25,8 +25,11 @@ export class SharedTooltip {
     this.guide = g;
   }
 
-  /** Show the tooltip near the cursor (flipped to stay on-screen) + a guide down the chart at cursor x. */
-  show(event: MouseEvent, html: string): void {
+  /**
+   * Show the tooltip near the cursor (flipped to stay on-screen) and the vertical guide
+   * SNAPPED to a data x. All coordinates are viewport (clientX/Y) pixels.
+   */
+  show(html: string, geom: { cursorX: number; cursorY: number; guideX: number; guideTop: number; guideHeight: number }): void {
     const el = this.el;
     el.className = `mx-tt-shared${this.theme === 'dark' ? ' dark-theme' : ''}`;
     el.innerHTML = html;
@@ -36,24 +39,22 @@ export class SharedTooltip {
     el.style.visibility = 'visible';
     el.style.display = 'block';
 
-    const pad = 14;
+    const pad = 16;
     const r = el.getBoundingClientRect();
-    let x = event.clientX + pad;
-    let y = event.clientY + pad;
-    if (x + r.width > window.innerWidth) x = event.clientX - r.width - pad;
-    if (y + r.height > window.innerHeight) y = event.clientY - r.height - pad;
+    let x = geom.cursorX + pad;
+    let y = geom.cursorY + pad;
+    if (x + r.width > window.innerWidth) x = geom.cursorX - r.width - pad;
+    if (y + r.height > window.innerHeight) y = geom.cursorY - r.height - pad;
     el.style.left = `${Math.max(4, x)}px`;
     el.style.top = `${Math.max(4, y)}px`;
 
-    // Guide: a fixed vertical line at the cursor x, spanning the chart container's height.
-    const cr = this.container.getBoundingClientRect();
     const g = this.guide;
     g.style.position = 'fixed';
     g.style.zIndex = '999';
     g.style.pointerEvents = 'none';
-    g.style.left = `${event.clientX}px`;
-    g.style.top = `${cr.top}px`;
-    g.style.height = `${cr.height}px`;
+    g.style.left = `${geom.guideX}px`;
+    g.style.top = `${geom.guideTop}px`;
+    g.style.height = `${geom.guideHeight}px`;
     g.style.display = 'block';
   }
 
