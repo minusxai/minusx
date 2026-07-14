@@ -1,9 +1,9 @@
 # LLM provider migration
 
 This folder is the LLM **boundary**: the only place in the codebase allowed to
-import `@mariozechner/pi-ai`. It exists so the underlying LLM library can be
+import `@earendil-works/pi-ai`. It exists so the underlying LLM library can be
 replaced (pi-ai → Vercel AI SDK) by reimplementing this one surface, without
-touching consumers. An ESLint rule (`no-restricted-imports` → `@mariozechner/pi-ai`)
+touching consumers. An ESLint rule (`no-restricted-imports` → `@earendil-works/pi-ai`)
 enforces the boundary everywhere except `orchestrator/llm/**`.
 
 ## Status
@@ -11,7 +11,7 @@ enforces the boundary everywhere except `orchestrator/llm/**`.
 - **Milestone 1 — DONE.** pi-ai is fully isolated to `orchestrator/llm/`.
   Consumers import the owned types + wrapped runtime from `@/orchestrator/llm`,
   faux/test helpers from `@/orchestrator/llm/testing`, and typebox directly from
-  `typebox`. `@mariozechner/pi-ai@0.73.0` and `typebox@1.1.37` are version-frozen.
+  `typebox`. `@earendil-works/pi-ai@0.80.6 (imported via its temporary /compat entrypoint)` and `typebox@1.1.37` are version-frozen.
 - **Milestone 2 — pending.** Reimplement the export surface below on the Vercel
   AI SDK (`@ai-sdk/*`); the linter + types tell you when the swap is complete.
 
@@ -20,7 +20,7 @@ enforces the boundary everywhere except `orchestrator/llm/**`.
 - Import LLM **types and runtime** from `@/orchestrator/llm`.
 - Import **faux/test helpers** from `@/orchestrator/llm/testing`.
 - Import **typebox** (`Type`, `TSchema`, `Static`) directly from `typebox`.
-- Never import `@mariozechner/pi-ai` directly.
+- Never import `@earendil-works/pi-ai` directly.
 
 ## Export surface (the Milestone-2 spec)
 

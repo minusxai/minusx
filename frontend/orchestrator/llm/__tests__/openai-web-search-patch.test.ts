@@ -1,5 +1,5 @@
 // Validates the OpenAI (Responses API) half of the pi web-search patch
-// (patches/@mariozechner+pi-ai+0.73.0.patch):
+// (patches/@earendil-works+pi-ai+0.80.6.patch):
 //  - request: the hosted `{ type: 'web_search' }` tool is injected when
 //    options.webSearch is set (and user_location when a city is given)
 //  - response: url_citation annotations — both the streaming

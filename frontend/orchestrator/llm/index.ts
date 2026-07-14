@@ -1,10 +1,10 @@
 /**
  * ════════════════════════════════════════════════════════════════════════════
- *  LLM BOUNDARY — the ONLY production module allowed to import `@mariozechner/pi-ai`.
+ *  LLM BOUNDARY — the ONLY production module allowed to import `@earendil-works/pi-ai`.
  * ════════════════════════════════════════════════════════════════════════════
  *
  * All pi-ai dependencies are isolated behind this directory (`orchestrator/llm/`);
- * an ESLint rule forbids importing `@mariozechner/pi-ai` anywhere else. The rest
+ * an ESLint rule forbids importing `@earendil-works/pi-ai` anywhere else. The rest
  * of the codebase imports the OWNED types + wrapped runtime from here, and imports
  * typebox (`Type`, `TSchema`, `Static`) directly from `typebox`.
  *
@@ -25,14 +25,14 @@ import {
   getProviders as piGetProviders,
   streamSimple as piStreamSimple,
   EventStream as PiEventStream,
-} from '@mariozechner/pi-ai';
+} from '@earendil-works/pi-ai/compat';
 import type {
   Api as PiApi,
   Model as PiModel,
   Context as PiContext,
   SimpleStreamOptions as PiSimpleStreamOptions,
   AssistantMessageDiagnostic,
-} from '@mariozechner/pi-ai';
+} from '@earendil-works/pi-ai/compat';
 import type { TSchema } from 'typebox';
 
 // ─── Opaque handle types (aliased to pi; never inspected outside this boundary) ──

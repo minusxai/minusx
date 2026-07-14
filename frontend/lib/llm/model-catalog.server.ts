@@ -38,11 +38,19 @@ export function parseModelsDevCatalog(json: unknown): ModelCatalog {
     for (const [modelId, m] of Object.entries(models)) {
       if (!m || typeof m !== 'object') continue;
       const model = m as {
-        name?: string; reasoning?: boolean;
-        modalities?: { input?: string[] };
+        name?: string; reasoning?: boolean; tool_call?: boolean;
+        modalities?: { input?: string[]; output?: string[] };
         limit?: { context?: number; output?: number };
         cost?: { input?: number; output?: number; cache_read?: number; cache_write?: number };
       };
+      // AGENT-capable models only: image-generation / TTS / embedding entries
+      // polluted the pickers and broke the Test button's default-model fallback
+      // (alphabetical order put chatgpt-image-latest first for openai). Output
+      // modality alone doesn't cut it — models.dev lists chatgpt-image-latest
+      // with output ['text','image'] — so also require tool calling, which
+      // every agent here needs anyway (explicit false only; absent = assumed chat).
+      if (model.modalities?.output && !model.modalities.output.includes('text')) continue;
+      if (model.tool_call === false) continue;
       const input = (model.modalities?.input ?? ['text']).filter((v): v is 'text' | 'image' => v === 'text' || v === 'image');
       parsed.set(modelId, {
         id: modelId,
