@@ -20,6 +20,7 @@ import {
   WebAnalystAgent,
   EditFile,
   CreateFile,
+  DetachViz,
   ReadFiles,
   Navigate,
   ReviewFile,
@@ -115,6 +116,7 @@ export const REGISTRABLES: RegistrableClass[] = [
   CheckFileHealth,
   EditFile,
   CreateFile,
+  DetachViz,
   Navigate,
   ReviewFile,
   Screenshot, // legacy alias of ReviewFile — old conversation logs still resolve it

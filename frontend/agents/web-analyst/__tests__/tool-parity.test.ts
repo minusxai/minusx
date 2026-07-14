@@ -21,6 +21,7 @@ const EXPECTED_TOOLS = [
   'SearchFiles',
   'CheckFileHealth',
   'CreateFile',
+  'DetachViz',
   'LoadSkill',
   'LoadContext',
   'FuzzyMatch',
