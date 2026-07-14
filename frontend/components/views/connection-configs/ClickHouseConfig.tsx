@@ -14,7 +14,7 @@ export default function ClickHouseConfig({ config, onChange }: BaseConfigProps) 
         <Box gridColumn="span 2">
           <Text fontSize="sm" fontWeight="700" mb={2}>Host</Text>
           <Input
-            aria-label="ClickHouse host"
+            aria-label="clickhouse host"
             value={config.host ?? ''}
             onChange={(e) => onChange({ ...config, host: e.target.value })}
             placeholder="play.clickhouse.com"
@@ -29,7 +29,7 @@ export default function ClickHouseConfig({ config, onChange }: BaseConfigProps) 
               <Box
                 as="button"
                 key={p}
-                aria-label={`ClickHouse protocol ${p}`}
+                aria-label={`clickhouse protocol ${p}`}
                 px={3}
                 py={1.5}
                 fontSize="xs"
@@ -54,7 +54,7 @@ export default function ClickHouseConfig({ config, onChange }: BaseConfigProps) 
         <Box>
           <Text fontSize="sm" fontWeight="700" mb={2}>Port</Text>
           <Input
-            aria-label="ClickHouse port"
+            aria-label="clickhouse port"
             type="number"
             value={config.port ?? ''}
             onChange={(e) => onChange({ ...config, port: e.target.value === '' ? undefined : parseInt(e.target.value) })}
@@ -67,7 +67,7 @@ export default function ClickHouseConfig({ config, onChange }: BaseConfigProps) 
       <Box>
         <Text fontSize="sm" fontWeight="700" mb={2}>Database</Text>
         <Input
-          aria-label="ClickHouse database"
+          aria-label="clickhouse database"
           value={config.database ?? ''}
           onChange={(e) => onChange({ ...config, database: e.target.value })}
           placeholder="default"
@@ -82,7 +82,7 @@ export default function ClickHouseConfig({ config, onChange }: BaseConfigProps) 
         <Box>
           <Text fontSize="sm" fontWeight="700" mb={2}>Username</Text>
           <Input
-            aria-label="ClickHouse username"
+            aria-label="clickhouse username"
             value={config.username ?? ''}
             onChange={(e) => onChange({ ...config, username: e.target.value })}
             placeholder="default"
@@ -93,7 +93,7 @@ export default function ClickHouseConfig({ config, onChange }: BaseConfigProps) 
         <Box>
           <Text fontSize="sm" fontWeight="700" mb={2}>Password</Text>
           <Input
-            aria-label="ClickHouse password"
+            aria-label="clickhouse password"
             type="password"
             value={config.password ?? ''}
             onChange={(e) => onChange({ ...config, password: e.target.value })}

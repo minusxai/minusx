@@ -191,7 +191,7 @@ run_in_image() { # run_in_image <script> [arg]
     --add-host=host.docker.internal:host-gateway \
     --env-file frontend/.env \
     "$FRONTEND_IMAGE" \
-    npx tsx --conditions react-server "scripts/setup-cli/$1" ${2:-} 2>/dev/null
+    node --import tsx --import ./scripts/setup-cli/node-preload.mjs "scripts/setup-cli/$1" ${2:-} 2>/dev/null
 }
 
 # Rewrite host-local DB addresses to the address the container sees.

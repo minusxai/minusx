@@ -3,7 +3,7 @@
 // retry-time model picker; the interview's suggestions come from the static
 // compatibility.json.
 //
-//   docker run --rm <image> npx tsx --conditions react-server scripts/setup-cli/list-models.ts [provider]
+//   docker run --rm <image> node --import tsx --import ./scripts/setup-cli/node-preload.mjs scripts/setup-cli/list-models.ts [provider]
 //
 // stdout: { providers: { <slug>: [{ id, name, reasoning, input, contextWindow }] } }
 import { listProviders } from '@/orchestrator/llm';

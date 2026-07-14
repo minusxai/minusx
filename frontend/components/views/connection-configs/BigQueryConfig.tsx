@@ -75,6 +75,7 @@ export default function BigQueryConfig({ config, onChange, mode }: BaseConfigPro
           </Button>
         </HStack>
         <Textarea
+          aria-label="bigquery service_account_json"
           value={serviceAccountJson}
           onChange={(e) => handleServiceAccountJsonChange(e.target.value)}
           placeholder='{"type": "service_account", "project_id": "...", ...}'
@@ -87,7 +88,7 @@ export default function BigQueryConfig({ config, onChange, mode }: BaseConfigPro
         {projectId && (
           <HStack gap={1.5} mt={1.5}>
             <LuCheck size={12} color="var(--chakra-colors-accent-teal)" />
-            <Text fontSize="xs" color="fg.muted">
+            <Text fontSize="xs" color="fg.muted" aria-label="bigquery project_id">
               Project: <Text as="span" fontFamily="mono" fontWeight="600" color="fg.default">{projectId}</Text>
             </Text>
           </HStack>

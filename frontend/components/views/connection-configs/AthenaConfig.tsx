@@ -10,6 +10,7 @@ export default function AthenaConfig({ config, onChange }: BaseConfigProps) {
         <Box>
           <Text fontSize="sm" fontWeight="700" mb={2}>Region</Text>
           <Input
+            aria-label="athena region_name"
             value={config.region_name || ''}
             onChange={(e) => onChange({ ...config, region_name: e.target.value })}
             placeholder="us-east-1"
@@ -19,6 +20,7 @@ export default function AthenaConfig({ config, onChange }: BaseConfigProps) {
         <Box>
           <Text fontSize="sm" fontWeight="700" mb={2}>Workgroup</Text>
           <Input
+            aria-label="athena work_group"
             value={config.work_group || ''}
             onChange={(e) => onChange({ ...config, work_group: e.target.value })}
             placeholder="primary"
@@ -30,6 +32,7 @@ export default function AthenaConfig({ config, onChange }: BaseConfigProps) {
       <Box>
         <Text fontSize="sm" fontWeight="700" mb={2}>S3 Staging Directory</Text>
         <Input
+          aria-label="athena s3_staging_dir"
           value={config.s3_staging_dir || ''}
           onChange={(e) => onChange({ ...config, s3_staging_dir: e.target.value })}
           placeholder="s3://my-bucket/athena-results/"
@@ -43,6 +46,7 @@ export default function AthenaConfig({ config, onChange }: BaseConfigProps) {
       <Box>
         <Text fontSize="sm" fontWeight="700" mb={2}>Default Schema</Text>
         <Input
+          aria-label="athena schema_name"
           value={config.schema_name || ''}
           onChange={(e) => onChange({ ...config, schema_name: e.target.value })}
           placeholder="default"
@@ -54,6 +58,7 @@ export default function AthenaConfig({ config, onChange }: BaseConfigProps) {
         <Box>
           <Text fontSize="sm" fontWeight="700" mb={2}>AWS Access Key ID</Text>
           <Input
+            aria-label="athena aws_access_key_id"
             value={config.aws_access_key_id || ''}
             onChange={(e) => onChange({ ...config, aws_access_key_id: e.target.value })}
             placeholder="(optional)"
@@ -63,6 +68,7 @@ export default function AthenaConfig({ config, onChange }: BaseConfigProps) {
         <Box>
           <Text fontSize="sm" fontWeight="700" mb={2}>AWS Secret Access Key</Text>
           <Input
+            aria-label="athena aws_secret_access_key"
             type="password"
             value={config.aws_secret_access_key || ''}
             onChange={(e) => onChange({ ...config, aws_secret_access_key: e.target.value })}

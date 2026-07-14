@@ -69,6 +69,7 @@ export default function PostgreSQLConfig({ config, onChange }: BaseConfigProps) 
         <Box>
           <Text fontSize="sm" fontWeight="700" mb={2}>Connection String</Text>
           <Input
+            aria-label="postgresql connection_string"
             value={config.connection_string || ''}
             onChange={(e) => onChange({ connection_string: e.target.value })}
             placeholder="postgresql://user:password@localhost:5432/mydb?sslmode=disable"
@@ -84,6 +85,7 @@ export default function PostgreSQLConfig({ config, onChange }: BaseConfigProps) 
             <Box>
               <Text fontSize="sm" fontWeight="700" mb={2}>Host</Text>
               <Input
+                aria-label="postgresql host"
                 value={config.host ?? ''}
                 onChange={(e) => onChange({ ...config, host: e.target.value })}
                 placeholder="localhost"
@@ -93,6 +95,7 @@ export default function PostgreSQLConfig({ config, onChange }: BaseConfigProps) 
             <Box>
               <Text fontSize="sm" fontWeight="700" mb={2}>Port</Text>
               <Input
+                aria-label="postgresql port"
                 type="number"
                 value={config.port ?? ''}
                 onChange={(e) => onChange({ ...config, port: e.target.value === '' ? undefined : parseInt(e.target.value) })}
@@ -105,6 +108,7 @@ export default function PostgreSQLConfig({ config, onChange }: BaseConfigProps) 
           <Box>
             <Text fontSize="sm" fontWeight="700" mb={2}>Database</Text>
             <Input
+              aria-label="postgresql database"
               value={config.database || ''}
               onChange={(e) => onChange({ ...config, database: e.target.value })}
               placeholder="my_database"
@@ -117,6 +121,7 @@ export default function PostgreSQLConfig({ config, onChange }: BaseConfigProps) 
             <Box>
               <Text fontSize="sm" fontWeight="700" mb={2}>Username</Text>
               <Input
+                aria-label="postgresql username"
                 value={config.username || ''}
                 onChange={(e) => onChange({ ...config, username: e.target.value })}
                 placeholder="postgres"
@@ -127,6 +132,7 @@ export default function PostgreSQLConfig({ config, onChange }: BaseConfigProps) 
             <Box>
               <Text fontSize="sm" fontWeight="700" mb={2}>Password</Text>
               <Input
+                aria-label="postgresql password"
                 type="password"
                 value={config.password || ''}
                 onChange={(e) => onChange({ ...config, password: e.target.value })}

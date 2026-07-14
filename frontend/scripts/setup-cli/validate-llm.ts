@@ -2,7 +2,7 @@
 // one-token call — the same probe behind POST /api/llm/test.
 //
 //   echo '{"provider":{"name":"openai","provider":"openai","apiKey":"sk-…"},"model":"gpt-5.4"}' \
-//     | docker run --rm -i <image> npx tsx --conditions react-server scripts/setup-cli/validate-llm.ts
+//     | docker run --rm -i <image> node --import tsx --import ./scripts/setup-cli/node-preload.mjs scripts/setup-cli/validate-llm.ts
 //
 // stdin: { provider: LlmProviderEntry, model?: string, options?: object }
 // stdout: LlmTestResult JSON ({ ok, error?, latencyMs?, model? })
