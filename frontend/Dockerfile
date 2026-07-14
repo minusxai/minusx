@@ -75,9 +75,12 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy database scripts and lib for initialization
+# Copy database scripts and lib for initialization. orchestrator/ is needed by
+# the setup-cli entries (scripts/setup-cli/*, run via `docker run` by setup.sh),
+# which import the LLM boundary (@/orchestrator/llm) through lib/llm.
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/orchestrator ./orchestrator
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 # Install tsx + re-apply pi-ai patches. The npm install restores native deps
