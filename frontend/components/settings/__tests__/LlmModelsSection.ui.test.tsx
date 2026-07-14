@@ -116,6 +116,49 @@ describe('LlmModelsSection', () => {
     });
   });
 
+  it('model options live behind a gear button; reasoning defaults to low and is stored explicitly', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k1' }] }),
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('Add Analyst model'));
+    // No inline reasoning dropdown — an options gear instead.
+    expect(screen.queryByLabelText('Analyst primary reasoning')).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Analyst primary options'));
+    // 'low' is pre-selected (the default) — no ambiguous 'default' option exists.
+    expect(await screen.findByLabelText('Reasoning effort low selected')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Reasoning effort default/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Set reasoning effort high'));
+    await user.click(screen.getByLabelText('Close model options'));
+
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.assignments.analyst.chain[0].options.reasoning).toBe('high');
+    });
+  });
+
+  it('a new chain step stores reasoning low explicitly (what you see is what is saved)', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k1' }] }),
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('Add Analyst model'));
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.assignments.analyst.chain[0].options.reasoning).toBe('low');
+    });
+  });
+
   it('builds an assignment chain with fallbacks', async () => {
     const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
     renderWithProviders(<LlmModelsSection />, {

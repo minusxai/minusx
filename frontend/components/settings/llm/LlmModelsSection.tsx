@@ -21,8 +21,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, Box, Button, Flex, HStack, Input, Text, VStack } from '@chakra-ui/react';
-import { LuCheck, LuCirclePlus, LuPlug, LuTrash2, LuX } from 'react-icons/lu';
+import { Badge, Box, Button, Dialog, Flex, HStack, Input, Text, VStack } from '@chakra-ui/react';
+import { LuCheck, LuCirclePlus, LuPlug, LuSettings2, LuTrash2, LuX } from 'react-icons/lu';
 import SimpleSelect from '@/components/evals/SimpleSelect';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { toaster } from '@/components/ui/toaster';
@@ -46,14 +46,10 @@ const PROVIDER_LABELS: Record<string, string> = {
   google: 'Google',
 };
 
-const REASONING_OPTIONS = [
-  { value: '', label: 'default' },
-  { value: 'off', label: 'off' },
-  { value: 'minimal', label: 'minimal' },
-  { value: 'low', label: 'low' },
-  { value: 'medium', label: 'medium' },
-  { value: 'high', label: 'high' },
-];
+// No ambiguous 'default' entry — the default level is LOW and shows as the
+// pre-selected option, so what's selected is always what runs.
+const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'] as const;
+const DEFAULT_REASONING = 'low';
 
 const USE_CASE_TITLES: Record<LlmUseCase, { title: string; description: string }> = {
   analyst: { title: 'Analyst', description: 'The main chat/analysis agent (Explore, Question, Dashboard, Slack, reports).' },
@@ -437,6 +433,9 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
     onChange(next);
   };
 
+  // Which step's options modal is open (null = none).
+  const [optionsFor, setOptionsFor] = useState<number | null>(null);
+
   return (
     <Box borderWidth="1px" borderColor="border.muted" borderRadius="md" p={4} aria-label={`Model assignment ${meta.title}`}>
       <Text fontSize="sm" fontWeight="medium" fontFamily="mono">{meta.title}</Text>
@@ -447,7 +446,7 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
           const slug = entry?.provider ?? '';
           const registryModels = slug ? modelsFor(slug) : [];
           const stepLabel = `${meta.title} ${index === 0 ? 'primary' : `fallback ${index}`}`;
-          const reasoning = (step.options?.['reasoning'] as string | undefined) ?? '';
+          const reasoning = (step.options?.['reasoning'] as string | undefined) ?? DEFAULT_REASONING;
           return (
             <Flex key={index} gap={3} wrap="wrap" align="flex-end">
               <Badge size="xs" variant="surface" minW="72px" justifyContent="center" mb={2}>{index === 0 ? 'primary' : `fallback ${index}`}</Badge>
@@ -486,26 +485,27 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
                 </Box>
               )}
               {slug !== MINUSX_PROVIDER && (
-                <Box minW="130px">
-                  <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Reasoning effort</Text>
-                  <SimpleSelect
-                    value={reasoning}
-                    onChange={(value) => setStep(index, { options: value ? { ...step.options, reasoning: value } : (() => { const { reasoning: _r, ...rest } = step.options ?? {}; return Object.keys(rest).length ? rest : undefined; })() })}
-                    options={REASONING_OPTIONS}
-                    placeholder="reasoning"
-                    ariaLabel={`${stepLabel} reasoning`}
-                  />
-                </Box>
+                <Button size="xs" variant="ghost" mb={1} onClick={() => setOptionsFor(index)} aria-label={`${stepLabel} options`} title="Model options">
+                  <LuSettings2 />
+                </Button>
               )}
               <Button size="xs" variant="ghost" colorPalette="red" mb={1} onClick={() => onChange(chain.filter((_, i) => i !== index))} aria-label={`Remove ${stepLabel}`}>
                 <LuTrash2 />
               </Button>
+              {optionsFor === index && (
+                <StepOptionsModal
+                  stepLabel={stepLabel}
+                  reasoning={reasoning}
+                  onReasoningChange={(value) => setStep(index, { options: { ...step.options, reasoning: value } })}
+                  onClose={() => setOptionsFor(null)}
+                />
+              )}
             </Flex>
           );
         })}
         <Button
           size="xs" variant="outline" fontFamily="mono" alignSelf="flex-start"
-          onClick={() => onChange([...chain, { providerName: providerOptions[0]?.value ?? '' }])}
+          onClick={() => onChange([...chain, { providerName: providerOptions[0]?.value ?? '', options: { reasoning: DEFAULT_REASONING } }])}
           disabled={providerOptions.length === 0}
           aria-label={`Add ${meta.title} ${chain.length === 0 ? 'model' : 'fallback'}`}
         >
@@ -513,5 +513,59 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
         </Button>
       </VStack>
     </Box>
+  );
+}
+
+/**
+ * Per-step model options. Only reasoning effort for now; future per-model
+ * options (temperature, max tokens, …) get rows here instead of new columns
+ * in the chain row.
+ */
+function StepOptionsModal({ stepLabel, reasoning, onReasoningChange, onClose }: {
+  stepLabel: string;
+  reasoning: string;
+  onReasoningChange: (value: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog.Root open onOpenChange={(d) => { if (!d.open) onClose(); }}>
+      <Dialog.Backdrop />
+      <Dialog.Positioner>
+        <Dialog.Content maxW="420px" aria-label={`Model options for ${stepLabel}`}>
+          <Dialog.Header>
+            <Dialog.Title fontSize="md" fontFamily="mono">Model options — {stepLabel}</Dialog.Title>
+          </Dialog.Header>
+          <Dialog.Body>
+            <Text fontSize="xs" fontWeight="medium" fontFamily="mono" mb={1}>Reasoning effort</Text>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={2}>
+              How much the model thinks before answering. Higher = better on hard questions, slower and pricier.
+            </Text>
+            <HStack gap={1} wrap="wrap">
+              {REASONING_LEVELS.map(level => {
+                const selected = reasoning === level;
+                return (
+                  <Button
+                    key={level}
+                    size="xs" fontFamily="mono"
+                    variant={selected ? 'solid' : 'outline'}
+                    bg={selected ? 'accent.teal' : undefined}
+                    color={selected ? 'white' : undefined}
+                    onClick={() => onReasoningChange(level)}
+                    aria-label={selected ? `Reasoning effort ${level} selected` : `Set reasoning effort ${level}`}
+                  >
+                    {level}
+                  </Button>
+                );
+              })}
+            </HStack>
+          </Dialog.Body>
+          <Dialog.Footer>
+            <Button size="sm" fontFamily="mono" onClick={onClose} aria-label="Close model options">
+              Done
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog.Positioner>
+    </Dialog.Root>
   );
 }
