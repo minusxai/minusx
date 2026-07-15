@@ -198,6 +198,7 @@ export type ChartAnnotation = Static<typeof ChartAnnotation>;
 
 export const VizSettings = Type.Object({
   type: StringEnum(VIZ_TYPES, 'type of the visualization (default is table)'),
+  typeLocked: Nullable(Type.Boolean({ description: 'when true, the chart type was explicitly chosen (by the user, or on their request) and semantic-explorer auto-inference must not change it. Absent/false lets the explorer auto-pick the type from the query shape. Set to true when setting a specific type because the user asked for it.' })),
   xCols: Nullable(Type.Array(Type.String(), { description: 'list of column names in the x axis (for non-pivot chart types)' })),
   yCols: Nullable(Type.Array(Type.String(), { description: 'list of column names in the y axis (for non-pivot chart types). When dualAxis is enabled in axisConfig, these are the left-axis columns.' })),
   yRightCols: Nullable(Type.Array(Type.String(), { description: 'list of column names for the right Y axis (only used when axisConfig.dualAxis is true)' })),

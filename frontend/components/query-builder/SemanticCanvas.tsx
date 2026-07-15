@@ -26,7 +26,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, VStack, HStack, Text, Button, Input, Icon } from '@chakra-ui/react';
 import { LuPlay, LuSigma, LuGroup, LuClock, LuSearch, LuTriangleAlert, LuX, LuTable, LuCheck } from 'react-icons/lu';
-import { compileSemanticQuery, validateSemanticQuery, semanticAlias } from '@/lib/semantic/compile';
+import { compileSemanticQuery, validateSemanticQuery } from '@/lib/semantic/compile';
+import { autoVizForSpec } from '@/lib/semantic/infer-viz';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { searchFields, type SemanticFieldHit } from '@/lib/semantic/models-client';
 import type { ModelStub } from '@/lib/semantic/derive';
@@ -72,17 +73,7 @@ const specForStub = (stub: ModelStub): SemanticQuerySpec => ({
   dimensions: [],
 });
 
-const vizOf = (spec: SemanticQuerySpec): SemanticVizAssignment => {
-  const xCols = [
-    ...(spec.timeGrain ? [spec.timeGrain.toLowerCase()] : []),
-    ...spec.dimensions.map(semanticAlias),
-  ];
-  return {
-    type: spec.timeGrain ? 'line' : xCols.length > 0 ? 'bar' : 'table',
-    xCols,
-    yCols: spec.measures.map(semanticAlias),
-  };
-};
+const vizOf = (spec: SemanticQuerySpec): SemanticVizAssignment => autoVizForSpec(spec);
 
 const matches = (q: string, name: string) => {
   const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
