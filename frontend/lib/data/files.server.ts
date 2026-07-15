@@ -40,6 +40,8 @@ import { getLoader, LoaderOptions } from './loaders';
 import { listAllConnections } from './connections.server';
 import { extractConnectionSecrets, mergeExistingSecretRefs } from '@/lib/secrets/connection-secrets.server';
 import { extractConfigSecrets, modeFromPhysicalPath } from '@/lib/secrets/config-secrets.server';
+import { assertTableNamesAvailable, DatasetNameConflictError } from '@/lib/data/datasets.server';
+import type { DatasetContent } from '@/lib/types/datasets';
 import { restoreRedactedConfigSecrets } from '@/lib/secrets/config-secret-specs';
 import { computeSchemaFromWhitelist } from './loaders/context-loader-utils';
 import { makeDefaultContextContent, resolveVersionWhitelist } from '@/lib/context/context-utils';
@@ -414,6 +416,17 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }
     }
 
+    // The dataset gate: global schema.table uniqueness per mode. Every dataset
+    // create lands here — the upload route, the agent, the JSON editor alike.
+    if (type === 'dataset') {
+      try {
+        await assertTableNamesAvailable(((content as unknown as DatasetContent).files ?? []), user);
+      } catch (err) {
+        if (err instanceof DatasetNameConflictError) throw new UserFacingError(err.message);
+        throw err;
+      }
+    }
+
     // Handle createPath option: create parent directories as folder types
     if (options?.createPath) {
       const pathSegments = finalPath.split('/').filter(Boolean);
@@ -473,8 +486,11 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // Structural/system types are immediately visible on create. Everything else (user-created
-    // content) starts as draft until the user explicitly saves.
-    const LIVE_ON_CREATE_TYPES = new Set(['folder', 'config', 'styles', 'context', 'context_run', 'alert_run', 'report_run', 'session']);
+    // content) starts as draft until the user explicitly saves. Datasets are live on create:
+    // they're born from an upload whose content is already fully materialized, and the feature's
+    // contract is upload → query immediately (a draft dataset would also dodge the global
+    // name-uniqueness listing, letting two drafts claim one table name).
+    const LIVE_ON_CREATE_TYPES = new Set(['folder', 'config', 'styles', 'context', 'context_run', 'alert_run', 'report_run', 'session', 'dataset']);
     const startAsDraft = !LIVE_ON_CREATE_TYPES.has(type);
 
     // Create file in database (returns numeric ID)
@@ -626,6 +642,17 @@ class FilesDataLayerServer implements IFilesDataLayer {
         contentToSave = await stampAndValidateViews(contentToSave as ContextContent, path, user) as BaseFileContent;
       } catch (err) {
         if (err instanceof ViewSaveError) throw new UserFacingError(err.message);
+        throw err;
+      }
+    }
+
+    // The dataset gate on EDIT: a rename cannot steal a name another dataset
+    // holds (excludeFileId keeps a dataset from colliding with itself).
+    if (existingFile.type === 'dataset') {
+      try {
+        await assertTableNamesAvailable(((contentToSave as unknown as DatasetContent).files ?? []), user, { excludeFileId: id });
+      } catch (err) {
+        if (err instanceof DatasetNameConflictError) throw new UserFacingError(err.message);
         throw err;
       }
     }

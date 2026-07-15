@@ -11,28 +11,124 @@
     {
       "type": "fileTypeAccess",
       "role": "editor",
-      "allowedTypes": ["question", "dashboard", "story", "notebook", "folder", "context", "connection", "conversation", "chat", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"],
-      "createTypes": ["question", "dashboard", "story", "notebook", "folder", "alert", "conversation", "chat", "session", "report", "transformation", "alert_run", "report_run", "transformation_run"],
-      "viewTypes": ["question", "dashboard", "story", "notebook", "folder", "context", "conversation", "chat", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"]
+      "allowedTypes": [
+        "question",
+        "dashboard",
+        "story",
+        "notebook",
+        "folder",
+        "context",
+        "connection",
+        "conversation",
+        "chat",
+        "session",
+        "report",
+        "alert",
+        "alert_run",
+        "report_run",
+        "transformation",
+        "transformation_run",
+        "dataset"
+      ],
+      "createTypes": [
+        "question",
+        "dashboard",
+        "story",
+        "notebook",
+        "folder",
+        "alert",
+        "conversation",
+        "chat",
+        "session",
+        "report",
+        "transformation",
+        "alert_run",
+        "report_run",
+        "transformation_run",
+        "dataset"
+      ],
+      "viewTypes": [
+        "question",
+        "dashboard",
+        "story",
+        "notebook",
+        "folder",
+        "context",
+        "conversation",
+        "chat",
+        "session",
+        "report",
+        "alert",
+        "alert_run",
+        "report_run",
+        "transformation",
+        "transformation_run",
+        "dataset"
+      ]
     },
     {
       "type": "fileTypeAccess",
       "role": "viewer",
-      "allowedTypes": ["question", "dashboard", "story", "notebook", "folder", "context", "connection", "conversation", "chat", "session", "alert", "alert_run", "report_run", "report", "transformation", "transformation_run"],
-      "createTypes": ["conversation", "chat", "session"],
-      "viewTypes": ["question", "dashboard", "story", "notebook", "folder", "conversation", "chat", "session", "report", "alert", "alert_run", "report_run"]
+      "allowedTypes": [
+        "question",
+        "dashboard",
+        "story",
+        "notebook",
+        "folder",
+        "context",
+        "connection",
+        "conversation",
+        "chat",
+        "session",
+        "alert",
+        "alert_run",
+        "report_run",
+        "report",
+        "transformation",
+        "transformation_run",
+        "dataset"
+      ],
+      "createTypes": [
+        "conversation",
+        "chat",
+        "session"
+      ],
+      "viewTypes": [
+        "question",
+        "dashboard",
+        "story",
+        "notebook",
+        "folder",
+        "conversation",
+        "chat",
+        "session",
+        "report",
+        "alert",
+        "alert_run",
+        "report_run",
+        "dataset"
+      ]
     },
     {
       "type": "createLocationRestrictions",
       "role": "*",
       "restrictions": [
         {
-          "fileTypes": ["context", "question", "dashboard", "story", "notebook"],
+          "fileTypes": [
+            "context",
+            "question",
+            "dashboard",
+            "story",
+            "notebook",
+            "dataset"
+          ],
           "requiredPathPrefix": "",
           "description": "Analytics files must be in mode root (resolved at runtime based on user's mode)"
         },
         {
-          "fileTypes": ["connection"],
+          "fileTypes": [
+            "connection"
+          ],
           "requiredPathPrefix": "/database",
           "description": "Database connections must be in database folder (resolved at runtime based on user's mode)"
         }
@@ -41,13 +137,20 @@
     {
       "type": "creationBlocklist",
       "role": "*",
-      "blockedTypes": ["config", "styles"],
+      "blockedTypes": [
+        "config",
+        "styles"
+      ],
       "reason": "These file types are critical system files and cannot be manually created"
     },
     {
       "type": "deletionBlocklist",
       "role": "*",
-      "blockedTypes": ["config", "styles", "context"],
+      "blockedTypes": [
+        "config",
+        "styles",
+        "context"
+      ],
       "reason": "These file types are critical system files and cannot be deleted or removed"
     }
   ]
