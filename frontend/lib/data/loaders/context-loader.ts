@@ -126,7 +126,11 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
   // contexts inherit from, so it must never lose a table (boundFullSchema = names-only, no table cap).
   // parentSchema is only the editor's available-to-whitelist menu, so it may also cap the table list.
   const fullSchema = boundFullSchema(withDatasets) as ContextContent['fullSchema'];
-  const parentSchema = boundSchema(computed.parentSchema) as ContextContent['parentSchema'];
+  // parentSchema is the editor's "available to whitelist" menu — offer the
+  // UN-NARROWED files entry there ('*' = no whitelist filtering), so admins can
+  // see and narrow dataset tables even when nothing else is offered.
+  const parentWithDatasets = injectDatasetsAsConnection(computed.parentSchema, datasets, '*');
+  const parentSchema = boundSchema(parentWithDatasets) as ContextContent['parentSchema'];
   const { fullDocs, fullMetrics, fullAnnotations, fullSkills } = computed;
 
   // Declared relationships inherit like metrics: fullRelationships is

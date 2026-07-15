@@ -24,6 +24,7 @@ import { UserFacingError } from '@/lib/errors';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { Mode } from '@/lib/mode/mode-types';
 import { getNodeConnector } from '@/lib/connections';
+import { FILES_CONNECTION } from '@/lib/types/datasets';
 
 /**
  * Database connections defined in the org CONFIG (`databases.connections`) —
@@ -83,7 +84,18 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
         updated_at: doc?.updated_at ?? new Date(0).toISOString(),
       };
     });
-    const formatted = [...configFormatted, ...fileFormatted];
+    let formatted = [...configFormatted, ...fileFormatted];
+
+    // The virtual `files` connection (datasets): offered whenever the mode has
+    // any dataset doc, so the editor's connection picker can select it. Its
+    // table set is folder-resolved at query time — no doc, no schema here.
+    const datasets = await DocumentDB.listAll('dataset', [modePath], undefined, false);
+    if (datasets.length > 0) {
+      formatted = [
+        { id: -1, name: FILES_CONNECTION, type: 'csv', config: {}, created_at: new Date(0).toISOString(), updated_at: new Date(0).toISOString() },
+        ...formatted,
+      ];
+    }
 
     if (!includeSchemas) {
       return { connections: formatted };
