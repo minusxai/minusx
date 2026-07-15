@@ -11,6 +11,7 @@ import type { VizEnvelope, ColumnFormatConfig, ConditionalFormatRule, PivotConfi
 import type { VizColumnKind } from './types';
 import { getTemplate, VIZ_TEMPLATES } from './viz-templates';
 import { immutableSet } from '@/lib/utils/immutable-collections';
+import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
 
 export const EDITABLE_CHANNELS = ['x', 'y', 'color', 'theta'] as const;
 export type EditableChannel = (typeof EDITABLE_CHANNELS)[number];
@@ -1003,6 +1004,129 @@ export function removeYField(envelope: VizEnvelope, name: string): VizEnvelope {
     delete encoding.y;
   }
   if (encoding.color?.field === fold.as[0]) delete encoding.color;
+  spec.encoding = encoding;
+  return next;
+}
+
+// ── Series colors (the V1 Style-popover colors, spec-native) ────────────────────────
+//
+// Overrides are keyed by SERIES NAME and written into the color channel's scale
+// (domain + range) — never an index-keyed side-channel — so they survive data
+// reordering and detach, agents see them in the spec, and defaults stay stable
+// (the full domain is pinned alongside the range).
+
+export interface SeriesColorEntry {
+  key: string;
+  /** Effective color: the override, or the default palette color at the domain position. */
+  color: string;
+  overridden: boolean;
+}
+
+/** The chart's series keys in VEGA's default domain order (ascending strings). */
+function seriesKeys(spec: Record<string, unknown>, rows: Array<Record<string, unknown>>): string[] {
+  const color = channelDef(spec, 'color');
+  const y = channelDef(spec, 'y');
+  if (color && typeof color.field === 'string') {
+    // Fold key → the folded measure columns are the series.
+    const fold = typeof y?.field === 'string' ? findYFold(spec) : null;
+    if (fold && fold.as[0] === color.field) return [...fold.fields].sort();
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const v = row[color.field];
+      if (v != null) seen.add(String(v));
+    }
+    return [...seen].sort();
+  }
+  if (color && typeof color.datum === 'string') return [color.datum];
+  // Single measure: the injected render-time legend names the series after the measure.
+  if (y && typeof y.field === 'string') return [typeof y.title === 'string' ? y.title : y.field];
+  return [];
+}
+
+/**
+ * Overrides currently pinned on the color scale (domain[i] → range[i]). Writing pins the
+ * FULL domain+range (order-stable), so entries that still equal the default palette color
+ * at their position are NOT user overrides — they read back as defaults.
+ */
+function seriesColorOverrides(spec: Record<string, unknown>): Map<string, string> {
+  const scale = asPlainRecord(channelDef(spec, 'color')?.scale);
+  const domain = scale?.domain;
+  const range = scale?.range;
+  const out = new Map<string, string>();
+  if (Array.isArray(domain) && Array.isArray(range)) {
+    domain.forEach((k, i) => {
+      const c = range[i];
+      if (typeof c === 'string' && c !== COLOR_PALETTE[i % COLOR_PALETTE.length]) out.set(String(k), c);
+    });
+  } else if (Array.isArray(range) && range.length === 1 && typeof range[0] === 'string') {
+    // Single-series datum legend: a one-entry range with no domain.
+    const key = seriesKeys(spec, [])[0];
+    if (key) out.set(key, range[0]);
+  }
+  return out;
+}
+
+const asPlainRecord = (v: unknown): Record<string, unknown> | null =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+
+/** The series list with effective colors, for the Settings UI. */
+export function getSeriesColors(envelope: VizEnvelope, rows: Array<Record<string, unknown>>): SeriesColorEntry[] {
+  const source = sourceOf(envelope);
+  if (source.kind !== 'vega-lite') return [];
+  const spec = (source as { spec: Record<string, unknown> }).spec;
+  if (!isUnitVegaLiteSpec(spec)) return [];
+  const overrides = seriesColorOverrides(spec);
+  return seriesKeys(spec, rows).map((key, i) => ({
+    key,
+    color: overrides.get(key) ?? COLOR_PALETTE[i % COLOR_PALETTE.length],
+    overridden: overrides.has(key),
+  }));
+}
+
+/** Set (hex) or clear (null) one series' color. Surgical; no-op on non-unit/non-VL sources. */
+export function setSeriesColor(
+  envelope: VizEnvelope,
+  rows: Array<Record<string, unknown>>,
+  seriesKey: string,
+  color: string | null,
+): VizEnvelope {
+  const source = sourceOf(envelope);
+  if (source.kind !== 'vega-lite') return envelope;
+  if (!isUnitVegaLiteSpec((source as { spec: Record<string, unknown> }).spec)) return envelope;
+  const { next, spec } = cloneEnvelope(envelope);
+  const encoding = (spec.encoding ?? {}) as Record<string, Record<string, unknown> | undefined>;
+  const keys = seriesKeys(spec, rows);
+  const overrides = seriesColorOverrides(spec);
+  if (color == null) overrides.delete(seriesKey);
+  else overrides.set(seriesKey, color);
+
+  const colorDef = encoding.color;
+  const fieldBased = colorDef != null && typeof colorDef.field === 'string';
+
+  if (!fieldBased) {
+    // Single measure: persist a datum legend + one-entry range (what the render-time
+    // injection produces, plus the pinned color); clearing restores the bare spec.
+    if (overrides.size === 0) {
+      delete encoding.color;
+    } else {
+      encoding.color = { datum: keys[0], scale: { range: [overrides.get(keys[0])!] } };
+    }
+    spec.encoding = encoding;
+    return next;
+  }
+
+  const def = { ...colorDef } as Record<string, unknown>;
+  const scale = { ...(asPlainRecord(def.scale) ?? {}) };
+  if (overrides.size === 0) {
+    delete scale.domain;
+    delete scale.range;
+  } else {
+    scale.domain = keys;
+    scale.range = keys.map((k, i) => overrides.get(k) ?? COLOR_PALETTE[i % COLOR_PALETTE.length]);
+  }
+  if (Object.keys(scale).length > 0) def.scale = scale;
+  else delete def.scale;
+  encoding.color = def;
   spec.encoding = encoding;
   return next;
 }

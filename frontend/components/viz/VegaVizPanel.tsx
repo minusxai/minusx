@@ -14,6 +14,7 @@ import type { VizSettings } from '@/lib/types';
 import {
   isEnvelopeEditable, getEnvelopeVizType, setEnvelopeVizType, V2_SUPPORTED_VIZ_TYPES,
   getStacked, setStacked, getYLogScale, setYLogScale, getMaxBins, setMaxBins,
+  getSeriesColors, setSeriesColor,
   getTableConditionalFormats, setTableConditionalFormats, getVizCss, setVizCss,
   getPivotConfig, setPivotConfig, getVizColumnFormats, mergeVizColumnFormat,
   getRecipeParams, setRecipeParam,
@@ -437,34 +438,36 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
             This chart is generated from the {String((envelope.source as unknown as Record<string, unknown>).recipe)} recipe —
             bind columns in Fields, or ask the agent for deeper customization.
           </Text>
-        ) : isUnit && spec && !['heatmap', 'pie'].includes(vizType ?? '') ? (
-          // Stacked / log-y are cartesian concepts — hidden for pie (theta) and
-          // heatmap (colour), where they'd silently do nothing sensible.
+        ) : isUnit && spec ? (
           <Box display="flex" flexDirection="column" gap={3} py={1}>
-            <HStack justify="space-between">
-              <Text fontSize="xs" color="fg.muted">Stacked</Text>
-              <Switch.Root
-                aria-label="Toggle stacked"
-                size="sm"
-                checked={getStacked(spec)}
-                onCheckedChange={(e) => onVizChange(setStacked(envelope, e.checked))}
-              >
-                <Switch.HiddenInput />
-                <Switch.Control><Switch.Thumb /></Switch.Control>
-              </Switch.Root>
-            </HStack>
-            <HStack justify="space-between">
-              <Text fontSize="xs" color="fg.muted">Log scale (Y)</Text>
-              <Switch.Root
-                aria-label="Toggle log scale"
-                size="sm"
-                checked={getYLogScale(spec)}
-                onCheckedChange={(e) => onVizChange(setYLogScale(envelope, e.checked))}
-              >
-                <Switch.HiddenInput />
-                <Switch.Control><Switch.Thumb /></Switch.Control>
-              </Switch.Root>
-            </HStack>
+            {/* Stacked / log-y are cartesian concepts — hidden for pie (theta) and
+                heatmap (colour), where they'd silently do nothing sensible. */}
+            {!['heatmap', 'pie'].includes(vizType ?? '') && (<>
+              <HStack justify="space-between">
+                <Text fontSize="xs" color="fg.muted">Stacked</Text>
+                <Switch.Root
+                  aria-label="Toggle stacked"
+                  size="sm"
+                  checked={getStacked(spec)}
+                  onCheckedChange={(e) => onVizChange(setStacked(envelope, e.checked))}
+                >
+                  <Switch.HiddenInput />
+                  <Switch.Control><Switch.Thumb /></Switch.Control>
+                </Switch.Root>
+              </HStack>
+              <HStack justify="space-between">
+                <Text fontSize="xs" color="fg.muted">Log scale (Y)</Text>
+                <Switch.Root
+                  aria-label="Toggle log scale"
+                  size="sm"
+                  checked={getYLogScale(spec)}
+                  onCheckedChange={(e) => onVizChange(setYLogScale(envelope, e.checked))}
+                >
+                  <Switch.HiddenInput />
+                  <Switch.Control><Switch.Thumb /></Switch.Control>
+                </Switch.Root>
+              </HStack>
+            </>)}
             {vizType === 'histogram' && (
               <HStack justify="space-between">
                 <Text fontSize="xs" color="fg.muted">Max bins</Text>
@@ -487,14 +490,60 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                 />
               </HStack>
             )}
+            {/* Series colors (V1 Style-popover parity): per-series overrides, keyed by
+                series NAME on the color scale. Heatmap's quantitative ramp is excluded. */}
+            {vizType !== 'heatmap' && (() => {
+              const seriesColors = getSeriesColors(envelope, rows ?? []);
+              if (seriesColors.length === 0) return null;
+              const shown = seriesColors.slice(0, 12);
+              return (
+                <Box>
+                  <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+                    {vizType === 'pie' ? 'Slice colors' : 'Series colors'}
+                  </Text>
+                  <Box display="flex" flexDirection="column" gap={1.5}>
+                    {shown.map(s => (
+                      <HStack key={s.key} justify="space-between" gap={2}>
+                        <Text fontSize="xs" color="fg.muted" flex="1" minW={0} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                          {s.key}
+                        </Text>
+                        {s.overridden && (
+                          <Box
+                            as="button"
+                            aria-label={`Reset color for ${s.key}`}
+                            fontSize="10px"
+                            color="fg.subtle"
+                            _hover={{ color: 'fg.default' }}
+                            onClick={() => onVizChange(setSeriesColor(envelope, rows ?? [], s.key, null))}
+                          >
+                            reset
+                          </Box>
+                        )}
+                        <input
+                          key={`${s.key}:${s.color}`}
+                          aria-label={`Color for ${s.key}`}
+                          type="color"
+                          defaultValue={s.color}
+                          // Commit on close/blur — a live per-tick commit would rebuild the
+                          // chart dozens of times while dragging inside the native picker.
+                          onBlur={(e) => {
+                            if (e.target.value !== s.color) onVizChange(setSeriesColor(envelope, rows ?? [], s.key, e.target.value));
+                          }}
+                          style={{ width: 26, height: 18, padding: 0, border: '1px solid var(--chakra-colors-border-muted)', borderRadius: 4, background: 'transparent', cursor: 'pointer' }}
+                        />
+                      </HStack>
+                    ))}
+                    {seriesColors.length > shown.length && (
+                      <Text fontSize="10px" color="fg.subtle">+{seriesColors.length - shown.length} more series — ask the agent to color those.</Text>
+                    )}
+                  </Box>
+                </Box>
+              );
+            })()}
             <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
-              Everything else (formats, colors, layers, interactions) — ask the agent; it edits the spec directly.
+              Everything else (formats, layers, interactions) — ask the agent; it edits the spec directly.
             </Text>
           </Box>
-        ) : isUnit && spec ? (
-          <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
-            Nothing to toggle for this chart type — formats, colors, and interactions are edited via chat.
-          </Text>
         ) : (
           <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
             This spec uses layers/facets — settings toggles only apply to simple charts. Edit via chat.
