@@ -90,18 +90,27 @@ export function checkViewAvailability(
   view: ViewDef,
   offered: DatabaseWithSchema[],
   visible: ViewDef[],
+  opts: { strictUnknownSchema?: boolean } = {},
 ): string | null {
   const reads = view.reads;
   if (!reads) return null; // never computed (legacy) — nothing to check against
 
   const allowed = offeredTables(offered, view.connection);
 
-  // If we don't KNOW what the connection offers (schema never introspected, or
-  // introspection is failing right now), we cannot judge — and must not pretend
-  // to. Disabling every view on a transient introspection failure would be far
-  // worse than the theoretical exposure: this is an availability gap, not a
-  // policy decision. The save-time gate still runs whenever a schema IS known.
-  if (allowed.size === 0) return checkViewDeps(view, visible);
+  // We don't KNOW what the connection offers (schema never introspected, or
+  // introspection failing right now). LOAD and SAVE want opposite behaviour:
+  //  · LOAD (default) fails OPEN — a transient introspection blip must not
+  //    disable every view in the workspace; the boundary re-checks on the next
+  //    load once the schema is known.
+  //  · SAVE fails CLOSED — saving is interactive and retryable, so refusing a
+  //    table read we cannot verify ("try again") is safe, and it closes the
+  //    window where a forbidden read would persist and execute.
+  if (allowed.size === 0) {
+    if (opts.strictUnknownSchema && reads.tables.length > 0) {
+      return `could not be verified against the parent knowledge base right now — try saving again in a moment`;
+    }
+    return checkViewDeps(view, visible);
+  }
 
   const missing = reads.tables.filter((t) => !allowed.has(`${t.schema ?? ''}.${t.table}`.toLowerCase()));
   if (missing.length > 0) {
@@ -144,4 +153,39 @@ export function findViewDependents(name: string, all: ViewDef[]): string[] {
     }
   }
   return [...dependents];
+}
+
+/**
+ * Detect a cycle in the view dependency graph (the `reads.views` edges). Returns
+ * the offending path, or null. Cheap graph work at save time — no parsing — and
+ * catches SELF-references too (`a → a`), which findViewDependents deliberately
+ * skips. Cycles otherwise only surface at query time (resolveViewsInSql), which
+ * is inconsistent with the save-time guard on deleting a depended-on view.
+ */
+export function findViewCycle(views: ViewDef[]): string[] | null {
+  const byName = new Map(views.map((v) => [v.name, v]));
+  const state = new Map<string, 'visiting' | 'done'>();
+  const path: string[] = [];
+
+  const dfs = (name: string): string[] | null => {
+    if (state.get(name) === 'done') return null;
+    if (state.get(name) === 'visiting') return [...path, name]; // closed the loop
+    const v = byName.get(name);
+    if (!v) return null; // a missing dependency is an availability problem, not a cycle
+    state.set(name, 'visiting');
+    path.push(name);
+    for (const dep of v.reads?.views ?? []) {
+      const cycle = dfs(dep);
+      if (cycle) return cycle;
+    }
+    path.pop();
+    state.set(name, 'done');
+    return null;
+  };
+
+  for (const v of views) {
+    const cycle = dfs(v.name);
+    if (cycle) return cycle;
+  }
+  return null;
 }

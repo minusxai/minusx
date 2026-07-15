@@ -16,8 +16,14 @@ import type { ConnectionContent, ContextContent, ContextVersion, QuestionContent
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 const { mockQuery } = vi.hoisted(() => ({ mockQuery: vi.fn() }));
+const SCHEMA = {
+  updated_at: new Date().toISOString(),
+  schemas: [{ schema: 'mxfood', tables: [
+    { table: 'orders', columns: [{ name: 'zone_name', type: 'VARCHAR' }, { name: 'total', type: 'DOUBLE' }] },
+  ]}],
+};
 vi.mock('@/lib/connections', () => ({
-  getNodeConnector: () => ({ query: mockQuery, getSchema: async () => [] }),
+  getNodeConnector: () => ({ query: mockQuery, getSchema: async () => SCHEMA.schemas }),
 }));
 vi.mock('@/lib/connections/statistics-engine', () => ({
   profileDatabase: vi.fn(async (_t: string, s: unknown) => ({ schema: s, queryCount: 0 })),
@@ -53,7 +59,7 @@ describe('prepareView', () => {
       rows: [],
     });
     await getModules().db.exec('DELETE FROM files', []);
-    const conn: ConnectionContent = { type: 'duckdb', config: { file_path: '../x.duckdb' } };
+    const conn: ConnectionContent = { type: 'duckdb', config: { file_path: '../x.duckdb' }, schema: SCHEMA };
     await mkPublished('warehouse', '/org/database/warehouse', 'connection', conn);
     // Root context owns zone_revenue; a child context exists too.
     await mkPublished('context', '/org/context', 'context',
@@ -130,7 +136,7 @@ describe('promoteQuestionToView', () => {
     mockQuery.mockReset();
     mockQuery.mockResolvedValue({ columns: ['zone_name', 'revenue'], types: ['VARCHAR', 'DOUBLE'], rows: [] });
     await getModules().db.exec('DELETE FROM files', []);
-    const conn: ConnectionContent = { type: 'duckdb', config: { file_path: '../x.duckdb' } };
+    const conn: ConnectionContent = { type: 'duckdb', config: { file_path: '../x.duckdb' }, schema: SCHEMA };
     await mkPublished('warehouse', '/org/database/warehouse', 'connection', conn);
     await mkPublished('context', '/org/context', 'context',
       { versions: [version([])], published: { all: 1 } } as ContextContent);

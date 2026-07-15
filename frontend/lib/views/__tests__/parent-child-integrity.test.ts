@@ -227,6 +227,20 @@ describe('parent → child view integrity (real save/load path)', () => {
     })).rejects.toThrow(/zone_revenue/);
   });
 
+  it('6b. a CYCLIC view definition fails the save (not just at query time)', async () => {
+    const sales = await loadContext(salesId);
+    await expect(saveContext(salesId, '/org/sales/context', {
+      ...sales,
+      versions: [{
+        ...sales.versions![0],
+        views: [
+          { name: 'a', connection: 'warehouse', sql: 'SELECT * FROM _views.b' },
+          { name: 'b', connection: 'warehouse', sql: 'SELECT * FROM _views.a' },
+        ],
+      }],
+    })).rejects.toThrow(/circular|cycle/i);
+  });
+
   it('7. a child INHERITS the parent\'s views, and may build on them', async () => {
     // Parent publishes a view over orders (which it offers).
     const org = await loadContext(orgId);

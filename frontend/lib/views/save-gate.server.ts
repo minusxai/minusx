@@ -19,7 +19,7 @@ import { computeSchemaFromWhitelist } from '@/lib/data/loaders/context-loader-ut
 import { resolveVersionWhitelist, getPublishedVersionForUser } from '@/lib/context/context-utils';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { connectionTypeToDialect } from '@/lib/types';
-import { computeViewReads, checkViewAvailability } from '@/lib/views/integrity';
+import { computeViewReads, checkViewAvailability, findViewCycle } from '@/lib/views/integrity';
 import { validateViews } from '@/lib/views/resolve';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ContextContent, DatabaseWithSchema, ViewDef } from '@/lib/types';
@@ -97,10 +97,19 @@ export async function stampAndValidateViews(
       }
     }));
 
-    // Boundary + integrity, against what the parent offers and the views that exist here.
+    // Cycles: a view reading itself (transitively) would fail at query time, so
+    // catch it at save — consistent with the delete-a-depended-on-view guard.
+    const cycle = findViewCycle([...inherited, ...stamped]);
+    if (cycle) {
+      problems.push(`Views form a cycle: ${cycle.join(' → ')}`);
+    }
+
+    // Boundary + integrity, against what the parent offers and the views that
+    // exist here. SAVE is strict: a table read we cannot verify (unknown parent
+    // schema) is refused, not waved through — the opposite of the load path.
     const visible = [...inherited, ...stamped];
     for (const v of stamped) {
-      const problem = checkViewAvailability(v, offered, visible);
+      const problem = checkViewAvailability(v, offered, visible, { strictUnknownSchema: true });
       if (problem) problems.push(`View "${v.name}": ${problem}`);
     }
     return { ...version, views: stamped };

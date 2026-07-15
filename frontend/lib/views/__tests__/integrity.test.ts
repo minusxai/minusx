@@ -14,7 +14,7 @@
  * (loudly) rather than silently escalating it.
  */
 import { describe, it, expect } from 'vitest';
-import { computeViewReads, checkViewAvailability, findViewDependents } from '../integrity';
+import { computeViewReads, checkViewAvailability, findViewDependents, findViewCycle } from '../integrity';
 import type { DatabaseWithSchema, ViewDef } from '@/lib/types';
 
 const view = (name: string, sql: string, extra: Partial<ViewDef> = {}): ViewDef =>
@@ -106,6 +106,53 @@ describe('checkViewAvailability — the whitelist chain is a real boundary', () 
     const derived = view('top_zones', 'SELECT * FROM _views.zone_revenue',
       { reads: { tables: [], views: ['zone_revenue'] } });
     expect(checkViewAvailability(derived, OFFERED, [])).toMatch(/zone_revenue/);
+  });
+});
+
+describe('unknown schema: fail OPEN on load, fail CLOSED on save', () => {
+  const readsPayroll = view('x', 'SELECT * FROM mxfood.payroll',
+    { reads: { tables: [{ schema: 'mxfood', table: 'payroll' }], views: [] } });
+
+  it('LOAD (default): unknown schema does not disable a view (transient blip must not nuke everything)', () => {
+    expect(checkViewAvailability(readsPayroll, [], [])).toBeNull();
+  });
+
+  it('SAVE (strict): unknown schema REFUSES a table read — saving is interactive and retryable', () => {
+    const problem = checkViewAvailability(readsPayroll, [], [], { strictUnknownSchema: true });
+    expect(problem).toMatch(/could not be verified|verify/i);
+  });
+
+  it('SAVE (strict): a VIEW-only read is still fine when schema is unknown (no table to verify)', () => {
+    const base = view('z', 'SELECT 1', { reads: { tables: [], views: [] } });
+    const derived = view('y', 'SELECT * FROM _views.z', { reads: { tables: [], views: ['z'] } });
+    expect(checkViewAvailability(derived, [], [base, derived], { strictUnknownSchema: true })).toBeNull();
+  });
+});
+
+describe('findViewCycle — cycles are caught at save, not just at query time', () => {
+  const withReads = (name: string, views: string[]): ViewDef =>
+    ({ name, connection: 'warehouse', sql: '', reads: { tables: [], views } });
+
+  it('detects a two-view cycle', () => {
+    const cycle = findViewCycle([withReads('a', ['b']), withReads('b', ['a'])]);
+    expect(cycle).toBeTruthy();
+    expect(cycle).toEqual(expect.arrayContaining(['a', 'b']));
+  });
+
+  it('detects a self-referencing cycle (which findViewDependents misses)', () => {
+    expect(findViewCycle([withReads('self', ['self'])])).toBeTruthy();
+  });
+
+  it('detects a longer cycle a→b→c→a', () => {
+    expect(findViewCycle([withReads('a', ['b']), withReads('b', ['c']), withReads('c', ['a'])])).toBeTruthy();
+  });
+
+  it('a DAG has no cycle', () => {
+    expect(findViewCycle([withReads('a', ['b']), withReads('b', ['c']), withReads('c', [])])).toBeNull();
+  });
+
+  it('a missing dependency is not a cycle (handled by availability check)', () => {
+    expect(findViewCycle([withReads('a', ['gone'])])).toBeNull();
   });
 });
 

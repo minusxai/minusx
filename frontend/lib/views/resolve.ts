@@ -36,12 +36,35 @@ export class ViewResolutionError extends Error {
   }
 }
 
-/** Cheap pre-check: does this SQL mention the views schema at all? */
+/**
+ * Cheap pre-check: does this SQL mention the views schema at all?
+ *
+ * This is a substring gate, not a parse, so it is deliberately fail-SAFE, not
+ * exact: `SELECT '_views.x'` (the token inside a string literal) trips it and
+ * takes the parse path needlessly — a rare wasted parse, never a wrong result,
+ * because the IR only ever rewrites real table references and leaves literals
+ * untouched. The inverse (a genuine `_views.` table ref that this misses) cannot
+ * happen: every such reference contains the literal substring, so the gate never
+ * skips resolution for a query that actually needs it.
+ */
 export const mentionsViews = (sql: string): boolean =>
   new RegExp(`${VIEWS_SCHEMA}\\s*\\.`, 'i').test(sql);
 
 /** The CTE identifier a view compiles to. Prefixed to avoid colliding with user CTEs. */
 const cteName = (viewName: string): string => `${VIEWS_SCHEMA}_${viewName}`;
+
+/**
+ * Quote a column identifier for the column-projection wrapper. The names come
+ * from the DB's own reported columns, so they can be reserved words (`order`) or
+ * contain spaces (`AS "Net Revenue"`) — an unquoted `SELECT order, Net Revenue`
+ * is a parse error, so this is required for correctness, not cosmetics.
+ * BigQuery quotes with backticks; every other dialect we support uses the
+ * SQL-standard double quote.
+ */
+function quoteIdent(name: string, dialect: string): string {
+  if (dialect === 'bigquery') return '`' + name.replace(/`/g, '``') + '`';
+  return '"' + name.replace(/"/g, '""') + '"';
+}
 
 const isViewRef = (t: TableReference | undefined): boolean =>
   !!t && (t.schema ?? '').toLowerCase() === VIEWS_SCHEMA;
@@ -124,7 +147,7 @@ async function viewBodySql(v: HydratedView, dialect: string): Promise<string> {
     // View turned off: a valid relation that yields no rows and no usable columns.
     return `SELECT NULL AS _off FROM (\n${body}\n) AS ${cteName(v.name)}_src WHERE 1 = 0`;
   }
-  const cols = v.whitelistedColumns.join(', ');
+  const cols = v.whitelistedColumns.map((c) => quoteIdent(c, dialect)).join(', ');
   return `SELECT ${cols} FROM (\n${body}\n) AS ${cteName(v.name)}_src`;
 }
 

@@ -189,6 +189,16 @@ describe('column whitelist — projection is REAL enforcement', () => {
     expect(reader.getRows().length).toBe(0); // a view turned off yields no rows
   });
 
+  it('projects columns that need QUOTING (reserved words, spaces) — real schemas hit this', async () => {
+    // A GA4-style view: a reserved-word column and an aliased-with-space column.
+    const tricky = view('tricky', `SELECT z.zone_name AS "order", SUM(o.total) AS "Net Revenue", COUNT(*) AS n
+      FROM mxfood.orders o JOIN mxfood.zones z ON o.zone_id = z.id GROUP BY z.zone_name`);
+    const restricted = { ...tricky, whitelistedColumns: ['order', 'Net Revenue'] };
+    const sql = await resolveViewsInSql('SELECT * FROM _views.tricky', 'duckdb', [restricted]);
+    const reader = await db.runAndReadAll(sql);          // must not be a Parser Error
+    expect(reader.columnNames().sort()).toEqual(['Net Revenue', 'order']);
+  });
+
   it('no whitelist = every column exposed', async () => {
     const sql = await resolveViewsInSql('SELECT * FROM _views.zone_revenue', 'duckdb', [ZONE_REVENUE]);
     const reader = await db.runAndReadAll(sql);
