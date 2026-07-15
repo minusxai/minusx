@@ -28,13 +28,15 @@ export function DataLoader() {
   // Restore persisted UI flags after hydration — single dispatch avoids 3 separate re-render cycles
   useEffect(() => {
     try {
-      const flags: { devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Record<string, unknown> } = {};
+      const flags: { devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Record<string, unknown> } = {};
       const dev = localStorage.getItem('devMode');
       if (dev !== null) flags.devMode = dev === 'true';
       const confirm = localStorage.getItem('askForConfirmation');
       if (confirm !== null) flags.askForConfirmation = confirm === 'true';
       const advanced = localStorage.getItem('showAdvanced');
       if (advanced !== null) flags.showAdvanced = advanced === 'true';
+      const vizV2 = localStorage.getItem('vizV2');
+      if (vizV2 !== null) flags.vizV2 = vizV2 === 'true';
       const suggestedQuestions = localStorage.getItem('showSuggestedQuestions');
       if (suggestedQuestions !== null) flags.showSuggestedQuestions = suggestedQuestions === 'true';
       const trustScore = localStorage.getItem('showTrustScore');

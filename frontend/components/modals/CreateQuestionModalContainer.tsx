@@ -8,7 +8,7 @@ import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, clearFileChanges, createDraftFile, deleteFile } from '@/lib/file-state/file-state';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { selectMergedContent, selectEffectiveName, setEphemeral, setFile } from '@/store/filesSlice';
-import { setFileEditMode, selectFileEditMode, selectQuestionCollapsedPanel, setQuestionCollapsedPanel } from '@/store/uiSlice';
+import { setFileEditMode, selectFileEditMode, selectQuestionCollapsedPanel, setQuestionCollapsedPanel, selectVizV2 } from '@/store/uiSlice';
 import { selectView } from '@/store/authSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
 import { QuestionContent, type DbFile } from '@/lib/types';
@@ -68,6 +68,7 @@ export default function CreateQuestionModalContainer({
 
   const mergedContent = useAppSelector(state => effectiveId ? selectMergedContent(state, effectiveId) as QuestionContent | undefined : undefined);
   const effectiveName = useAppSelector(state => effectiveId ? selectEffectiveName(state, effectiveId) || '' : '');
+  const vizV2Enabled = useAppSelector(selectVizV2);
 
   // --- Redux state that used to live directly inside QuestionViewV2 (a Container/View
   // convention violation) — now read here and passed down as props. See CLAUDE.md
@@ -295,6 +296,7 @@ export default function CreateQuestionModalContainer({
 
         <QuestionViewV2
           viewMode="page"
+          vizV2Enabled={vizV2Enabled}
           content={mergedContent}
           // Resolve the schema context at the draft's real path (tutorial mode,
           // per-folder contexts) — without this the view falls back to '/org'

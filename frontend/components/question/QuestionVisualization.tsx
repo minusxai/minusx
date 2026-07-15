@@ -19,7 +19,7 @@ import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { memo, useState, useEffect, useRef } from 'react';
 import isEqual from 'lodash/isEqual';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
+import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection, selectVizV2 } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 import { setRecipeParam } from '@/lib/viz/encoding-edit';
@@ -180,6 +180,7 @@ function QuestionVisualizationInner({
   const dispatch = useAppDispatch();
   const showJson = useAppSelector(state => state.ui.devMode);
   const colorMode = useAppSelector(state => state.ui.colorMode);
+  const vizV2Enabled = useAppSelector(selectVizV2);
   const { config: appConfig } = useConfigs();
   const agentName = appConfig.branding.agentName;
 
@@ -217,7 +218,9 @@ function QuestionVisualizationInner({
   // no `viz` envelope renders through <VegaChart> via the converter (the question page's
   // Viz panel edits the same converted envelope — see QuestionViewV2); table/pivot keep
   // their DOM renderers. Pure — recomputed from vizSettings each render.
-  const legacyRenderViz = data
+  // Gated by the uiSlice `vizV2` flag while the bridge is opt-in; a saved `viz`
+  // envelope above is authoritative regardless of the flag.
+  const legacyRenderViz = vizV2Enabled && data
     ? resolveLegacyRenderEnvelope({
         hasVizEnvelope: hasVizV2,
         vizSettings: currentState?.vizSettings,

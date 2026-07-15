@@ -122,6 +122,11 @@ interface QuestionViewV2Props {
   onChange: (updates: Partial<QuestionContent>) => void;
   onParameterValueChange?: (paramName: string, value: string | number | null) => void;  // Ephemeral
   onExecute: (overrideParamValues?: Record<string, any>) => void;  // Phase 3: Explicit execute
+
+  /** Viz V2 bridge flag (uiSlice `vizV2`, passed down — views are Redux-free):
+   * when set, a legacy chart's Viz panel edits its converted V2 envelope. A
+   * saved `viz` envelope always uses the V2 panel regardless. */
+  vizV2Enabled?: boolean;
 }
 
 export default function QuestionViewV2({
@@ -148,6 +153,7 @@ export default function QuestionViewV2({
   onChange,
   onParameterValueChange,
   onExecute,
+  vizV2Enabled = false,
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
   const isPreview = mode === 'preview';
@@ -215,10 +221,11 @@ export default function QuestionViewV2({
   // file upgrades on Save). Table/pivot keep the V1 panel until their own migration.
   const effectiveViz = useMemo(() => {
     if (content.viz != null) return content.viz;
+    if (!vizV2Enabled) return null; // bridge is opt-in — legacy questions keep the classic panel
     const legacyType = content.vizSettings?.type;
     if (!queryData || !legacyType || legacyType === 'table' || legacyType === 'pivot') return null;
     return vizSettingsToEnvelope(content.vizSettings!, toVizColumns(queryData.columns, queryData.types));
-  }, [content.viz, content.vizSettings, queryData]);
+  }, [content.viz, content.vizSettings, queryData, vizV2Enabled]);
 
 
   // Track container width for responsive layout
