@@ -244,6 +244,38 @@ export const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_job_runs_job ON job_runs(job_id, job_type);
   CREATE INDEX IF NOT EXISTS idx_job_runs_created_at ON job_runs(created_at DESC);
 
+  -- Access V2 (M2): a group = capability profile + folder scopes + members.
+  -- Additive and idempotent — created on boot everywhere, no data migration.
+  -- Access stays role + home-folder based until a group has members (no
+  -- memberships → the resolver produces only the base grant).
+  CREATE TABLE IF NOT EXISTS groups (
+    id            SERIAL PRIMARY KEY,
+    name          TEXT NOT NULL,
+    mode          TEXT NOT NULL DEFAULT 'org',
+    kind          TEXT NOT NULL DEFAULT 'custom',   -- 'admin' | 'editor' | 'viewer' | 'custom'
+    allowed_types JSONB NOT NULL DEFAULT '[]',      -- capability: "*" (string) or FileType[]
+    view_types    JSONB NOT NULL DEFAULT '[]',
+    create_types  JSONB NOT NULL DEFAULT '[]',
+    locked        BOOLEAN NOT NULL DEFAULT false,   -- the admin group is not editable
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS group_scopes (
+    id        SERIAL PRIMARY KEY,
+    group_id  INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    folder    TEXT NOT NULL DEFAULT ''              -- mode-relative prefix ('' = mode root)
+  );
+
+  CREATE TABLE IF NOT EXISTS group_members (
+    group_id  INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    user_id   INTEGER NOT NULL,
+    PRIMARY KEY (group_id, user_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id);
+  CREATE INDEX IF NOT EXISTS idx_group_scopes_group ON group_scopes(group_id);
+
   -- Configs table for storing system configuration values
   CREATE TABLE IF NOT EXISTS configs (
     key TEXT PRIMARY KEY,

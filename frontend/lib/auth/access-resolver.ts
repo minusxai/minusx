@@ -15,6 +15,7 @@ import { getEffectiveRule } from '@/lib/auth/access-rules';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { AccessPredicate, AccessScope, TypeSet } from '@/lib/auth/access-predicate';
+import { resolveUserGroupGrants } from '@/lib/data/groups.server';
 
 /** Resolve a principal's access snapshot. Mirrors today's `canAccessFile` inputs. */
 export function resolveAccessPredicate(user: EffectiveUser, overrides?: AccessRulesOverride): AccessPredicate {
@@ -46,4 +47,25 @@ export function resolveAccessPredicate(user: EffectiveUser, overrides?: AccessRu
     viewTypes,
     homeFolder: admin ? null : homeFolder,
   };
+}
+
+/**
+ * Group-aware resolution: the base (role + home) predicate plus any group
+ * grants the user has. Async because group memberships are a DB read. When the
+ * user is in no groups — the common case, and every guest — this equals the
+ * base predicate, so behavior is unchanged until a group is populated. Admins
+ * already bypass path scoping, so their group grants are moot (skipped).
+ *
+ * Data-layer reads that need group-aware access resolve this ONCE per request
+ * and evaluate `checkAccess` per file; the sync `resolveAccessPredicate` above
+ * stays for per-file helpers that must remain synchronous.
+ */
+export async function resolveAccessPredicateWithGroups(
+  user: EffectiveUser,
+  overrides?: AccessRulesOverride,
+): Promise<AccessPredicate> {
+  const base = resolveAccessPredicate(user, overrides);
+  if (base.admin || !user.userId) return base;
+  const groupGrants = await resolveUserGroupGrants(user.userId, user.mode);
+  return groupGrants.length ? { ...base, grants: [...base.grants, ...groupGrants] } : base;
 }

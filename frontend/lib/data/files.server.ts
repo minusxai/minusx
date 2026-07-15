@@ -23,7 +23,7 @@ import {
   DeleteFileResult
 } from './types';
 import { canAccessFile } from './helpers/permissions';
-import { resolveAccessPredicate } from '@/lib/auth/access-resolver';
+import { resolveAccessPredicateWithGroups } from '@/lib/auth/access-resolver';
 import { checkAccess, type AccessVariant } from '@/lib/auth/access-predicate';
 import { extractReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
@@ -97,10 +97,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
       throw new FileNotFoundError(id);
     }
 
-    // Load config-based access rule overrides once per request
+    // Load config-based access rule overrides once per request; resolve the
+    // group-aware access predicate once and reuse it for the file + its refs.
     const overrides = await this._getOverrides(user);
+    const predicate = await resolveAccessPredicateWithGroups(user, overrides);
 
-    if (!canAccessFile(file, user, overrides)) {
+    if (!checkAccess(file, predicate, 'access')) {
       throw new AccessPermissionError('You do not have permission to access this file');
     }
 
@@ -135,10 +137,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
     //   Folder  → children are filesystem entries; full path check (`access`)
     //   Content → embedded assets (a dashboard's questions): type + mode only, no
     //             path (`embedded`) — they travel with the container you can open.
-    // One resolved predicate for the whole batch (Access V2 engine).
-    const refPredicate = resolveAccessPredicate(user, overrides);
+    // Reuse the group-aware predicate resolved above for the whole ref batch.
     const refVariant: AccessVariant = file.type === 'folder' ? 'access' : 'embedded';
-    const filteredReferences = references.filter(ref => checkAccess(ref, refPredicate, refVariant));
+    const filteredReferences = references.filter(ref => checkAccess(ref, predicate, refVariant));
 
     // Apply custom loaders AFTER permission checks (Phase 3)
     const loaderStart = Date.now();
@@ -161,9 +162,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
   async loadFiles(ids: number[], user: EffectiveUser, options?: LoaderOptions): Promise<LoadFilesResult> {
     const files = await DocumentDB.getByIds(ids);
     const overrides = await this._getOverrides(user);
+    const predicate = await resolveAccessPredicateWithGroups(user, overrides);
 
-    // Filter by unified permission check (Phase 4)
-    const filteredFiles = files.filter(f => canAccessFile(f, user, overrides));
+    // Filter by the group-aware access predicate.
+    const filteredFiles = files.filter(f => checkAccess(f, predicate, 'access'));
 
     // Track which reference IDs came from folder parents vs content parents so we can
     // apply the right permission check per ref (see comment below).
@@ -183,9 +185,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Reference filtering (Access V2 engine): folder children get the full path
     // check (`access`); embedded content assets get type + mode only (`embedded`).
-    const refPredicate = resolveAccessPredicate(user, overrides);
     const filteredReferences = references.filter(ref =>
-      checkAccess(ref, refPredicate, folderRefIds.has(ref.id) ? 'access' : 'embedded')
+      checkAccess(ref, predicate, folderRefIds.has(ref.id) ? 'access' : 'embedded')
     );
 
     // Apply loaders AFTER permission checks (Phase 3)
@@ -214,9 +215,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     const overrides = await this._getOverrides(user);
 
-    // Access V2 (M1b): SQL-enforce the permission predicate in the query, so the
-    // DB returns only accessible rows. Phase 6: skip content loading for perf.
-    const listPredicate = resolveAccessPredicate(user, overrides);
+    // Access V2: SQL-enforce the group-aware permission predicate in the query,
+    // so the DB returns only accessible rows. Phase 6: skip content for perf.
+    const listPredicate = await resolveAccessPredicateWithGroups(user, overrides);
     let files = await DocumentDB.listAll(
       type,
       paths.length > 0 ? paths : undefined,
@@ -225,9 +226,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
       { predicate: listPredicate, variant: 'access' }
     );
 
-    // Backstop: the in-memory filter is now redundant with the SQL predicate
-    // (proven identical by the parity batteries) — kept as defense-in-depth.
-    files = files.filter(f => canAccessFile(f, user, overrides));
+    // Backstop: redundant with the SQL predicate (proven identical by the parity
+    // batteries) — kept as defense-in-depth, and group-aware like the query.
+    files = files.filter(f => checkAccess(f, listPredicate, 'access'));
 
     // Apply loaders AFTER permission checks (Phase 3)
     files = await Promise.all(
