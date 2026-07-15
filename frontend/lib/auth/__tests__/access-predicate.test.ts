@@ -167,3 +167,14 @@ describe('checkAccess parity with legacy permissions.ts', () => {
     }
   });
 });
+
+describe('admin capability immunity', () => {
+  it('accessRules overrides can never reduce admin capabilities (lockout guard)', () => {
+    const overrides: AccessRulesOverride = { admin: { allowedTypes: ['question'], viewTypes: ['question'] } };
+    const admin = user('admin', '', 'org');
+    const p = resolveAccessPredicate(admin, overrides);
+    // Admin must still access every type in mode — the override is ignored.
+    expect(checkAccess(file(1, 'dashboard', '/org/sales/d'), p, 'access')).toBe(true);
+    expect(checkAccess(file(1, 'config', '/org/configs/config'), p, 'ui')).toBe(true);
+  });
+});

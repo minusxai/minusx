@@ -140,6 +140,11 @@ export class UserDB {
 
     const finalRole = data.role !== undefined ? data.role : currentUser.role;
 
+    // Lockout guard: the workspace must always keep at least one admin.
+    if (currentUser.role === 'admin' && finalRole !== 'admin') {
+      await this.assertNotLastAdmin(id, 'demote');
+    }
+
     let normalizedHomeFolder = data.home_folder;
     if (data.home_folder !== undefined) {
       normalizedHomeFolder = validateAndNormalizeHomeFolder(data.home_folder, finalRole);
@@ -166,7 +171,22 @@ export class UserDB {
   }
 
   static async delete(id: number): Promise<void> {
+    // Lockout guard: the workspace must always keep at least one admin.
+    const user = await this.getById(id);
+    if (user?.role === 'admin') {
+      await this.assertNotLastAdmin(id, 'delete');
+    }
     await getModules().db.exec('DELETE FROM users WHERE id = $1', [id]);
+  }
+
+  /** Throw when `id` is the only remaining admin (prevents workspace lockout). */
+  private static async assertNotLastAdmin(id: number, action: string): Promise<void> {
+    const others = await getModules().db.exec<{ count: number }>(
+      `SELECT COUNT(*) as count FROM users WHERE role = 'admin' AND id != $1`, [id],
+    );
+    if (Number(others.rows[0]?.count ?? 0) === 0) {
+      throw new Error(`Cannot ${action} the last admin — the workspace must keep at least one admin.`);
+    }
   }
 
   static async emailExists(email: string, excludeId?: number): Promise<boolean> {

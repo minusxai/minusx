@@ -108,6 +108,13 @@ function loadAccessRules(): RulesConfig {
 export function getEffectiveRule(role: UserRole, overrides?: AccessRulesOverride): FileTypeAccessRule | undefined {
   const config = loadAccessRules();
 
+  // Lockout guard: config overrides can tune editor/viewer capabilities, but
+  // must never reduce ADMIN capabilities — a bad accessRules edit would
+  // otherwise lock admins (including the author) out of their own workspace.
+  if (role === 'admin') {
+    overrides = undefined;
+  }
+
   const rule = config.rules.find(
     (r): r is FileTypeAccessRule => r.type === 'fileTypeAccess' && (r as FileTypeAccessRule).role === role
   ) as FileTypeAccessRule | undefined;
