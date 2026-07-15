@@ -12,7 +12,7 @@ import { PGlite } from '@electric-sql/pglite';
 import type { FileType } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { Mode } from '@/lib/mode/mode-types';
-import { checkAccess, toSql, type AccessVariant } from '@/lib/auth/access-predicate';
+import { checkAccess, toSql, type AccessVariant, type AccessPredicate } from '@/lib/auth/access-predicate';
 import { resolveAccessPredicate } from '@/lib/auth/access-resolver';
 
 function user(role: EffectiveUser['role'], home_folder: string, mode: Mode, userId = 1): EffectiveUser {
@@ -83,6 +83,54 @@ describe('toSql selects exactly the checkAccess-accepted rows (PGLite)', () => {
         const missing = [...want].filter(id => !got.has(id));
         const extra = [...got].filter(id => !want.has(id));
         expect({ missing, extra }).toEqual({ missing: [], extra: [] });
+      });
+    }
+  }
+
+  // Multi-grant (group) predicates: OR across grants, capabilities ∩ scopes
+  // within each. The resolver only ever produces a single base grant, so these
+  // are hand-built to exercise the group SQL path directly.
+  const MULTI: { name: string; p: AccessPredicate }[] = [
+    {
+      name: 'base + full-caps group on marketing',
+      p: {
+        admin: false, mode: 'org', viewTypes: ['question', 'dashboard'], homeFolder: '/org/sales',
+        grants: [
+          { allowedTypes: ['question', 'dashboard'], scopes: [{ path: '/org/sales', excludeSystem: true }] },
+          { allowedTypes: '*', scopes: [{ path: '/org/marketing' }] },
+        ],
+      },
+    },
+    {
+      name: 'two groups, different caps, overlapping scope (more-permissive wins)',
+      p: {
+        admin: false, mode: 'org', viewTypes: '*', homeFolder: null,
+        grants: [
+          { allowedTypes: ['dashboard'], scopes: [{ path: '/org/marketing' }] },
+          { allowedTypes: ['question', 'connection'], scopes: [{ path: '/org/marketing' }] },
+        ],
+      },
+    },
+    {
+      name: 'group with empty scope grants nothing on its own',
+      p: {
+        admin: false, mode: 'org', viewTypes: ['question'], homeFolder: '/org/sales',
+        grants: [
+          { allowedTypes: ['question'], scopes: [{ path: '/org/sales', excludeSystem: true }] },
+          { allowedTypes: '*', scopes: [] },
+        ],
+      },
+    },
+  ];
+
+  for (const { name, p } of MULTI) {
+    for (const variant of VARIANTS) {
+      it(`multi-grant · ${name} · ${variant}`, async () => {
+        const want = new Set(ROWS.filter(r => checkAccess(r, p, variant)).map(r => r.id));
+        const frag = toSql(p, variant);
+        const got = await sqlIds(frag.sql, frag.params);
+        expect({ missing: [...want].filter(id => !got.has(id)), extra: [...got].filter(id => !want.has(id)) })
+          .toEqual({ missing: [], extra: [] });
       });
     }
   }
