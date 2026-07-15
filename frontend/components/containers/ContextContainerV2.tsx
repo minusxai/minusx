@@ -217,6 +217,7 @@ export default function ContextContainerV2({
       metrics: sourceVersion.metrics ? JSON.parse(JSON.stringify(sourceVersion.metrics)) : undefined,
       annotations: sourceVersion.annotations ? JSON.parse(JSON.stringify(sourceVersion.annotations)) : undefined,
       relationships: sourceVersion.relationships ? JSON.parse(JSON.stringify(sourceVersion.relationships)) : undefined,
+      views: sourceVersion.views ? JSON.parse(JSON.stringify(sourceVersion.views)) : undefined,
       createdAt: new Date().toISOString(),
       createdBy: user.id,
       description: description || ''
@@ -339,7 +340,7 @@ export default function ContextContainerV2({
     if (!currentContent || !currentVersionContent || !user?.id) return;
 
     // If updating databases, docs, metrics, or annotations, update the selected version
-    if (updates.databases !== undefined || updates.docs !== undefined || updates.metrics !== undefined || updates.annotations !== undefined || updates.relationships !== undefined) {
+    if (updates.databases !== undefined || updates.docs !== undefined || updates.metrics !== undefined || updates.annotations !== undefined || updates.relationships !== undefined || updates.views !== undefined) {
       // Convert DatabaseContext[] | '*' (editor format) → Whitelist (storage format)
       const newWhitelist: Whitelist | undefined = updates.databases !== undefined
         ? updates.databases === '*'
@@ -356,6 +357,7 @@ export default function ContextContainerV2({
             metrics: updates.metrics ?? v.metrics,
             annotations: updates.annotations ?? v.annotations,
             relationships: updates.relationships ?? v.relationships,
+            views: updates.views ?? v.views,
             lastEditedAt: new Date().toISOString(),
             lastEditedBy: user.id
           };
@@ -425,6 +427,7 @@ export default function ContextContainerV2({
       metrics: currentVersionContent.metrics,
       annotations: currentVersionContent.annotations,
       relationships: currentVersionContent.relationships,
+      views: currentVersionContent.views,
       published: currentContent.published // Ensure published is always present
     };
   }, [currentContent, currentVersionContent]);

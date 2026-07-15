@@ -15,6 +15,9 @@ import { getModules } from '@/lib/modules/registry';
 import { getCachedJsonlStream } from '@/lib/query-cache/execute.server';
 import { resolveCachePolicy } from '@/lib/query-cache/policy.server';
 import { assertGuestQueryAllowed, sanitizeGuestParams, GuestQueryDeniedError } from '@/lib/query-cache/guest-query.server';
+import { getViewsForPath } from '@/lib/views/views.server';
+import { resolvePath } from '@/lib/mode/path-resolver';
+import { mentionsViews, resolveViewsInSql, ViewResolutionError } from '@/lib/views/resolve';
 
 type ParamMap = Record<string, string | number | null>;
 
@@ -90,16 +93,38 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       }
     }
 
+    // Derive dialect via getRawByName (no schema-profiling loader on the hot path).
+    let queryDialect = 'duckdb';
+    try {
+      const { type } = await ConnectionsAPI.getRawByName(connectionName, user.mode);
+      if (type) queryDialect = connectionTypeToDialect(type);
+    } catch { /* default duckdb */ }
+
+    // ── Views: inline `_views.x` as CTEs BEFORE caching ───────────────────────
+    // Order matters twice over:
+    //  · AFTER whitelist validation, which checks the query the user wrote — a
+    //    view is authorized as itself (it appears in the whitelisted schema),
+    //    so a curated view can expose an aggregate of tables the reader may not
+    //    query directly. The view's own SQL is validated where it is AUTHORED.
+    //  · BEFORE the cache, so the cache key is computed over the RESOLVED SQL:
+    //    editing a view's body changes the key and invalidates stale results for
+    //    free, with no cache-key surgery.
+    // Non-view queries take the fast path (byte-identical, never parsed) and keep
+    // their existing cache keys.
+    let executedQuery = query;
+    if (mentionsViews(query)) {
+      try {
+        const views = await getViewsForPath(filePath ?? resolvePath(user.mode, '/'), connectionName, user);
+        executedQuery = await resolveViewsInSql(query, queryDialect, views);
+      } catch (err) {
+        if (err instanceof ViewResolutionError) return ApiErrors.badRequest(err.message);
+        throw err;
+      }
+    }
+
     // ── The execution thunk (runs only on miss / expired / background revalidate) ──
     const execute = async (): Promise<QueryStream> => {
-      // Derive dialect via getRawByName (no schema-profiling loader on the hot path).
-      let queryDialect = 'duckdb';
-      try {
-        const { type } = await ConnectionsAPI.getRawByName(connectionName, user.mode);
-        if (type) queryDialect = connectionTypeToDialect(type);
-      } catch { /* default duckdb */ }
-
-      const { sql: noneResolvedQuery, params: resolvedParams } = await applyNoneParams(query, paramValues, queryDialect);
+      const { sql: noneResolvedQuery, params: resolvedParams } = await applyNoneParams(executedQuery, paramValues, queryDialect);
 
       // Stream the result — the executor pipes it through to the object store +
       // client without materializing on the server.
@@ -111,7 +136,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // guests — public shares must stay cache-served so they can't hammer the warehouse.
     const forceRefresh = bodyForceRefresh === true && !user.guest;
     const { stream, meta } = await getCachedJsonlStream({
-      mode, connectionName, query, params: paramValues, policy, execute, forceRefresh,
+      mode, connectionName, query: executedQuery, params: paramValues, policy, execute, forceRefresh,
       parameterTypes: paramTypes,
     });
 

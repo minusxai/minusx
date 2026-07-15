@@ -19,6 +19,7 @@ import type { ContextContent } from '@/lib/types';
 import type { DatabaseWithSchema } from '@/lib/types';
 import { countResolvedWhitelist } from '@/lib/context/context-utils';
 import SchemaTreeView, { type WhitelistItem } from '../schema-browser/SchemaTreeView';
+import ViewsSection from './ViewsSection';
 import { Checkbox } from '@/components/ui/checkbox';
 import Editor from '@monaco-editor/react';
 
@@ -43,9 +44,12 @@ interface DatabasesTabContentProps {
   toggleDatabase: (name: string) => void;
   yamlText: string;
   onYamlChange: (newYaml: string) => void;
+  /** Path of the context file — views resolve + save against it. */
+  contextPath: string;
 }
 
 export function DatabasesTabContent({
+  contextPath,
   isActive,
   activeTab,
   colorMode,
@@ -303,6 +307,20 @@ export function DatabasesTabContent({
                         </Collapsible.Trigger>
                         <Collapsible.Content>
                           <Box p={4}>
+                            {/* Views: curated SQL that behaves like a table. Sits
+                                above the raw schema — it's the layer people should
+                                reach for first. */}
+                            <Box mb={4} border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
+                              <ViewsSection
+                                contextPath={contextPath}
+                                connection={database.databaseName}
+                                views={content.views || []}
+                                inheritedViews={content.fullViews || []}
+                                problems={content.viewProblems || []}
+                                onViewsChange={editMode ? (next) => onChange({ views: next }) : undefined}
+                                namePrefix={contextPath.split('/').filter(Boolean).slice(-2, -1)[0]}
+                              />
+                            </Box>
                             <SchemaTreeView
                               schemas={database.schemas}
                               selectable={true}

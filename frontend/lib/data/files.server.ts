@@ -29,6 +29,7 @@ import { validateFileState } from '@/lib/validation/content-validators';
 import { getTemplateDefaults } from '@/lib/data/story/template-defaults';
 import { withCompiledStoryCss } from '@/lib/data/story/story-css.server';
 import { validateFileStateServer } from '@/lib/validation/content-validators.server';
+import { stampAndValidateViews, ViewSaveError } from '@/lib/views/save-gate.server';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
 import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType, canCreateFileByRole } from '@/lib/auth/access-rules';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
@@ -612,6 +613,21 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const saveValidationError = await validateFileStateServer({ type: existingFile.type, content: contentToSave, name, path });
     if (saveValidationError) {
       throw new UserFacingError(`Invalid file content: ${saveValidationError}`);
+    }
+
+    // The view gate. Every context write lands here — the view dialog, the raw
+    // JSON editor, and the agent's EditFile alike — so this is the ONLY place
+    // that can honestly enforce what a view may read. It recomputes each view's
+    // `reads` from its SQL (never trusting the client) and refuses a view that
+    // reaches outside what the parent knowledge base offers, or that reads a view
+    // which no longer exists (i.e. deleting a view its dependents still need).
+    if (existingFile.type === 'context') {
+      try {
+        contentToSave = await stampAndValidateViews(contentToSave as ContextContent, path, user) as BaseFileContent;
+      } catch (err) {
+        if (err instanceof ViewSaveError) throw new UserFacingError(err.message);
+        throw err;
+      }
     }
 
     // Guard: references must be real (positive) IDs — virtual files must be saved first

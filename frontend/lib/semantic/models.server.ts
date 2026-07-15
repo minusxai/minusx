@@ -22,6 +22,9 @@ import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
 import { connectionTypeToDialect } from '@/lib/types';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import { VIEWS_SCHEMA } from '@/lib/types';
+import { resolveViewsForContext } from '@/lib/views/views.server';
+import { exposedColumns } from '@/lib/types/views';
 import type { ContextContent, DatabaseSchema, DatabaseWithSchema, SemanticModel, TableRelationship } from '@/lib/types';
 
 export interface ScopedModelsParams {
@@ -68,14 +71,35 @@ async function resolveScope(
     context = null; // no context → scope to the connection schema directly
   }
 
+  // Views live on the context, not in the connection's schema — merge them in as
+  // `_views` tables so they derive semantic models exactly like real tables.
+  const views = resolveViewsForContext(context, user.userId).filter((v) => v.connection === connection);
+  const schemaWithViews: DatabaseSchema = views.length === 0 ? schema : {
+    ...schema,
+    schemas: [
+      ...(schema.schemas ?? []).filter((s) => s.schema !== VIEWS_SCHEMA),
+      // exposedColumns applies the view's column whitelist — a deselected column
+      // must not surface as a semantic measure/dimension, matching what query
+      // execution already projects away.
+      {
+        schema: VIEWS_SCHEMA,
+        tables: views
+          .filter((v) => exposedColumns(v).length > 0)
+          .map((v) => ({ table: v.name, columns: exposedColumns(v).map((c) => ({ ...c })) })),
+      },
+    ],
+  };
+
   // Whitelisted table names for this connection (names survive bounding).
   // Without a context, every table in the connection is in scope.
   const contextDb = context?.fullSchema?.find((db) => db.databaseName === connection);
-  const source = contextDb ?? { databaseName: connection, schemas: schema.schemas };
+  const source = contextDb ?? { databaseName: connection, schemas: schemaWithViews.schemas };
   const whitelisted = new Set<string>();
   for (const s of source.schemas ?? []) {
     for (const t of s.tables ?? []) whitelisted.add(`${s.schema}|${t.table}`);
   }
+  // Views are curated by construction — always in scope for the context that sees them.
+  for (const v of views) whitelisted.add(`${VIEWS_SCHEMA}|${v.name}`);
 
   // Inherited (fullRelationships) + the live version's own — mirrors how
   // metrics resolve (full* fields are inherited-only).
@@ -87,7 +111,7 @@ async function resolveScope(
     ...(liveVersion?.relationships ?? []),
   ].filter((r) => r.connection === connection);
 
-  return { schema, whitelisted, namingSchemas: source.schemas ?? [], relationships };
+  return { schema: schemaWithViews, whitelisted, namingSchemas: source.schemas ?? [], relationships };
 }
 
 export async function getScopedSemanticModels(
