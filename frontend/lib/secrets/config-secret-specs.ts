@@ -25,11 +25,43 @@ export interface ConfigSecretSpec {
   secretFields: string[];
 }
 
-/** Every secret-bearing location in the org config document. */
+/** Every secret-bearing location in the org config document.
+ *  Secret fields may be DOTTED paths into each element (e.g. 'config.password'
+ *  for database connections, whose credentials nest under entry.config). */
 export const CONFIG_SECRET_SPECS: ConfigSecretSpec[] = [
   { arrayPath: 'bots', identityField: 'name', secretFields: ['bot_token', 'signing_secret'] },
   { arrayPath: 'llm.providers', identityField: 'name', secretFields: ['apiKey'] },
+  // Database connections (Settings → Databases): union of every connector's
+  // secret config fields (see frontend/compatibility.json `secret: true`).
+  {
+    arrayPath: 'databases.connections', identityField: 'name',
+    secretFields: ['config.password', 'config.connection_string', 'config.service_account_json', 'config.aws_secret_access_key'],
+  },
 ];
+
+/** Read a possibly-dotted field path off an element (undefined when absent). */
+export function getSecretField(element: Record<string, unknown>, field: string): unknown {
+  let node: unknown = element;
+  for (const seg of field.split('.')) {
+    if (!node || typeof node !== 'object') return undefined;
+    node = (node as Record<string, unknown>)[seg];
+  }
+  return node;
+}
+
+/** Write (or delete, when `value` is undefined) a possibly-dotted field path. */
+export function setSecretField(element: Record<string, unknown>, field: string, value: unknown): void {
+  const segs = field.split('.');
+  let node: Record<string, unknown> = element;
+  for (const seg of segs.slice(0, -1)) {
+    const next = node[seg];
+    if (!next || typeof next !== 'object') return; // path absent — nothing to write
+    node = next as Record<string, unknown>;
+  }
+  const last = segs[segs.length - 1];
+  if (value === undefined) delete node[last];
+  else node[last] = value;
+}
 
 /**
  * Placeholder shown in place of a LEGACY raw secret on read (docs written before
@@ -78,10 +110,10 @@ function mapConfigSecrets<T>(
     for (const element of arr) {
       if (!element || typeof element !== 'object') continue;
       for (const field of spec.secretFields) {
-        if (!(field in element)) continue;
-        const next = transform(spec, element, field, element[field]);
-        if (next === undefined) delete element[field];
-        else element[field] = next;
+        const current = getSecretField(element, field);
+        if (current === undefined) continue;
+        const next = transform(spec, element, field, current);
+        setSecretField(element, field, next);
       }
     }
   }
@@ -113,7 +145,7 @@ export function restoreRedactedConfigSecrets<T>(incoming: T, stored: unknown): T
     const storedArr = secretArrayAt(stored, spec.arrayPath) ?? [];
     const identity = element[spec.identityField];
     const counterpart = storedArr.find(e => e && typeof e === 'object' && e[spec.identityField] === identity);
-    const storedValue = counterpart?.[field];
+    const storedValue = counterpart ? getSecretField(counterpart, field) : undefined;
     // Restore a real stored value (ref or legacy raw); otherwise drop the placeholder.
     return typeof storedValue === 'string' && storedValue !== '' && !isRedactedSecret(storedValue)
       ? storedValue

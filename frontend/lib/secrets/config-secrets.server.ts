@@ -22,7 +22,9 @@ import { isSecretRef } from './secret-refs';
 import {
   CONFIG_SECRET_SPECS,
   configSecretRefPath,
+  getSecretField,
   isRedactedSecret,
+  setSecretField,
 } from './config-secret-specs';
 import { VALID_MODES, DEFAULT_MODE, type Mode } from '@/lib/mode/mode-types';
 
@@ -54,11 +56,11 @@ export async function extractConfigSecrets<T>(mode: Mode, content: T): Promise<T
       const identityRaw = element[spec.identityField];
       const identity = typeof identityRaw === 'string' && identityRaw !== '' ? identityRaw : `at-${index}`;
       for (const field of spec.secretFields) {
-        const value = element[field];
+        const value = getSecretField(element, field);
         if (typeof value !== 'string' || value === '' || isSecretRef(value) || isRedactedSecret(value)) continue;
         const refPath = configSecretRefPath(mode, spec.arrayPath, identity, field);
         await SecretsDB.set(refPath, value);
-        element[field] = refPath;
+        setSecretField(element, field, refPath);
       }
     }
   }

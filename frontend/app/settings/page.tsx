@@ -15,6 +15,7 @@ import { SlackIntegration } from '@/components/settings/integrations/SlackIntegr
 import { McpIntegration } from '@/components/settings/integrations/McpIntegration';
 import { RemoteAgentsSection } from '@/components/settings/RemoteAgentsSection';
 import { LlmModelsSection } from '@/components/settings/llm/LlmModelsSection';
+import { DatabasesSection } from '@/components/settings/databases/DatabasesSection';
 import UsersContent from '@/components/settings/UsersContent';
 import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
 import StylesContainerV2 from '@/components/containers/StylesContainerV2';
@@ -32,7 +33,7 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
 
-type TabId = 'general' | 'homepage' | 'dev' | 'data' | 'users' | 'appearance' | 'configs' | 'styles' | 'messaging' | 'integrations' | 'models';
+type TabId = 'general' | 'homepage' | 'dev' | 'data' | 'users' | 'appearance' | 'configs' | 'styles' | 'messaging' | 'integrations' | 'models' | 'databases';
 
 interface SettingEntry {
   tab: TabId;
@@ -655,6 +656,16 @@ function SettingsContent() {
       custom: (
         <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" p={6}>
           <LlmModelsSection />
+        </Box>
+      ),
+    },
+    {
+      id: 'databases',
+      label: 'Databases',
+      visible: isAdmin,
+      custom: (
+        <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" p={6}>
+          <DatabasesSection />
         </Box>
       ),
     },

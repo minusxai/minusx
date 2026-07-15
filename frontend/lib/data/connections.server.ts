@@ -25,13 +25,39 @@ import { resolvePath } from '@/lib/mode/path-resolver';
 import { Mode } from '@/lib/mode/mode-types';
 import { getNodeConnector } from '@/lib/connections';
 
+/**
+ * Database connections defined in the org CONFIG (`databases.connections`) —
+ * the Settings → Databases surface, managed like LLM providers. Config is the
+ * SOURCE OF TRUTH for a connection's spec: a config entry shadows a same-named
+ * legacy `/database` doc (whose remaining job is schema caching). Credentials
+ * in entries are `@SECRETS/…` refs at rest; `resolveConnectionSecrets` swaps
+ * them at query time, same as file-backed connections.
+ */
+async function getConfigDatabases(mode: Mode): Promise<Array<{ name: string; type: ConnectionContent['type']; config: Record<string, any> }>> {
+  try {
+    const doc = await DocumentDB.getByPath(resolvePath(mode, '/configs/config'));
+    const section = (doc?.content as { databases?: { connections?: unknown } } | null)?.databases;
+    const entries = section?.connections;
+    if (!Array.isArray(entries)) return [];
+    return entries.filter((e): e is { name: string; type: ConnectionContent['type']; config: Record<string, any> } =>
+      !!e && typeof e === 'object' && typeof (e as { name?: unknown }).name === 'string' && typeof (e as { type?: unknown }).type === 'string');
+  } catch {
+    return [];
+  }
+}
+
 class ConnectionsDataLayerServer implements IConnectionsDataLayer {
   async listAll(user: EffectiveUser, includeSchemas = false): Promise<ListConnectionsResult> {
     // Filter connections by mode to ensure mode isolation
     const modePath = `/${user.mode}`;
     const connections = await DocumentDB.listAll('connection', [modePath]);
 
-    const formatted = connections.map(conn => {
+    // Config-backed connections: merge, config entry wins on a name clash.
+    const configEntries = await getConfigDatabases(user.mode);
+    const configNames = new Set(configEntries.map((e) => e.name));
+    const fileFormatted = connections
+      .filter((conn) => !configNames.has(conn.name))
+      .map(conn => {
       const content = conn.content as ConnectionContent;
       return {
         id: conn.id,
@@ -43,15 +69,40 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       };
     });
 
+    // Config entries surface with the same safe-config redaction; the legacy
+    // doc's id is reused when one exists (schema-cache holder), else -1.
+    const docByName = new Map(connections.map((c) => [c.name, c]));
+    const configFormatted = configEntries.map((e) => {
+      const doc = docByName.get(e.name);
+      return {
+        id: doc?.id ?? -1,
+        name: e.name,
+        type: e.type,
+        config: getSafeConfig(e.type, e.config),
+        created_at: doc?.created_at ?? new Date(0).toISOString(),
+        updated_at: doc?.updated_at ?? new Date(0).toISOString(),
+      };
+    });
+    const formatted = [...configFormatted, ...fileFormatted];
+
     if (!includeSchemas) {
       return { connections: formatted };
     }
 
-    // Fetch schemas in parallel (no timeout, no fallback)
-    const schemaPromises = connections.map(async conn => {
-      const content = conn.content as ConnectionContent;
+    // Fetch schemas in parallel (no timeout, no fallback). Config-backed
+    // entries introspect with their config spec (secrets resolved downstream
+    // by the connector path when needed).
+    const schemaSources = [
+      ...configEntries.map((e) => ({ name: e.name, type: e.type, config: e.config })),
+      ...connections.filter((c) => !configNames.has(c.name)).map((c) => ({
+        name: c.name,
+        type: (c.content as ConnectionContent).type,
+        config: (c.content as ConnectionContent).config,
+      })),
+    ];
+    const schemaPromises = schemaSources.map(async (conn) => {
       try {
-        const connector = getNodeConnector(conn.name, content.type, content.config);
+        const connector = getNodeConnector(conn.name, conn.type, conn.config);
         const schema: DatabaseSchema = {
           schemas: connector ? await connector.getSchema() : [],
           updated_at: new Date().toISOString(),
@@ -76,6 +127,21 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     const connectionPath = resolvePath(user.mode, `/database/${name}`);
     const conn = await DocumentDB.getByPath(connectionPath);
 
+    // Config entry wins; a legacy doc (when present) only contributes identity.
+    const configEntry = (await getConfigDatabases(user.mode)).find((e) => e.name === name);
+    if (configEntry) {
+      return {
+        connection: {
+          id: conn?.id ?? -1,
+          name,
+          type: configEntry.type,
+          config: getSafeConfig(configEntry.type, configEntry.config),
+          created_at: conn?.created_at ?? new Date(0).toISOString(),
+          updated_at: conn?.updated_at ?? new Date(0).toISOString(),
+        }
+      };
+    }
+
     if (!conn) {
       throw new Error(`Connection '${name}' not found`);
     }
@@ -98,6 +164,14 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
    * Never expose this to clients; it returns sensitive credentials like service_account_json.
    */
   async getRawByName(name: string, mode: Mode): Promise<{ type: string; config: Record<string, any> }> {
+    // Config entry wins — the Settings → Databases surface is the source of
+    // truth for a connection's spec. Credentials arrive as @SECRETS refs and
+    // are resolved by the caller (resolveConnectionSecrets), same as docs.
+    const configEntry = (await getConfigDatabases(mode)).find((e) => e.name === name);
+    if (configEntry) {
+      return { type: configEntry.type, config: configEntry.config };
+    }
+
     const connectionPath = resolvePath(mode, `/database/${name}`);
     const conn = await DocumentDB.getByPath(connectionPath);
 

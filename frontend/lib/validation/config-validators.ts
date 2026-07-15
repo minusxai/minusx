@@ -4,6 +4,7 @@ import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import type { VisualizationType } from '@/lib/types';
 import { LLM_USE_CASES } from '@/lib/llm/llm-config-types';
+import { validateDatabasesConfig } from '@/lib/config/database-config-types';
 
 const VALID_VIZ_TYPES: readonly VisualizationType[] = [
   'table', 'bar', 'row', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot', 'trend', 'waterfall', 'combo', 'radar', 'geo'
@@ -137,6 +138,8 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
 
   if (config.llm !== undefined && validateLlmConfig(config.llm) != null) return false;
 
+  if (config.databases !== undefined && validateDatabasesConfig(config.databases) != null) return false;
+
   return true;
 }
 
@@ -151,6 +154,11 @@ export function orgConfigValidationError(content: unknown): string | null {
     if (llm !== undefined) {
       const llmError = validateLlmConfig(llm);
       if (llmError) return `Invalid LLM config: ${llmError}`;
+    }
+    const databases = (content as { databases?: unknown } | null)?.databases;
+    if (databases !== undefined) {
+      const dbError = validateDatabasesConfig(databases);
+      if (dbError) return `Invalid databases config: ${dbError}`;
     }
     return 'Invalid config structure. Required fields: branding.{logoLight, logoDark, displayName, agentName, favicon}';
   }
