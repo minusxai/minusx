@@ -2,7 +2,7 @@
 
 import { memo } from 'react';
 import { Box, VStack, HStack, Grid, GridItem, SimpleGrid, Heading, Text, Icon, Badge } from '@chakra-ui/react';
-import { LuTriangleAlert, LuTrendingUp, LuEye, LuActivity } from 'react-icons/lu';
+import { LuTriangleAlert, LuTrendingUp, LuEye, LuActivity, LuChartLine, LuSparkles, LuSearch, LuTarget } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -21,8 +21,9 @@ const TONE_CONFIG: Record<InsightTone, { color: string; label: string; icon: Ico
   watch: { color: 'accent.warning', label: 'Watch', icon: LuEye },
 };
 
-/** Chip colors rotated across question sections so threads scan as distinct lanes. */
+/** Chip colors and icons rotated across question sections so threads scan as distinct lanes. */
 const SECTION_ACCENTS = ['accent.cyan', 'accent.secondary', 'accent.warning', 'accent.primary'];
+const SECTION_ICONS: IconType[] = [LuChartLine, LuSparkles, LuSearch, LuTarget];
 
 const ENTRANCE_KEYFRAMES = `
 @keyframes agentBriefIn {
@@ -82,12 +83,14 @@ function ThreadCard({
   question,
   section,
   accent,
+  icon,
   order,
   onClick,
 }: {
   question: string;
   section: string;
   accent: string;
+  icon: IconType;
   order: number;
   onClick: () => void;
 }) {
@@ -111,6 +114,9 @@ function ThreadCard({
       onClick={onClick}
       style={entrance(order)}
     >
+      <Box p={1.5} borderRadius="md" bg={`${accent}/10`} flexShrink={0}>
+        <Icon as={icon} boxSize={3.5} color={accent} />
+      </Box>
       <Badge
         fontSize="2xs"
         fontWeight="700"
@@ -150,6 +156,7 @@ function AgentWelcomeImpl({ agent, onPromptClick, colStart: _colStart, colSpan: 
       question,
       section: section.title,
       accent: SECTION_ACCENTS[sectionIndex % SECTION_ACCENTS.length],
+      icon: SECTION_ICONS[sectionIndex % SECTION_ICONS.length],
     }))
   );
 
@@ -253,6 +260,7 @@ function AgentWelcomeImpl({ agent, onPromptClick, colStart: _colStart, colSpan: 
                     question={thread.question}
                     section={thread.section}
                     accent={thread.accent}
+                    icon={thread.icon}
                     order={i + 5}
                     onClick={() => onPromptClick(thread.question)}
                   />
