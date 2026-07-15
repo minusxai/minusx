@@ -312,3 +312,55 @@ describe('dialect matrix — compile → SQL → parse → detect round trip', (
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// 6. Explorer fixed point: specs the semantic explorer emits must round-trip
+//    EXACTLY, or auto-run's detection feedback (spec → sql → detect → spec)
+//    would oscillate and re-execute forever.
+// ---------------------------------------------------------------------------
+
+describe('explorer fixed point — timeColumn override round trip', () => {
+  const SHIPMENTS: SemanticModel = {
+    name: 'Shipments',
+    connection: 'warehouse',
+    table: 'shipments',
+    timeDimension: { column: 'created_at' },
+    dimensions: [
+      { name: 'Carrier', column: 'carrier' },
+      { name: 'Delivered At', column: 'delivered_at', temporal: true },
+    ],
+    measures: [
+      { name: 'Count', agg: 'COUNT' },
+      { name: 'Total Weight', agg: 'SUM', column: 'weight' },
+    ],
+  };
+
+  const CASES: Array<[string, SemanticQuerySpec]> = [
+    ['non-default temporal column as time axis', {
+      model: 'Shipments', table: 'shipments', measures: ['Count'], dimensions: [],
+      timeGrain: 'WEEK', timeColumn: 'delivered_at',
+    }],
+    ['timeColumn + dim + filters (IN, IS NULL)', {
+      model: 'Shipments', table: 'shipments', measures: ['Count', 'Total Weight'], dimensions: ['Carrier'],
+      timeGrain: 'DAY', timeColumn: 'delivered_at',
+      filters: [
+        { dimension: 'Carrier', operator: 'IN', value: ['ups', 'fedex'] },
+        { dimension: 'Carrier', operator: 'IS NOT NULL' },
+      ],
+    }],
+    ['two measures + one dim (the scatter shape)', {
+      model: 'Shipments', table: 'shipments', measures: ['Count', 'Total Weight'], dimensions: ['Carrier'],
+    }],
+  ];
+
+  for (const [name, spec] of CASES) {
+    it(`${name}: compile → SQL → detect ≡ spec`, async () => {
+      const sql = irToSqlLocal(compileSemanticQuery(spec, SHIPMENTS), 'duckdb');
+      const detected = await detectSemanticQuery(sql, [SHIPMENTS], 'duckdb');
+      expect(detected).toEqual(spec);
+      // fixed point: a second pass through the loop changes nothing
+      const sql2 = irToSqlLocal(compileSemanticQuery(detected!, SHIPMENTS), 'duckdb');
+      expect(sql2).toBe(sql);
+    });
+  }
+});

@@ -8,3 +8,4 @@ export { SemanticExplorer } from './SemanticExplorer';
 export { ChartTypeRail } from './ChartTypeRail';
 export { FieldsRail, type DraggingField } from './FieldsRail';
 export { FilterEditor } from './FilterEditor';
+export { SqlPeekDrawer } from './SqlPeekDrawer';

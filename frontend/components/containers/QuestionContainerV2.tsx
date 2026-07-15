@@ -254,6 +254,10 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
     [handleExecute],
   );
 
+  // Semantic auto-run: UN-FORCED — cache-served and deduped exactly like the
+  // mount auto-execute, so dragging fields around never hammers the warehouse.
+  const handleAutoExecute = useCallback(() => handleExecute(), [handleExecute]);
+
   // Get proposed query from UI state (set by UserInputComponent for diff view)
   const proposedQuery = useAppSelector(state =>
     selectProposedQuery(state, typeof fileId === 'number' ? fileId : undefined)
@@ -293,6 +297,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
       onChange={handleChange}
       onParameterValueChange={handleParameterValueChange}
       onExecute={handleExecuteForced}
+      onAutoExecute={handleAutoExecute}
     />
   );
 }

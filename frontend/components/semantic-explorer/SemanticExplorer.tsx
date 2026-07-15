@@ -19,7 +19,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, VStack, HStack, Text, Button, Input } from '@chakra-ui/react';
-import { LuPlay, LuTriangleAlert } from 'react-icons/lu';
+import { LuPlay, LuPause, LuTriangleAlert } from 'react-icons/lu';
 import { compileSemanticQuery, validateSemanticQuery } from '@/lib/semantic/compile';
 import { autoVizForSpec, inferVizForSpec, type VizMatch } from '@/lib/semantic/infer-viz';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
@@ -32,6 +32,7 @@ import { AddChipButton } from '../query-builder/QueryChip';
 import { FieldsRail, type DraggingField } from './FieldsRail';
 import { FilterEditor, ShelfChip, filterChipText } from './FilterEditor';
 import { ChartTypeRail } from './ChartTypeRail';
+import { SqlPeekDrawer } from './SqlPeekDrawer';
 
 const TIME_GRAINS: SemanticTimeGrain[] = ['HOUR', 'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'];
 
@@ -60,6 +61,15 @@ interface SemanticExplorerProps {
   onVizTypeChange: (type: VizSettings['type'], locked: boolean) => void;
   onExecute?: () => void;
   isExecuting?: boolean;
+  /** Auto-run state: undefined = no auto-run capability (legacy manual mode,
+   *  Execute button always shown); true = running on every edit (pause
+   *  offered); false = paused (resume + Execute offered). */
+  autoRun?: boolean;
+  onToggleAutoRun?: () => void;
+  /** The compiled SQL for the peek drawer (content.query, always in sync). */
+  compiledSql?: string;
+  /** Jump to the full SQL editor tab. */
+  onEditSql?: () => void;
 }
 
 const specForStub = (stub: ModelStub): SemanticQuerySpec => ({
@@ -84,6 +94,10 @@ export function SemanticExplorer({
   onVizTypeChange,
   onExecute,
   isExecuting = false,
+  autoRun,
+  onToggleAutoRun,
+  compiledSql,
+  onEditSql,
 }: SemanticExplorerProps) {
   const [spec, setSpec] = useState<SemanticQuerySpec | null>(() => value ?? null);
   const [browsingTables, setBrowsingTables] = useState(false);
@@ -354,6 +368,24 @@ export function SemanticExplorer({
 
       <HStack justify="space-between" align="center">
         <HStack gap={2}>
+          {autoRun !== undefined && onToggleAutoRun && (
+            <HStack
+              as="button"
+              aria-label={autoRun ? 'Pause auto-run' : 'Resume auto-run'}
+              gap={1}
+              px={1.5} py={0.5}
+              borderRadius="sm"
+              border="1px solid"
+              borderColor={autoRun ? 'accent.teal' : 'border.muted'}
+              color={autoRun ? 'accent.teal' : 'fg.muted'}
+              _hover={{ bg: 'bg.muted' }}
+              onClick={onToggleAutoRun}
+              title={autoRun ? 'Auto-run is on: every change runs the query' : 'Auto-run paused: changes wait for Execute'}
+            >
+              {autoRun ? <LuPause size={11} /> : <LuPlay size={11} />}
+              <Text fontSize="2xs" fontFamily="mono" fontWeight="600">auto</Text>
+            </HStack>
+          )}
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">Limit</Text>
           <Input
             aria-label="Semantic row limit"
@@ -374,7 +406,7 @@ export function SemanticExplorer({
         )}
       </HStack>
 
-      {onExecute && (
+      {onExecute && autoRun !== true && (
         <Button
           aria-label="Execute semantic query"
           onClick={onExecute}
@@ -394,6 +426,8 @@ export function SemanticExplorer({
           <Text ml={2} fontFamily="mono">Execute</Text>
         </Button>
       )}
+
+      {compiledSql && <SqlPeekDrawer sql={compiledSql} onEditSql={onEditSql} />}
     </VStack>
   );
 

@@ -105,6 +105,11 @@ interface QuestionViewV2Props {
   onChange: (updates: Partial<QuestionContent>) => void;
   onParameterValueChange?: (paramName: string, value: string | number | null) => void;  // Ephemeral
   onExecute: (overrideParamValues?: Record<string, any>) => void;  // Phase 3: Explicit execute
+
+  // Semantic auto-run: an UN-FORCED execute (cache-served, deduped) the view
+  // debounce-invokes after shelf edits. Callers that omit it (modals, toolcall
+  // embeds) get no auto-run — the explorer falls back to the Execute button.
+  onAutoExecute?: () => void;
 }
 
 export default function QuestionViewV2({
@@ -131,6 +136,7 @@ export default function QuestionViewV2({
   onChange,
   onParameterValueChange,
   onExecute,
+  onAutoExecute,
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
   const isPreview = mode === 'preview';
@@ -337,6 +343,49 @@ export default function QuestionViewV2({
   // family was necessarily a deliberate pick.
   const vizTypeLocked = content.vizSettings?.typeLocked
     ?? !['table', 'bar', 'line'].includes(content.vizSettings?.type ?? 'table');
+
+  // --- Semantic auto-run: debounce shelf edits into UN-FORCED executes. -------
+  // Loop guards: keyed on the COMPILED SQL (an edit sequence landing back on
+  // the same SQL runs nothing), the ref starts at the mount query (a persisted
+  // spec whose result already loaded never re-runs), and the pending timer is
+  // cancelled on pause, tab switch, and unmount.
+  const [semanticAutoRun, setSemanticAutoRun] = useState(true);
+  const lastAutoRanSqlRef = useRef<string>(content.query);
+  const autoRunTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The timer must call the LATEST onAutoExecute — the container's execute
+  // handler closes over the merged content, and the shelf edit that scheduled
+  // this run is exactly what changed it. A stale closure would run the old SQL.
+  const onAutoExecuteRef = useRef(onAutoExecute);
+  useEffect(() => { onAutoExecuteRef.current = onAutoExecute; });
+
+  const cancelPendingAutoRun = useCallback(() => {
+    if (autoRunTimerRef.current) {
+      clearTimeout(autoRunTimerRef.current);
+      autoRunTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleAutoRun = useCallback((sql: string) => {
+    if (!onAutoExecute || !semanticAutoRun) return;
+    cancelPendingAutoRun();
+    autoRunTimerRef.current = setTimeout(() => {
+      autoRunTimerRef.current = null;
+      if (sql === lastAutoRanSqlRef.current) return;
+      lastAutoRanSqlRef.current = sql;
+      onAutoExecuteRef.current?.();
+    }, 400);
+  }, [onAutoExecute, semanticAutoRun, cancelPendingAutoRun]);
+
+  const toggleSemanticAutoRun = useCallback(() => {
+    cancelPendingAutoRun();
+    setSemanticAutoRun((a) => !a);
+  }, [cancelPendingAutoRun]);
+
+  // Leaving semantic mode (or unmounting) abandons any pending auto-run.
+  useEffect(() => {
+    if (effectiveQueryMode !== 'semantic') cancelPendingAutoRun();
+  }, [effectiveQueryMode, cancelPendingAutoRun]);
+  useEffect(() => cancelPendingAutoRun, [cancelPendingAutoRun]);
 
   // Handle chart axis change
   const handleAxisChange = (xCols: string[], yCols: string[]) => {
@@ -595,6 +644,7 @@ export default function QuestionViewV2({
                             yCols: viz.yCols,
                           },
                         });
+                        scheduleAutoRun(sql);
                       }}
                       vizType={content.vizSettings?.type ?? 'table'}
                       vizTypeLocked={vizTypeLocked}
@@ -603,6 +653,10 @@ export default function QuestionViewV2({
                       }}
                       onExecute={handleExecute}
                       isExecuting={queryLoading && !queryData}
+                      autoRun={onAutoExecute ? semanticAutoRun : undefined}
+                      onToggleAutoRun={onAutoExecute ? toggleSemanticAutoRun : undefined}
+                      compiledSql={content.query || undefined}
+                      onEditSql={() => { setUserPickedMode(true); setQueryMode('sql'); }}
                     />
                   </Box>
                 )}
