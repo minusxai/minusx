@@ -235,6 +235,29 @@ describe('SemanticExplorer', () => {
     vi.unstubAllGlobals();
   });
 
+  it('an existing filter chip can be EDITED in place', async () => {
+    const { onChange } = renderExplorer({
+      value: {
+        model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: [],
+        filters: [{ dimension: 'Status', operator: '=', value: 'done' }],
+      },
+    });
+
+    // clicking the chip opens the editor, prefilled with the filter
+    fireEvent.click(screen.getByLabelText('Filter chip: Status'));
+    const input = await screen.findByLabelText('Semantic filter value');
+    expect((input as HTMLInputElement).value).toBe('done');
+
+    fireEvent.change(input, { target: { value: 'cancelled' } });
+    fireEvent.click(screen.getByLabelText('Apply semantic filter'));
+
+    await waitFor(() => {
+      const [spec, sql] = onChange.mock.calls.at(-1)!;
+      expect(spec.filters).toEqual([{ dimension: 'Status', operator: '=', value: 'cancelled' }]);
+      expect(sql).toContain('cancelled');
+    });
+  });
+
   it('removing a selected chip updates the spec', async () => {
     const { onChange } = renderExplorer({
       value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },

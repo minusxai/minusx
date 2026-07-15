@@ -423,23 +423,36 @@ export function SemanticExplorer({
         <HStack gap={1.5} align="center" flexWrap="wrap">
           {shelfLabel('Filters', (spec.filters ?? []).length === 0)}
           {(spec.filters ?? []).map((f, idx) => (
-            <ShelfChip
-              key={`${f.dimension}-${idx}`}
-              label={`Filter chip: ${f.dimension}`}
-              accent="accent.cyan"
-              onRemove={() => update({ filters: (spec.filters ?? []).filter((_, i) => i !== idx) })}
-            >
-              <Text fontSize="xs" fontFamily="mono">
-                {f.operator === 'IS NULL' || f.operator === 'IS NOT NULL'
-                  ? `${f.dimension} ${f.operator}`
-                  : `${f.dimension} ${f.operator} ${Array.isArray(f.value) ? `(${f.value.join(', ')})` : String(f.value ?? '')}`}
-              </Text>
-            </ShelfChip>
+            <SemanticFilterPicker
+              key={`${f.dimension}-${f.operator}-${filterValueString(f)}-${idx}`}
+              dimensions={model ? model.dimensions.map((d) => d.name) : [f.dimension]}
+              initial={f}
+              onSubmit={(filter) => update({ filters: (spec.filters ?? []).map((prev, i) => (i === idx ? filter : prev)) })}
+              trigger={(openEditor) => (
+                <ShelfChip
+                  label={`Filter chip: ${f.dimension}`}
+                  accent="accent.cyan"
+                  onClick={openEditor}
+                  onRemove={() => update({ filters: (spec.filters ?? []).filter((_, i) => i !== idx) })}
+                >
+                  <Text fontSize="xs" fontFamily="mono">
+                    {f.operator === 'IS NULL' || f.operator === 'IS NOT NULL'
+                      ? `${f.dimension} ${f.operator}`
+                      : `${f.dimension} ${f.operator} ${Array.isArray(f.value) ? `(${f.value.join(', ')})` : String(f.value ?? '')}`}
+                  </Text>
+                </ShelfChip>
+              )}
+            />
           ))}
           {model && (
             <SemanticFilterPicker
               dimensions={model.dimensions.map((d) => d.name)}
-              onAdd={(filter) => update({ filters: [...(spec.filters ?? []), filter] })}
+              onSubmit={(filter) => update({ filters: [...(spec.filters ?? []), filter] })}
+              trigger={(openEditor) => (
+                <Box aria-label="Add semantic filter">
+                  <AddChipButton onClick={openEditor} variant="filter" />
+                </Box>
+              )}
             />
           )}
         </HStack>
@@ -653,8 +666,8 @@ export function SemanticExplorer({
 // Pieces
 // ---------------------------------------------------------------------------
 
-function ShelfChip({ label, accent = 'border.muted', onRemove, children }: {
-  label: string; accent?: string; onRemove?: () => void; children: React.ReactNode;
+function ShelfChip({ label, accent = 'border.muted', onRemove, onClick, children }: {
+  label: string; accent?: string; onRemove?: () => void; onClick?: () => void; children: React.ReactNode;
 }) {
   return (
     <HStack
@@ -662,6 +675,7 @@ function ShelfChip({ label, accent = 'border.muted', onRemove, children }: {
       gap={1.5} px={2} py={0.5}
       bg={`${accent}/8`} borderRadius="md" border="1px solid" borderColor={`${accent}/25`}
       userSelect="none"
+      {...(onClick ? { onClick, cursor: 'pointer', _hover: { bg: `${accent}/15` } } : {})}
     >
       {children}
       {onRemove && (
@@ -680,17 +694,32 @@ function ShelfChip({ label, accent = 'border.muted', onRemove, children }: {
   );
 }
 
-/** Filter add flow (dimension → operator → value). */
-function SemanticFilterPicker({ dimensions, onAdd }: {
+/** String form of a filter's value, for the editor input. */
+const filterValueString = (f?: SemanticQueryFilter): string =>
+  f?.value === undefined ? '' : Array.isArray(f.value) ? f.value.join(', ') : String(f.value);
+
+/**
+ * Filter editor popover — both flows: ADD (empty, dimension → operator →
+ * value) and EDIT-IN-PLACE (`initial` set: opens prefilled on the clicked
+ * chip, dimension fixed). The trigger render-prop receives the open() call.
+ */
+function SemanticFilterPicker({ dimensions, initial, trigger, onSubmit }: {
   dimensions: string[];
-  onAdd: (filter: SemanticQueryFilter) => void;
+  initial?: SemanticQueryFilter;
+  trigger: (open: () => void) => React.ReactNode;
+  onSubmit: (filter: SemanticQueryFilter) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [dimension, setDimension] = useState('');
-  const [operator, setOperator] = useState<SemanticQueryFilter['operator']>('=');
-  const [value, setValue] = useState('');
+  const [dimension, setDimension] = useState(initial?.dimension ?? '');
+  const [operator, setOperator] = useState<SemanticQueryFilter['operator']>(initial?.operator ?? '=');
+  const [value, setValue] = useState(() => filterValueString(initial));
 
-  const close = () => { setOpen(false); setDimension(''); setOperator('='); setValue(''); };
+  const close = () => {
+    setOpen(false);
+    setDimension(initial?.dimension ?? '');
+    setOperator(initial?.operator ?? '=');
+    setValue(filterValueString(initial));
+  };
   const needsValue = operator !== 'IS NULL' && operator !== 'IS NOT NULL';
 
   const submit = () => {
@@ -699,7 +728,7 @@ function SemanticFilterPicker({ dimensions, onAdd }: {
       : operator === 'IN' ? value.split(',').map((v) => v.trim()).filter(Boolean)
       : value.trim() !== '' && !isNaN(Number(value)) ? Number(value)
       : value;
-    onAdd({ dimension, operator, ...(parsed !== undefined ? { value: parsed } : {}) });
+    onSubmit({ dimension, operator, ...(parsed !== undefined ? { value: parsed } : {}) });
     close();
   };
 
@@ -707,11 +736,7 @@ function SemanticFilterPicker({ dimensions, onAdd }: {
     <PickerPopover
       open={open}
       onOpenChange={(details) => { if (!details.open) close(); else setOpen(true); }}
-      trigger={
-        <Box aria-label="Add semantic filter">
-          <AddChipButton onClick={() => setOpen(true)} variant="filter" />
-        </Box>
-      }
+      trigger={trigger(() => setOpen(true))}
       width="300px"
       padding={3}
     >
