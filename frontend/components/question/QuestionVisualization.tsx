@@ -7,17 +7,31 @@
 
 import { Box, HStack, VStack, Text, Spinner, Button } from '@chakra-ui/react';
 import { LuRocket, LuWrench, LuCode, LuRefreshCw, LuCloudOff } from 'react-icons/lu';
+import dynamic from 'next/dynamic';
 import { Tooltip } from '@/components/ui/tooltip';
 import { TableV2 } from '@/components/plotx/TableV2';
+import { VizTableView } from '@/components/viz/VizTableView';
+import { VizPivotView } from '@/components/viz/VizPivotView';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/components/question/error-parser';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { memo, useState, useEffect, useRef } from 'react';
 import isEqual from 'lodash/isEqual';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
+import { setRecipeParam } from '@/lib/viz/encoding-edit';
+import { resolveLegacyRenderEnvelope } from '@/lib/viz/from-vizsettings';
+import { toVizColumns } from '@/lib/viz/query-data';
+import { ChartDownloadMenu } from '@/components/viz/ChartDownloadMenu';
+import { getBrandLogoUrl } from '@/lib/branding/whitelabel';
+
+// Viz V2 (docs/Visualization Arch V2.md): lazy chunk — vega/vega-lite only load on
+// pages that actually render a V2 envelope (same pattern as GeoPlot/Leaflet).
+// eslint-disable-next-line no-restricted-syntax
+const VegaChart = dynamic(() => import('@/components/viz/VegaChart'), { ssr: false });
 
 export interface ContainerConfig {
   showHeader: boolean;
@@ -64,6 +78,8 @@ interface QuestionVisualizationProps {
   onHideVizTab?: () => void;
   /** Whether the Viz tab is currently open in the left panel */
   vizTabOpen?: boolean;
+  /** Viz V2 envelope write-back (e.g. table header format edits). Omit for read-only surfaces. */
+  onVizChange?: (viz: import('@/lib/validation/atlas-schemas').VizEnvelope) => void;
 }
 
 function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: number | null }) {
@@ -159,9 +175,11 @@ function QuestionVisualizationInner({
   onOpenVizTab,
   onHideVizTab,
   vizTabOpen,
+  onVizChange,
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
   const showJson = useAppSelector(state => state.ui.devMode);
+  const colorMode = useAppSelector(state => state.ui.colorMode);
   const { config: appConfig } = useConfigs();
   const agentName = appConfig.branding.agentName;
 
@@ -186,9 +204,43 @@ function QuestionVisualizationInner({
     return null;
   }
 
-  const isChartType = currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table';
+  // A V2 envelope is authoritative when present (RFC): the vizSettings pipeline is bypassed.
+  // The settings button stays visible for V2 questions — the panel shows the spec inspector.
+  const hasVizV2 = currentState?.viz != null;
+  // table/pivot kinds render on the DOM tier, never through vega (RFC §10).
+  const vizV2Kind = hasVizV2 ? (currentState.viz!.source as unknown as { kind: string }).kind : null;
+  const isVizV2Table = vizV2Kind === 'table';
+  const isVizV2Pivot = vizV2Kind === 'pivot';
+  const isChartType = hasVizV2 || (currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table');
+
+  // V1→V2 render bridge (Viz Arch V2 §21 item 1): on EVERY surface, a legacy chart with
+  // no `viz` envelope renders through <VegaChart> via the converter (the question page's
+  // Viz panel edits the same converted envelope — see QuestionViewV2); table/pivot keep
+  // their DOM renderers. Pure — recomputed from vizSettings each render.
+  const legacyRenderViz = data
+    ? resolveLegacyRenderEnvelope({
+        hasVizEnvelope: hasVizV2,
+        vizSettings: currentState?.vizSettings,
+        columns: toVizColumns(data.columns, data.types),
+      })
+    : null;
 
   const showChartTitle = config.viz.showTitle;
+
+  // Image + CSV download, revealed on hover of the chart (V1 parity). Rendered over both
+  // the V2 chart and the legacy render bridge; a subtle top-right control on every chart.
+  const chartDownloadOverlay = (envelope: VizEnvelope) => (
+    <Box className="mx-chart-dl" position="absolute" bottom={2} right={2} zIndex={6} opacity={0} transition="opacity 0.12s">
+      <ChartDownloadMenu
+        envelope={envelope}
+        rows={data?.rows ?? []}
+        columns={data?.columns ?? []}
+        colorMode={colorMode}
+        logoSrc={getBrandLogoUrl(appConfig.branding, colorMode)}
+      />
+    </Box>
+  );
+
   return (
     <VStack gap={0} width="full" align="stretch" flex="1" overflow="hidden"
     // borderRadius={'lg'} border={'1px solid'} borderColor={'border.muted'}
@@ -432,12 +484,60 @@ function QuestionVisualizationInner({
                     </Box>
                   </Tooltip>
                 )}
-                {currentState?.vizSettings?.type === 'table' && (
+                {hasVizV2 && isVizV2Table && (
+                  <VizTableView
+                    envelope={currentState.viz!}
+                    columns={data.columns}
+                    types={data.types}
+                    rows={data.rows}
+                    sql={currentState?.query}
+                    databaseName={currentState?.connection_name}
+                    enableDrilldown={config.enableDrilldown !== false}
+                    onVizChange={config.editable ? onVizChange : undefined}
+                  />
+                )}
+                {hasVizV2 && isVizV2Pivot && (
+                  <VizPivotView
+                    envelope={currentState.viz!}
+                    rows={data.rows}
+                    sql={currentState?.query}
+                    databaseName={currentState?.connection_name}
+                    enableDrilldown={config.enableDrilldown !== false}
+                  />
+                )}
+                {hasVizV2 && !isVizV2Table && !isVizV2Pivot && (
+                  <Box position="relative" flex="1" minHeight="0" overflow="hidden" display="flex" p={3} css={{ '&:hover .mx-chart-dl, &:focus-within .mx-chart-dl': { opacity: 1 } }}>
+                    <VegaChart
+                      envelope={currentState.viz!}
+                      rows={data.rows}
+                      colorMode={colorMode}
+                      onViewChange={config.editable && onVizChange
+                        ? (params) => {
+                            let next = currentState.viz!;
+                            for (const [k, val] of Object.entries(params)) {
+                              // Drop defaults so the envelope stays clean (zoom 1, no pan).
+                              const isDefault = (k === 'zoom' && val === 1) || ((k === 'panX' || k === 'panY') && val === 0);
+                              next = setRecipeParam(next, k, isDefault ? undefined : val);
+                            }
+                            onVizChange(next);
+                          }
+                        : undefined}
+                    />
+                    {chartDownloadOverlay(currentState.viz!)}
+                  </Box>
+                )}
+                {!hasVizV2 && currentState?.vizSettings?.type === 'table' && (
                   <Box flex="1" minHeight="0" overflow="hidden" display="flex" width={"100%"} alignItems={"stretch"} flexDirection={"column"}>
                     <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.connection_name} enableDrilldown={config.enableDrilldown !== false} columnFormats={currentState.vizSettings?.columnFormats ?? undefined} onColumnFormatsChange={config.editable ? onColumnFormatsChange : undefined} conditionalFormats={currentState.vizSettings?.conditionalFormats ?? undefined} />
                   </Box>
                 )}
-                {(currentState?.vizSettings?.type === 'line' ||
+                {legacyRenderViz && (
+                  <Box position="relative" flex="1" minHeight="0" overflow="hidden" display="flex" p={3} css={{ '&:hover .mx-chart-dl, &:focus-within .mx-chart-dl': { opacity: 1 } }}>
+                    <VegaChart envelope={legacyRenderViz} rows={data.rows} colorMode={colorMode} />
+                    {chartDownloadOverlay(legacyRenderViz)}
+                  </Box>
+                )}
+                {!hasVizV2 && !legacyRenderViz && (currentState?.vizSettings?.type === 'line' ||
                   currentState?.vizSettings?.type === 'bar' ||
                   currentState?.vizSettings?.type === 'area' ||
                   currentState?.vizSettings?.type === 'scatter' ||
