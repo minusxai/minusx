@@ -408,7 +408,8 @@ export default function ContextEditorV2({
         />
       </Box>
 
-      <ContextVersionManager
+      {/* Todo: Vivek - hide version manager for now, to be added back later */}
+      {/* <ContextVersionManager
         content={content}
         showDebug={showDebug}
         isAdmin={isAdmin}
@@ -420,7 +421,7 @@ export default function ContextEditorV2({
         onCreateVersion={onCreateVersion}
         onPublishVersion={onPublishVersion}
         onDeleteVersion={onDeleteVersion}
-      />
+      /> */}
 
       {/* Error Display */}
       {error && (

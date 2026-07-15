@@ -46,6 +46,18 @@ import { useSemanticCompat } from '@/lib/hooks/use-semantic-compat';
 // to the caller since it has no layout effect there (see callers' comments).
 type CollapsedPanel = 'none' | 'left' | 'right';
 
+// ---------------------------------------------------------------------------
+// Panel sizing — THE one place to tune the three-column layout. Everything is
+// a percentage of the container width; the center (data/plot) column takes
+// whatever the other two leave. min/max bound the drag handles.
+// ---------------------------------------------------------------------------
+const PANEL_LAYOUT = {
+  /** Left column: the GUI/SQL query surface. */
+  left: { initial: 35, min: 25, max: 65 },
+  /** Right column: the viz settings panel. */
+  viz: { initial: 20, min: 12, max: 35 },
+} as const;
+
 /**
  * Props for QuestionViewV2
  */
@@ -152,12 +164,11 @@ export default function QuestionViewV2({
   const mainContentRef = useRef<HTMLDivElement>(null);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
 
-  // Resizable panel state. 38% (not 50/50) because the wide layout is three
-  // columns — query surface | data/plot | viz panel — and the chart needs room.
-  const [leftPanelWidth, setLeftPanelWidth] = useState(38); // percentage
+  // Resizable panel state (percentages; see PANEL_LAYOUT for the defaults)
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(PANEL_LAYOUT.left.initial);
   const [isResizing, setIsResizing] = useState(false);
   const resizeStartX = useRef<number>(0);
-  const resizeStartWidth = useRef<number>(38);
+  const resizeStartWidth = useRef<number>(PANEL_LAYOUT.left.initial);
   const rafRef = useRef<number | null>(null);
   // Live geo map view getter — populated by the map (ChartBuilder/GeoPlot) when it
   // mounts, read by the VizConfigPanel "Pin current view" button (a sibling of the map).
@@ -236,12 +247,11 @@ export default function QuestionViewV2({
   // there is no room for a third column.
   const showVizPanel = !useCompactLayout && showVizControls;
   const [vizPanelOpen, setVizPanelOpen] = useState(true);
-  // Viz panel resize state (px width; the left panel resizes in % of the
-  // container, but the viz panel is a fixed-width tool column).
-  const [vizPanelWidth, setVizPanelWidth] = useState(300);
+  // Viz panel resize state (percentage, like the left panel; see PANEL_LAYOUT)
+  const [vizPanelWidth, setVizPanelWidth] = useState<number>(PANEL_LAYOUT.viz.initial);
   const [isVizResizing, setIsVizResizing] = useState(false);
   const vizResizeStartX = useRef<number>(0);
-  const vizResizeStartWidth = useRef<number>(300);
+  const vizResizeStartWidth = useRef<number>(PANEL_LAYOUT.viz.initial);
   const vizRafRef = useRef<number | null>(null);
 
   // Fully derived mode: until the user explicitly picks a tab, Semantic is the
@@ -279,7 +289,7 @@ export default function QuestionViewV2({
       const containerRect = mainContentRef.current.getBoundingClientRect();
       const deltaX = clientX - resizeStartX.current;
       const deltaPercent = (deltaX / containerRect.width) * 100;
-      const newWidth = Math.max(25, Math.min(65, resizeStartWidth.current + deltaPercent));
+      const newWidth = Math.max(PANEL_LAYOUT.left.min, Math.min(PANEL_LAYOUT.left.max, resizeStartWidth.current + deltaPercent));
       setLeftPanelWidth(newWidth);
     });
   }, [isResizing]);
@@ -325,8 +335,10 @@ export default function QuestionViewV2({
     const handleMouseMove = (e: MouseEvent) => {
       if (vizRafRef.current) cancelAnimationFrame(vizRafRef.current);
       vizRafRef.current = requestAnimationFrame(() => {
-        const delta = vizResizeStartX.current - e.clientX;
-        setVizPanelWidth(Math.max(240, Math.min(520, vizResizeStartWidth.current + delta)));
+        if (!mainContentRef.current) return;
+        const containerRect = mainContentRef.current.getBoundingClientRect();
+        const deltaPercent = ((vizResizeStartX.current - e.clientX) / containerRect.width) * 100;
+        setVizPanelWidth(Math.max(PANEL_LAYOUT.viz.min, Math.min(PANEL_LAYOUT.viz.max, vizResizeStartWidth.current + deltaPercent)));
       });
     };
     const handleMouseUp = () => {
@@ -1024,7 +1036,7 @@ export default function QuestionViewV2({
           {/* Right Column: the viz panel — chart config for ALL questions */}
           {showVizPanel && vizPanelOpen && (
             <Box
-              width={`${vizPanelWidth}px`}
+              width={`calc(${vizPanelWidth}% - 8px)`}
               flexShrink={0}
               my={2}
               mr={2}

@@ -143,7 +143,7 @@ export default function ViewWorkbench({
         <Input
           aria-label="View description"
           size="sm" fontSize="xs" flex={1}
-          placeholder="What does this view show? (optional)"
+          placeholder="What does this data model show? (optional)"
           value={description}
           readOnly={readOnly}
           onChange={(e) => setDescription(e.target.value)}
@@ -185,7 +185,7 @@ export default function ViewWorkbench({
               size="xs" bg="accent.teal" color="white"
               onClick={save} disabled={!canSave} loading={saving}
             >
-              <LuSave size={12} /> <Text ml={1}>Save view</Text>
+              <LuSave size={12} /> <Text ml={1}>Save Data Model</Text>
             </Button>
           </HStack>
         </HStack>
