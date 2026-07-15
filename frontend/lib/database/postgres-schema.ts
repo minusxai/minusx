@@ -201,6 +201,11 @@ export const POSTGRES_SCHEMA = `
   DROP INDEX IF EXISTS idx_files_type;
 
   CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
+  -- Access V2 (M1b): the permission predicate matches folder scopes with
+  -- path LIKE prefix-slash-percent. Accelerating that needs a text_pattern_ops
+  -- index on hosted Postgres — but PGLite (the OSS default) rejects the opclass,
+  -- and this shared schema runs on both. It's a pure perf optimization
+  -- (correctness is unaffected), so hosted deployments add it out-of-band.
   CREATE INDEX IF NOT EXISTS idx_files_updated_at ON files(updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_files_type_updated ON files(type, updated_at DESC);
   -- Public-share lookup: resolve a story by the nonce stored in meta.shares[] via jsonb containment.

@@ -7,6 +7,10 @@ import { getModules } from '../modules/registry';
 import { DEFAULT_CONVERSATION_NAME } from '../constants';
 import { UserFacingError } from '../errors';
 import { stripNulChars } from './sanitize-jsonb';
+import { toSql, type AccessPredicate, type AccessVariant } from '@/lib/auth/access-predicate';
+
+/** SQL-enforced permission filter for a read (Access V2 / M1b). */
+export interface AccessQuery { predicate: AccessPredicate; variant?: AccessVariant; }
 
 /**
  * Path uniqueness applies to PUBLISHED files only (partial index
@@ -181,7 +185,8 @@ export class DocumentDB {
     typeFilter?: string,
     pathFilters?: string[],
     depth?: number,
-    includeContent: boolean = true
+    includeContent: boolean = true,
+    access?: AccessQuery
   ): Promise<DbFile[]> {
     const db = getModules().db;
     const conditions: string[] = [];
@@ -229,6 +234,15 @@ export class DocumentDB {
 
     // Always exclude draft files from listings
     conditions.push('draft = false');
+
+    // Access V2: SQL-enforce the caller's permission predicate (M1b). Compiled
+    // at the running param offset so `$n` placeholders line up. Optional — omit
+    // for system/internal reads that must not be permission-filtered.
+    if (access) {
+      const frag = toSql(access.predicate, access.variant ?? 'access', { paramOffset: params.length });
+      conditions.push(`(${frag.sql})`);
+      params.push(...frag.params);
+    }
 
     const columns = includeContent
       ? '*'
