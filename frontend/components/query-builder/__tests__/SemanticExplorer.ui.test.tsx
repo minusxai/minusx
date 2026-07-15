@@ -101,6 +101,36 @@ describe('SemanticExplorer', () => {
     expect(screen.getByLabelText('Semantic field search')).toBeTruthy();
   });
 
+  it('the table browser lists data models (views) FIRST, separated from tables', () => {
+    renderExplorer({
+      value: null,
+      stubs: [
+        ...STUBS,
+        { name: 'Revenue Model', connection: 'warehouse', schema: '_views', table: 'revenue_model' },
+      ],
+    });
+    const models = within(screen.getByLabelText('Data models section'));
+    const tables = within(screen.getByLabelText('Tables section'));
+
+    expect(models.getByLabelText('Pick table: Revenue Model')).toBeTruthy();
+    expect(tables.getByLabelText('Pick table: Orders')).toBeTruthy();
+    expect(tables.getByLabelText('Pick table: Users')).toBeTruthy();
+    // no cross-contamination
+    expect(models.queryByLabelText('Pick table: Orders')).toBeNull();
+    expect(tables.queryByLabelText('Pick table: Revenue Model')).toBeNull();
+
+    // models come first in the document
+    const modelsEl = screen.getByLabelText('Data models section');
+    const tablesEl = screen.getByLabelText('Tables section');
+    expect(modelsEl.compareDocumentPosition(tablesEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('no Data models section when the schema has no views', () => {
+    renderExplorer({ value: null });
+    expect(screen.queryByLabelText('Data models section')).toBeNull();
+    expect(screen.getByLabelText('Tables section')).toBeTruthy();
+  });
+
   it('picking a table from the empty-state list loads its model', () => {
     const { onSelectModel } = renderExplorer({ value: null });
     fireEvent.click(screen.getByLabelText('Pick table: Users'));

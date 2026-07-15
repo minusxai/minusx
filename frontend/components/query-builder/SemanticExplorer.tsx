@@ -29,12 +29,12 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, VStack, HStack, Text, Button, Input, Icon, Grid } from '@chakra-ui/react';
-import { LuPlay, LuPause, LuRefreshCw, LuSigma, LuGroup, LuClock, LuSearch, LuTriangleAlert, LuX, LuTable, LuCheck, LuListFilter } from 'react-icons/lu';
+import { LuPlay, LuPause, LuRefreshCw, LuSigma, LuGroup, LuClock, LuSearch, LuTriangleAlert, LuX, LuTable, LuCheck, LuLayers, LuListFilter } from 'react-icons/lu';
 import { compileSemanticQuery, validateSemanticQuery, semanticAlias } from '@/lib/semantic/compile';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { searchFields, type SemanticFieldHit } from '@/lib/semantic/models-client';
 import type { ModelStub } from '@/lib/semantic/derive';
-import type { SemanticModel, SemanticTimeGrain, VizSettings } from '@/lib/types';
+import { VIEWS_SCHEMA, type SemanticModel, type SemanticTimeGrain, type VizSettings } from '@/lib/types';
 import type { SemanticQuerySpec, SemanticQueryFilter } from '@/lib/validation/atlas-schemas';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AddChipButton } from './QueryChip';
@@ -546,23 +546,42 @@ export function SemanticExplorer({
   );
 
   // --- table browser (no model yet, or explicitly changing table) ----------------
+  // Data models (views, the curated `_views` schema) come first, subtly
+  // separated from the raw tables beneath.
+
+  const modelStubs = stubs.filter((st) => st.schema === VIEWS_SCHEMA && matches(query, st.name));
+  const tableStubs = stubs.filter((st) => st.schema !== VIEWS_SCHEMA && matches(query, st.name)).slice(0, 200);
+
+  const browserHeader = (label: string, icon: React.ReactNode, count: number) => (
+    <HStack gap={1.5} pb={1}>
+      {icon}
+      <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">{label}</Text>
+      <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" ml="auto">{count}</Text>
+    </HStack>
+  );
 
   const tableBrowser = (
     <VStack align="stretch" gap={1} px={3} py={2} overflowY="auto" flex={1} minH={0}>
-      <HStack gap={1.5} pb={1}>
-        <Icon as={LuTable} boxSize={3} color="accent.teal" />
-        <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">Tables</Text>
-        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" ml="auto">{stubs.length}</Text>
-      </HStack>
-      {stubs
-        .filter((st) => matches(query, st.name))
-        .slice(0, 200)
-        .map((st) => fieldRow(
+      {modelStubs.length > 0 && (
+        <VStack aria-label="Data models section" align="stretch" gap={1} pb={2} mb={1} borderBottom="1px solid" borderColor="border.muted">
+          {browserHeader('Data models', <Icon as={LuLayers} boxSize={3} color="accent.secondary" />, modelStubs.length)}
+          {modelStubs.map((st) => fieldRow(
+            st.name, false, 'accent.secondary',
+            <Icon as={LuLayers} boxSize={3} color="accent.secondary" flexShrink={0} />,
+            () => pickStub(st),
+            `Pick table: ${st.name}`,
+          ))}
+        </VStack>
+      )}
+      <VStack aria-label="Tables section" align="stretch" gap={1}>
+        {browserHeader('Tables', <Icon as={LuTable} boxSize={3} color="accent.teal" />, tableStubs.length)}
+        {tableStubs.map((st) => fieldRow(
           st.name, false, 'accent.teal',
           <Icon as={LuTable} boxSize={3} color="fg.muted" flexShrink={0} />,
           () => pickStub(st),
           `Pick table: ${st.name}`,
         ))}
+      </VStack>
     </VStack>
   );
 
