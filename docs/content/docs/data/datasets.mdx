@@ -1,0 +1,46 @@
+---
+title: Datasets
+description: CSV, Excel and Google Sheets as files — anyone can add data and query it immediately
+---
+
+Datasets are how static data gets into MinusX: **files, not connections**. Any editor can add a CSV, Excel workbook or Google Sheet to their own folder and query it immediately — no admin, no connection setup.
+
+---
+
+## Adding a dataset
+
+**Create → Dataset** (or `/new/dataset`) in any folder you can edit:
+
+- **Upload files** — CSV, Excel or Parquet. Each file (and each Excel sheet) becomes a table.
+- **Paste a link** — a public Google Sheets URL. Each tab becomes a table, and the dataset remembers the source so you can **re-import** it later with one click.
+
+Give the dataset a name and a **schema** (the namespace your tables live under, e.g. `sales`). Table names must be unique across your whole workspace — if a name is taken, pick another table or schema name.
+
+## Querying
+
+Dataset tables are queried through the built-in **`files`** connection:
+
+```sql
+SELECT * FROM sales.deals d JOIN public.zones z ON d.zone_id = z.zone_id
+```
+
+Tables from different datasets are **joinable** — they share one engine. The GUI works too: dataset columns derive measures and dimensions like any warehouse table.
+
+## Where a dataset is visible
+
+A dataset is queryable **in its own folder and every folder beneath it — never above, never sideways.** Data added at the workspace root is available to everyone; a team's uploads stay within that team's subtree. This mirrors how [Knowledge Base grants](/docs/knowledge-base/context) flow.
+
+## Managing tables
+
+Open the dataset file to:
+
+- **Expose / hide** each table (hidden tables disappear from the AI, the GUI and every query — the name stays reserved)
+- **Add files** to an existing dataset
+- **Delete** a table (removes the stored data too)
+- **Re-import** a link source to refresh its snapshot
+
+Admins can additionally narrow dataset tables per team in the Knowledge Base, exactly like warehouse tables.
+
+<Callout type="info">
+Database connections (Postgres, BigQuery, …) are infrastructure and live in **Settings → Databases** (admin-only). Datasets are content — files in folders, self-serve by design.
+</Callout>

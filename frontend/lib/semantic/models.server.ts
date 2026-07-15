@@ -14,6 +14,8 @@
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { getPersistedConnectionSchema } from '@/lib/data/connections.server';
+import { getVisibleTables } from '@/lib/data/datasets.server';
+import { FILES_CONNECTION } from '@/lib/types/datasets';
 import { findNearestContextPath, getPublishedVersionForUser } from '@/lib/context/context-utils';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { deriveSemanticModels } from '@/lib/semantic/derive';
@@ -55,13 +57,34 @@ interface ConnectionScope {
   relationships: TableRelationship[];
 }
 
+/** Build a DatabaseSchema for the virtual files connection from dataset docs. */
+async function filesSchemaForPath(path: string, user: EffectiveUser): Promise<DatabaseSchema | null> {
+  const tables = await getVisibleTables(path, user);
+  if (tables.length === 0) return null;
+  const bySchema = new Map<string, Array<{ table: string; columns: Array<{ name: string; type: string }> }>>();
+  for (const t of tables) {
+    if (!bySchema.has(t.schema_name)) bySchema.set(t.schema_name, []);
+    bySchema.get(t.schema_name)!.push({ table: t.table_name, columns: t.columns.map((c) => ({ ...c })) });
+  }
+  return {
+    updated_at: new Date().toISOString(),
+    schemas: [...bySchema.entries()].map(([schema, tbls]) => ({ schema, tables: tbls })),
+  };
+}
+
 /** Shared resolution: connection columns + context whitelist + relationships. */
 async function resolveScope(
   user: EffectiveUser,
   path: string,
   connection: string,
 ): Promise<ConnectionScope | null> {
-  const schema = await getPersistedConnectionSchema(connection, user);
+  // The virtual `files` connection has no doc (and so no persisted schema):
+  // its tables come from the dataset docs visible at the requesting path —
+  // same folder-and-below rule as query execution, so the GUI can never
+  // derive a model for a table the path cannot query.
+  const schema = connection === FILES_CONNECTION
+    ? await filesSchemaForPath(path, user)
+    : await getPersistedConnectionSchema(connection, user);
   if (!schema) return null;
 
   let context: ContextContent | null = null;

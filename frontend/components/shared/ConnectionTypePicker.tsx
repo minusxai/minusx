@@ -29,9 +29,7 @@ export default function ConnectionTypePicker({ onSelect, disabled = false }: Con
   return (
     <VStack align="stretch" gap={5}>
       {CONNECTION_TYPE_GROUPS.map((group) => {
-        // Static sources (CSV/XLSX/Sheets) are DATASETS now — files added in any
-        // folder (New → Dataset), not connections. Don't offer them here.
-        const options = CONNECTION_TYPES.filter((ct) => ct.group === group.id && (!ct.devOnly || devMode) && !('isStatic' in ct && ct.isStatic));
+        const options = CONNECTION_TYPES.filter((ct) => ct.group === group.id && (!ct.devOnly || devMode));
         if (options.length === 0) return null;
 
         const isManagedWarehouse = group.id === 'minusx-warehouse';

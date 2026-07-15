@@ -15,13 +15,14 @@
 
 import React, { useMemo, useRef, useState } from 'react';
 import { Box, VStack, HStack, Text, Button, Input } from '@chakra-ui/react';
-import { LuTable, LuUpload, LuLink, LuSave } from 'react-icons/lu';
+import { LuTable, LuUpload, LuLink, LuSave, LuTrash2, LuRefreshCw, LuPlus } from 'react-icons/lu';
 import { useSearchParams } from 'next/navigation';
 import { useFile } from '@/lib/hooks/file-state-hooks';
+import { reloadFile } from '@/lib/file-state/file-state';
 import { editFile, publishFile } from '@/lib/file-state/file-state';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import SchemaColumnRow from '@/components/schema-browser/SchemaColumnRow';
-import { createDatasetFromUploads, createDatasetFromLink } from '@/lib/connections/client/dataset-upload';
+import { createDatasetFromUploads, createDatasetFromLink, addFilesToDataset, deleteDatasetTable, reimportDatasetGroup } from '@/lib/connections/client/dataset-upload';
 import { tableKey, FILES_CONNECTION } from '@/lib/types/datasets';
 import type { DatasetContent } from '@/lib/types/datasets';
 import type { FileComponentProps } from '@/lib/ui/fileComponents';
@@ -106,9 +107,30 @@ function DatasetView({ fileId }: { fileId: number }) {
   const { fileState } = useFile(fileId) ?? {};
   const content = fileState?.content as DatasetContent | undefined;
   const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const addInput = useRef<HTMLInputElement>(null);
   const hidden = useMemo(() => new Set(content?.hiddenTables ?? []), [content]);
 
   if (!content) return <Box p={6}><Text fontSize="sm" color="fg.muted" fontFamily="mono">Loading dataset…</Text></Box>;
+
+  /** Run a lifecycle action, then force-reload the doc so the page reflects it. */
+  const act = async (fn: () => Promise<{ success: boolean; message?: string }>) => {
+    setActionError(null);
+    setSaving(true);
+    try {
+      const result = await fn();
+      if (!result.success) { setActionError(result.message ?? 'Action failed'); return; }
+      await reloadFile({ fileId });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addFiles = (files: File[]) => {
+    if (files.length === 0) return;
+    const schema = content.files?.[0]?.schema_name ?? 'public';
+    void act(() => addFilesToDataset(fileId, fileState?.name ?? 'dataset', schema, files));
+  };
 
   const toggle = async (key: string) => {
     const next = new Set(hidden);
@@ -132,8 +154,14 @@ function DatasetView({ fileId }: { fileId: number }) {
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">
             query these via the <Text as="span" fontWeight="700">{FILES_CONNECTION}</Text> connection — here and in every folder beneath
           </Text>
+          <Button aria-label="Add files to dataset" size="2xs" variant="outline" onClick={() => addInput.current?.click()}>
+            <LuPlus size={11} /> <Text ml={1}>Add files</Text>
+          </Button>
+          <input ref={addInput} type="file" multiple hidden aria-label="Add files input"
+            accept=".csv,.xlsx,.parquet" onChange={(e) => addFiles([...(e.target.files ?? [])])} />
         </HStack>
       </HStack>
+      {actionError && <Text aria-label="Dataset action error" fontSize="xs" color="accent.danger" fontFamily="mono">{actionError}</Text>}
       <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
         {(content.files ?? []).map((t) => (
           <SchemaColumnRow
@@ -147,9 +175,23 @@ function DatasetView({ fileId }: { fileId: number }) {
               ariaLabel: `Expose table ${tableKey(t)}`,
             }}
             description={
-              <Text fontSize="2xs" color="fg.muted" truncate>
-                {t.source === 'link' ? (t.source_url ?? 'link') : t.filename} · {t.columns.length} columns
-              </Text>
+              <HStack gap={2} minW={0}>
+                <Text fontSize="2xs" color="fg.muted" truncate>
+                  {t.source === 'link' ? (t.source_url ?? 'link') : t.filename} · {t.columns.length} columns
+                </Text>
+                {t.source === 'link' && t.source_group && (
+                  <Box as="button" aria-label={`Re-import ${tableKey(t)}`} title="Re-import from source"
+                    color="accent.teal" cursor="pointer"
+                    onClick={() => void act(() => reimportDatasetGroup(fileId, t.source_group!))}>
+                    <LuRefreshCw size={11} />
+                  </Box>
+                )}
+                <Box as="button" aria-label={`Delete table ${tableKey(t)}`} title="Delete table"
+                  color="accent.danger" cursor="pointer"
+                  onClick={() => void act(() => deleteDatasetTable(fileId, tableKey(t)))}>
+                  <LuTrash2 size={11} />
+                </Box>
+              </HStack>
             }
           />
         ))}

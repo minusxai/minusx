@@ -69,6 +69,29 @@ describe('DatasetContainerV2 — create mode', () => {
 });
 
 describe('DatasetContainerV2 — view mode', () => {
+  it('lifecycle actions: delete-table and re-import PATCH the dataset endpoint', async () => {
+    const testStore = storeModule.makeStore();
+    vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    seed(testStore, CONTENT);
+    const fetchSpy = vi.fn(async (_i: RequestInfo | URL, _o?: RequestInit) =>
+      ({ ok: true, status: 200, json: async () => ({ success: true, data: {} }) } as Response));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    renderWithProviders(<DatasetContainerV2 fileId={42} />, { store: testStore });
+    expect(screen.getByLabelText('Add files to dataset')).toBeTruthy(); // append affordance exists
+    // link-sourced table gets a re-import button ONLY when it has a source_group
+    expect(screen.queryByLabelText('Re-import sales.budget')).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('Delete table sales.deals'));
+    await waitFor(() => {
+      const call = fetchSpy.mock.calls.find((c) => String(c[0]).includes('/api/datasets/42'));
+      expect(call).toBeTruthy();
+      const body = JSON.parse((call![1] as RequestInit).body as string);
+      expect(body).toMatchObject({ action: 'delete-table', table: 'sales.deals' });
+    });
+    vi.unstubAllGlobals();
+  });
+
   it('lists tables with expose checkboxes; unchecking persists hiddenTables', async () => {
     const testStore = storeModule.makeStore();
     vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);

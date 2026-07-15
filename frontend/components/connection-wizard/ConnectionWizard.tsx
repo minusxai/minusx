@@ -14,7 +14,6 @@ import {
 import StepIndicatorBar from './StepIndicatorBar';
 import StepConnection from './steps/StepConnection';
 import StepModels from './steps/StepModels';
-import StepStaticUpload from './steps/StepStaticUpload';
 import StepQuestionnaire from './steps/StepQuestionnaire';
 import StepContext from './steps/StepContext';
 import StepGenerating from './steps/StepGenerating';
@@ -41,10 +40,6 @@ export default function ConnectionWizard({
   const [questionnaireAnswers, setQuestionnaireAnswers] = useState<QuestionnaireAnswers | null>(
     initialQuestionnaireAnswers,
   );
-  // Sub-state for static connection (CSV/Sheets) upload within the connection step
-  const [staticTab, setStaticTab] = useState<'csv' | 'sheets' | null>(null);
-  // Schema names from static upload — used to auto-select only relevant schemas in context step
-  const [staticSchemas, setStaticSchemas] = useState<string[] | null>(null);
 
   const connectionCriteria = useMemo(() => ({ type: 'connection' as const }), []);
   const { files: connectionFiles } = useFilesByCriteria({ criteria: connectionCriteria, partial: true });
@@ -67,19 +62,6 @@ export default function ConnectionWizard({
     onStepChange?.('questionnaire', { connectionId: id, connectionName: name });
   }, [onStepChange]);
 
-  const handleStaticSelect = useCallback((tab: 'csv' | 'sheets') => {
-    setStaticTab(tab);
-  }, []);
-
-  const handleStaticComplete = useCallback((id: number, name: string, schemaNames: string[]) => {
-    setStaticTab(null);
-    setStaticSchemas(schemaNames);
-    handleConnectionComplete(id, name);
-  }, [handleConnectionComplete]);
-
-  const handleStaticBack = useCallback(() => {
-    setStaticTab(null);
-  }, []);
 
   const handleQuestionnaireComplete = useCallback((answers: QuestionnaireAnswers) => {
     setQuestionnaireAnswers(answers);
@@ -150,19 +132,11 @@ export default function ConnectionWizard({
             greeting={greeting('models')}
           />
         )}
-        {step === 'connection' && !staticTab && (
+        {step === 'connection' && (
             <StepConnection
               onComplete={handleConnectionComplete}
-              onStaticSelect={handleStaticSelect}
               greeting={greeting('connection')}
             />
-        )}
-        {step === 'connection' && staticTab && (
-          <StepStaticUpload
-            tab={staticTab}
-            onComplete={handleStaticComplete}
-            onBack={handleStaticBack}
-          />
         )}
         {step === 'questionnaire' && connectionName && (
           <StepQuestionnaire
@@ -178,7 +152,7 @@ export default function ConnectionWizard({
             onRequestChat={handleRequestChat}
             onContextCreated={handleRequestChat}
             greeting={greeting('context')}
-            staticSchemas={staticSchemas}
+            staticSchemas={null}
             questionnaireAnswers={questionnaireAnswers}
             connections={connections}
             connectionsLoading={connectionsLoading}
@@ -192,7 +166,7 @@ export default function ConnectionWizard({
             onComplete={handleGeneratingComplete}
             onFinish={onComplete}
             showSlackStep={showSlackStep}
-            staticSchemas={staticSchemas}
+            staticSchemas={null}
             initialPreference={questionnaireAnswers?.dashboardPreference}
             questionnaireAnswers={questionnaireAnswers}
           />

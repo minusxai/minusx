@@ -34,15 +34,17 @@ MinusX connects to your existing databases to query and analyze data. Connection
 
 ## Configuring a connection
 
-1. Navigate to **Connections** in the sidebar
-2. Click **New Connection**
-3. Select your database type
-4. Enter connection details (host, port, database, credentials)
-5. Test the connection
-6. Save
+Database connections are managed in **Settings → Databases** (admin-only), like LLM providers:
 
-<Callout type="warn">
-Connection credentials are stored securely in the documents database. For production deployments, use environment variables for sensitive values.
+1. Open **Settings → Databases**
+2. Pick the database type and name the connection
+3. Enter connection details (host, port, database, credentials)
+4. Save
+
+Credentials never sit in the config document — on save they are extracted into a server-only secrets store and replaced with references, so no read path (API, agent, export) ever sees a raw credential.
+
+<Callout type="info">
+CSV, Excel and Google Sheets are **not** connections — they are [datasets](/docs/data/datasets): files any editor can add to their own folder and query immediately.
 </Callout>
 
 ---

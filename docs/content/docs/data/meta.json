@@ -2,6 +2,7 @@
   "title": "Sources & Data Models",
   "pages": [
     "connections",
+    "datasets",
     "data-modeling"
   ],
   "defaultOpen": false

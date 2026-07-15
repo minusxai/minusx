@@ -1,5 +1,5 @@
 export type ConnectionTypeOption = {
-  type: 'bigquery' | 'postgresql' | 'csv' | 'xlsx' | 'google-sheets' | 'athena' | 'clickhouse' | 'databricks' | 'snowflake' | 'duckdb' | 'sqlite';
+  type: 'bigquery' | 'postgresql' | 'athena' | 'clickhouse' | 'databricks' | 'snowflake' | 'duckdb' | 'sqlite';
   name: string;
   logo: string;
   comingSoon: boolean;
@@ -35,37 +35,6 @@ export const CONNECTION_TYPES: ConnectionTypeOption[] = [
     comingSoon: false,
     group: 'external-engine',
     description: 'Use AWS Athena over your Glue catalog and S3 data.',
-  },
-  {
-    type: 'csv',
-    name: 'CSV',
-    logo: '/logos/csv.svg',
-    comingSoon: false,
-    group: 'minusx-warehouse',
-    description: 'Upload CSV files into the {{agentName}} managed warehouse.',
-    redirectToStatic: true,
-    isStatic: true,
-  },
-  {
-    type: 'xlsx',
-    name: 'Excel Workbook',
-    logo: '/logos/xlsx.svg',
-    comingSoon: false,
-    group: 'minusx-warehouse',
-    description: 'Upload Excel spreadsheets into the {{agentName}} managed warehouse.',
-    redirectToStatic: true,
-    isStatic: true,
-  },
-  {
-    type: 'google-sheets',
-    name: 'Google Sheets',
-    logo: '/logos/google-sheets.svg',
-    comingSoon: false,
-    group: 'minusx-warehouse',
-    description: 'Import a public sheet into the {{agentName}} managed warehouse.',
-    redirectToStatic: true,
-    isStatic: true,
-    note: 'Sheet needs to be public',
   },
   {
     type: 'clickhouse',

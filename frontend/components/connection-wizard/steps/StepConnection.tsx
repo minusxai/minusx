@@ -14,23 +14,16 @@ const DATASOURCE_REQUEST_URL = 'https://forms.gle/9mXUGYUhULRRn68K6';
 
 interface StepConnectionProps {
   onComplete: (connectionId: number, connectionName: string) => void;
-  onStaticSelect?: (tab: 'csv' | 'sheets') => void;
   greeting?: string;
 }
 
-export default function StepConnection({ onComplete, onStaticSelect, greeting }: StepConnectionProps) {
+export default function StepConnection({ onComplete, greeting }: StepConnectionProps) {
   const [draftFileId, setDraftFileId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const userMode = useAppSelector(state => state.auth.user?.mode) || 'org';
 
   const handleTypeSelect = async (connType: ConnectionTypeOption) => {
     if (connType.comingSoon) return;
-
-    if ('isStatic' in connType && connType.isStatic) {
-      const tab = connType.type === 'google-sheets' ? 'sheets' : 'csv';
-      onStaticSelect?.(tab);
-      return;
-    }
 
     setCreating(true);
     try {
@@ -51,7 +44,6 @@ export default function StepConnection({ onComplete, onStaticSelect, greeting }:
         skipTypePicker
         onSaveSuccess={onComplete}
         hideCancel
-        onStaticSelect={onStaticSelect}
       />
     );
   }
