@@ -127,8 +127,8 @@ export default function ViewWorkbench({
 
   return (
     <VStack
-      align="stretch" gap={3} p={3}
-      bg="bg.surface" borderRadius="md" border="1px solid" borderColor="border.muted"
+      align="stretch" gap={3} py={3}
+      bg="bg.surface"
       onClick={(e) => e.stopPropagation()}
     >
       <HStack gap={2}>
@@ -155,8 +155,7 @@ export default function ViewWorkbench({
           A FIXED height (not minH) is essential: the editor fills its parent, so
           an unbounded parent makes Monaco lay out to tens of thousands of px (the
           minimap becomes a giant strip) and the results table grows forever. */}
-      <Box
-        border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden"
+      <Box overflow="hidden" px={0}
         h="480px" display="flex" flexDirection="column"
       >
         <QuestionContainerV2 fileId={fileId} readOnly={readOnly} />

@@ -643,7 +643,7 @@ export default function QuestionViewV2({
             bg={!useCompactLayout ? 'bg.canvas' : undefined}
             overflow="hidden"
             my={!useCompactLayout ? 2 : 0}
-            ml={!useCompactLayout ? 2 : 0}
+            ml={0}
           >
             {/* SQL Editor Section */}
             <Box
@@ -879,7 +879,7 @@ export default function QuestionViewV2({
             minHeight="0"
             overflow="hidden"
             // my={!useCompactLayout ? 2 : 0}
-            mr={!useCompactLayout && !showVizPanel ? 2 : 0}
+            mr={0}
           >
             {parameters.length > 0 && (
               <ParameterRow
@@ -1081,7 +1081,7 @@ export default function QuestionViewV2({
                 fontWeight="600"
                 style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
               >
-                Viz
+                Viz Settings
               </Text>
             </Box>
           )}
