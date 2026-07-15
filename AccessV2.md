@@ -42,12 +42,14 @@ Two gaps:
 ```
 admin                                                            -- OR
 OR ( path LIKE '/<mode>/%'                                       -- mode isolation
-     AND EXISTS ( SELECT 1 FROM group_members m JOIN groups g …  -- union of groups
-                  WHERE m.user_id = <caller>
-                    AND files.type = ANY(g.types)                --   capability ∩
-                    AND (files.path = g.folder
-                         OR files.path LIKE g.folder||'/%') ) )  --   scope (prefix)
+     AND ( files.type IN (<grant types>)                         -- per resolved grant:
+           AND (files.path = <grant folder>                      --   capability ∩
+                OR files.path LIKE <grant folder>||'/%') ) )     --   scope (prefix), OR'd
 OR path LIKE '/<mode>/…/<caller home or conversations>/%'        -- intrinsic grants
+
+Grants are resolved in the app (config `groups` section × the caller's
+membership array) and compiled into the WHERE as literals — the query never
+joins any table.
 ```
 
 Every operation is *compilable* ("0 rows" = denied) — reads are wired to SQL today; write-guard SQL (`INSERT … SELECT … WHERE`, predicate in `UPDATE`/`DELETE` `WHERE`) is deliberately deferred hardening.
@@ -98,13 +100,13 @@ Extract one effective-access resolver producing an `AccessPredicate` + in-memory
 - [ ] Narrow system-bypass path (migrations, seeding, first-user bootstrap)
 - [ ] Install the predicate as an RLS policy + `FORCE ROW LEVEL SECURITY`; verify on PGLite **and** Postgres; test the superuser-bypass boundary
 
-### M2 — Group model + resolver (additive — NO migration needed) ✅ DONE
-Key correction: **no data migration.** `initializeSchema()` applies the schema idempotently on every boot (both PGLite + Postgres), so new tables are created everywhere automatically; and role + home-folder stay as the base, with groups purely additive on top — behavior is unchanged until a group has members.
-- [x] Schema: `groups`, `group_scopes`, `group_members` — additive `CREATE TABLE IF NOT EXISTS` in `postgres-schema.ts`
-- [x] `groups.server.ts`: `Group` type, CRUD, `resolveUserGroupGrants(userId, mode)`
-- [x] `resolveAccessPredicateWithGroups` — base grant (role+home) ∪ group grants; read paths (`loadFile`/`loadFiles`/`getFiles`) group-aware
-- [x] Verified: groups extend access end-to-end; **no members → today's behavior**; mode-scoped; multi-group union; full suite green
-- [ ] Seed `Admin`/`Editor`/`Viewer` group ROWS from `rules.json` — deferred (role is the implicit base grant; the group rows are only needed to make them editable in the UI)
+### M2 — Group model + resolver (additive — NO migration, NO new tables) ✅ DONE
+**Storage (final):** group DEFINITIONS live in the org config document's `groups` section (name → capabilities × folders), next to `accessRules` — hand-editable and versioned with the config. MEMBERSHIP is a `groups` array of names on the users table (one idempotent column; the only schema touch). The built-in groups ARE the roles: the `role` column is the user's built-in group (admin locked; editor/viewer capabilities editable via `accessRules`) — so every user has ≥1 group, and custom groups are purely additive.
+- [x] `OrgConfig.groups` (`GroupDef`) + `validateGroupsSection` (reserved built-in names rejected) + `mergeConfig` carry-through
+- [x] `users.groups` JSONB column (idempotent `ADD COLUMN IF NOT EXISTS`); `UserDB` round-trips it
+- [x] `groups.server.ts`: config-backed CRUD (names immutable; **delete refused while assigned**; dangling membership names ignored), `resolveUserGroupGrants`
+- [x] `resolveAccessPredicateWithGroups` — base grant (built-in group + home) ∪ custom-group grants; read paths group-aware
+- [x] Verified red-first: additive; no membership → today's behavior; mode-scoped; **3-group union**; **nested overlapping scopes**; guests excluded; full suite green
 
 ### M3 — Feature: custom groups + UX ✅ DONE
 Backend
