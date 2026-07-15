@@ -17,10 +17,13 @@ const envelope = (spec: Record<string, unknown>): VizEnvelope => ({
   source: { kind: 'vega-lite', grammar: 'vega-lite@6', spec },
 }) as unknown as VizEnvelope;
 
+// GENUINELY custom: the overlay layer FIELD-encodes a second measure, so it is NOT the
+// recognized base+annotation shape — a datum-only rule layer now folds in as "Area with
+// a reference line" and keeps the full panel (see viz-annotated-unit.test.ts).
 const CUSTOM = envelope({
   layer: [
     { mark: 'area', encoding: { x: { field: 'week_start', type: 'temporal' }, y: { field: 'revenue', type: 'quantitative' } } },
-    { mark: 'rule', encoding: { y: { datum: 100 } } },
+    { mark: 'rule', encoding: { y: { field: 'revenue2', type: 'quantitative', aggregate: 'mean' } } },
   ],
 });
 
