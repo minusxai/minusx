@@ -12,8 +12,16 @@
  */
 import { compareValues } from '@/lib/evals/index'
 import type { ColumnType } from '@/lib/database/column-types'
-import type { ConditionalFormatRule } from '@/lib/types'
+import type { ColorScaleFormatRule, ConditionFormatRule, ConditionalFormatRule } from '@/lib/types'
 import type { TestOperator } from '@/lib/types'
+import { getScaleColor } from './color-scale'
+
+/** Alpha for scale-rule cell fills — matches the pivot heatmap's non-compact fill. */
+const SCALE_ALPHA = 0.55
+
+/** Discriminate the two ConditionalFormatRule variants. */
+export const isColorScaleRule = (rule: ConditionalFormatRule): rule is ColorScaleFormatRule =>
+  'scale' in rule
 
 /**
  * Pick a readable text color (near-black or white) for a given hex background,
@@ -33,7 +41,7 @@ export function getContrastText(bgHex: string): string {
 }
 
 /** Evaluate a single rule's condition against a raw cell value. Null/undefined never match. */
-export function evalCondition(value: unknown, rule: ConditionalFormatRule, columnType: ColumnType): boolean {
+export function evalCondition(value: unknown, rule: ConditionFormatRule, columnType: ColumnType): boolean {
   if (value == null) return false
   const answerType: 'number' | 'string' = columnType === 'number' ? 'number' : 'string'
   const { operator } = rule
@@ -58,12 +66,30 @@ export function buildConditionalBg(
   rules: ConditionalFormatRule[] | undefined,
   rows: Record<string, unknown>[],
   columnTypeByName: Record<string, ColumnType>,
+  opts?: { isDark?: boolean },
 ): (row: Record<string, unknown>, colId: string) => string | undefined {
   if (!rules || rules.length === 0) return () => undefined
+  const isDark = opts?.isDark ?? false
 
   // Precompute which column-target rules have at least one matching row.
   const columnMatch = new Map<string, boolean>()
+  // Precompute per-rule value domains for colour-scale rules.
+  const scaleDomain = new Map<string, { min: number; max: number }>()
   for (const rule of rules) {
+    if (isColorScaleRule(rule)) {
+      let min = Infinity
+      let max = -Infinity
+      for (const row of rows) {
+        const v = row[rule.column]
+        if (v == null) continue
+        const n = Number(v)
+        if (!Number.isFinite(n)) continue
+        if (n < min) min = n
+        if (n > max) max = n
+      }
+      if (min !== Infinity) scaleDomain.set(rule.id, { min, max })
+      continue
+    }
     if (rule.target !== 'column') continue
     const ct = columnTypeByName[rule.column] ?? 'text'
     columnMatch.set(rule.id, rows.some(row => evalCondition(row[rule.column], rule, ct)))
@@ -72,6 +98,18 @@ export function buildConditionalBg(
   return (row, colId) => {
     let bg: string | undefined
     for (const rule of rules) {
+      if (isColorScaleRule(rule)) {
+        if (colId !== rule.column) continue
+        const domain = scaleDomain.get(rule.id)
+        const v = row[colId]
+        if (!domain || v == null) continue
+        const n = Number(v)
+        if (!Number.isFinite(n)) continue
+        // Constant column → mid-ramp (no divide-by-zero)
+        const normalized = domain.max === domain.min ? 0.5 : (n - domain.min) / (domain.max - domain.min)
+        bg = getScaleColor(normalized, rule.scale, isDark, SCALE_ALPHA)
+        continue
+      }
       const ct = columnTypeByName[rule.column] ?? 'text'
       if (rule.target === 'row') {
         if (evalCondition(row[rule.column], rule, ct)) bg = rule.bgColor

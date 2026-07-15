@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { evalCondition, buildConditionalBg, getContrastText } from '../conditional-format-utils'
-import type { ConditionalFormatRule } from '@/lib/types'
+import type { ConditionFormatRule } from '@/lib/types'
 
-const rule = (over: Partial<ConditionalFormatRule>): ConditionalFormatRule => ({
+const rule = (over: Partial<ConditionFormatRule>): ConditionFormatRule => ({
   id: 'r1',
   column: 'status',
   operator: '=',

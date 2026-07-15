@@ -105,7 +105,7 @@ export function getEffectiveColorPalette(colorOverrides?: Record<string, string>
 }
 
 // Light mode colors (matching theme.ts)
-const LIGHT_THEME = {
+export const LIGHT_THEME = {
   bgCanvas: '#FAFBFC',
   bgSurface: '#FFFFFF',
   bgMuted: '#F6F8FA',
@@ -117,7 +117,7 @@ const LIGHT_THEME = {
 }
 
 // Dark mode colors (matching theme.ts)
-const DARK_THEME = {
+export const DARK_THEME = {
   bgCanvas: '#0D1117',
   bgSurface: '#161B22',
   bgMuted: '#010409',
