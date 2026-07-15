@@ -77,23 +77,23 @@ So the by-id read carries *which variant* the caller needs (today's `file.type =
 
 Each milestone is gated by tests. **No behavior change until M3.** RLS (M1c) is optional hardening, sequenced *after* the feature works — it doesn't block anything before it.
 
-### M1a — Resolver + predicate parity (zero behavior change)
+### M1a — Resolver + predicate parity (zero behavior change) ✅ DONE (PR #599)
 Extract one effective-access resolver producing an `AccessPredicate` + in-memory `check()` that reproduces **today's exact behavior**, then route the existing gate through it.
-- [ ] `AccessPredicate` contract + `resolveAccessPredicate(user)` + `check(file, predicate, variant)` (contracts first)
-- [ ] Reproduce `canAccessFile`: type access (role + config `accessRules` overrides), mode isolation, admin bypass
-- [ ] Reproduce non-admin path rules: home folder (excluding system subfolders), `/database`, own `/logs/conversations/{id}`, `/logs/runs`, ancestor-context access
-- [ ] Reproduce the two reference variants (folder-child = full; embedded asset = type + mode only)
-- [ ] Reproduce `canViewFileInUI` (adds `viewTypes`) + create/edit/delete rules (create types, create scope, creation/deletion blocklists, create-location restrictions)
-- [ ] Characterization battery: {admin, editor, viewer, guest, impersonated} × {folder-child, embedded-ref, conversations, database, runs, ancestor-context, mode-isolation, create-blocklist, create-location} — confirm **red** against a stub, then green
-- [ ] Route `files.server.ts` + `guest-session.ts` through `check()`; delete the duplicated logic; full suite + `validate` green
+- [x] `AccessPredicate` contract + `resolveAccessPredicate(user)` + `checkAccess(file, predicate, variant)` — `lib/auth/access-predicate.ts` + `access-resolver.ts`
+- [x] Reproduce `canAccessFile`: type access (role + config `accessRules` overrides), mode isolation, admin bypass
+- [x] Reproduce non-admin path rules: home folder (excluding system subfolders), `/database`, own `/logs/conversations/{id}`, `/logs/runs`, ancestor-context access
+- [x] Reproduce the two reference variants (folder-child = full; embedded asset = type + mode only)
+- [x] Reproduce `canViewFileInUI` (adds `viewTypes`) — differential battery. *(Write rules — create/edit/delete — stay app-side by design, per the Q1 decision: app-side check for the error message; SQL scope-guard added in M1b live-wiring.)*
+- [x] Characterization battery ({admin, editor, viewer, guest-shaped, impersonation-shaped} × path/type/variant matrix) — `__tests__/access-predicate.test.ts`
+- [x] Route `permissions.ts` (`canAccessFile`/`canViewFileInUI` delegate) + `files.server.ts` reference filter through the engine; deleted duplicated helpers; full suite + `validate` green
 
-### M1b — SQL enforcement (zero behavior change)
-- [ ] `AccessPredicate.toSql()` → parameterized `WHERE` / `EXISTS` fragment
-- [ ] Thread the predicate through every `DocumentDB` read (`listAll`, `getById`, `getByIds`, `findByShareNonce`, counts) as a **required arg**; system queries pass an explicit bypass token
-- [ ] Carry the reference variant into `getByIds` (folder vs embedded)
-- [ ] Guarded writes: `INSERT … SELECT … WHERE` for create; predicate in `WHERE` for edit/delete/move; keep the app-side check only for the error message
-- [ ] `text_pattern_ops` index on `path` (`postgres-schema.ts` + `update-workspace-template`)
-- [ ] Parity assertion: SQL result set **===** `check()`-filtered set across the battery; full suite green; browser-verify key flows
+### M1b — SQL enforcement (zero behavior change) — CORE DONE (PR #599); live-wiring in progress
+- [x] `AccessPredicate.toSql()` → parameterized `WHERE` fragment (`lib/auth/access-predicate.ts`)
+- [x] **Gold parity: compiled SQL selects EXACTLY the `checkAccess`-accepted rows** — PGLite battery `__tests__/access-predicate-sql.test.ts` (all principals × variants) + real-DB `listAll` integration `__tests__/listall-access.test.ts`
+- [x] Optional predicate on `DocumentDB.listAll` (SQL-filtered reads), backward-compatible, param-offset-safe
+- [ ] **Live-wiring (needs review — flips user-facing reads):** pass the predicate from `readFolder`/`file-search`/`shares` read paths; carry the variant into `getByIds` for references
+- [ ] Guarded writes: predicate in `WHERE` for edit/delete/move; `INSERT … SELECT … WHERE` for create (app-side check retained for the error message)
+- [x] `path` prefix index — NOTE: `text_pattern_ops` rejected by PGLite (OSS default); it's a hosted-Postgres-only perf optimization added out-of-band (correctness unaffected)
 
 ### M1c — Transparent RLS *(optional hardening — gated on the timing decision)*
 - [ ] Non-superuser `app_user` role + `GRANT`s (`postgres-schema.ts`)

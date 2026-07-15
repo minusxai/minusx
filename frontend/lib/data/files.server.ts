@@ -181,18 +181,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
       getFilesAnalyticsSummary(filteredFiles.map(f => f.id)).catch(() => ({})),
     ]);
 
-    // Reference filtering depends on the parent file type:
-    //   Folder  → children are filesystem entries; apply full canAccessFile (path rules enforced)
-    //   Content → embedded assets (questions in a dashboard, etc.); the parent's permission check
-    //             is sufficient — only enforce type access + mode isolation, not path
-    const modePrefix = `/${user.mode}`;
-    const filteredReferences = references.filter(ref => {
-      if (folderRefIds.has(ref.id)) {
-        return canAccessFile(ref, user, overrides);
-      }
-      if (!canAccessFileType(user.role, ref.type, overrides)) return false;
-      return ref.path === modePrefix || ref.path.startsWith(modePrefix + '/');
-    });
+    // Reference filtering (Access V2 engine): folder children get the full path
+    // check (`access`); embedded content assets get type + mode only (`embedded`).
+    const refPredicate = resolveAccessPredicate(user, overrides);
+    const filteredReferences = references.filter(ref =>
+      checkAccess(ref, refPredicate, folderRefIds.has(ref.id) ? 'access' : 'embedded')
+    );
 
     // Apply loaders AFTER permission checks (Phase 3)
     const transformedFiles = await Promise.all(
@@ -218,18 +212,21 @@ class FilesDataLayerServer implements IFilesDataLayer {
   async getFiles(options: GetFilesOptions, user: EffectiveUser): Promise<GetFilesResult> {
     const { paths = [], type, depth = 1 } = options;
 
-    // Pass path filters and depth to database for SQL-level filtering
-    // Phase 6: Skip content loading for performance - references are cached in DB column
+    const overrides = await this._getOverrides(user);
+
+    // Access V2 (M1b): SQL-enforce the permission predicate in the query, so the
+    // DB returns only accessible rows. Phase 6: skip content loading for perf.
+    const listPredicate = resolveAccessPredicate(user, overrides);
     let files = await DocumentDB.listAll(
       type,
       paths.length > 0 ? paths : undefined,
       depth,
-      false  // includeContent: false - 50-80% faster!
+      false, // includeContent: false - 50-80% faster!
+      { predicate: listPredicate, variant: 'access' }
     );
 
-    const overrides = await this._getOverrides(user);
-
-    // Apply unified permission filter (Phase 4)
+    // Backstop: the in-memory filter is now redundant with the SQL predicate
+    // (proven identical by the parity batteries) — kept as defense-in-depth.
     files = files.filter(f => canAccessFile(f, user, overrides));
 
     // Apply loaders AFTER permission checks (Phase 3)
