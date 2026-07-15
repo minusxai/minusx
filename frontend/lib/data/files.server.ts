@@ -983,6 +983,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
       throw new AccessPermissionError(`Cannot move file of type: ${file.type}`);
     }
 
+    // The moves below run under the caller's RLS context (M1c): the update
+    // policy gates both the moved rows (USING) and their target paths
+    // (WITH CHECK), scoped to the caller's role + home + group grants.
+    const movePredicate = await resolveAccessPredicateWithGroups(user, await this._getOverrides(user));
+    const moveAccess = { predicate: movePredicate };
+
     const oldPath = file.path;
 
     // Validate destination parent folder exists
@@ -1008,11 +1014,13 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }
 
       const descendantIds = descendants.map(f => f.id);
-      await DocumentDB.moveFolderAndChildren(id, descendantIds, oldPath, newPath, name);
+      await DocumentDB.moveFolderAndChildren(id, descendantIds, oldPath, newPath, name, moveAccess);
     } else {
-      const success = await DocumentDB.updateMetadata(id, name, newPath);
+      const success = await DocumentDB.updateMetadata(id, name, newPath, moveAccess);
       if (!success) {
-        throw new FileNotFoundError(id);
+        // The file exists (loaded above) — an RLS-filtered 0-row update means
+        // the caller may not move it, not that it vanished.
+        throw new AccessPermissionError('You do not have permission to move this file');
       }
     }
 

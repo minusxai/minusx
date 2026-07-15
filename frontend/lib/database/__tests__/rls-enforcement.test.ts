@@ -96,6 +96,11 @@ describe('RLS enforcement on files (M1c)', () => {
     await seed('/org/logs/runs/r1', 'alert_run');
     await seed('/org/configs/extra-config', 'config');
     await seed('/tutorial/sales/tq');
+    await seed('/org/sales/mv1');
+    await seed('/org/marketing/mv2');
+    await seed('/org/sales/mvdir', 'folder');
+    await seed('/org/sales/mvdir/child');
+    await seed('/org/marketing/mvdir2', 'folder');
     await seed('/org/zzz/high-id');                  // invisible to scoped users; max id in the table
   }, 30_000);
   afterAll(async () => { await cleanupTestDatabase(DB); });
@@ -265,6 +270,63 @@ describe('RLS enforcement on files (M1c)', () => {
     const m1 = rowsByPath.get('/org/marketing/m1')!;
     expect(await DocumentDB.deleteByIds([m1.id], { predicate: p })).toBe(0);
     expect(await ownerName(m1.id)).toBe('m1');
+  });
+
+  // ─────────────────────── atomic writes: MOVE/RENAME ──────────────────────
+  it('updateMetadata under access renames in-home; refuses an out-of-scope file (row unchanged)', async () => {
+    const p = resolveAccessPredicate(EDITOR);
+    const mv1 = rowsByPath.get('/org/sales/mv1')!;
+    expect(await DocumentDB.updateMetadata(mv1.id, 'mv1-renamed', mv1.path, { predicate: p })).toBe(true);
+    expect(await ownerName(mv1.id)).toBe('mv1-renamed');
+    const mv2 = rowsByPath.get('/org/marketing/mv2')!;
+    expect(await DocumentDB.updateMetadata(mv2.id, 'hacked', mv2.path, { predicate: p })).toBe(false);
+    expect(await ownerName(mv2.id)).toBe('mv2');
+  });
+
+  it('updateMetadata under access refuses moving an in-home file OUT of scope (WITH CHECK)', async () => {
+    const p = resolveAccessPredicate(EDITOR);
+    const mv1 = rowsByPath.get('/org/sales/mv1')!;
+    await expect(DocumentDB.updateMetadata(mv1.id, 'mv1-renamed', '/org/marketing/stolen', { predicate: p }))
+      .rejects.toThrow(AccessPermissionError);
+    const row = await getModules().db.exec<{ path: string }>('SELECT path FROM files WHERE id = $1', [mv1.id]);
+    expect(row.rows[0].path).toBe('/org/sales/mv1');
+  });
+
+  it('moveFolderAndChildren under access moves a home folder atomically; refuses out-of-scope', async () => {
+    const p = resolveAccessPredicate(EDITOR);
+    const dir = rowsByPath.get('/org/sales/mvdir')!;
+    const child = rowsByPath.get('/org/sales/mvdir/child')!;
+    const moved = await DocumentDB.moveFolderAndChildren(dir.id, [child.id], dir.path, '/org/sales/mvdir-new', 'mvdir-new', { predicate: p });
+    expect(moved).toBe(2);
+    const childRow = await getModules().db.exec<{ path: string }>('SELECT path FROM files WHERE id = $1', [child.id]);
+    expect(childRow.rows[0].path).toBe('/org/sales/mvdir-new/child');
+    // out-of-scope folder: refused, nothing moved
+    const dir2 = rowsByPath.get('/org/marketing/mvdir2')!;
+    await expect(DocumentDB.moveFolderAndChildren(dir2.id, [], dir2.path, '/org/marketing/mvdir2-x', 'x', { predicate: p }))
+      .rejects.toThrow(AccessPermissionError);
+    expect(await ownerName(dir2.id)).toBe('mvdir2');
+  });
+
+  it('FilesAPI.moveFile refuses an out-of-scope move for a scoped editor (closes the open-move hole)', async () => {
+    const mv2 = rowsByPath.get('/org/marketing/mv2')!;
+    await expect(FilesAPI.moveFile({ id: mv2.id, name: 'stolen', newPath: '/org/marketing/stolen2' }, EDITOR))
+      .rejects.toThrow(AccessPermissionError);
+    expect(await ownerName(mv2.id)).toBe('mv2');
+  });
+
+  it('FilesAPI.moveFile refuses a viewer moving a question in their own home (createTypes gate)', async () => {
+    const mv1 = rowsByPath.get('/org/sales/mv1')!;
+    await expect(FilesAPI.moveFile({ id: mv1.id, name: 'x', newPath: '/org/sales/mv1-viewer' }, VIEWER))
+      .rejects.toThrow(AccessPermissionError);
+  });
+
+  it('FilesAPI.moveFile still works for the scoped editor within home, and for the admin anywhere', async () => {
+    const mv1 = rowsByPath.get('/org/sales/mv1')!;
+    const r = await FilesAPI.moveFile({ id: mv1.id, name: 'mv1-final', newPath: '/org/sales/mv1-final' }, EDITOR);
+    expect(r.path).toBe('/org/sales/mv1-final');
+    const mv2 = rowsByPath.get('/org/marketing/mv2')!;
+    const r2 = await FilesAPI.moveFile({ id: mv2.id, name: 'mv2-admin', newPath: '/org/marketing/mv2-admin' }, ADMIN);
+    expect(r2.path).toBe('/org/marketing/mv2-admin');
   });
 
   // ───────────────────────── behavior preservation ─────────────────────────

@@ -397,14 +397,24 @@ export class DocumentDB {
     return result.rows.length > 0 ? result.rows[0] : null;
   }
 
-  static async updateMetadata(id: number, name: string, path: string): Promise<boolean> {
+  static async updateMetadata(id: number, name: string, path: string, access?: AccessQuery): Promise<boolean> {
     // version++ so any other tab holding a stale snapshot gets a ConflictError
     // on its next save (rather than silently re-writing the old path).
-    const result = await getModules().db.exec(
-      'UPDATE files SET name = $1, path = $2, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
-      [name, path, id]
-    );
-    return result.rowCount > 0;
+    // Under an RLS context (M1c) the UPDATE is the guard: a row the caller may
+    // not edit is untouched (false), and a move target outside their scopes is
+    // refused by the policy's WITH CHECK on the new row.
+    try {
+      const result = await withDbAccess(access, (q) => q(
+        'UPDATE files SET name = $1, path = $2, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+        [name, path, id]
+      ));
+      return result.rowCount > 0;
+    } catch (error) {
+      if (access && isRlsViolation(error)) {
+        throw new AccessPermissionError('You do not have permission to move this file to that path');
+      }
+      throw error;
+    }
   }
 
   /**
@@ -425,30 +435,47 @@ export class DocumentDB {
     descendantIds: number[],
     oldPath: string,
     newPath: string,
-    newName: string
+    newName: string,
+    access?: AccessQuery
   ): Promise<number> {
     if (descendantIds.length === 0) {
-      const updated = await this.updateMetadata(folderId, newName, newPath);
+      const updated = await this.updateMetadata(folderId, newName, newPath, access);
+      if (access && !updated) {
+        throw new AccessPermissionError('You do not have permission to move this folder');
+      }
       return updated ? 1 : 0;
     }
 
-    const db = getModules().db;
     const allIds = [folderId, ...descendantIds];
     const placeholders = allIds.map((_, i) => `$${i + 5}`).join(', ');
-    const result = await db.exec(
-      `UPDATE files
-       SET
-         name = CASE WHEN id = $1 THEN $2 ELSE name END,
-         path = CASE
-           WHEN id = $1 THEN $3
-           ELSE $3 || substr(path, length($4) + 1)
-         END,
-         version = version + 1,
-         updated_at = CURRENT_TIMESTAMP
-       WHERE id IN (${placeholders})`,
-      [folderId, newName, newPath, oldPath, ...allIds]
-    );
-    return result.rowCount;
+    try {
+      return await withDbAccess(access, async (q) => {
+        const result = await q(
+          `UPDATE files
+           SET
+             name = CASE WHEN id = $1 THEN $2 ELSE name END,
+             path = CASE
+               WHEN id = $1 THEN $3
+               ELSE $3 || substr(path, length($4) + 1)
+             END,
+             version = version + 1,
+             updated_at = CURRENT_TIMESTAMP
+           WHERE id IN (${placeholders})`,
+          [folderId, newName, newPath, oldPath, ...allIds]
+        );
+        // All-or-nothing under RLS: rows the policy filtered out would leave a
+        // torn move — throwing here rolls the whole transaction back.
+        if (access && result.rowCount < allIds.length) {
+          throw new AccessPermissionError('You do not have permission to move this folder');
+        }
+        return result.rowCount;
+      });
+    } catch (error) {
+      if (access && isRlsViolation(error)) {
+        throw new AccessPermissionError('You do not have permission to move this folder to that path');
+      }
+      throw error;
+    }
   }
 
   static async deleteByIds(ids: number[], access?: AccessQuery): Promise<number> {
