@@ -22,7 +22,7 @@
 
 import React, { useState } from 'react';
 import { Box, VStack, HStack, Text, Button, Icon } from '@chakra-ui/react';
-import { LuPlus, LuEye, LuTable, LuChevronRight, LuChevronDown, LuBan } from 'react-icons/lu';
+import { LuPlus, LuEye, LuEyeOff, LuTable, LuChevronRight, LuChevronDown, LuBan } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
 import SchemaColumnRow from '@/components/schema-browser/SchemaColumnRow';
 import ViewWorkbench from './ViewWorkbench';
@@ -102,6 +102,11 @@ export default function ViewsSection({
     else setEditing({ kind: 'inspect', name: v.name });
   };
 
+  /** Is this view's definition panel open (being edited or inspected)? */
+  const isDefOpen = (v: ViewDef, index: number | null) =>
+    (editing?.kind === 'edit' && index !== null && editing.index === index) ||
+    (editing?.kind === 'inspect' && editing.name === v.name);
+
   const viewRow = (v: ViewDef, index: number | null, inheritedRow = false) => {
     const disabled = problemOf(v.name);
     const cols = v.columns ?? [];
@@ -163,18 +168,25 @@ export default function ViewsSection({
           </Text>
 
           <HStack gap={2} flexShrink={0}>
-            <Box
-              as="button"
-              aria-label={`Definition of ${v.name}`}
-              title="View definition"
-              display="flex" alignItems="center" gap={1} px={1.5} py={0.5}
-              fontSize="10px" fontWeight="600" fontFamily="mono" color="accent.teal"
-              borderRadius="sm" cursor="pointer" transition="all 0.15s"
-              _hover={{ bg: 'accent.teal/10' }}
-              onClick={(e: React.MouseEvent) => { e.stopPropagation(); openDefinition(v, index); }}
-            >
-              <LuEye size={11} /> Definition
-            </Box>
+            {(() => {
+              const open = isDefOpen(v, index);
+              return (
+                <Box
+                  as="button"
+                  aria-label={`Definition of ${v.name}`}
+                  title={open ? 'Hide definition' : 'View definition'}
+                  display="flex" alignItems="center" gap={1} px={1.5} py={0.5}
+                  fontSize="10px" fontWeight="600" fontFamily="mono"
+                  color={open ? 'fg.muted' : 'accent.teal'}
+                  bg={open ? 'bg.muted' : 'transparent'}
+                  borderRadius="sm" cursor="pointer" transition="all 0.15s"
+                  _hover={{ bg: open ? 'bg.emphasized' : 'accent.teal/10' }}
+                  onClick={(e: React.MouseEvent) => { e.stopPropagation(); open ? setEditing(null) : openDefinition(v, index); }}
+                >
+                  {open ? <LuEyeOff size={11} /> : <LuEye size={11} />} {open ? 'Hide' : 'Definition'}
+                </Box>
+              );
+            })()}
             {!disabled && (
               <Text fontSize="10px" fontWeight="600" color="fg.subtle" fontFamily="mono">
                 {v.whitelistedColumns ? `${on.length}/${cols.length}` : cols.length} cols
@@ -209,37 +221,34 @@ export default function ViewsSection({
     );
   };
 
-  /** A row, unless it's the one being edited/inspected — then the workbench takes its place. */
-  const renderRow = (v: ViewDef, index: number | null, inheritedRow: boolean) => {
-    if (editing?.kind === 'edit' && index !== null && editing.index === index) {
-      return (
-        <Box key={`edit-${v.name}`} p={2}>
-          <ViewWorkbench
-            contextPath={contextPath}
-            connection={connection}
-            view={v}
-            onSave={(next) => upsert(index, next)}
-            onDelete={() => remove(index)}
-            onCancel={() => setEditing(null)}
-          />
+  /** The row, with its definition panel expanded BELOW it when open (the eye toggles it). */
+  const renderRow = (v: ViewDef, index: number | null, inheritedRow: boolean) => (
+    <React.Fragment key={`row-${inheritedRow ? 'inh' : 'own'}-${v.name}`}>
+      {viewRow(v, index, inheritedRow)}
+      {isDefOpen(v, index) && (
+        <Box px={2} pb={2}>
+          {editing?.kind === 'edit' ? (
+            <ViewWorkbench
+              contextPath={contextPath}
+              connection={connection}
+              view={v}
+              onSave={(next) => upsert(index!, next)}
+              onDelete={() => remove(index!)}
+              onCancel={() => setEditing(null)}
+            />
+          ) : (
+            <ViewWorkbench
+              contextPath={contextPath}
+              connection={connection}
+              view={v}
+              readOnly
+              onCancel={() => setEditing(null)}
+            />
+          )}
         </Box>
-      );
-    }
-    if (editing?.kind === 'inspect' && editing.name === v.name) {
-      return (
-        <Box key={`inspect-${v.name}`} p={2}>
-          <ViewWorkbench
-            contextPath={contextPath}
-            connection={connection}
-            view={v}
-            readOnly
-            onCancel={() => setEditing(null)}
-          />
-        </Box>
-      );
-    }
-    return viewRow(v, index, inheritedRow);
-  };
+      )}
+    </React.Fragment>
+  );
 
   return (
     <VStack align="stretch" gap={0} onClick={(e) => e.stopPropagation()}>

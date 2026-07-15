@@ -151,8 +151,14 @@ export default function ViewWorkbench({
       </HStack>
 
       {/* The real question editor — GUI / SQL / Viz, Run, charts. Read-only when
-          inspecting a definition (the editor itself disables editing + Monaco). */}
-      <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden" minH="420px">
+          inspecting a definition (the editor itself disables editing + Monaco).
+          A FIXED height (not minH) is essential: the editor fills its parent, so
+          an unbounded parent makes Monaco lay out to tens of thousands of px (the
+          minimap becomes a giant strip) and the results table grows forever. */}
+      <Box
+        border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden"
+        h="480px" display="flex" flexDirection="column"
+      >
         <QuestionContainerV2 fileId={fileId} readOnly={readOnly} />
       </Box>
 
@@ -163,11 +169,9 @@ export default function ViewWorkbench({
         </HStack>
       )}
 
-      {readOnly ? (
-        <HStack justify="flex-end">
-          <Button aria-label="Close view" size="xs" variant="outline" onClick={onCancel}>Close</Button>
-        </HStack>
-      ) : (
+      {/* Read-only inspection has no footer — the row's Definition/Hide toggle
+          closes it. Editing keeps explicit Save / Delete / Cancel. */}
+      {!readOnly && (
         <HStack justify="space-between">
           {onDelete ? (
             <Button aria-label="Delete view" size="xs" variant="ghost" colorPalette="red" onClick={onDelete}>

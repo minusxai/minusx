@@ -7,7 +7,7 @@
  * read-only (disabled checkbox + badge); disabled views show their reason.
  */
 import React from 'react';
-import { screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import ViewsSection from '@/components/context/ViewsSection';
 import type { ViewDef } from '@/lib/types';
@@ -69,12 +69,31 @@ describe('ViewsSection', () => {
     expect(box.disabled).toBe(true);
   });
 
-  it('the eye button opens the view definition (editable in edit mode)', async () => {
+  it('the eye button TOGGLES the definition open/closed; the row stays put', async () => {
     renderSection({ views: [ZONE_REVENUE] });
-    fireEvent.click(screen.getByLabelText('Definition of zone_revenue'));
-    // The ViewWorkbench (real question editor) appears with an editable name + Save.
+    const toggle = screen.getByLabelText('Definition of zone_revenue');
+
+    fireEvent.click(toggle);
+    // The ViewWorkbench (real question editor) expands with an editable name + Save,
+    // and the row itself is still there (the panel opens BELOW, it doesn't replace it).
     expect(await screen.findByLabelText('View name')).toBeTruthy();
     expect(screen.getByLabelText('Save view')).toBeTruthy();
+    expect(screen.getByLabelText('View zone_revenue')).toBeTruthy();
+    expect(toggle.textContent).toMatch(/hide/i);
+
+    // Same button hides it again — no separate Close control.
+    fireEvent.click(screen.getByLabelText('Definition of zone_revenue'));
+    await waitFor(() => expect(screen.queryByLabelText('View name')).toBeNull());
+  });
+
+  it('in view mode the definition opens READ-ONLY (no Save, no Close — the toggle hides it)', async () => {
+    renderSection({ views: [ZONE_REVENUE], editable: false });
+    fireEvent.click(screen.getByLabelText('Definition of zone_revenue'));
+    expect(await screen.findByLabelText('View name')).toBeTruthy();
+    expect(screen.queryByLabelText('Save view')).toBeNull();
+    expect(screen.queryByLabelText('Close view')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Definition of zone_revenue'));
+    await waitFor(() => expect(screen.queryByLabelText('View name')).toBeNull());
   });
 
   it('scopes views to the connection', () => {
