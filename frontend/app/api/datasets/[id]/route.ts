@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { withAuth } from '@/lib/http/with-auth';
-import { processFilesFromS3, importGoogleSheetToS3, deleteS3File } from '@/lib/csv-processor';
+import { processFilesFromS3, deleteS3File } from '@/lib/csv-processor';
+import { reimportLinkGroup } from '@/lib/data/dataset-sync.server';
 import { verifyStorageToken } from '@/lib/object-store/key-token';
 import { FilesAPI } from '@/lib/data/files.server';
 import { UserFacingError } from '@/lib/errors';
@@ -59,22 +60,11 @@ export const PATCH = withAuth(async (request: NextRequest, user, context?: { par
       staleKeys.push(target.s3_key);
     } else if (action === 'reimport') {
       const group = body.source_group as string;
-      const groupTables = (current.files ?? []).filter((t) => t.source === 'link' && t.source_group === group);
-      const sourceUrl = groupTables[0]?.source_url;
-      if (!sourceUrl) return ApiErrors.badRequest('no link source with that group');
-      const { files: fresh, spreadsheetId } = await importGoogleSheetToS3(
-        sourceUrl, file.name, user.mode, groupTables[0].schema_name,
-      );
-      const registered = await processFilesFromS3(user.mode, file.name, fresh);
-      staleKeys.push(...groupTables.map((t) => t.s3_key));
-      nextFiles = [
-        ...(current.files ?? []).filter((t) => !(t.source === 'link' && t.source_group === group)),
-        ...registered.map((r): DatasetTable => ({
-          filename: r.filename, table_name: r.table_name, schema_name: r.schema_name,
-          s3_key: r.s3_key, file_format: r.file_format, row_count: r.row_count,
-          columns: r.columns, source: 'link', source_url: sourceUrl, source_group: spreadsheetId,
-        })),
-      ];
+      // Shared with the scheduled sheets_sync job: merge semantics preserve the
+      // user's deletions/renames, and cleanup happens inside only on success.
+      const { files, result } = await reimportLinkGroup(file.name, current.files ?? [], group, user);
+      if (result.status === 'error') return ApiErrors.badRequest(result.error ?? 'Re-import failed');
+      nextFiles = files;
     } else {
       return ApiErrors.badRequest(`unknown action '${String(action)}'`);
     }

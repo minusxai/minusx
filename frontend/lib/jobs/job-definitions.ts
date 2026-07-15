@@ -1,4 +1,5 @@
-import type { ConnectionContent, CsvFileInfo, ScheduledJobContent } from '@/lib/types';
+import type { ScheduledJobContent } from '@/lib/types';
+import type { DatasetContent } from '@/lib/types/datasets';
 import type { FileType } from '@/lib/ui/file-metadata';
 
 export interface JobDefinition {
@@ -16,10 +17,9 @@ export interface JobDefinition {
 }
 
 function isSheetsSyncActive(content: ScheduledJobContent): boolean {
-  const conn = content as unknown as ConnectionContent;
-  if (!conn.autoSync?.cron || !conn.config) return false;
-  const files = (conn.config.files ?? []) as CsvFileInfo[];
-  return files.some((f) => f.source_type === 'google_sheets' && !!f.spreadsheet_id);
+  const ds = content as unknown as DatasetContent;
+  if (!ds.autoSync?.cron) return false;
+  return (ds.files ?? []).some((t) => t.source === 'link' && !!t.source_group);
 }
 
 export const JOB_DEFINITIONS: JobDefinition[] = [
@@ -28,8 +28,8 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
   { job_type: 'report',         file_type: 'report',         isActive: (c) => c.status === 'live' },
   {
     job_type: 'sheets_sync',
-    file_type: 'connection',
+    file_type: 'dataset',
     isActive: isSheetsSyncActive,
-    getCron: (c) => (c as unknown as ConnectionContent).autoSync?.cron ?? null,
+    getCron: (c) => (c as unknown as DatasetContent).autoSync?.cron ?? null,
   },
 ];

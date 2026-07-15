@@ -8,7 +8,7 @@ import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { JobRunsDB } from '@/lib/database/job-runs-db';
-import type { ConnectionContent, CsvFileInfo, RunFileContent } from '@/lib/types';
+import type { RunFileContent } from '@/lib/types';
 import { NextRequest } from 'next/server';
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ function makeCronRequest(): NextRequest {
 const SHEET_URL_1 = 'https://docs.google.com/spreadsheets/d/SS1/edit';
 const SHEET_URL_2 = 'https://docs.google.com/spreadsheets/d/SS2/edit';
 
-function sheetFile(overrides: Partial<CsvFileInfo>): CsvFileInfo {
+function sheetFile(overrides: Partial<DatasetTable>): DatasetTable {
   return {
     filename: 'Sheet1.csv',
     table_name: 'sheet1',
@@ -70,14 +70,14 @@ function sheetFile(overrides: Partial<CsvFileInfo>): CsvFileInfo {
     file_format: 'parquet',
     row_count: 10,
     columns: [{ name: 'a', type: 'VARCHAR' }],
-    source_type: 'google_sheets',
-    spreadsheet_url: SHEET_URL_1,
-    spreadsheet_id: 'SS1',
+    source: 'link',
+    source_url: SHEET_URL_1,
+    source_group: 'SS1',
     ...overrides,
   };
 }
 
-const CSV_UPLOAD_FILE: CsvFileInfo = {
+const CSV_UPLOAD_FILE: DatasetTable = {
   filename: 'upload.csv',
   table_name: 'upload',
   schema_name: 'public',
@@ -85,29 +85,23 @@ const CSV_UPLOAD_FILE: CsvFileInfo = {
   file_format: 'parquet',
   row_count: 3,
   columns: [{ name: 'x', type: 'BIGINT' }],
-  source_type: 'csv',
+  source: 'upload',
 };
 
-function baseConnectionContent(): ConnectionContent {
+function baseDatasetContent(): DatasetContent {
   return {
-    id: 'sheets_synced',
-    name: 'sheets_synced',
-    type: 'csv',
-    config: {
-      files: [
-        CSV_UPLOAD_FILE,
-        sheetFile({ filename: 'Orders.csv', table_name: 'orders_renamed', s3_key: 'old/orders' }),
-        sheetFile({ filename: 'Customers.csv', table_name: 'customers', s3_key: 'old/customers' }),
-      ],
-    },
+    files: [
+      CSV_UPLOAD_FILE,
+      sheetFile({ filename: 'Orders.csv', table_name: 'orders_renamed', s3_key: 'old/orders' }),
+      sheetFile({ filename: 'Customers.csv', table_name: 'customers', s3_key: 'old/customers' }),
+    ],
     autoSync: { cron: '* * * * *', timezone: 'UTC' },
-    schema: { databases: [] } as any,  // stale cached schema, replaced on sync
-  } as ConnectionContent;
+  };
 }
 
-async function getConnection(id: number): Promise<ConnectionContent> {
+async function getDataset(id: number): Promise<DatasetContent> {
   const file = await DocumentDB.getById(id);
-  return file!.content as ConnectionContent;
+  return file!.content as DatasetContent;
 }
 
 /** Default happy-path mock: reimport of SS1 returns two fresh files. */
@@ -146,15 +140,16 @@ describe('Google Sheets Auto-Sync E2E', () => {
   setupTestDb(TEST_DB_PATH, {
     customInit: async () => {
       syncedConnId = await DocumentDB.create(
-        'sheets_synced', '/org/database/sheets_synced', 'connection', baseConnectionContent(), [], undefined, false
+        'sheets_synced', '/org/sheets_synced', 'dataset', baseDatasetContent(), [], undefined, false
       );
       // A sheets connection with NO autoSync — must never be picked up by cron
-      const plain = baseConnectionContent() as ConnectionContent & { id: string; name: string };
-      delete (plain as any).autoSync;
-      plain.name = 'plain_sheets';
-      plain.id = 'plain_sheets';
+      const plain = baseDatasetContent();
+      delete plain.autoSync;
+      // Global schema.table uniqueness holds across datasets now — the plain
+      // dataset needs its own namespace.
+      plain.files = plain.files.map((f) => ({ ...f, schema_name: `plain_${f.schema_name}` }));
       plainConnId = await DocumentDB.create(
-        'plain_sheets', '/org/database/plain_sheets', 'connection', plain, [], undefined, false
+        'plain_sheets', '/org/plain_sheets', 'dataset', plain, [], undefined, false
       );
       await JobRunsDB.ensureTable();
     },
@@ -177,14 +172,14 @@ describe('Google Sheets Auto-Sync E2E', () => {
     expect(runs[0].status).toBe('SUCCESS');
     expect(runs[0].source).toBe('cron');
 
-    const conn = await getConnection(syncedConnId);
-    const files = conn.config.files as CsvFileInfo[];
+    const conn = await getDataset(syncedConnId);
+    const files = conn.files;
 
     // CSV upload untouched
     expect(files.find((f) => f.s3_key === 'csv/upload.parquet')).toEqual(CSV_UPLOAD_FILE);
 
     // Sheet files replaced with new S3 keys
-    const sheetFiles = files.filter((f) => f.source_type === 'google_sheets');
+    const sheetFiles = files.filter((f) => f.source === 'link');
     expect(sheetFiles).toHaveLength(2);
     expect(sheetFiles.map((f) => f.s3_key).sort()).toEqual([
       'new/SS1/customers.parquet',
@@ -192,9 +187,9 @@ describe('Google Sheets Auto-Sync E2E', () => {
     ]);
     // Source metadata reattached
     for (const f of sheetFiles) {
-      expect(f.spreadsheet_id).toBe('SS1');
-      expect(f.spreadsheet_url).toBe(SHEET_URL_1);
-      expect(f.source_type).toBe('google_sheets');
+      expect(f.source_group).toBe('SS1');
+      expect(f.source_url).toBe(SHEET_URL_1);
+      expect(f.source).toBe('link');
     }
 
     // User's table rename preserved by filename match (Orders.csv was "orders_renamed")
@@ -207,9 +202,6 @@ describe('Google Sheets Auto-Sync E2E', () => {
     // Sync bookkeeping
     expect(conn.lastSyncedAt).toBeTruthy();
     expect(conn.lastSyncError).toBeUndefined();
-    // saveFile re-introspects on save, so the stale placeholder must be gone
-    expect((conn.schema as any)?.databases).toBeUndefined();
-    if (conn.schema) expect(conn.schema.updated_at).toBeTruthy();
     // autoSync schedule preserved
     expect(conn.autoSync?.cron).toBe('* * * * *');
 
@@ -231,16 +223,16 @@ describe('Google Sheets Auto-Sync E2E', () => {
     const runs = await JobRunsDB.getByJobId(String(plainConnId), 'sheets_sync');
     expect(runs).toHaveLength(0);
     // And its content is untouched
-    const conn = await getConnection(plainConnId);
+    const conn = await getDataset(plainConnId);
     expect(conn.lastSyncedAt).toBeUndefined();
-    expect((conn.config.files as CsvFileInfo[]).map((f) => f.s3_key)).toContain('old/orders');
+    expect(conn.files.map((f) => f.s3_key)).toContain('old/orders');
   });
 
   it('skips when the cron schedule is not due (last fire >1h ago)', async () => {
     const safeHour = (new Date().getHours() - 2 + 24) % 24;
-    const content = baseConnectionContent();
+    const content = baseDatasetContent();
     content.autoSync = { cron: `0 ${safeHour} * * *`, timezone: 'UTC' };
-    await DocumentDB.update(syncedConnId, 'sheets_synced', '/org/database/sheets_synced', content, [], 'test-edit');
+    await DocumentDB.update(syncedConnId, 'sheets_synced', '/org/sheets_synced', content, [], 'test-edit');
 
     await cronPostHandler(makeCronRequest());
     const runs = await JobRunsDB.getByJobId(String(syncedConnId), 'sheets_sync');
@@ -266,8 +258,8 @@ describe('Google Sheets Auto-Sync E2E', () => {
     expect(runs).toHaveLength(1);
     expect(runs[0].status).toBe('FAILURE');
 
-    const conn = await getConnection(syncedConnId);
-    const files = conn.config.files as CsvFileInfo[];
+    const conn = await getDataset(syncedConnId);
+    const files = conn.files;
     // Old data fully intact — stale beats broken
     expect(files.map((f) => f.s3_key).sort()).toEqual(['csv/upload.parquet', 'old/customers', 'old/orders']);
     expect(conn.lastSyncError).toContain('not publicly accessible');
@@ -278,11 +270,11 @@ describe('Google Sheets Auto-Sync E2E', () => {
 
   it('partial failure across two spreadsheets: good group updated, bad group kept, run FAILURE', async () => {
     // Add a second spreadsheet group to the connection
-    const content = baseConnectionContent();
-    (content.config.files as CsvFileInfo[]).push(
-      sheetFile({ filename: 'Leads.csv', table_name: 'leads', s3_key: 'old/leads', spreadsheet_id: 'SS2', spreadsheet_url: SHEET_URL_2 })
+    const content = baseDatasetContent();
+    content.files.push(
+      sheetFile({ filename: 'Leads.csv', table_name: 'leads', s3_key: 'old/leads', source_group: 'SS2', source_url: SHEET_URL_2 })
     );
-    await DocumentDB.update(syncedConnId, 'sheets_synced', '/org/database/sheets_synced', content, [], 'test-edit');
+    await DocumentDB.update(syncedConnId, 'sheets_synced', '/org/sheets_synced', content, [], 'test-edit');
 
     mockImportGoogleSheetToS3.mockImplementation(async (url: string) => {
       if (url.includes('SS2')) throw new Error('Spreadsheet not found — it may be private or deleted');
@@ -298,17 +290,17 @@ describe('Google Sheets Auto-Sync E2E', () => {
     expect(runs).toHaveLength(1);
     expect(runs[0].status).toBe('FAILURE');
 
-    const conn = await getConnection(syncedConnId);
-    const files = conn.config.files as CsvFileInfo[];
+    const conn = await getDataset(syncedConnId);
+    const files = conn.files;
 
     // SS1 group replaced (Customers tab disappeared from the sheet → dropped)
-    const ss1 = files.filter((f) => f.spreadsheet_id === 'SS1');
+    const ss1 = files.filter((f) => f.source_group === 'SS1');
     expect(ss1).toHaveLength(1);
     expect(ss1[0].s3_key).toBe('new/SS1/orders.parquet');
     expect(ss1[0].table_name).toBe('orders_renamed');
 
     // SS2 group untouched
-    const ss2 = files.filter((f) => f.spreadsheet_id === 'SS2');
+    const ss2 = files.filter((f) => f.source_group === 'SS2');
     expect(ss2).toHaveLength(1);
     expect(ss2[0].s3_key).toBe('old/leads');
 

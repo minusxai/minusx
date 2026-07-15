@@ -22,6 +22,7 @@ import { reloadFile } from '@/lib/file-state/file-state';
 import { editFile, publishFile } from '@/lib/file-state/file-state';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import SchemaColumnRow from '@/components/schema-browser/SchemaColumnRow';
+import { SheetsAutoSyncSection } from '@/components/datasets/SheetsAutoSyncSection';
 import { createDatasetFromUploads, createDatasetFromLink, addFilesToDataset, deleteDatasetTable, reimportDatasetGroup } from '@/lib/connections/client/dataset-upload';
 import { tableKey, FILES_CONNECTION } from '@/lib/types/datasets';
 import type { DatasetContent } from '@/lib/types/datasets';
@@ -148,6 +149,22 @@ function DatasetView({ fileId }: { fileId: number }) {
     }
   };
 
+  const hasLinkSources = (content.files ?? []).some((t) => t.source === 'link' && t.source_group);
+
+  const setAutoSync = async (autoSync: { cron: string; timezone: string } | undefined) => {
+    setSaving(true);
+    try {
+      const next: DatasetContent = { ...content, autoSync };
+      if (!autoSync) delete next.autoSync;
+      editFile({ fileId, changes: { content: next } });
+      await publishFile({ fileId });
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Could not update auto-sync');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <VStack align="stretch" gap={3} p={6} aria-label="Dataset tables">
       <HStack justify="space-between">
@@ -199,6 +216,16 @@ function DatasetView({ fileId }: { fileId: number }) {
           />
         ))}
       </Box>
+      {hasLinkSources && (
+        <Box border="1px solid" borderColor="border.muted" borderRadius="md" p={3}>
+          <SheetsAutoSyncSection
+            autoSync={content.autoSync}
+            onChange={(next) => void setAutoSync(next)}
+            lastSyncedAt={content.lastSyncedAt}
+            lastSyncError={content.lastSyncError}
+          />
+        </Box>
+      )}
     </VStack>
   );
 }

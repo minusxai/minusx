@@ -25,7 +25,6 @@ import {
   Text,
   Heading,
   HStack,
-  Progress,
 } from '@chakra-ui/react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { LuTriangleAlert, LuFileJson2, LuEye, LuSave, LuTable, LuSettings, LuArrowLeft, LuCircleAlert, LuCheck } from 'react-icons/lu';
@@ -35,11 +34,9 @@ import TabSwitcher from '../selectors/TabSwitcher';
 import Editor from '@monaco-editor/react';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type { Mode } from '@/lib/mode/mode-types';
-import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import ConnectionTablesBrowser from '../schema-browser/ConnectionTablesBrowser';
-import StaticTablesBrowser from '../schema-browser/StaticTablesBrowser';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
-import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig, DuckDBConfig, SqliteConfig, ClickHouseConfig } from './connection-configs';
+import { BigQueryConfig, PostgreSQLConfig, AthenaConfig, DuckDBConfig, SqliteConfig, ClickHouseConfig } from './connection-configs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { CONNECTION_TYPES } from '@/lib/ui/connection-type-options';
 import ConnectionTypePicker from '@/components/shared/ConnectionTypePicker';
@@ -76,11 +73,9 @@ interface ConnectionFormV2Props {
   mode: 'create' | 'view';
   hideCancel?: boolean;
   greeting?: string;
-  onPendingDeletion?: (s3Key: string) => void;
   /** When true, skip switching to 'tables' view after save (wizard handles navigation). */
   wizardMode?: boolean;
   /** Called when CSV/Sheets is selected in wizard mode instead of navigating away. */
-  onStaticSelect?: (tab: 'csv' | 'sheets') => void;
   /** Skip the type selection step and go straight to configure (type already set on content). */
   skipTypeSelection?: boolean;
   colorMode: 'light' | 'dark';
@@ -103,9 +98,7 @@ export default function ConnectionFormV2({
   mode,
   hideCancel = false,
   greeting,
-  onPendingDeletion,
   wizardMode = false,
-  onStaticSelect,
   skipTypeSelection = false,
   colorMode,
   userMode,
@@ -113,8 +106,6 @@ export default function ConnectionFormV2({
   homeFolder,
 }: ConnectionFormV2Props) {
   const router = useRouter();
-  const staticConnectionPath = resolvePath(userMode, '/database/static');
-  const { file: staticConnectionFile, loading: staticConnectionLoading } = useFileByPath(staticConnectionPath);
   const homePath = resolvePath(userMode, homeFolder || '/');
   const { databases: contextDatabases, hasContext } = useContextHook(homePath, undefined, true);
   // Check whitelist status for this specific connection: 'full' | 'partial' | 'none'
@@ -123,14 +114,7 @@ export default function ConnectionFormV2({
   // Enriched schema viewer (dev mode only)
   const [schemaJsonExpanded, setSchemaJsonExpanded] = useState(false);
 
-  const [redirectingToStatic, setRedirectingToStatic] = useState<false | 'csv' | 'sheets'>(false);
 
-  useEffect(() => {
-    if (redirectingToStatic && staticConnectionFile?.fileState.id && staticConnectionFile.fileState.id > 0) {
-      const modeParam = userMode !== 'org' ? `&mode=${userMode}` : '';
-      router.push(`/f/${staticConnectionFile.fileState.id}?tab=${redirectingToStatic}${modeParam}`);
-    }
-  }, [redirectingToStatic, staticConnectionFile?.fileState.id, userMode, router]);
 
   // For create mode, start with type selection step; skip if already editing or skipTypeSelection set
   const [step, setStep] = useState<'select-type' | 'configure'>(
@@ -139,11 +123,10 @@ export default function ConnectionFormV2({
   // For existing connections, default to 'tables' view; for new connections, show 'settings'.
   // Static connection: defaults to 'tables' unless arriving via ?tab= param (means user
   // clicked CSV/Google Sheets from the type selection and wants to upload).
-  const isStaticConnection = content.type === 'csv' && fileName === 'static';
   const searchParams = useSearchParams();
   const hasTabParam = searchParams.has('tab');
   const [activeSection, setActiveSection] = useState<'tables' | 'settings'>(
-    mode === 'view' && !(isStaticConnection && hasTabParam) ? 'tables' : 'settings'
+    mode === 'view' ? 'tables' : 'settings'
   );
   const [activeView, setActiveView] = useState<'form' | 'json'>('form');
   const [nameError, setNameError] = useState<string | null>(null);
@@ -180,22 +163,6 @@ export default function ConnectionFormV2({
     if (connType.comingSoon) return;
     const selectedType = connType.type;
 
-    // CSV and Google Sheets always go to the static connection — no new connection is created
-    if (connType.isStatic || selectedType === 'csv' || selectedType === 'google-sheets') {
-      const tab = selectedType === 'google-sheets' ? 'sheets' : 'csv';
-      // In wizard mode, notify parent instead of navigating away
-      if (onStaticSelect) {
-        onStaticSelect(tab);
-        return;
-      }
-      if (staticConnectionFile?.fileState.id && staticConnectionFile.fileState.id > 0) {
-        const modeParam = userMode !== 'org' ? `&mode=${userMode}` : '';
-        router.push(`/f/${staticConnectionFile.fileState.id}?tab=${tab}${modeParam}`);
-      } else {
-        setRedirectingToStatic(tab);
-      }
-      return;
-    }
     handleTypeChange(selectedType as 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'clickhouse');
     setStep('configure');
   };
@@ -619,14 +586,6 @@ export default function ConnectionFormV2({
             )}
           </VStack>
 
-          {/* Loading bar while resolving static connection */}
-          {(redirectingToStatic || staticConnectionLoading) && (
-            <Progress.Root size="xs" value={null} colorPalette="teal">
-              <Progress.Track borderRadius="full">
-                <Progress.Range />
-              </Progress.Track>
-            </Progress.Root>
-          )}
 
           <ConnectionTypePicker onSelect={handleTypeSelect} />
         </VStack>
@@ -775,24 +734,13 @@ export default function ConnectionFormV2({
                 </HStack>
               )}
               <Box minH="400px">
-                {isStaticConnection ? (
-                  <StaticTablesBrowser
-                    schemas={schemas}
-                    schemaLoading={schemaLoading}
-                    schemaError={schemaError}
-                    connectionName={fileName}
-                    onRetry={handleSchemaReload}
-                    whitelistedSchemas={whitelistedDb?.schemas}
-                  />
-                ) : (
-                  <ConnectionTablesBrowser
-                    schemas={schemas}
-                    schemaLoading={schemaLoading}
-                    schemaError={schemaError}
-                    connectionName={fileName}
-                    onRetry={handleSchemaReload}
-                  />
-                )}
+                <ConnectionTablesBrowser
+                  schemas={schemas}
+                  schemaLoading={schemaLoading}
+                  schemaError={schemaError}
+                  connectionName={fileName}
+                  onRetry={handleSchemaReload}
+                />
               </Box>
             </VStack>
 
@@ -879,14 +827,6 @@ export default function ConnectionFormV2({
               Lowercase letters, numbers, and underscores only
             </Text>
           )}
-          {isStaticConnection && (
-            <HStack gap={2} mt={2} px={3} py={2} bg="accent.teal/5" borderRadius="md" border="1px solid" borderColor="accent.teal/20">
-              <LuCircleAlert size={13} color="var(--chakra-colors-accent-teal)" style={{ flexShrink: 0 }} />
-              <Text fontSize="xs" color="fg.muted">
-                All uploaded CSV, Parquet, and Google Sheets datasets are stored in this connection.
-              </Text>
-            </HStack>
-          )}
         </Box>
 
         {/* BigQuery Configuration */}
@@ -904,46 +844,6 @@ export default function ConnectionFormV2({
             config={config}
             onChange={(newConfig) => onChange({ config: newConfig })}
             mode={mode}
-          />
-        )}
-
-        {/* Static connection — unified CSV + Google Sheets landing zone */}
-        {content.type === 'csv' && fileName === 'static' && (
-          <StaticConnectionConfig
-            config={config}
-            onChange={(newConfig) => onChange({ config: newConfig })}
-            mode={mode}
-            userMode={userMode}
-            onError={setNameError}
-            onPendingDeletion={onPendingDeletion}
-            onSave={onSave}
-            autoSync={content.autoSync}
-            onAutoSyncChange={(autoSync) => onChange({ autoSync })}
-            lastSyncedAt={content.lastSyncedAt}
-            lastSyncError={content.lastSyncError}
-          />
-        )}
-
-        {/* CSV Configuration (non-static, backward compat) */}
-        {content.type === 'csv' && fileName !== 'static' && (
-          <CsvConfig
-            config={config}
-            onChange={(newConfig) => onChange({ config: newConfig })}
-            mode={mode}
-            connectionName={fileName}
-            onError={setNameError}
-          />
-        )}
-
-        {/* Google Sheets Configuration */}
-        {content.type === 'google-sheets' && (
-          <GoogleSheetsConfig
-            config={config}
-            onChange={(newConfig) => onChange({ config: newConfig })}
-            mode={mode}
-            connectionName={fileName}
-            userMode={userMode}
-            onError={setNameError}
           />
         )}
 

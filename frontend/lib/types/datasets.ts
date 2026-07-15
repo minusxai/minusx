@@ -66,6 +66,10 @@ export interface DatasetContent extends BaseFileContent {
    * the table does not exist for the agent, the GUI or any query.
    */
   hiddenTables?: string[];
+  /** Scheduled re-import of link sources (the sheets_sync job reads this). */
+  autoSync?: { cron: string; timezone: string };
+  lastSyncedAt?: string;
+  lastSyncError?: string;
 }
 
 /** Canonical `schema.table` key for uniqueness checks and hide lists. */

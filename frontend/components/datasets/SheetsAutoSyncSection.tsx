@@ -22,7 +22,7 @@ interface SheetsAutoSyncSectionProps {
   editMode?: boolean;
 }
 
-/** Auto-sync toggle + schedule + last-sync status for Google Sheets-backed connections. */
+/** Auto-sync toggle + schedule + last-sync status for link-sourced datasets. */
 export function SheetsAutoSyncSection({
   autoSync,
   onChange,
@@ -42,7 +42,7 @@ export function SheetsAutoSyncSection({
               Auto-sync
             </Text>
             <Text fontSize="2xs" color="fg.muted">
-              Re-import all Google Sheets in this connection on a schedule
+              Re-import this dataset's link sources on a schedule
             </Text>
           </VStack>
         </HStack>

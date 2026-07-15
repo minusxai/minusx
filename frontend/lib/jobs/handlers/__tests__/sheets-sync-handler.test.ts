@@ -1,10 +1,11 @@
 /**
- * Scheduled Google-Sheets auto-sync must honor the user's deletions: re-syncing a sheet whose live
- * source still has a tab the user deleted must NOT resurrect that tab (same guarantee as the manual
- * Re-import button). The S3 / DB boundaries are mocked; the real mergeReimportedSheetFiles runs.
+ * Scheduled link-source auto-sync (DATASETS) must honor the user's deletions:
+ * re-syncing a sheet whose live source still has a tab the user deleted must
+ * NOT resurrect that tab (same guarantee as the manual Re-import button —
+ * both run reimportLinkGroup). S3 / DB boundaries mocked; the real merge runs.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { CsvFileInfo, ConnectionContent } from '@/lib/types';
+import type { DatasetContent, DatasetTable } from '@/lib/types/datasets';
 
 const { mocks } = vi.hoisted(() => ({
   mocks: {
@@ -29,10 +30,10 @@ import { sheetsSyncJobHandler } from '@/lib/jobs/handlers/sheets-sync-handler';
 
 const user = { userId: 1, email: 'a@x.com', name: 'A', role: 'admin', mode: 'org', home_folder: '' } as any;
 
-function sheetFile(filename: string, table_name: string, s3_key: string, row_count = 0): CsvFileInfo {
+function sheetTable(filename: string, table_name: string, s3_key: string, row_count = 0): DatasetTable {
   return {
     filename, table_name, schema_name: 'public', s3_key, file_format: 'csv', row_count, columns: [],
-    source_type: 'google_sheets', spreadsheet_url: 'https://docs.google.com/spreadsheets/d/A', spreadsheet_id: 'A',
+    source: 'link', source_url: 'https://docs.google.com/spreadsheets/d/A', source_group: 'A',
   };
 }
 
@@ -40,16 +41,15 @@ describe('sheetsSyncJobHandler — scheduled sync preserves deletions', () => {
   beforeEach(() => {
     Object.values(mocks).forEach((m) => m.mockReset());
     mocks.deleteS3File.mockResolvedValue(undefined);
-    mocks.loadFile.mockResolvedValue({ data: { name: 'static', path: '/org/database/static', references: [] } });
+    mocks.loadFile.mockResolvedValue({ data: { name: 'sheetdata', path: '/org/sheetdata', references: [] } });
     mocks.saveFile.mockResolvedValue(undefined);
   });
 
   it('does NOT resurrect a tab the user deleted (live sheet still has it)', async () => {
-    // The connection currently has only companies_1 — the user deleted companies_2.
-    const content: ConnectionContent = {
-      type: 'csv',
-      config: { files: [sheetFile('companies_1.csv', 'companies_1', 'old1', 5)] },
-    } as unknown as ConnectionContent;
+    // The dataset currently has only companies_1 — the user deleted companies_2.
+    const content: DatasetContent = {
+      files: [sheetTable('companies_1.csv', 'companies_1', 'old1', 5)],
+    };
 
     // The LIVE sheet still has both tabs, so the import returns both.
     mocks.importGoogleSheetToS3.mockResolvedValue({
@@ -67,8 +67,8 @@ describe('sheetsSyncJobHandler — scheduled sync preserves deletions', () => {
     );
 
     expect(mocks.saveFile).toHaveBeenCalledTimes(1);
-    const savedContent = mocks.saveFile.mock.calls[0][3] as ConnectionContent;
-    const savedFiles = (savedContent.config?.files ?? []) as CsvFileInfo[];
+    const savedContent = mocks.saveFile.mock.calls[0][3] as DatasetContent;
+    const savedFiles = savedContent.files ?? [];
 
     expect(savedFiles.map((f) => f.filename)).toEqual(['companies_1.csv']); // companies_2 NOT resurrected
     expect(savedFiles[0].s3_key).toBe('fresh1');                            // kept tab refreshed
