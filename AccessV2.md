@@ -1,6 +1,6 @@
 # Access V2 — Groups, Folder Permissions, and SQL-Enforced Access
 
-Status: **in progress** (PR #599). Groups + engine + UI are done and CI-green. **M1c — transparent RLS + atomic guarded writes — is REQUIRED scope (not optional) and being implemented now**: enforcement must live in the database itself, not only in application SQL/code.
+Status: **feature-complete including M1c** (PR #599). Groups + engine + UI + **transparent RLS with atomic guarded writes** are implemented, tested (red-first + mutation-checked), and browser-verified: enforcement lives in the database itself — user-scoped queries run as the restricted `app_user` role and the `files` policies filter reads and refuse out-of-scope writes inside the statement. The owner/system path (migrations, seeding, background jobs) is unaffected.
 
 ## Why
 
@@ -97,13 +97,16 @@ Extract one effective-access resolver producing an `AccessPredicate` + in-memory
 - [ ] Write-guard SQL (`INSERT … SELECT … WHERE`, predicate in `UPDATE`/`DELETE` `WHERE`) — deferred hardening; writes are enforced app-side with the same engine (`checkWriteAccess`)
 - [x] `path` prefix index — NOTE: `text_pattern_ops` rejected by PGLite (OSS default); hosted-Postgres perf optimization added out-of-band (correctness unaffected)
 
-### M1c — Transparent RLS + atomic guarded writes (REQUIRED — in progress)
-- [ ] `app_user` role (idempotent) + grants on `files` only; `GRANT app_user TO` the connection user (`postgres-schema.ts`)
-- [ ] `app_access_allows(path, type, op)` policy function + SELECT/INSERT/UPDATE/DELETE policies; `ENABLE ROW LEVEL SECURITY` on `files` (owner = system path)
-- [ ] Access-context execution: user-scoped `DocumentDB` reads AND writes run in a `SET LOCAL ROLE app_user` + `app.access` transaction (module `transaction` API)
-- [ ] Reference loads carry the `embedded` variant into the context (container semantics preserved under RLS)
-- [ ] **Gold parity (red-first): raw unfiltered SELECT under RLS === `checkAccess` matrix on real PGLite**; atomic write denial (0 rows / policy error) for out-of-scope create/edit/delete; owner/system path unaffected
-- [ ] Full suite green; browser-verify
+### M1c — Transparent RLS + atomic guarded writes (REQUIRED — DONE)
+- [x] `app_user` role (idempotent) + grants on `files` only; `GRANT app_user TO` the connection user; `GRANT USAGE` on the **current** schema (schema is search_path-selected — a fixed name broke the per-schema test harness) (`postgres-schema.ts`)
+- [x] `app_access_allows(path, type, op)` policy function (+ typeset/scope helpers, `left()`-comparisons so `%`/`_` in paths can't widen a match) + SELECT/INSERT/UPDATE/DELETE policies; `ENABLE ROW LEVEL SECURITY` on `files` (owner = system path; NOT `FORCE` — the owner must bypass)
+- [x] Access-context execution: `db.withAccess` (both OSS DB modules, shared `runWithAccess`) opens a transaction, `set_config('app.access', ctx, true)` + `SET LOCAL ROLE app_user`; `DocumentDB.getById/getByIds/listAll/create/update/deleteByIds` take an optional `AccessQuery` and run inside it; `files.server.ts` passes the caller's predicate on load/create/save/delete. Graceful fallback (warn once) when the connection user can't create roles — enforcement degrades to M1b predicate injection + app checks, never breaks the app
+- [x] Atomic writes: create ids via `SECURITY DEFINER app_next_file_id()` (an RLS-filtered `MAX(id)` would collide with hidden rows — found by the red battery); `UPDATE` 0-rows → `AccessPermissionError`; RLS violations (42501) translated; denied `loadFile` keeps the legacy 403 via an id-only owner probe (404 vs 403 without leaking)
+- [x] Reference loads carry the `embedded` variant into the context (container semantics preserved under RLS); folder-cascade deletes keep removing `context` children (group delete = folder-scoped, type-agnostic — like home)
+- [x] **Gold parity (red-first): raw unfiltered SELECT under RLS === `checkAccess` for every principal × variant on real PGLite** (`lib/database/__tests__/rls-enforcement.test.ts`, 32 tests); atomic write denials; owner path unrestricted; **mutation-checked** (read-policy fall-open → 7 red; update-policy fall-open → 2 red)
+- [x] Full suite green (4604); browser-verified: scoped editor sees filtered listings, is 403'd on an out-of-scope file id, creates/saves/runs in their home; admin unaffected; cascade folder delete intact
+
+**What stays app-side (deliberate):** static type blocklists / protected paths / location restrictions (not per-principal; and cascade deletes must remove `context` children), `batchSave`/`moveFile`/metadata-merge helpers (validated app-side before owner-path SQL), and precise error messages.
 
 ### M2 — Group model + resolver (additive — NO migration, NO new tables) ✅ DONE
 **Storage (final):** group DEFINITIONS live in the org config document's `groups` section (name → capabilities × folders), next to `accessRules` — hand-editable and versioned with the config. MEMBERSHIP is a `groups` array of names on the users table (one idempotent column; the only schema touch). The built-in groups ARE the roles: the `role` column is the user's built-in group (admin locked; editor/viewer capabilities editable via `accessRules`) — so every user has ≥1 group, and custom groups are purely additive.
