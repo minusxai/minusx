@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { withAuth } from '@/lib/http/with-auth';
-import { processFilesFromS3 } from '@/lib/csv-processor';
+import { processFilesFromS3, importGoogleSheetToS3 } from '@/lib/csv-processor';
 import { verifyStorageToken } from '@/lib/object-store/key-token';
 import { FilesAPI } from '@/lib/data/files.server';
 import { UserFacingError } from '@/lib/errors';
@@ -31,12 +31,17 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const files = body.files as Array<{ s3_key: string; filename: string; schema_name?: string; table_name?: string }> | undefined;
 
     if (!path || !name) return ApiErrors.badRequest('path and name are required');
-    if (!files?.length) return ApiErrors.badRequest('At least one file is required');
+    if (!files?.length && !source_url) return ApiErrors.badRequest('Provide files to upload or a source_url to import');
 
-    // Verify each s3_key token — proves it was issued by this server.
-    const verifiedFiles = files.map((f) => ({ ...f, s3_key: verifyStorageToken(f.s3_key) }));
+    // LINK sources: the server fetches + snapshots the source itself (Google
+    // Sheets today) — the s3 keys are server-minted, so no tokens involved.
+    // UPLOAD sources: verify each s3_key token — proves it was issued by this
+    // server's presign endpoint.
+    const incoming = source_url && !files?.length
+      ? (await importGoogleSheetToS3(source_url, name, user.mode, (body.schema_name as string) ?? 'public')).files
+      : files!.map((f) => ({ ...f, s3_key: verifyStorageToken(f.s3_key) }));
 
-    const registered = await processFilesFromS3(user.mode, name, verifiedFiles);
+    const registered = await processFilesFromS3(user.mode, name, incoming);
 
     const tables: DatasetTable[] = registered.map((r) => ({
       filename: r.filename, table_name: r.table_name, schema_name: r.schema_name,

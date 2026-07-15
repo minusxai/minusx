@@ -9,6 +9,7 @@ import { createDraftFile } from '@/lib/file-state/file-state';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import DatasetContainerV2 from '@/components/containers/DatasetContainerV2';
 
 interface NewFilePageProps {
   params: Promise<{ type: string }>;
@@ -59,6 +60,17 @@ export default function NewFilePage({ params }: NewFilePageProps) {
 
   if (!getSupportedFileTypes(config.supportedFileTypes).includes(type)) {
     notFound();
+  }
+
+  // Datasets are upload-first: no draft doc exists until the upload registers
+  // (they're LIVE on create), so render the create form directly instead of
+  // the draft-then-redirect flow.
+  if (type === 'dataset') {
+    return (
+      <Suspense fallback={<Center h="100vh" bg="bg.canvas"><Spinner size="lg" /></Center>}>
+        <DatasetContainerV2 fileId={-1} mode="create" />
+      </Suspense>
+    );
   }
 
   return (
