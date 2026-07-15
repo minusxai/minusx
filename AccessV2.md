@@ -1,6 +1,6 @@
 # Access V2 — Groups, Folder Permissions, and SQL-Enforced Access
 
-Status: **design, pre-implementation.** This documents the target model and the phased path to it. No behavior changes until Phase 3.
+Status: **in progress** (PR #599). **M1a done + M1b core done**, both proven and zero-behavior-change (CI green). **M2 (groups) and M3 (feature + UI) not yet started** — those are the behavior-changing parts that warrant review before a production flip. See the Milestones section for exact checkbox state.
 
 ## Why
 
