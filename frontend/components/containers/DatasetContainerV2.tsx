@@ -121,6 +121,9 @@ function DatasetView({ fileId }: { fileId: number }) {
       const result = await fn();
       if (!result.success) { setActionError(result.message ?? 'Action failed'); return; }
       await reloadFile({ fileId });
+    } catch (e) {
+      // A reload hiccup must surface as a message, never an unhandled rejection.
+      setActionError(e instanceof Error ? e.message : 'Action failed');
     } finally {
       setSaving(false);
     }
