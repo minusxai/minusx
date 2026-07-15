@@ -9,7 +9,7 @@
  * Composed specs (layer/facet/concat) show a hint instead — those are chat-edited.
  * Pure view: envelope + columns in, onVizChange(newEnvelope) out. No Redux.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Box, HStack, Text, Wrap } from '@chakra-ui/react';
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from '@/components/plotx/AxisComponents';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
@@ -35,6 +35,12 @@ export interface VegaEncodingPanelProps {
 export function VegaEncodingPanel({ envelope, columns, types, onVizChange, customPreview }: VegaEncodingPanelProps) {
   const isTouchDevice = useIsTouchDevice();
   const [dragged, setDragged] = useState<string | null>(null);
+  // Zone-to-zone moves (V1 AxisBuilder parity): when the drag starts on a chip ALREADY
+  // in a zone, remember that source channel — dropping on another zone then moves the
+  // column (add to target + remove from source, one atomic envelope edit), and ending
+  // the drag outside every zone removes it.
+  const [dragSource, setDragSource] = useState<string | null>(null);
+  const dropLandedRef = useRef(false);
   const [mobileSelected, setMobileSelected] = useState<string | null>(null);
   const editable = isEnvelopeEditable(envelope) && !customPreview;
 
@@ -58,6 +64,35 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange, custo
 
   const removeFromZone = (channel: string, name: string) => {
     onVizChange(removeZoneField(envelope, channel, name));
+  };
+
+  const endDrag = () => {
+    setDragged(null);
+    setDragSource(null);
+  };
+
+  const handleZoneDrop = (channel: string) => {
+    const col = dragged ?? mobileSelected;
+    if (!col) return;
+    dropLandedRef.current = true;
+    if (dragSource != null) {
+      // MOVE between zones: one atomic edit (dropping back on the source is a no-op).
+      if (dragSource !== channel) {
+        onVizChange(removeZoneField(addZoneField(envelope, channel, columnOf(col)), dragSource, col));
+      }
+    } else {
+      assign(channel, col);
+    }
+    endDrag();
+    setMobileSelected(null);
+  };
+
+  const handleZoneChipDragEnd = () => {
+    // Drag ended on no zone → drag-out removes the chip from its source (V1 parity).
+    if (dragSource != null && dragged != null && !dropLandedRef.current) {
+      onVizChange(removeZoneField(envelope, dragSource, dragged));
+    }
+    endDrag();
   };
 
   return (
@@ -89,14 +124,11 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange, custo
         {zones.map(({ channel, label }) => {
           const fields = getZoneFields(envelope, channel).filter(f => f !== '__mx_key');
           return (
-            <Box key={channel} flex="1" minW="120px" aria-label={`${label} drop zone`}>
+            <Box key={channel} flex="1" minW="120px">
               <DropZone
                 label={label}
                 isTouchDevice={isTouchDevice}
-                onDrop={() => {
-                  const col = dragged ?? mobileSelected;
-                  if (col) assign(channel, col);
-                }}
+                onDrop={() => handleZoneDrop(channel)}
               >
                 {fields.length > 0 ? (
                   fields.map(field => (
@@ -104,6 +136,12 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange, custo
                       key={field}
                       column={field}
                       type={resolveColumnType(field, columns, types)}
+                      onDragStart={() => {
+                        setDragged(field);
+                        setDragSource(channel);
+                        dropLandedRef.current = false;
+                      }}
+                      onDragEnd={handleZoneChipDragEnd}
                       onRemove={() => removeFromZone(channel, field)}
                       // ONE popover across the vega tier (alias + d3 format); storage
                       // differs per source: native = surgical spec edits (channel
@@ -118,7 +156,10 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange, custo
                             : getChannelPresentation(envelope, channel)}
                           onCommit={(next) => {
                             if (!isRecipe) {
-                              onVizChange(setChannelPresentation(envelope, channel as EditableChannel, next));
+                              // The column KIND rides along: a date column on a discrete
+                              // axis needs formatType so date patterns don't hit d3-format.
+                              const temporalKind = sqlTypeToVizKind(types[columns.indexOf(field)] ?? '') === 'temporal';
+                              onVizChange(setChannelPresentation(envelope, channel as EditableChannel, next, { temporalKind }));
                               return;
                             }
                             const cfg = { ...recipeFormats?.[field] };

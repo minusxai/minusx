@@ -54,6 +54,55 @@ describe('setChannelPresentation', () => {
     expect(specOf(cleared).encoding.x.axis).toBeUndefined();
   });
 
+  // A temporal COLUMN on a DISCRETE axis (the heatmap x: temporal → ordinal band) still
+  // takes date patterns — but ordinal axes treat `format` as a NUMBER format, and
+  // d3-format('%b %Y') THROWS inside the vega dataflow (silent blank chart); VL also
+  // DROPS formatType:'utc' as a custom type, and 'time' shifts Z-dates a month back
+  // locally. The temporalKind flag therefore writes a UTC labelExpr instead of `format`.
+  it('temporal column on a discrete axis: date formats become a UTC labelExpr', () => {
+    const heatmap = envelope({ mark: { type: 'rect' }, encoding: {
+      x: { field: 'week_start', type: 'ordinal' },
+      y: { field: 'category', type: 'nominal' },
+      color: { field: 'revenue', type: 'quantitative', aggregate: 'sum' },
+    } });
+    const next = setChannelPresentation(heatmap, 'x', { format: '%b %Y' }, { temporalKind: true });
+    expect(specOf(next).encoding.x.axis).toEqual({ labelExpr: 'utcFormat(toDate(datum.value), "%b %Y")' });
+  });
+
+  it("date patterns with apostrophes (Jan '25) survive the labelExpr round-trip", () => {
+    const heatmap = envelope({ mark: { type: 'rect' }, encoding: {
+      x: { field: 'week_start', type: 'ordinal' },
+      y: { field: 'category', type: 'nominal' },
+    } });
+    const next = setChannelPresentation(heatmap, 'x', { format: "%b '%y" }, { temporalKind: true });
+    expect(specOf(next).encoding.x.axis.labelExpr).toBe('utcFormat(toDate(datum.value), "%b \'%y")');
+    expect(getChannelPresentation(next, 'x').format).toBe("%b '%y");
+  });
+
+  it('reads the format back out of the discrete-axis labelExpr (popover round-trip)', () => {
+    const heatmap = envelope({ mark: { type: 'rect' }, encoding: {
+      x: { field: 'week_start', type: 'ordinal' },
+      y: { field: 'category', type: 'nominal' },
+    } });
+    const withFmt = setChannelPresentation(heatmap, 'x', { format: '%b %Y' }, { temporalKind: true });
+    expect(getChannelPresentation(withFmt, 'x').format).toBe('%b %Y');
+  });
+
+  it('clearing the format on a discrete temporal axis drops the labelExpr', () => {
+    const heatmap = envelope({ mark: { type: 'rect' }, encoding: {
+      x: { field: 'week_start', type: 'ordinal' },
+      y: { field: 'category', type: 'nominal' },
+    } });
+    const withFmt = setChannelPresentation(heatmap, 'x', { format: '%b %Y' }, { temporalKind: true });
+    const cleared = setChannelPresentation(withFmt, 'x', { format: null }, { temporalKind: true });
+    expect(specOf(cleared).encoding.x.axis).toBeUndefined();
+  });
+
+  it('a true temporal channel keeps plain axis.format (VL time-formats natively)', () => {
+    const next = setChannelPresentation(envelope(BAR()), 'x', { format: '%b %Y' }, { temporalKind: true });
+    expect(specOf(next).encoding.x.axis).toEqual({ format: '%b %Y' });
+  });
+
   it('uses the field-def format for theta (no axis on arcs)', () => {
     const pie = envelope({ mark: 'arc', encoding: { theta: { field: 'revenue', type: 'quantitative' }, color: { field: 'region', type: 'nominal' } } });
     const next = setChannelPresentation(pie, 'theta', { format: '$,.0f' });

@@ -1027,17 +1027,46 @@ export function getChannelPresentation(envelope: VizEnvelope, channel: string): 
   const def = channelDef(spec, channel);
   if (!def) return { title: null, format: null };
   const axis = def.axis as Record<string, unknown> | undefined;
-  const format = AXIS_CHANNELS.has(channel)
-    ? (typeof axis?.format === 'string' ? axis.format : null)
-    : (typeof def.format === 'string' ? def.format : null);
+  let format: string | null;
+  if (AXIS_CHANNELS.has(channel)) {
+    format = typeof axis?.format === 'string' ? axis.format : null;
+    // Discrete-axis date labels live in OUR labelExpr shape — read the pattern back.
+    if (format == null && typeof axis?.labelExpr === 'string') {
+      format = DISCRETE_DATE_LABEL_RE.exec(axis.labelExpr)?.[1] ?? null;
+    }
+  } else {
+    format = typeof def.format === 'string' ? def.format : null;
+  }
   return { title: typeof def.title === 'string' ? def.title : null, format };
 }
 
-/** Set/clear (null) the alias and/or format on one channel. `undefined` leaves as-is. */
+/**
+ * Discrete-axis date labels: the labelExpr our popover writes for a temporal COLUMN on
+ * an ordinal/nominal band axis, and the regex that reads the pattern back. Why not
+ * `axis.format`: ordinal axes treat `format` as a d3 NUMBER format — d3-format('%b %Y')
+ * THROWS inside the vega dataflow (a silent blank chart). Why not `formatType`:
+ * Vega-Lite DROPS 'utc' as a custom type, and 'time' formats locally, shifting a
+ * '2024-01-01Z' band label back into "Dec 2023". utcFormat over toDate is exact.
+ */
+// The pattern rides in a DOUBLE-quoted expression string so date patterns with
+// apostrophes ("%b '%y" → Jan '25) survive; double quotes are stripped (never valid
+// in a d3 date pattern, and they'd break out of the expression).
+const discreteDateLabelExpr = (fmt: string): string =>
+  `utcFormat(toDate(datum.value), "${fmt.replace(/"/g, '')}")`;
+const DISCRETE_DATE_LABEL_RE = /^utcFormat\(toDate\(datum\.value\), "(.+)"\)$/;
+
+/**
+ * Set/clear (null) the alias and/or format on one channel. `undefined` leaves as-is.
+ * `opts.temporalKind` marks the underlying COLUMN as a date: on a channel rendered
+ * DISCRETE (the heatmap's temporal→ordinal band axis) the date pattern is written as a
+ * UTC labelExpr (see above). True temporal channels keep plain `axis.format` — VL
+ * time-formats those natively.
+ */
 export function setChannelPresentation(
   envelope: VizEnvelope,
   channel: string,
   changes: { title?: string | null; format?: string | null },
+  opts?: { temporalKind?: boolean },
 ): VizEnvelope {
   const source = sourceOf(envelope);
   if (source.kind === 'recipe') return envelope; // recipes format internally
@@ -1051,10 +1080,17 @@ export function setChannelPresentation(
   }
 
   if (changes.format !== undefined) {
+    const discreteDateAxis = opts?.temporalKind === true && def.type !== 'temporal';
     if (AXIS_CHANNELS.has(channel)) {
       const axis = { ...((def.axis as Record<string, unknown> | undefined) ?? {}) };
-      if (changes.format === null || changes.format === '') delete axis.format;
-      else axis.format = changes.format;
+      // Clear BOTH representations first — the channel may have flipped between
+      // continuous (format) and discrete (labelExpr) since the format was set.
+      delete axis.format;
+      if (typeof axis.labelExpr === 'string' && DISCRETE_DATE_LABEL_RE.test(axis.labelExpr)) delete axis.labelExpr;
+      if (changes.format != null && changes.format !== '') {
+        if (discreteDateAxis) axis.labelExpr = discreteDateLabelExpr(changes.format);
+        else axis.format = changes.format;
+      }
       if (Object.keys(axis).length > 0) def.axis = axis;
       else delete def.axis;
     } else {

@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Text, IconButton, VStack } from '@chakra-ui/react';
+import { ChartError } from '@/components/plotx/ChartError';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, injectNamedAssets } from '@/lib/viz/render-vega';
@@ -165,6 +166,18 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           ...sizeOf(el),
         });
         viewRef.current = view;
+        // Vega LOGS dataflow errors (an invalid axis format, a broken expression…)
+        // instead of rejecting runAsync — the view is left broken and the chart shows
+        // as a SILENT blank. Collect logged errors and promote the first one to a real
+        // throw after the first run, so it lands on the error card like any failure.
+        const loggedErrors: unknown[] = [];
+        view.logger({
+          level(): never { return this as never; },
+          error(...args: unknown[]) { loggedErrors.push(args[0]); console.error('[VegaChart] vega error:', ...args); return this; },
+          warn(...args: unknown[]) { console.warn('[VegaChart]', ...args); return this; },
+          info() { return this; },
+          debug() { return this; },
+        } as never);
         // Shared-tooltip charts suppress the DEFAULT per-mark tooltip — and this MUST
         // happen before the first runAsync: vega's View.tooltip() re-initializes the
         // renderer, which synchronously CLEARS the SVG. Calling it after the first
@@ -186,6 +199,10 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         }
         if (cancelled) return;
         await view.runAsync();
+        if (loggedErrors.length > 0) {
+          const first = loggedErrors[0];
+          throw first instanceof Error ? first : new Error(String(first));
+        }
         promoteFontAttrs(el);
         // Shared multi-series tooltip (ECharts-style axis tooltip): for cartesian charts
         // with a shared x, hovering shows EVERY series at that x with a color swatch + a
@@ -377,10 +394,10 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
   return (
     <Box position="relative" flex="1" width="full" minHeight="0" overflow="hidden">
       {error && (
-        <Box position="absolute" inset={0} zIndex={1} bg="bg.subtle" p={4} overflow="auto" aria-label="Vega chart error">
-          <Text fontSize="xs" fontFamily="mono" color="accent.danger" whiteSpace="pre-wrap">
-            Chart failed to render: {error}
-          </Text>
+        <Box position="absolute" inset={0} zIndex={1} bg="bg.subtle" overflow="auto" aria-label="Vega chart error">
+          {/* Same friendly card as the classic charts (V1 parity); the full stack is
+              already on the console from the build effect's catch. */}
+          <ChartError message={error} />
         </Box>
       )}
       <Box

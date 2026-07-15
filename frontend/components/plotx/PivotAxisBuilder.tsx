@@ -260,7 +260,7 @@ export const PivotAxisBuilder = ({
         p={3}
         bg="bg.surface"
         borderRadius="md"
-        border="2px dashed"
+        border="1px solid"
         borderColor="border.muted"
         minW={0}
       >

@@ -68,6 +68,7 @@ export const ColumnChip = ({
 
   return (
     <HStack
+      aria-label={`Column chip ${column}`}
       gap={1.5}
       px={2}
       py={1}
@@ -108,6 +109,7 @@ export const DropZone = ({ label, onDrop, isTouchDevice, children, labelExtra }:
 
   return (
     <VStack
+      aria-label={`${label} drop zone`}
       flex="1"
       align="stretch"
       gap={1}
@@ -484,6 +486,7 @@ export const ZoneChip = ({ column, type, onRemove, extra, formatConfig, onFormat
   return (
     <Box position="relative" ref={chipRef} minW={0} maxW="100%" flex="0 1 auto">
       <HStack
+        aria-label={`Zone chip ${column}`}
         gap={1.5}
         px={2}
         py={1}

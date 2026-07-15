@@ -63,4 +63,36 @@ describe('VegaChart renders marks into the DOM', () => {
     );
     await waitFor(() => expect(marksIn(container).length).toBeGreaterThan(0), { timeout: 5000 });
   });
+
+  it('vega dataflow errors (logged, not thrown) surface as the error card — never a silent blank', async () => {
+    // Vega LOGS dataflow errors (runAsync still resolves) and leaves the renderer broken.
+    // Regression: an invalid d3 format on an ordinal axis blanked the chart with no error.
+    const badFormat = envelope({
+      mark: { type: 'rect' },
+      encoding: {
+        // '%b %Y' is a date pattern; on an ordinal axis it reaches d3-format → throws in-flow.
+        x: { field: 'platform', type: 'ordinal', axis: { format: '%b %Y' } },
+        y: { field: 'platform', type: 'nominal' },
+        color: { field: 'revenue', type: 'quantitative', aggregate: 'sum' },
+      },
+    });
+    const { findByLabelText } = renderWithProviders(
+      <VegaChart envelope={badFormat} rows={ROWS} colorMode="dark" />,
+    );
+    const overlay = await findByLabelText('Vega chart error');
+    expect(overlay.textContent).toContain('Chart configuration error');
+    expect(overlay.textContent?.toLowerCase()).toContain('format');
+  });
+
+  it('render failures show the friendly ChartError card, not raw error text', async () => {
+    // A recipe reference missing a required binding — materialization fails.
+    const broken = { version: 2, source: { kind: 'recipe', recipe: 'minusx/point-map@1', bindings: { lat: 'a' } } } as unknown as VizEnvelope;
+    const { findByLabelText } = renderWithProviders(
+      <VegaChart envelope={broken} rows={ROWS} colorMode="dark" />,
+    );
+    const overlay = await findByLabelText('Vega chart error');
+    // The V1-style card: a friendly title plus the specific message — not a bare dump.
+    expect(overlay.textContent).toContain('Chart configuration error');
+    expect(overlay.textContent).toContain('missing binding');
+  });
 });
