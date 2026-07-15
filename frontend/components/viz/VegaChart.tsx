@@ -16,6 +16,7 @@ import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLe
 import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/viz-templates';
 import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
 import { SharedTooltip } from '@/lib/viz/shared-tooltip';
+import { injectGuideMark } from '@/lib/viz/guide-mark';
 
 // Tooltip value/x formatters. Tooltips show the FULL number ("2,574", not the axis's
 // "2.6k") and a readable date — the chart's own d3 format is for the axis, not here.
@@ -27,29 +28,9 @@ const makeXFormatter = (plan: TooltipPlan) => (raw: unknown): string => {
   return Number.isNaN(+d) ? String(raw) : d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 };
 
-// Shared-tooltip guide: a native Vega `rule` mark injected BEHIND the data marks (so bars
-// occlude it) and driven by signals — `mxGuidePx` is the data-rect pixel x (same space as
-// the marks, so it lands exactly on the point), `mxGuideOn` toggles visibility. A subtle
-// grey band. Tune stroke/width/opacity here.
-const GUIDE_STROKE = '#9aa4b2';
-const GUIDE_WIDTH = 5;
-const GUIDE_OPACITY = 0.28;
-function injectGuideMark(vegaSpec: Record<string, unknown>): boolean {
-  const marks = vegaSpec.marks;
-  if (!Array.isArray(marks) || marks.length === 0) return false; // composed/empty → no guide
-  const signals = (Array.isArray(vegaSpec.signals) ? vegaSpec.signals : []) as Array<Record<string, unknown>>;
-  signals.push({ name: 'mxGuidePx', value: -1 }, { name: 'mxGuideOn', value: 0 });
-  vegaSpec.signals = signals;
-  marks.unshift({
-    type: 'rule', interactive: false, clip: true,
-    encode: { update: {
-      x: { signal: 'mxGuidePx' }, y: { value: 0 }, y2: { signal: 'height' },
-      stroke: { value: GUIDE_STROKE }, strokeWidth: { value: GUIDE_WIDTH },
-      opacity: { signal: `mxGuideOn * ${GUIDE_OPACITY}` },
-    } },
-  });
-  return true;
-}
+// The shared-tooltip guide line (a native Vega `rule` mark driven by mxGuidePx/mxGuideOn/
+// mxGuideH signals) lives in ./guide-mark — extracted so its bounds invariant is
+// unit-tested (mxGuideH rests at 0 so the guide never feeds the fit solver; see guide-mark.ts).
 
 // Interactive maps (drag pan, wheel zoom, +/- buttons, persisted view) are detected by
 // CAPABILITY — the `mxViewParams` signal — not by recipe id, so a DETACHED map (kind:
@@ -184,6 +165,12 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           ...sizeOf(el),
         });
         viewRef.current = view;
+        // Shared-tooltip charts suppress the DEFAULT per-mark tooltip — and this MUST
+        // happen before the first runAsync: vega's View.tooltip() re-initializes the
+        // renderer, which synchronously CLEARS the SVG. Calling it after the first
+        // render wiped the just-painted chart with no error, and nothing repainted
+        // until the next interaction-triggered run (the silent-blank-chart bug).
+        if (tooltipPlan) view.tooltip(() => {});
         // Recipe boundary/lookup datasets (choropleth & analytic geo, RFC §9) are
         // resolved from the asset registry and bound before the first layout.
         await injectNamedAssets(view, resolved.ok ? resolved.assets : undefined);
@@ -212,13 +199,17 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           const controller = new SharedTooltip(colorMode);
           const holder = { data: buildTooltipData(rowsRef.current, plan) };
           const formatX = makeXFormatter(plan);
-          const v = view;
-          v.tooltip(() => {}); // suppress the default per-mark tooltip; we drive our own
+          const v = view; // default per-mark tooltip already suppressed pre-run (above)
 
           const setGuide = (on: boolean, px = -1) => {
             if (!hasGuide) return;
             v.signal('mxGuideOn', on ? 1 : 0);
-            if (on) v.signal('mxGuidePx', px);
+            if (on) {
+              v.signal('mxGuidePx', px);
+              // Grow the guide to the (now-settled) plot height ONLY on hover; it rests at
+              // 0 so it never feeds the autosize:fit solve on first paint (see guide-mark.ts).
+              v.signal('mxGuideH', Number(v.height()) || 0);
+            }
             v.runAsync().catch(() => { /* race on unmount */ });
           };
           const hideAll = () => { controller.hide(); setGuide(false); };
@@ -240,7 +231,8 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
             if (dataX < -6 || dataX > width + 6 || dataY < -6 || dataY > height + 6) { hideAll(); return; }
             let best: TooltipEntry | null = null, bestDist = Infinity, bestPx = 0;
             for (const entry of holder.data.values()) {
-              const sv = plan.xTemporal ? new Date(entry.xRaw as string | number | Date) : entry.xRaw;
+              // xPlot (bin centers) positions on the scale; xRaw is the display label.
+              const sv = entry.xPlot ?? (plan.xTemporal ? new Date(entry.xRaw as string | number | Date) : entry.xRaw);
               let px = xs(sv);
               if (typeof px !== 'number' || Number.isNaN(px)) continue;
               if (typeof xs.bandwidth === 'function') px += xs.bandwidth() / 2;
@@ -248,9 +240,18 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
               if (d < bestDist) { bestDist = d; best = entry; bestPx = px; }
             }
             if (!best) { hideAll(); return; }
-            const scale = v.scale('color') as ((k: string) => string) | undefined;
-            const colorFor = (k: string) => { try { return scale ? String(scale(k)) : '#8b949e'; } catch { return '#8b949e'; } };
-            controller.show(renderSharedTooltipHtml(best, { xTitle: plan.xTitle, colorFor, formatX, formatValue: fmtTooltipValue }), e.clientX, e.clientY);
+            // Charts with only literal colors (waterfall, boxplot) have NO color scale —
+            // view.scale('color') itself throws, so the lookup goes inside the guard too.
+            const colorFor = (k: string) => {
+              try {
+                const scale = v.scale('color') as ((key: string) => string) | undefined;
+                return scale ? String(scale(k)) : '#8b949e';
+              } catch { return '#8b949e'; }
+            };
+            // bins/stats/waterfall rows are ORDERED summaries (Max→Min, change→total) —
+            // value-sorting only applies to real multi-series (wide/long) charts.
+            const sortByValue = plan.series.kind === 'wide' || plan.series.kind === 'long';
+            controller.show(renderSharedTooltipHtml(best, { xTitle: plan.xTitle, colorFor, formatX, formatValue: fmtTooltipValue, sortByValue }), e.clientX, e.clientY);
             setGuide(true, bestPx);
           };
           const onMove = (e: PointerEvent) => {

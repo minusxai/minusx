@@ -88,6 +88,27 @@ describe('minusx/radar@1', () => {
     expect(svg).toContain('Support');
   });
 
+  it('vertices carry a LARGE invisible hover halo so the tooltip works near, not just on, a point', () => {
+    const m = materializeRecipe({ recipe: 'minusx/radar@1', bindings: { metric: 'metric', value: 'score', series: 'product' } });
+    if (!m.ok) throw new Error('materialize failed');
+    // Find the faceted series group's symbol marks.
+    const walk = (marks: unknown[]): Array<Record<string, unknown>> =>
+      marks.flatMap(mk => {
+        const rec = mk as Record<string, unknown>;
+        const nested = Array.isArray(rec.marks) ? walk(rec.marks as unknown[]) : [];
+        return rec.type === 'symbol' ? [rec, ...nested] : nested;
+      });
+    const symbols = walk(m.spec.marks as unknown[]);
+    expect(symbols.length).toBe(2); // visible dot + hover halo
+    const size = (s: Record<string, unknown>): number =>
+      ((s.encode as { update: { size: { value: number } } }).update.size.value);
+    const [dot, halo] = [...symbols].sort((a, b) => size(a) - size(b));
+    expect(size(halo)).toBeGreaterThan(size(dot) * 5); // a real hit-area gain
+    const haloUpdate = (halo.encode as { update: Record<string, unknown> }).update;
+    expect((haloUpdate.fillOpacity as { value: number }).value).toBeLessThan(0.01); // invisible
+    expect(haloUpdate.tooltip).toBeTruthy(); // but still tooltipped
+  });
+
   it('renders single-series without a series binding', async () => {
     const rows = ROWS.filter(r => r.product === 'A');
     const svg = await renderEnvelopeToSvg(envelope({ metric: 'metric', value: 'score' }), rows, 'dark', { width: 420, height: 360 });

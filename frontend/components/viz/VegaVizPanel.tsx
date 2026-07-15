@@ -243,7 +243,28 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
       )}
 
       {activeTab === 'settings' && !customPreview && !isDomTier && (
-        isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/trend@1' ? (
+        isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/funnel@1' ? (
+          <Box display="flex" flexDirection="column" gap={3} py={1}>
+            <HStack justify="space-between">
+              <Box>
+                <Text fontSize="xs" color="fg.muted">Horizontal layout</Text>
+                <Text fontSize="10px" color="fg.subtle">Stages run left to right instead of top to bottom</Text>
+              </Box>
+              <Switch.Root
+                aria-label="Horizontal funnel"
+                size="sm"
+                checked={getRecipeParams(envelope).orientation === 'horizontal'}
+                onCheckedChange={(e) => onVizChange(setRecipeParam(envelope, 'orientation', e.checked ? 'horizontal' : undefined))}
+              >
+                <Switch.HiddenInput />
+                <Switch.Control><Switch.Thumb /></Switch.Control>
+              </Switch.Root>
+            </HStack>
+            <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+              Stage order follows the query&apos;s row order. Rename and format the value in Fields.
+            </Text>
+          </Box>
+        ) : isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/trend@1' ? (
           <Box display="flex" flexDirection="column" gap={3} py={1}>
             <HStack justify="space-between">
               <Box>

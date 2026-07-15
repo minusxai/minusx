@@ -123,6 +123,51 @@ describe('headless rendering of materialized recipes', () => {
     expect(svg).toContain('(6.0%)');   // 60 / 1000
   });
 
+  it('funnel draws per-stage ZEBRA bands: one area per stage, alternating opacity', () => {
+    const m = materializeRecipe({ recipe: 'minusx/funnel@1', bindings: { stage: 'stage', value: 'users' } });
+    if (!m.ok) throw new Error(m.error);
+    const layers = (m.spec as { layer: Array<Record<string, any>> }).layer;
+    const area = layers.find(l => l.mark?.type === 'area')!;
+    // One band per stage (not one continuous silhouette): the stage rank splits the area.
+    expect(area.encoding.detail?.field).toBe('__mx_rank');
+    // Zebra: fillOpacity alternates on rank parity — two DIFFERENT opacities.
+    const fo = area.encoding.fillOpacity;
+    expect(fo.condition.test).toContain('__mx_rank % 2');
+    expect(fo.condition.value).not.toBe(fo.value);
+  });
+
+  it('funnel orientation param flips the taper axis (horizontal → stages run left to right)', () => {
+    const horizontal = materializeRecipe({
+      recipe: 'minusx/funnel@1', bindings: { stage: 'stage', value: 'users' },
+      params: { orientation: 'horizontal' },
+    });
+    if (!horizontal.ok) throw new Error(horizontal.error);
+    const area = (horizontal.spec as { layer: Array<Record<string, any>> }).layer.find(l => l.mark?.type === 'area')!;
+    // Horizontal: the stage sequence runs along x; the taper (ranged span) along y.
+    expect(area.encoding.x.field).toBe('__mx_pos');
+    expect(area.encoding.y.field).toBe('__mx_x0');
+    expect(area.encoding.y2.field).toBe('__mx_x1');
+
+    const vertical = materializeRecipe({ recipe: 'minusx/funnel@1', bindings: { stage: 'stage', value: 'users' } });
+    if (!vertical.ok) throw new Error(vertical.error);
+    const vArea = (vertical.spec as { layer: Array<Record<string, any>> }).layer.find(l => l.mark?.type === 'area')!;
+    expect(vArea.encoding.y.field).toBe('__mx_pos'); // default stays top-to-bottom
+    expect(vArea.encoding.x.field).toBe('__mx_x0');
+    expect(vArea.encoding.x2.field).toBe('__mx_x1');
+  });
+
+  it('horizontal funnel renders headlessly with stage labels', async () => {
+    const m = materializeRecipe({
+      recipe: 'minusx/funnel@1', bindings: { stage: 'stage', value: 'users' },
+      params: { orientation: 'horizontal' },
+    });
+    if (!m.ok) throw new Error(m.error);
+    const svg = await renderVegaLiteToSvg(m.spec, FUNNEL_ROWS, 'dark', { width: 480, height: 300 });
+    expect(svg).toContain('mark-area');
+    expect(svg).toContain('Visited');
+    expect(svg).toContain('(6.0%)');
+  });
+
   it('waterfall renders floating bars in data order with signed labels', async () => {
     const m = materializeRecipe({ recipe: 'minusx/waterfall@1', bindings: { category: 'stage', value: 'users' } });
     if (!m.ok) throw new Error(m.error);

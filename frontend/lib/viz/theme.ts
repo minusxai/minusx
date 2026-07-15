@@ -77,7 +77,7 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
     // Sensible mark defaults; spec-level mark properties win natively.
     // Small filled dots on every line point (house default). Kept intentionally small so
     // dense time-series stay legible; a spec can opt out with `mark: {point: false}`.
-    line: { strokeWidth: 2, point: { filled: true, size: 18 } },
+    line: { strokeWidth: 2, point: { filled: true, size: 25 } },
     point: { filled: true, size: 60 },
     bar: { cornerRadiusEnd: 2 },
     // Choropleth / analytic-geo regions (RFC §9): a bare `mark: geoshape` — the

@@ -5,11 +5,26 @@
  * handler + color scale + vertical guide line live in `VegaChart` (browser).
  *
  * A `TooltipPlan` describes how to read series from the query result:
- *   - `wide`  — series are COLUMNS (a multi-measure fold, or a single measure). One row per x.
- *   - `long`  — series come from a color COLUMN's values; the measure is one column. N rows per x.
- * `null` from `buildTooltipPlan` means "not a shared-tooltip chart" (pie, scatter, maps, a
- * quantitative x histogram/row) → the caller keeps the default per-mark tooltip.
+ *   - `wide`      — series are COLUMNS (a multi-measure fold, or a single measure). One row per x.
+ *   - `long`      — series come from a color COLUMN's values; the measure is one column. N rows per x.
+ *   - `bins`      — histogram: x buckets are BINS over the measure (vega's own `bin` math, so
+ *                   the tooltip's buckets are exactly the drawn bars); one Count row per bin.
+ *   - `stats`     — boxplot: rows are the five-number summary per category (vega's `quartiles`
+ *                   + 1.5·IQR whiskers clamped to the data — exactly what VL draws).
+ *   - `waterfall` — the waterfall recipe: per step, the signed change + running total, plus
+ *                   the closing Total entry. Row colors mirror the recipe's bar colors.
+ * `null` from `buildTooltipPlan` means "not a shared-tooltip chart" (pie, maps, row) → the
+ * caller keeps the default per-mark tooltip.
  */
+import * as vegaExports from 'vega';
+import { WATERFALL_UP_COLOR, WATERFALL_DOWN_COLOR, WATERFALL_TOTAL_COLOR } from './viz-templates';
+
+// vega re-exports vega-statistics (bin, quartiles) at runtime, but its .d.ts omits them.
+// Using vega's own math keeps the tooltip's buckets/stats EXACTLY what the chart draws.
+const { bin: vegaBin, quartiles: vegaQuartiles } = vegaExports as unknown as {
+  bin: (opts: { extent: [number, number]; maxbins?: number }) => { start: number; stop: number; step: number };
+  quartiles: (values: number[]) => [number, number, number];
+};
 
 export interface TooltipSeriesRef {
   /** Query-result column for a wide series (fold field / single measure). */
@@ -22,7 +37,10 @@ export interface TooltipSeriesRef {
 
 export type TooltipSeries =
   | { kind: 'wide'; series: TooltipSeriesRef[] }
-  | { kind: 'long'; colorField: string; valueField: string };
+  | { kind: 'long'; colorField: string; valueField: string }
+  | { kind: 'bins'; valueField: string; maxbins: number }
+  | { kind: 'stats'; valueField: string; label: string }
+  | { kind: 'waterfall'; categoryField: string; valueField: string; valueLabel: string };
 
 export interface TooltipPlan {
   xField: string;
@@ -93,18 +111,82 @@ function comboPlan(spec: Record<string, unknown>): TooltipPlan | null {
   };
 }
 
+/**
+ * The waterfall recipe's built spec: a layer whose bar floats between the running-total
+ * window fields. Detected structurally (materialized specs, not envelopes, reach here).
+ */
+function waterfallPlan(spec: Record<string, unknown>): TooltipPlan | null {
+  const layers = spec.layer;
+  if (!Array.isArray(layers)) return null;
+  const bar = layers.map(asRecord).find(l =>
+    l != null && markType(l) === 'bar' &&
+    channel(l, 'y')?.field === '__mx_prev' && (channel(l, 'y2') as { field?: unknown } | null)?.field === '__mx_sum');
+  if (!bar) return null;
+  const x = channel(bar, 'x');
+  if (!x || typeof x.field !== 'string') return null;
+  // The tooltip reads RAW rows, so it needs the ORIGINAL value column — recover it from
+  // the recipe's aggregate transform (sum(value) → __mx_amount).
+  let valueField: string | null = null;
+  const transforms = Array.isArray(spec.transform) ? spec.transform : [];
+  for (const t of transforms) {
+    const agg = asRecord(t)?.aggregate;
+    const first = Array.isArray(agg) ? asRecord(agg[0]) : null;
+    if (first?.as === '__mx_amount' && typeof first.field === 'string') valueField = first.field;
+  }
+  if (!valueField) return null;
+  // Display titles ride the recipe's authored tooltip encoding (alias-aware).
+  const tips = (bar.encoding as { tooltip?: Array<{ field?: string; title?: string }> } | undefined)?.tooltip;
+  const catTitle = tips?.find(t => t.field === x.field)?.title;
+  const valueLabel = tips?.find(t => t.field === '__mx_amount')?.title ?? valueField;
+  return {
+    xField: x.field,
+    xTitle: typeof catTitle === 'string' ? catTitle : x.field,
+    xTemporal: false,
+    series: { kind: 'waterfall', categoryField: x.field, valueField, valueLabel: String(valueLabel) },
+  };
+}
+
 export function buildTooltipPlan(spec: Record<string, unknown>): TooltipPlan | null {
   const combo = comboPlan(spec);
   if (combo) return combo;
+  const waterfall = waterfallPlan(spec);
+  if (waterfall) return waterfall;
 
   const mark = markType(spec);
-  if (mark !== 'line' && mark !== 'area' && mark !== 'bar') return null;
+  if (mark !== 'line' && mark !== 'area' && mark !== 'bar' && mark !== 'point' && mark !== 'boxplot') return null;
 
   const x = channel(spec, 'x');
   const y = channel(spec, 'y');
-  if (!x || typeof x.field !== 'string' || !y || typeof y.field !== 'string') return null;
-  // A quantitative x (scatter-like, histogram, row) has no shared category to group by.
-  if (x.type === 'quantitative') return null;
+  if (!x || typeof x.field !== 'string') return null;
+
+  // Histogram: the measure binned along x, count on y — bucket rows with vega's own
+  // bin math so the tooltip's buckets are exactly the drawn bars.
+  if (mark === 'bar' && x.bin != null && x.bin !== false) {
+    const binOpts = asRecord(x.bin);
+    const maxbins = typeof binOpts?.maxbins === 'number' ? binOpts.maxbins : 10;
+    return {
+      xField: x.field,
+      xTitle: typeof x.title === 'string' ? x.title : x.field,
+      xTemporal: false,
+      series: { kind: 'bins', valueField: x.field, maxbins },
+    };
+  }
+
+  if (!y || typeof y.field !== 'string') return null;
+  // An unbinned quantitative x on a BAR is the row/misfit shape — no shared axis.
+  if (mark === 'bar' && x.type === 'quantitative') return null;
+
+  // Boxplot: the composite mark aggregates internally; the tooltip mirrors it with the
+  // five-number summary per category (quartiles + 1.5·IQR whiskers, computed like VL's).
+  if (mark === 'boxplot') {
+    const label = typeof y.title === 'string' ? y.title : y.field;
+    return {
+      xField: x.field,
+      xTitle: typeof x.title === 'string' ? x.title : x.field,
+      xTemporal: x.type === 'temporal',
+      series: { kind: 'stats', valueField: y.field, label },
+    };
+  }
 
   const xField = x.field;
   const xTitle = typeof x.title === 'string' ? x.title : xField;
@@ -132,11 +214,23 @@ export function buildTooltipPlan(spec: Record<string, unknown>): TooltipPlan | n
   return { xField, xTitle, xFormat, xTemporal: x.type === 'temporal', valueFormat, series };
 }
 
+export interface TooltipRow {
+  label: string;
+  value: number;
+  /** Key to resolve the swatch from the chart's color scale. */
+  colorKey: string;
+  /** Explicit swatch color — wins over the colorKey lookup (waterfall sign colors). */
+  color?: string;
+}
+
 export interface TooltipEntry {
-  /** Raw x value (for formatting the header). */
+  /** Raw x value (for formatting the header; bins pre-format it to "start – end"). */
   xRaw: unknown;
-  /** Series rows at this x: label, summed value, and the color-scale key. */
-  rows: Array<{ label: string; value: number; colorKey: string }>;
+  /** Value to run through the x SCALE for guide positioning, when it differs from
+   *  xRaw (bin midpoints — xRaw is the range label, xPlot the numeric center). */
+  xPlot?: number;
+  /** Series rows at this x. */
+  rows: TooltipRow[];
 }
 
 const toNum = (v: unknown): number => {
@@ -161,11 +255,94 @@ export function tooltipXKey(datum: Record<string, unknown> | null | undefined, p
   return xKey(datum?.[plan.xField], plan);
 }
 
+/** Trim float dust off nice bin edges (steps are 1/2/2.5/5 ×10^k, so 6 digits suffice). */
+const fmtBinEdge = (n: number): string => String(+n.toFixed(6));
+
+/** Histogram: bucket raw values with vega's bin math; one non-empty entry per bin. */
+function binsData(rows: Array<Record<string, unknown>>, series: Extract<TooltipSeries, { kind: 'bins' }>): Map<string, TooltipEntry> {
+  const index = new Map<string, TooltipEntry>();
+  const values = rows.map(r => Number(r[series.valueField])).filter(Number.isFinite);
+  if (values.length === 0) return index;
+  const { start, stop, step } = vegaBin({ extent: [Math.min(...values), Math.max(...values)], maxbins: series.maxbins });
+  const nBins = Math.max(1, Math.round((stop - start) / step));
+  for (let i = 0; i < nBins; i++) {
+    const b0 = start + i * step;
+    const b1 = start + (i + 1) * step;
+    // Vega buckets [b0, b1), except the last bin which also takes v === stop.
+    const count = values.filter(v => v >= b0 && (v < b1 || (i === nBins - 1 && v <= b1))).length;
+    if (count === 0) continue; // no bar drawn → nothing to snap the guide to
+    const label = `${fmtBinEdge(b0)} – ${fmtBinEdge(b1)}`;
+    index.set(label, { xRaw: label, xPlot: b0 + step / 2, rows: [{ label: 'Count', value: count, colorKey: 'Count' }] });
+  }
+  return index;
+}
+
+/** Boxplot: five-number summary per category — vega quartiles, whiskers at 1.5·IQR clamped to data. */
+function statsData(rows: Array<Record<string, unknown>>, plan: TooltipPlan, series: Extract<TooltipSeries, { kind: 'stats' }>): Map<string, TooltipEntry> {
+  const index = new Map<string, TooltipEntry>();
+  const groups = new Map<string, { xRaw: unknown; values: number[] }>();
+  for (const row of rows) {
+    const xRaw = row[plan.xField];
+    const key = xKey(xRaw, plan);
+    if (!groups.has(key)) groups.set(key, { xRaw, values: [] });
+    const v = Number(row[series.valueField]);
+    if (Number.isFinite(v)) groups.get(key)!.values.push(v);
+  }
+  for (const [key, g] of groups) {
+    if (g.values.length === 0) continue;
+    const sorted = [...g.values].sort((a, b) => a - b);
+    const [q1, median, q3] = vegaQuartiles(sorted);
+    const iqr = q3 - q1;
+    const lo = sorted.find(v => v >= q1 - 1.5 * iqr) ?? sorted[0];
+    const hi = [...sorted].reverse().find(v => v <= q3 + 1.5 * iqr) ?? sorted[sorted.length - 1];
+    const k = series.label;
+    index.set(key, { xRaw: g.xRaw, rows: [
+      { label: 'Max', value: hi, colorKey: k },
+      { label: 'Q3', value: q3, colorKey: k },
+      { label: 'Median', value: median, colorKey: k },
+      { label: 'Q1', value: q1, colorKey: k },
+      { label: 'Min', value: lo, colorKey: k },
+    ] });
+  }
+  return index;
+}
+
+/** Waterfall: per step the signed change + running total; a closing Total entry. */
+function waterfallData(rows: Array<Record<string, unknown>>, plan: TooltipPlan, series: Extract<TooltipSeries, { kind: 'waterfall' }>): Map<string, TooltipEntry> {
+  const index = new Map<string, TooltipEntry>();
+  const sums = new Map<string, { xRaw: unknown; sum: number }>(); // first-seen = waterfall order
+  for (const row of rows) {
+    const xRaw = row[series.categoryField];
+    const key = xKey(xRaw, plan);
+    if (!sums.has(key)) sums.set(key, { xRaw, sum: 0 });
+    sums.get(key)!.sum += toNum(row[series.valueField]);
+  }
+  let running = 0;
+  for (const [key, g] of sums) {
+    running += g.sum;
+    index.set(key, { xRaw: g.xRaw, rows: [
+      { label: series.valueLabel, value: g.sum, colorKey: series.valueLabel, color: g.sum < 0 ? WATERFALL_DOWN_COLOR : WATERFALL_UP_COLOR },
+      { label: 'Running total', value: running, colorKey: 'Running total' },
+    ] });
+  }
+  if (sums.size > 0) {
+    index.set('Total', { xRaw: 'Total', rows: [
+      { label: series.valueLabel, value: running, colorKey: series.valueLabel, color: WATERFALL_TOTAL_COLOR },
+    ] });
+  }
+  return index;
+}
+
 /**
  * Index the query result by x, summing each series' value (matching VL's SUM aggregation).
  * Series order is preserved: fold/measure order for `wide`, first-seen for `long`.
+ * Bins/stats/waterfall aggregate the whole result to mirror what their chart draws.
  */
 export function buildTooltipData(rows: Array<Record<string, unknown>>, plan: TooltipPlan): Map<string, TooltipEntry> {
+  if (plan.series.kind === 'bins') return binsData(rows, plan.series);
+  if (plan.series.kind === 'stats') return statsData(rows, plan, plan.series);
+  if (plan.series.kind === 'waterfall') return waterfallData(rows, plan, plan.series);
+
   const index = new Map<string, TooltipEntry>();
   const acc = new Map<string, Map<string, { label: string; value: number; colorKey: string }>>();
 
@@ -217,7 +394,7 @@ export function renderSharedTooltipHtml(entry: TooltipEntry, opts: RenderTooltip
   const header =
     `<div class="mx-tt-head">${escapeHtml(opts.xTitle)} · ${escapeHtml(opts.formatX(entry.xRaw))}</div>`;
   const body = rows.map(r => {
-    const swatch = `<span class="mx-tt-dot" style="background:${escapeHtml(opts.colorFor(r.colorKey))}"></span>`;
+    const swatch = `<span class="mx-tt-dot" style="background:${escapeHtml(r.color ?? opts.colorFor(r.colorKey))}"></span>`;
     return `<div class="mx-tt-row">${swatch}<span class="mx-tt-name">${escapeHtml(r.label)}</span>` +
       `<span class="mx-tt-val">${escapeHtml(opts.formatValue(r.value))}</span></div>`;
   }).join('');

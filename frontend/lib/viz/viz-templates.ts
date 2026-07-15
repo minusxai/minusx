@@ -68,8 +68,13 @@ export interface VizTemplate {
 }
 
 // ── minusx/funnel@1 ─────────────────────────────────────────────────────────────
-// Tapered funnel silhouette (ECharts look): a ranged area over the stage sequence,
-// single hue, stage + value/percent labels centered. Stage order = data order.
+// Classic ECharts funnel: one tapered trapezoid PER STAGE (each spans its own value
+// down to the next stage's; the last tapers to a tip), single hue with ZEBRA
+// alternation (full / 0.8-ish opacity) so adjacent stages read as distinct bands.
+// Stage order = data order. `orientation` param: 'vertical' (default, stages run
+// top→bottom) or 'horizontal' (stages run left→right, taper vertical).
+const FUNNEL_OPACITY_ODD = 0.92;
+const FUNNEL_OPACITY_EVEN = 0.74;
 const funnel: VizTemplate = {
   id: 'minusx/funnel@1',
   vizType: 'funnel',
@@ -78,49 +83,85 @@ const funnel: VizTemplate = {
     { name: 'stage', label: 'Stages', accepts: ['nominal', 'temporal'] },
     { name: 'value', label: 'Value', accepts: ['quantitative'] },
   ],
-  build(bindings, formats) {
+  build(bindings, formats, params) {
     const stage = String(bindings.stage);
     const value = String(bindings.value);
-    // Data order IS the funnel order (SQL owns semantics — ORDER BY the stage
-    // sequence). The tapered silhouette is a ranged area (x…x2 = ±value/2) over the
-    // stage rank; linear interpolation between ranks yields the classic trapezoids.
-    const y = { field: '__mx_rank', type: 'quantitative', axis: null, scale: { reverse: true, zero: false } };
+    const horizontal = (params as Record<string, unknown> | null | undefined)?.orientation === 'horizontal';
     const fmt = formats?.[value]?.format;
     // Clean tooltip (Stage + Value + % of top) — otherwise the auto encoding tooltip
-    // leaks the recipe's internal geometry fields (__mx_x0/__mx_rank/…).
+    // leaks the recipe's internal geometry fields (__mx_x0/__mx_pos/…).
     const tooltip = [
       { field: stage, type: 'nominal', title: aliasOf(formats, stage) },
       { field: '__mx_value', type: 'quantitative', title: aliasOf(formats, value), ...(fmt ? { format: fmt } : {}) },
       { field: '__mx_pct', type: 'quantitative', title: '% of top', format: '.1f' },
     ];
+    // The stage-sequence axis (rank positions) and the taper axis (±width/2). Each
+    // band is its own two-point ranged area: the fold emits a top edge (this stage's
+    // width at rank) and a bottom edge (the NEXT stage's width at rank+1) — linear
+    // interpolation between them is the trapezoid. detail=rank splits the areas.
+    const seq = {
+      field: '__mx_pos', type: 'quantitative', axis: null,
+      scale: horizontal ? { zero: false } : { reverse: true, zero: false },
+    };
+    const seqMid = {
+      field: '__mx_mid', type: 'quantitative', axis: null,
+      scale: horizontal ? { zero: false } : { reverse: true, zero: false },
+    };
+    const taper = { field: '__mx_x0', type: 'quantitative', axis: null };
+    const taper2 = { field: '__mx_x1' };
+    const center = { datum: 0, axis: null };
+    // Text layers keep one row per stage (the fold doubled them) and sit at the
+    // band's CENTER (rank + 0.5).
+    const labelFilter = [{ filter: "datum.__mx_edge === '__mx_wa'" }];
     return {
       transform: [
         { aggregate: [{ op: 'sum', field: value, as: '__mx_value' }], groupby: [stage] },
         { window: [{ op: 'rank', as: '__mx_rank' }] },
         { window: [{ op: 'first_value', field: '__mx_value', as: '__mx_first' }], frame: [null, null] },
-        { calculate: '-datum.__mx_value / 2', as: '__mx_x0' },
-        { calculate: 'datum.__mx_value / 2', as: '__mx_x1' },
+        // Next stage's width; the LAST stage tapers to a tip (ECharts minSize 0).
+        { window: [{ op: 'lead', field: '__mx_value', as: '__mx_next' }], frame: [0, 1] },
+        { calculate: 'datum.__mx_next != null ? datum.__mx_next : 0', as: '__mx_wb' },
+        { calculate: 'datum.__mx_value', as: '__mx_wa' },
+        { fold: ['__mx_wa', '__mx_wb'], as: ['__mx_edge', '__mx_w'] },
+        { calculate: "datum.__mx_edge === '__mx_wa' ? datum.__mx_rank : datum.__mx_rank + 1", as: '__mx_pos' },
+        { calculate: 'datum.__mx_rank + 0.5', as: '__mx_mid' },
+        { calculate: '-datum.__mx_w / 2', as: '__mx_x0' },
+        { calculate: 'datum.__mx_w / 2', as: '__mx_x1' },
         { calculate: 'datum.__mx_value / datum.__mx_first * 100', as: '__mx_pct' },
         { calculate: `${numExpr('datum.__mx_value', formats, value)} + ' (' + format(datum.__mx_pct, '.1f') + '%)'`, as: '__mx_label' },
       ],
       layer: [
         {
-          mark: { type: 'area', interpolate: 'linear', opacity: 0.88 },
+          mark: { type: 'area', interpolate: 'linear' },
           encoding: {
-            y,
-            x: { field: '__mx_x0', type: 'quantitative', axis: null },
-            x2: { field: '__mx_x1' },
+            ...(horizontal
+              ? { x: seq, y: taper, y2: taper2 }
+              : { y: seq, x: taper, x2: taper2 }),
+            detail: { field: '__mx_rank' },
             color: { value: '#16a085' },
+            // Zebra: alternate band opacity on stage parity (color, 0.8·color, color…).
+            fillOpacity: {
+              condition: { test: 'datum.__mx_rank % 2 === 1', value: FUNNEL_OPACITY_ODD },
+              value: FUNNEL_OPACITY_EVEN,
+            },
             tooltip,
           },
         },
         {
+          transform: labelFilter,
           mark: { type: 'text', dy: -7, fontWeight: 'bold', tooltip: false },
-          encoding: { y, x: { datum: 0, axis: null }, text: { field: stage, type: 'nominal' } },
+          encoding: {
+            ...(horizontal ? { x: seqMid, y: center } : { y: seqMid, x: center }),
+            text: { field: stage, type: 'nominal' },
+          },
         },
         {
+          transform: labelFilter,
           mark: { type: 'text', dy: 8, tooltip: false },
-          encoding: { y, x: { datum: 0, axis: null }, text: { field: '__mx_label', type: 'nominal' } },
+          encoding: {
+            ...(horizontal ? { x: seqMid, y: center } : { y: seqMid, x: center }),
+            text: { field: '__mx_label', type: 'nominal' },
+          },
         },
       ],
     };
@@ -131,6 +172,12 @@ const funnel: VizTemplate = {
 // Floating bars on a running total, data order preserved (waterfall order is
 // semantic). Increases use the theme palette; decreases use the danger red —
 // matching the classic ECharts waterfall. Value labels ride each bar.
+
+// Exported for the shared tooltip (tooltip-plan), whose waterfall rows mirror the bars.
+export const WATERFALL_UP_COLOR = '#16a085';
+export const WATERFALL_DOWN_COLOR = '#c0392b';
+export const WATERFALL_TOTAL_COLOR = '#2980b9';
+
 const waterfall: VizTemplate = {
   id: 'minusx/waterfall@1',
   vizType: 'waterfall',
@@ -162,8 +209,8 @@ const waterfall: VizTemplate = {
             y: { field: '__mx_prev', type: 'quantitative', title: yTitle },
             y2: { field: '__mx_sum' },
             color: {
-              condition: { test: 'datum.__mx_amount < 0', value: '#c0392b' },
-              value: '#16a085',
+              condition: { test: 'datum.__mx_amount < 0', value: WATERFALL_DOWN_COLOR },
+              value: WATERFALL_UP_COLOR,
             },
             // Clean tooltip (Step + change + running total) — no __mx internals leak.
             tooltip: [{ field: category, type: 'nominal', title: catTitle }, numTip('__mx_amount', yTitle), numTip('__mx_sum', 'Running total')],
@@ -188,7 +235,7 @@ const waterfall: VizTemplate = {
             x,
             y: { field: '__mx_total', type: 'quantitative', title: yTitle },
             y2: { datum: 0 },
-            color: { value: '#2980b9' },
+            color: { value: WATERFALL_TOTAL_COLOR },
             tooltip: [{ field: category, type: 'nominal', title: catTitle }, numTip('__mx_total', yTitle)],
           },
         },
@@ -361,7 +408,25 @@ const radar: VizTemplate = {
                       x: { signal: `scale('radial', datum.__mx_value) * cos(${angular('datum')})` },
                       y: { signal: `scale('radial', datum.__mx_value) * sin(${angular('datum')})` },
                       fill: { scale: 'color', field: '__mx_series' },
-                      size: { value: 70 }, // bigger hit target so the vertex is easy to hover
+                      size: { value: 70 },
+                      tooltip: { signal: `{${JSON.stringify(aliasOf(formats, metric))}: datum[${m}], 'Series': datum.__mx_series, 'Value': ${numExpr('datum.__mx_value', formats, values[0])}}` },
+                    },
+                  },
+                },
+                // Invisible hover HALO over each vertex: the visible dot is a ~9px hit
+                // target, so the tooltip felt broken ("hover shows nothing") unless the
+                // cursor landed exactly on it. A large near-zero-opacity symbol is still
+                // painted, so it captures hover and carries the same tooltip.
+                {
+                  type: 'symbol',
+                  from: { data: 'facet' },
+                  encode: {
+                    update: {
+                      x: { signal: `scale('radial', datum.__mx_value) * cos(${angular('datum')})` },
+                      y: { signal: `scale('radial', datum.__mx_value) * sin(${angular('datum')})` },
+                      fill: { scale: 'color', field: '__mx_series' },
+                      fillOpacity: { value: 0.001 },
+                      size: { value: 900 },
                       tooltip: { signal: `{${JSON.stringify(aliasOf(formats, metric))}: datum[${m}], 'Series': datum.__mx_series, 'Value': ${numExpr('datum.__mx_value', formats, values[0])}}` },
                     },
                   },
