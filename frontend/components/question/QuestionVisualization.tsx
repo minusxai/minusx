@@ -6,7 +6,7 @@
  */
 
 import { Box, HStack, VStack, Text, Spinner, Button } from '@chakra-ui/react';
-import { LuRocket, LuWrench, LuSettings, LuCode, LuRefreshCw, LuCloudOff } from 'react-icons/lu';
+import { LuRocket, LuWrench, LuCode, LuRefreshCw, LuCloudOff } from 'react-icons/lu';
 import dynamic from 'next/dynamic';
 import { Tooltip } from '@/components/ui/tooltip';
 import { TableV2 } from '@/components/plotx/TableV2';
