@@ -23,6 +23,8 @@ import {
   DeleteFileResult
 } from './types';
 import { canAccessFile } from './helpers/permissions';
+import { resolveAccessPredicate } from '@/lib/auth/access-resolver';
+import { checkAccess, type AccessVariant } from '@/lib/auth/access-predicate';
 import { extractReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
@@ -130,17 +132,13 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // Reference filtering depends on the parent file type:
-    //   Folder  → children are filesystem entries; apply full canAccessFile (path rules enforced)
-    //   Content → embedded assets (questions in a dashboard, etc.); the parent's permission check
-    //             is sufficient — only enforce type access + mode isolation, not path
-    const modePrefix = `/${user.mode}`;
-    const filteredReferences = references.filter(ref => {
-      if (file.type === 'folder') {
-        return canAccessFile(ref, user, overrides);
-      }
-      if (!canAccessFileType(user.role, ref.type, overrides)) return false;
-      return ref.path === modePrefix || ref.path.startsWith(modePrefix + '/');
-    });
+    //   Folder  → children are filesystem entries; full path check (`access`)
+    //   Content → embedded assets (a dashboard's questions): type + mode only, no
+    //             path (`embedded`) — they travel with the container you can open.
+    // One resolved predicate for the whole batch (Access V2 engine).
+    const refPredicate = resolveAccessPredicate(user, overrides);
+    const refVariant: AccessVariant = file.type === 'folder' ? 'access' : 'embedded';
+    const filteredReferences = references.filter(ref => checkAccess(ref, refPredicate, refVariant));
 
     // Apply custom loaders AFTER permission checks (Phase 3)
     const loaderStart = Date.now();

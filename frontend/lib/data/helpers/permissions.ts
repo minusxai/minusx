@@ -1,10 +1,11 @@
 import { DbFile } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { canAccessFileType, canViewFileType } from '@/lib/auth/access-rules';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { resolvePath, resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import type { Mode } from '@/lib/mode/mode-types';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
+import { resolveAccessPredicate } from '@/lib/auth/access-resolver';
+import { checkAccess } from '@/lib/auth/access-predicate';
 
 /**
  * Check if a user has access to a specific file (path-based, mode-aware)
@@ -48,147 +49,29 @@ export function checkFileAccess(file: DbFile, user: EffectiveUser): boolean {
 }
 
 /**
- * Check if path is a system path that non-admins can access
- * System paths: /database/* (connections), /logs/conversations/{userId}/* (user conversations)
+ * Unified access check — combines type + path + mode checks.
  *
- * @param path - File path to check
- * @param user - Effective user
- * @returns true if path is accessible system path, false otherwise
- */
-function isAccessibleSystemPath(path: string, user: EffectiveUser): boolean {
-  // Database connections (read-only access for all users)
-  const databaseFolder = resolvePath(user.mode, '/database');
-  if (path === databaseFolder || path.startsWith(databaseFolder + '/')) {
-    return true;
-  }
-
-  // User's conversation folder
-  const userId = user.userId?.toString() || user.email;
-  const userConversationFolder = resolvePath(user.mode, `/logs/conversations/${userId}`);
-  if (path.startsWith(userConversationFolder)) {
-    return true;
-  }
-
-  // Job run output files (alert_run, report_run, etc.) — read access for all roles
-  const runsFolder = resolvePath(user.mode, '/logs/runs');
-  if (path === runsFolder || path.startsWith(runsFolder + '/')) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Check if a context file is an ancestor of the user's home folder
- * Non-admins need access to ancestor contexts for hierarchical schema filtering
- *
- * Example: User with home_folder=/org/sales needs access to /org/context
- *
- * @param file - The file to check
- * @param user - Effective user
- * @returns true if file is an ancestor context, false otherwise
- */
-function isAncestorContext(file: DbFile, user: EffectiveUser): boolean {
-  // Only applies to context files
-  if (file.type !== 'context') {
-    return false;
-  }
-
-  // Only for non-admins with home folder
-  if (!user.home_folder) {
-    return false;
-  }
-
-  const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
-
-  // Check if context path is an ancestor of home folder
-  // e.g., /org/context is ancestor of /org/sales
-  // The home folder must start with the context's directory
-  const contextDir = file.path.substring(0, file.path.lastIndexOf('/'));
-
-  // Check if home folder is at or under the context's directory
-  // e.g., /org/sales starts with /org/ (ancestor), or /org equals /org (at root)
-  return resolvedHomeFolder === contextDir || resolvedHomeFolder.startsWith(contextDir + '/');
-}
-
-/**
- * Unified access check - combines type + path + mode checks (Phase 4)
- * Replaces: canAccessFileType() + checkFileAccess()
- *
- * Checks in order:
- * 1. Type access (role-based)
- * 2. Mode isolation (all users)
- * 3. Path access (admin = full in mode, non-admin = home folder)
+ * Access V2: this now delegates to the single `AccessPredicate` engine
+ * (`resolveAccessPredicate` + `checkAccess`), so the in-memory decision and the
+ * SQL-compiled decision (M1b) share one source of truth. Behavior is unchanged
+ * — guarded by the differential battery in `lib/auth/__tests__/access-predicate.test.ts`.
  *
  * @param file - The file to check access for
  * @param user - The effective user
  * @returns true if user can access file, false otherwise
  */
 export function canAccessFile(file: DbFile, user: EffectiveUser, overrides?: AccessRulesOverride): boolean {
-  // Step 1: Type check (role-based, with optional config overrides)
-  if (!canAccessFileType(user.role, file.type, overrides)) {
-    return false;
-  }
-
-  // Step 2: Mode isolation (all users)
-  const modePrefix = `/${user.mode}`;
-  if (!file.path.startsWith(modePrefix + '/') && file.path !== modePrefix) {
-    return false;
-  }
-
-  // Step 3: Path check (admins = full access in mode, non-admins = home folder)
-  if (isAdmin(user.role)) {
-    return true;
-  }
-
-  // Non-admin: Check home folder access (system folder subtrees are excluded — use
-  // isAccessibleSystemPath below to re-grant only the specific paths non-admins need)
-  const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
-  const homeAccess =
-    (file.path === resolvedHomeFolder || file.path.startsWith(resolvedHomeFolder + '/'))
-    && !isUnderSystemFolder(file.path, user.mode as Mode);
-
-  if (homeAccess) {
-    return true;
-  }
-
-  // Non-admin: Check system path access (database, user conversations)
-  if (isAccessibleSystemPath(file.path, user)) {
-    return true;
-  }
-
-  // Non-admin: Check ancestor context access (for hierarchical filtering)
-  if (isAncestorContext(file, user)) {
-    return true;
-  }
-
-  return false;
+  return checkAccess(file, resolveAccessPredicate(user, overrides), 'access');
 }
 
 /**
- * Check if user can VIEW a file in UI (search, folder browser)
- * Same as canAccessFile() but also checks viewTypes for UI filtering
+ * Check if user can VIEW a file in UI (search, folder browser) — `canAccessFile`
+ * plus the `viewTypes` gate. Delegates to the `AccessPredicate` engine.
  *
- * Use this for:
- * - Search results
- * - Folder browser listings  
- * - Any UI that shows files to users
- *
- * Do NOT use for:
- * - Loading referenced files (dashboard → questions)
- * - Loading ancestor contexts
- * - API operations that need full access
+ * Use for: search results, folder browser listings, any UI that shows files.
+ * Do NOT use for: loading referenced files, ancestor contexts, or API operations
+ * that need full access (use `canAccessFile` / the `embedded` variant).
  */
 export function canViewFileInUI(file: DbFile, user: EffectiveUser, overrides?: AccessRulesOverride): boolean {
-  // First check full access permissions
-  if (!canAccessFile(file, user, overrides)) {
-    return false;
-  }
-
-  // Then check UI visibility (viewTypes, with optional config overrides)
-  if (!canViewFileType(user.role, file.type, overrides)) {
-    return false;
-  }
-
-  return true;
+  return checkAccess(file, resolveAccessPredicate(user, overrides), 'ui');
 }

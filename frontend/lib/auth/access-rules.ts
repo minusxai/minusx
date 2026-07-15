@@ -105,7 +105,7 @@ function loadAccessRules(): RulesConfig {
  * Overrides replace individual fields (allowedTypes, createTypes, viewTypes) per role.
  * If no override exists for a role/field, the rules.json default is used.
  */
-function getEffectiveRule(role: UserRole, overrides?: AccessRulesOverride): FileTypeAccessRule | undefined {
+export function getEffectiveRule(role: UserRole, overrides?: AccessRulesOverride): FileTypeAccessRule | undefined {
   const config = loadAccessRules();
 
   const rule = config.rules.find(
