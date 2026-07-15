@@ -14,7 +14,7 @@
  */
 import type { FileType } from '@/lib/types';
 import type { Mode } from '@/lib/mode/mode-types';
-import { isUnderSystemFolder } from '@/lib/mode/path-resolver';
+import { isUnderSystemFolder, resolvePath, HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
 
 export type TypeSet = '*' | FileType[];
 
@@ -105,4 +105,67 @@ export function checkAccess(
     if (scopeMatches(file.path, s, p.mode)) return true;
   }
   return isAncestorContext(file.type, file.path, p.homeFolder);
+}
+
+// ───────────────────────── SQL compilation (M1b) ─────────────────────────────
+
+export interface SqlFragment {
+  /** Boolean SQL over the `files` row (parameterized). */
+  sql: string;
+  /** Positional params for the fragment's `$n` placeholders. */
+  params: unknown[];
+}
+
+/**
+ * Compile the SAME predicate to a parameterized SQL `WHERE` fragment — the
+ * enforcement twin of `checkAccess`. Proven row-for-row identical to `checkAccess`
+ * by the PGLite parity battery (`__tests__/access-predicate-sql.test.ts`).
+ *
+ * @param opts.alias      table/alias whose `path`/`type` columns are referenced (default `files`)
+ * @param opts.paramOffset number of `$n` placeholders already used by the caller's query
+ */
+export function toSql(
+  p: AccessPredicate,
+  variant: AccessVariant = 'access',
+  opts: { alias?: string; paramOffset?: number } = {},
+): SqlFragment {
+  const alias = opts.alias ?? 'files';
+  const pathCol = `${alias}.path`;
+  const typeCol = `${alias}.type`;
+  const offset = opts.paramOffset ?? 0;
+  const params: unknown[] = [];
+  const ph = (v: unknown) => { params.push(v); return `$${offset + params.length}`; };
+
+  const typeGate = (set: TypeSet) =>
+    set === '*' ? 'TRUE' : set.length === 0 ? 'FALSE' : `${typeCol} IN (${set.map(t => ph(t)).join(', ')})`;
+  // `path = x OR path LIKE x/%` — prefix with a `/` boundary.
+  const underPrefixSql = (path: string) => `(${pathCol} = ${ph(path)} OR ${pathCol} LIKE ${ph(path + '/%')})`;
+  // raw `startsWith` (conversation folder) — reproduces the legacy boundary-less match.
+  const rawPrefixSql = (path: string) => `${pathCol} LIKE ${ph(path + '%')}`;
+
+  const clauses: string[] = [typeGate(p.allowedTypes)];
+  if (variant === 'ui') clauses.push(typeGate(p.viewTypes));
+  clauses.push(underPrefixSql(`/${p.mode}`)); // mode isolation
+
+  if (!p.admin && variant !== 'embedded') {
+    const scopeSql: string[] = [];
+    for (const s of p.scopes) {
+      if (s.matchRaw) {
+        scopeSql.push(rawPrefixSql(s.path));
+      } else if (s.excludeSystem) {
+        const sys = HIDDEN_SYSTEM_FOLDERS.map(f => underPrefixSql(resolvePath(p.mode, f))).join(' OR ');
+        scopeSql.push(`(${underPrefixSql(s.path)} AND NOT (${sys}))`);
+      } else {
+        scopeSql.push(underPrefixSql(s.path));
+      }
+    }
+    if (p.homeFolder) {
+      const dir = `regexp_replace(${pathCol}, '/[^/]*$', '')`;
+      const home = ph(p.homeFolder);
+      scopeSql.push(`(${typeCol} = 'context' AND (${home} = ${dir} OR ${home} LIKE ${dir} || '/%'))`);
+    }
+    clauses.push(scopeSql.length ? `(${scopeSql.join(' OR ')})` : 'FALSE');
+  }
+
+  return { sql: clauses.join(' AND '), params };
 }
