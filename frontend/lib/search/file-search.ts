@@ -3,7 +3,8 @@ import { searchInField, type FieldSearchStats } from './file-search-utils';
 import { FilesAPI } from '@/lib/data/files.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
-import { canViewFileInUI } from '@/lib/data/helpers/permissions';
+import { resolveAccessPredicateWithGroups } from '@/lib/auth/access-resolver';
+import { checkAccess } from '@/lib/auth/access-predicate';
 
 /**
  * Search configuration for different file types
@@ -254,10 +255,12 @@ export async function searchFilesInFolder(
   }
 
   // Apply visibility filter based on context
-  // 'ui' mode: Filter to viewable types only (for UI search, folder browser)
+  // 'ui' mode: viewable types only (UI search, folder browser) — group-aware,
+  //            so files shared via a group show up in search too.
   // 'all' mode: No additional filter (for LLM tools - they need full access)
-  const filesToSearch = visibility === 'ui'
-    ? allFiles.filter(file => canViewFileInUI(file, user))
+  const uiPredicate = visibility === 'ui' ? await resolveAccessPredicateWithGroups(user) : null;
+  const filesToSearch = uiPredicate
+    ? allFiles.filter(file => checkAccess(file, uiPredicate, 'ui'))
     : allFiles;
 
   // Execute search with ranking

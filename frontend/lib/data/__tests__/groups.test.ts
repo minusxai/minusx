@@ -8,6 +8,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { getModules } from '@/lib/modules/registry';
+import { searchFilesInFolder } from '@/lib/search/file-search';
 import { createGroup, updateGroup, deleteGroup, listGroups, resolveUserGroupGrants, validateGroupInput } from '@/lib/data/groups.server';
 import { resolveAccessPredicateWithGroups } from '@/lib/auth/access-resolver';
 import { checkAccess } from '@/lib/auth/access-predicate';
@@ -18,12 +19,13 @@ const DB = getTestDbPath('groups');
 const viewer: EffectiveUser = { userId: 7, email: 'v@x.co', name: 'V', role: 'viewer', home_folder: 'sales', mode: 'org' };
 const financeDash = { type: 'dashboard' as const, path: '/org/finance/report' };
 
+beforeAll(async () => {
+  await initTestDatabase(DB);
+  await DocumentDB.create('report', '/org/finance/report', 'dashboard', {} as BaseFileContent, [], undefined, false);
+}, 30_000);
+afterAll(async () => { await cleanupTestDatabase(DB); });
+
 describe('groups (M2) — additive grants', () => {
-  beforeAll(async () => {
-    await initTestDatabase(DB);
-    await DocumentDB.create('report', '/org/finance/report', 'dashboard', {} as BaseFileContent, [], undefined, false);
-  }, 30_000);
-  afterAll(async () => { await cleanupTestDatabase(DB); });
 
   it('no memberships → base-only (a sales viewer cannot reach /org/finance)', async () => {
     const p = await resolveAccessPredicateWithGroups(viewer);
@@ -107,6 +109,27 @@ describe('groups (M2) — additive grants', () => {
 
     await deleteGroup(g.id);
     expect((await listGroups('org')).find(x => x.id === g.id)).toBeUndefined();
+  });
+});
+
+describe('group-aware read surfaces', () => {
+  it('search returns group-granted files to a member (ui visibility)', async () => {
+    const g = await createGroup({
+      name: 'FinSearch', mode: 'org',
+      allowedTypes: ['dashboard'], viewTypes: ['dashboard'], createTypes: [],
+      scopes: ['finance'], memberIds: [7],
+    });
+    try {
+      const res = await searchFilesInFolder({ query: 'report', folder_path: '/org', visibility: 'ui' }, viewer);
+      expect(res.results.map(r => r.path)).toContain('/org/finance/report');
+    } finally {
+      await deleteGroup(g.id);
+    }
+  });
+
+  it('search does NOT return the file to a non-member', async () => {
+    const res = await searchFilesInFolder({ query: 'report', folder_path: '/org', visibility: 'ui' }, viewer);
+    expect(res.results.map(r => r.path)).not.toContain('/org/finance/report');
   });
 });
 

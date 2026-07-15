@@ -5,6 +5,8 @@ import { ShareRecord, CreateShareResult } from './types';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { DbFile } from '@/lib/types';
 import { canAccessFile } from '@/lib/data/helpers/permissions';
+import { resolveAccessPredicateWithGroups } from '@/lib/auth/access-resolver';
+import { checkAccess } from '@/lib/auth/access-predicate';
 import { createShareLink, decodeShareLink, isLiveShareNonce } from '@/lib/auth/share-tokens';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -120,7 +122,10 @@ class SharesDataLayerServer implements ISharesDataLayer {
     const file = await DocumentDB.getById(fileId);
     if (!file) throw new FileNotFoundError(fileId);
     const overrides = await this._getOverrides(user);
-    if (!canAccessFile(file, user, overrides)) {
+    // Group-aware: a user who can open a story via a group grant can also
+    // persist its preview image.
+    const predicate = await resolveAccessPredicateWithGroups(user, overrides);
+    if (!checkAccess(file, predicate, 'access')) {
       throw new AccessPermissionError('You do not have permission to access this file');
     }
     if (file.type !== 'story') throw new UserFacingError('Only stories have preview images');

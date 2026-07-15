@@ -1,6 +1,6 @@
 # Access V2 — Groups, Folder Permissions, and SQL-Enforced Access
 
-Status: **in progress** (PR #599). **M1a done + M1b core done**, both proven and zero-behavior-change (CI green). **M2 (groups) and M3 (feature + UI) not yet started** — those are the behavior-changing parts that warrant review before a production flip. See the Milestones section for exact checkbox state.
+Status: **in progress** (PR #599). M1a + M1b core + M2 (additive groups) + M3 core (CRUD API + Groups UI) are DONE and CI-green; groups are inert until populated, so merged behavior is unchanged. See the Milestones section for exact checkbox state.
 
 ## Why
 
@@ -37,7 +37,7 @@ Two gaps:
 
 ## Enforcement — compiled to SQL
 
-All **file access** is enforced in the query, not in application code. The scattered JS checks (`canAccessFile` and its call sites) are deleted; the permission decision becomes a single SQL predicate over `(files.type, files.path)` and the caller's live group set:
+**File reads** are enforced in the query: the permission decision compiles to a single SQL predicate over `(files.type, files.path)` and the caller's live group set. The in-memory `checkAccess` (same engine, proven identical) remains as the per-file guard and defense-in-depth backstop. **Writes are checked app-side** with the same engine (where the group state and the precise error message live); pushing write guards into the SQL `WHERE` is optional hardening:
 
 ```
 admin                                                            -- OR
@@ -50,10 +50,7 @@ OR ( path LIKE '/<mode>/%'                                       -- mode isolati
 OR path LIKE '/<mode>/…/<caller home or conversations>/%'        -- intrinsic grants
 ```
 
-Every operation compiles; "0 rows" = denied:
-- **Read / edit / delete** — predicate in `WHERE`.
-- **Create** — `INSERT … SELECT <values> WHERE <predicate over the new path+type>`; nothing selected → nothing inserted → denied.
-- **Move** — one `WHERE` checks the old path (row) and new path (param) together.
+Every operation is *compilable* ("0 rows" = denied) — reads are wired to SQL today; write-guard SQL (`INSERT … SELECT … WHERE`, predicate in `UPDATE`/`DELETE` `WHERE`) is deliberately deferred hardening.
 
 Fine-grained scopes are a **live join** in the query (not the token), so adding a user to a group, or a folder to a group, takes effect immediately — no re-login. (The coarse admin flag can live in the token, like `role` today.)
 
@@ -141,4 +138,4 @@ Parity battery = **principals** {user, admin, **guest**, impersonated} × **vari
 
 ## Indexing
 
-Prefix matching (`path LIKE '/x/%'`) needs a `text_pattern_ops` index on `path` — the existing plain btree (`idx_files_path`) does **not** accelerate `LIKE 'prefix%'` under the default collation. Declared in `postgres-schema.ts` as `CREATE INDEX IF NOT EXISTS … (path text_pattern_ops)` (self-applies on boot) + `npm run update-workspace-template`.
+Prefix matching (`path LIKE '/x/%'`) wants a `text_pattern_ops` index on `path` on hosted Postgres — a plain btree does not accelerate LIKE-prefix under the default collation. **PGLite (the OSS default) rejects that opclass**, and `postgres-schema.ts` runs on both, so the index is NOT in the shared schema; hosted deployments add it out-of-band. Pure perf optimization — correctness is unaffected.
