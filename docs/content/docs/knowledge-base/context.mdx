@@ -30,6 +30,10 @@ Whitelisting narrows the AI's focus to the tables that matter.
 3. Check the tables and columns you want the AI to use
 4. Save your context
 
+### Views
+
+Beyond raw tables, you can create **Views** right here — curated SQL exposed as clean, flat tables. A View is whitelisted like a table (down to individual columns) and can back the GUI. Reach for one when a question needs a join or shape the semantic layer can't express. See [Data Modeling](/docs/data/data-modeling) for the full picture.
+
 ### Tree-based whitelisting
 
 Contexts are organized as a **tree structure** that mirrors your organization's hierarchy. Each node in the tree is a context that controls what its children can see.
@@ -49,7 +53,7 @@ Org Context (root)
 
 **Key rules:**
 
-- The **root context** whitelists tables from your connections — only [data models](/docs/data/data-modeling) can be whitelisted here
+- The **root context** whitelists tables and [Views](/docs/data/data-modeling) from your connections
 - A **parent context** controls which of its whitelisted tables each child folder can access
 - **Child contexts** can only see tables their parent has granted — they cannot access anything beyond that
 - This enables org-wide data governance: every user queries from trusted, governed datasets, and each team sees only what's relevant to them
