@@ -4,9 +4,9 @@
  * SemanticExplorer — the single-surface semantic exploration canvas
  * (PyGWalker/ThoughtSpot style). LEFT: the fields rail (measures /
  * dimensions / time — click to add, or drag). RIGHT: the semantic shelves
- * (Metrics / Group by / Time / Filters) as drop zones with removable chips,
- * the always-visible chart-type rail (matching types ranked by
- * inferVizForSpec), limit, and execute.
+ * (Metrics / Dimensions / Time / Filters) as drop zones with removable
+ * chips, a collapsible Chart section (the parent supplies the full viz
+ * panel), limit, and execute.
  *
  * Every edit compiles the spec to dialect SQL client-side
  * (compileSemanticQuery → irToSqlLocal) and emits `(spec, sql, viz)` where
@@ -19,24 +19,23 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, VStack, HStack, Text, Button, Input } from '@chakra-ui/react';
-import { LuPlay, LuPause, LuTriangleAlert } from 'react-icons/lu';
+import { LuPlay, LuPause, LuTriangleAlert, LuChevronDown, LuChevronRight, LuChartColumn } from 'react-icons/lu';
 import { compileSemanticQuery, validateSemanticQuery } from '@/lib/semantic/compile';
-import { autoVizForSpec, inferVizForSpec, type VizMatch } from '@/lib/semantic/infer-viz';
+import { autoVizForSpec, type VizMatch } from '@/lib/semantic/infer-viz';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { searchFields, type SemanticFieldHit } from '@/lib/semantic/models-client';
 import type { ModelStub } from '@/lib/semantic/derive';
-import type { SemanticModel, SemanticTimeGrain, VizSettings } from '@/lib/types';
+import type { SemanticModel, SemanticTimeGrain } from '@/lib/types';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 import { DropZone, useIsTouchDevice } from '../plotx/AxisComponents';
 import { AddChipButton } from '../query-builder/QueryChip';
 import { FieldsRail, type DraggingField } from './FieldsRail';
 import { FilterEditor, ShelfChip, filterChipText } from './FilterEditor';
-import { ChartTypeRail } from './ChartTypeRail';
 import { SqlPeekDrawer } from './SqlPeekDrawer';
 
 const TIME_GRAINS: SemanticTimeGrain[] = ['HOUR', 'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'];
 
-type ShelfKind = 'metrics' | 'groupby' | 'time' | 'filters';
+type ShelfKind = 'metrics' | 'dimensions' | 'time' | 'filters';
 
 interface SemanticExplorerProps {
   /** Full models loaded for the tables in play (fetched on demand). */
@@ -53,12 +52,11 @@ interface SemanticExplorerProps {
   value: SemanticQuerySpec | null | undefined;
   /** Emits the edited spec, the SQL compiled from it, and the inferred viz. */
   onChange: (spec: SemanticQuerySpec, sql: string, viz: VizMatch) => void;
-  /** The effective chart type shown as active on the rail. */
-  vizType: VizSettings['type'];
-  /** Whether the type is a sticky manual choice (vizSettings.typeLocked). */
-  vizTypeLocked: boolean;
-  /** Rail pick (locked=true) or reset-to-auto (locked=false). */
-  onVizTypeChange: (type: VizSettings['type'], locked: boolean) => void;
+  /** The FULL chart panel (type selector + config), supplied by the parent —
+   *  rendered in a collapsible Chart section below the shelves. The parent
+   *  owns it because it needs the query result columns and the whole
+   *  vizSettings handler set; the explorer stays purely semantic. */
+  chartPanel?: React.ReactNode;
   onExecute?: () => void;
   isExecuting?: boolean;
   /** Auto-run state: undefined = no auto-run capability (legacy manual mode,
@@ -89,9 +87,7 @@ export function SemanticExplorer({
   connectionName,
   value,
   onChange,
-  vizType,
-  vizTypeLocked,
-  onVizTypeChange,
+  chartPanel,
   onExecute,
   isExecuting = false,
   autoRun,
@@ -114,6 +110,7 @@ export function SemanticExplorer({
   const [addFilterOpen, setAddFilterOpen] = useState(false);
   const [presetFilterDim, setPresetFilterDim] = useState<string | undefined>(undefined);
   const [editingFilterIdx, setEditingFilterIdx] = useState<number | null>(null);
+  const [chartOpen, setChartOpen] = useState(true);
 
   const model = spec ? models.find((m) => m.name === spec.model) : undefined;
   const issues = spec && model ? validateSemanticQuery(spec, model) : [];
@@ -227,7 +224,7 @@ export function SemanticExplorer({
           update({ measures: [...spec.measures, field.name] });
         }
         break;
-      case 'groupby':
+      case 'dimensions':
         if (
           (field.kind === 'dimension' || (field.kind === 'time' && model.dimensions.some((d) => d.name === field.name)))
           && !spec.dimensions.includes(field.name)
@@ -261,9 +258,6 @@ export function SemanticExplorer({
     : 'Time';
 
   const filters = spec?.filters ?? [];
-  const ranked = spec && model && issues.length === 0 ? inferVizForSpec(spec, model) : inferVizForSpec(
-    { model: spec?.model ?? '', measures: [], dimensions: [] },
-  );
 
   const shelves = spec && (
     <VStack align="stretch" gap={3} flex={1} minW={0} overflowY="auto">
@@ -285,12 +279,12 @@ export function SemanticExplorer({
         </HStack>
       </DropZone>
 
-      <DropZone label="Group by" ariaLabel="Group by shelf" onDrop={() => handleShelfDrop('groupby')} isTouchDevice={false}>
+      <DropZone label="Dimensions" ariaLabel="Dimensions shelf" onDrop={() => handleShelfDrop('dimensions')} isTouchDevice={false}>
         <HStack gap={1.5} flexWrap="wrap" minH="26px">
           {spec.dimensions.map((name) => (
             <ShelfChip
               key={name}
-              label={`Group by chip: ${name}`}
+              label={`Dimensions chip: ${name}`}
               onRemove={() => update({ dimensions: spec.dimensions.filter((d) => d !== name) })}
             >
               <Text fontSize="xs" fontFamily="mono">{name}</Text>
@@ -359,12 +353,26 @@ export function SemanticExplorer({
         </HStack>
       </DropZone>
 
-      <HStack gap={2} align="center">
-        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" flexShrink={0}>
-          Chart
-        </Text>
-        <ChartTypeRail ranked={ranked} value={vizType} locked={vizTypeLocked} onPick={onVizTypeChange} />
-      </HStack>
+      {chartPanel && (
+        <Box borderTop="1px solid" borderColor="border.muted" pt={2}>
+          <HStack
+            as="button"
+            aria-label="Toggle chart section"
+            gap={1.5}
+            color="fg.muted"
+            _hover={{ color: 'fg.default' }}
+            onClick={() => setChartOpen((o) => !o)}
+            width="100%"
+          >
+            {chartOpen ? <LuChevronDown size={12} /> : <LuChevronRight size={12} />}
+            <LuChartColumn size={12} />
+            <Text fontSize="2xs" fontFamily="mono" fontWeight="600" textTransform="uppercase" letterSpacing="0.05em">
+              Chart
+            </Text>
+          </HStack>
+          {chartOpen && <Box mt={2}>{chartPanel}</Box>}
+        </Box>
+      )}
 
       <HStack justify="space-between" align="center">
         <HStack gap={2}>

@@ -77,12 +77,16 @@ interface VizTypeSelectorProps {
   value: VizSettings['type'];
   onChange: (type: VizSettings['type']) => void;
   orientation?: 'vertical' | 'horizontal' | 'grouped';
+  /** When set (semantic explorer), types NOT in the list render dimmed —
+   *  they don't fit the current query shape but stay clickable. */
+  matchedTypes?: VizSettings['type'][];
 }
 
 export function VizTypeSelector({
   value,
   onChange,
-  orientation = 'vertical'
+  orientation = 'vertical',
+  matchedTypes,
 }: VizTypeSelectorProps) {
   const { config } = useConfigs();
   const allowedVizTypes = config.allowedVizTypes;
@@ -112,6 +116,7 @@ export function VizTypeSelector({
       >
         {allTypes.map(({ type, icon, label }) => {
           const isActive = value === type;
+          const isDimmed = !!matchedTypes && !matchedTypes.includes(type) && !isActive;
           return (
             <Box
               key={type}
@@ -125,6 +130,7 @@ export function VizTypeSelector({
               borderRadius="md"
               bg={isActive ? 'accent.teal/15' : 'transparent'}
               color={isActive ? 'accent.teal' : 'fg.muted'}
+              opacity={isDimmed ? 0.35 : 1}
               cursor="pointer"
               transition="all 0.12s ease"
               _hover={{

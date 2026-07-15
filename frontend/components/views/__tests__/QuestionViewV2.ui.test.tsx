@@ -217,16 +217,16 @@ describe('QuestionViewV2 — semantic explorer mode', () => {
     renderQuestion(store);
 
     expect(await screen.findByLabelText('Metrics shelf')).toBeInTheDocument();
-    expect(screen.getByLabelText('Group by shelf')).toBeInTheDocument();
+    expect(screen.getByLabelText('Dimensions shelf')).toBeInTheDocument();
     expect(screen.getByLabelText('Explore')).toBeInTheDocument();
     expect(screen.queryByLabelText('Viz')).toBeNull();
   });
 
-  it('picking a chart type from the rail persists it LOCKED', async () => {
+  it('picking a chart type from the embedded viz panel persists it LOCKED', async () => {
     const store = setupSemantic();
     renderQuestion(store);
 
-    fireEvent.click(await screen.findByLabelText('Chart type Pie'));
+    fireEvent.click(await screen.findByLabelText('Pie'));
     expect(mergedVizSettings(store)).toMatchObject({ type: 'pie', typeLocked: true });
   });
 

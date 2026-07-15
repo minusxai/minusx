@@ -1,13 +1,14 @@
 /**
  * SemanticExplorer — the single-surface semantic exploration canvas.
  * LEFT: the fields rail (measures / dimensions / time, searchable, click OR
- * drag). RIGHT: semantic shelves (Metrics / Group by / Time / Filters) as drop
- * zones with removable chips, the always-visible chart-type rail, limit, and
- * execute. Every edit compiles REAL SQL client-side and emits
- * (spec, sql, viz) where viz is the auto-inferred match for the spec.
+ * drag). RIGHT: semantic shelves (Metrics / Dimensions / Time / Filters) as
+ * drop zones with removable chips, a collapsible Chart section (the parent
+ * supplies the full viz panel), limit, and execute. Every edit compiles REAL
+ * SQL client-side and emits (spec, sql, viz) where viz is the auto-inferred
+ * match for the spec.
  *
  * Ported from SemanticCanvas.ui.test.tsx (same field/chip aria vocabulary) +
- * the new drag-drop, filter-edit, and chart-type interactions.
+ * the new drag-drop and filter-edit interactions.
  */
 import React from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
@@ -42,7 +43,6 @@ const STARTED: SemanticQuerySpec = { model: 'Orders', table: 'orders', measures:
 function renderExplorer(props: Partial<React.ComponentProps<typeof SemanticExplorer>> = {}) {
   const onChange = vi.fn();
   const onSelectModel = vi.fn();
-  const onVizTypeChange = vi.fn();
   renderWithProviders(
     <SemanticExplorer
       models={[ORDERS_MODEL]}
@@ -53,13 +53,10 @@ function renderExplorer(props: Partial<React.ComponentProps<typeof SemanticExplo
       connectionName="warehouse"
       value={STARTED}
       onChange={onChange}
-      vizType="table"
-      vizTypeLocked={false}
-      onVizTypeChange={onVizTypeChange}
       {...props}
     />
   );
-  return { onChange, onSelectModel, onVizTypeChange };
+  return { onChange, onSelectModel };
 }
 
 describe('SemanticExplorer — fields rail (ported)', () => {
@@ -90,7 +87,7 @@ describe('SemanticExplorer — fields rail (ported)', () => {
     expect(sql).toContain('GROUP BY');
     expect(sql).toContain('SUM(amount) AS revenue');
     expect(viz).toMatchObject({ type: 'bar', xCols: ['status'], yCols: ['revenue'] });
-    expect(screen.getByLabelText('Group by chip: Status')).toBeTruthy();
+    expect(screen.getByLabelText('Dimensions chip: Status')).toBeTruthy();
   });
 
   it('clicking an assigned field toggles it OFF again', async () => {
@@ -108,7 +105,7 @@ describe('SemanticExplorer — fields rail (ported)', () => {
     const { onChange } = renderExplorer();
     fireEvent.click(screen.getByLabelText('Field dimension: Status'));
     fireEvent.click(screen.getByLabelText('Field dimension: Region'));
-    await waitFor(() => expect(screen.getByLabelText('Group by chip: Region')).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText('Dimensions chip: Region')).toBeTruthy());
     const [spec, sql] = onChange.mock.calls.at(-1)!;
     expect(spec.dimensions).toEqual(['Status', 'Region']);
     expect(sql).toContain('LEFT JOIN customers c');
@@ -191,7 +188,7 @@ describe('SemanticExplorer — shelves', () => {
     const { onChange } = renderExplorer({
       value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },
     });
-    fireEvent.click(screen.getByLabelText('Remove Status from Group by'));
+    fireEvent.click(screen.getByLabelText('Remove Status from Dimensions'));
     await waitFor(() => {
       const [spec] = onChange.mock.calls.at(-1)!;
       expect(spec.dimensions).toEqual([]);
@@ -205,8 +202,8 @@ describe('SemanticExplorer — shelves', () => {
     expect(screen.getByLabelText('Metrics chip: Revenue')).toBeTruthy();
     expect(screen.getByLabelText('Metrics chip: Orders')).toBeTruthy();
     expect(screen.getByLabelText('Time chip: Order date')).toBeTruthy();
-    expect(screen.getByLabelText('Group by chip: Status')).toBeTruthy();
-    expect(screen.getByLabelText('Group by chip: Region')).toBeTruthy();
+    expect(screen.getByLabelText('Dimensions chip: Status')).toBeTruthy();
+    expect(screen.getByLabelText('Dimensions chip: Region')).toBeTruthy();
   });
 
   it('dragging a measure onto the Metrics shelf adds it', async () => {
@@ -219,13 +216,13 @@ describe('SemanticExplorer — shelves', () => {
     });
   });
 
-  it('dragging a dimension onto the Group by shelf adds it; onto Metrics it does nothing', async () => {
+  it('dragging a dimension onto the Dimensions shelf adds it; onto Metrics it does nothing', async () => {
     const { onChange } = renderExplorer();
     fireEvent.dragStart(screen.getByLabelText('Field dimension: Status'));
     fireEvent.drop(screen.getByLabelText('Metrics shelf'));
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.dragStart(screen.getByLabelText('Field dimension: Status'));
-    fireEvent.drop(screen.getByLabelText('Group by shelf'));
+    fireEvent.drop(screen.getByLabelText('Dimensions shelf'));
     await waitFor(() => {
       const [spec] = onChange.mock.calls.at(-1)!;
       expect(spec.dimensions).toEqual(['Status']);
@@ -274,23 +271,19 @@ describe('SemanticExplorer — shelves', () => {
   });
 });
 
-describe('SemanticExplorer — chart type rail', () => {
-  it('shows the rail and picking a type reports a locked choice', () => {
-    const { onVizTypeChange } = renderExplorer({
-      value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },
-    });
-    fireEvent.click(screen.getByLabelText('Chart type Pie'));
-    expect(onVizTypeChange).toHaveBeenCalledWith('pie', true);
+describe('SemanticExplorer — chart section', () => {
+  it('renders the provided chart panel in a collapsible Chart section (open by default)', () => {
+    renderExplorer({ chartPanel: <div aria-label="Chart panel contents" /> });
+    expect(screen.getByLabelText('Chart panel contents')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Toggle chart section'));
+    expect(screen.queryByLabelText('Chart panel contents')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Toggle chart section'));
+    expect(screen.getByLabelText('Chart panel contents')).toBeTruthy();
   });
 
-  it('reset-to-auto hands the inferred type back unlocked', () => {
-    const { onVizTypeChange } = renderExplorer({
-      value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },
-      vizType: 'pie',
-      vizTypeLocked: true,
-    });
-    fireEvent.click(screen.getByLabelText('Reset chart type to auto'));
-    expect(onVizTypeChange).toHaveBeenCalledWith('bar', false);
+  it('no chart section without a chartPanel', () => {
+    renderExplorer();
+    expect(screen.queryByLabelText('Toggle chart section')).toBeNull();
   });
 });
 

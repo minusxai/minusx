@@ -40,6 +40,8 @@ import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
 import { useSemanticCompat } from '@/lib/hooks/use-semantic-compat';
+import { inferVizForSpec } from '@/lib/semantic/infer-viz';
+import { LuSparkles } from 'react-icons/lu';
 
 // Which side of the split view is collapsed (or neither). Page mode persists this
 // globally in Redux (state.ui.questionCollapsedPanel); toolcall mode keeps it local
@@ -344,6 +346,14 @@ export default function QuestionViewV2({
   const vizTypeLocked = content.vizSettings?.typeLocked
     ?? !['table', 'bar', 'line'].includes(content.vizSettings?.type ?? 'table');
 
+  // Chart types that fit the current shelves (semantic mode): matching types
+  // render full-strength in the embedded viz panel, the rest dimmed.
+  const semanticVizSpec = content.semanticQuery ?? detectedSemanticSpec;
+  const semanticVizRanked = useMemo(
+    () => (semanticVizSpec ? inferVizForSpec(semanticVizSpec) : []),
+    [semanticVizSpec],
+  );
+
   // --- Semantic auto-run: debounce shelf edits into UN-FORCED executes. -------
   // Loop guards: keyed on the COMPILED SQL (an edit sequence landing back on
   // the same SQL runs nothing), the ref starts at the mount query (a persisted
@@ -646,11 +656,88 @@ export default function QuestionViewV2({
                         });
                         scheduleAutoRun(sql);
                       }}
-                      vizType={content.vizSettings?.type ?? 'table'}
-                      vizTypeLocked={vizTypeLocked}
-                      onVizTypeChange={(type, locked) => {
-                        onChange({ vizSettings: { ...content.vizSettings, type, typeLocked: locked } });
-                      }}
+                      chartPanel={
+                        <Box>
+                          <HStack justify="space-between" align="center" mb={1}>
+                            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+                              {vizTypeLocked ? 'chart type: manual' : 'chart type: auto'}
+                            </Text>
+                            {vizTypeLocked && (
+                              <HStack
+                                as="button"
+                                aria-label="Reset chart type to auto"
+                                gap={0.5}
+                                px={1.5} py={0.5}
+                                borderRadius="sm"
+                                color="accent.teal"
+                                fontSize="2xs"
+                                fontFamily="mono"
+                                fontWeight="600"
+                                _hover={{ bg: 'accent.teal/10' }}
+                                onClick={() => {
+                                  const auto = semanticVizRanked[0];
+                                  onChange({
+                                    vizSettings: {
+                                      ...content.vizSettings,
+                                      type: auto?.type ?? 'table',
+                                      typeLocked: false,
+                                      ...(auto ? { xCols: auto.xCols, yCols: auto.yCols } : {}),
+                                    },
+                                  });
+                                }}
+                              >
+                                <LuSparkles size={11} />
+                                <Text>auto</Text>
+                              </HStack>
+                            )}
+                          </HStack>
+                          <VizTypeSelector
+                            value={content.vizSettings?.type || 'table'}
+                            onChange={(type) => {
+                              onChange({ vizSettings: { ...content.vizSettings, type, typeLocked: true } });
+                            }}
+                            orientation="grouped"
+                            matchedTypes={semanticVizRanked.map((m) => m.type)}
+                          />
+                          {queryData && content.vizSettings?.type === 'table' && (
+                            <TableConditionalFormatPanel
+                              columns={queryData.columns}
+                              rules={content.vizSettings?.conditionalFormats ?? undefined}
+                              onChange={handleConditionalFormatsChange}
+                            />
+                          )}
+                          {queryData && content.vizSettings?.type && content.vizSettings.type !== 'table' && (
+                            <VizConfigPanel
+                              columns={queryData.columns}
+                              types={queryData.types}
+                              chartType={content.vizSettings.type}
+                              initialXCols={content.vizSettings?.xCols ?? undefined}
+                              initialYCols={content.vizSettings?.yCols ?? undefined}
+                              initialYRightCols={content.vizSettings?.yRightCols ?? undefined}
+                              onAxisChange={handleAxisChange}
+                              onYRightColsChange={handleYRightColsChange}
+                              initialTooltipCols={content.vizSettings?.tooltipCols ?? undefined}
+                              onTooltipColsChange={handleTooltipColsChange}
+                              initialPivotConfig={content.vizSettings?.pivotConfig ?? undefined}
+                              onPivotConfigChange={handlePivotConfigChange}
+                              initialGeoConfig={content.vizSettings?.geoConfig ?? undefined}
+                              onGeoConfigChange={handleGeoConfigChange}
+                              initialColumnFormats={content.vizSettings?.columnFormats ?? undefined}
+                              onColumnFormatsChange={handleColumnFormatsChange}
+                              styleConfig={content.vizSettings?.styleConfig ?? undefined}
+                              onStyleConfigChange={handleStyleConfigChange}
+                              axisConfig={content.vizSettings?.axisConfig ?? undefined}
+                              onAxisConfigChange={handleAxisConfigChange}
+                              annotations={content.vizSettings?.annotations ?? undefined}
+                              onAnnotationsChange={handleAnnotationsChange}
+                              trendConfig={content.vizSettings?.trendConfig ?? undefined}
+                              onTrendConfigChange={handleTrendConfigChange}
+                              seriesCount={chartSeriesCount}
+                              getMapView={getMapView}
+                            />
+                          )}
+                        </Box>
+                      }
                       onExecute={handleExecute}
                       isExecuting={queryLoading && !queryData}
                       autoRun={onAutoExecute ? semanticAutoRun : undefined}
