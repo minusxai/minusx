@@ -32,6 +32,7 @@ import { Box, VStack, HStack, Text, Button, Input, Icon, Grid } from '@chakra-ui
 import { LuPlay, LuPause, LuRefreshCw, LuSigma, LuTag, LuCalendarDays, LuSearch, LuTriangleAlert, LuX, LuTable, LuCheck, LuLayers, LuListFilter, LuHash, LuFingerprint, LuDivide, LuArrowDownToLine, LuArrowUpToLine } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import { compileSemanticQuery, validateSemanticQuery, semanticAlias } from '@/lib/semantic/compile';
+import { inferVizType } from '@/lib/semantic/infer-viz';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { searchFields, type SemanticFieldHit } from '@/lib/semantic/models-client';
 import type { ModelStub } from '@/lib/semantic/derive';
@@ -91,17 +92,14 @@ const specForStub = (stub: ModelStub): SemanticQuerySpec => ({
   dimensions: [],
 });
 
-const vizOf = (spec: SemanticQuerySpec): SemanticVizAssignment => {
-  const xCols = [
+const vizOf = (spec: SemanticQuerySpec): SemanticVizAssignment => ({
+  type: inferVizType(spec),
+  xCols: [
     ...(spec.timeGrain ? [spec.timeGrain.toLowerCase()] : []),
     ...spec.dimensions.map(semanticAlias),
-  ];
-  return {
-    type: spec.timeGrain ? 'line' : xCols.length > 0 ? 'bar' : 'table',
-    xCols,
-    yCols: spec.measures.map(semanticAlias),
-  };
-};
+  ],
+  yCols: spec.measures.map(semanticAlias),
+});
 
 const matches = (q: string, name: string) => {
   const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);

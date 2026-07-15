@@ -21,6 +21,7 @@ import {
   LuChevronLeft,
   LuChevronRight,
   LuGripVertical,
+  LuRefreshCw,
 } from 'react-icons/lu';
 import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType, type DbFile } from '@/lib/types';
 import SqlEditor from '../query-builder/SqlEditor';
@@ -40,6 +41,7 @@ import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
 import { useSemanticCompat } from '@/lib/hooks/use-semantic-compat';
+import { inferVizType, recommendedVizTypes } from '@/lib/semantic/infer-viz';
 
 // Which side of the split view is collapsed (or neither). Page mode persists this
 // globally in Redux (state.ui.questionCollapsedPanel); toolcall mode keeps it local
@@ -55,7 +57,7 @@ const PANEL_LAYOUT = {
   /** Left column: the GUI/SQL query surface. */
   left: { initial: 35, min: 25, max: 65 },
   /** Right column: the viz settings panel. */
-  viz: { initial: 20, min: 12, max: 35 },
+  viz: { initial: 20, min: 15, max: 25 },
 } as const;
 
 /**
@@ -393,8 +395,36 @@ export default function QuestionViewV2({
   };
 
   // Handle viz type change
+  // A manual type pick LOCKS the chart type: semantic exploration stops
+  // auto-switching it. Legacy files without the flag: a saved type outside
+  // the old default family (table/bar/line) counts as a deliberate pick.
+  const semanticSpec = detectedSemanticSpec ?? content.semanticQuery;
+  const vizTypeLocked =
+    content.vizSettings?.typeLocked
+      ?? !['table', 'bar', 'line'].includes(content.vizSettings?.type ?? 'table');
+  const recommendedTypes = useMemo(
+    () => (semanticSpec ? recommendedVizTypes(semanticSpec) : undefined),
+    [semanticSpec],
+  );
+
   const handleVizTypeChange = (type: VisualizationType) => {
-    onChange({ vizSettings: { ...content.vizSettings, type } });
+    onChange({ vizSettings: { ...content.vizSettings, type, typeLocked: true } });
+  };
+
+  // The Auto badge: locked → unlock and immediately re-infer from the spec;
+  // already auto → lock the current type (freeze what you see).
+  const handleToggleAutoType = () => {
+    if (vizTypeLocked) {
+      onChange({
+        vizSettings: {
+          ...content.vizSettings,
+          typeLocked: false,
+          ...(semanticSpec ? { type: inferVizType(semanticSpec) } : {}),
+        },
+      });
+    } else {
+      onChange({ vizSettings: { ...content.vizSettings, typeLocked: true } });
+    }
   };
 
   // Handle chart axis change
@@ -518,12 +548,36 @@ export default function QuestionViewV2({
   // The full chart config block — rendered in the right-hand VizPanel column
   // (wide layout) or under the Viz tab (compact layout). Assembled here so the
   // handlers stay in one place regardless of where the block is mounted.
+  // The Auto chart-type badge — lives in the Viz Settings header (wide
+  // layout) or above the config block (compact Viz tab, which has no header).
+  const autoTypeBadge = semanticSpec ? (
+    <HStack
+      as="button"
+      aria-label="Toggle auto chart type"
+      onClick={handleToggleAutoType}
+      gap={1} px={2} py={0.5}
+      borderRadius="md" border="1px solid"
+      borderColor={vizTypeLocked ? 'border.muted' : 'accent.teal'}
+      bg={vizTypeLocked ? 'transparent' : 'accent.teal/10'}
+      color={vizTypeLocked ? 'fg.subtle' : 'accent.teal'}
+      cursor="pointer"
+      _hover={{ bg: vizTypeLocked ? 'bg.muted' : 'accent.teal/15' }}
+      title={vizTypeLocked
+        ? 'Chart type is pinned to your pick. Click to let exploration choose it again.'
+        : 'Chart type follows your selection automatically. Click to pin the current type.'}
+    >
+      <LuRefreshCw size={10} />
+      <Text fontSize="2xs" fontFamily="mono" fontWeight="600">Auto</Text>
+    </HStack>
+  ) : undefined;
+
   const vizConfigBody = queryData ? (
     <Box px={3} py={2} display="flex" flexDirection="column" gap={0}>
       <VizTypeSelector
         value={content.vizSettings?.type || 'table'}
         onChange={handleVizTypeChange}
         orientation="grouped"
+        recommended={recommendedTypes}
       />
       {content.vizSettings?.type === 'table' && (
         <TableConditionalFormatPanel
@@ -703,9 +757,9 @@ export default function QuestionViewV2({
                     field columns below). Prefer the spec DETECTED from the
                     live SQL (covers agent-written queries) over the persisted
                     one. Shelf edits imply the viz: axis columns always track
-                    the query; the chart TYPE is only auto-set while it's still
-                    in the default family (table/bar/line) — a deliberate pick
-                    like pie or pivot from the viz panel is respected. */}
+                    the query; the chart TYPE follows the inference only while
+                    UNLOCKED — any manual pick (vizSettings.typeLocked) is
+                    respected until the Auto badge hands control back. */}
                 {effectiveQueryMode === 'semantic' && showSemanticTab && (
                   <Box flex={1} overflow="hidden" display="flex" flexDirection="column" minHeight={0}>
                     <SemanticExplorer
@@ -717,13 +771,12 @@ export default function QuestionViewV2({
                       connectionName={content.connection_name}
                       value={detectedSemanticSpec ?? content.semanticQuery}
                       onChange={(spec, sql, viz) => {
-                        const autoType = ['table', 'bar', 'line'].includes(content.vizSettings?.type ?? 'table');
                         onChange({
                           semanticQuery: spec,
                           query: sql,
                           vizSettings: {
                             ...content.vizSettings,
-                            ...(autoType ? { type: viz.type } : {}),
+                            ...(vizTypeLocked ? {} : { type: viz.type }),
                             xCols: viz.xCols,
                             yCols: viz.yCols,
                           },
@@ -738,9 +791,15 @@ export default function QuestionViewV2({
                 )}
 
                 {/* Viz Mode (compact layout only): the same config block the
-                    wide layout shows in the right-hand VizPanel column */}
+                    wide layout shows in the right-hand VizPanel column (which
+                    carries the Auto badge in its header — here it sits on top) */}
                 {effectiveQueryMode === 'viz' && (
                   <Box flex={1} overflow="auto">
+                    {autoTypeBadge && (
+                      <HStack justify="flex-end" px={3} pt={2}>
+                        {autoTypeBadge}
+                      </HStack>
+                    )}
                     {vizConfigBody}
                   </Box>
                 )}
@@ -1046,7 +1105,7 @@ export default function QuestionViewV2({
               bg="bg.canvas"
               overflow="hidden"
             >
-              <VizPanel>
+              <VizPanel headerExtra={autoTypeBadge}>
                 {vizConfigBody}
               </VizPanel>
             </Box>

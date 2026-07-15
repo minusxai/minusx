@@ -19,11 +19,13 @@ import { Box, HStack, Text } from '@chakra-ui/react';
 import { LuChartColumn } from 'react-icons/lu';
 
 interface VizPanelProps {
+  /** Optional control rendered at the header's right edge (e.g. the Auto chart-type badge). */
+  headerExtra?: React.ReactNode;
   /** The full chart config block, assembled by the parent. */
   children: React.ReactNode;
 }
 
-export function VizPanel({ children }: VizPanelProps) {
+export function VizPanel({ headerExtra, children }: VizPanelProps) {
   return (
     <Box aria-label="Viz panel" h="100%" display="flex" flexDirection="column" minH={0}>
       <HStack px={3} py={1.5} gap={1.5} flexShrink={0} borderBottom="1px solid" borderColor="border.muted" bg="bg.muted">
@@ -31,6 +33,7 @@ export function VizPanel({ children }: VizPanelProps) {
         <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">
           Viz Settings
         </Text>
+        {headerExtra && <Box ml="auto">{headerExtra}</Box>}
       </HStack>
       <Box flex={1} overflowY="auto" minH={0}>
         {children}
