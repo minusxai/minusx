@@ -38,11 +38,12 @@ function setup(props: Partial<React.ComponentProps<typeof ViewWorkbench>> = {}) 
 }
 
 describe('ViewWorkbench', () => {
-  it('renders the REAL question editor — the SQL/GUI/Viz tabs, not a bespoke box', async () => {
+  it('renders the REAL question editor — the SQL tab and viz panel, not a bespoke box', async () => {
     setup({ view: ZONE_REVENUE });
-    // These come from QuestionViewV2's QueryModeSelector, so their presence proves reuse.
+    // These come from QuestionViewV2 (QueryModeSelector + the right-hand viz
+    // panel), so their presence proves reuse.
     expect(await screen.findByLabelText('SQL')).toBeTruthy();
-    expect(screen.getByLabelText('Viz')).toBeTruthy();
+    expect(screen.getByLabelText('Viz panel')).toBeTruthy();
   });
 
   it('seeds the editor with the view\'s SQL and connection', async () => {

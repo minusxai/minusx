@@ -6,7 +6,7 @@
  */
 
 import { Box, HStack, VStack, Text, Spinner, Button } from '@chakra-ui/react';
-import { LuRocket, LuWrench, LuSettings, LuCode, LuRefreshCw, LuCloudOff } from 'react-icons/lu';
+import { LuRocket, LuWrench, LuCode, LuRefreshCw, LuCloudOff } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { TableV2 } from '@/components/plotx/TableV2';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
@@ -194,7 +194,7 @@ function QuestionVisualizationInner({
     // borderRadius={'lg'} border={'1px solid'} borderColor={'border.muted'}
     >
       {/* Viz Config toggle button — show/hide viz tab in the left panel */}
-      {(onOpenVizTab || onHideVizTab) && isChartType && config.viz.showChartBuilder && data && !error && (
+      {/* {(onOpenVizTab || onHideVizTab) && isChartType && config.viz.showChartBuilder && data && !error && (
         <Box display="flex" alignItems="center" justifyContent="flex-end" bg="bg.muted" shadow="sm" px={2} py={1}>
           <Button
             aria-label={vizTabOpen ? "Hide viz settings" : "Show viz settings"}
@@ -203,14 +203,14 @@ function QuestionVisualizationInner({
             onClick={vizTabOpen ? onHideVizTab : onOpenVizTab}
             color="fg.muted"
             fontWeight="600"
-            fontSize="xs"
+            fontSize="2xs"
             flexShrink={0}
           >
-            <LuSettings size={14} />
-            {vizTabOpen ? 'Hide Viz Config' : 'Show Viz Config'}
+            <LuSettings />
+            {vizTabOpen ? 'Hide Viz Settings' : 'Show Viz Settings'}
           </Button>
         </Box>
-      )}
+      )} */}
 
       {/* Results and Side Selector Container */}
       <HStack gap={0} width="full" align="stretch" flex="1" overflow="hidden" minH="0px">

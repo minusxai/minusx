@@ -296,6 +296,10 @@ export default function CreateQuestionModalContainer({
         <QuestionViewV2
           viewMode="page"
           content={mergedContent}
+          // Resolve the schema context at the draft's real path (tutorial mode,
+          // per-folder contexts) — without this the view falls back to '/org'
+          // and the GUI tab silently disappears for new questions.
+          filePath={file?.path ?? folderPath}
           questionId={typeof effectiveId === 'number' ? effectiveId : undefined}
           queryData={queryData}
           queryLoading={queryLoading}

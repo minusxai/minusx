@@ -31,7 +31,6 @@ import { selectConnectionsLoading, selectPersistableContent, selectMergedContent
 import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { useContext as useKnowledgeContext } from '@/lib/hooks/useContext';
-import { ContextVersionManager } from './ContextVersionManager';
 import { DatabasesTabContent } from './DatabasesTabContent';
 import { SkillsTabContent } from './SkillsTabContent';
 import { EvalsTabContent } from './EvalsTabContent';
@@ -408,7 +407,8 @@ export default function ContextEditorV2({
         />
       </Box>
 
-      <ContextVersionManager
+      {/* Todo: Vivek - hide version manager for now, to be added back later */}
+      {/* <ContextVersionManager
         content={content}
         showDebug={showDebug}
         isAdmin={isAdmin}
@@ -420,7 +420,7 @@ export default function ContextEditorV2({
         onCreateVersion={onCreateVersion}
         onPublishVersion={onPublishVersion}
         onDeleteVersion={onDeleteVersion}
-      />
+      /> */}
 
       {/* Error Display */}
       {error && (

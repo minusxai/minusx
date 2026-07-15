@@ -254,7 +254,7 @@ export default function ViewsSection({
     <VStack align="stretch" gap={0} onClick={(e) => e.stopPropagation()}>
       <Box px={3} py={1} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted">
         <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.02em">
-          Views
+          Data Models
         </Text>
       </Box>
 
@@ -276,7 +276,7 @@ export default function ViewsSection({
       {editable && !editing && (
         <Box px={3} py={1}>
           <Button aria-label={`Add view to ${connection}`} size="2xs" variant="ghost" onClick={() => setEditing({ kind: 'new' })}>
-            <LuPlus /> New view
+            <LuPlus /> New Data Model
           </Button>
         </Box>
       )}

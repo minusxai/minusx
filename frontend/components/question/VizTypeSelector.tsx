@@ -76,12 +76,19 @@ interface VizTypeSelectorProps {
   value: VizSettings['type'];
   onChange: (type: VizSettings['type']) => void;
   orientation?: 'vertical' | 'horizontal' | 'grouped';
+  /**
+   * Types that fit the current data shape (semantic questions). Everything
+   * stays clickable — recommended types render at full strength, the rest
+   * dim slightly. Omit for no treatment (non-semantic contexts).
+   */
+  recommended?: Array<VizSettings['type']>;
 }
 
 export function VizTypeSelector({
   value,
   onChange,
-  orientation = 'vertical'
+  orientation = 'vertical',
+  recommended,
 }: VizTypeSelectorProps) {
   const { config } = useConfigs();
   const allowedVizTypes = config.allowedVizTypes;
@@ -111,6 +118,10 @@ export function VizTypeSelector({
       >
         {allTypes.map(({ type, icon, label }) => {
           const isActive = value === type;
+          const isRecommended = recommended?.includes(type) ?? false;
+          // With recommendations present, the non-fitting types recede a
+          // little (still clickable); the active pick never dims.
+          const dimmed = !!recommended && !isRecommended && !isActive;
           return (
             <Box
               key={type}
@@ -124,14 +135,17 @@ export function VizTypeSelector({
               borderRadius="md"
               bg={isActive ? 'accent.teal/15' : 'transparent'}
               color={isActive ? 'accent.teal' : 'fg.muted'}
+              opacity={dimmed ? 0.4 : 1}
               cursor="pointer"
               transition="all 0.12s ease"
               _hover={{
                 bg: isActive ? 'accent.teal/20' : 'bg.muted',
                 color: isActive ? 'accent.teal' : 'fg.default',
+                opacity: 1,
               }}
               onClick={() => onChange(type)}
               aria-label={label}
+              data-recommended={isRecommended ? 'true' : undefined}
             >
               {icon}
               <Text fontSize="2xs" fontFamily="mono" fontWeight={isActive ? '700' : '500'} lineHeight="1">
