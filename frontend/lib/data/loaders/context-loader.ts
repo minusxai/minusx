@@ -12,6 +12,10 @@ import { computeSchemaFromWhitelist } from './context-loader-utils';
 import { boundSchema, boundFullSchema } from '@/lib/context/schema-bounding';
 import { checkViewAvailability } from '@/lib/views/integrity';
 import { exposedColumns } from '@/lib/types/views';
+import { applyWhitelistToConnections } from '@/lib/sql/schema-filter';
+import { getVisibleDatasets } from '@/lib/data/datasets.server';
+import { exposedTables, FILES_CONNECTION } from '@/lib/types/datasets';
+import type { ResolvedDataset } from '@/lib/types/datasets';
 
 /**
  * Context Loader - Computes fullSchema and fullDocs based on published version
@@ -100,6 +104,20 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
   const allViews = [...fullViews, ...validOwnViews];
   const withViews = injectViewsAsTables(computed.fullSchema, allViews);
 
+  // Datasets (static data as files) surface as an ORDINARY `files` database
+  // entry: the tables visible AT THIS CONTEXT'S FOLDER (its own datasets +
+  // ancestors'; hidden tables excluded). One injection makes them appear
+  // everywhere tables do — the KB UI, the agent's schema, the semantic layer.
+  // AUTO-EXPOSE with opt-in narrowing: when the version's whitelist carries an
+  // explicit `files` entry, it filters the injected tables (and the query-time
+  // resolver reads this same fullSchema, so narrowing enforces on /api/query);
+  // with no entry, everything visible is exposed — upload → query, no ceremony.
+  const contextFolder = file.path.substring(0, file.path.lastIndexOf('/')) || '/';
+  const datasets = await getVisibleDatasets(contextFolder, user);
+  const withDatasets = injectDatasetsAsConnection(
+    withViews, datasets, resolveVersionWhitelist(publishedVersion),
+  );
+
   // Bound the columnar schema (WITH the views already injected, so they ship with columns): keep columns when small, drop the
   // columnar bulk when huge. This is what keeps a 1963-table connection from putting ~8 MB into every
   // context load, API response, Redux store, and chat payload — the production OOM.
@@ -107,7 +125,7 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
   // fullSchema vs parentSchema differ in ONE way: fullSchema is the RESOLVED own schema that CHILD
   // contexts inherit from, so it must never lose a table (boundFullSchema = names-only, no table cap).
   // parentSchema is only the editor's available-to-whitelist menu, so it may also cap the table list.
-  const fullSchema = boundFullSchema(withViews) as ContextContent['fullSchema'];
+  const fullSchema = boundFullSchema(withDatasets) as ContextContent['fullSchema'];
   const parentSchema = boundSchema(computed.parentSchema) as ContextContent['parentSchema'];
   const { fullDocs, fullMetrics, fullAnnotations, fullSkills } = computed;
 
@@ -179,6 +197,40 @@ function injectViewsAsTables(schema: DatabaseWithSchema[], views: ViewDef[]): Da
   });
 }
 
+
+/**
+ * Inject the folder-visible dataset tables as the `files` database entry.
+ * Exposed tables only (a dataset's hiddenTables never surface). An explicit
+ * `files` whitelist entry NARROWS the injected tables; absent, everything is
+ * exposed (auto-expose). No datasets → no entry (nothing phantom in the KB).
+ */
+function injectDatasetsAsConnection(
+  schema: DatabaseWithSchema[],
+  datasets: ResolvedDataset[],
+  whitelist: ContextVersion['whitelist'],
+): DatabaseWithSchema[] {
+  const bySchema = new Map<string, Array<{ table: string; columns: Array<{ name: string; type: string }> }>>();
+  for (const d of datasets) {
+    for (const t of exposedTables(d.content)) {
+      if (!bySchema.has(t.schema_name)) bySchema.set(t.schema_name, []);
+      bySchema.get(t.schema_name)!.push({ table: t.table_name, columns: t.columns.map((c) => ({ ...c })) });
+    }
+  }
+  const base = schema.filter((db) => db.databaseName !== FILES_CONNECTION);
+  if (bySchema.size === 0) return base;
+
+  const filesDb: DatabaseWithSchema = {
+    databaseName: FILES_CONNECTION,
+    schemas: [...bySchema.entries()].map(([s, tables]) => ({ schema: s, tables })),
+  };
+
+  const hasFilesWhitelist = Array.isArray(whitelist) && whitelist.some((w) => w.name === FILES_CONNECTION);
+  const entry = hasFilesWhitelist
+    ? applyWhitelistToConnections([filesDb], (whitelist as Extract<ContextVersion['whitelist'], unknown[]>))[0]
+    : filesDb;
+  if (!entry || !entry.schemas.some((s) => s.tables.length > 0)) return base;
+  return [...base, entry];
+}
 
 /**
  * Compute fullSchema and fullDocs from a specific version
