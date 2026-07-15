@@ -101,31 +101,39 @@ Extract one effective-access resolver producing an `AccessPredicate` + in-memory
 - [ ] Narrow system-bypass path (migrations, seeding, first-user bootstrap)
 - [ ] Install the predicate as an RLS policy + `FORCE ROW LEVEL SECURITY`; verify on PGLite **and** Postgres; test the superuser-bypass boundary
 
-### M2 — Group model + seed + migration (zero behavior change checkpoint)
-- [ ] Schema: `groups`, `group_scopes`, `group_members` — migration entry (v37) + `postgres-schema.ts` + `update-workspace-template`
-- [ ] Types for `Group` / capability profile / scope
-- [ ] Seed `Admin` (caps `*`, scope `*`, workspace-admin, **locked**) / `Editor` / `Viewer` from `rules.json`; `Editor`/`Viewer` scoped to `$HOME`
-- [ ] Migrate every user → membership in the seed group matching their role; `home_folder` becomes their personal scope
-- [ ] Resolver reads groups **live** + intrinsic grants (home folder, conversations); `isAdmin(user)` = in-admin-group; fold config `accessRules` overrides into seed capabilities
-- [ ] Parity: behavior **identical** to pre-migration across the battery; full suite green
+### M2 — Group model + resolver (additive — NO migration needed) ✅ DONE
+Key correction: **no data migration.** `initializeSchema()` applies the schema idempotently on every boot (both PGLite + Postgres), so new tables are created everywhere automatically; and role + home-folder stay as the base, with groups purely additive on top — behavior is unchanged until a group has members.
+- [x] Schema: `groups`, `group_scopes`, `group_members` — additive `CREATE TABLE IF NOT EXISTS` in `postgres-schema.ts`
+- [x] `groups.server.ts`: `Group` type, CRUD, `resolveUserGroupGrants(userId, mode)`
+- [x] `resolveAccessPredicateWithGroups` — base grant (role+home) ∪ group grants; read paths (`loadFile`/`loadFiles`/`getFiles`) group-aware
+- [x] Verified: groups extend access end-to-end; **no members → today's behavior**; mode-scoped; multi-group union; full suite green
+- [ ] Seed `Admin`/`Editor`/`Viewer` group ROWS from `rules.json` — deferred (role is the implicit base grant; the group rows are only needed to make them editable in the UI)
 
-### M3 — Feature: custom groups + UX
+### M3 — Feature: custom groups + UX — backend + core UI DONE; two views remain
 Backend
-- [ ] Group CRUD API (groups · members · folder scopes) — admin-gated
-- [ ] Capability presets (View / Build / Full) + advanced type-matrix override
-- [ ] Invariants: always ≥ 1 admin; `Admin` group not editable into a lockout; a group needs ≥ 1 scope
+- [x] Group CRUD API (`/api/groups`, `/api/groups/[id]`) — admin-gated, validated
+- [x] Capability presets (View / Build / Full) — advanced type-matrix override deferred
+- [ ] Invariants: **≥ 1 admin** not yet enforced; `Admin` locked ✅ (tested); a group needs ≥ 1 scope ✅ (empty grant is a no-op)
 
 UI
-- [ ] Group page — members · capability preset · folder rows (add-picker)
-- [ ] Folder → access view ("who can see this folder")
-- [ ] "Why does X have access?" affordance on a user
-- [ ] User create/edit: assign group(s) + home folder
-- [ ] Browser-verify + visual iteration
+- [x] Group page — members · preset · folder rows (Settings → Groups) — **browser-verified**: create persists + displays after clean boot
+- [ ] Folder → access view ("who can see this folder") — NOT done
+- [ ] "Why does X have access?" affordance on a user — NOT done
+- [ ] User create/edit: assign group(s) — NOT done (membership is edited from the group page)
+- [x] Browser-verify — done; visual polish still wants your eye
 
-### Cross-cutting (verified throughout)
-- [ ] Guest / public-share: predicate stays optional; guests covered by intrinsic scope; public sharing unbroken (explicit tests)
-- [ ] Impersonation (`as_user`) path tested
-- [ ] User-facing permissions doc
+### Cross-cutting
+- [x] Guest / public-share: guests have no memberships → base-only (explicit test); public sharing unbroken (full suite green)
+- [ ] Impersonation (`as_user`): resolves by the impersonated user's id — inherits group-aware resolution; no dedicated test yet
+- [ ] User-facing permissions doc — NOT done
+
+## Test coverage — auth feature classes (all green; proven non-decoration by a mutation check)
+The batteries were verified meaningful by deleting the system-folder exclusion in `checkAccess` and confirming **6 tests went red** across the characterization + SQL parity, then reverting.
+- **Engine parity** (`access-predicate.test.ts`) — `checkAccess` vs frozen legacy `permissions.ts`, full matrix of {admin, editor, viewer} × {home / system / database / conversations-raw / runs / ancestor-context / mode-isolation / wrong-mode} × {access / ui / embedded} + config overrides.
+- **SQL parity** (`access-predicate-sql.test.ts`) — compiled `toSql` selects EXACTLY the `checkAccess` set against real PGLite, for base predicates **and multi-grant (group) predicates** (union, per-grant type ∩ scope, empty scope, param offset).
+- **listAll integration** (`listall-access.test.ts`) — the predicate SQL-filters a real seeded DB identically to `checkAccess`.
+- **Groups** (`groups.test.ts`) — additive grant, capability-limited, removal reverts, **mode-scoped**, **multi-group union**, **locked** reject, **guest** base-only, CRUD round-trip, `validateGroupInput`.
+- **Legacy** (`lib-unit.test.ts`) — the pre-existing `canAccessFile`/`checkFileAccess` characterization tests still pass through the delegation.
 
 ## Test strategy (Phase 1 is a security change — coverage is the safety)
 
