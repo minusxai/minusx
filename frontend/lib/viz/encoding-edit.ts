@@ -22,9 +22,54 @@ export function isUnitVegaLiteSpec(spec: Record<string, unknown>): boolean {
   return 'mark' in spec && !COMPOSITION_KEYS.some(k => k in spec);
 }
 
+// ── Annotated-unit recognition (annotations "in the fold") ──────────────────────────
+//
+// A spec of shape {layer: [unit chart, ...annotation layers]} — where every extra layer
+// is a datum-only rule/rect/text (reference lines + their badge labels, ours or
+// agent-authored) — is still treated as its BASE chart everywhere: type detection, the
+// drop-zone lens, settings toggles, the shared tooltip. Purely structural, so no stored
+// format changes; a layer with any FIELD encoding keeps the spec genuinely custom.
+
+/** A datum/value-only rule, rect, or text layer — annotation chrome, not a data mark. */
+function isAnnotationLayer(layer: unknown): boolean {
+  const l = layer && typeof layer === 'object' && !Array.isArray(layer) ? (layer as Record<string, unknown>) : null;
+  if (!l) return false;
+  const markType = getMarkType(l);
+  if (markType !== 'rule' && markType !== 'rect' && markType !== 'text') return false;
+  const encoding = l.encoding;
+  if (encoding == null || typeof encoding !== 'object' || Array.isArray(encoding)) return false;
+  return Object.values(encoding as Record<string, unknown>).every(def => {
+    if (def == null || typeof def !== 'object' || Array.isArray(def)) return false;
+    return !('field' in (def as Record<string, unknown>));
+  });
+}
+
+/** Split base chart from annotation layers; null when the spec isn't unit-or-annotated. */
+export function annotationSplit(
+  spec: Record<string, unknown>,
+): { unit: Record<string, unknown>; annotations: Record<string, unknown>[] } | null {
+  if (isUnitVegaLiteSpec(spec)) return { unit: spec, annotations: [] };
+  if (COMPOSITION_KEYS.some(k => k !== 'layer' && k in spec)) return null;
+  const layers = spec.layer;
+  if (!Array.isArray(layers) || layers.length < 2) return null;
+  const [first, ...rest] = layers;
+  const base = first && typeof first === 'object' && !Array.isArray(first) ? (first as Record<string, unknown>) : null;
+  if (!base || !isUnitVegaLiteSpec(base)) return null;
+  if (!rest.every(isAnnotationLayer)) return null;
+  return { unit: base, annotations: rest as Record<string, unknown>[] };
+}
+
+/** The editable UNIT of a spec — itself, or the base layer of an annotated spec. */
+export const unitOf = (spec: Record<string, unknown>): Record<string, unknown> | null =>
+  annotationSplit(spec)?.unit ?? null;
+
+/** unitOf with a pass-through fallback (edit helpers operate on whatever is there). */
+const unitOrSelf = (spec: Record<string, unknown>): Record<string, unknown> =>
+  unitOf(spec) ?? spec;
+
 /** The column a channel encodes, or null when absent / not a plain field reference. */
 export function getChannelField(spec: Record<string, unknown>, channel: EditableChannel): string | null {
-  const encoding = spec.encoding as Record<string, Record<string, unknown>> | undefined;
+  const encoding = unitOrSelf(spec).encoding as Record<string, Record<string, unknown>> | undefined;
   const def = encoding?.[channel];
   return def && typeof def.field === 'string' ? def.field : null;
 }
@@ -48,8 +93,8 @@ export function setChannelField(
   column: { name: string; kind: VizColumnKind } | null,
 ): VizEnvelope {
   const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
-  const spec = (next.source as { spec: Record<string, unknown> }).spec;
-  const encoding = { ...(spec.encoding as Record<string, unknown> | undefined) } as Record<string, unknown>;
+  const unit = unitOrSelf((next.source as { spec: Record<string, unknown> }).spec);
+  const encoding = { ...(unit.encoding as Record<string, unknown> | undefined) } as Record<string, unknown>;
   if (column == null) {
     delete encoding[channel];
   } else {
@@ -60,7 +105,7 @@ export function setChannelField(
     // Heatmap rule (rect marks): x/y are DISCRETE bands. A temporal type would go
     // continuous and collapse the rows into one giant rect per category — the same
     // temporal→ordinal mapping the pivot→heatmap transform applies.
-    const rectAxis = (channel === 'x' || channel === 'y') && getMarkType(spec) === 'rect';
+    const rectAxis = (channel === 'x' || channel === 'y') && getMarkType(unit) === 'rect';
     const vlType = rectAxis && column.kind === 'temporal' ? 'ordinal' : KIND_TO_VL_TYPE[column.kind];
     const def: Record<string, unknown> = { ...base, field: column.name, type: vlType };
     // A previous datum/value literal on this channel would fight the new field ref.
@@ -68,7 +113,7 @@ export function setChannelField(
     delete def.value;
     encoding[channel] = def;
   }
-  spec.encoding = encoding;
+  unit.encoding = encoding;
   return next;
 }
 
@@ -80,7 +125,7 @@ const cloneEnvelope = (envelope: VizEnvelope): { next: VizEnvelope; spec: Record
 };
 
 const channelDef = (spec: Record<string, unknown>, channel: string): Record<string, unknown> | null => {
-  const def = (spec.encoding as Record<string, unknown> | undefined)?.[channel];
+  const def = (unitOrSelf(spec).encoding as Record<string, unknown> | undefined)?.[channel];
   return def && typeof def === 'object' && !Array.isArray(def) ? (def as Record<string, unknown>) : null;
 };
 
@@ -140,8 +185,9 @@ export function isComboVegaLiteSpec(spec: Record<string, unknown>): boolean {
 /** Swap the mark type; a mark-def object keeps its other props (tooltip, cornerRadius…). */
 export function setMarkType(envelope: VizEnvelope, type: string): VizEnvelope {
   const { next, spec } = cloneEnvelope(envelope);
-  spec.mark = typeof spec.mark === 'object' && spec.mark != null
-    ? { ...(spec.mark as Record<string, unknown>), type }
+  const unit = unitOrSelf(spec);
+  unit.mark = typeof unit.mark === 'object' && unit.mark != null
+    ? { ...(unit.mark as Record<string, unknown>), type }
     : type;
   return next;
 }
@@ -176,8 +222,9 @@ const MARK_FOR_TYPE: Record<Exclude<V2VizType, 'table' | 'pivot' | 'row' | 'pie'
   bar: 'bar', line: 'line', area: 'area', scatter: 'point', boxplot: 'boxplot',
 };
 
-/** Classify a unit spec into a selector viz type (null when unrecognized). */
+/** Classify a unit (or annotated-unit) spec into a selector viz type (null when unrecognized). */
 export function getVizType(spec: Record<string, unknown>): V2VizType | null {
+  spec = unitOrSelf(spec);
   const mark = getMarkType(spec);
   if (mark === 'arc') return 'pie';
   if (mark === 'rect') return 'heatmap';
@@ -206,9 +253,11 @@ const withMark = (spec: Record<string, unknown>, type: string): void => {
 /** Native-spec viz types (recipes and the DOM table route through setEnvelopeVizType instead). */
 export type SpecVizType = Exclude<V2VizType, 'table' | 'pivot' | 'combo' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'choropleth' | 'point_map'>;
 
-/** Switch a unit spec's viz type, transforming encodings where the shapes differ. */
+/** Switch a unit (or annotated-unit) spec's viz type, transforming encodings where the
+ *  shapes differ. Annotation layers ride along untouched. */
 export function setVizType(envelope: VizEnvelope, type: SpecVizType): VizEnvelope {
-  const { next, spec } = cloneEnvelope(envelope);
+  const { next, spec: outerSpec } = cloneEnvelope(envelope);
+  const spec = unitOrSelf(outerSpec);
   const encoding = { ...((spec.encoding as Record<string, unknown> | undefined) ?? {}) } as Record<string, Record<string, unknown> | undefined>;
   const from = getVizType(spec);
 
@@ -482,10 +531,11 @@ export function setYBounds(envelope: VizEnvelope, bounds: { min?: number | null;
   else delete y.scale;
 
   const bounded = scale.domainMin !== undefined || scale.domainMax !== undefined;
-  const mark: Record<string, unknown> = typeof spec.mark === 'string' ? { type: spec.mark } : { ...(asPlainRecord(spec.mark) ?? {}) };
+  const unit = unitOrSelf(spec);
+  const mark: Record<string, unknown> = typeof unit.mark === 'string' ? { type: unit.mark } : { ...(asPlainRecord(unit.mark) ?? {}) };
   if (bounded) mark.clip = true;
   else delete mark.clip;
-  spec.mark = mark;
+  unit.mark = mark;
   return next;
 }
 
@@ -493,7 +543,7 @@ export type LineInterpolate = 'linear' | 'monotone' | 'step';
 
 /** The line/area interpolation ('linear' is VL's implicit default). */
 export function getLineInterpolate(spec: Record<string, unknown>): LineInterpolate {
-  const mark = asPlainRecord(spec.mark);
+  const mark = asPlainRecord(unitOrSelf(spec).mark);
   const interp = mark?.interpolate;
   return interp === 'monotone' || interp === 'step' ? interp : 'linear';
 }
@@ -501,10 +551,11 @@ export function getLineInterpolate(spec: Record<string, unknown>): LineInterpola
 /** Set the interpolation; 'linear' removes the prop (the default stays implicit). */
 export function setLineInterpolate(envelope: VizEnvelope, interpolate: LineInterpolate): VizEnvelope {
   const { next, spec } = cloneEnvelope(envelope);
-  const mark: Record<string, unknown> = typeof spec.mark === 'string' ? { type: spec.mark } : { ...(asPlainRecord(spec.mark) ?? {}) };
+  const unit = unitOrSelf(spec);
+  const mark: Record<string, unknown> = typeof unit.mark === 'string' ? { type: unit.mark } : { ...(asPlainRecord(unit.mark) ?? {}) };
   if (interpolate === 'linear') delete mark.interpolate;
   else mark.interpolate = interpolate;
-  spec.mark = mark;
+  unit.mark = mark;
   return next;
 }
 
@@ -543,7 +594,7 @@ export function isEnvelopeEditable(envelope: VizEnvelope): boolean {
   const source = sourceOf(envelope);
   if (source.kind === 'table' || source.kind === 'pivot') return true;
   if (source.kind === 'recipe') return getTemplate(source.recipe as string) != null;
-  return isUnitVegaLiteSpec((source as { spec: Record<string, unknown> }).spec);
+  return unitOf((source as { spec: Record<string, unknown> }).spec) != null;
 }
 
 /** Zone descriptors for the Fields tab: recipe bindings, or VL channels by type. */
@@ -593,7 +644,7 @@ export function isMultiZone(envelope: VizEnvelope, channel: string): boolean {
   if (source.kind === 'recipe') {
     return getTemplate(source.recipe as string)?.bindings.find(b => b.name === channel)?.multi ?? false;
   }
-  return channel === 'y' && isUnitVegaLiteSpec((source as { spec: Record<string, unknown> }).spec);
+  return channel === 'y' && unitOf((source as { spec: Record<string, unknown> }).spec) != null;
 }
 
 /** Add a column to a multi zone (append) or assign a single zone. */
@@ -839,7 +890,7 @@ export function setEnvelopeVizType(
     } as unknown as VizEnvelope;
   }
   const needsReconstruction = source.kind === 'recipe' || source.kind === 'table' || source.kind === 'pivot' ||
-    (source.kind === 'vega-lite' && !isUnitVegaLiteSpec((source as { spec: Record<string, unknown> }).spec));
+    (source.kind === 'vega-lite' && unitOf((source as { spec: Record<string, unknown> }).spec) == null);
   if (needsReconstruction) {
     // Reconstruct a plain bar from the bindings/columns, then transform to the target.
     const barEnvelope = {
@@ -975,7 +1026,7 @@ interface FoldInfo {
 }
 
 const findYFold = (spec: Record<string, unknown>): FoldInfo | null => {
-  const transforms = spec.transform;
+  const transforms = unitOrSelf(spec).transform;
   if (!Array.isArray(transforms)) return null;
   const y = channelDef(spec, 'y');
   if (!y || typeof y.field !== 'string') return null;
@@ -998,7 +1049,8 @@ export function getYFields(spec: Record<string, unknown>): string[] {
 
 /** Add a measure to Y: plain assign → fold-of-two → append to the fold. */
 export function addYField(envelope: VizEnvelope, column: { name: string; kind: VizColumnKind }): VizEnvelope {
-  const { next, spec } = cloneEnvelope(envelope);
+  const { next, spec: outerSpec } = cloneEnvelope(envelope);
+  const spec = unitOrSelf(outerSpec);
   const encoding = { ...((spec.encoding as Record<string, unknown> | undefined) ?? {}) } as Record<string, Record<string, unknown> | undefined>;
   const y = encoding.y;
 
@@ -1035,7 +1087,8 @@ export function addYField(envelope: VizEnvelope, column: { name: string; kind: V
 
 /** Remove a measure from Y; unfolds back to a plain field when one remains. */
 export function removeYField(envelope: VizEnvelope, name: string): VizEnvelope {
-  const { next, spec } = cloneEnvelope(envelope);
+  const { next, spec: outerSpec } = cloneEnvelope(envelope);
+  const spec = unitOrSelf(outerSpec);
   const encoding = { ...((spec.encoding as Record<string, unknown> | undefined) ?? {}) } as Record<string, Record<string, unknown> | undefined>;
   const fold = findYFold(spec);
 
@@ -1065,6 +1118,205 @@ export function removeYField(envelope: VizEnvelope, name: string): VizEnvelope {
   }
   if (encoding.color?.field === fold.as[0]) delete encoding.color;
   spec.encoding = encoding;
+  return next;
+}
+
+// ── Reference lines (annotations as REAL layers — no sidecar config) ────────────────
+//
+// The idiomatic Vega-Lite annotation is a layered rule, plus a BADGE label (a tinted
+// rect plate behind colored text — the house chip look, readable in both color modes).
+// Written straight into source.spec: the spec is the single source of truth, and the
+// annotated shape stays recognized (annotationSplit) so the panel keeps working.
+
+export interface ReferenceLineSpec {
+  axis: 'x' | 'y';
+  value: number | string;
+  label?: string | null;
+  color?: string | null;
+}
+
+const REFERENCE_LINE_DEFAULT_COLOR = '#e74c3c';
+
+/** Convert a date-ish value to VL's DateTime object — raw string datums don't reliably
+ *  parse on temporal scales. UTC fields: result dates are UTC/date-only. */
+const toDateTimeDatum = (value: number | string): Record<string, number> | null => {
+  const d = new Date(value);
+  if (Number.isNaN(+d)) return null;
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, date: d.getUTCDate() };
+};
+
+// Badge geometry (probed empirically): rect mark-prop x/y anchor the CENTER; text
+// mark-prop x is the align anchor. Mono at 11px ≈ 6.6px/char (LEGEND_LABEL_CHAR_PX).
+const BADGE_CHAR_PX = 6.6;
+const BADGE_PAD_PX = 7;
+const BADGE_HEIGHT_PX = 18;
+const BADGE_EDGE_PX = 8;   // inset from the plot edge
+const BADGE_LIFT_PX = 13;  // vertical distance from the rule to the badge center (y-lines)
+
+/** The rect-plate + text layers for a reference-line badge label. */
+function badgeLayers(
+  axis: 'x' | 'y',
+  anchor: Record<string, unknown>,
+  label: string,
+  color: string,
+): Record<string, unknown>[] {
+  const width = Math.round(label.length * BADGE_CHAR_PX) + BADGE_PAD_PX * 2;
+  const plateMark = axis === 'y'
+    ? { x: BADGE_EDGE_PX + width / 2, yOffset: -BADGE_LIFT_PX }
+    : { y: BADGE_EDGE_PX + BADGE_HEIGHT_PX / 2, xOffset: BADGE_EDGE_PX / 2 + width / 2 };
+  const textMark = axis === 'y'
+    ? { x: BADGE_EDGE_PX + BADGE_PAD_PX, dy: -BADGE_LIFT_PX }
+    : { y: BADGE_EDGE_PX + BADGE_HEIGHT_PX / 2, dx: BADGE_EDGE_PX / 2 + BADGE_PAD_PX };
+  return [
+    {
+      transform: [{ sample: 1 }],
+      mark: {
+        type: 'rect', ...plateMark, width, height: BADGE_HEIGHT_PX,
+        cornerRadius: 5, fill: color, fillOpacity: 0.16,
+      },
+      encoding: { ...anchor },
+    },
+    {
+      transform: [{ sample: 1 }],
+      mark: { type: 'text', ...textMark, align: 'left', baseline: 'middle', fontWeight: 'bold', color },
+      encoding: { ...anchor, text: { value: label } },
+    },
+  ];
+}
+
+/** Append a reference line (rule + optional badge label) as real layers. Unit specs are
+ *  wrapped into `{layer: [unit, …]}`; already-layered specs get the layers appended. */
+export function addReferenceLine(envelope: VizEnvelope, line: ReferenceLineSpec): VizEnvelope {
+  const source = sourceOf(envelope);
+  if (source.kind !== 'vega-lite') return envelope;
+  const { next, spec } = cloneEnvelope(envelope);
+
+  // The anchored channel's type (temporal x needs a DateTime datum). Read from the
+  // unit spec, or the first layer of a composed one.
+  const base = isUnitVegaLiteSpec(spec) ? spec : (Array.isArray(spec.layer) ? (spec.layer[0] as Record<string, unknown>) : null);
+  const channelType = base ? (channelDef(base, line.axis)?.type as string | undefined) : undefined;
+  const datum = channelType === 'temporal' ? (toDateTimeDatum(line.value) ?? line.value) : line.value;
+
+  const color = line.color || REFERENCE_LINE_DEFAULT_COLOR;
+  const anchor = { [line.axis]: { datum } };
+  const layers: Record<string, unknown>[] = [{
+    // sample(1): annotation layers inherit the full dataset and would otherwise draw
+    // one mark PER ROW (stacked plates/text at row count × opacity).
+    transform: [{ sample: 1 }],
+    mark: { type: 'rule', color, strokeDash: [4, 4], strokeWidth: 1.5 },
+    encoding: anchor,
+  }];
+  if (line.label != null && line.label !== '') {
+    layers.push(...badgeLayers(line.axis, anchor, line.label, color));
+  }
+
+  if (Array.isArray(spec.layer)) {
+    spec.layer = [...(spec.layer as unknown[]), ...layers];
+    return next;
+  }
+  // Wrap the unit spec: it becomes the base layer WHOLESALE (including its transform,
+  // so folds stay unit-scoped and the annotated-unit editors keep finding them).
+  const wrapped: Record<string, unknown> = {};
+  const baseLayer: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(spec)) {
+    if (k === '$schema') wrapped[k] = v;
+    else baseLayer[k] = v;
+    delete spec[k];
+  }
+  Object.assign(spec, wrapped, { layer: [baseLayer, ...layers] });
+  return next;
+}
+
+// ── Reference-line management (list / recolor / remove, unwrap on last) ─────────────
+
+export interface ReferenceLineEntry {
+  /** The rule layer's index in spec.layer — the stable handle for edits. */
+  index: number;
+  axis: 'x' | 'y';
+  /** Display value (DateTime datums read back as YYYY-MM-DD). */
+  value: number | string;
+  label: string | null;
+  color: string;
+}
+
+const datumDisplay = (datum: unknown): number | string => {
+  const d = asPlainRecord(datum);
+  if (d && typeof d.year === 'number') {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.year}-${pad((d.month as number) ?? 1)}-${pad((d.date as number) ?? 1)}`;
+  }
+  return datum as number | string;
+};
+
+/** A rule layer + its trailing badge layers (everything up to the next rule). */
+function referenceLineGroups(spec: Record<string, unknown>): Array<{ start: number; end: number; rule: Record<string, unknown>; text: Record<string, unknown> | null }> {
+  const split = annotationSplit(spec);
+  if (!split || split.annotations.length === 0) return [];
+  const layers = spec.layer as unknown[];
+  const groups: Array<{ start: number; end: number; rule: Record<string, unknown>; text: Record<string, unknown> | null }> = [];
+  for (let i = 1; i < layers.length; i++) {
+    const layer = layers[i] as Record<string, unknown>;
+    if (getMarkType(layer) !== 'rule') continue;
+    let end = i + 1;
+    while (end < layers.length && getMarkType(layers[end] as Record<string, unknown>) !== 'rule') end++;
+    const text = (layers.slice(i + 1, end) as Record<string, unknown>[]).find(l => getMarkType(l) === 'text') ?? null;
+    groups.push({ start: i, end, rule: layer, text });
+  }
+  return groups;
+}
+
+export function getReferenceLines(envelope: VizEnvelope): ReferenceLineEntry[] {
+  const source = sourceOf(envelope);
+  if (source.kind !== 'vega-lite') return [];
+  const spec = (source as { spec: Record<string, unknown> }).spec;
+  return referenceLineGroups(spec).map(({ start, rule, text }) => {
+    const encoding = (rule.encoding ?? {}) as Record<string, { datum?: unknown } | undefined>;
+    const axis: 'x' | 'y' = encoding.y?.datum !== undefined ? 'y' : 'x';
+    const mark = asPlainRecord(rule.mark);
+    const textValue = (asPlainRecord((text?.encoding as Record<string, unknown> | undefined)?.text)?.value ?? null) as string | null;
+    return {
+      index: start,
+      axis,
+      value: datumDisplay(encoding[axis]?.datum),
+      label: textValue,
+      color: typeof mark?.color === 'string' ? mark.color : REFERENCE_LINE_DEFAULT_COLOR,
+    };
+  });
+}
+
+/** Recolor one reference line (rule + badge plate + text move together). */
+export function setReferenceLineColor(envelope: VizEnvelope, index: number, color: string): VizEnvelope {
+  const source = sourceOf(envelope);
+  if (source.kind !== 'vega-lite') return envelope;
+  const { next, spec } = cloneEnvelope(envelope);
+  const group = referenceLineGroups(spec).find(g => g.start === index);
+  if (!group) return envelope;
+  const layers = spec.layer as Record<string, unknown>[];
+  for (let i = group.start; i < group.end; i++) {
+    const mark = asPlainRecord(layers[i].mark);
+    if (!mark) continue;
+    if (getMarkType(layers[i]) === 'rect') mark.fill = color;
+    else mark.color = color;
+  }
+  return next;
+}
+
+/** Remove one reference line; removing the LAST unwraps back to the plain unit spec. */
+export function removeReferenceLine(envelope: VizEnvelope, index: number): VizEnvelope {
+  const source = sourceOf(envelope);
+  if (source.kind !== 'vega-lite') return envelope;
+  const { next, spec } = cloneEnvelope(envelope);
+  const group = referenceLineGroups(spec).find(g => g.start === index);
+  if (!group) return envelope;
+  const layers = (spec.layer as unknown[]).filter((_, i) => i < group.start || i >= group.end);
+  if (layers.length === 1) {
+    // Only the base chart remains — hoist it back to a unit spec.
+    const base = layers[0] as Record<string, unknown>;
+    delete spec.layer;
+    Object.assign(spec, base);
+    return next;
+  }
+  spec.layer = layers;
   return next;
 }
 
@@ -1134,7 +1386,7 @@ export function getSeriesColors(envelope: VizEnvelope, rows: Array<Record<string
   const source = sourceOf(envelope);
   if (source.kind !== 'vega-lite') return [];
   const spec = (source as { spec: Record<string, unknown> }).spec;
-  if (!isUnitVegaLiteSpec(spec)) return [];
+  if (unitOf(spec) == null) return [];
   const overrides = seriesColorOverrides(spec);
   return seriesKeys(spec, rows).map((key, i) => ({
     key,
@@ -1152,8 +1404,9 @@ export function setSeriesColor(
 ): VizEnvelope {
   const source = sourceOf(envelope);
   if (source.kind !== 'vega-lite') return envelope;
-  if (!isUnitVegaLiteSpec((source as { spec: Record<string, unknown> }).spec)) return envelope;
-  const { next, spec } = cloneEnvelope(envelope);
+  if (unitOf((source as { spec: Record<string, unknown> }).spec) == null) return envelope;
+  const { next, spec: outerSpec } = cloneEnvelope(envelope);
+  const spec = unitOrSelf(outerSpec);
   const encoding = (spec.encoding ?? {}) as Record<string, Record<string, unknown> | undefined>;
   const keys = seriesKeys(spec, rows);
   const overrides = seriesColorOverrides(spec);

@@ -18,6 +18,7 @@
  */
 import * as vegaExports from 'vega';
 import { WATERFALL_UP_COLOR, WATERFALL_DOWN_COLOR, WATERFALL_TOTAL_COLOR } from './viz-templates';
+import { unitOf } from './encoding-edit';
 
 // vega re-exports vega-statistics (bin, quartiles) at runtime, but its .d.ts omits them.
 // Using vega's own math keeps the tooltip's buckets/stats EXACTLY what the chart draws.
@@ -151,6 +152,10 @@ export function buildTooltipPlan(spec: Record<string, unknown>): TooltipPlan | n
   if (combo) return combo;
   const waterfall = waterfallPlan(spec);
   if (waterfall) return waterfall;
+  // Annotated-unit specs (base chart + reference-line layers) plan against the base —
+  // the shared tooltip/guide keeps working with annotations present.
+  const unit = unitOf(spec);
+  if (unit != null && unit !== spec) return buildTooltipPlan(unit);
 
   const mark = markType(spec);
   if (mark !== 'line' && mark !== 'area' && mark !== 'bar' && mark !== 'point' && mark !== 'boxplot') return null;

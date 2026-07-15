@@ -20,6 +20,7 @@ import type { Spec as VegaSpec } from 'vega';
 import { expressionInterpreter } from 'vega-interpreter';
 import { Handler as TooltipHandler } from 'vega-tooltip';
 import { prepareVegaLiteSpec } from './prepare';
+import { annotationSplit } from './encoding-edit';
 import { getVegaLiteConfig, getVegaParserConfig } from './theme';
 import { materializeRecipe } from './viz-templates';
 import { VIZ_DATASET_MAIN } from './types';
@@ -382,11 +383,20 @@ export function compileVegaLite(
     if (!('autosize' in prepared)) prepared.autosize = { type: 'fit', contains: 'padding' };
   }
   // Legend defaults only for true single-view specs — in composed/layered specs param
-  // placement differs per view, so authors declare interactions themselves.
+  // placement differs per view, so authors declare interactions themselves. Exception:
+  // an ANNOTATED unit (base chart + reference-line layers) applies them to its base,
+  // so adding a reference line doesn't cost the single-series legend or legend toggle.
   if (!composed && !('layer' in prepared)) {
     injectSingleSeriesLegend(prepared);
     injectLegendToggle(prepared);
     injectHeatmapCellLayout(prepared);
+  } else if (!composed) {
+    const split = annotationSplit(prepared);
+    if (split && split.annotations.length > 0) {
+      injectSingleSeriesLegend(split.unit);
+      injectLegendToggle(split.unit);
+      injectHeatmapCellLayout(split.unit);
+    }
   }
   // House look: legends are entry labels only, with no redundant heading.
   if (!composed) suppressLegendTitles(prepared);

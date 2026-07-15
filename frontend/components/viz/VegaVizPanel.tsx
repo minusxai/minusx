@@ -16,6 +16,7 @@ import {
   getStacked, setStacked, getYLogScale, setYLogScale, getMaxBins, setMaxBins,
   getSeriesColors, setSeriesColor,
   getYBounds, setYBounds, getLineInterpolate, setLineInterpolate, type LineInterpolate,
+  addReferenceLine, getReferenceLines, setReferenceLineColor, removeReferenceLine,
   getTableConditionalFormats, setTableConditionalFormats, getVizCss, setVizCss,
   getPivotConfig, setPivotConfig, getVizColumnFormats, mergeVizColumnFormat,
   getRecipeParams, setRecipeParam,
@@ -85,6 +86,77 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
   // Drafts for the Y-bounds inputs — committed on blur (empty = automatic).
   const [yMinDraft, setYMinDraft] = useState<string | null>(null);
   const [yMaxDraft, setYMaxDraft] = useState<string | null>(null);
+  // Reference-line adder drafts. Adding writes REAL rule/text layers into the spec —
+  // the chart becomes a composed ("custom") spec by design; further edits go via chat.
+  const [refAxis, setRefAxis] = useState<'y' | 'x'>('y');
+  const [refValue, setRefValue] = useState('');
+  const [refLabel, setRefLabel] = useState('');
+  const commitReferenceLine = () => {
+    if (refValue.trim() === '') return;
+    const n = Number(refValue);
+    onVizChange(addReferenceLine(envelope, {
+      axis: refAxis,
+      value: Number.isFinite(n) && refValue.trim() !== '' && !Number.isNaN(n) ? n : refValue.trim(),
+      label: refLabel.trim() || null,
+    }));
+    setRefValue('');
+    setRefLabel('');
+  };
+  const referenceLines = getReferenceLines(envelope);
+  const referenceLineCard = (
+    <Box p={3} bg="bg.surface" borderRadius="md" border="1px solid" borderColor="border.muted" display="flex" flexDirection="column" gap={2}>
+      <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+        Reference lines
+      </Text>
+      {referenceLines.map(line => {
+        const name = line.label ?? String(line.value);
+        return (
+          <HStack key={line.index} justify="space-between" gap={2}>
+            <Text fontSize="xs" color="fg.muted" flex="1" minW={0} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+              {line.label ? `${line.label} · ` : ''}{line.axis} = {String(line.value)}
+            </Text>
+            <input
+              key={`${line.index}:${line.color}`}
+              aria-label={`Color for reference line ${name}`}
+              type="color"
+              defaultValue={line.color}
+              onBlur={(e) => {
+                if (e.target.value !== line.color) onVizChange(setReferenceLineColor(envelope, line.index, e.target.value));
+              }}
+              style={{ width: 26, height: 18, padding: 0, border: '1px solid var(--chakra-colors-border-muted)', borderRadius: 4, background: 'transparent', cursor: 'pointer' }}
+            />
+            <Box
+              as="button"
+              aria-label={`Remove reference line ${name}`}
+              fontSize="xs"
+              color="fg.subtle"
+              _hover={{ color: 'accent.danger' }}
+              onClick={() => onVizChange(removeReferenceLine(envelope, line.index))}
+            >
+              ✕
+            </Box>
+          </HStack>
+        );
+      })}
+      <HStack gap={1.5}>
+        <NativeSelect.Root size="xs" width="58px" flexShrink={0}>
+          <NativeSelect.Field aria-label="Reference line axis" value={refAxis} onChange={(e) => setRefAxis(e.target.value as 'y' | 'x')}>
+            <option value="y">Y</option>
+            <option value="x">X</option>
+          </NativeSelect.Field>
+          <NativeSelect.Indicator />
+        </NativeSelect.Root>
+        <Input aria-label="Reference line value" size="xs" flex="1" minW="60px" placeholder="value" value={refValue} onChange={(e) => setRefValue(e.target.value)} />
+        <Input aria-label="Reference line label" size="xs" flex="1" minW="60px" placeholder="label (optional)" value={refLabel} onChange={(e) => setRefLabel(e.target.value)} />
+        <Button aria-label="Add reference line" size="xs" variant="solid" colorPalette="teal" onClick={commitReferenceLine} disabled={refValue.trim() === ''}>
+          Add
+        </Button>
+      </HStack>
+      <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+        Saved as real chart layers — the agent and the Spec tab see exactly the same thing.
+      </Text>
+    </Box>
+  );
 
   // Pivot Formulas builder inputs — the same derivation ChartBuilder does for the
   // classic panel: dimension VALUES come from aggregating the result rows.
@@ -598,13 +670,21 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                 </Box>
               );
             })()}
+            {referenceLineCard}
             <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
               Everything else (formats, layers, interactions) — ask the agent; it edits the spec directly.
             </Text>
           </Box>
+        ) : spec != null && Array.isArray((spec as Record<string, unknown>).layer) ? (
+          <Box display="flex" flexDirection="column" gap={2.5} py={1}>
+            {referenceLineCard}
+            <Text fontSize="xs" color="fg.subtle" lineHeight="1.6">
+              This spec uses layers — the other settings toggles only apply to simple charts. Edit via chat.
+            </Text>
+          </Box>
         ) : (
           <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
-            This spec uses layers/facets — settings toggles only apply to simple charts. Edit via chat.
+            This spec uses facets/concat — settings toggles only apply to simple charts. Edit via chat.
           </Text>
         )
       )}
