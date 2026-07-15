@@ -151,3 +151,40 @@ describe('QuestionViewV2 (mounted via QuestionContainerV2) — Redux integration
   });
 
 });
+
+describe('QuestionViewV2 — three-column layout (viz panel on the right)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('the viz panel is open by default and collapses to a slim strip via the handle chevron', () => {
+    const store = setup();
+    renderQuestion(store);
+
+    expect(screen.getByLabelText('Viz panel')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Collapse viz panel'));
+    expect(screen.queryByLabelText('Viz panel')).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('Expand viz panel'));
+    expect(screen.getByLabelText('Viz panel')).toBeInTheDocument();
+  });
+
+  it('the mode selector has no Viz tab in the wide layout — viz lives in the right panel', () => {
+    const store = setup();
+    renderQuestion(store);
+
+    expect(screen.getByLabelText('SQL')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Viz')).toBeNull();
+  });
+
+  it('the viz handle has chevrons on BOTH sides, like the left handle — the left one collapses the data panel', () => {
+    const store = setup();
+    renderQuestion(store);
+
+    fireEvent.click(screen.getByLabelText('Collapse data panel'));
+    expect(selectQuestionCollapsedPanel(store.getState())).toBe('right');
+    // the viz panel itself stays open
+    expect(screen.getByLabelText('Viz panel')).toBeInTheDocument();
+  });
+});

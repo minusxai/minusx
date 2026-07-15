@@ -32,7 +32,8 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { QuestionEmptyState } from '@/components/views/shared/empty-states';
 import type { FileId, FileState } from '@/store/filesSlice';
-import { QueryModeSelector, SemanticCanvas, type QueryTab } from '../query-builder';
+import { QueryModeSelector, SemanticExplorer, type QueryTab } from '../query-builder';
+import { VizPanel } from '../question/VizPanel';
 import { deriveModelStubs, type ModelStub } from '@/lib/semantic/derive';
 import { useSemanticModels } from '@/lib/hooks/use-semantic-models';
 import { VizTypeSelector } from '../question/VizTypeSelector';
@@ -151,11 +152,12 @@ export default function QuestionViewV2({
   const mainContentRef = useRef<HTMLDivElement>(null);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
 
-  // Resizable panel state
-  const [leftPanelWidth, setLeftPanelWidth] = useState(45); // percentage
+  // Resizable panel state. 38% (not 50/50) because the wide layout is three
+  // columns — query surface | data/plot | viz panel — and the chart needs room.
+  const [leftPanelWidth, setLeftPanelWidth] = useState(38); // percentage
   const [isResizing, setIsResizing] = useState(false);
   const resizeStartX = useRef<number>(0);
-  const resizeStartWidth = useRef<number>(45);
+  const resizeStartWidth = useRef<number>(38);
   const rafRef = useRef<number | null>(null);
   // Live geo map view getter — populated by the map (ChartBuilder/GeoPlot) when it
   // mounts, read by the VizConfigPanel "Pin current view" button (a sibling of the map).
@@ -224,18 +226,36 @@ export default function QuestionViewV2({
     filePath || '/org', content.connection_name, builderTables,
   );
   const showSemanticTab = semanticStubs.length > 0;
+
+  // Use compact layout when container is narrow (< 700px) - stacked vertical layout
+  const useCompactLayout = (containerWidth > 0 && containerWidth < 700) || !fullMode;
+
+  // The wide layout is THREE columns: query surface (GUI/SQL) | data/plot |
+  // viz panel. The Viz tab therefore leaves the mode selector and becomes the
+  // right-hand VizPanel column; compact (stacked) keeps the Viz tab since
+  // there is no room for a third column.
+  const showVizPanel = !useCompactLayout && showVizControls;
+  const [vizPanelOpen, setVizPanelOpen] = useState(true);
+  // Viz panel resize state (px width; the left panel resizes in % of the
+  // container, but the viz panel is a fixed-width tool column).
+  const [vizPanelWidth, setVizPanelWidth] = useState(300);
+  const [isVizResizing, setIsVizResizing] = useState(false);
+  const vizResizeStartX = useRef<number>(0);
+  const vizResizeStartWidth = useRef<number>(300);
+  const vizRafRef = useRef<number | null>(null);
+
   // Fully derived mode: until the user explicitly picks a tab, Semantic is the
   // resting state whenever the query detects. A Semantic choice that loses its
   // footing (SQL edited into something non-semantic, models removed) falls
-  // back to SQL rather than stranding the user on a dead tab.
+  // back to SQL rather than stranding the user on a dead tab. A Viz choice
+  // carried over from the compact layout lands on SQL — viz lives in the
+  // right-hand panel here.
   const semanticAvailable = showSemanticTab && (canUseSemantic || !!content.semanticQuery);
   const effectiveQueryMode: QueryTab =
     !userPickedMode && queryMode === 'sql' && detectedSemanticSpec ? 'semantic'
       : queryMode === 'semantic' && !semanticAvailable ? 'sql'
+      : queryMode === 'viz' && showVizPanel ? 'sql'
       : queryMode;
-
-  // Use compact layout when container is narrow (< 700px) - stacked vertical layout
-  const useCompactLayout = (containerWidth > 0 && containerWidth < 700) || !fullMode;
 
   // Handle panel resize
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -290,6 +310,41 @@ export default function QuestionViewV2({
       }
     };
   }, [isResizing, handleResizeMove, handleResizeEnd]);
+
+  // Viz panel resize (mirrors the left handle; drag left = wider panel)
+  const handleVizResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsVizResizing(true);
+    vizResizeStartX.current = e.clientX;
+    vizResizeStartWidth.current = vizPanelWidth;
+  }, [vizPanelWidth]);
+
+  useEffect(() => {
+    if (!isVizResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (vizRafRef.current) cancelAnimationFrame(vizRafRef.current);
+      vizRafRef.current = requestAnimationFrame(() => {
+        const delta = vizResizeStartX.current - e.clientX;
+        setVizPanelWidth(Math.max(240, Math.min(520, vizResizeStartWidth.current + delta)));
+      });
+    };
+    const handleMouseUp = () => {
+      if (vizRafRef.current) {
+        cancelAnimationFrame(vizRafRef.current);
+        vizRafRef.current = null;
+      }
+      setIsVizResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      if (vizRafRef.current) cancelAnimationFrame(vizRafRef.current);
+    };
+  }, [isVizResizing]);
 
   // Debounce timer ref for param/ref sync
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -405,6 +460,24 @@ export default function QuestionViewV2({
     onExecute(content.parameterValues ?? {});
   }, [onExecute, content.parameterValues]);
 
+  // Semantic auto-run: every shelf edit compiles fresh SQL into content.query;
+  // when enabled, that new query executes automatically (debounced) so the
+  // chart tracks the exploration with no Run clicks. Keyed on the compiled
+  // SQL — the ref remembers the last query already run (seeded with the
+  // mount-time query, whose results the container loads anyway).
+  const [semanticAutoRun, setSemanticAutoRun] = useState(true);
+  const lastAutoRunQuery = useRef<string | undefined>(content.query);
+  useEffect(() => {
+    if (!semanticAutoRun || effectiveQueryMode !== 'semantic' || isPreview || readOnly) return;
+    const query = content.query?.trim();
+    if (!query || query === lastAutoRunQuery.current?.trim()) return;
+    const timer = setTimeout(() => {
+      lastAutoRunQuery.current = content.query;
+      handleExecute();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [content.query, semanticAutoRun, effectiveQueryMode, isPreview, readOnly, handleExecute]);
+
   const debouncedQueryUpdate = useMemo(
     () => debounce((query: string) => onChange({ query }), 150),
     [onChange]
@@ -429,6 +502,62 @@ export default function QuestionViewV2({
       onChange({ parameters: updatedParams });
     }, 300);
   }, [onChange, parameters]);
+
+  // The full chart config block — rendered in the right-hand VizPanel column
+  // (wide layout) or under the Viz tab (compact layout). Assembled here so the
+  // handlers stay in one place regardless of where the block is mounted.
+  const vizConfigBody = queryData ? (
+    <Box px={3} py={2} display="flex" flexDirection="column" gap={0}>
+      <VizTypeSelector
+        value={content.vizSettings?.type || 'table'}
+        onChange={handleVizTypeChange}
+        orientation="grouped"
+      />
+      {content.vizSettings?.type === 'table' && (
+        <TableConditionalFormatPanel
+          columns={queryData.columns}
+          rules={content.vizSettings?.conditionalFormats ?? undefined}
+          onChange={handleConditionalFormatsChange}
+        />
+      )}
+      {content.vizSettings?.type && content.vizSettings.type !== 'table' && (
+        <VizConfigPanel
+          columns={queryData.columns}
+          types={queryData.types}
+          chartType={content.vizSettings.type}
+          initialXCols={content.vizSettings?.xCols ?? undefined}
+          initialYCols={content.vizSettings?.yCols ?? undefined}
+          initialYRightCols={content.vizSettings?.yRightCols ?? undefined}
+          onAxisChange={handleAxisChange}
+          onYRightColsChange={handleYRightColsChange}
+          initialTooltipCols={content.vizSettings?.tooltipCols ?? undefined}
+          onTooltipColsChange={handleTooltipColsChange}
+          initialPivotConfig={content.vizSettings?.pivotConfig ?? undefined}
+          onPivotConfigChange={handlePivotConfigChange}
+          initialGeoConfig={content.vizSettings?.geoConfig ?? undefined}
+          onGeoConfigChange={handleGeoConfigChange}
+          initialColumnFormats={content.vizSettings?.columnFormats ?? undefined}
+          onColumnFormatsChange={handleColumnFormatsChange}
+          styleConfig={content.vizSettings?.styleConfig ?? undefined}
+          onStyleConfigChange={handleStyleConfigChange}
+          axisConfig={content.vizSettings?.axisConfig ?? undefined}
+          onAxisConfigChange={handleAxisConfigChange}
+          annotations={content.vizSettings?.annotations ?? undefined}
+          onAnnotationsChange={handleAnnotationsChange}
+          trendConfig={content.vizSettings?.trendConfig ?? undefined}
+          onTrendConfigChange={handleTrendConfigChange}
+          seriesCount={chartSeriesCount}
+          getMapView={getMapView}
+        />
+      )}
+    </Box>
+  ) : (
+    <Box px={3} py={4}>
+      <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
+        Run the query to configure the viz.
+      </Text>
+    </Box>
+  );
 
   return (
     <Box
@@ -522,7 +651,7 @@ export default function QuestionViewV2({
                     onModeChange={(m: QueryTab) => { setUserPickedMode(true); setQueryMode(m); }}
                     showSemanticTab={showSemanticTab}
                     canUseSemantic={canUseSemantic}
-                    showVizTab={showVizControls}
+                    showVizTab={showVizControls && useCompactLayout}
                     canUseViz={!!queryData}
                   />
                 </Box>
@@ -558,16 +687,16 @@ export default function QuestionViewV2({
                   />
                 )}
 
-                {/* Semantic Mode: the drag-drop canvas (fields → shelves).
-                    Prefer the spec DETECTED from the live SQL (covers
-                    agent-written queries) over the persisted one. Shelf edits
-                    imply the viz: axis columns always track the query; the
-                    chart TYPE is only auto-set while it's still in the default
-                    family (table/bar/line) — a deliberate pick like pie or
-                    pivot from the Viz tab is respected. */}
+                {/* Semantic Mode: the click-to-toggle explorer (shelves on top,
+                    field columns below). Prefer the spec DETECTED from the
+                    live SQL (covers agent-written queries) over the persisted
+                    one. Shelf edits imply the viz: axis columns always track
+                    the query; the chart TYPE is only auto-set while it's still
+                    in the default family (table/bar/line) — a deliberate pick
+                    like pie or pivot from the viz panel is respected. */}
                 {effectiveQueryMode === 'semantic' && showSemanticTab && (
                   <Box flex={1} overflow="hidden" display="flex" flexDirection="column" minHeight={0}>
-                    <SemanticCanvas
+                    <SemanticExplorer
                       models={semanticModels}
                       stubs={semanticStubs}
                       onSelectModel={(stub: ModelStub) => setPickedTables((prev) => prev.includes(stub.table) ? prev : [...prev, stub.table])}
@@ -590,55 +719,17 @@ export default function QuestionViewV2({
                       }}
                       onExecute={handleExecute}
                       isExecuting={queryLoading && !queryData}
+                      autoRun={semanticAutoRun}
+                      onToggleAutoRun={() => setSemanticAutoRun((a) => !a)}
                     />
                   </Box>
                 )}
 
-                {/* Viz Mode: Chart type selector + axis config */}
-                {effectiveQueryMode === 'viz' && queryData && (
-                  <Box flex={1} overflow="auto" px={3} py={2} display="flex" flexDirection="column" gap={0}>
-                    <VizTypeSelector
-                      value={content.vizSettings?.type || 'table'}
-                      onChange={handleVizTypeChange}
-                      orientation="grouped"
-                    />
-                    {content.vizSettings?.type === 'table' && (
-                      <TableConditionalFormatPanel
-                        columns={queryData.columns}
-                        rules={content.vizSettings?.conditionalFormats ?? undefined}
-                        onChange={handleConditionalFormatsChange}
-                      />
-                    )}
-                    {content.vizSettings?.type && content.vizSettings.type !== 'table' && (
-                      <VizConfigPanel
-                        columns={queryData.columns}
-                        types={queryData.types}
-                        chartType={content.vizSettings.type}
-                        initialXCols={content.vizSettings?.xCols ?? undefined}
-                        initialYCols={content.vizSettings?.yCols ?? undefined}
-                        initialYRightCols={content.vizSettings?.yRightCols ?? undefined}
-                        onAxisChange={handleAxisChange}
-                        onYRightColsChange={handleYRightColsChange}
-                        initialTooltipCols={content.vizSettings?.tooltipCols ?? undefined}
-                        onTooltipColsChange={handleTooltipColsChange}
-                        initialPivotConfig={content.vizSettings?.pivotConfig ?? undefined}
-                        onPivotConfigChange={handlePivotConfigChange}
-                        initialGeoConfig={content.vizSettings?.geoConfig ?? undefined}
-                        onGeoConfigChange={handleGeoConfigChange}
-                        initialColumnFormats={content.vizSettings?.columnFormats ?? undefined}
-                        onColumnFormatsChange={handleColumnFormatsChange}
-                        styleConfig={content.vizSettings?.styleConfig ?? undefined}
-                        onStyleConfigChange={handleStyleConfigChange}
-                        axisConfig={content.vizSettings?.axisConfig ?? undefined}
-                        onAxisConfigChange={handleAxisConfigChange}
-                        annotations={content.vizSettings?.annotations ?? undefined}
-                        onAnnotationsChange={handleAnnotationsChange}
-                        trendConfig={content.vizSettings?.trendConfig ?? undefined}
-                        onTrendConfigChange={handleTrendConfigChange}
-                        seriesCount={chartSeriesCount}
-                        getMapView={getMapView}
-                      />
-                    )}
+                {/* Viz Mode (compact layout only): the same config block the
+                    wide layout shows in the right-hand VizPanel column */}
+                {effectiveQueryMode === 'viz' && (
+                  <Box flex={1} overflow="auto">
+                    {vizConfigBody}
                   </Box>
                 )}
               </Box>
@@ -776,7 +867,7 @@ export default function QuestionViewV2({
             minHeight="0"
             overflow="hidden"
             // my={!useCompactLayout ? 2 : 0}
-            mr={!useCompactLayout ? 2 : 0}
+            mr={!useCompactLayout && !showVizPanel ? 2 : 0}
           >
             {parameters.length > 0 && (
               <ParameterRow
@@ -827,16 +918,161 @@ export default function QuestionViewV2({
                 onMapReady={handleMapReady}
                 onSeriesCountChange={setChartSeriesCount}
                 onOpenVizTab={() => {
-                  if (collapsedPanel === 'left') toggleCollapsedPanel('none');
-                  setQueryMode('viz');
+                  if (showVizPanel) {
+                    setVizPanelOpen(true);
+                  } else {
+                    if (collapsedPanel === 'left') toggleCollapsedPanel('none');
+                    setQueryMode('viz');
+                  }
                 }}
                 onHideVizTab={() => {
-                  toggleCollapsedPanel('left');
+                  if (showVizPanel) setVizPanelOpen(false);
+                  else toggleCollapsedPanel('left');
                 }}
-                vizTabOpen={queryMode === 'viz' && collapsedPanel !== 'left'}
+                vizTabOpen={showVizPanel ? vizPanelOpen : (queryMode === 'viz' && collapsedPanel !== 'left')}
               />
             )}
           </Box>
+          {/* End Center Panel */}
+
+          {/* Viz Panel Resize Handle — mirrors the left handle */}
+          {showVizPanel && vizPanelOpen && (
+            <Box
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              width="8px"
+              cursor="col-resize"
+              onMouseDown={handleVizResizeStart}
+              userSelect="none"
+              flexShrink={0}
+              position="relative"
+              role="group"
+            >
+              <Box
+                position="absolute"
+                top="0"
+                bottom="0"
+                width="2px"
+                bg={isVizResizing ? 'accent.teal' : 'border.muted'}
+                _groupHover={{ bg: 'accent.teal' }}
+                transition="all 0.15s ease"
+                borderRadius="full"
+              />
+              <Box
+                position="absolute"
+                top="50%"
+                transform="translateY(-50%)"
+                display="flex"
+                flexDirection="column"
+                alignItems="center"
+                justifyContent="center"
+                width="20px"
+                height="72px"
+                bg={isVizResizing ? 'accent.teal' : 'bg.emphasized'}
+                _groupHover={{ bg: 'accent.teal' }}
+                borderRadius="md"
+                transition="all 0.15s ease"
+                boxShadow="sm"
+                gap={0}
+              >
+                <Box
+                  cursor="pointer"
+                  p={1}
+                  borderRadius="sm"
+                  onClick={() => toggleCollapsedPanel('right')}
+                  onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                  aria-label="Collapse data panel"
+                  role="button"
+                  _hover={{ opacity: 0.7 }}
+                >
+                  <Box
+                    as={LuChevronLeft}
+                    fontSize="xs"
+                    color={isVizResizing ? 'white' : 'fg.muted'}
+                    _groupHover={{ color: 'white' }}
+                  />
+                </Box>
+                <Box
+                  as={LuGripVertical}
+                  fontSize="sm"
+                  color={isVizResizing ? 'white' : 'fg.muted'}
+                  _groupHover={{ color: 'white' }}
+                  transition="color 0.15s ease"
+                />
+                <Box
+                  cursor="pointer"
+                  p={1}
+                  borderRadius="sm"
+                  onClick={() => setVizPanelOpen(false)}
+                  onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                  aria-label="Collapse viz panel"
+                  role="button"
+                  _hover={{ opacity: 0.7 }}
+                >
+                  <Box
+                    as={LuChevronRight}
+                    fontSize="xs"
+                    color={isVizResizing ? 'white' : 'fg.muted'}
+                    _groupHover={{ color: 'white' }}
+                  />
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {/* Right Column: the viz panel — chart config for ALL questions */}
+          {showVizPanel && vizPanelOpen && (
+            <Box
+              width={`${vizPanelWidth}px`}
+              flexShrink={0}
+              my={2}
+              mr={2}
+              borderRadius="lg"
+              border="1px solid"
+              borderColor="border.muted"
+              bg="bg.canvas"
+              overflow="hidden"
+            >
+              <VizPanel>
+                {vizConfigBody}
+              </VizPanel>
+            </Box>
+          )}
+
+          {/* Collapsed Viz Panel Strip */}
+          {showVizPanel && !vizPanelOpen && (
+            <Box
+              bg="accent.teal/30"
+              border="1px solid"
+              borderColor="accent.teal"
+              width="36px"
+              flexShrink={0}
+              display="flex"
+              flexDirection="column"
+              alignItems="center"
+              justifyContent="center"
+              cursor="pointer"
+              onClick={() => setVizPanelOpen(true)}
+              aria-label="Expand viz panel"
+              role="button"
+              _hover={{ bg: 'accent.teal/50' }}
+              my={2}
+              mr={2}
+              borderRadius="lg"
+              gap={2}
+            >
+              <Box color="fg.default"><LuChevronLeft size={14} /></Box>
+              <Text
+                fontSize="xs"
+                color="fg.default"
+                fontWeight="600"
+                style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+              >
+                Viz
+              </Text>
+            </Box>
+          )}
         </Box>
         )}
       </Box>

@@ -1,22 +1,26 @@
 'use client';
 
 /**
- * SemanticCanvas — the semantic query editor (the Semantic tab).
+ * SemanticExplorer — the semantic query surface (the GUI tab), PyGWalker/
+ * ThoughtSpot style.
  *
- * Two panes:
- *  - LEFT (the picker, scrolls independently): the FULL field list of the
- *    current model — measures, dimensions, time — always visible. The search
- *    bar on top FILTERS this list as you type (it shrinks), and additionally
- *    surfaces matching fields from OTHER whitelisted tables (server search,
- *    POST /api/semantic-models {q}) — picking one of those switches the model.
- *    With no model picked yet, the picker lists every whitelisted table to
- *    browse, so there is never a blank screen.
- *  - RIGHT (static, never scrolls away): what's currently selected — measure/
- *    dimension chips (removable), the time grain, filters, limit, execute.
+ * TOP (never scrolls away):
+ *  - the shelves first: what's currently selected — Measures / Dimensions /
+ *    Time / Filters chips (removable), plus the row limit;
+ *  - then a compact strip: the table chip, the field search, validation, Run.
+ * BELOW (fills the panel): the FULL field vocabulary of the current model in
+ * two scrollable columns — Dimensions with Time beneath (neither list is
+ * usually long) | Measures — so the whole vocabulary is visible at once.
  *
  * Interaction is CLICK-TO-TOGGLE — no drag and drop. Every field has exactly
- * one home (measure → Measures, dimension → Dimensions, time → Time), so a
- * click is unambiguous; dragging would add ceremony without choices.
+ * one home (dimension → Dimensions, measure → Measures, temporal → Time), so
+ * a click is unambiguous; dragging would add ceremony without choices.
+ *
+ * The search bar FILTERS the columns as you type (they shrink), and
+ * additionally surfaces matching fields from OTHER whitelisted tables
+ * (server search, POST /api/semantic-models {q}) — picking one switches the
+ * model. With no model picked yet, the columns give way to a browsable table
+ * list, so there is never a blank screen.
  *
  * Every edit compiles the spec to dialect SQL client-side
  * (compileSemanticQuery → irToSqlLocal) and emits `(spec, sql, viz)` — the viz
@@ -24,8 +28,8 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Box, VStack, HStack, Text, Button, Input, Icon } from '@chakra-ui/react';
-import { LuPlay, LuSigma, LuGroup, LuClock, LuSearch, LuTriangleAlert, LuX, LuTable, LuCheck } from 'react-icons/lu';
+import { Box, VStack, HStack, Text, Button, Input, Icon, Grid } from '@chakra-ui/react';
+import { LuPlay, LuPause, LuRefreshCw, LuSigma, LuGroup, LuClock, LuSearch, LuTriangleAlert, LuX, LuTable, LuCheck, LuListFilter } from 'react-icons/lu';
 import { compileSemanticQuery, validateSemanticQuery, semanticAlias } from '@/lib/semantic/compile';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { searchFields, type SemanticFieldHit } from '@/lib/semantic/models-client';
@@ -45,7 +49,7 @@ export interface SemanticVizAssignment {
   yCols: string[];
 }
 
-interface SemanticCanvasProps {
+interface SemanticExplorerProps {
   /** Full models loaded for the tables in play (fetched on demand). */
   models: SemanticModel[];
   /** One cheap stub per whitelisted table — the empty-state table list. */
@@ -62,6 +66,9 @@ interface SemanticCanvasProps {
   onChange: (spec: SemanticQuerySpec, sql: string, viz: SemanticVizAssignment) => void;
   onExecute?: () => void;
   isExecuting?: boolean;
+  /** Auto-run state, owned by the parent (undefined = no auto-run support). */
+  autoRun?: boolean;
+  onToggleAutoRun?: () => void;
 }
 
 const specForStub = (stub: ModelStub): SemanticQuerySpec => ({
@@ -89,7 +96,7 @@ const matches = (q: string, name: string) => {
   return tokens.every((t) => name.toLowerCase().includes(t));
 };
 
-export function SemanticCanvas({
+export function SemanticExplorer({
   models,
   stubs,
   onSelectModel,
@@ -100,7 +107,9 @@ export function SemanticCanvas({
   onChange,
   onExecute,
   isExecuting = false,
-}: SemanticCanvasProps) {
+  autoRun,
+  onToggleAutoRun,
+}: SemanticExplorerProps) {
   const [spec, setSpec] = useState<SemanticQuerySpec | null>(() => value ?? null);
   const [browsingTables, setBrowsingTables] = useState(false);
   const [query, setQuery] = useState('');
@@ -118,7 +127,7 @@ export function SemanticCanvas({
       const sql = irToSqlLocal(compileSemanticQuery(next, nextModel), dialect);
       onChange(next, sql, vizOf(next));
     } catch (err) {
-      console.error('[SemanticCanvas] compile failed:', err);
+      console.error('[SemanticExplorer] compile failed:', err);
     }
   }, [dialect, onChange]);
 
@@ -174,7 +183,7 @@ export function SemanticCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [models, spec?.model, spec?.measures.length]);
 
-  // --- cross-table search (feeds the "Other tables" section of the picker) ----
+  // --- cross-table search (feeds the "Other tables" strip) --------------------
 
   const runSearch = useCallback((q: string) => {
     setQuery(q);
@@ -208,54 +217,7 @@ export function SemanticCanvas({
     setOtherHits([]);
   }, [onSelectModel]);
 
-  // --- left pane (the picker) ---------------------------------------------------
-
-  const searchBar = (
-    <HStack gap={1.5} px={2} bg="bg.surface" borderRadius="md" border="1px solid" borderColor="border.muted" flexShrink={0}>
-      <LuSearch size={13} color="var(--chakra-colors-fg-subtle)" />
-      <Input
-        aria-label="Semantic field search"
-        variant="subtle"
-        bg="transparent"
-        size="sm"
-        fontFamily="mono"
-        fontSize="xs"
-        border="none"
-        placeholder={model ? 'Filter measures & dimensions…' : 'Search fields across all tables…'}
-        value={query}
-        onChange={(e) => runSearch(e.target.value)}
-      />
-    </HStack>
-  );
-
-  const fieldRow = (label: string, assigned: boolean, icon: React.ReactNode, onClick: () => void, ariaLabel: string) => (
-    <HStack
-      key={ariaLabel}
-      aria-label={ariaLabel}
-      as="button"
-      gap={1.5} px={2} py={1}
-      bg={assigned ? 'accent.teal/10' : 'transparent'}
-      borderRadius="md" border="1px solid"
-      borderColor={assigned ? 'accent.teal' : 'border.default'}
-      cursor="pointer"
-      _hover={{ bg: assigned ? 'accent.teal/15' : 'bg.muted' }}
-      onClick={onClick}
-      userSelect="none"
-      width="100%"
-      textAlign="left"
-      flexShrink={0}
-    >
-      {icon}
-      <Text fontSize="xs" fontFamily="mono" truncate flex={1}>{label}</Text>
-      {assigned && <LuCheck size={12} color="var(--chakra-colors-accent-teal)" />}
-    </HStack>
-  );
-
-  const sectionHeader = (label: string) => (
-    <Text key={`hdr-${label}`} fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" flexShrink={0}>
-      {label}
-    </Text>
-  );
+  // --- field vocabulary, split by home column ----------------------------------
 
   // The effective time axis (spec.timeColumn overrides the model default).
   const effectiveTimeColumn = spec?.timeColumn ?? model?.timeDimension?.column;
@@ -264,8 +226,6 @@ export function SemanticCanvas({
         ?? model.timeDimension?.label ?? model.timeDimension?.column ?? 'Time')
     : 'Time';
 
-  // Model picked: full field list, filtered (shrunk) by the query. Temporal
-  // base columns render as time rows (clock) — clicking one makes it the axis.
   const visibleMeasures = model ? model.measures.filter((m) => matches(query, m.name)) : [];
   const temporalDims = model ? model.dimensions.filter((d) => d.temporal && !d.join) : [];
   const visibleTemporal = temporalDims.filter((d) => matches(query, d.name));
@@ -279,9 +239,34 @@ export function SemanticCanvas({
   // Cross-table hits, minus the current model's own fields (already listed).
   const foreignHits = otherHits.filter((h) => h.model !== spec?.model).slice(0, 20);
 
-  const picker = (
-    <VStack align="stretch" gap={2} w="240px" flexShrink={0} minH={0} maxH="100%">
-      {searchBar}
+  const fieldRow = (label: string, assigned: boolean, accent: string, icon: React.ReactNode, onClick: () => void, ariaLabel: string) => (
+    <HStack
+      key={ariaLabel}
+      aria-label={ariaLabel}
+      as="button"
+      gap={1.5} px={2} py={1}
+      bg={assigned ? `${accent}/10` : 'transparent'}
+      borderRadius="md" border="1px solid"
+      borderColor={assigned ? accent : 'transparent'}
+      cursor="pointer"
+      _hover={{ bg: assigned ? `${accent}/15` : 'bg.muted' }}
+      onClick={onClick}
+      userSelect="none"
+      width="100%"
+      textAlign="left"
+      flexShrink={0}
+      transition="background 0.1s ease"
+    >
+      {icon}
+      <Text fontSize="xs" fontFamily="mono" truncate flex={1}>{label}</Text>
+      {assigned && <Box flexShrink={0}><LuCheck size={12} color={`var(--chakra-colors-${accent.replace('.', '-')})`} /></Box>}
+    </HStack>
+  );
+
+  // --- top strip: table chip + search + validation + run ------------------------
+
+  const topStrip = (
+    <HStack px={3} py={2} gap={2} flexShrink={0} borderBottom="1px solid" borderColor="border.muted">
       {spec && (
         <HStack
           as="button"
@@ -292,132 +277,123 @@ export function SemanticCanvas({
           _hover={{ bg: 'bg.muted' }}
           onClick={() => setBrowsingTables((b) => !b)}
           flexShrink={0}
+          maxW="200px"
           title="Pick a different table (starts a fresh query)"
         >
-          <Icon as={LuTable} boxSize={3} color="fg.muted" flexShrink={0} />
-          <Text fontSize="xs" fontFamily="mono" truncate flex={1} textAlign="left">{spec.model}</Text>
-          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">change ▾</Text>
+          <Icon as={LuTable} boxSize={3} color="accent.teal" flexShrink={0} />
+          <Text fontSize="xs" fontFamily="mono" fontWeight="600" truncate>{spec.model}</Text>
+          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">▾</Text>
         </HStack>
       )}
-      <VStack align="stretch" gap={1.5} overflowY="auto" minH={0} flex={1} pr={1}>
-        {!spec || browsingTables ? (
-          <>
-            {sectionHeader('Tables')}
-            {stubs
-              .filter((st) => matches(query, st.name))
-              .slice(0, 200)
-              .map((st) => fieldRow(
-                st.name, false,
-                <Icon as={LuTable} boxSize={3} color="fg.muted" flexShrink={0} />,
-                () => pickStub(st),
-                `Pick table: ${st.name}`,
-              ))}
-          </>
-        ) : !model ? (
-          <Text fontSize="xs" color="fg.subtle" fontFamily="mono">Loading {spec.model}…</Text>
-        ) : (
-          <>
-            {visibleMeasures.length > 0 && sectionHeader('Measures')}
-            {visibleMeasures.map((m) => fieldRow(
-              m.name,
-              spec.measures.includes(m.name),
-              <LuSigma size={12} color="var(--chakra-colors-accent-primary)" />,
-              () => toggleMeasure(m.name),
-              `Field measure: ${m.name}`,
-            ))}
-            {(visibleDimensions.length > 0 || visibleTemporal.length > 0 || visibleDefaultTime) && sectionHeader('Dimensions')}
-            {visibleDefaultTime && fieldRow(
-              defaultTimeLabel,
-              !!spec.timeGrain && effectiveTimeColumn === model.timeDimension!.column,
-              <LuClock size={12} color="var(--chakra-colors-accent-secondary)" />,
-              () => toggleTime(model.timeDimension!.column),
-              `Field time: ${defaultTimeLabel}`,
-            )}
-            {visibleTemporal.map((d) => fieldRow(
-              d.name,
-              (!!spec.timeGrain && effectiveTimeColumn === d.column) || spec.dimensions.includes(d.name),
-              <LuClock size={12} color="var(--chakra-colors-accent-secondary)" />,
-              () => (spec.dimensions.includes(d.name) ? toggleDimension(d.name) : toggleTime(d.column)),
-              `Field time: ${d.name}`,
-            ))}
-            {visibleDimensions.map((d) => fieldRow(
-              d.name,
-              spec.dimensions.includes(d.name),
-              <LuGroup size={12} color="var(--chakra-colors-accent-warning)" />,
-              () => toggleDimension(d.name),
-              `Field dimension: ${d.name}`,
-            ))}
-          </>
-        )}
-        {foreignHits.length > 0 && (
-          <>
-            {sectionHeader('Other tables')}
-            {foreignHits.map((h) => (
-              <HStack
-                key={`${h.kind}:${h.model}:${h.name}`}
-                aria-label={`Other table field ${h.kind}: ${h.name} (${h.model})`}
-                as="button"
-                gap={1.5} px={2} py={1}
-                borderRadius="md" border="1px dashed" borderColor="border.muted"
-                _hover={{ bg: 'bg.muted' }}
-                onClick={() => pickOtherHit(h)}
-                width="100%"
-                textAlign="left"
-                flexShrink={0}
-              >
-                {h.kind === 'measure'
-                  ? <LuSigma size={12} color="var(--chakra-colors-accent-primary)" />
-                  : <LuGroup size={12} color="var(--chakra-colors-accent-warning)" />}
-                <Text fontSize="xs" fontFamily="mono" flex={1} truncate>{h.name}</Text>
-                <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate maxW="90px">{h.model}</Text>
-              </HStack>
-            ))}
-          </>
-        )}
-      </VStack>
-    </VStack>
+      <HStack gap={1.5} px={2} flex={1} minW={0} bg="bg.surface" borderRadius="md" border="1px solid" borderColor="border.muted">
+        <LuSearch size={13} color="var(--chakra-colors-fg-subtle)" />
+        <Input
+          aria-label="Semantic field search"
+          variant="subtle"
+          bg="transparent"
+          size="xs"
+          fontFamily="mono"
+          fontSize="xs"
+          border="none"
+          placeholder={model ? 'Filter fields…' : 'Search fields across all tables…'}
+          value={query}
+          onChange={(e) => runSearch(e.target.value)}
+        />
+      </HStack>
+      {spec && issues.length > 0 && (
+        <HStack gap={1} color="orange.400" flexShrink={0} title={issues[0]}>
+          <LuTriangleAlert size={13} />
+          <Text fontSize="2xs" fontFamily="mono" maxW="140px" truncate>{issues[0]}</Text>
+        </HStack>
+      )}
+      {spec && onToggleAutoRun && (
+        <HStack
+          as="button"
+          aria-label="Toggle auto-run"
+          onClick={onToggleAutoRun}
+          gap={1} px={2} py={1}
+          borderRadius="md" border="1px solid"
+          borderColor={autoRun ? 'accent.teal' : 'border.muted'}
+          bg={autoRun ? 'accent.teal/10' : 'transparent'}
+          color={autoRun ? 'accent.teal' : 'fg.subtle'}
+          cursor="pointer"
+          _hover={{ bg: autoRun ? 'accent.teal/15' : 'bg.muted' }}
+          flexShrink={0}
+          title={autoRun ? 'Auto-run is on: every edit executes automatically' : 'Auto-run is off: use Run'}
+        >
+          {autoRun ? <LuRefreshCw size={11} /> : <LuPause size={11} />}
+          <Text fontSize="2xs" fontFamily="mono" fontWeight="600">Auto</Text>
+        </HStack>
+      )}
+      {spec && onExecute && (
+        <Button
+          aria-label="Execute semantic query"
+          onClick={onExecute}
+          size="xs"
+          loading={isExecuting}
+          bg="accent.teal"
+          color="white"
+          _hover={{ opacity: 0.9 }}
+          fontWeight="600"
+          fontFamily="mono"
+          px={3}
+          flexShrink={0}
+          disabled={issues.length > 0}
+        >
+          <LuPlay size={12} fill="currentColor" />
+          Run
+        </Button>
+      )}
+    </HStack>
   );
 
-  // --- right pane (static selection summary) -----------------------------------
+  // --- shelves: the current selection, always visible on top --------------------
 
-  const selection = !spec ? (
-    <VStack align="stretch" gap={2} flex={1} minW={0} pt={8}>
-      <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center">
-        Pick a table on the left, or search for a measure or dimension.
-      </Text>
-    </VStack>
-  ) : (
-    <VStack align="stretch" gap={3} flex={1} minW={0} overflowY="auto">
-      <Box>
-        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
-          {spec.model}
-        </Text>
-        <SelectionGroup label="Measures">
+  const shelfLabel = (label: string, empty: boolean) => (
+    <Text
+      fontSize="2xs" fontWeight="700" color="fg.subtle"
+      textTransform="uppercase" letterSpacing="0.06em"
+      opacity={empty ? 0.45 : 1}
+      flexShrink={0}
+    >
+      {label}
+    </Text>
+  );
+
+  const shelves = spec && (
+    <Box aria-label="Semantic shelves" px={3} py={2} flexShrink={0} borderBottom="1px solid" borderColor="border.muted" bg="bg.surface">
+      <HStack gap={4} rowGap={1.5} flexWrap="wrap" align="center">
+        <HStack gap={1.5} align="center" flexWrap="wrap">
+          {shelfLabel('Measures', spec.measures.length === 0)}
           {spec.measures.map((name) => (
             <ShelfChip
               key={name}
               label={`Measures chip: ${name}`}
+              accent="accent.primary"
               onRemove={spec.measures.length > 1 ? () => update({ measures: spec.measures.filter((m) => m !== name) }) : undefined}
             >
               <Text fontSize="xs" fontFamily="mono">{name}</Text>
             </ShelfChip>
           ))}
-        </SelectionGroup>
-        <SelectionGroup label="Dimensions">
+        </HStack>
+        <HStack gap={1.5} align="center" flexWrap="wrap">
+          {shelfLabel('Dimensions', spec.dimensions.length === 0)}
           {spec.dimensions.map((name) => (
             <ShelfChip
               key={name}
               label={`Dimensions chip: ${name}`}
+              accent="accent.warning"
               onRemove={() => update({ dimensions: spec.dimensions.filter((d) => d !== name) })}
             >
               <Text fontSize="xs" fontFamily="mono">{name}</Text>
             </ShelfChip>
           ))}
-        </SelectionGroup>
+        </HStack>
         {model?.timeDimension && (
-          <SelectionGroup label="Time">
+          <HStack gap={1.5} align="center" flexWrap="wrap">
+            {shelfLabel('Time', !spec.timeGrain)}
             {spec.timeGrain && (
-              <ShelfChip label={`Time chip: ${timeLabel}`} onRemove={() => update({ timeGrain: undefined })}>
+              <ShelfChip label={`Time chip: ${timeLabel}`} accent="accent.secondary" onRemove={() => update({ timeGrain: undefined })}>
                 <Text fontSize="xs" fontFamily="mono">{timeLabel}</Text>
                 <select
                   aria-label="Time grain"
@@ -430,13 +406,15 @@ export function SemanticCanvas({
                 </select>
               </ShelfChip>
             )}
-          </SelectionGroup>
+          </HStack>
         )}
-        <SelectionGroup label="Filters">
+        <HStack gap={1.5} align="center" flexWrap="wrap">
+          {shelfLabel('Filters', (spec.filters ?? []).length === 0)}
           {(spec.filters ?? []).map((f, idx) => (
             <ShelfChip
               key={`${f.dimension}-${idx}`}
               label={`Filter chip: ${f.dimension}`}
+              accent="accent.cyan"
               onRemove={() => update({ filters: (spec.filters ?? []).filter((_, i) => i !== idx) })}
             >
               <Text fontSize="xs" fontFamily="mono">
@@ -452,15 +430,12 @@ export function SemanticCanvas({
               onAdd={(filter) => update({ filters: [...(spec.filters ?? []), filter] })}
             />
           )}
-        </SelectionGroup>
-      </Box>
-
-      <HStack justify="space-between" align="center">
-        <HStack gap={2}>
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono">Limit</Text>
+        </HStack>
+        <HStack gap={1.5} align="center" ml="auto">
+          {shelfLabel('Limit', !spec.limit)}
           <Input
             aria-label="Semantic row limit"
-            size="xs" width="90px" type="number" fontFamily="mono"
+            size="2xs" width="64px" type="number" fontFamily="mono" fontSize="xs"
             value={spec.limit ?? ''}
             placeholder="1000"
             onChange={(e) => {
@@ -469,42 +444,174 @@ export function SemanticCanvas({
             }}
           />
         </HStack>
-        {issues.length > 0 && (
-          <HStack gap={1.5} color="orange.400">
-            <LuTriangleAlert size={12} />
-            <Text fontSize="xs" fontFamily="mono">{issues[0]}</Text>
-          </HStack>
-        )}
       </HStack>
+    </Box>
+  );
 
-      {onExecute && (
-        <Button
-          aria-label="Execute semantic query"
-          onClick={onExecute}
-          size="lg"
-          loading={isExecuting}
-          loadingText="Running..."
-          width="full"
-          bg="accent.teal"
-          color="white"
-          _hover={{ opacity: 0.9, transform: 'translateY(-1px)' }}
-          transition="all 0.2s ease"
-          fontWeight="600"
-          letterSpacing="0.02em"
-          disabled={issues.length > 0}
-        >
-          <LuPlay size={18} fill="white" />
-          <Text ml={2} fontFamily="mono">Execute</Text>
-        </Button>
-      )}
+  // --- field columns -------------------------------------------------------------
+
+  // A labeled field section with a sticky header; the parent column scrolls.
+  // Non-first sections (Time, under Dimensions) get a top border to separate
+  // them from the rows above.
+  const fieldSection = (
+    ariaLabel: string,
+    label: string,
+    icon: React.ReactNode,
+    count: number,
+    rows: React.ReactNode,
+    emptyText: string,
+    first = true,
+  ) => (
+    <Box aria-label={ariaLabel} display="flex" flexDirection="column" minW={0}>
+      <HStack
+        gap={1.5} px={2.5} py={1.5} flexShrink={0}
+        borderBottom="1px solid" borderColor="border.muted"
+        {...(first ? {} : { borderTop: '1px solid', borderTopColor: 'border.muted' })}
+        position="sticky" top={0} bg="bg.muted" zIndex={1}
+      >
+        {icon}
+        <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">{label}</Text>
+        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" ml="auto">{count}</Text>
+      </HStack>
+      <VStack align="stretch" gap={1} px={1.5} py={1.5}>
+        {count === 0
+          ? <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" px={1} py={1}>{emptyText}</Text>
+          : rows}
+      </VStack>
+    </Box>
+  );
+
+  // Two columns: Dimensions with Time beneath (neither list is usually long),
+  // Measures on the right.
+  const columns = model && spec && (
+    <Grid templateColumns="minmax(0,1fr) minmax(0,1fr)" flex={1} minH={0}>
+      <Box borderRight="1px solid" borderColor="border.muted" overflowY="auto" minH={0} minW={0}>
+        {fieldSection(
+          'Dimensions column', 'Dimensions',
+          <LuGroup size={11} color="var(--chakra-colors-accent-warning)" />,
+          visibleDimensions.length,
+          visibleDimensions.map((d) => fieldRow(
+            d.name,
+            spec.dimensions.includes(d.name),
+            'accent.warning',
+            <LuGroup size={12} color="var(--chakra-colors-accent-warning)" />,
+            () => toggleDimension(d.name),
+            `Field dimension: ${d.name}`,
+          )),
+          query ? 'No matches' : 'No dimensions',
+        )}
+        {fieldSection(
+          'Time column', 'Time',
+          <LuClock size={11} color="var(--chakra-colors-accent-secondary)" />,
+          visibleTemporal.length + (visibleDefaultTime ? 1 : 0),
+          <>
+            {visibleDefaultTime && fieldRow(
+              defaultTimeLabel,
+              !!spec.timeGrain && effectiveTimeColumn === model.timeDimension!.column,
+              'accent.secondary',
+              <LuClock size={12} color="var(--chakra-colors-accent-secondary)" />,
+              () => toggleTime(model.timeDimension!.column),
+              `Field time: ${defaultTimeLabel}`,
+            )}
+            {visibleTemporal.map((d) => fieldRow(
+              d.name,
+              (!!spec.timeGrain && effectiveTimeColumn === d.column) || spec.dimensions.includes(d.name),
+              'accent.secondary',
+              <LuClock size={12} color="var(--chakra-colors-accent-secondary)" />,
+              () => (spec.dimensions.includes(d.name) ? toggleDimension(d.name) : toggleTime(d.column)),
+              `Field time: ${d.name}`,
+            ))}
+          </>,
+          query ? 'No matches' : 'No time fields',
+          false,
+        )}
+      </Box>
+      <Box overflowY="auto" minH={0} minW={0}>
+        {fieldSection(
+          'Measures column', 'Measures',
+          <LuSigma size={11} color="var(--chakra-colors-accent-primary)" />,
+          visibleMeasures.length,
+          visibleMeasures.map((m) => fieldRow(
+            m.name,
+            spec.measures.includes(m.name),
+            'accent.primary',
+            <LuSigma size={12} color="var(--chakra-colors-accent-primary)" />,
+            () => toggleMeasure(m.name),
+            `Field measure: ${m.name}`,
+          )),
+          query ? 'No matches' : 'No measures',
+        )}
+      </Box>
+    </Grid>
+  );
+
+  // --- table browser (no model yet, or explicitly changing table) ----------------
+
+  const tableBrowser = (
+    <VStack align="stretch" gap={1} px={3} py={2} overflowY="auto" flex={1} minH={0}>
+      <HStack gap={1.5} pb={1}>
+        <Icon as={LuTable} boxSize={3} color="accent.teal" />
+        <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">Tables</Text>
+        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" ml="auto">{stubs.length}</Text>
+      </HStack>
+      {stubs
+        .filter((st) => matches(query, st.name))
+        .slice(0, 200)
+        .map((st) => fieldRow(
+          st.name, false, 'accent.teal',
+          <Icon as={LuTable} boxSize={3} color="fg.muted" flexShrink={0} />,
+          () => pickStub(st),
+          `Pick table: ${st.name}`,
+        ))}
     </VStack>
   );
 
+  // --- cross-table search hits (pinned under the columns) -------------------------
+
+  const otherTablesStrip = foreignHits.length > 0 && (
+    <Box flexShrink={0} borderTop="1px solid" borderColor="border.muted" px={3} py={2} maxH="160px" overflowY="auto" bg="bg.surface">
+      <HStack gap={1.5} pb={1.5}>
+        <LuListFilter size={11} color="var(--chakra-colors-fg-subtle)" />
+        <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">Other tables</Text>
+      </HStack>
+      <VStack align="stretch" gap={1}>
+        {foreignHits.map((h) => (
+          <HStack
+            key={`${h.kind}:${h.model}:${h.name}`}
+            aria-label={`Other table field ${h.kind}: ${h.name} (${h.model})`}
+            as="button"
+            gap={1.5} px={2} py={1}
+            borderRadius="md" border="1px dashed" borderColor="border.muted"
+            _hover={{ bg: 'bg.muted' }}
+            onClick={() => pickOtherHit(h)}
+            width="100%"
+            textAlign="left"
+            flexShrink={0}
+          >
+            {h.kind === 'measure'
+              ? <LuSigma size={12} color="var(--chakra-colors-accent-primary)" />
+              : <LuGroup size={12} color="var(--chakra-colors-accent-warning)" />}
+            <Text fontSize="xs" fontFamily="mono" flex={1} truncate>{h.name}</Text>
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate maxW="90px">{h.model}</Text>
+          </HStack>
+        ))}
+      </VStack>
+    </Box>
+  );
+
   return (
-    <HStack align="stretch" gap={3} p={4} h="100%" minH={0}>
-      {picker}
-      {selection}
-    </HStack>
+    <VStack align="stretch" gap={0} h="100%" minH={0}>
+      {!browsingTables && shelves}
+      {topStrip}
+      {!spec || browsingTables ? (
+        tableBrowser
+      ) : !model ? (
+        <Text fontSize="xs" color="fg.subtle" fontFamily="mono" px={3} py={3}>Loading {spec.model}…</Text>
+      ) : (
+        columns
+      )}
+      {otherTablesStrip}
+    </VStack>
   );
 }
 
@@ -512,27 +619,14 @@ export function SemanticCanvas({
 // Pieces
 // ---------------------------------------------------------------------------
 
-function SelectionGroup({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Box mb={3}>
-      <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
-        {label}
-      </Text>
-      <HStack gap={1.5} flexWrap="wrap" minH="26px">
-        {children}
-      </HStack>
-    </Box>
-  );
-}
-
-function ShelfChip({ label, onRemove, children }: {
-  label: string; onRemove?: () => void; children: React.ReactNode;
+function ShelfChip({ label, accent = 'border.muted', onRemove, children }: {
+  label: string; accent?: string; onRemove?: () => void; children: React.ReactNode;
 }) {
   return (
     <HStack
       aria-label={label}
-      gap={1.5} px={2} py={1}
-      bg="bg.muted" borderRadius="md" border="1px solid" borderColor="border.muted"
+      gap={1.5} px={2} py={0.5}
+      bg={`${accent}/8`} borderRadius="md" border="1px solid" borderColor={`${accent}/25`}
       userSelect="none"
     >
       {children}
@@ -541,6 +635,7 @@ function ShelfChip({ label, onRemove, children }: {
           as="button"
           aria-label={`Remove ${label.split(': ')[1]} from ${label.split(' chip')[0]}`}
           onClick={(e: React.MouseEvent) => { e.stopPropagation(); onRemove(); }}
+          color="fg.subtle"
           _hover={{ color: 'accent.danger' }}
           flexShrink={0}
         >

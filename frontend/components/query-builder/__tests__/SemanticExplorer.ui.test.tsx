@@ -1,17 +1,17 @@
 /**
- * SemanticCanvas — click-to-toggle semantic editor. LEFT: the picker — the
- * full field list (measures / dimensions / time), always visible,
- * independently scrollable, with a search bar that FILTERS it (and surfaces
- * matches from other tables). RIGHT: static summary of what's selected
- * (removable chips), time grain, filters, limit, execute. Clicking a field
- * toggles it; there is no drag and drop — every field has exactly one home,
- * so a click is unambiguous. Every edit compiles REAL SQL client-side and
- * emits spec + SQL + viz columns.
+ * SemanticExplorer — the single-surface semantic editor that replaces
+ * SemanticCanvas. TOP: the shelves first (selected Measures / Dimensions /
+ * Time / Filters chips + Limit), then a compact strip with the table chip,
+ * field search and Run button. BELOW: the full field vocabulary split into
+ * two click-to-toggle columns — Dimensions (with Time beneath) | Measures.
+ * No drag and drop: every field has exactly one home, so a click is
+ * unambiguous. Every edit compiles REAL SQL client-side and emits spec +
+ * SQL + viz columns.
  */
 import React from 'react';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
-import { SemanticCanvas } from '@/components/query-builder';
+import { SemanticExplorer } from '@/components/query-builder';
 import type { SemanticModel } from '@/lib/types';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 
@@ -38,11 +38,11 @@ const STUBS = [
 
 const STARTED: SemanticQuerySpec = { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: [] };
 
-function renderCanvas(props: Partial<React.ComponentProps<typeof SemanticCanvas>> = {}) {
+function renderExplorer(props: Partial<React.ComponentProps<typeof SemanticExplorer>> = {}) {
   const onChange = vi.fn();
   const onSelectModel = vi.fn();
   renderWithProviders(
-    <SemanticCanvas
+    <SemanticExplorer
       models={[ORDERS_MODEL]}
       stubs={STUBS}
       onSelectModel={onSelectModel}
@@ -57,27 +57,58 @@ function renderCanvas(props: Partial<React.ComponentProps<typeof SemanticCanvas>
   return { onChange, onSelectModel };
 }
 
-describe('SemanticCanvas', () => {
+describe('SemanticExplorer', () => {
+  // --- LAYOUT: shelves on top, two field columns (Time under Dimensions) -----
+
+  it('splits the field vocabulary into Dimensions / Measures / Time sections', () => {
+    renderExplorer();
+    const dims = within(screen.getByLabelText('Dimensions column'));
+    const measures = within(screen.getByLabelText('Measures column'));
+    const time = within(screen.getByLabelText('Time column'));
+
+    expect(measures.getByLabelText('Field measure: Revenue')).toBeTruthy();
+    expect(measures.getByLabelText('Field measure: Orders')).toBeTruthy();
+    expect(dims.getByLabelText('Field dimension: Status')).toBeTruthy();
+    expect(dims.getByLabelText('Field dimension: Region')).toBeTruthy();
+    expect(time.getByLabelText('Field time: Order date')).toBeTruthy();
+
+    // no cross-contamination between columns
+    expect(dims.queryByLabelText('Field measure: Revenue')).toBeNull();
+    expect(measures.queryByLabelText('Field dimension: Status')).toBeNull();
+    expect(time.queryByLabelText('Field dimension: Status')).toBeNull();
+  });
+
+  it('selected chips live in the shelves strip on top, ABOVE the search/run strip', () => {
+    renderExplorer({
+      value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },
+    });
+    const shelvesEl = screen.getByLabelText('Semantic shelves');
+    const shelves = within(shelvesEl);
+    expect(shelves.getByLabelText('Measures chip: Revenue')).toBeTruthy();
+    expect(shelves.getByLabelText('Dimensions chip: Status')).toBeTruthy();
+
+    // the shelves come FIRST; table chip + search + run sit below them
+    const search = screen.getByLabelText('Semantic field search');
+    expect(shelvesEl.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // --- Behavior carried over from SemanticCanvas -----------------------------
+
   it('empty state shows a BROWSABLE table list, not a blank search box', () => {
-    renderCanvas({ value: null });
+    renderExplorer({ value: null });
     expect(screen.getByLabelText('Pick table: Orders')).toBeTruthy();
     expect(screen.getByLabelText('Pick table: Users')).toBeTruthy();
     expect(screen.getByLabelText('Semantic field search')).toBeTruthy();
   });
 
   it('picking a table from the empty-state list loads its model', () => {
-    const { onSelectModel } = renderCanvas({ value: null });
+    const { onSelectModel } = renderExplorer({ value: null });
     fireEvent.click(screen.getByLabelText('Pick table: Users'));
     expect(onSelectModel).toHaveBeenCalledWith(expect.objectContaining({ table: 'users' }));
   });
 
-  it('the full field list is visible with no typing; clicking a dimension toggles it on', async () => {
-    const { onChange } = renderCanvas();
-    expect(screen.getByLabelText('Field measure: Revenue')).toBeTruthy();
-    expect(screen.getByLabelText('Field measure: Orders')).toBeTruthy();
-    expect(screen.getByLabelText('Field dimension: Status')).toBeTruthy();
-    expect(screen.getByLabelText('Field time: Order date')).toBeTruthy();
-
+  it('clicking a dimension toggles it on and emits spec + SQL + viz', async () => {
+    const { onChange } = renderExplorer();
     fireEvent.click(screen.getByLabelText('Field dimension: Status'));
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const [spec, sql, viz] = onChange.mock.calls.at(-1)!;
@@ -89,7 +120,7 @@ describe('SemanticCanvas', () => {
   });
 
   it('clicking an assigned field toggles it OFF again', async () => {
-    const { onChange } = renderCanvas({
+    const { onChange } = renderExplorer({
       value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },
     });
     fireEvent.click(screen.getByLabelText('Field dimension: Status'));
@@ -100,7 +131,7 @@ describe('SemanticCanvas', () => {
   });
 
   it('dimensions are unbounded; joins apply invisibly', async () => {
-    const { onChange } = renderCanvas();
+    const { onChange } = renderExplorer();
     fireEvent.click(screen.getByLabelText('Field dimension: Status'));
     fireEvent.click(screen.getByLabelText('Field dimension: Region'));
     await waitFor(() => expect(screen.getByLabelText('Dimensions chip: Region')).toBeTruthy());
@@ -110,7 +141,7 @@ describe('SemanticCanvas', () => {
   });
 
   it('clicking the time field sets a grain and viz becomes a line chart', async () => {
-    const { onChange } = renderCanvas();
+    const { onChange } = renderExplorer();
     fireEvent.click(screen.getByLabelText('Field time: Order date'));
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const [spec, sql, viz] = onChange.mock.calls.at(-1)!;
@@ -132,7 +163,7 @@ describe('SemanticCanvas', () => {
         { name: 'Delivered At', column: 'delivered_at', temporal: true },
       ],
     };
-    const { onChange } = renderCanvas({ models: [model] });
+    const { onChange } = renderExplorer({ models: [model] });
     fireEvent.click(screen.getByLabelText('Field time: Delivered At'));
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const [spec, sql] = onChange.mock.calls.at(-1)!;
@@ -149,7 +180,7 @@ describe('SemanticCanvas', () => {
   });
 
   it('the search bar FILTERS the visible field list', async () => {
-    renderCanvas();
+    renderExplorer();
     fireEvent.change(screen.getByLabelText('Semantic field search'), { target: { value: 'reven' } });
     await waitFor(() => expect(screen.queryByLabelText('Field dimension: Status')).toBeNull());
     expect(screen.getByLabelText('Field measure: Revenue')).toBeTruthy();
@@ -166,7 +197,7 @@ describe('SemanticCanvas', () => {
       ] } }),
     });
     vi.stubGlobal('fetch', fetchMock);
-    const { onSelectModel } = renderCanvas();
+    const { onSelectModel } = renderExplorer();
 
     fireEvent.change(screen.getByLabelText('Semantic field search'), { target: { value: 'spend' } });
     fireEvent.click(await screen.findByLabelText('Other table field measure: Total Spend (Users)', undefined, { timeout: 3000 }));
@@ -175,7 +206,7 @@ describe('SemanticCanvas', () => {
   });
 
   it('removing a selected chip updates the spec', async () => {
-    const { onChange } = renderCanvas({
+    const { onChange } = renderExplorer({
       value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },
     });
     fireEvent.click(screen.getByLabelText('Remove Status from Dimensions'));
@@ -186,15 +217,15 @@ describe('SemanticCanvas', () => {
   });
 
   it('the table can be CHANGED after picking one', () => {
-    const { onSelectModel } = renderCanvas();
+    const { onSelectModel } = renderExplorer();
     fireEvent.click(screen.getByLabelText('Change table'));
     // back to the browsable tables list
     fireEvent.click(screen.getByLabelText('Pick table: Users'));
     expect(onSelectModel).toHaveBeenCalledWith(expect.objectContaining({ table: 'users' }));
   });
 
-  it('restores a persisted spec onto the selection panel', () => {
-    renderCanvas({
+  it('restores a persisted spec onto the shelves', () => {
+    renderExplorer({
       value: { model: 'Orders', table: 'orders', measures: ['Revenue', 'Orders'], dimensions: ['Status', 'Region'], timeGrain: 'WEEK' },
     });
     expect(screen.getByLabelText('Measures chip: Revenue')).toBeTruthy();
@@ -206,8 +237,20 @@ describe('SemanticCanvas', () => {
 
   it('execute is wired', async () => {
     const onExecute = vi.fn();
-    renderCanvas({ value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: [] }, onExecute });
+    renderExplorer({ value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: [] }, onExecute });
     fireEvent.click(screen.getByLabelText('Execute semantic query'));
     expect(onExecute).toHaveBeenCalled();
+  });
+
+  it('the auto-run toggle is wired (and only offered when the parent supports it)', () => {
+    const onToggleAutoRun = vi.fn();
+    renderExplorer({ onExecute: vi.fn(), autoRun: true, onToggleAutoRun });
+    fireEvent.click(screen.getByLabelText('Toggle auto-run'));
+    expect(onToggleAutoRun).toHaveBeenCalled();
+  });
+
+  it('no auto-run toggle without a parent handler', () => {
+    renderExplorer({ onExecute: vi.fn() });
+    expect(screen.queryByLabelText('Toggle auto-run')).toBeNull();
   });
 });
