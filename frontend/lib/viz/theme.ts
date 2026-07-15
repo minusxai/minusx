@@ -9,6 +9,15 @@
 import type { Config as VegaLiteConfig } from 'vega-lite';
 import { COLOR_PALETTE, LIGHT_THEME, DARK_THEME, getChartFontFamily } from '@/lib/chart/echarts-theme';
 
+/**
+ * The card-surface color per mode. Used by render-time enrichments that need an OPAQUE
+ * surface-colored fill (the reference-line badge backing) — VL bakes mark fills at
+ * compile, so named style configs can't supply this; the renderer resolves it instead.
+ */
+export function getSurfaceColor(mode: 'light' | 'dark'): string {
+  return (mode === 'light' ? LIGHT_THEME : DARK_THEME).bgSurface;
+}
+
 export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
   const colors = mode === 'light' ? LIGHT_THEME : DARK_THEME;
   return {

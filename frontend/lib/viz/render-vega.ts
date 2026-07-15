@@ -21,7 +21,7 @@ import { expressionInterpreter } from 'vega-interpreter';
 import { Handler as TooltipHandler } from 'vega-tooltip';
 import { prepareVegaLiteSpec } from './prepare';
 import { annotationSplit } from './encoding-edit';
-import { getVegaLiteConfig, getVegaParserConfig } from './theme';
+import { getVegaLiteConfig, getVegaParserConfig, getSurfaceColor } from './theme';
 import { materializeRecipe } from './viz-templates';
 import { VIZ_DATASET_MAIN } from './types';
 import { loadGeoFeatures } from './geo-assets';
@@ -396,6 +396,16 @@ export function compileVegaLite(
       injectSingleSeriesLegend(split.unit);
       injectLegendToggle(split.unit);
       injectHeatmapCellLayout(split.unit);
+      // Reference-line badge BACKING plates: the saved spec tags them with the
+      // 'mx-annotation-plate' style and no fill (mode-free on disk); the renderer
+      // resolves the opaque surface color here. VL bakes mark fills at compile, so
+      // a config.style entry can't do this.
+      for (const layer of split.annotations) {
+        const mark = layer.mark as Record<string, unknown> | undefined;
+        if (mark && typeof mark === 'object' && mark.style === 'mx-annotation-plate' && mark.fill == null) {
+          mark.fill = getSurfaceColor(mode);
+        }
+      }
     }
   }
   // House look: legends are entry labels only, with no redundant heading.

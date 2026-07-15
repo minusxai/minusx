@@ -1153,7 +1153,12 @@ const BADGE_HEIGHT_PX = 18;
 const BADGE_EDGE_PX = 8;   // inset from the plot edge
 const BADGE_LIFT_PX = 13;  // vertical distance from the rule to the badge center (y-lines)
 
-/** The rect-plate + text layers for a reference-line badge label. */
+/**
+ * The badge layers for a reference-line label: an OPAQUE surface backing (the
+ * `mx-annotation-plate` theme style supplies the mode-aware surface fill, like the
+ * trend recipe's `mx-trend-focus` plate) under a tinted color plate, under the text —
+ * so the badge stays readable over gridlines and data in both color modes.
+ */
 function badgeLayers(
   axis: 'x' | 'y',
   anchor: Record<string, unknown>,
@@ -1167,13 +1172,17 @@ function badgeLayers(
   const textMark = axis === 'y'
     ? { x: BADGE_EDGE_PX + BADGE_PAD_PX, dy: -BADGE_LIFT_PX }
     : { y: BADGE_EDGE_PX + BADGE_HEIGHT_PX / 2, dx: BADGE_EDGE_PX / 2 + BADGE_PAD_PX };
+  const plateGeometry = { ...plateMark, width, height: BADGE_HEIGHT_PX, cornerRadius: 5 };
   return [
     {
       transform: [{ sample: 1 }],
-      mark: {
-        type: 'rect', ...plateMark, width, height: BADGE_HEIGHT_PX,
-        cornerRadius: 5, fill: color, fillOpacity: 0.16,
-      },
+      // No fill here — the theme style provides the surface color per color mode.
+      mark: { type: 'rect', style: 'mx-annotation-plate', ...plateGeometry },
+      encoding: { ...anchor },
+    },
+    {
+      transform: [{ sample: 1 }],
+      mark: { type: 'rect', ...plateGeometry, fill: color, fillOpacity: 0.16 },
       encoding: { ...anchor },
     },
     {
@@ -1284,7 +1293,8 @@ export function getReferenceLines(envelope: VizEnvelope): ReferenceLineEntry[] {
   });
 }
 
-/** Recolor one reference line (rule + badge plate + text move together). */
+/** Recolor one reference line (rule + tint plate + text move together; the surface
+ *  BACKING plate keeps its theme fill). */
 export function setReferenceLineColor(envelope: VizEnvelope, index: number, color: string): VizEnvelope {
   const source = sourceOf(envelope);
   if (source.kind !== 'vega-lite') return envelope;
@@ -1294,7 +1304,7 @@ export function setReferenceLineColor(envelope: VizEnvelope, index: number, colo
   const layers = spec.layer as Record<string, unknown>[];
   for (let i = group.start; i < group.end; i++) {
     const mark = asPlainRecord(layers[i].mark);
-    if (!mark) continue;
+    if (!mark || mark.style === 'mx-annotation-plate') continue;
     if (getMarkType(layers[i]) === 'rect') mark.fill = color;
     else mark.color = color;
   }

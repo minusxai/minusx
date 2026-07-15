@@ -27,11 +27,11 @@ const LINE = () => envelope({
 });
 
 describe('addReferenceLine', () => {
-  it('wraps a unit spec into layers: base chart + rule + badge (plate + text)', () => {
+  it('wraps a unit spec into layers: base chart + rule + badge (backing + tint + text)', () => {
     const next = addReferenceLine(LINE(), { axis: 'y', value: 500000, label: 'Target', color: '#e74c3c' });
     const spec = specOf(next);
     expect(spec.mark).toBeUndefined();            // no longer a unit spec
-    expect(spec.layer).toHaveLength(4);           // base + rule + plate + text
+    expect(spec.layer).toHaveLength(5);           // base + rule + backing + tint + text
     expect(spec.layer[0].mark.type).toBe('line'); // base chart first, unchanged
     expect(spec.layer[0].encoding.y.field).toBe('revenue');
     const rule = spec.layer[1];
@@ -40,16 +40,19 @@ describe('addReferenceLine', () => {
     expect(rule.encoding.y.datum).toBe(500000);
     // Annotation layers inherit the FULL dataset — without sample(1) each draws once
     // PER ROW (100 rows stacked a 0.16-opacity plate into a solid block).
-    expect(rule.transform).toEqual([{ sample: 1 }]);
-    expect(spec.layer[2].transform).toEqual([{ sample: 1 }]);
-    expect(spec.layer[3].transform).toEqual([{ sample: 1 }]);
-    // The label is a BADGE: a tinted plate behind colored text (house chip style).
-    const plate = spec.layer[2];
+    for (const i of [1, 2, 3, 4]) expect(spec.layer[i].transform).toEqual([{ sample: 1 }]);
+    // The label is a BADGE: an OPAQUE surface backing (theme style, mode-aware fill)
+    // under a tinted plate, behind colored text (house chip style).
+    const backing = spec.layer[2];
+    expect(backing.mark.type).toBe('rect');
+    expect(backing.mark.style).toBe('mx-annotation-plate'); // fill comes from the theme
+    expect(backing.mark.fill).toBeUndefined();
+    const plate = spec.layer[3];
     expect(plate.mark.type).toBe('rect');
     expect(plate.mark.fill).toBe('#e74c3c');
     expect(plate.mark.fillOpacity).toBeLessThan(0.5);
     expect(plate.mark.cornerRadius).toBeGreaterThan(0);
-    const text = spec.layer[3];
+    const text = spec.layer[4];
     expect(text.mark.type).toBe('text');
     expect(text.mark.color).toBe('#e74c3c');
     expect(text.encoding.text.value).toBe('Target');
@@ -80,7 +83,7 @@ describe('addReferenceLine', () => {
   it('appends to an ALREADY-layered spec (a second line)', () => {
     const one = addReferenceLine(LINE(), { axis: 'y', value: 100, label: 'Floor' });
     const two = addReferenceLine(one, { axis: 'y', value: 900, label: 'Ceiling' });
-    expect(specOf(two).layer).toHaveLength(7); // base + 2×(rule+plate+text)
+    expect(specOf(two).layer).toHaveLength(9); // base + 2×(rule+backing+tint+text)
   });
 
   it('an X line on a temporal axis converts the value to a VL DateTime datum', () => {
@@ -94,16 +97,19 @@ describe('addReferenceLine', () => {
     expect(addReferenceLine(recipe, { axis: 'y', value: 1 })).toBe(recipe);
   });
 
-  it('renders headlessly: rule, plate, and label land in the SVG', async () => {
+  it('renders headlessly: rule, plates, and label land in the SVG', async () => {
     const next = addReferenceLine(LINE(), { axis: 'y', value: 15, label: 'Target' });
     const svg = await renderEnvelopeToSvg(next, [
       { week: '2025-01-06', revenue: 10 },
       { week: '2025-01-13', revenue: 20 },
     ], 'dark', { width: 400, height: 300 });
     expect(svg).toContain('mark-rule');
-    expect(svg).toContain('mark-rect'); // the badge plate
+    expect(svg).toContain('mark-rect'); // the badge plates
     expect(svg).toContain('Target');
     expect(svg).toContain('mark-line'); // base chart intact
+    // The BACKING plate resolves to the mode's OPAQUE surface color at render (the
+    // saved spec stays mode-free — the fill is injected by compileVegaLite).
+    expect(svg.toLowerCase()).toContain('#161b22'); // DARK_THEME.bgSurface
   });
 });
 
@@ -122,14 +128,15 @@ describe('reference-line management', () => {
     expect(String(lines[1].value)).toBe('2025-03-01'); // DateTime datum reads back displayable
   });
 
-  it('setReferenceLineColor recolors the rule, plate, and text together', () => {
+  it('setReferenceLineColor recolors rule, tint plate, and text — NOT the surface backing', () => {
     const env = twoLines();
     const [first] = getReferenceLines(env);
     const next = setReferenceLineColor(env, first.index, '#0000ff');
     const spec = specOf(next);
-    expect(spec.layer[first.index].mark.color).toBe('#0000ff');
-    expect(spec.layer[first.index + 1].mark.fill).toBe('#0000ff');
-    expect(spec.layer[first.index + 2].mark.color).toBe('#0000ff');
+    expect(spec.layer[first.index].mark.color).toBe('#0000ff');       // rule
+    expect(spec.layer[first.index + 1].mark.fill).toBeUndefined();    // backing keeps its theme fill
+    expect(spec.layer[first.index + 2].mark.fill).toBe('#0000ff');    // tint plate
+    expect(spec.layer[first.index + 3].mark.color).toBe('#0000ff');   // text
     expect(getReferenceLines(next)[0].color).toBe('#0000ff');
   });
 
