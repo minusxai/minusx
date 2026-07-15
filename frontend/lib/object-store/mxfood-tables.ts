@@ -1,8 +1,8 @@
 /**
  * Canonical list of mxfood tutorial tables.
  *
- * Must stay in sync with the `csv_files` entries on the tutorial-mode
- * connection in `lib/database/workspace-template.json`. Used by:
+ * Must stay in sync with the `files` entries on the tutorial-mode `static`
+ * DATASET doc in `lib/database/workspace-template.json`. Used by:
  *   - `AuthModule.register` to seed parquets at workspace creation
  *   - `POST /api/admin/reset-tutorial` to re-seed parquets on reset
  */

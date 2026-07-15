@@ -26,6 +26,131 @@ const TEMPLATE_IDS = immutableSet(
 );
 
 /**
+ * V37 — the static-sources / config-databases split.
+ *
+ * 1. Warehouse connection docs copy their spec into the mode config's
+ *    `databases.connections` (names byte-identical — contexts, questions and
+ *    Views keep resolving); the doc remains as the schema-cache holder.
+ *    duckdb/internal_db stay file-backed (system plumbing).
+ * 2. Static connections (csv / google-sheets) become DATASET docs at the mode
+ *    root — same s3 keys, zero data movement; root = the same everywhere reach
+ *    they had as global connections. Legacy source fields map:
+ *    csv→'upload', google_sheets→'link' (+source_url / source_group).
+ * 3. Every content reference to a static connection's NAME (questions,
+ *    notebook cells, context whitelists) is rewritten to the virtual `files`
+ *    connection.
+ * 4. schema.table collisions across old static connections rename with a
+ *    numeric suffix (first connection wins) — logged loudly.
+ */
+const V37_STATIC_TYPES = new Set(['csv', 'google-sheets']);
+const V37_CONFIG_TYPES = new Set(['postgresql', 'bigquery', 'athena', 'clickhouse', 'mongo']);
+
+function v37StaticSourcesAndConfigDatabases(data: InitData): InitData {
+  const documents = data.documents ?? (data.orgs ?? []).flatMap((o: OrgData) => o.documents);
+  type Doc = (typeof documents)[number];
+
+  const modeOf = (path: string): string => path.split('/')[1] ?? 'org';
+  const isConnDoc = (d: Doc): boolean => d.type === 'connection' && /^\/[^/]+\/database\/[^/]+$/.test(d.path);
+
+  const connDocs = documents.filter(isConnDoc);
+  const staticDocs = connDocs.filter((d) => V37_STATIC_TYPES.has((d.content as { type?: string })?.type ?? ''));
+  const warehouseDocs = connDocs.filter((d) => V37_CONFIG_TYPES.has((d.content as { type?: string })?.type ?? ''));
+  if (staticDocs.length === 0 && warehouseDocs.length === 0) return data;
+
+  const nextId = (() => { let max = Math.max(0, ...documents.map((d) => d.id)); return () => ++max; })();
+  const staticNamesByMode = new Map<string, Set<string>>();
+  for (const d of staticDocs) {
+    const mode = modeOf(d.path);
+    if (!staticNamesByMode.has(mode)) staticNamesByMode.set(mode, new Set());
+    staticNamesByMode.get(mode)!.add(d.name);
+  }
+
+  // 2. Static connections → dataset docs at the mode root (collision-suffixed).
+  const takenByMode = new Map<string, Set<string>>();
+  const datasetDocs: Doc[] = staticDocs.map((d) => {
+    const mode = modeOf(d.path);
+    if (!takenByMode.has(mode)) takenByMode.set(mode, new Set());
+    const taken = takenByMode.get(mode)!;
+    const files = (((d.content as { config?: { files?: Array<Record<string, unknown>> } })?.config?.files) ?? []).map((f) => {
+      let table = String(f.table_name ?? '');
+      const schema = String(f.schema_name ?? 'public');
+      if (taken.has(`${schema}.${table}`)) {
+        let n = 2;
+        while (taken.has(`${schema}.${table}_${n}`)) n++;
+        console.warn(`[migration v37] static table ${schema}.${table} collides — renamed to ${schema}.${table}_${n} (from connection '${d.name}')`);
+        table = `${table}_${n}`;
+      }
+      taken.add(`${schema}.${table}`);
+      const isLink = f.source_type === 'google_sheets';
+      return {
+        filename: f.filename ?? `${table}.csv`,
+        table_name: table,
+        schema_name: schema,
+        s3_key: f.s3_key,
+        file_format: f.file_format ?? 'csv',
+        row_count: f.row_count ?? 0,
+        columns: f.columns ?? [],
+        source: isLink ? 'link' : 'upload',
+        ...(isLink && f.spreadsheet_url ? { source_url: f.spreadsheet_url } : {}),
+        ...(isLink && f.spreadsheet_id ? { source_group: f.spreadsheet_id } : {}),
+      };
+    });
+    return {
+      ...d,
+      id: nextId(),
+      path: `/${mode}/${d.name}`,
+      type: 'dataset',
+      content: { files } as Doc['content'],
+    };
+  });
+
+  // 1. Warehouse specs → the mode config doc's databases section.
+  const rewritten = documents
+    .filter((d) => !staticDocs.includes(d))
+    .map((d) => {
+      if (d.type === 'config' && /^\/[^/]+\/configs\/config$/.test(d.path)) {
+        const mode = modeOf(d.path);
+        const mine = warehouseDocs.filter((w) => modeOf(w.path) === mode);
+        if (mine.length === 0) return d;
+        const existing = ((d.content as { databases?: { connections?: unknown[] } })?.databases?.connections ?? []) as Array<{ name?: string }>;
+        const existingNames = new Set(existing.map((e) => e.name));
+        const additions = mine
+          .filter((w) => !existingNames.has(w.name))
+          .map((w) => ({ name: w.name, type: (w.content as { type: string }).type, config: (w.content as { config?: Record<string, unknown> }).config ?? {} }));
+        return { ...d, content: { ...(d.content as object), databases: { connections: [...existing, ...additions] } } as Doc['content'] };
+      }
+
+      // 3. connection_name rewrites: static names → 'files' (per mode).
+      const staticNames = staticNamesByMode.get(modeOf(d.path));
+      if (!staticNames || staticNames.size === 0) return d;
+      const c = d.content as Record<string, unknown> | null;
+      if (!c) return d;
+
+      if ((d.type === 'question') && typeof c.connection_name === 'string' && staticNames.has(c.connection_name)) {
+        return { ...d, content: { ...c, connection_name: 'files' } as Doc['content'] };
+      }
+      if (d.type === 'notebook' && Array.isArray(c.cells)) {
+        const cells = (c.cells as Array<Record<string, unknown>>).map((cell) =>
+          typeof cell.connection_name === 'string' && staticNames.has(cell.connection_name)
+            ? { ...cell, connection_name: 'files' } : cell);
+        return { ...d, content: { ...c, cells } as Doc['content'] };
+      }
+      if (d.type === 'context' && Array.isArray(c.versions)) {
+        const versions = (c.versions as Array<Record<string, unknown>>).map((v) => {
+          if (!Array.isArray(v.whitelist)) return v;
+          const whitelist = (v.whitelist as Array<Record<string, unknown>>).map((w) =>
+            typeof w.name === 'string' && staticNames.has(w.name) ? { ...w, name: 'files' } : w);
+          return { ...v, whitelist };
+        });
+        return { ...d, content: { ...c, versions } as Doc['content'] };
+      }
+      return d;
+    });
+
+  return { ...data, documents: [...rewritten, ...datasetDocs], orgs: undefined, companies: undefined };
+}
+
+/**
  * V36 — Shift all non-system file IDs to ≥ 1000.
  *
  * IDs 1–99 are reserved for system template files (tutorial, internals).
@@ -104,6 +229,11 @@ export const MIGRATIONS: MigrationEntry[] = [
     dataVersion: 36,
     description: 'Shift all non-system file IDs to ≥ 1000 (reserve 1–99 for system template; /org files 100–112 also shifted)',
     dataMigration: v36ShiftUserFileIds,
+  },
+  {
+    dataVersion: 37,
+    description: 'Static sources become root dataset files; warehouse connection specs copy into config.databases; static connection_name references rewrite to files',
+    dataMigration: v37StaticSourcesAndConfigDatabases,
   },
 ];
 
