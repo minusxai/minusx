@@ -12,7 +12,7 @@
  * selector + config) is what's under test, and that renders from queryData
  * columns alone.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
@@ -61,7 +61,7 @@ vi.mock('@/components/question/QuestionVisualization', () => ({
 
 const QUERY_DATA = { columns: ['month', 'revenue'], types: ['date', 'number'], rows: [['2025-01-01', 10]] };
 
-function Harness({ vizSettings, latest }: { vizSettings: VizSettings; latest: { content?: QuestionContent } }) {
+function Harness({ vizSettings, onContent }: { vizSettings: VizSettings; onContent: (content: QuestionContent) => void }) {
   const [content, setContent] = useState<QuestionContent>({
     description: null,
     query: 'SELECT 1 AS seed',
@@ -73,7 +73,9 @@ function Harness({ vizSettings, latest }: { vizSettings: VizSettings; latest: { 
     cachePolicy: null,
     semanticQuery: SPEC,
   } as unknown as QuestionContent);
-  latest.content = content;
+  useEffect(() => {
+    onContent(content);
+  }, [onContent, content]);
   return (
     <QuestionViewV2
       viewMode="page"
@@ -94,7 +96,7 @@ function Harness({ vizSettings, latest }: { vizSettings: VizSettings; latest: { 
 
 function mount(vizSettings: VizSettings) {
   const latest: { content?: QuestionContent } = {};
-  renderWithProviders(<Harness vizSettings={vizSettings} latest={latest} />);
+  renderWithProviders(<Harness vizSettings={vizSettings} onContent={(content) => { latest.content = content; }} />);
   return latest;
 }
 

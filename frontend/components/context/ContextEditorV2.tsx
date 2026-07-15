@@ -31,7 +31,6 @@ import { selectConnectionsLoading, selectPersistableContent, selectMergedContent
 import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { useContext as useKnowledgeContext } from '@/lib/hooks/useContext';
-import { ContextVersionManager } from './ContextVersionManager';
 import { DatabasesTabContent } from './DatabasesTabContent';
 import { SkillsTabContent } from './SkillsTabContent';
 import { EvalsTabContent } from './EvalsTabContent';
