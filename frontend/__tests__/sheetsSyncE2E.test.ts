@@ -9,6 +9,7 @@ import { setupTestDb } from '@/test/harness/test-db';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { JobRunsDB } from '@/lib/database/job-runs-db';
 import type { RunFileContent } from '@/lib/types';
+import type { DatasetContent, DatasetTable } from '@/lib/types/datasets';
 import { NextRequest } from 'next/server';
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
