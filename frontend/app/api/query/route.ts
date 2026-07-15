@@ -18,6 +18,7 @@ import { assertGuestQueryAllowed, sanitizeGuestParams, GuestQueryDeniedError } f
 import { getViewsForPath } from '@/lib/views/views.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { mentionsViews, resolveViewsInSql, ViewResolutionError } from '@/lib/views/resolve';
+import { FILES_CONNECTION, FILES_DIALECT } from '@/lib/types/datasets';
 
 type ParamMap = Record<string, string | number | null>;
 
@@ -94,11 +95,14 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     }
 
     // Derive dialect via getRawByName (no schema-profiling loader on the hot path).
-    let queryDialect = 'duckdb';
-    try {
-      const { type } = await ConnectionsAPI.getRawByName(connectionName, user.mode);
-      if (type) queryDialect = connectionTypeToDialect(type);
-    } catch { /* default duckdb */ }
+    // The virtual `files` connection has no doc — its dialect is fixed (DuckDB).
+    let queryDialect: string = FILES_DIALECT;
+    if (connectionName !== FILES_CONNECTION) {
+      try {
+        const { type } = await ConnectionsAPI.getRawByName(connectionName, user.mode);
+        if (type) queryDialect = connectionTypeToDialect(type);
+      } catch { /* default duckdb */ }
+    }
 
     // ── Views: inline `_views.x` as CTEs BEFORE caching ───────────────────────
     // Order matters twice over:
@@ -127,8 +131,9 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       const { sql: noneResolvedQuery, params: resolvedParams } = await applyNoneParams(executedQuery, paramValues, queryDialect);
 
       // Stream the result — the executor pipes it through to the object store +
-      // client without materializing on the server.
-      return runQueryStream(connectionName, noneResolvedQuery, resolvedParams, user, paramTypes);
+      // client without materializing on the server. filePath anchors dataset
+      // visibility for the virtual `files` connection (folder-and-below).
+      return runQueryStream(connectionName, noneResolvedQuery, resolvedParams, user, paramTypes, { filePath: filePath ?? undefined });
     };
 
     // ── SWR + lease + blob, streamed as JSONL ──────────────────────────────────

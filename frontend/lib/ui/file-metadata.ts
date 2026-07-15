@@ -65,6 +65,14 @@ export const FILE_TYPE_METADATA = {
     supported: true,
     h: 'none',
   },
+  dataset: {
+    label: 'Dataset',
+    icon: LuTable,
+    color: 'accent.success',      // Green — data users bring themselves
+    category: 'analytics',
+    supported: true,
+    h: 'none',
+  },
 //   connector: {
 //     label: 'Data Connector',
 //     icon: LuPlug,

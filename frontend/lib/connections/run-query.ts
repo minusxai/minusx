@@ -2,13 +2,23 @@ import 'server-only';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { resolveConnectionSecrets } from '@/lib/secrets/connection-secrets.server';
 import { getNodeConnector } from '@/lib/connections';
+import { CsvConnector } from './csv-connector';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { connectionTypeToDialect } from '@/lib/types';
+import { FILES_CONNECTION, FILES_DIALECT } from '@/lib/types/datasets';
+import { getVisibleTables } from '@/lib/data/datasets.server';
+import { resolvePath } from '@/lib/mode/path-resolver';
 import { QUERY_SERVER_TIMEOUT_MS } from '@/lib/config';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { drainQueryStream, drainQueryStreamBounded, queryResultToStream, type QueryResult, type QueryStream, type BoundedDrainOptions, type BoundedQueryResult } from './base';
 
 export type { QueryResult, QueryStream };
+
+/** Location options for queries whose table set is folder-derived (`files`). */
+export interface RunQueryOptions {
+  /** Path of the file the query runs from — anchors dataset visibility. */
+  filePath?: string;
+}
 
 /** Race a materialization against the server wall-clock bound (shared by runQuery + runQueryBounded). */
 function withServerTimeout<T>(work: Promise<T>): Promise<T> {
@@ -47,6 +57,7 @@ export async function runQuery(
   query: string,
   params: Record<string, string | number>,
   user: EffectiveUser,
+  opts?: RunQueryOptions,
 ): Promise<QueryResult> {
   // Materialized convenience — drains the streaming path. Every execution flows
   // through runQueryStream, so streaming-capable connectors stream even here.
@@ -56,7 +67,7 @@ export async function runQuery(
   // browser's 120s guard can't protect. A stuck warehouse query otherwise hangs them all
   // indefinitely. The connector's work is abandoned, not cancelled (connectors lack a uniform
   // cancel API) — the point is unblocking the caller and its semaphore/turn.
-  return withServerTimeout((async () => drainQueryStream(await runQueryStream(databaseName, query, params, user)))());
+  return withServerTimeout((async () => drainQueryStream(await runQueryStream(databaseName, query, params, user, undefined, opts)))());
 }
 
 /**
@@ -72,8 +83,9 @@ export async function runQueryBounded(
   params: Record<string, string | number>,
   user: EffectiveUser,
   budget: BoundedDrainOptions,
+  opts?: RunQueryOptions,
 ): Promise<BoundedQueryResult> {
-  return withServerTimeout((async () => drainQueryStreamBounded(await runQueryStream(databaseName, query, params, user), budget))());
+  return withServerTimeout((async () => drainQueryStreamBounded(await runQueryStream(databaseName, query, params, user, undefined, opts), budget))());
 }
 
 /**
@@ -89,7 +101,23 @@ export async function runQueryStream(
   user: EffectiveUser,
   /** Declared logical param types ('text'|'number'|'date'), keyed by name — advisory; see queryStream. */
   paramTypes?: Record<string, string>,
+  opts?: RunQueryOptions,
 ): Promise<QueryStream> {
+  // The VIRTUAL files connection: no connection doc exists — the table set is
+  // resolved from the caller's folder (own datasets + ancestors', hidden tables
+  // excluded) and attached into one DuckDB session, so tables from different
+  // datasets are joinable. The CsvConnector instance cache keys on the resolved
+  // file set, so different folders never share a session and a re-upload (new
+  // s3_key) gets a fresh instance automatically.
+  if (databaseName === FILES_CONNECTION) {
+    const anchor = opts?.filePath ?? resolvePath(user.mode, '/');
+    const folder = anchor.substring(0, anchor.lastIndexOf('/')) || anchor;
+    const tables = await getVisibleTables(folder, user);
+    const connector = new CsvConnector(FILES_CONNECTION, { files: tables });
+    const cappedQuery = await enforceQueryLimit(query, { dialect: FILES_DIALECT });
+    return connector.queryStream(cappedQuery, params);
+  }
+
   // Use getRawByName so credentials (e.g. service_account_json) are included.
   const rawConn = await ConnectionsAPI.getRawByName(databaseName, user.mode).catch(() => null);
   if (!rawConn) {

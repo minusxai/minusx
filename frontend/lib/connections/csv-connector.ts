@@ -106,13 +106,19 @@ async function initInstance(
       );
     }
 
-    // Lock down DuckDB access to the storage prefix of the uploaded files only.
+    // Lock down DuckDB access to the storage prefixes of the attached files only.
     // allowed_directories must be set BEFORE disabling external access.
-    const storagePrefix = files[0]?.s3_key.split('/')[0] ?? '';
-    if (isLocal && storagePrefix) {
-      await conn.run(`SET allowed_directories = ['${join(LOCAL_UPLOAD_PATH, storagePrefix)}/']`);
-    } else if (!isLocal && OBJECT_STORE_BUCKET && storagePrefix) {
-      await conn.run(`SET allowed_directories = ['s3://${OBJECT_STORE_BUCKET}/${storagePrefix}/']`);
+    // ALL distinct prefixes are allowed (not just files[0]'s): the virtual
+    // `files` connection attaches tables from multiple datasets, whose uploads
+    // may live under different prefixes.
+    const storagePrefixes = [...new Set(files.map((f) => f.s3_key.split('/')[0]).filter(Boolean))];
+    if (storagePrefixes.length > 0) {
+      const dirs = storagePrefixes
+        .map((p) => (isLocal ? `'${join(LOCAL_UPLOAD_PATH, p)}/'` : `'s3://${OBJECT_STORE_BUCKET ?? ''}/${p}/'`))
+        .join(', ');
+      if (isLocal || OBJECT_STORE_BUCKET) {
+        await conn.run(`SET allowed_directories = [${dirs}]`);
+      }
     }
     await conn.run('SET enable_external_access = false');
   } finally {

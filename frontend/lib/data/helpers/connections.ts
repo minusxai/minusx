@@ -8,8 +8,10 @@ import { IS_DEV } from '@/lib/constants';
 /**
  * Reserved connection names that cannot be used
  */
-// 'static' is the shared CSV/Google Sheets landing zone — one per mode, cannot be deleted or renamed
-export const RESERVED_NAMES = ['static'];
+// 'static' is the legacy shared CSV/Google Sheets landing zone — one per mode, cannot be deleted or renamed
+// 'files' is the VIRTUAL connection dataset tables resolve through (lib/types/datasets.ts) —
+// a real connection must never shadow it
+export const RESERVED_NAMES = ['static', 'files'];
 
 /** Connection types only available in development (NODE_ENV !== 'production'). */
 const DEV_ONLY_CONNECTION_TYPES = ['duckdb', 'sqlite'];
