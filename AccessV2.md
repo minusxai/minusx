@@ -1,6 +1,6 @@
 # Access V2 — Groups, Folder Permissions, and SQL-Enforced Access
 
-Status: **feature-complete** (PR #599, CI green). Groups are config-stored (no new tables), additive, and inert until populated — merged behavior is unchanged for existing workspaces until an admin creates a group. Remaining (deliberately deferred): M1c transparent RLS and SQL write-guards (writes are enforced app-side with the same engine).
+Status: **in progress** (PR #599). Groups + engine + UI are done and CI-green. **M1c — transparent RLS + atomic guarded writes — is REQUIRED scope (not optional) and being implemented now**: enforcement must live in the database itself, not only in application SQL/code.
 
 ## Why
 
@@ -52,13 +52,20 @@ membership array) and compiled into the WHERE as literals — the query never
 joins any table.
 ```
 
-Every operation is *compilable* ("0 rows" = denied) — reads are wired to SQL today; write-guard SQL (`INSERT … SELECT … WHERE`, predicate in `UPDATE`/`DELETE` `WHERE`) is deliberately deferred hardening.
+Every operation is enforced in the database ("0 rows" / policy error = denied): reads via the injected predicate AND the RLS policy; writes atomically via the RLS write policies inside the statement itself (M1c).
 
 Fine-grained scopes are a **live join** in the query (not the token), so adding a user to a group, or a folder to a group, takes effect immediately — no re-login. (The coarse admin flag can live in the token, like `role` today.)
 
-### Transparent enforcement via RLS — deferred (M1c), feasibility proven
+### Transparent enforcement via RLS (M1c) — REQUIRED, design
 
-NOT implemented yet — deliberately sequenced after the feature. The plan, verified empirically on **both PGLite and Postgres**: install the same predicate as a Row-Level-Security policy on `files` (non-superuser `app_user` role + per-transaction session variable + `FORCE ROW LEVEL SECURITY`), so the database itself refuses unauthorized rows regardless of the SQL a caller runs. A narrow owner-run system path stays for migrations/seeding/bootstrap. Footgun when implementing: superusers bypass RLS entirely — the app-vs-system role boundary is the whole game.
+The database itself enforces access on `files`, regardless of what SQL runs:
+
+- **`app_user`** — a non-login role with grants ONLY on `files`. Every user-scoped `files` query runs in a transaction that does `SET LOCAL ROLE app_user` + `set_config('app.access', <context>, true)`; the transaction ends and both reset.
+- **`app.access` context** — JSON built from the caller's resolved `AccessPredicate` (mode, admin, grants with types × scopes, home folder, write scopes, reference variant). Groups stay config-stored: the app resolves grants (config × membership) and hands the DB the *result*; the policy evaluates it generically.
+- **`app_access_allows(path, type, op)`** — one SQL function encapsulating the engine semantics (mode isolation, admin, per-grant type ∩ scope, raw/exclude-system scopes, ancestor-context, embedded variant for reference loads, write = base home/conversation scopes ∪ group `createTypes` grants). Policies on `files`: SELECT `USING(read)`; INSERT `WITH CHECK(write)`; UPDATE/DELETE `USING(write)` (+ `WITH CHECK`).
+- **Atomic guarded writes** — because the policy applies inside the write statement itself, `INSERT`/`UPDATE`/`DELETE` under `app_user` are checked atomically by the database: out-of-scope writes affect 0 rows / raise a policy error. App-side checks remain only for precise error messages.
+- **System path** — `ENABLE ROW LEVEL SECURITY` (not FORCE): the DB owner (migrations, seeding, registration, background jobs without a user principal) bypasses policies; everything holding a user principal runs as `app_user` and is enforced. That owner/app boundary is the critical review surface.
+- **Gold test** — for the full principal × variant matrix: a RAW unfiltered `SELECT` under the RLS context must return EXACTLY the `checkAccess`-accepted set (the policy itself filters, with no predicate in the query), on real PGLite; the policy SQL is engine-parity-tested like `toSql` was.
 
 ### Two reference variants (preserve today's behavior)
 
@@ -90,11 +97,13 @@ Extract one effective-access resolver producing an `AccessPredicate` + in-memory
 - [ ] Write-guard SQL (`INSERT … SELECT … WHERE`, predicate in `UPDATE`/`DELETE` `WHERE`) — deferred hardening; writes are enforced app-side with the same engine (`checkWriteAccess`)
 - [x] `path` prefix index — NOTE: `text_pattern_ops` rejected by PGLite (OSS default); hosted-Postgres perf optimization added out-of-band (correctness unaffected)
 
-### M1c — Transparent RLS *(optional hardening — gated on the timing decision)*
-- [ ] Non-superuser `app_user` role + `GRANT`s (`postgres-schema.ts`)
-- [ ] Per-transaction `SET LOCAL ROLE` + caller session var in the DB module
-- [ ] Narrow system-bypass path (migrations, seeding, first-user bootstrap)
-- [ ] Install the predicate as an RLS policy + `FORCE ROW LEVEL SECURITY`; verify on PGLite **and** Postgres; test the superuser-bypass boundary
+### M1c — Transparent RLS + atomic guarded writes (REQUIRED — in progress)
+- [ ] `app_user` role (idempotent) + grants on `files` only; `GRANT app_user TO` the connection user (`postgres-schema.ts`)
+- [ ] `app_access_allows(path, type, op)` policy function + SELECT/INSERT/UPDATE/DELETE policies; `ENABLE ROW LEVEL SECURITY` on `files` (owner = system path)
+- [ ] Access-context execution: user-scoped `DocumentDB` reads AND writes run in a `SET LOCAL ROLE app_user` + `app.access` transaction (module `transaction` API)
+- [ ] Reference loads carry the `embedded` variant into the context (container semantics preserved under RLS)
+- [ ] **Gold parity (red-first): raw unfiltered SELECT under RLS === `checkAccess` matrix on real PGLite**; atomic write denial (0 rows / policy error) for out-of-scope create/edit/delete; owner/system path unaffected
+- [ ] Full suite green; browser-verify
 
 ### M2 — Group model + resolver (additive — NO migration, NO new tables) ✅ DONE
 **Storage (final):** group DEFINITIONS live in the org config document's `groups` section (name → capabilities × folders), next to `accessRules` — hand-editable and versioned with the config. MEMBERSHIP is a `groups` array of names on the users table (one idempotent column; the only schema touch). The built-in groups ARE the roles: the `role` column is the user's built-in group (admin locked; editor/viewer capabilities editable via `accessRules`) — so every user has ≥1 group, and custom groups are purely additive.
