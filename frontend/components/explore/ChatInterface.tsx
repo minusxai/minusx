@@ -29,6 +29,8 @@ import {
   appStateShotKey,
 } from '@/lib/screenshot/app-state-screenshot';
 import ExampleQuestions from './message/ExampleQuestions';
+import AgentWelcome from './agents/AgentWelcome';
+import type { DemoAgent } from '@/lib/agents/demo-agents';
 import FileNotFound from '../file-browser/FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
@@ -67,6 +69,8 @@ interface ChatInterfaceProps {
   readOnly?: boolean;
   /** Custom empty-state prompts (e.g. story-specific questions). Falls back to generic defaults. */
   suggestedPrompts?: string[];
+  /** Active demo agent: skins the empty state with the agent's greeting + question sections. */
+  agent?: DemoAgent | null;
 }
 
 export default function ChatInterface({
@@ -80,6 +84,7 @@ export default function ChatInterface({
   onDatabaseChange,
   readOnly = false,
   suggestedPrompts,
+  agent = null,
 }: ChatInterfaceProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
@@ -896,7 +901,7 @@ export default function ChatInterface({
           overflowY="auto"
           display="flex"
           flexDirection="column"
-          justifyContent={allMessages.length === 0 ? "center" : "flex-start"}
+          justifyContent={allMessages.length === 0 && !agent ? "center" : "flex-start"}
           onScroll={checkScrollPosition}
         >
           <Box width="100%" p={4}>
@@ -912,13 +917,22 @@ export default function ChatInterface({
           ) : loadError ? (
             <FileNotFound/>
           ) : !readOnly && allMessages.length === 0 ? (
-            <ExampleQuestions
-              onPromptClick={stableSendMessage}
-              container={container}
-              colSpan={colSpan}
-              colStart={colStart}
-              customPrompts={suggestedPrompts}
-            />
+            agent ? (
+              <AgentWelcome
+                agent={agent}
+                onPromptClick={stableSendMessage}
+                colSpan={colSpan}
+                colStart={colStart}
+              />
+            ) : (
+              <ExampleQuestions
+                onPromptClick={stableSendMessage}
+                container={container}
+                colSpan={colSpan}
+                colStart={colStart}
+                customPrompts={suggestedPrompts}
+              />
+            )
           ) : (
             <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
                 gap={2} w="100%">

@@ -74,10 +74,12 @@ interface SuggestedQuestionCardProps {
   /** Locked: shown as a teaser (e.g. before sign-in) — non-interactive with a lock affordance. */
   locked?: boolean;
   onClick?: (text: string) => void;
+  /** Accent token for the icon chip / category / hover tint (agent-skinned cards). */
+  accent?: string;
 }
 
 /** A single "try these questions" card. Reused by the explore empty-state and the share gate. */
-function SuggestedQuestionCard({ prompt, locked = false, onClick }: SuggestedQuestionCardProps) {
+function SuggestedQuestionCard({ prompt, locked = false, onClick, accent = 'accent.teal' }: SuggestedQuestionCardProps) {
   const PromptIcon = prompt.icon ?? LuSparkles;
   // Locked = a lightweight "preview" row (dashed, no fill, no category) so a stack
   // of them reads as a calm teaser list rather than three heavy interactive cards.
@@ -93,15 +95,15 @@ function SuggestedQuestionCard({ prompt, locked = false, onClick }: SuggestedQue
       cursor={locked ? 'default' : 'pointer'}
       transition="all 0.2s"
       onClick={locked ? undefined : () => onClick?.(prompt.text)}
-      _hover={locked ? undefined : { borderColor: 'accent.teal', bg: 'accent.teal/5', transform: 'translateX(4px)' }}
+      _hover={locked ? undefined : { borderColor: accent, bg: `${accent}/5`, transform: 'translateX(4px)' }}
     >
       <HStack gap={2.5}>
-        <Box p={1.5} borderRadius="md" bg="accent.teal/10">
-          <Icon as={PromptIcon} boxSize={3.5} color="accent.teal" />
+        <Box p={1.5} borderRadius="md" bg={`${accent}/10`}>
+          <Icon as={PromptIcon} boxSize={3.5} color={accent} />
         </Box>
         <VStack gap={0} align="start" flex="1">
           {prompt.category && !locked && (
-            <Text fontSize="2xs" fontWeight="600" color="accent.teal" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
+            <Text fontSize="2xs" fontWeight="600" color={accent} textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
               {prompt.category}
             </Text>
           )}
@@ -120,10 +122,12 @@ interface SuggestedQuestionsListProps {
   locked?: boolean;
   onPromptClick?: (text: string) => void;
   label?: string;
+  /** Accent token passed through to the cards (agent-skinned lists). */
+  accent?: string;
 }
 
 /** "TRY THESE QUESTIONS" label + the stack of cards. */
-export function SuggestedQuestionsList({ prompts, locked, onPromptClick, label = 'Try these questions' }: SuggestedQuestionsListProps) {
+export function SuggestedQuestionsList({ prompts, locked, onPromptClick, label = 'Try these questions', accent }: SuggestedQuestionsListProps) {
   return (
     <Box width="100%">
       <Text fontSize="xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={2} fontFamily="mono">
@@ -131,7 +135,7 @@ export function SuggestedQuestionsList({ prompts, locked, onPromptClick, label =
       </Text>
       <VStack gap={2} align="stretch">
         {prompts.map((prompt, index) => (
-          <SuggestedQuestionCard key={index} prompt={prompt} locked={locked} onClick={onPromptClick} />
+          <SuggestedQuestionCard key={index} prompt={prompt} locked={locked} onClick={onPromptClick} accent={accent} />
         ))}
       </VStack>
     </Box>

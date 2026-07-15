@@ -4,6 +4,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, HStack, VStack, Flex } from '@chakra-ui/react';
 import ChatInterface from './ChatInterface';
+import AgentsHub from './agents/AgentsHub';
+import AgentChatHeader from './agents/AgentChatHeader';
+import { selectActiveAgent } from '@/store/agentsSlice';
 import RightSidebar from '@/components/app-shell/RightSidebar';
 import MobileRightSidebar from '@/components/app-shell/MobileRightSidebar';
 import Breadcrumb from '@/components/file-browser/Breadcrumb';
@@ -132,11 +135,44 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
     return () => window.removeEventListener('resize', checkMobile);
   }, [dispatch]);
 
+  // Demo agents: the /explore landing shows the agents grid; launching an
+  // agent (or opening an existing conversation) shows the chat instead.
+  const activeAgent = useAppSelector(selectActiveAgent);
+  const showAgentsHub = !conversationId && !activeAgent;
+
   // Build breadcrumb items for explore page
-  const breadcrumbItems = useMemo(() => [
-    { label: 'Home', href: '/' },
-    { label: 'Explore' }
-  ], []);
+  const breadcrumbItems = useMemo(() => {
+    if (showAgentsHub) {
+      return [{ label: 'Home', href: '/' }, { label: 'Agents' }];
+    }
+    if (activeAgent) {
+      return [
+        { label: 'Home', href: '/' },
+        { label: 'Agents', href: '/explore' },
+        { label: activeAgent.name },
+      ];
+    }
+    return [{ label: 'Home', href: '/' }, { label: 'Explore' }];
+  }, [showAgentsHub, activeAgent]);
+
+  if (showAgentsHub) {
+    return (
+      <VStack gap={0} align="stretch" height="100%">
+        {!hideTopChrome && (
+          <Box px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }}>
+            <Flex justify="space-between" align="center" gap={4}>
+              <Box flex="1" minW={0}>
+                <Breadcrumb items={breadcrumbItems} />
+              </Box>
+            </Flex>
+          </Box>
+        )}
+        <Box flex="1" overflow="hidden">
+          <AgentsHub />
+        </Box>
+      </VStack>
+    );
+  }
 
   return (
     <HStack gap={0}
@@ -156,6 +192,8 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
               </Flex>
             </Box>
           )}
+          {/* Agent identity strip (demo agents) */}
+          {activeAgent && <AgentChatHeader agent={activeAgent} />}
           {/* Chat Interface */}
           <Box flex="1" overflow="hidden">
             <ChatInterface
@@ -164,6 +202,7 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
               contextVersion={selectedVersion}
               appState={undefined}
               container="page"
+              agent={activeAgent}
               onContextChange={(path, version) => {
                 setSelectedContextPath(path);
                 setSelectedVersion(version);
