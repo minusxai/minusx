@@ -2,7 +2,9 @@
 
 import { Box, Button, HStack, Icon, Menu, Portal, Text, VStack } from '@chakra-ui/react'
 import { LuChevronDown, LuPlus, LuTrash2 } from 'react-icons/lu'
-import type { ConditionalFormatRule } from '@/lib/types'
+import type { ColorScaleFormatRule, ConditionFormatRule, ConditionalFormatRule } from '@/lib/types'
+import { isColorScaleRule } from '@/lib/chart/conditional-format-utils'
+import type { ColorScaleName } from '@/lib/chart/color-scale'
 
 interface TableConditionalFormatPanelProps {
   columns: string[]
@@ -10,8 +12,14 @@ interface TableConditionalFormatPanelProps {
   onChange: (rules: ConditionalFormatRule[]) => void
 }
 
-type Operator = ConditionalFormatRule['operator']
-type Target = ConditionalFormatRule['target']
+type Operator = ConditionFormatRule['operator']
+type Target = ConditionFormatRule['target']
+
+const SCALES: { value: ColorScaleName; label: string }[] = [
+  { value: 'red-yellow-green', label: 'Red → Green' },
+  { value: 'green', label: 'Green (GitHub)' },
+  { value: 'blue', label: 'Blue' },
+]
 
 const OPERATORS: { value: Operator; label: string }[] = [
   { value: '=', label: '=' },
@@ -117,14 +125,21 @@ export const TableConditionalFormatPanel = ({ columns, rules, onChange }: TableC
   const items = rules ?? []
   const columnOptions = columns.map(c => ({ value: c, label: c }))
 
-  const updateRule = (index: number, patch: Partial<ConditionalFormatRule>) => {
-    onChange(items.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)))
+  const updateRule = (index: number, patch: Partial<ConditionFormatRule> | Partial<ColorScaleFormatRule>) => {
+    onChange(items.map((rule, i) => (i === index ? { ...rule, ...patch } as ConditionalFormatRule : rule)))
   }
 
   const addRule = () => {
     onChange([
       ...items,
       { id: newId(), column: columns[0] ?? '', operator: '=', value: '', target: 'cell', bgColor: DEFAULT_COLOR },
+    ])
+  }
+
+  const addScaleRule = () => {
+    onChange([
+      ...items,
+      { id: newId(), column: columns[0] ?? '', scale: 'red-yellow-green' },
     ])
   }
 
@@ -138,21 +153,47 @@ export const TableConditionalFormatPanel = ({ columns, rules, onChange }: TableC
         <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
           Conditional Formatting
         </Text>
-        <button type="button" onClick={addRule} aria-label="Add conditional formatting rule" style={addButtonStyle}>
-          <LuPlus size={10} />
-          <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">Add</Text>
-        </button>
+        <HStack gap={1}>
+          <button type="button" onClick={addRule} aria-label="Add conditional formatting rule" style={addButtonStyle}>
+            <LuPlus size={10} />
+            <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">Rule</Text>
+          </button>
+          <button type="button" onClick={addScaleRule} aria-label="Add color scale rule" style={addButtonStyle}>
+            <LuPlus size={10} />
+            <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">Scale</Text>
+          </button>
+        </HStack>
       </HStack>
 
       {items.length === 0 && (
         <Text fontSize="xs" fontFamily="mono" color="fg.muted">
-          No rules yet. Color a cell, row, or column when a condition on a column holds.
+          No rules yet. Color cells when a condition holds (Rule), or paint a numeric column min→max (Scale).
         </Text>
       )}
 
       {items.length > 0 && (
         <VStack align="stretch" gap={2} maxH="320px" overflowY="auto">
-          {items.map((rule, index) => (
+          {items.map((rule, index) => isColorScaleRule(rule) ? (
+            <VStack key={rule.id} align="stretch" gap={1.5} p={2} border="1px solid" borderColor="border.muted" borderRadius="md">
+              {/* Colour scale: column · scale · delete */}
+              <HStack gap={1.5} minW={0} align="center">
+                <Box flex={2} minW={0}>
+                  <MenuSelect ariaLabel="Scale column" value={rule.column} options={columnOptions} onChange={(column) => updateRule(index, { column })} />
+                </Box>
+                <Box flex={2} minW={0}>
+                  <MenuSelect ariaLabel="Color scale" value={rule.scale} options={SCALES} onChange={(scale) => updateRule(index, { scale })} />
+                </Box>
+                <button
+                  type="button"
+                  onClick={() => removeRule(index)}
+                  aria-label="Remove conditional formatting rule"
+                  style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--chakra-colors-fg-subtle)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}
+                >
+                  <LuTrash2 size={14} />
+                </button>
+              </HStack>
+            </VStack>
+          ) : (
             <VStack key={rule.id} align="stretch" gap={1.5} p={2} border="1px solid" borderColor="border.muted" borderRadius="md">
               {/* Condition: column · operator · value */}
               <HStack gap={1.5} minW={0}>

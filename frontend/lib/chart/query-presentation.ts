@@ -11,6 +11,8 @@
  * one decision and it can be unit-tested directly.
  */
 import { RENDERABLE_CHART_TYPES } from './render-chart-svg';
+import { isEnvelopeImageViz } from '@/lib/viz/encoding-edit';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 export type QueryPresentation = 'image' | 'data';
 
@@ -23,6 +25,39 @@ export type QueryPresentation = 'image' | 'data';
  */
 export function isImageViz(vizType: string | undefined): boolean {
   return vizType !== undefined && RENDERABLE_CHART_TYPES.has(vizType);
+}
+
+/**
+ * V2-aware image gate over a file's CONTENT (Viz Arch V2 §21 item 2). A V2 `viz`
+ * envelope is authoritative — every chart kind images (only the DOM-tier table/pivot
+ * don't); otherwise fall back to the legacy `vizSettings.type` gate above.
+ */
+export function isContentImageViz(
+  content: { viz?: VizEnvelope | null; vizSettings?: { type?: string } | null } | undefined,
+): boolean {
+  if (content?.viz) return isEnvelopeImageViz(content.viz);
+  return isImageViz(content?.vizSettings?.type);
+}
+
+/**
+ * Which viz an ExecuteQuery result should render as an IMAGE. A V2 `viz` envelope is
+ * authoritative — when present it decides outright (chart → render it, table/pivot → no
+ * image), never falling back to `vizSettings`. Only when there is no envelope does the
+ * legacy `vizSettings.type` gate apply. Null = send rows, no image.
+ */
+export type ExecuteQueryImageSource =
+  | { kind: 'envelope'; viz: VizEnvelope }
+  | { kind: 'vizSettings'; vizSettings: unknown }
+  | null;
+
+export function selectExecuteQueryImage(params: { viz?: unknown; vizSettings?: unknown }): ExecuteQueryImageSource {
+  if (params.viz != null) {
+    const viz = params.viz as VizEnvelope;
+    return isEnvelopeImageViz(viz) ? { kind: 'envelope', viz } : null;
+  }
+  const vizType = (params.vizSettings as { type?: string } | null | undefined)?.type;
+  if (params.vizSettings && isImageViz(vizType)) return { kind: 'vizSettings', vizSettings: params.vizSettings };
+  return null;
 }
 
 /**

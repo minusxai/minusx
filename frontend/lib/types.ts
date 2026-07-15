@@ -13,7 +13,7 @@ export type { FileType };
 export type { FileState };
 export type {
   AggregationFunction, FormulaOperator, VisualizationType, ParameterType,
-  PivotValueConfig, PivotFormula, PivotConfig, ColumnFormatConfig, ConditionalFormatRule, VizSettings, AxisConfig, AxisScale, VisualizationStyleConfig, ChartAnnotation, TrendConfig, TrendCompareMode, SingleValueConfig,
+  PivotValueConfig, PivotFormula, PivotConfig, ColumnFormatConfig, ConditionalFormatRule, ConditionFormatRule, ColorScaleFormatRule, VizSettings, AxisConfig, AxisScale, VisualizationStyleConfig, ChartAnnotation, TrendConfig, TrendCompareMode, SingleValueConfig,
   QuestionParameter,
   QuestionContent,
   FileReference, InlineAsset,

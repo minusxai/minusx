@@ -1,4 +1,55 @@
+import { format as d3Format } from 'd3-format'
+import { timeFormat as d3TimeFormat } from 'd3-time-format'
 import type { ColumnFormatConfig } from '@/lib/types'
+
+// ── d3 formatting (the unified viz vocabulary) ────────────────────────────────
+//
+// `ColumnFormatConfig.format` is a d3 pattern — the same string the vega tier
+// renders natively (spec axis.format, recipe labels). These helpers let the DOM
+// grids (table/pivot) speak it too. Compiled formatters are cached; an invalid
+// pattern returns null so callers fall back to the legacy fields.
+
+// eslint-disable-next-line no-restricted-syntax -- pure memo: a compiled d3 formatter is a deterministic function of the pattern string, identical for every request
+const d3NumberCache = new Map<string, (n: number) => string>()
+// eslint-disable-next-line no-restricted-syntax -- pure memo: a compiled d3 formatter is a deterministic function of the pattern string, identical for every request
+const d3TimeCache = new Map<string, (d: Date) => string>()
+
+export const formatD3Number = (value: number, pattern: string): string | null => {
+  try {
+    let f = d3NumberCache.get(pattern)
+    if (!f) { f = d3Format(pattern); d3NumberCache.set(pattern, f) }
+    return f(value)
+  } catch {
+    return null
+  }
+}
+
+export const formatD3Date = (date: Date, pattern: string): string | null => {
+  try {
+    let f = d3TimeCache.get(pattern)
+    if (!f) { f = d3TimeFormat(pattern); d3TimeCache.set(pattern, f) }
+    return f(date)
+  } catch {
+    return null
+  }
+}
+
+// Shared preset lists for every d3-vocabulary format popover (native charts,
+// recipes, V2 table/pivot). `format: null` = the tier's default.
+export const D3_NUMBER_PRESETS: ReadonlyArray<{ label: string; format: string | null }> = [
+  { label: 'Default (20k)', format: null },
+  { label: '1,234', format: ',.0f' },
+  { label: '1,234.56', format: ',.2f' },
+  { label: '$1,234', format: '$,.0f' },
+  { label: '12.3%', format: '.1%' },
+]
+
+export const D3_DATE_PRESETS: ReadonlyArray<{ label: string; format: string | null }> = [
+  { label: 'Default (smart)', format: null },
+  { label: 'Jan 2025', format: '%b %Y' },
+  { label: "Jan '25", format: "%b '%y" },
+  { label: '2025-01-31', format: '%Y-%m-%d' },
+]
 
 /**
  * Build a compact label for multiple y-columns.

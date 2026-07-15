@@ -116,7 +116,7 @@ export const PivotConfig = Type.Object({
   showRowTotals: Nullable(Type.Boolean({ description: 'show row totals column' })),
   showColumnTotals: Nullable(Type.Boolean({ description: 'show column totals row' })),
   showHeatmap: Nullable(Type.Boolean({ description: 'show heatmap conditional formatting' })),
-  compact: Nullable(Type.Boolean({ description: 'compact heatmap mode: hides cell values, shows only colored squares with tooltips, and uses smaller cells — like a GitHub contribution graph' })),
+  compact: Nullable(Type.Boolean({ description: 'DEPRECATED compact heatmap mode (GitHub-contribution-graph look) — kept rendering for legacy pivots; prefer the dedicated heatmap viz type (vega-lite rect mark) instead' })),
   heatmapScale: Nullable(Type.String({ description: "heatmap color scale: 'red-yellow-green' (default), 'green' (single-hue like GitHub), 'blue' (single-hue blue)" })),
   rowFormulas: Nullable(Type.Array(PivotFormula, { description: 'formulas combining top-level row dimension values' })),
   columnFormulas: Nullable(Type.Array(PivotFormula, { description: 'formulas combining top-level column dimension values' })),
@@ -140,6 +140,10 @@ export type AxisConfig = Static<typeof AxisConfig>;
 
 export const ColumnFormatConfig = Type.Object({
   alias: Nullable(Type.String({ description: 'display name override for the column header' })),
+  format: Nullable(Type.String({ description:
+    "d3 format string for numeric values — the VEGA-TIER vocabulary (recipe sources): e.g. ',.0f', " +
+    "'$,.2f', '.2~s'. Takes precedence over decimalPoints/prefix/suffix. DOM grids (table/pivot) " +
+    'ignore it — they use the fields below.' })),
   decimalPoints: Nullable(Type.Integer({ description: 'number of decimal places (0-4) for numeric columns' })),
   dateFormat: Nullable(Type.String({ description: "date display format as a Unicode date pattern, e.g. 'yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'MMM dd, yyyy', \"MMM'yy\", 'yyyy', 'yyyy-MM-dd HH:mm', 'HH:mm:ss'. Tokens: yyyy (4-digit year), yy (2-digit year), MMMM (full month), MMM (short month), MM (month number), dd (day), HH (hours 24h), mm (minutes), ss (seconds)." })),
   prefix: Nullable(Type.String({ description: "string to prepend to displayed values (e.g. '$', '€')" })),
@@ -147,14 +151,26 @@ export const ColumnFormatConfig = Type.Object({
 }, { title: 'ColumnFormatConfig' });
 export type ColumnFormatConfig = Static<typeof ColumnFormatConfig>;
 
-export const ConditionalFormatRule = Type.Object({
+export const ConditionFormatRule = Type.Object({
   id: Type.String({ description: 'stable unique id for this rule' }),
   column: Type.String({ description: 'the column whose value the condition is checked against' }),
   operator: StringEnum(['=', '!=', '>', '<', '>=', '<=', 'contains'], 'comparison operator'),
   value: Type.String({ description: 'value to compare against (coerced to number for numeric columns)' }),
   target: StringEnum(['cell', 'row', 'column'], "what gets painted when the condition matches: the matching 'cell', the entire 'row', or the entire 'column'"),
   bgColor: Type.String({ description: "background color as a hex string, e.g. '#fde68a'" }),
-}, { title: 'ConditionalFormatRule' });
+}, { title: 'ConditionFormatRule' });
+export type ConditionFormatRule = Static<typeof ConditionFormatRule>;
+
+export const ColorScaleFormatRule = Type.Object({
+  id: Type.String({ description: 'stable unique id for this rule' }),
+  column: Type.String({ description: 'numeric column whose cells are painted with a min→max colour ramp over the column values (heatmap cells)' }),
+  scale: StringEnum(['red-yellow-green', 'green', 'blue'], "colour ramp: 'red-yellow-green' (diverging, default), 'green' (single-hue, GitHub-like), 'blue' (single-hue)"),
+}, { title: 'ColorScaleFormatRule' });
+export type ColorScaleFormatRule = Static<typeof ColorScaleFormatRule>;
+
+// A conditional format is EITHER a condition rule (paint when a predicate holds)
+// or a colour-scale rule (min→max ramp over a numeric column).
+export const ConditionalFormatRule = Type.Union([ConditionFormatRule, ColorScaleFormatRule], { title: 'ConditionalFormatRule' });
 export type ConditionalFormatRule = Static<typeof ConditionalFormatRule>;
 
 export const VisualizationStyleConfig = Type.Object({
@@ -214,6 +230,124 @@ export const VizSettings = Type.Object({
   singleValueConfig: NullableD(SingleValueConfig, "single-value (big number) styling — label, prefix/suffix, font size/color/weight, alignment. The number stays live; these only decorate it. Only used when type is 'single_value'."),
 }, { title: 'VizSettings' });
 export type VizSettings = Static<typeof VizSettings>;
+
+// ============================================================================
+// Viz V2 envelope (docs/Visualization Arch V2.md)
+//
+// Only the MinusX envelope lives in TypeBox. Native Vega-Lite/Vega spec bodies are
+// deliberately opaque here (open records) — they are validated against Vega-Lite's
+// package-provided official schema plus the MinusX field/security passes in lib/viz/validate.ts.
+// Do NOT reproduce the grammars in TypeBox.
+// ============================================================================
+
+export const VIZ_GRAMMAR_VEGA_LITE = 'vega-lite@6';
+export const VIZ_GRAMMAR_VEGA = 'vega@6';
+
+export const VizSourceRecipe = Type.Object({
+  kind: Type.Literal('recipe'),
+  recipe: Type.String({ description:
+    "a SHIPPED recipe id, e.g. 'minusx/funnel@1' or 'minusx/waterfall@1'. The chart is generated from the " +
+    'recipe + bindings at render time — nothing else to author. Available recipes and their bindings are ' +
+    'listed in the questions skill.' }),
+  bindings: Type.Record(Type.String(), Type.Union([Type.String(), Type.Array(Type.String())]), { description:
+    'recipe binding slots → query-result column names (validated against the actual columns). Multi-capable ' +
+    "slots (e.g. radar's value) accept an ARRAY of columns — one series per column." }),
+  params: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'optional recipe params (see the recipe docs); omit for defaults' })),
+  columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description:
+    'per-column display formatting keyed by RESULT column name, applied at materialization: `alias` ' +
+    'renames displays derived from the column name (waterfall y-axis title, radar series names); ' +
+    'decimalPoints/prefix/suffix reshape the value labels (waterfall bars, funnel values). Omit for defaults.' })),
+}, { title: 'VizSourceRecipe' });
+export type VizSourceRecipe = Static<typeof VizSourceRecipe>;
+
+export const VizSourceVegaLite = Type.Object({
+  kind: Type.Literal('vega-lite'),
+  grammar: Type.Literal(VIZ_GRAMMAR_VEGA_LITE, { description: 'pinned grammar major version; never fetched from the network' }),
+  spec: Type.Record(Type.String(), Type.Unknown(), { description:
+    'a Vega-Lite spec. Omit `data` — the query result is injected as the named dataset "main" ' +
+    '(`data: {"name": "main"}`); external data URLs are rejected. Validated against the official ' +
+    'Vega-Lite schema and the query-result columns.' }),
+  detachedFrom: Nullable(VizSourceRecipe),
+}, { title: 'VizSourceVegaLite' });
+export type VizSourceVegaLite = Static<typeof VizSourceVegaLite>;
+
+// Raw native-Vega spec — the full-control escape hatch (RFC §21.10). A recipe is
+// "detached" into this via detachRecipe(): its materialized spec is frozen here so the
+// agent can edit ANY property (marks, signals, projections, layers) with no recipe
+// param. Native Vega expresses charts Vega-Lite can't (projections/signals/geo/tiles),
+// so this is where detached radar/trend/geo maps land; VL-engine recipes detach to
+// `kind: 'vega-lite'` instead. `assets` carries any named boundary datasets the spec
+// references (geo maps), injected at render exactly like a recipe's assets. `detachedFrom`
+// keeps the original recipe source so the chart can be RE-ATTACHED (reset), discarding edits.
+export const VizSourceVega = Type.Object({
+  kind: Type.Literal('vega'),
+  grammar: Type.Literal(VIZ_GRAMMAR_VEGA, { description: 'pinned grammar major version; never fetched from the network' }),
+  spec: Type.Record(Type.String(), Type.Unknown(), { description:
+    'a native Vega spec. The query result is bound as the named dataset "main" (`data: [{"name": "main"}]`); ' +
+    'external data URLs are rejected. Edit this directly to fully customize a detached chart.' }),
+  assets: NullableD(Type.Record(Type.String(), Type.String()), 'named boundary/lookup datasets the spec references → asset ids (geo maps), injected at render'),
+  detachedFrom: Nullable(VizSourceRecipe),
+}, { title: 'VizSourceVega' });
+export type VizSourceVega = Static<typeof VizSourceVega>;
+
+// The DOM grid tier (RFC §10): tables never route through vega. The only persisted
+// state is display formatting — sorting/filtering/visibility are ephemeral UI state.
+export const VizSourceTable = Type.Object({
+  kind: Type.Literal('table'),
+  columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description:
+    'per-column display formatting keyed by RESULT column name: `alias` + `format` (d3 — the unified ' +
+    'viz vocabulary, numbers and dates). Legacy decimalPoints/dateFormat/prefix/suffix also honored. ' +
+    'Omit for sensible defaults.' })),
+  conditionalFormats: Nullable(Type.Array(ConditionalFormatRule, { description:
+    'conditional background-color rules — each paints cells/rows/columns a color when a condition ' +
+    'on a column holds. Omit for none.' })),
+  css: Nullable(Type.String({ description:
+    'CSS overrides for the table LOOKS (the DOM tier equivalent of a chart spec), scoped to this ' +
+    "table automatically. Write rules against the stable class contract: .mx-table, .mx-header-row, " +
+    '.mx-th, .mx-row, .mx-cell, .mx-col-<columnName> (per-column), .mx-toolbar (bottom bar), ' +
+    '.mx-row-odd/.mx-row-even (zebra stripe parity — the default stripe is a CSS rule, restyle or ' +
+    'unset it here). No @import and no external url() — both are rejected. Omit for the default theme.' })),
+}, { title: 'VizSourceTable' });
+export type VizSourceTable = Static<typeof VizSourceTable>;
+
+// The pivot grid (RFC §10): same DOM tier + css contract as table; the pivot
+// STRUCTURE (rows/columns/values) is real config, so it stays typed — reusing the
+// classic PivotConfig schema wholesale (subtotals, heatmap, formulas included).
+export const VizSourcePivot = Type.Object({
+  kind: Type.Literal('pivot'),
+  config: PivotConfig,
+  columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description:
+    'per-column display formatting keyed by RESULT column name: `alias` renames dimension/value ' +
+    'headers, `format` (d3) formats cells and date headers. Omit for sensible defaults.' })),
+  conditionalFormats: Nullable(Type.Array(ConditionalFormatRule, { description:
+    'conditional background-color rules over VALUE columns (keyed by result column name): condition ' +
+    'rules paint cells/rows/columns when a predicate holds; colour-scale rules paint cells min→max ' +
+    'along a ramp. Omit for none.' })),
+  css: Nullable(Type.String({ description:
+    'CSS overrides for the pivot LOOKS, scoped to this pivot automatically. The pivot shares the ' +
+    "table's class contract — .mx-table, .mx-header-row, .mx-th, .mx-row (+ .mx-row-odd/.mx-row-even " +
+    'zebra), .mx-cell, .mx-col-<columnName> (per value column), .mx-toolbar — plus the root class ' +
+    '`.mx-pivot` for element selectors (`.mx-pivot th { … }`). ' +
+    'No @import and no external url() — both are rejected. Omit for the default theme.' })),
+}, { title: 'VizSourcePivot' });
+export type VizSourcePivot = Static<typeof VizSourcePivot>;
+
+// Discriminated on `kind`. `vega` and `slippy-map` join this union as they land
+// (additive — see the RFC).
+export const VizSource = Type.Union([VizSourceVegaLite, VizSourceVega, VizSourceRecipe, VizSourceTable, VizSourcePivot], { title: 'VizSource' });
+export type VizSource = Static<typeof VizSource>;
+
+export const VizEnvelope = Type.Object({
+  version: Type.Literal(2),
+  source: VizSource,
+  // Reserved namespaces (RFC §13) — schema-present so saved envelopes never need a shape
+  // migration when these land; ignored by the probe runtime.
+  dataBindings: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'RESERVED: query param bindings (re-execute). Not yet implemented — omit.' })),
+  viewParams: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'RESERVED: presentation-only params/signals. Not yet implemented — omit.' })),
+  interactions: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'RESERVED: typed interaction outputs. Not yet implemented — omit.' })),
+  assets: Nullable(Type.Record(Type.String(), Type.String(), { description: 'RESERVED: named-asset registry refs (e.g. topojson boundaries). Not yet implemented — omit.' })),
+}, { title: 'VizEnvelope' });
+export type VizEnvelope = Static<typeof VizEnvelope>;
 
 // ============================================================================
 // Question Content
@@ -290,6 +424,9 @@ export const QuestionContent = Type.Object({
   connection_name: Type.String({ description: 'connection name (empty string if none)' }),
   cachePolicy: Nullable(CachePolicy),
   semanticQuery: NullableD(SemanticQuerySpec, 'Semantic-tier state; query holds the compiled SQL'),
+  viz: NullableD(VizEnvelope,
+    'Viz V2 envelope (docs/Visualization Arch V2.md). When present it is AUTHORITATIVE — the chart renders ' +
+    'from viz and legacy vizSettings is ignored. Omit to keep rendering via vizSettings.'),
 }, { title: 'QuestionContent' });
 export type QuestionContent = Static<typeof QuestionContent>;
 
