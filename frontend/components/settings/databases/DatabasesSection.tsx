@@ -84,7 +84,7 @@ export function DatabasesSection() {
 
   const fieldValue = (entry: DatabaseConfigEntry, key: string): string => {
     const v = entry.config[key];
-    if (v === undefined || v === null || isSecretRef(v)) return '';
+    if (v == null || isSecretRef(v)) return '';
     return String(v);
   };
 

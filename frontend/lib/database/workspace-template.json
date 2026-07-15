@@ -1870,7 +1870,7 @@
       "last_edit_id": "from_migration"
     },
     {
-      "id": 1013,
+      "id": 6,
       "name": "static",
       "path": "/tutorial/static",
       "type": "dataset",
@@ -2693,7 +2693,7 @@
       "references": []
     },
     {
-      "id": 1014,
+      "id": 1007,
       "name": "static",
       "path": "/org/static",
       "type": "dataset",
@@ -2707,7 +2707,7 @@
       "references": []
     },
     {
-      "id": 1015,
+      "id": 9,
       "name": "static",
       "path": "/internals/static",
       "type": "dataset",

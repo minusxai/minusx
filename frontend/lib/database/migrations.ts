@@ -42,8 +42,8 @@ const TEMPLATE_IDS = immutableSet(
  * 4. schema.table collisions across old static connections rename with a
  *    numeric suffix (first connection wins) — logged loudly.
  */
-const V37_STATIC_TYPES = new Set(['csv', 'google-sheets']);
-const V37_CONFIG_TYPES = new Set(['postgresql', 'bigquery', 'athena', 'clickhouse', 'mongo']);
+const V37_STATIC_TYPES = immutableSet(['csv', 'google-sheets']);
+const V37_CONFIG_TYPES = immutableSet(['postgresql', 'bigquery', 'athena', 'clickhouse', 'mongo']);
 
 function v37StaticSourcesAndConfigDatabases(data: InitData): InitData {
   const documents = data.documents ?? (data.orgs ?? []).flatMap((o: OrgData) => o.documents);
@@ -57,7 +57,6 @@ function v37StaticSourcesAndConfigDatabases(data: InitData): InitData {
   const warehouseDocs = connDocs.filter((d) => V37_CONFIG_TYPES.has((d.content as { type?: string })?.type ?? ''));
   if (staticDocs.length === 0 && warehouseDocs.length === 0) return data;
 
-  const nextId = (() => { let max = Math.max(0, ...documents.map((d) => d.id)); return () => ++max; })();
   const staticNamesByMode = new Map<string, Set<string>>();
   for (const d of staticDocs) {
     const mode = modeOf(d.path);
@@ -97,7 +96,9 @@ function v37StaticSourcesAndConfigDatabases(data: InitData): InitData {
     });
     return {
       ...d,
-      id: nextId(),
+      // ID PRESERVED: the connection doc is removed in this same pass, so its
+      // id is free — reusing it keeps template ids in the reserved range and
+      // never mints ids that could collide with user files.
       path: `/${mode}/${d.name}`,
       type: 'dataset',
       content: { files } as Doc['content'],

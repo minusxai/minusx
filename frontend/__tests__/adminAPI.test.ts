@@ -384,12 +384,14 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(rootResult.rows[0].path).toBe('/tutorial');
     expect(rootResult.rows[0].name).toBe('tutorial');
 
-    const connResult = await db.exec<{ id: number; path: string }>(
-      "SELECT id, path FROM files WHERE id = 6",
+    // V37: the tutorial static source is a DATASET at the mode root (same id 6).
+    const connResult = await db.exec<{ id: number; path: string; type: string }>(
+      "SELECT id, path, type FROM files WHERE id = 6",
       []
     );
     expect(connResult.rows).toHaveLength(1);
-    expect(connResult.rows[0].path).toBe('/tutorial/database/static');
+    expect(connResult.rows[0].path).toBe('/tutorial/static');
+    expect(connResult.rows[0].type).toBe('dataset');
 
     const id11Result = await db.exec<{ path: string }>(
       "SELECT path FROM files WHERE id = 11",
