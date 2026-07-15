@@ -99,13 +99,15 @@ interface DropZoneProps {
   isTouchDevice?: boolean
   children: React.ReactNode
   labelExtra?: React.ReactNode
+  ariaLabel?: string
 }
 
-export const DropZone = ({ label, onDrop, isTouchDevice, children, labelExtra }: DropZoneProps) => {
+export const DropZone = ({ label, onDrop, isTouchDevice, children, labelExtra, ariaLabel }: DropZoneProps) => {
   const [isDragOver, setIsDragOver] = useState(false)
 
   return (
     <VStack
+      aria-label={ariaLabel}
       flex="1"
       align="stretch"
       gap={1}

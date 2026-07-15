@@ -36,7 +36,7 @@ interface VizTypeGroup {
   types: VizTypeOption[];
 }
 
-const ALL_VIZ_GROUPS: VizTypeGroup[] = [
+export const ALL_VIZ_GROUPS: VizTypeGroup[] = [
   {
     label: 'Basic',
     types: [
@@ -69,8 +69,9 @@ const ALL_VIZ_GROUPS: VizTypeGroup[] = [
   },
 ];
 
-// Flat list for legacy horizontal/vertical orientations
-const ALL_VIZ_TYPES: VizTypeOption[] = ALL_VIZ_GROUPS.flatMap(g => g.types);
+// Flat list for legacy horizontal/vertical orientations (and the semantic
+// explorer's ChartTypeRail, which reorders it by inference match).
+export const ALL_VIZ_TYPES: VizTypeOption[] = ALL_VIZ_GROUPS.flatMap(g => g.types);
 
 interface VizTypeSelectorProps {
   value: VizSettings['type'];

@@ -32,7 +32,8 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { QuestionEmptyState } from '@/components/views/shared/empty-states';
 import type { FileId, FileState } from '@/store/filesSlice';
-import { QueryModeSelector, SemanticCanvas, type QueryTab } from '../query-builder';
+import { QueryModeSelector, type QueryTab } from '../query-builder';
+import { SemanticExplorer } from '../semantic-explorer';
 import { deriveModelStubs, type ModelStub } from '@/lib/semantic/derive';
 import { useSemanticModels } from '@/lib/hooks/use-semantic-models';
 import { VizTypeSelector } from '../question/VizTypeSelector';
@@ -330,6 +331,13 @@ export default function QuestionViewV2({
     onChange({ vizSettings: { ...content.vizSettings, type } });
   };
 
+  // Whether the chart type is a sticky manual choice the semantic explorer's
+  // auto-inference must not override. Legacy saved questions (no typeLocked)
+  // fall back to the old heuristic: a type outside the table/bar/line auto
+  // family was necessarily a deliberate pick.
+  const vizTypeLocked = content.vizSettings?.typeLocked
+    ?? !['table', 'bar', 'line'].includes(content.vizSettings?.type ?? 'table');
+
   // Handle chart axis change
   const handleAxisChange = (xCols: string[], yCols: string[]) => {
     onChange({
@@ -522,7 +530,7 @@ export default function QuestionViewV2({
                     onModeChange={(m: QueryTab) => { setUserPickedMode(true); setQueryMode(m); }}
                     showSemanticTab={showSemanticTab}
                     canUseSemantic={canUseSemantic}
-                    showVizTab={showVizControls}
+                    showVizTab={showVizControls && effectiveQueryMode !== 'semantic'}
                     canUseViz={!!queryData}
                   />
                 </Box>
@@ -558,16 +566,17 @@ export default function QuestionViewV2({
                   />
                 )}
 
-                {/* Semantic Mode: the drag-drop canvas (fields → shelves).
-                    Prefer the spec DETECTED from the live SQL (covers
-                    agent-written queries) over the persisted one. Shelf edits
-                    imply the viz: axis columns always track the query; the
-                    chart TYPE is only auto-set while it's still in the default
-                    family (table/bar/line) — a deliberate pick like pie or
-                    pivot from the Viz tab is respected. */}
+                {/* Semantic Mode: the single-surface explorer (fields rail →
+                    shelves → chart-type rail). Prefer the spec DETECTED from
+                    the live SQL (covers agent-written queries) over the
+                    persisted one. Shelf edits imply the viz: axis columns
+                    always track the query; the chart TYPE follows
+                    auto-inference until it's LOCKED — a deliberate pick on the
+                    rail (typeLocked, or legacy saved types outside the
+                    table/bar/line auto family) is never overridden. */}
                 {effectiveQueryMode === 'semantic' && showSemanticTab && (
                   <Box flex={1} overflow="hidden" display="flex" flexDirection="column" minHeight={0}>
-                    <SemanticCanvas
+                    <SemanticExplorer
                       models={semanticModels}
                       stubs={semanticStubs}
                       onSelectModel={(stub: ModelStub) => setPickedTables((prev) => prev.includes(stub.table) ? prev : [...prev, stub.table])}
@@ -576,17 +585,21 @@ export default function QuestionViewV2({
                       connectionName={content.connection_name}
                       value={detectedSemanticSpec ?? content.semanticQuery}
                       onChange={(spec, sql, viz) => {
-                        const autoType = ['table', 'bar', 'line'].includes(content.vizSettings?.type ?? 'table');
                         onChange({
                           semanticQuery: spec,
                           query: sql,
                           vizSettings: {
                             ...content.vizSettings,
-                            ...(autoType ? { type: viz.type } : {}),
+                            ...(vizTypeLocked ? {} : { type: viz.type }),
                             xCols: viz.xCols,
                             yCols: viz.yCols,
                           },
                         });
+                      }}
+                      vizType={content.vizSettings?.type ?? 'table'}
+                      vizTypeLocked={vizTypeLocked}
+                      onVizTypeChange={(type, locked) => {
+                        onChange({ vizSettings: { ...content.vizSettings, type, typeLocked: locked } });
                       }}
                       onExecute={handleExecute}
                       isExecuting={queryLoading && !queryData}
