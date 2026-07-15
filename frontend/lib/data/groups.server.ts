@@ -116,6 +116,25 @@ export interface GroupInput {
   memberIds: number[];
 }
 
+/** Validate an untrusted group payload into a `GroupInput` (or an error message). */
+export function validateGroupInput(body: unknown, mode: Mode): { input: GroupInput } | { error: string } {
+  const b = (body ?? {}) as Record<string, unknown>;
+  if (typeof b.name !== 'string' || !b.name.trim()) return { error: 'Group name is required' };
+  const asTypeSet = (v: unknown): TypeSet | null =>
+    v === '*' ? '*' : Array.isArray(v) && v.every(x => typeof x === 'string') ? (v as FileType[]) : null;
+  const allowedTypes = asTypeSet(b.allowedTypes);
+  if (allowedTypes === null) return { error: 'allowedTypes must be "*" or an array of file types' };
+  const viewTypes = asTypeSet(b.viewTypes ?? []);
+  if (viewTypes === null) return { error: 'viewTypes must be "*" or an array of file types' };
+  const createTypes = asTypeSet(b.createTypes ?? []);
+  if (createTypes === null) return { error: 'createTypes must be "*" or an array of file types' };
+  const scopes = Array.isArray(b.scopes) && b.scopes.every(s => typeof s === 'string') ? (b.scopes as string[]) : null;
+  if (scopes === null) return { error: 'scopes must be an array of folder strings' };
+  const memberIds = Array.isArray(b.memberIds) && b.memberIds.every(x => Number.isInteger(x)) ? (b.memberIds as number[]) : null;
+  if (memberIds === null) return { error: 'memberIds must be an array of user ids' };
+  return { input: { name: b.name.trim(), mode, allowedTypes, viewTypes, createTypes, scopes, memberIds } };
+}
+
 export async function createGroup(input: GroupInput): Promise<Group> {
   const db = getModules().db;
   const res = await db.exec<{ id: number }>(
