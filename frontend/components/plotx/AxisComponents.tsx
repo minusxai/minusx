@@ -534,6 +534,7 @@ export const ZoneChip = ({ column, type, onRemove, extra, formatConfig, onFormat
         )}
         <Box
           as="button"
+          aria-label={`Remove ${column}`}
           onClick={(e: React.MouseEvent) => { e.stopPropagation(); onRemove() }}
           ml={onFormatChange ? 0 : 0.5}
           _hover={{ color: 'accent.danger' }}

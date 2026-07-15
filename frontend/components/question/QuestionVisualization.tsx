@@ -213,15 +213,13 @@ function QuestionVisualizationInner({
   const isVizV2Pivot = vizV2Kind === 'pivot';
   const isChartType = hasVizV2 || (currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table');
 
-  // Render-only V1→V2 bridge (Viz Arch V2 §21 item 1): on READ-ONLY surfaces, a legacy
-  // chart with no `viz` envelope renders through <VegaChart> via the converter. Editable
-  // surfaces keep the V1 ChartBuilder (until the item-4 backfill writes a real `viz`);
-  // table/pivot keep their DOM renderers. Pure — recomputed from vizSettings each render,
-  // so V1 edits still flow to the picture.
+  // V1→V2 render bridge (Viz Arch V2 §21 item 1): on EVERY surface, a legacy chart with
+  // no `viz` envelope renders through <VegaChart> via the converter (the question page's
+  // Viz panel edits the same converted envelope — see QuestionViewV2); table/pivot keep
+  // their DOM renderers. Pure — recomputed from vizSettings each render.
   const legacyRenderViz = data
     ? resolveLegacyRenderEnvelope({
         hasVizEnvelope: hasVizV2,
-        editable: config.editable,
         vizSettings: currentState?.vizSettings,
         columns: toVizColumns(data.columns, data.types),
       })

@@ -189,32 +189,28 @@ describe('recipe sources (non-geo)', () => {
   });
 });
 
-describe('resolveLegacyRenderEnvelope (render-only bridge)', () => {
+describe('resolveLegacyRenderEnvelope (render bridge)', () => {
   const cols: VizResultColumn[] = [{ name: 'region', kind: 'nominal' }, { name: 'revenue', kind: 'quantitative' }];
   const bar = vs({ type: 'bar', xCols: ['region'], yCols: ['revenue'] });
 
-  it('bridges a legacy CHART on a read-only surface', () => {
-    const e = resolveLegacyRenderEnvelope({ hasVizEnvelope: false, editable: false, vizSettings: bar, columns: cols });
+  it('bridges a legacy CHART on every surface — including the editable question page', () => {
+    const e = resolveLegacyRenderEnvelope({ hasVizEnvelope: false, vizSettings: bar, columns: cols });
     expect(e).not.toBeNull();
     expect(src(e!).kind).toBe('vega-lite');
     expect(markType(e!)).toBe('bar');
   });
 
   it('does NOT bridge when a V2 envelope already exists', () => {
-    expect(resolveLegacyRenderEnvelope({ hasVizEnvelope: true, editable: false, vizSettings: bar, columns: cols })).toBeNull();
-  });
-
-  it('does NOT bridge editable surfaces (V1 ChartBuilder stays until backfill)', () => {
-    expect(resolveLegacyRenderEnvelope({ hasVizEnvelope: false, editable: true, vizSettings: bar, columns: cols })).toBeNull();
+    expect(resolveLegacyRenderEnvelope({ hasVizEnvelope: true, vizSettings: bar, columns: cols })).toBeNull();
   });
 
   it('does NOT bridge table or pivot (their DOM renderers stay)', () => {
-    expect(resolveLegacyRenderEnvelope({ hasVizEnvelope: false, editable: false, vizSettings: vs({ type: 'table' }), columns: cols })).toBeNull();
-    expect(resolveLegacyRenderEnvelope({ hasVizEnvelope: false, editable: false, vizSettings: vs({ type: 'pivot', pivotConfig: { rows: [], columns: [], values: [] } }), columns: cols })).toBeNull();
+    expect(resolveLegacyRenderEnvelope({ hasVizEnvelope: false, vizSettings: vs({ type: 'table' }), columns: cols })).toBeNull();
+    expect(resolveLegacyRenderEnvelope({ hasVizEnvelope: false, vizSettings: vs({ type: 'pivot', pivotConfig: { rows: [], columns: [], values: [] } }), columns: cols })).toBeNull();
   });
 
   it('does NOT bridge when there is no vizSettings at all', () => {
-    expect(resolveLegacyRenderEnvelope({ hasVizEnvelope: false, editable: false, vizSettings: null, columns: cols })).toBeNull();
+    expect(resolveLegacyRenderEnvelope({ hasVizEnvelope: false, vizSettings: null, columns: cols })).toBeNull();
   });
 });
 

@@ -160,21 +160,21 @@ function geoEnvelope(vizSettings: VizSettings): VizEnvelope {
 }
 
 /**
- * Render-only V1 → V2 bridge (§21 item 1). On READ-ONLY surfaces (dashboards, notebook
- * read cells, stories, embeds — `editable === false`), a legacy question with no `viz`
- * envelope renders its CHART through `<VegaChart>` via the converter. Editable surfaces
- * keep the V1 `ChartBuilder` (editing stays untouched until the item-4 backfill actually
- * writes a `viz`); table/pivot keep their existing DOM renderers. Returns null when no
- * bridge applies — the caller then falls back to the legacy render path.
+ * V1 → V2 render bridge (§21 item 1). On EVERY surface — dashboards, notebook cells,
+ * stories, embeds, and the editable question page — a legacy question with no `viz`
+ * envelope renders its CHART through `<VegaChart>` via the converter; the question
+ * page's Viz panel edits the same converted envelope (the first edit writes a real
+ * `viz` onto the content, so the file upgrades on Save). Table/pivot keep their
+ * existing DOM renderers. Returns null when no bridge applies — the caller then falls
+ * back to the legacy render path.
  */
 export function resolveLegacyRenderEnvelope(args: {
   hasVizEnvelope: boolean;
-  editable: boolean;
   vizSettings: VizSettings | null | undefined;
   columns: VizResultColumn[];
 }): VizEnvelope | null {
-  const { hasVizEnvelope, editable, vizSettings, columns } = args;
-  if (hasVizEnvelope || editable || !vizSettings) return null;
+  const { hasVizEnvelope, vizSettings, columns } = args;
+  if (hasVizEnvelope || !vizSettings) return null;
   if (vizSettings.type === 'table' || vizSettings.type === 'pivot') return null;
   return vizSettingsToEnvelope(vizSettings, columns);
 }
