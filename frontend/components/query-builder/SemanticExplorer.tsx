@@ -127,6 +127,23 @@ export function SemanticExplorer({
   const searchSeq = useRef(0);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  // Reconcile EXTERNAL spec changes (header Cancel, agent edits, undo): when
+  // the value prop changes and it isn't just our own last edit echoing back
+  // through content, adopt it — otherwise the shelves keep showing a
+  // selection the query no longer has. Local-only intermediate states (a
+  // freshly picked table before its default measure lands) are safe: the
+  // value prop hasn't changed then, so this never clobbers them.
+  const lastEmittedJson = useRef<string | null>(null);
+  const prevValueJson = useRef<string>(JSON.stringify(value ?? null));
+  useEffect(() => {
+    const json = JSON.stringify(value ?? null);
+    if (json === prevValueJson.current) return; // prop identity churn, same spec
+    prevValueJson.current = json;
+    if (json === lastEmittedJson.current) return; // our own edit, persisted and echoed
+    setSpec(value ?? null);
+    setBrowsingTables(false);
+  }, [value]);
+
   const model = spec ? models.find((m) => m.name === spec.model) : undefined;
   const issues = spec && model ? validateSemanticQuery(spec, model) : [];
 
@@ -135,6 +152,7 @@ export function SemanticExplorer({
     if (validateSemanticQuery(next, nextModel).length > 0) return;
     try {
       const sql = irToSqlLocal(compileSemanticQuery(next, nextModel), dialect);
+      lastEmittedJson.current = JSON.stringify(next);
       onChange(next, sql, vizOf(next));
     } catch (err) {
       console.error('[SemanticExplorer] compile failed:', err);

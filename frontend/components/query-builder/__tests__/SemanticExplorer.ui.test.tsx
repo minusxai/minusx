@@ -41,20 +41,20 @@ const STARTED: SemanticQuerySpec = { model: 'Orders', table: 'orders', measures:
 function renderExplorer(props: Partial<React.ComponentProps<typeof SemanticExplorer>> = {}) {
   const onChange = vi.fn();
   const onSelectModel = vi.fn();
-  renderWithProviders(
-    <SemanticExplorer
-      models={[ORDERS_MODEL]}
-      stubs={STUBS}
-      onSelectModel={onSelectModel}
-      dialect="duckdb"
-      path="/org"
-      connectionName="warehouse"
-      value={STARTED}
-      onChange={onChange}
-      {...props}
-    />
-  );
-  return { onChange, onSelectModel };
+  const defaults = {
+    models: [ORDERS_MODEL],
+    stubs: STUBS,
+    onSelectModel,
+    dialect: 'duckdb',
+    path: '/org',
+    connectionName: 'warehouse',
+    value: STARTED,
+    onChange,
+  };
+  const view = renderWithProviders(<SemanticExplorer {...defaults} {...props} />);
+  const rerenderExplorer = (next: Partial<React.ComponentProps<typeof SemanticExplorer>> = {}) =>
+    view.rerender(<SemanticExplorer {...defaults} {...props} {...next} />);
+  return { onChange, onSelectModel, rerenderExplorer };
 }
 
 describe('SemanticExplorer', () => {
@@ -286,6 +286,32 @@ describe('SemanticExplorer', () => {
     expect(screen.getByLabelText('Time chip: Order date')).toBeTruthy();
     expect(screen.getByLabelText('Dimensions chip: Status')).toBeTruthy();
     expect(screen.getByLabelText('Dimensions chip: Region')).toBeTruthy();
+  });
+
+  it('adopts an EXTERNAL value change (header Cancel, agent edit) — no stale shelves', async () => {
+    const { rerenderExplorer } = renderExplorer({
+      value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: ['Status'] },
+    });
+    expect(screen.getByLabelText('Dimensions chip: Status')).toBeTruthy();
+
+    // Cancel reverted the content: the persisted spec no longer has Status.
+    rerenderExplorer({ value: { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: [] } });
+
+    await waitFor(() => expect(screen.queryByLabelText('Dimensions chip: Status')).toBeNull());
+  });
+
+  it("the explorer's OWN edit echoing back through the value prop does not reset it", async () => {
+    const { onChange, rerenderExplorer } = renderExplorer();
+
+    fireEvent.click(screen.getByLabelText('Field dimension: Status'));
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const [emittedSpec] = onChange.mock.calls.at(-1)!;
+
+    // The parent persists the spec and hands it back (fresh object, same shape).
+    rerenderExplorer({ value: JSON.parse(JSON.stringify(emittedSpec)) });
+
+    expect(screen.getByLabelText('Dimensions chip: Status')).toBeTruthy();
+    expect(onChange).toHaveBeenCalledTimes(1); // no feedback loop
   });
 
   it('execute is wired', async () => {
