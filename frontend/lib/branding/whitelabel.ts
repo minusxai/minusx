@@ -37,6 +37,23 @@ export interface FileTypeAccessOverride {
  */
 export type AccessRulesOverride = Partial<Record<UserRole, FileTypeAccessOverride>>;
 
+/**
+ * Access V2 — a custom group, stored IN THE CONFIG DOCUMENT (no tables).
+ * Capabilities × folder scopes; effective access = union across a user's
+ * groups on top of their built-in group (role) + home folder. Group names are
+ * immutable (no rename); membership is the `groups` array on the users table.
+ */
+export interface GroupDef {
+  /** '*' or file types this group can access (read). */
+  allowedTypes: '*' | FileType[];
+  /** '*' or file types visible in UI listings/search. */
+  viewTypes: '*' | FileType[];
+  /** '*' or file types this group can create/edit/delete within its folders. */
+  createTypes: '*' | FileType[];
+  /** Mode-relative folder prefixes ('' = whole mode root); cascade to subfolders. */
+  folders: string[];
+}
+
 export interface OrgBranding {
   displayName: string;  // Workspace display name
   agentName: string;    // Agent name
@@ -70,6 +87,7 @@ export interface OrgConfig {
   city?: string;  // Optional city identifier for agent context
   thinkingPhrases?: string[];  // Optional custom thinking phrases for AI indicator
   accessRules?: AccessRulesOverride;  // Per-org file type access overrides (overrides rules.json)
+  groups?: Record<string, GroupDef>;  // Access V2: custom groups (capabilities × folders); membership lives on users.groups
   supportedFileTypes?: FileType[];  // Fully replaces the default supported file types when set (see getSupportedFileTypes)
   setupWizard?: SetupWizard;
   bots?: ConfigBot[];
@@ -164,6 +182,7 @@ export function mergeConfig(
       ? overrides.thinkingPhrases
       : defaults.thinkingPhrases,
     accessRules: overrides.accessRules ?? defaults.accessRules,
+    groups: overrides.groups ?? defaults.groups,
     supportedFileTypes: (overrides.supportedFileTypes && overrides.supportedFileTypes.length > 0)
       ? overrides.supportedFileTypes
       : defaults.supportedFileTypes,

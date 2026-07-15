@@ -92,8 +92,8 @@ describe('Import/Export API Endpoints', () => {
     const initialData: InitData = {
       version: LATEST_DATA_VERSION,
       users: [
-        { id: 1, email: 'user1@alpha.com', name: 'User 1', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'admin', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { id: 2, email: 'user2@alpha.com', name: 'User 2', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'viewer', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 1, email: 'user1@alpha.com', name: 'User 1', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'admin', groups: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 2, email: 'user2@alpha.com', name: 'User 2', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'viewer', groups: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
       ],
       documents: [
         { id: 1, name: 'test_db', path: '/org/database/test_db', type: 'connection', content: { type: 'duckdb', config: { file_path: 'test.duckdb' } }, references: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), version: 1, last_edit_id: null },
@@ -107,7 +107,7 @@ describe('Import/Export API Endpoints', () => {
       userId: 1,
       email: 'admin@alpha.com',
       name: 'Alpha Admin',
-      role: 'admin',
+      role: 'admin', groups: [],
       home_folder: '/org',
       companyName: 'Alpha Corp'
     });
@@ -163,7 +163,7 @@ describe('Import/Export API Endpoints', () => {
         userId: 2,
         email: 'viewer@alpha.com',
         name: 'Viewer',
-        role: 'viewer',
+        role: 'viewer', groups: [],
         home_folder: '/org',
         companyName: 'Alpha Corp'
       });
@@ -180,9 +180,9 @@ describe('Import/Export API Endpoints', () => {
       const importData: InitData = {
         version: LATEST_DATA_VERSION,
         users: [
-          { id: 1, email: 'newadmin@example.com', name: 'New Admin', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'admin', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-          { id: 2, email: 'newuser@example.com', name: 'New User', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'viewer', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-          { id: 3, email: 'newuser2@example.com', name: 'New User 2', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'viewer', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: 1, email: 'newadmin@example.com', name: 'New Admin', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'admin', groups: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: 2, email: 'newuser@example.com', name: 'New User', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'viewer', groups: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: 3, email: 'newuser2@example.com', name: 'New User 2', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'viewer', groups: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         ],
         documents: [
           { id: 1, name: 'Doc 1', path: '/org/doc1', type: 'question', content: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, connection_name: '' }, references: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), version: 1, last_edit_id: null },
@@ -230,7 +230,7 @@ describe('Import/Export API Endpoints', () => {
       const importData: InitData = {
         version: LATEST_DATA_VERSION,
         users: [
-          { id: 1, email: 'admin@gzipped.com', name: 'Admin', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'admin', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: 1, email: 'admin@gzipped.com', name: 'Admin', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'admin', groups: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         ],
         documents: [],
       };
@@ -262,7 +262,7 @@ describe('Import/Export API Endpoints', () => {
         userId: 2,
         email: 'viewer@alpha.com',
         name: 'Viewer',
-        role: 'viewer',
+        role: 'viewer', groups: [],
         home_folder: '/org',
         companyName: 'Alpha Corp'
       });
@@ -339,7 +339,7 @@ describe('POST /api/admin/reset-tutorial', () => {
       userId: 1,
       email: 'admin@testco.com',
       name: 'Admin',
-      role: 'admin',
+      role: 'admin', groups: [],
       home_folder: '',
       companyName: 'TestCo Corp'
     });
@@ -419,7 +419,7 @@ describe('POST /api/admin/reset-tutorial', () => {
       userId: 2,
       email: 'viewer@testco.com',
       name: 'Viewer',
-      role: 'viewer',
+      role: 'viewer', groups: [],
       home_folder: '',
       companyName: 'TestCo Corp'
     });

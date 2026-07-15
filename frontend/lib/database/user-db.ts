@@ -15,6 +15,8 @@ export interface User {
   state: string | null;
   home_folder: string;
   role: UserRole;
+  /** Access V2: custom-group memberships (names from the config `groups` section). */
+  groups: string[];
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +43,7 @@ interface UserRow {
   state: string | null;
   home_folder: string;
   role: string;
+  groups?: unknown;
   created_at: string;
   updated_at: string;
 }
@@ -55,9 +58,16 @@ function rowToUser(row: UserRow): User {
     state: row.state,
     home_folder: row.home_folder,
     role: row.role as UserRole,
+    groups: parseGroups(row.groups),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
+}
+
+/** Normalize the JSONB `groups` column into a string array (tolerant of legacy rows). */
+function parseGroups(v: unknown): string[] {
+  const val = typeof v === 'string' ? (() => { try { return JSON.parse(v); } catch { return []; } })() : v;
+  return Array.isArray(val) ? val.filter((x): x is string => typeof x === 'string') : [];
 }
 
 export class UserDB {
@@ -133,6 +143,7 @@ export class UserDB {
       state?: string | null;
       home_folder?: string;
       role?: UserRole;
+      groups?: string[];
     }
   ): Promise<void> {
     const currentUser = await this.getById(id);
@@ -163,6 +174,7 @@ export class UserDB {
     if (data.state !== undefined) { fields.push(`state = $${paramIndex++}`); values.push(data.state); }
     if (normalizedHomeFolder !== undefined) { fields.push(`home_folder = $${paramIndex++}`); values.push(normalizedHomeFolder); }
     if (data.role !== undefined) { fields.push(`role = $${paramIndex++}`); values.push(data.role); }
+    if (data.groups !== undefined) { fields.push(`groups = $${paramIndex++}`); values.push(JSON.stringify([...new Set(data.groups)])); }
 
     if (fields.length === 0) return;
     values.push(id);

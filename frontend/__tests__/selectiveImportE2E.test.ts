@@ -28,7 +28,7 @@ function createTestData(userCount: number, docCount: number): { users: InitData[
       phone: null,
       state: null,
       home_folder: '/org',
-      role: i === 0 ? 'admin' as const : 'viewer' as const,
+      role: i === 0 ? 'admin' as const : 'viewer' as const, groups: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     })),
@@ -90,8 +90,8 @@ describe('Import/Export E2E', () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           users: [
-            { id: 1, email: 'admin@alpha.com', name: 'Admin', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'admin', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-            { id: 2, email: 'user@alpha.com', name: 'User', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'viewer', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+            { id: 1, email: 'admin@alpha.com', name: 'Admin', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'admin', groups: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+            { id: 2, email: 'user@alpha.com', name: 'User', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'viewer', groups: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
           ],
           documents: [
             { id: 1, name: 'Doc 1', path: '/org/doc1', type: 'question' as const, references: [], content: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, connection_name: '' }, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), version: 1, last_edit_id: null },

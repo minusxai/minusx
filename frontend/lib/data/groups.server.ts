@@ -1,132 +1,103 @@
 /**
- * Access V2 (M2/M3) — groups data layer. A group is a capability profile
- * (`allowedTypes`/`viewTypes`/`createTypes`) applied over a set of folder
- * scopes, with a member list. `resolveUserGroupGrants` is what the access
- * resolver appends to the base (role) grant; the rest is CRUD for the admin UI.
+ * Access V2 — groups data layer, CONFIG-STORED (no tables).
  *
- * Groups aren't files, so this uses the low-level DB module directly (the same
- * primitive `DocumentDB` runs on).
+ * A group's DEFINITION (capabilities × folders) lives in the org config
+ * document's `groups` section — same home as `accessRules`, hand-editable,
+ * versioned with the config. MEMBERSHIP is the `groups` array of names on the
+ * users table. The built-in groups (admin/editor/viewer) are the `role`
+ * column + `rules.json`; custom groups are purely additive on top.
+ *
+ * `resolveUserGroupGrants` is what the access resolver appends to the base
+ * grant; the rest is CRUD for the admin UI. Names are immutable (no rename);
+ * a group still assigned to users cannot be deleted.
  */
 import 'server-only';
-import { getModules } from '@/lib/modules/registry';
 import type { Mode } from '@/lib/mode/mode-types';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type { AccessGrant, TypeSet } from '@/lib/auth/access-predicate';
 import type { FileType } from '@/lib/types';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import type { GroupDef } from '@/lib/branding/whitelabel';
+import { getRawConfig, saveRawConfig } from '@/lib/data/configs.server';
+import { validateGroupsSection } from '@/lib/validation/config-validators';
+import { UserDB } from '@/lib/database/user-db';
 
-export interface Group {
-  id: number;
+export const BUILTIN_GROUPS = ['admin', 'editor', 'viewer'] as const;
+
+export interface Group extends GroupDef {
   name: string;
-  mode: Mode;
-  kind: 'admin' | 'editor' | 'viewer' | 'custom';
-  allowedTypes: TypeSet;
-  viewTypes: TypeSet;
-  createTypes: TypeSet;
-  locked: boolean;
-  /** Mode-relative folder prefixes ('' = mode root). */
-  scopes: string[];
   memberIds: number[];
 }
 
-/** Normalize a stored JSONB capability into a `TypeSet` ('*' or FileType[]). */
-function parseTypeSet(v: unknown): TypeSet {
-  const val = typeof v === 'string' ? safeJson(v) : v;
-  if (val === '*') return '*';
-  return Array.isArray(val) ? (val as FileType[]) : [];
-}
-function safeJson(s: string): unknown { try { return JSON.parse(s); } catch { return s; } }
-function toJson(set: TypeSet): string { return JSON.stringify(set); }
-
 /** Resolve a folder ('' → mode root) to an absolute path scope. */
 function scopePath(mode: Mode, folder: string): string {
-  return folder ? resolvePath(mode, `/${folder.replace(/^\/+|\/+$/g, '')}`) : `/${mode}`;
+  const clean = folder.replace(/^\/+|\/+$/g, '');
+  return clean ? resolvePath(mode, `/${clean}`) : `/${mode}`;
+}
+
+/** The `groups` section of a mode's config document ({} when absent/invalid). */
+async function readGroupDefs(mode: Mode): Promise<Record<string, GroupDef>> {
+  const raw = await getRawConfig(mode);
+  const groups = (raw as { groups?: unknown }).groups;
+  if (!groups || validateGroupsSection(groups) !== null) return {};
+  return groups as Record<string, GroupDef>;
 }
 
 /**
- * The group grants for a user in a mode — appended to the base grant by the
- * access resolver. Empty when the user is in no groups (the common case →
- * behavior stays role + home only).
+ * The custom-group grants for a user in a mode — appended to the base (role +
+ * home) grant by the access resolver. Membership names that don't exist in the
+ * mode's config are ignored (e.g. a group defined only in another mode).
+ * Empty for users with no memberships — the common case — and for principals
+ * without a user row (guests).
  */
 export async function resolveUserGroupGrants(userId: number, mode: Mode): Promise<AccessGrant[]> {
-  const db = getModules().db;
-  const res = await db.exec<{ id: number; allowed_types: unknown; create_types: unknown; folder: string | null }>(
-    `SELECT g.id, g.allowed_types, g.create_types, s.folder
-       FROM group_members m
-       JOIN groups g ON g.id = m.group_id AND g.mode = $2
-       LEFT JOIN group_scopes s ON s.group_id = g.id
-      WHERE m.user_id = $1`,
-    [userId, mode],
-  );
-  const byGroup = new Map<number, { allowedTypes: TypeSet; createTypes: TypeSet; folders: string[] }>();
-  for (const row of res.rows) {
-    let g = byGroup.get(row.id);
-    if (!g) {
-      g = { allowedTypes: parseTypeSet(row.allowed_types), createTypes: parseTypeSet(row.create_types), folders: [] };
-      byGroup.set(row.id, g);
-    }
-    if (row.folder != null) g.folders.push(row.folder);
+  const user = await UserDB.getById(userId);
+  if (!user || user.groups.length === 0) return [];
+  const defs = await readGroupDefs(mode);
+  const grants: AccessGrant[] = [];
+  for (const name of user.groups) {
+    const def = defs[name];
+    if (!def || def.folders.length === 0) continue; // dangling name or no scope → grants nothing
+    grants.push({
+      allowedTypes: def.allowedTypes,
+      createTypes: def.createTypes,
+      scopes: def.folders.map(f => ({ path: scopePath(mode, f) })),
+    });
   }
-  return [...byGroup.values()]
-    .filter(g => g.folders.length > 0) // a grant with no scope grants nothing
-    .map(g => ({
-      allowedTypes: g.allowedTypes,
-      createTypes: g.createTypes,
-      scopes: g.folders.map(f => ({ path: scopePath(mode, f) })),
-    }));
+  return grants;
 }
 
-interface GroupRow {
-  id: number; name: string; mode: string; kind: string;
-  allowed_types: unknown; view_types: unknown; create_types: unknown; locked: boolean;
-}
-
-function rowToGroup(r: GroupRow, scopes: string[], memberIds: number[]): Group {
-  return {
-    id: r.id, name: r.name, mode: r.mode as Mode, kind: r.kind as Group['kind'],
-    allowedTypes: parseTypeSet(r.allowed_types), viewTypes: parseTypeSet(r.view_types),
-    createTypes: parseTypeSet(r.create_types), locked: r.locked, scopes, memberIds,
-  };
-}
-
+/** All custom groups in a mode, with membership resolved from the users table. */
 export async function listGroups(mode: Mode): Promise<Group[]> {
-  const db = getModules().db;
-  const groups = await db.exec<GroupRow>('SELECT * FROM groups WHERE mode = $1 ORDER BY id', [mode]);
-  if (groups.rows.length === 0) return [];
-  const ids = groups.rows.map(g => g.id);
-  const ph = ids.map((_, i) => `$${i + 1}`).join(',');
-  const scopes = await db.exec<{ group_id: number; folder: string }>(`SELECT group_id, folder FROM group_scopes WHERE group_id IN (${ph})`, ids);
-  const members = await db.exec<{ group_id: number; user_id: number }>(`SELECT group_id, user_id FROM group_members WHERE group_id IN (${ph})`, ids);
-  return groups.rows.map(g => rowToGroup(
-    g,
-    scopes.rows.filter(s => s.group_id === g.id).map(s => s.folder),
-    members.rows.filter(m => m.group_id === g.id).map(m => m.user_id),
-  ));
+  const [defs, users] = await Promise.all([readGroupDefs(mode), UserDB.listAll()]);
+  return Object.entries(defs).map(([name, def]) => ({
+    name,
+    ...def,
+    memberIds: users.filter(u => u.groups.includes(name)).map(u => u.id),
+  }));
 }
 
-export async function getGroup(id: number): Promise<Group | null> {
-  const db = getModules().db;
-  const g = await db.exec<GroupRow>('SELECT * FROM groups WHERE id = $1', [id]);
-  if (g.rows.length === 0) return null;
-  const scopes = await db.exec<{ folder: string }>('SELECT folder FROM group_scopes WHERE group_id = $1', [id]);
-  const members = await db.exec<{ user_id: number }>('SELECT user_id FROM group_members WHERE group_id = $1', [id]);
-  return rowToGroup(g.rows[0], scopes.rows.map(s => s.folder), members.rows.map(m => m.user_id));
+export async function getGroup(name: string, mode: Mode): Promise<Group | null> {
+  return (await listGroups(mode)).find(g => g.name === name) ?? null;
 }
 
 export interface GroupInput {
   name: string;
-  mode: Mode;
-  kind?: Group['kind'];
   allowedTypes: TypeSet;
   viewTypes: TypeSet;
   createTypes: TypeSet;
-  scopes: string[];
+  folders: string[];
   memberIds: number[];
 }
 
 /** Validate an untrusted group payload into a `GroupInput` (or an error message). */
-export function validateGroupInput(body: unknown, mode: Mode): { input: GroupInput } | { error: string } {
+export function validateGroupInput(body: unknown): { input: GroupInput } | { error: string } {
   const b = (body ?? {}) as Record<string, unknown>;
   if (typeof b.name !== 'string' || !b.name.trim()) return { error: 'Group name is required' };
+  const name = b.name.trim();
+  if ((BUILTIN_GROUPS as readonly string[]).includes(name)) {
+    return { error: `"${name}" is a built-in group and cannot be redefined` };
+  }
   const asTypeSet = (v: unknown): TypeSet | null =>
     v === '*' ? '*' : Array.isArray(v) && v.every(x => typeof x === 'string') ? (v as FileType[]) : null;
   const allowedTypes = asTypeSet(b.allowedTypes);
@@ -135,59 +106,69 @@ export function validateGroupInput(body: unknown, mode: Mode): { input: GroupInp
   if (viewTypes === null) return { error: 'viewTypes must be "*" or an array of file types' };
   const createTypes = asTypeSet(b.createTypes ?? []);
   if (createTypes === null) return { error: 'createTypes must be "*" or an array of file types' };
-  const scopes = Array.isArray(b.scopes) && b.scopes.every(s => typeof s === 'string') ? (b.scopes as string[]) : null;
-  if (scopes === null) return { error: 'scopes must be an array of folder strings' };
+  const folders = Array.isArray(b.folders) && b.folders.every(f => typeof f === 'string') ? (b.folders as string[]) : null;
+  if (folders === null) return { error: 'folders must be an array of folder strings' };
   const memberIds = Array.isArray(b.memberIds) && b.memberIds.every(x => Number.isInteger(x)) ? (b.memberIds as number[]) : null;
   if (memberIds === null) return { error: 'memberIds must be an array of user ids' };
-  return { input: { name: b.name.trim(), mode, allowedTypes, viewTypes, createTypes, scopes, memberIds } };
+  return { input: { name, allowedTypes, viewTypes, createTypes, folders, memberIds } };
 }
 
-export async function createGroup(input: GroupInput): Promise<Group> {
-  const db = getModules().db;
-  const res = await db.exec<{ id: number }>(
-    `INSERT INTO groups (name, mode, kind, allowed_types, view_types, create_types)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-    [input.name, input.mode, input.kind ?? 'custom', toJson(input.allowedTypes), toJson(input.viewTypes), toJson(input.createTypes)],
-  );
-  const id = res.rows[0].id;
-  await replaceScopes(id, input.scopes);
-  await replaceMembers(id, input.memberIds);
-  return (await getGroup(id))!;
+function toDef(input: GroupInput): GroupDef {
+  return {
+    allowedTypes: input.allowedTypes,
+    viewTypes: input.viewTypes,
+    createTypes: input.createTypes,
+    folders: [...new Set(input.folders.map(f => f.replace(/^\/+|\/+$/g, '')))],
+  };
 }
 
-export async function updateGroup(id: number, input: GroupInput): Promise<Group> {
-  const db = getModules().db;
-  const existing = await getGroup(id);
-  if (!existing) throw new Error(`Group ${id} not found`);
-  if (existing.locked) throw new Error('This group is locked and cannot be edited');
-  await db.exec(
-    `UPDATE groups SET name=$1, allowed_types=$2, view_types=$3, create_types=$4, updated_at=CURRENT_TIMESTAMP WHERE id=$5`,
-    [input.name, toJson(input.allowedTypes), toJson(input.viewTypes), toJson(input.createTypes), id],
-  );
-  await replaceScopes(id, input.scopes);
-  await replaceMembers(id, input.memberIds);
-  return (await getGroup(id))!;
+/** Write the full groups section back into the mode's config document. */
+async function writeGroupDefs(user: EffectiveUser, defs: Record<string, GroupDef>): Promise<void> {
+  const raw = await getRawConfig(user.mode);
+  await saveRawConfig(user.mode, { ...raw, groups: defs });
 }
 
-export async function deleteGroup(id: number): Promise<void> {
-  const db = getModules().db;
-  const existing = await getGroup(id);
-  if (existing?.locked) throw new Error('This group is locked and cannot be deleted');
-  await db.exec('DELETE FROM groups WHERE id = $1', [id]); // scopes/members cascade
-}
-
-async function replaceScopes(groupId: number, folders: string[]): Promise<void> {
-  const db = getModules().db;
-  await db.exec('DELETE FROM group_scopes WHERE group_id = $1', [groupId]);
-  for (const folder of [...new Set(folders.map(f => f.replace(/^\/+|\/+$/g, '')))]) {
-    await db.exec('INSERT INTO group_scopes (group_id, folder) VALUES ($1,$2)', [groupId, folder]);
+export async function createGroup(input: GroupInput, user: EffectiveUser): Promise<Group> {
+  if ((BUILTIN_GROUPS as readonly string[]).includes(input.name)) {
+    throw new Error(`"${input.name}" is a built-in group and cannot be redefined`);
   }
+  const defs = await readGroupDefs(user.mode);
+  if (defs[input.name]) throw new Error(`Group "${input.name}" already exists`);
+  await writeGroupDefs(user, { ...defs, [input.name]: toDef(input) });
+  await setMembers(input.name, input.memberIds);
+  return (await getGroup(input.name, user.mode))!;
 }
 
-async function replaceMembers(groupId: number, userIds: number[]): Promise<void> {
-  const db = getModules().db;
-  await db.exec('DELETE FROM group_members WHERE group_id = $1', [groupId]);
-  for (const userId of [...new Set(userIds)]) {
-    await db.exec('INSERT INTO group_members (group_id, user_id) VALUES ($1,$2)', [groupId, userId]);
+export async function updateGroup(name: string, input: GroupInput, user: EffectiveUser): Promise<Group> {
+  const defs = await readGroupDefs(user.mode);
+  if (!defs[name]) throw new Error(`Group "${name}" not found`);
+  // Names are immutable — the definition is replaced under the SAME name.
+  await writeGroupDefs(user, { ...defs, [name]: toDef({ ...input, name }) });
+  await setMembers(name, input.memberIds);
+  return (await getGroup(name, user.mode))!;
+}
+
+/** Delete a group definition. Refused while any user is still assigned to it. */
+export async function deleteGroup(name: string, user: EffectiveUser): Promise<void> {
+  const defs = await readGroupDefs(user.mode);
+  if (!defs[name]) return;
+  const members = (await UserDB.listAll()).filter(u => u.groups.includes(name));
+  if (members.length > 0) {
+    throw new Error(`Group "${name}" is still assigned to ${members.length} user(s) — remove the members first`);
+  }
+  const { [name]: _removed, ...rest } = defs;
+  await writeGroupDefs(user, rest);
+}
+
+/** Reconcile the users table so exactly `memberIds` carry this group name. */
+async function setMembers(name: string, memberIds: number[]): Promise<void> {
+  const want = new Set(memberIds);
+  for (const u of await UserDB.listAll()) {
+    const has = u.groups.includes(name);
+    if (want.has(u.id) && !has) {
+      await UserDB.update(u.id, { groups: [...u.groups, name] });
+    } else if (!want.has(u.id) && has) {
+      await UserDB.update(u.id, { groups: u.groups.filter(g => g !== name) });
+    }
   }
 }

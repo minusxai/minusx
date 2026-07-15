@@ -12,7 +12,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { FilesAPI } from '@/lib/data/files.server';
-import { createGroup, deleteGroup } from '@/lib/data/groups.server';
+import { createGroup, updateGroup, deleteGroup } from '@/lib/data/groups.server';
+import { UserDB } from '@/lib/database/user-db';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { BaseFileContent, QuestionContent } from '@/lib/types';
 
@@ -22,28 +23,31 @@ const viewer: EffectiveUser = { userId: 22, email: 'v@x.co', name: 'V', role: 'v
 
 const q = (sql = 'select 1'): QuestionContent => ({ query: sql, connection_name: '', parameters: [], vizSettings: { type: 'table', xCols: [], yCols: [] } } as unknown as QuestionContent);
 
-let buildGroupId: number;
-let viewGroupId: number;
+const adminUser: EffectiveUser = { userId: 1, email: 'a@x.co', name: 'A', role: 'admin', home_folder: '', mode: 'org' };
 
 beforeAll(async () => {
   await initTestDatabase(DB);
   await DocumentDB.create('finance', '/org/finance', 'folder', { name: 'finance' } as BaseFileContent, [], undefined, false);
   await DocumentDB.create('shared_q', '/org/finance/shared_q', 'question', q() as unknown as BaseFileContent, [], undefined, false);
   await DocumentDB.create('view_q', '/org/finance/view_q', 'question', q() as unknown as BaseFileContent, [], undefined, false);
-  const build = await createGroup({
-    name: 'Finance-Builders', mode: 'org',
+  // The write/view users need real rows (membership lives on the users table).
+  await UserDB.create('e21@x.co', 'E', 'sales', { role: 'editor', password_hash: 'h' });
+  await UserDB.create('v22@x.co', 'V', 'sales', { role: 'viewer', password_hash: 'h' });
+  const rows = await UserDB.listAll();
+  editor.userId = rows.find(u => u.email === 'e21@x.co')!.id;
+  viewer.userId = rows.find(u => u.email === 'v22@x.co')!.id;
+  await createGroup({
+    name: 'Finance-Builders',
     allowedTypes: ['question', 'dashboard', 'folder'], viewTypes: ['question', 'dashboard', 'folder'],
     createTypes: ['question', 'dashboard', 'folder'],
-    scopes: ['finance'], memberIds: [21],
-  });
-  buildGroupId = build.id;
-  const view = await createGroup({
-    name: 'Finance-Viewers', mode: 'org',
+    folders: ['finance'], memberIds: [editor.userId!],
+  }, adminUser);
+  await createGroup({
+    name: 'Finance-Viewers',
     allowedTypes: ['question', 'dashboard', 'folder'], viewTypes: ['question', 'dashboard', 'folder'],
     createTypes: [],
-    scopes: ['finance'], memberIds: [22],
-  });
-  viewGroupId = view.id;
+    folders: ['finance'], memberIds: [viewer.userId!],
+  }, adminUser);
 }, 30_000);
 afterAll(async () => { await cleanupTestDatabase(DB); });
 
@@ -83,15 +87,16 @@ describe('group write access', () => {
   });
 
   it('group write cannot bypass universal guards (config creation stays blocked)', async () => {
-    const g = await createGroup({
-      name: 'Everything', mode: 'org', allowedTypes: '*', viewTypes: '*', createTypes: '*',
-      scopes: [''], memberIds: [21],
-    });
+    await createGroup({
+      name: 'Everything', allowedTypes: '*', viewTypes: '*', createTypes: '*',
+      folders: [''], memberIds: [editor.userId!],
+    }, adminUser);
     try {
       await expect(FilesAPI.createFile({ name: 'evil_config', path: '/org/finance/evil_config', type: 'config', content: {} as BaseFileContent }, editor))
         .rejects.toThrow(/cannot be manually created|system-managed/i);
     } finally {
-      await deleteGroup(g.id);
+      await updateGroup('Everything', { name: 'Everything', allowedTypes: '*', viewTypes: '*', createTypes: '*', folders: [''], memberIds: [] }, adminUser);
+      await deleteGroup('Everything', adminUser);
     }
   });
 

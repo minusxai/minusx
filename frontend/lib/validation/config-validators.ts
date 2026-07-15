@@ -136,8 +136,31 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
   }
 
   if (config.llm !== undefined && validateLlmConfig(config.llm) != null) return false;
+  if (config.groups !== undefined && validateGroupsSection(config.groups) != null) return false;
 
   return true;
+}
+
+/** Validate the `groups` config section; returns the failure reason or null. */
+export function validateGroupsSection(groups: unknown): string | null {
+  if (typeof groups !== 'object' || groups === null || Array.isArray(groups)) {
+    return 'groups must be an object keyed by group name';
+  }
+  const RESERVED = new Set(['admin', 'editor', 'viewer']);
+  const isTypeSet = (v: unknown) => v === '*' || (Array.isArray(v) && v.every(x => typeof x === 'string'));
+  for (const [name, def] of Object.entries(groups as Record<string, unknown>)) {
+    if (!name.trim()) return 'group names must be non-empty';
+    if (RESERVED.has(name)) return `"${name}" is a built-in group and cannot be redefined`;
+    if (typeof def !== 'object' || def === null) return `group "${name}" must be an object`;
+    const g = def as Record<string, unknown>;
+    if (!isTypeSet(g.allowedTypes)) return `group "${name}": allowedTypes must be "*" or an array of file types`;
+    if (!isTypeSet(g.viewTypes)) return `group "${name}": viewTypes must be "*" or an array of file types`;
+    if (!isTypeSet(g.createTypes)) return `group "${name}": createTypes must be "*" or an array of file types`;
+    if (!Array.isArray(g.folders) || !g.folders.every(f => typeof f === 'string')) {
+      return `group "${name}": folders must be an array of folder strings`;
+    }
+  }
+  return null;
 }
 
 /**

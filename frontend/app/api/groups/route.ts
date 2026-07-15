@@ -18,9 +18,9 @@ export const GET = withAuth(async (_request: NextRequest, user) => {
 export const POST = withAuth(async (request: NextRequest, user) => {
   if (!isAdmin(user.role)) return ApiErrors.forbidden('Only admins can manage groups');
   try {
-    const parsed = validateGroupInput(await request.json(), user.mode);
+    const parsed = validateGroupInput(await request.json());
     if ('error' in parsed) return ApiErrors.validationError(parsed.error);
-    return successResponse({ group: await createGroup(parsed.input) });
+    return successResponse({ group: await createGroup(parsed.input, user) });
   } catch (error) {
     return handleApiError(error);
   }

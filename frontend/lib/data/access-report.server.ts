@@ -52,7 +52,7 @@ export async function folderAccessReport(path: string, mode: Mode): Promise<Fold
   }
 
   for (const g of groups) {
-    const scopeCovers = g.scopes.some(s => covers(toAbsolute(s, mode), abs));
+    const scopeCovers = g.folders.some(f => covers(toAbsolute(f, mode), abs));
     if (!scopeCovers || g.memberIds.length === 0) continue;
     const write = g.createTypes === '*' || (Array.isArray(g.createTypes) && g.createTypes.length > 0);
     entries.push({
@@ -97,7 +97,7 @@ export async function userAccessReport(userId: number, mode: Mode): Promise<User
       entries.push({
         source: 'group',
         label: `Group: ${g.name}`,
-        detail: `${write ? 'Can build' : 'Can view'} in ${g.scopes.map(s => `/${s}`).join(', ') || '(no folders)'}.`,
+        detail: `${write ? 'Can build' : 'Can view'} in ${g.folders.map(f => `/${f}`).join(', ') || '(no folders)'}.`,
       });
     }
   }

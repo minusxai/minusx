@@ -5,25 +5,24 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { UserDB } from '@/lib/database/user-db';
-import { createGroup, deleteGroup } from '@/lib/data/groups.server';
+import { createGroup } from '@/lib/data/groups.server';
 import { folderAccessReport, userAccessReport } from '@/lib/data/access-report.server';
 
 const DB = getTestDbPath('access_report');
+const adminUser = { userId: 1, email: 'a@x.co', name: 'A', role: 'admin' as const, home_folder: '', mode: 'org' as const };
 let salesUserId: number;
-let groupId: number;
 
 describe('access reports', () => {
   beforeAll(async () => {
     await initTestDatabase(DB);
     salesUserId = await UserDB.create('sales@x.co', 'Sales', 'sales', { role: 'viewer', password_hash: 'h' });
-    const g = await createGroup({
-      name: 'Finance-Builders', mode: 'org',
+    await createGroup({
+      name: 'Finance-Builders',
       allowedTypes: ['question'], viewTypes: ['question'], createTypes: ['question'],
-      scopes: ['finance'], memberIds: [salesUserId],
-    });
-    groupId = g.id;
+      folders: ['finance'], memberIds: [salesUserId],
+    }, adminUser);
   }, 30_000);
-  afterAll(async () => { await deleteGroup(groupId).catch(() => {}); await cleanupTestDatabase(DB); });
+  afterAll(async () => { await cleanupTestDatabase(DB); });
 
   it('folder report: /finance shows admins, the group (write), not the sales home user', async () => {
     const entries = await folderAccessReport('/finance', 'org');
