@@ -1,5 +1,5 @@
 {
-  "$comment": "Shared static contract: what MinusX supports. Consumed by the app (connection form field specs), setup.sh (interview prompts — curled from raw.githubusercontent.com), and the docs (supported-databases / supported-models tables). Guarded by frontend/lib/compatibility/__tests__/compatibility.test.ts — model ids must exist in the baked pi-ai registry, connection types in CONNECTION_TYPES, field keys in the connector configs. Curated model lists are recommendations (free-text override is always allowed); update them when defaults change.",
+  "$comment": "Shared static contract: what MinusX supports. Consumed by the app (connection form field specs), setup.sh (interview prompts \u2014 curled from raw.githubusercontent.com), and the docs (supported-databases / supported-models tables). Guarded by frontend/lib/compatibility/__tests__/compatibility.test.ts \u2014 model ids must exist in the baked pi-ai registry, connection types in CONNECTION_TYPES, field keys in the connector configs. Curated model lists are recommendations (free-text override is always allowed); update them when defaults change.",
   "version": 1,
   "llm": {
     "providers": [
@@ -7,7 +7,7 @@
         "id": "minusx",
         "name": "MinusX (managed)",
         "kind": "managed",
-        "description": "Fully managed — one API key, model choice and routing handled by the MinusX gateway.",
+        "description": "Fully managed \u2014 one API key, model choice and routing handled by the MinusX gateway.",
         "credentials": [
           {
             "key": "apiKey",
@@ -185,7 +185,7 @@
         "id": "custom",
         "name": "Custom (OpenAI-compatible)",
         "kind": "custom",
-        "description": "Self-managed OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM, …).",
+        "description": "Self-managed OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM, \u2026).",
         "credentials": [
           {
             "key": "baseUrl",
@@ -250,7 +250,7 @@
             "kind": "password",
             "required": false,
             "secret": true,
-            "note": "Optional — overrides the individual fields above"
+            "note": "Optional \u2014 overrides the individual fields above"
           }
         ]
       },
@@ -372,24 +372,6 @@
             "secret": true
           }
         ]
-      },
-      {
-        "type": "csv",
-        "name": "CSV",
-        "cli": false,
-        "fields": []
-      },
-      {
-        "type": "xlsx",
-        "name": "Excel Workbook",
-        "cli": false,
-        "fields": []
-      },
-      {
-        "type": "google-sheets",
-        "name": "Google Sheets",
-        "cli": false,
-        "fields": []
       }
     ]
   }
