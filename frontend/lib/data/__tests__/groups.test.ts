@@ -92,9 +92,10 @@ describe('groups (M2) — additive grants', () => {
   it('impersonation resolves the impersonated user\'s group grants', async () => {
     const g = await createGroup({ name: 'Imp', mode: 'org', allowedTypes: ['dashboard'], viewTypes: ['dashboard'], createTypes: [], scopes: ['finance'], memberIds: [7] });
     try {
-      // getEffectiveUser builds an impersonated principal with the TARGET's
-      // userId/home_folder — grants must follow the target, not the admin.
-      const impersonated: EffectiveUser = { ...viewer, impersonating: 'admin@x.co' as never };
+      // getEffectiveUser builds an impersonated principal AS the target user
+      // (the admin's ?as_user= yields the target's userId/home_folder/role) —
+      // so grants must resolve by the target's id, which this exercises.
+      const impersonated: EffectiveUser = { ...viewer };
       const p = await resolveAccessPredicateWithGroups(impersonated);
       expect(checkAccess(financeDash, p, 'access')).toBe(true);
     } finally {
