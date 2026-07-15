@@ -24,8 +24,9 @@ const ZONE_REVENUE: ViewDef = {
   ],
 };
 
-function renderSection(overrides: Partial<React.ComponentProps<typeof ViewsSection>> = {}) {
+function renderSection(overrides: Partial<React.ComponentProps<typeof ViewsSection>> & { editable?: boolean } = {}) {
   const onViewsChange = vi.fn();
+  const editable = overrides.editable !== false;
   function Harness() {
     const [views, setViews] = React.useState<ViewDef[]>((overrides.views as ViewDef[]) ?? [ZONE_REVENUE]);
     return (
@@ -35,7 +36,7 @@ function renderSection(overrides: Partial<React.ComponentProps<typeof ViewsSecti
         inheritedViews={[]}
         {...overrides}
         views={views}
-        onViewsChange={(next) => { onViewsChange(next); setViews(next); }}
+        onViewsChange={editable ? (next) => { onViewsChange(next); setViews(next); } : undefined}
       />
     );
   }
@@ -80,6 +81,18 @@ describe('view + column whitelisting', () => {
     fireEvent.click(await screen.findByLabelText('Expose column zone_revenue.cost'));
     await waitFor(() => expect(onViewsChange).toHaveBeenCalled());
     expect(onViewsChange.mock.calls.at(-1)![0][0].whitelistedColumns).toBeUndefined();
+  });
+
+  it('in VIEW mode, column checkboxes are state-reflecting but disabled', async () => {
+    const restricted = { ...ZONE_REVENUE, whitelistedColumns: ['zone_name', 'revenue'] };
+    renderSection({ views: [restricted], editable: false });
+    fireEvent.click(screen.getByLabelText('Toggle columns of zone_revenue'));
+    const cost = await screen.findByLabelText('Expose column zone_revenue.cost') as HTMLInputElement;
+    expect(cost.checked).toBe(false);   // reflects that cost is hidden
+    expect(cost.disabled).toBe(true);   // but not toggleable outside edit mode
+    const revenue = screen.getByLabelText('Expose column zone_revenue.revenue') as HTMLInputElement;
+    expect(revenue.checked).toBe(true);
+    expect(revenue.disabled).toBe(true);
   });
 
   it('a DISABLED view is shown with its reason and cannot be exposed', () => {

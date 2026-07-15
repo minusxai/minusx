@@ -2,8 +2,9 @@
 
 import type React from 'react';
 import { Box, VStack, HStack, Text, Icon, Collapsible, Input } from '@chakra-ui/react';
-import { LuTable, LuChevronRight, LuChevronDown, LuColumns3, LuDatabase, LuEye } from 'react-icons/lu';
+import { LuTable, LuChevronRight, LuChevronDown, LuDatabase, LuEye } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
+import SchemaColumnRow from './SchemaColumnRow';
 import ChildPathSelector from '../selectors/ChildPathSelector';
 import TableMetricsEditor from '../context/TableMetricsEditor';
 import TableRelationshipsEditor from '../context/TableRelationshipsEditor';
@@ -78,7 +79,6 @@ interface SchemaTreeSchemaRowProps {
   ) => Array<{ name: string; type: string }>;
   getVisibleTableCount: (schemaName: string, totalTables: number) => number;
   getVisibleColumnCount: (tableKey: string, totalColumns: number) => number;
-  getTypeColor: (type: string) => string;
 
   findTableAnn: (list: TableAnnotation[], schema: string, table: string) => TableAnnotation | undefined;
   effectiveTableDescription: (schema: string, table: string) => string | undefined;
@@ -126,7 +126,6 @@ export default function SchemaTreeSchemaRow({
   getFilteredColumns,
   getVisibleTableCount,
   getVisibleColumnCount,
-  getTypeColor,
   findTableAnn,
   effectiveTableDescription,
   effectiveColumnDescription,
@@ -462,69 +461,28 @@ export default function SchemaTreeSchemaRow({
                             const profiledDesc = (column as { meta?: { description?: string } }).meta?.description;
                             const colDesc = effectiveColumnDescription(schemaItem.schema, table.table, column.name, profiledDesc);
                             return (
-                            <VStack
-                              key={column.name}
-                              align="stretch"
-                              gap={0}
-                              borderBottom="1px solid"
-                              borderColor="border.muted"
-                              _hover={{ bg: 'bg.muted' }}
-                              transition="background 0.1s"
-                            >
-                            <HStack pl={3} pr={3} py={1} gap={2}>
-                              <HStack gap={1.5} w="160px" flexShrink={0} minW={0}>
-                                <Icon
-                                  as={LuColumns3}
-                                  boxSize={3}
-                                  color="fg.subtle"
-                                  flexShrink={0}
-                                />
-                                <Text
-                                  fontSize="xs"
-                                  fontWeight="500"
-                                  fontFamily="mono"
-                                  color="fg.default"
-                                  textOverflow="ellipsis"
-                                  overflow="hidden"
-                                  whiteSpace="nowrap"
-                                  minW={0}
-                                  title={column.name}
-                                >
-                                  {column.name}
-                                </Text>
-                              </HStack>
-                              {annotationsEditable ? (
-                                <Box flex={1} minW={0}>
+                              <SchemaColumnRow
+                                key={column.name}
+                                name={column.name}
+                                type={column.type}
+                                description={annotationsEditable ? (
                                   <AnnInput
                                     ariaLabel={`${schemaItem.schema}.${table.table}.${column.name} description`}
                                     value={findTableAnn(annotations, schemaItem.schema, table.table)?.columns?.find(c => c.name === column.name)?.description ?? ''}
                                     placeholder={profiledDesc || 'Describe column…'}
                                     onCommit={(v) => setColumnDescription(schemaItem.schema, table.table, column.name, v)}
                                   />
-                                </Box>
-                              ) : (
-                                <Text flex={1} minW={0} fontSize="2xs" color="fg.muted" truncate title={colDesc}>
-                                  {colDesc || ''}
-                                </Text>
-                              )}
-                              <Text
-                                fontSize="10px"
-                                fontWeight="600"
-                                color={getTypeColor(column.type)}
-                                fontFamily="mono"
-                                flexShrink={0}
-                              >
-                                {column.type}
-                              </Text>
-                            </HStack>
-                            {/* Persistent source hint while editing, so the profiled
-                                description stays visible even after an override. */}
-                            {annotationsEditable && profiledDesc && (
-                              <Text pl="172px" pr={3} pb={1} fontSize="2xs" color="fg.subtle" truncate title={profiledDesc}>
-                                source: {profiledDesc}
-                              </Text>
-                            )}
-                            </VStack>
+                                ) : (
+                                  <Text fontSize="2xs" color="fg.muted" truncate title={colDesc}>
+                                    {colDesc || ''}
+                                  </Text>
+                                )}
+                                footer={annotationsEditable && profiledDesc ? (
+                                  <Text pl="172px" pr={3} pb={1} fontSize="2xs" color="fg.subtle" truncate title={profiledDesc}>
+                                    source: {profiledDesc}
+                                  </Text>
+                                ) : undefined}
+                              />
                             );
                           })}
 

@@ -31,6 +31,8 @@ import { useSearchParams } from 'next/navigation';
 interface QuestionContainerV2Props {
   fileId: FileId;
   mode?: FileViewMode;
+  /** Force read-only regardless of role — e.g. inspecting a view's definition. */
+  readOnly?: boolean;
 }
 
 /**
@@ -39,7 +41,7 @@ interface QuestionContainerV2Props {
  * Delegates rendering to QuestionViewV2 (dumb component)
  * Header (edit mode, save, cancel, name) is handled by FileHeader via FileView
  */
-export default function QuestionContainerV2({ fileId, mode: containerMode }: QuestionContainerV2Props) {
+export default function QuestionContainerV2({ fileId, mode: containerMode, readOnly: readOnlyProp }: QuestionContainerV2Props) {
   const dispatch = useAppDispatch();
 
   // Read URL param overrides (p.start_date=... → { start_date: ... })
@@ -64,9 +66,10 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   // that used to live inside QuestionViewV2 key off it.
   const questionId = typeof fileId === 'number' ? fileId : undefined;
 
-  // Derive readOnly from the user's role — prevents persistable changes for non-editors
+  // Derive readOnly from the user's role — prevents persistable changes for non-editors.
+  // An explicit `readOnly` prop forces it on regardless (e.g. viewing a view's definition).
   const effectiveUser = useAppSelector(selectEffectiveUser);
-  const readOnly = !!effectiveUser && !!file && !canCreateFileByRole(effectiveUser.role, file.type as 'question');
+  const readOnly = readOnlyProp || (!!effectiveUser && !!file && !canCreateFileByRole(effectiveUser.role, file.type as 'question'));
   const fileLoading = !file || file.loading;
 
   // --- Redux state that used to live directly inside QuestionViewV2 (a Container/View

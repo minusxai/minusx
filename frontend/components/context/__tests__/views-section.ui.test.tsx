@@ -1,11 +1,13 @@
 /**
- * ViewsSection + ViewWorkbench — creating/editing a view expands IN PLACE inside
- * the whitelist UI: write SQL, run it, save. Saving goes through
- * /api/views/prepare (name validation + column snapshot) and only then lands on
- * the context version.
+ * ViewsSection — views are whitelisted with the SAME row UI tables use
+ * (SchemaColumnRow, a real checkbox), plus a view-specific eye button that opens
+ * the definition. The checkbox is shown in BOTH modes (state-reflecting when not
+ * editable); the eye — mirroring the table row's "Preview" affordance — opens the
+ * ViewWorkbench (editable in edit mode, read-only otherwise). Inherited views are
+ * read-only (disabled checkbox + badge); disabled views show their reason.
  */
 import React from 'react';
-import { screen } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import ViewsSection from '@/components/context/ViewsSection';
 import type { ViewDef } from '@/lib/types';
@@ -18,11 +20,9 @@ const ZONE_REVENUE: ViewDef = {
   description: 'Revenue per zone',
 };
 
-const prepareOk = (columns = ZONE_REVENUE.columns) =>
-  vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, data: { columns } }) });
-
-function renderSection(overrides: Partial<React.ComponentProps<typeof ViewsSection>> = {}) {
+function renderSection(overrides: Partial<React.ComponentProps<typeof ViewsSection>> & { editable?: boolean } = {}) {
   const onViewsChange = vi.fn();
+  const editable = overrides.editable !== false;
   function Harness() {
     const [views, setViews] = React.useState<ViewDef[]>((overrides.views as ViewDef[]) ?? []);
     return (
@@ -32,7 +32,7 @@ function renderSection(overrides: Partial<React.ComponentProps<typeof ViewsSecti
         inheritedViews={[]}
         {...overrides}
         views={views}
-        onViewsChange={(next) => { onViewsChange(next); setViews(next); }}
+        onViewsChange={editable ? (next) => { onViewsChange(next); setViews(next); } : undefined}
       />
     );
   }
@@ -41,27 +41,44 @@ function renderSection(overrides: Partial<React.ComponentProps<typeof ViewsSecti
 }
 
 describe('ViewsSection', () => {
-  it('lists this context\'s views with their column count', () => {
+  it('lists this context\'s views with their column count, a checkbox, and a definition button', () => {
     renderSection({ views: [ZONE_REVENUE] });
     const row = screen.getByLabelText('View zone_revenue');
     expect(row.textContent).toContain('_views.zone_revenue');
     expect(row.textContent).toContain('2 cols');
-    // each view carries an expose checkbox now
+    // whitelist checkbox — same affordance as a table
     expect(screen.getByLabelText('Expose view zone_revenue')).toBeTruthy();
+    // and a real eye button to open the definition
+    expect(screen.getByLabelText('Definition of zone_revenue')).toBeTruthy();
   });
 
-  it('shows inherited views read-only (cannot silently change someone else\'s definition)', () => {
+  it('shows the exposure checkbox in VIEW mode too, but disabled (state-reflecting)', () => {
+    renderSection({ views: [ZONE_REVENUE], editable: false });
+    const box = screen.getByLabelText('Expose view zone_revenue') as HTMLInputElement;
+    expect(box.checked).toBe(true);   // reflects that it's exposed
+    expect(box.disabled).toBe(true);  // but not toggleable outside edit mode
+    // the definition is still inspectable read-only
+    expect(screen.getByLabelText('Definition of zone_revenue')).toBeTruthy();
+  });
+
+  it('shows inherited views read-only — a disabled checkbox + an "inherited" badge', () => {
     renderSection({ views: [], inheritedViews: [ZONE_REVENUE] });
     const row = screen.getByLabelText('View zone_revenue');
     expect(row.textContent).toContain('inherited');
-    // inherited rows have no expose checkbox and no edit affordance
-    expect(screen.queryByLabelText('Expose view zone_revenue')).toBeNull();
+    const box = screen.getByLabelText('Expose view zone_revenue') as HTMLInputElement;
+    expect(box.disabled).toBe(true);
+  });
+
+  it('the eye button opens the view definition (editable in edit mode)', async () => {
+    renderSection({ views: [ZONE_REVENUE] });
+    fireEvent.click(screen.getByLabelText('Definition of zone_revenue'));
+    // The ViewWorkbench (real question editor) appears with an editable name + Save.
+    expect(await screen.findByLabelText('View name')).toBeTruthy();
+    expect(screen.getByLabelText('Save view')).toBeTruthy();
   });
 
   it('scopes views to the connection', () => {
     renderSection({ views: [{ ...ZONE_REVENUE, connection: 'other' }] });
     expect(screen.queryByLabelText('View zone_revenue')).toBeNull();
   });
-
-
 });

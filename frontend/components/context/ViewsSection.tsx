@@ -3,24 +3,28 @@
 /**
  * ViewsSection — the `_views` area of the whitelist UI.
  *
- * Views are curated SQL that behave like tables, so they're whitelisted like
- * tables: each view has a checkbox, and expanding it reveals its columns, each
- * with its own checkbox. Deselecting a column is REAL enforcement rather than
- * concealment — the view's CTE is projected to the selected columns, so the
- * column ceases to exist for the agent, the GUI and any query (see
- * lib/views/resolve.ts). That's something we cannot honestly offer for a raw
- * table's columns, where a hand-written SELECT could still name them.
+ * Views are curated SQL that behave like tables, so they are whitelisted with
+ * the SAME row UI tables use: a real exposure checkbox (shown in both modes,
+ * disabled when not editing) and column rows rendered by the shared
+ * `SchemaColumnRow` (colored types, per-column checkbox). Deselecting a column
+ * is REAL enforcement — the view's CTE is projected to the selected columns, so
+ * the column ceases to exist for the agent, the GUI and any query (see
+ * lib/views/resolve.ts). That is something we cannot honestly offer for a raw
+ * table's columns, where a hand-written SELECT could still name them — hence a
+ * view carries per-column checkboxes a table doesn't.
  *
- * Clicking a view expands it IN PLACE into the full question editor
- * (ViewWorkbench). Inherited views are listed read-only. A view the loader had
- * to DISABLE (e.g. an ancestor pulled a table it reads) is shown with its
- * reason, rather than silently vanishing.
+ * The eye button — mirroring the table row's "Preview" affordance — opens the
+ * view's definition in the real question editor (ViewWorkbench): editable in
+ * edit mode, read-only when just inspecting (view mode / inherited). Inherited
+ * views are read-only (disabled checkbox + badge); a view the loader had to
+ * DISABLE (an ancestor pulled a table it reads) shows its reason.
  */
 
 import React, { useState } from 'react';
 import { Box, VStack, HStack, Text, Button, Icon } from '@chakra-ui/react';
-import { LuPlus, LuEye, LuTable, LuChevronRight, LuChevronDown, LuBan, LuColumns3 } from 'react-icons/lu';
+import { LuPlus, LuEye, LuTable, LuChevronRight, LuChevronDown, LuBan } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
+import SchemaColumnRow from '@/components/schema-browser/SchemaColumnRow';
 import ViewWorkbench from './ViewWorkbench';
 import { VIEWS_SCHEMA } from '@/lib/types';
 import type { ViewDef, ViewProblem } from '@/lib/types';
@@ -35,7 +39,11 @@ interface ViewsSectionProps {
   namePrefix?: string;
 }
 
-type Editing = { kind: 'new' } | { kind: 'edit'; index: number } | null;
+type Editing =
+  | { kind: 'new' }
+  | { kind: 'edit'; index: number }
+  | { kind: 'inspect'; name: string }
+  | null;
 
 export default function ViewsSection({
   contextPath, connection, views, inheritedViews, problems = [], onViewsChange, namePrefix,
@@ -80,106 +88,157 @@ export default function ViewsSection({
     patch(index, { whitelistedColumns: next.length === all.length ? undefined : next });
   };
 
+  const toggleExpanded = (name: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
+  /** The eye button: edit the definition in place (edit mode) or inspect it read-only. */
+  const openDefinition = (v: ViewDef, index: number | null) => {
+    if (editable && index !== null && !problemOf(v.name)) setEditing({ kind: 'edit', index });
+    else setEditing({ kind: 'inspect', name: v.name });
+  };
+
   const viewRow = (v: ViewDef, index: number | null, inheritedRow = false) => {
     const disabled = problemOf(v.name);
     const cols = v.columns ?? [];
     const on = exposed(v);
     const isExpanded = expanded.has(v.name);
-    const canEdit = editable && index !== null && !disabled;
+    const canToggle = editable && index !== null && !disabled;
 
     return (
       <React.Fragment key={`${inheritedRow ? 'inh' : 'own'}-${v.name}`}>
         <HStack
           aria-label={`View ${v.name}`}
-          px={3} py={1.5} gap={2}
+          pl={3} pr={3} py={1.5} gap={1.5}
           borderBottom="1px solid" borderColor="border.muted"
-          _hover={canEdit ? { bg: 'bg.muted' } : undefined}
+          _hover={{ bg: 'bg.muted' }}
           opacity={inheritedRow || disabled ? 0.75 : 1}
           width="100%"
         >
-          {cols.length > 0 && !disabled && (
-            <Box
-              as="button"
-              aria-label={`Toggle columns of ${v.name}`}
-              onClick={(e: React.MouseEvent) => {
-                e.stopPropagation();
-                setExpanded((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(v.name)) next.delete(v.name); else next.add(v.name);
-                  return next;
-                });
-              }}
-              color="fg.subtle"
+          <HStack gap={1.5} flex={1} minW={0}>
+            {cols.length > 0 && !disabled ? (
+              <Box
+                as="button"
+                aria-label={`Toggle columns of ${v.name}`}
+                onClick={(e: React.MouseEvent) => { e.stopPropagation(); toggleExpanded(v.name); }}
+                color="fg.subtle" cursor="pointer" flexShrink={0}
+              >
+                <Icon as={isExpanded ? LuChevronDown : LuChevronRight} boxSize={3} />
+              </Box>
+            ) : <Box w={3} flexShrink={0} />}
+
+            {!disabled && (
+              <Box onClick={(e: React.MouseEvent) => e.stopPropagation()} flexShrink={0}>
+                <Checkbox
+                  aria-label={`Expose view ${v.name}`}
+                  checked={on.length > 0}
+                  onCheckedChange={canToggle ? () => toggleView(index!, v) : undefined}
+                  disabled={!canToggle}
+                />
+              </Box>
+            )}
+
+            <Icon
+              as={disabled ? LuBan : LuTable}
+              boxSize={3}
+              color={disabled ? 'accent.danger' : 'fg.muted'}
               flexShrink={0}
+            />
+            <Text
+              fontSize="xs" fontWeight="500" fontFamily="mono"
+              color={disabled ? 'accent.danger' : 'fg.default'}
+              textOverflow="ellipsis" overflow="hidden" whiteSpace="nowrap"
+              minW={0} title={`${VIEWS_SCHEMA}.${v.name}`}
             >
-              <Icon as={isExpanded ? LuChevronDown : LuChevronRight} boxSize={3} />
-            </Box>
-          )}
-
-          {editable && index !== null && !disabled && (
-            <Box onClick={(e: React.MouseEvent) => e.stopPropagation()} flexShrink={0}>
-              <Checkbox
-                aria-label={`Expose view ${v.name}`}
-                checked={on.length > 0}
-                onCheckedChange={() => toggleView(index, v)}
-              />
-            </Box>
-          )}
-
-          <Icon as={disabled ? LuBan : LuEye} boxSize={3} color={disabled ? 'accent.danger' : 'accent.cyan'} flexShrink={0} />
-
-          <Box
-            as={canEdit ? 'button' : undefined}
-            onClick={canEdit ? () => setEditing({ kind: 'edit', index }) : undefined}
-            textAlign="left"
-            flexShrink={0}
-          >
-            <Text fontSize="xs" fontWeight="600" fontFamily="mono">
               {VIEWS_SCHEMA}.{v.name}
             </Text>
-          </Box>
+          </HStack>
 
           <Text flex={1} minW={0} fontSize="2xs" color={disabled ? 'accent.danger' : 'fg.muted'} truncate>
             {disabled ? `DISABLED — ${disabled}` : (v.description || '')}
           </Text>
 
-          {!disabled && (
-            <HStack gap={1} flexShrink={0} color="fg.subtle">
-              <LuTable size={10} />
-              <Text fontSize="10px" fontFamily="mono">
+          <HStack gap={2} flexShrink={0}>
+            <Box
+              as="button"
+              aria-label={`Definition of ${v.name}`}
+              title="View definition"
+              display="flex" alignItems="center" gap={1} px={1.5} py={0.5}
+              fontSize="10px" fontWeight="600" fontFamily="mono" color="accent.teal"
+              borderRadius="sm" cursor="pointer" transition="all 0.15s"
+              _hover={{ bg: 'accent.teal/10' }}
+              onClick={(e: React.MouseEvent) => { e.stopPropagation(); openDefinition(v, index); }}
+            >
+              <LuEye size={11} /> Definition
+            </Box>
+            {!disabled && (
+              <Text fontSize="10px" fontWeight="600" color="fg.subtle" fontFamily="mono">
                 {v.whitelistedColumns ? `${on.length}/${cols.length}` : cols.length} cols
               </Text>
-            </HStack>
-          )}
-
-          {inheritedRow && (
-            <Text fontSize="10px" fontWeight="600" color="accent.teal" fontFamily="mono" flexShrink={0}>
-              inherited
-            </Text>
-          )}
+            )}
+            {inheritedRow && (
+              <Text fontSize="10px" fontWeight="600" color="accent.teal" fontFamily="mono">
+                inherited
+              </Text>
+            )}
+          </HStack>
         </HStack>
 
-        {isExpanded && !disabled && cols.map((c) => (
-          <HStack
-            key={`${v.name}.${c.name}`}
-            pl={9} pr={3} py={1} gap={2}
-            borderBottom="1px solid" borderColor="border.muted"
-            bg="bg.subtle"
-          >
-            {editable && index !== null && (
-              <Checkbox
-                aria-label={`Expose column ${v.name}.${c.name}`}
-                checked={on.includes(c.name)}
-                onCheckedChange={() => toggleColumn(index, v, c.name)}
+        {isExpanded && !disabled && (
+          <Box ml={6} borderLeft="1px solid" borderColor="border.muted">
+            {cols.map((c) => (
+              <SchemaColumnRow
+                key={c.name}
+                ariaLabel={`Column ${v.name}.${c.name}`}
+                name={c.name}
+                type={c.type}
+                selection={{
+                  checked: on.includes(c.name),
+                  onToggle: canToggle ? () => toggleColumn(index!, v, c.name) : undefined,
+                  ariaLabel: `Expose column ${v.name}.${c.name}`,
+                }}
               />
-            )}
-            <Icon as={LuColumns3} boxSize={3} color="fg.subtle" flexShrink={0} />
-            <Text fontSize="xs" fontFamily="mono" flex={1} minW={0} truncate>{c.name}</Text>
-            <Text fontSize="10px" fontFamily="mono" color="fg.subtle">{c.type}</Text>
-          </HStack>
-        ))}
+            ))}
+          </Box>
+        )}
       </React.Fragment>
     );
+  };
+
+  /** A row, unless it's the one being edited/inspected — then the workbench takes its place. */
+  const renderRow = (v: ViewDef, index: number | null, inheritedRow: boolean) => {
+    if (editing?.kind === 'edit' && index !== null && editing.index === index) {
+      return (
+        <Box key={`edit-${v.name}`} p={2}>
+          <ViewWorkbench
+            contextPath={contextPath}
+            connection={connection}
+            view={v}
+            onSave={(next) => upsert(index, next)}
+            onDelete={() => remove(index)}
+            onCancel={() => setEditing(null)}
+          />
+        </Box>
+      );
+    }
+    if (editing?.kind === 'inspect' && editing.name === v.name) {
+      return (
+        <Box key={`inspect-${v.name}`} p={2}>
+          <ViewWorkbench
+            contextPath={contextPath}
+            connection={connection}
+            view={v}
+            readOnly
+            onCancel={() => setEditing(null)}
+          />
+        </Box>
+      );
+    }
+    return viewRow(v, index, inheritedRow);
   };
 
   return (
@@ -190,22 +249,8 @@ export default function ViewsSection({
         </Text>
       </Box>
 
-      {inherited.map((v) => viewRow(v, null, true))}
-
-      {mine.map(({ v, index }) => (
-        editing?.kind === 'edit' && editing.index === index ? (
-          <Box key={`edit-${v.name}`} p={2}>
-            <ViewWorkbench
-              contextPath={contextPath}
-              connection={connection}
-              view={v}
-              onSave={(next) => upsert(index, next)}
-              onDelete={() => remove(index)}
-              onCancel={() => setEditing(null)}
-            />
-          </Box>
-        ) : viewRow(v, index)
-      ))}
+      {inherited.map((v) => renderRow(v, null, true))}
+      {mine.map(({ v, index }) => renderRow(v, index, false))}
 
       {editing?.kind === 'new' && (
         <Box p={2}>

@@ -32,7 +32,9 @@ interface ViewWorkbenchProps {
   view?: ViewDef;
   /** Pre-filled name for a new view (folder-derived, editable). */
   defaultName?: string;
-  onSave: (view: ViewDef) => void;
+  /** Inspect-only: the definition is shown but nothing can be edited or saved. */
+  readOnly?: boolean;
+  onSave?: (view: ViewDef) => void;
   onDelete?: () => void;
   onCancel: () => void;
 }
@@ -45,7 +47,7 @@ interface ViewWorkbenchProps {
 let nextVirtualId = -900_001;
 
 export default function ViewWorkbench({
-  contextPath, connection, view, defaultName = '', onSave, onDelete, onCancel,
+  contextPath, connection, view, defaultName = '', readOnly = false, onSave, onDelete, onCancel,
 }: ViewWorkbenchProps) {
   const dispatch = useAppDispatch();
   const [name, setName] = useState(view?.name ?? defaultName);
@@ -105,7 +107,7 @@ export default function ViewWorkbench({
         return;
       }
       const columns: ViewColumn[] = body.data?.columns ?? [];
-      onSave({
+      onSave?.({
         name: name.trim(),
         connection,
         sql,
@@ -135,6 +137,7 @@ export default function ViewWorkbench({
           size="sm" fontFamily="mono" fontSize="xs" maxW="240px"
           placeholder="view_name"
           value={name}
+          readOnly={readOnly}
           onChange={(e) => setName(e.target.value)}
         />
         <Input
@@ -142,13 +145,15 @@ export default function ViewWorkbench({
           size="sm" fontSize="xs" flex={1}
           placeholder="What does this view show? (optional)"
           value={description}
+          readOnly={readOnly}
           onChange={(e) => setDescription(e.target.value)}
         />
       </HStack>
 
-      {/* The real question editor — GUI / SQL / Viz, Run, charts. */}
+      {/* The real question editor — GUI / SQL / Viz, Run, charts. Read-only when
+          inspecting a definition (the editor itself disables editing + Monaco). */}
       <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden" minH="420px">
-        <QuestionContainerV2 fileId={fileId} />
+        <QuestionContainerV2 fileId={fileId} readOnly={readOnly} />
       </Box>
 
       {error && (
@@ -158,23 +163,29 @@ export default function ViewWorkbench({
         </HStack>
       )}
 
-      <HStack justify="space-between">
-        {onDelete ? (
-          <Button aria-label="Delete view" size="xs" variant="ghost" colorPalette="red" onClick={onDelete}>
-            <LuTrash2 size={12} /> <Text ml={1}>Delete</Text>
-          </Button>
-        ) : <Box />}
-        <HStack gap={2}>
-          <Button aria-label="Cancel view" size="xs" variant="outline" onClick={onCancel}>Cancel</Button>
-          <Button
-            aria-label="Save view"
-            size="xs" bg="accent.teal" color="white"
-            onClick={save} disabled={!canSave} loading={saving}
-          >
-            <LuSave size={12} /> <Text ml={1}>Save view</Text>
-          </Button>
+      {readOnly ? (
+        <HStack justify="flex-end">
+          <Button aria-label="Close view" size="xs" variant="outline" onClick={onCancel}>Close</Button>
         </HStack>
-      </HStack>
+      ) : (
+        <HStack justify="space-between">
+          {onDelete ? (
+            <Button aria-label="Delete view" size="xs" variant="ghost" colorPalette="red" onClick={onDelete}>
+              <LuTrash2 size={12} /> <Text ml={1}>Delete</Text>
+            </Button>
+          ) : <Box />}
+          <HStack gap={2}>
+            <Button aria-label="Cancel view" size="xs" variant="outline" onClick={onCancel}>Cancel</Button>
+            <Button
+              aria-label="Save view"
+              size="xs" bg="accent.teal" color="white"
+              onClick={save} disabled={!canSave} loading={saving}
+            >
+              <LuSave size={12} /> <Text ml={1}>Save view</Text>
+            </Button>
+          </HStack>
+        </HStack>
+      )}
     </VStack>
   );
 }

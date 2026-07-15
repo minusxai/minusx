@@ -478,23 +478,6 @@ export default function SchemaTreeView({
     }));
   };
 
-  const getTypeColor = (type: string): string => {
-    const typeLower = type.toLowerCase();
-    if (typeLower.includes('int') || typeLower.includes('number') || typeLower.includes('decimal') || typeLower.includes('float')) {
-      return 'accent.teal';
-    }
-    if (typeLower.includes('varchar') || typeLower.includes('text') || typeLower.includes('char') || typeLower.includes('string')) {
-      return 'accent.primary';
-    }
-    if (typeLower.includes('date') || typeLower.includes('time') || typeLower.includes('timestamp')) {
-      return 'accent.secondary';
-    }
-    if (typeLower.includes('bool')) {
-      return 'accent.success';
-    }
-    return 'fg.muted';
-  };
-
   // Calculate stats if enabled
   const stats = useMemo(() => {
     if (!showStats || !selectable) return null;
@@ -564,7 +547,6 @@ export default function SchemaTreeView({
                 getFilteredColumns={getFilteredColumns}
                 getVisibleTableCount={getVisibleTableCount}
                 getVisibleColumnCount={getVisibleColumnCount}
-                getTypeColor={getTypeColor}
                 findTableAnn={findTableAnn}
                 effectiveTableDescription={effectiveTableDescription}
                 effectiveColumnDescription={effectiveColumnDescription}
