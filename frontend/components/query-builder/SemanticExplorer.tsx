@@ -427,18 +427,23 @@ export function SemanticExplorer({
               initial={f}
               onSubmit={(filter) => update({ filters: (spec.filters ?? []).map((prev, i) => (i === idx ? filter : prev)) })}
               trigger={(openEditor) => (
-                <ShelfChip
-                  label={`Filter chip: ${f.dimension}`}
-                  accent="accent.cyan"
-                  onClick={openEditor}
-                  onRemove={() => update({ filters: (spec.filters ?? []).filter((_, i) => i !== idx) })}
-                >
-                  <Text fontSize="xs" fontFamily="mono">
-                    {f.operator === 'IS NULL' || f.operator === 'IS NOT NULL'
-                      ? `${f.dimension} ${f.operator}`
-                      : `${f.dimension} ${f.operator} ${Array.isArray(f.value) ? `(${f.value.join(', ')})` : String(f.value ?? '')}`}
-                  </Text>
-                </ShelfChip>
+                // The Box is the popover anchor: Popover.Trigger asChild needs a
+                // ref-forwarding element, which the plain ShelfChip fn is not —
+                // without it the popover loses its anchor and renders top-left.
+                <Box display="inline-flex">
+                  <ShelfChip
+                    label={`Filter chip: ${f.dimension}`}
+                    accent="accent.cyan"
+                    onClick={openEditor}
+                    onRemove={() => update({ filters: (spec.filters ?? []).filter((_, i) => i !== idx) })}
+                  >
+                    <Text fontSize="xs" fontFamily="mono">
+                      {f.operator === 'IS NULL' || f.operator === 'IS NOT NULL'
+                        ? `${f.dimension} ${f.operator}`
+                        : `${f.dimension} ${f.operator} ${Array.isArray(f.value) ? `(${f.value.join(', ')})` : String(f.value ?? '')}`}
+                    </Text>
+                  </ShelfChip>
+                </Box>
               )}
             />
           ))}
