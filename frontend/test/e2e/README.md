@@ -19,7 +19,7 @@ collides with a `next dev` you already have running on 3000.
 ## Harness
 
 - **`playwright.config.ts`** — webServer (E2E env), a `setup` project the `chromium`
-  project depends on, serial workers (tutorial reset is global-per-company).
+  project depends on, serial workers (tutorial reset is global state).
 - **`auth.setup.ts`** — registers the workspace admin (idempotent), logs in via the
   dev `password === email` shortcut, marks onboarding complete via `POST /api/configs`,
   and saves `storageState`.

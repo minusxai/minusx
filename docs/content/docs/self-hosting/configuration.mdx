@@ -83,7 +83,7 @@ Defaults are sensible; tune only under real load.
 |---|---|---|
 | `AUTH_URL` | `http://localhost:3000` | Canonical base URL for auth callbacks — set to your public URL behind a proxy. |
 | `ADMIN_PWD` | — | Optional admin password gate. |
-| `ENABLE_ORG_CREATION` | `true` | `false` blocks creating new organizations (single-tenant lockdown). |
+| `ENABLE_ORG_CREATION` | `true` | `false` blocks new workspace registration. |
 | `EMBED_ALLOWED_ORIGINS` | — | Origin allowlist for iframe embedding (`*` = any); enables the required cookie/CSP settings. |
 | `SHARE_GUEST_CHAT_ENABLED` | `false` | Allow anonymous guest chat on publicly shared stories. |
 | `CRON_SECRET` | — | Bearer secret authorizing scheduled-job endpoints (reports/alerts triggered by an external cron). |

@@ -162,7 +162,7 @@ npm run update-workspace-template   # re-runs migrations on the template; review
 - `config` - Company configuration (branding, settings)
 
 **Company Configs System**
-The configs system provides per-company configuration stored as database documents:
+The configs system provides workspace configuration stored as database documents:
 
 - **Storage**: Document at `/configs/config.json`
 - **File Type**: `'config'`

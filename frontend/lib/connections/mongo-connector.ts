@@ -260,7 +260,7 @@ export class MongoConnector extends NodeConnector {
  * Node process is long-lived and a stable client per Mongo URI is
  * exactly what `mongodb`'s authors recommend.
  */
-// eslint-disable-next-line no-restricted-syntax -- intentional process-wide singleton cache: connection-pool sharing across requests is the whole point. Key is the full Mongo URI (host:port/db + credentials), so cross-tenant collisions are impossible; entries are immutable promises (MongoClient instances live for the process lifetime by mongodb-driver design).
+// eslint-disable-next-line no-restricted-syntax -- intentional process-wide singleton cache: connection-pool sharing across requests is the whole point. Key is the full Mongo URI (host:port/db + credentials), so cross-connection collisions are impossible; entries are immutable promises (MongoClient instances live for the process lifetime by mongodb-driver design).
 const sharedMongoClients = new Map<string, Promise<MongoClient>>();
 
 function getSharedMongoClient(uri: string): Promise<MongoClient> {

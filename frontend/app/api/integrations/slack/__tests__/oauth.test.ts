@@ -2,15 +2,15 @@ import type { Mock } from 'vitest';
 /**
  * Tests for the Slack OAuth 2.0 flow.
  *
- * The flow is split across two routes so the install finishes inside tenant
- * context without a domain-wide cookie:
+ * The flow is split across two routes so the install finishes on the host the
+ * auth module designates, without a domain-wide cookie:
  *   - oauth-start      — admin-gated; mints the HMAC-signed state.
  *   - oauth-callback   — lands on the root domain (Slack's fixed redirect_uri);
  *                        a thin HMAC-verifying forwarder. No DB writes. Redirects
- *                        to the tenant's finish URL (from the auth module).
- *   - oauth-callback-finish — runs on the tenant's host (auth-gated), re-verifies
+ *                        to the finish URL the auth module supplies.
+ *   - oauth-callback-finish — runs on that finish host (auth-gated), re-verifies
  *                        the state + the logged-in admin, then exchanges the code
- *                        and writes the bot config in tenant context.
+ *                        and writes the bot config.
  *
  * Covers:
  *  1. buildState — payload encoding and HMAC structure
@@ -49,10 +49,10 @@ vi.mock('@/lib/auth/role-helpers', () => ({
   isAdmin: (role: string) => role === 'admin',
 }));
 
-// withAuth provides the authenticated tenant user to oauth-start and the finish
+// withAuth provides the authenticated user to oauth-start and the finish
 // route. Tests override `mockUser` to exercise the initiator/admin check.
 const { mockUser } = vi.hoisted(() => ({
-  mockUser: { value: { email: 'admin@acme.com', role: 'admin', mode: 'org' as const, userId: 1, home_folder: '/org' } },
+  mockUser: { value: { email: 'admin@example.com', role: 'admin', mode: 'org' as const, userId: 1, home_folder: '/org' } },
 }));
 vi.mock('@/lib/http/with-auth', () => ({
   withAuth: (handler: (req: any, user: any) => Promise<any>) => async (request: any) =>
@@ -60,7 +60,7 @@ vi.mock('@/lib/http/with-auth', () => ({
 }));
 
 // The root callback asks the auth module where to finalize the install. OSS returns
-// nothing (finish on same host); proprietary returns the tenant subdomain URL.
+// nothing (finish on same host); a deployment's auth module may supply an alternate finish host.
 const { getFinishUrlMock } = vi.hoisted(() => ({ getFinishUrlMock: vi.fn() }));
 vi.mock('@/lib/modules/registry', () => ({
   getModules: () => ({ auth: { getSlackInstallFinishUrl: getFinishUrlMock } }),
@@ -79,18 +79,18 @@ import { isSlackOAuthConfigured } from '@/lib/integrations/slack/config';
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const CALLBACK_BASE = 'https://minusx.app/api/integrations/slack/oauth-callback';
-const FINISH_BASE = 'https://acme.minusx.app/api/integrations/slack/oauth-callback-finish';
+const FINISH_BASE = 'https://alt.minusx.app/api/integrations/slack/oauth-callback-finish';
 
 const MOCK_SLACK_OAUTH = {
   ok: true,
   access_token: 'xoxb-test-bot-token',
   bot_user_id: 'U_BOT',
   app_id: 'A_APP',
-  team: { id: 'T_TEAM', name: 'Acme Workspace' },
+  team: { id: 'T_TEAM', name: 'Test Workspace' },
 };
 const MOCK_AUTH_TEST = {
-  url: 'https://acme.slack.com',
-  team: 'Acme Workspace',
+  url: 'https://test.slack.com',
+  team: 'Test Workspace',
   user: 'minusx-bot',
   team_id: 'T_TEAM',
   user_id: 'U_BOT',
@@ -108,8 +108,8 @@ function makeState(overrides: {
   return buildState({
     ts: Date.now(),
     nonce: 'testnonce16bytes',
-    returnUrl: 'https://acme.minusx.app/settings?tab=integrations',
-    userEmail: 'admin@acme.com',
+    returnUrl: 'https://alt.minusx.app/settings?tab=integrations',
+    userEmail: 'admin@example.com',
     ...overrides,
   });
 }
@@ -148,7 +148,7 @@ beforeEach(() => {
   (upsertSlackBotConfig as Mock).mockResolvedValue(undefined);
   (isSlackOAuthConfigured as Mock).mockReturnValue(true);
   getFinishUrlMock.mockReturnValue(null);
-  mockUser.value = { email: 'admin@acme.com', role: 'admin', mode: 'org', userId: 1, home_folder: '/org' };
+  mockUser.value = { email: 'admin@example.com', role: 'admin', mode: 'org', userId: 1, home_folder: '/org' };
 });
 
 // ─── 1. buildState ────────────────────────────────────────────────────────────
@@ -201,17 +201,17 @@ describe('oauth-callback — forwarding', () => {
     expect(new URL(res.headers.get('location')!).host).toBe('minusx.app');
   });
 
-  it('forwards to the tenant subdomain host supplied by the auth module', async () => {
-    getFinishUrlMock.mockReturnValue('https://acme.minusx.app/api/integrations/slack/oauth-callback-finish');
+  it('forwards to the alternate finish host supplied by the auth module', async () => {
+    getFinishUrlMock.mockReturnValue('https://alt.minusx.app/api/integrations/slack/oauth-callback-finish');
     const state = makeState();
     const res = await callbackHandler(makeCallbackRequest({ code: 'c', state }));
     const location = new URL(res.headers.get('location')!);
-    expect(location.host).toBe('acme.minusx.app');
-    expect(getFinishUrlMock).toHaveBeenCalledWith('https://acme.minusx.app/settings?tab=integrations');
+    expect(location.host).toBe('alt.minusx.app');
+    expect(getFinishUrlMock).toHaveBeenCalledWith('https://alt.minusx.app/settings?tab=integrations');
   });
 
   it('rejects a state with a tampered payload', async () => {
-    const state = makeState({ userEmail: 'admin@acme.com' });
+    const state = makeState({ userEmail: 'admin@example.com' });
     const lastDot = state.lastIndexOf('.');
     const originalPayload = JSON.parse(Buffer.from(state.slice(0, lastDot), 'base64url').toString());
     const attackerState = tamperPayload(state, { ...originalPayload, returnUrl: 'https://evil.minusx.app' });
@@ -256,7 +256,7 @@ describe('oauth-callback-finish — happy path', () => {
         install_mode: 'oauth',
         bot_token: 'xoxb-test-bot-token',
         team_id: 'T_TEAM',
-        installed_by: 'admin@acme.com',
+        installed_by: 'admin@example.com',
         enabled: true,
       }),
     );
@@ -266,7 +266,7 @@ describe('oauth-callback-finish — happy path', () => {
   });
 
   it('redirects to returnUrl with slack=installed', async () => {
-    const returnUrl = 'https://acme.minusx.app/settings?tab=integrations';
+    const returnUrl = 'https://alt.minusx.app/settings?tab=integrations';
     const res = await finishHandler(makeFinishRequest({ code: 'code', state: makeState({ returnUrl }) }));
     expect(res.headers.get('location')).toBe(`${returnUrl}&slack=installed`);
   });
@@ -274,15 +274,15 @@ describe('oauth-callback-finish — happy path', () => {
 
 describe('oauth-callback-finish — initiator check', () => {
   it('rejects when the logged-in user is not the admin who started the install', async () => {
-    mockUser.value = { email: 'someoneelse@acme.com', role: 'admin', mode: 'org', userId: 2, home_folder: '/org' };
-    const state = makeState({ userEmail: 'admin@acme.com' });
+    mockUser.value = { email: 'someoneelse@example.com', role: 'admin', mode: 'org', userId: 2, home_folder: '/org' };
+    const state = makeState({ userEmail: 'admin@example.com' });
     const res = await finishHandler(makeFinishRequest({ code: 'code', state }));
     expect(res.status).toBe(403);
     expect(upsertSlackBotConfig).not.toHaveBeenCalled();
   });
 
   it('rejects when the logged-in user is not an admin', async () => {
-    mockUser.value = { email: 'admin@acme.com', role: 'viewer', mode: 'org', userId: 1, home_folder: '/org' };
+    mockUser.value = { email: 'admin@example.com', role: 'viewer', mode: 'org', userId: 1, home_folder: '/org' };
     const res = await finishHandler(makeFinishRequest({ code: 'code', state: makeState() }));
     expect(res.status).toBe(403);
     expect(upsertSlackBotConfig).not.toHaveBeenCalled();
@@ -304,7 +304,7 @@ describe('oauth-callback-finish — initiator check', () => {
 
 describe('oauth-callback — edge cases', () => {
   it('redirects to returnUrl with slack=denied when user declines in Slack', async () => {
-    const returnUrl = 'https://acme.minusx.app/settings?tab=integrations';
+    const returnUrl = 'https://alt.minusx.app/settings?tab=integrations';
     const res = await callbackHandler(makeCallbackRequest({ error: 'access_denied', state: makeState({ returnUrl }) }));
     expect(res.headers.get('location')).toBe(`${returnUrl}&slack=denied`);
     expect(getFinishUrlMock).not.toHaveBeenCalled();
@@ -376,23 +376,23 @@ describe('oauth-start — host header handling', () => {
     return JSON.parse(Buffer.from(state.slice(0, lastDot), 'base64url').toString());
   }
 
-  it('sets returnUrl to the originating subdomain', async () => {
-    const res = await oauthStartHandler(makeStartRequest('acme.minusx.app'));
-    expect(decodeState(res.headers.get('location')!).returnUrl).toBe('https://acme.minusx.app/settings?tab=integrations');
+  it('sets returnUrl to the originating host', async () => {
+    const res = await oauthStartHandler(makeStartRequest('alt.minusx.app'));
+    expect(decodeState(res.headers.get('location')!).returnUrl).toBe('https://alt.minusx.app/settings?tab=integrations');
   });
 
   it('uses http protocol for localhost', async () => {
-    const res = await oauthStartHandler(makeStartRequest('acme.localhost:3000'));
+    const res = await oauthStartHandler(makeStartRequest('alt.localhost:3000'));
     expect(decodeState(res.headers.get('location')!).returnUrl).toMatch(/^http:\/\//);
   });
 
   it('includes userEmail from authenticated session in state', async () => {
-    const res = await oauthStartHandler(makeStartRequest('acme.minusx.app'));
-    expect(decodeState(res.headers.get('location')!).userEmail).toBe('admin@acme.com');
+    const res = await oauthStartHandler(makeStartRequest('alt.minusx.app'));
+    expect(decodeState(res.headers.get('location')!).userEmail).toBe('admin@example.com');
   });
 
   it('state produced by oauth-start verifies end to end (callback → finish)', async () => {
-    const startRes = await oauthStartHandler(makeStartRequest('acme.minusx.app'));
+    const startRes = await oauthStartHandler(makeStartRequest('alt.minusx.app'));
     const state = new URL(startRes.headers.get('location')!).searchParams.get('state')!;
 
     // Root callback forwards it to the finish route...

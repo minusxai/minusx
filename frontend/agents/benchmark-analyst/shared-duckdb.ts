@@ -8,7 +8,7 @@
 // Scope: **benchmark only**. Production connectors still use one
 // DuckDBInstance per file (see `lib/connections/duckdb-registry.ts`
 // and `sqlite-via-duckdb-registry.ts`). The per-file isolation in
-// production is the multi-tenant boundary — a user's instance
+// production is the per-user isolation boundary — a user's instance
 // physically can't see databases they don't have access to — and we
 // don't want to weaken it.
 //

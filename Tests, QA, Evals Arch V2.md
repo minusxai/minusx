@@ -58,7 +58,7 @@ These are agreed as solved / easy; listed so implementation doesn't skip them.
 4. **Tutorial-mode isolation + reset.** Tests run in `?mode=tutorial`, reset via the existing
    `POST /api/admin/reset-tutorial` in a `beforeAll`/`beforeEach` fixture. Tutorial seed = the test data.
    QA-on-prod is *forced* into tutorial (only isolated+resettable mode on a live deployment); local/CI uses
-   tutorial too, for flow parity. (`reset-tutorial` is global-per-company → serialize runs or use per-deployment tenants.)
+   tutorial too, for flow parity. (`reset-tutorial` is global state → serialize runs.)
 
 ---
 

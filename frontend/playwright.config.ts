@@ -23,7 +23,7 @@ fs.mkdirSync(PGLITE_DIR, { recursive: true });
 
 export default defineConfig({
   testDir: './test/e2e',
-  // tutorial reset is global-per-company → serialize to avoid runs stomping each other.
+  // tutorial reset is global state → serialize to avoid runs stomping each other.
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
