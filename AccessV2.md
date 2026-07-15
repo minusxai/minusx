@@ -1,6 +1,6 @@
 # Access V2 — Groups, Folder Permissions, and SQL-Enforced Access
 
-Status: **feature-complete** (PR #599). M1a + M1b core + M2 + M3 (read AND write sharing, roles editor, access explorer) are done, tested, and CI-green. Groups are inert until populated, so merged behavior is unchanged for existing workspaces. Remaining (deliberate): M1c transparent RLS (optional hardening) and SQL write-guards (app-side checks enforce writes today).
+Status: **feature-complete** (PR #599, CI green). Groups are config-stored (no new tables), additive, and inert until populated — merged behavior is unchanged for existing workspaces until an admin creates a group. Remaining (deliberately deferred): M1c transparent RLS and SQL write-guards (writes are enforced app-side with the same engine).
 
 ## Why
 
@@ -13,19 +13,19 @@ Two gaps:
 1. **One folder per user.** No way to give a user access to several areas, or to share an area across a team.
 2. **Scope implies write.** If a path is in your scope you can edit and delete in it. There's no way to express the most common arrangement — *many people can view this folder, a few can edit it.*
 
-## The model
+## The model (as shipped)
 
-**Roles become groups. Add groups. Keep the home folder.**
+**Every user has ≥ 1 group: their built-in group (the `role` column) plus any custom groups. No new tables.**
 
-- A **group** = a **capability profile** + a set of **folder scopes** + members.
-  - **Capability profile** — the type/verb matrix (today's `rules.json` shape). Chosen from a **preset**: `View` (read-only types), `Build` (create/edit analytics types), `Full` (build + manage connections/contexts + delete). The raw matrix is an "advanced" escape hatch.
-  - **Folder scopes** — a list of folders the profile applies to. Grants **cascade to subfolders** (prefix match). Stored mode-relative (like `home_folder`), resolved per mode at runtime.
-  - Membership is plain — a group's meaning lives in the group, not the membership.
-- **Seed groups** map 1:1 from today's roles, so migration is behavior-identical:
-  - `Admin` — a **special, locked group**: capabilities `*`, scope `*`, plus workspace-admin (below). Only membership is editable.
-  - `Editor` — today's editor types, scope = the member's home folder.
-  - `Viewer` — today's viewer types, scope = the member's home folder.
-- **`home_folder` stays** a per-user attribute and personal space. Internally it's an intrinsic grant (`Editor`/`Viewer` reference it as a symbolic scope); the group system is purely additive on top.
+- **Built-in groups** = the roles, fixed identities:
+  - `admin` — full access + workspace-admin actions; **locked** (capabilities immune to config overrides — lockout guard) and the **last admin can't be demoted or deleted**.
+  - `editor` / `viewer` — base capabilities applied to the member's home folder; their type matrices are **editable** in Settings → Groups → Built-in roles (persisted as the config document's `accessRules` overrides — the UI form of hand-editing that JSON).
+- **Custom groups** = capabilities × folders, purely additive:
+  - **Definition** lives in the org **config document's `groups` section** (`GroupDef`: `allowedTypes` / `viewTypes` / `createTypes` / `folders`) — next to `accessRules`, hand-editable, versioned with the config, validated on save (`validateGroupsSection`). Reserved names (`admin`/`editor`/`viewer`) are rejected.
+  - **Membership** is the `groups` array of names on the **users table** (one idempotent JSONB column — the only schema change). Names are immutable (no rename); a group **cannot be deleted while assigned** to any user; membership names not present in the mode's config are ignored (dangling-safe).
+  - **Capability presets** in the UI: `Can view` / `Can build` / `Full access` (which type sets a group gets); `createTypes` is what authorizes **writes** inside the group's folders.
+  - **Folder scopes** cascade to subfolders (prefix match), stored mode-relative, resolved per mode — a group defined in org config grants nothing in tutorial mode.
+- **`home_folder` stays** a per-user attribute and personal space — the built-in group's capabilities apply there. The group system is additive on top.
 
 **Effective access = union across a user's groups of `(capability ∩ scope)`, plus intrinsic grants (home folder, own conversations).**
 
@@ -33,7 +33,7 @@ Two gaps:
 - **Union only — no deny rules.** Most-permissive grant wins. Deny/precedence is where permission systems become unexplainable.
 - "Many view, few edit" = two groups over the same folder (`Finance-Viewers`, `Finance-Editors`). The group name *is* the permission. (Mixed levels within one group is deferred — an additive change if ever needed.)
 
-**Workspace-admin actions** (LLM settings, DB import/export, user management — the ~26 admin-only endpoints) are **not** file access. They stay a coarse in-endpoint check (`is the user in an admin-capable group?`), read from the token like `role` is today. Only the fine-grained folder scopes are resolved live (below).
+**Workspace-admin actions** (LLM settings, DB import/export, user management — the ~26 admin-only endpoints) are **not** file access. They stay a coarse in-endpoint `isAdmin` check read from the token, exactly as before. **Token/session are unchanged** — nobody is logged out by this feature; custom-group grants are resolved live from the DB+config per request, so membership and definition changes apply on the next request with no re-login. (Only a role change still requires re-login, as before.)
 
 ## Enforcement — compiled to SQL
 
@@ -56,13 +56,9 @@ Every operation is *compilable* ("0 rows" = denied) — reads are wired to SQL t
 
 Fine-grained scopes are a **live join** in the query (not the token), so adding a user to a group, or a folder to a group, takes effect immediately — no re-login. (The coarse admin flag can live in the token, like `role` today.)
 
-### Transparent enforcement via RLS
+### Transparent enforcement via RLS — deferred (M1c), feasibility proven
 
-The same predicate is installed as a **Postgres Row-Level Security policy** on `files`, so the database itself refuses unauthorized rows regardless of the SQL a caller runs — defense in depth, and enforcement can't be forgotten.
-
-- **Verified to work on both PGLite and Postgres** (the two backends this app supports). Mechanism: a non-superuser `app_user` role + a per-transaction session variable carrying the caller's identity/scope + `FORCE ROW LEVEL SECURITY`. Tested: a caller sees exactly the rows their group capability × folder scope allow.
-- **A narrow system path** (running as the owner, RLS bypassed) is reserved for migrations, seeding, and first-user bootstrap (there are no groups yet when the first admin registers).
-- **Footgun to respect:** superusers bypass RLS entirely. So exactly one narrow system path runs as the owner; everything else goes through the `app_user` wrapper. That boundary is the whole game.
+NOT implemented yet — deliberately sequenced after the feature. The plan, verified empirically on **both PGLite and Postgres**: install the same predicate as a Row-Level-Security policy on `files` (non-superuser `app_user` role + per-transaction session variable + `FORCE ROW LEVEL SECURITY`), so the database itself refuses unauthorized rows regardless of the SQL a caller runs. A narrow owner-run system path stays for migrations/seeding/bootstrap. Footgun when implementing: superusers bypass RLS entirely — the app-vs-system role boundary is the whole game.
 
 ### Two reference variants (preserve today's behavior)
 
@@ -86,13 +82,13 @@ Extract one effective-access resolver producing an `AccessPredicate` + in-memory
 - [x] Characterization battery ({admin, editor, viewer, guest-shaped, impersonation-shaped} × path/type/variant matrix) — `__tests__/access-predicate.test.ts`
 - [x] Route `permissions.ts` (`canAccessFile`/`canViewFileInUI` delegate) + `files.server.ts` reference filter through the engine; deleted duplicated helpers; full suite + `validate` green
 
-### M1b — SQL enforcement (zero behavior change) — CORE DONE (PR #599); live-wiring in progress
+### M1b — SQL enforcement (zero behavior change) ✅ DONE (except deferred write-guard SQL)
 - [x] `AccessPredicate.toSql()` → parameterized `WHERE` fragment (`lib/auth/access-predicate.ts`)
-- [x] **Gold parity: compiled SQL selects EXACTLY the `checkAccess`-accepted rows** — PGLite battery `__tests__/access-predicate-sql.test.ts` (all principals × variants) + real-DB `listAll` integration `__tests__/listall-access.test.ts`
+- [x] **Gold parity: compiled SQL selects EXACTLY the `checkAccess`-accepted rows** — PGLite battery `access-predicate-sql.test.ts` (all principals × variants, incl. multi-grant) + real-DB `listall-access.test.ts`
 - [x] Optional predicate on `DocumentDB.listAll` (SQL-filtered reads), backward-compatible, param-offset-safe
-- [ ] **Live-wiring (needs review — flips user-facing reads):** pass the predicate from `readFolder`/`file-search`/`shares` read paths; carry the variant into `getByIds` for references
-- [ ] Guarded writes: predicate in `WHERE` for edit/delete/move; `INSERT … SELECT … WHERE` for create (app-side check retained for the error message)
-- [x] `path` prefix index — NOTE: `text_pattern_ops` rejected by PGLite (OSS default); it's a hosted-Postgres-only perf optimization added out-of-band (correctness unaffected)
+- [x] Live-wired, group-aware read surface: `getFiles` listings (SQL predicate + in-memory backstop), `loadFile`/`loadFiles` + reference variants, **search**, story previews
+- [ ] Write-guard SQL (`INSERT … SELECT … WHERE`, predicate in `UPDATE`/`DELETE` `WHERE`) — deferred hardening; writes are enforced app-side with the same engine (`checkWriteAccess`)
+- [x] `path` prefix index — NOTE: `text_pattern_ops` rejected by PGLite (OSS default); hosted-Postgres perf optimization added out-of-band (correctness unaffected)
 
 ### M1c — Transparent RLS *(optional hardening — gated on the timing decision)*
 - [ ] Non-superuser `app_user` role + `GRANT`s (`postgres-schema.ts`)
@@ -110,7 +106,7 @@ Extract one effective-access resolver producing an `AccessPredicate` + in-memory
 
 ### M3 — Feature: custom groups + UX ✅ DONE
 Backend
-- [x] Group CRUD API (`/api/groups`, `/api/groups/[id]`) — admin-gated, validated
+- [x] Group CRUD API (`/api/groups`, `/api/groups/[name]` — name-keyed, no ids) — admin-gated, validated
 - [x] **Group WRITE access** — `createTypes` grants authorize create/edit/delete within group scopes (red-first tested; universal guards not bypassable)
 - [x] Group-aware read surface complete: loads, listings, **search**, story previews
 - [x] Capability presets (View / Build / Full); built-in-roles matrix editor covers the advanced case
@@ -128,17 +124,19 @@ UI (Settings → Groups; browser-verified)
 - [x] Impersonation: grants resolve by the impersonated principal's userId (tested)
 - [x] User-facing permissions doc — `docs/content/docs/self-hosting/permissions.mdx`
 
-## Test coverage — auth feature classes (all green; proven non-decoration by a mutation check)
-The batteries were verified meaningful by deleting the system-folder exclusion in `checkAccess` and confirming **6 tests went red** across the characterization + SQL parity, then reverting.
-- **Engine parity** (`access-predicate.test.ts`) — `checkAccess` vs frozen legacy `permissions.ts`, full matrix of {admin, editor, viewer} × {home / system / database / conversations-raw / runs / ancestor-context / mode-isolation / wrong-mode} × {access / ui / embedded} + config overrides.
-- **SQL parity** (`access-predicate-sql.test.ts`) — compiled `toSql` selects EXACTLY the `checkAccess` set against real PGLite, for base predicates **and multi-grant (group) predicates** (union, per-grant type ∩ scope, empty scope, param offset).
-- **listAll integration** (`listall-access.test.ts`) — the predicate SQL-filters a real seeded DB identically to `checkAccess`.
-- **Groups** (`groups.test.ts`) — additive grant, capability-limited, removal reverts, **mode-scoped**, **multi-group union**, **locked** reject, **guest** base-only, CRUD round-trip, `validateGroupInput`.
-- **Legacy** (`lib-unit.test.ts`) — the pre-existing `canAccessFile`/`checkFileAccess` characterization tests still pass through the delegation.
+## Test coverage — auth feature classes (all green; proven non-decoration by mutation checks)
+Mutation-verified: deleting the system-folder exclusion in `checkAccess` turned **6 tests red** (characterization + SQL parity); reverting the search fix turned its test red. These batteries catch real over-grant regressions.
+- **Engine parity** (`lib/auth/__tests__/access-predicate.test.ts`) — `checkAccess` vs frozen legacy `permissions.ts`: full matrix of {admin, editor, viewer} × {home / system-exclusion / database / conversations-raw / runs / ancestor-context / mode-isolation / wrong-mode} × {access / ui / embedded} + config overrides + **admin override-immunity** (lockout guard).
+- **SQL parity** (`lib/auth/__tests__/access-predicate-sql.test.ts`) — compiled `toSql` selects EXACTLY the `checkAccess` set against real PGLite, for base **and multi-grant** predicates (union, per-grant type ∩ scope, empty scope, param offset).
+- **listAll integration** (`lib/database/__tests__/listall-access.test.ts`) — the predicate SQL-filters a real seeded DB identically to `checkAccess`, composing with type filters.
+- **Groups** (`lib/data/__tests__/groups.test.ts`, red-first) — base-only default, additive grant + revert, **3-group union with cross-grant-leak negatives**, **nested overlapping scopes**, mode-scoping, **delete-in-use refusal**, reserved built-in names, duplicate rejection, **dangling membership ignored**, membership round-trip on the users table, guests excluded, **search integration** (member sees, non-member doesn't), config-section + API-payload validation.
+- **Group WRITE** (`lib/data/__tests__/groups-write.test.ts`, red-first, through the real `FilesAPI`) — Build-group create/edit/delete in scope; View-group reads but all writes rejected; non-member unchanged; universal guards (config blocklist) not bypassable; scope-bounded.
+- **Lockout guards** (`lib/database/__tests__/user-admin-invariant.test.ts`) — last admin can't be demoted or deleted; allowed when another admin exists.
+- **Explainability** (`lib/data/__tests__/access-report.test.ts`) — folder→who (admins / home users / groups with view-vs-build) and user→why agree with enforcement.
+- **Role editor API** (`app/api/access-rules/__tests__`) — effective matrix, editor/viewer overrides persist, **admin overrides refused**, non-admin forbidden.
+- **Legacy** (`lib-unit.test.ts`) — pre-existing `canAccessFile`/`checkFileAccess` characterization still passes through the delegation.
 
-## Test strategy (Phase 1 is a security change — coverage is the safety)
-
-Parity battery = **principals** {user, admin, **guest**, impersonated} × **variants** {folder-child, embedded-ref, conversation-folder, mode-isolation, create-blocklist}. Guest especially: guests have no group memberships, so the predicate must be **optional** (guests are covered only by their intrinsic scope) or public sharing breaks. Invariants: always ≥1 admin-capable member; the `Admin` group can't be edited into a lockout.
+Guests: no user row → no memberships → base-only by construction (tested); public sharing unbroken. Impersonation resolves grants by the impersonated principal's userId (tested).
 
 ## Indexing
 
