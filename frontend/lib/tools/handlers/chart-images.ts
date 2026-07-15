@@ -7,16 +7,15 @@
  */
 import type { AugmentedFile, VizSettings } from '@/lib/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
 import { renderEnvelopeImageDataUrl } from '@/lib/chart/VizImageRenderer.client';
-import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
-import { isEnvelopeImageViz } from '@/lib/viz/encoding-edit';
+import { resolveImageEnvelope } from '@/lib/viz/from-vizsettings';
 import { uploadChartOrEmbed } from '@/lib/chart/chart-attachments';
 
 /** Cap on chart images rendered per tool call (main-thread render + 2 uploads each). */
 const MAX_CHART_IMAGE_BLOCKS = 8;
 
-/** A deferred single-chart render → JPEG object URL (V2 Vega or legacy ECharts). */
+/** A deferred single-chart render → JPEG object URL (always the Vega pipeline —
+ *  legacy vizSettings convert through the same bridge as the on-screen chart). */
 type ImageThunk = () => Promise<string | null>;
 
 export async function renderFileChartImageBlocks(
@@ -34,21 +33,13 @@ export async function renderFileChartImageBlocks(
     // here rather than emit a blank image block.
     if (!qr || !qr.rows?.length) continue;
 
-    // A V2 `viz` envelope is authoritative: render its chart through Vega (canvas → JPEG).
-    if (content?.viz && isEnvelopeImageViz(content.viz)) {
-      const viz = content.viz;
-      thunks.push(() => renderEnvelopeImageDataUrl(viz, qr.rows, { width: 512, colorMode, addWatermark: false, padding: false }));
-    } else if (content?.vizSettings && RENDERABLE_CHART_TYPES.has(content.vizSettings.type)) {
-      // Legacy V1 question (no envelope) — the ECharts renderer, unchanged.
-      const vizSettings = content.vizSettings;
-      const titleOverride = f.fileState.name;
-      thunks.push(async () => {
-        const [r] = await clientChartImageRenderer.renderCharts(
-          [{ queryResult: qr, vizSettings, titleOverride }],
-          { width: 512, colorMode, addWatermark: false, padding: false },
-        );
-        return r?.dataUrl ?? null;
-      });
+    // One pipeline (retirement stage 2): a V2 `viz` renders directly; a legacy
+    // vizSettings chart converts through the same bridge as the on-screen chart.
+    const envelope = resolveImageEnvelope({
+      viz: content?.viz, vizSettings: content?.vizSettings, columns: qr.columns, types: qr.types,
+    });
+    if (envelope) {
+      thunks.push(() => renderEnvelopeImageDataUrl(envelope, qr.rows, { width: 512, colorMode, addWatermark: false, padding: false }));
     }
   }
 

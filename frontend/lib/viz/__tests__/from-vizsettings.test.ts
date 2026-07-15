@@ -189,6 +189,37 @@ describe('recipe sources (non-geo)', () => {
   });
 });
 
+describe('resolveImageEnvelope (chart→image bridge — Slack, LLM attachments)', () => {
+  const columns = ['month', 'revenue'];
+  const types = ['TIMESTAMP', 'DOUBLE'];
+
+  it('a V2 envelope passes through (image kinds only)', async () => {
+    const { resolveImageEnvelope } = await import('@/lib/viz/from-vizsettings');
+    const viz = vizSettingsToEnvelope(vs({ type: 'bar', xCols: ['month'], yCols: ['revenue'] }));
+    expect(resolveImageEnvelope({ viz, vizSettings: null, columns, types })).toBe(viz);
+    const table = vizSettingsToEnvelope(vs({ type: 'table' }));
+    expect(resolveImageEnvelope({ viz: table, vizSettings: null, columns, types })).toBeNull();
+  });
+
+  it('legacy vizSettings CHARTS convert — with column kinds honored (temporal x)', async () => {
+    const { resolveImageEnvelope } = await import('@/lib/viz/from-vizsettings');
+    const e = resolveImageEnvelope({
+      viz: null,
+      vizSettings: vs({ type: 'line', xCols: ['month'], yCols: ['revenue'] }),
+      columns, types,
+    })!;
+    expect(e).not.toBeNull();
+    const spec = (e.source as unknown as { spec: Record<string, any> }).spec;
+    expect(spec.encoding.x.type).toBe('temporal'); // types flowed through toVizColumns
+  });
+
+  it('table/pivot vizSettings and missing settings yield null (no image)', async () => {
+    const { resolveImageEnvelope } = await import('@/lib/viz/from-vizsettings');
+    expect(resolveImageEnvelope({ viz: null, vizSettings: vs({ type: 'table' }), columns, types })).toBeNull();
+    expect(resolveImageEnvelope({ viz: null, vizSettings: null, columns, types })).toBeNull();
+  });
+});
+
 describe('resolveLegacyRenderEnvelope (render bridge)', () => {
   const cols: VizResultColumn[] = [{ name: 'region', kind: 'nominal' }, { name: 'revenue', kind: 'quantitative' }];
   const bar = vs({ type: 'bar', xCols: ['region'], yCols: ['revenue'] });

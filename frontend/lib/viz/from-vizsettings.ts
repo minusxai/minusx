@@ -29,7 +29,8 @@
 import type { VizSettings, VizEnvelope, ColumnFormatConfig } from '@/lib/validation/atlas-schemas';
 import { VIZ_GRAMMAR_VEGA_LITE } from '@/lib/validation/atlas-schemas';
 import type { VizColumnKind, VizResultColumn } from './types';
-import { addYField, setChannelField, setVizType, type SpecVizType } from './encoding-edit';
+import { addYField, setChannelField, setVizType, isEnvelopeImageViz, type SpecVizType } from './encoding-edit';
+import { toVizColumns } from './query-data';
 
 const KIND_TO_VL_TYPE: Record<VizColumnKind, string> = {
   quantitative: 'quantitative',
@@ -177,6 +178,29 @@ export function resolveLegacyRenderEnvelope(args: {
   if (hasVizEnvelope || !vizSettings) return null;
   if (vizSettings.type === 'table' || vizSettings.type === 'pivot') return null;
   return vizSettingsToEnvelope(vizSettings, columns);
+}
+
+/**
+ * The chart→IMAGE bridge (§21 item 2 meets item 1): the envelope every image pipeline
+ * (Slack, LLM attachments, headless exports) renders from. A V2 `viz` is authoritative
+ * (image kinds only — table/pivot are DOM-tier, no chart image); a legacy chart's
+ * vizSettings converts through the same converter as the render bridge, with the query
+ * result's column kinds so temporal axes survive. Null = nothing to image.
+ */
+export function resolveImageEnvelope(args: {
+  viz?: VizEnvelope | null;
+  vizSettings?: VizSettings | null;
+  columns?: string[];
+  types?: string[];
+}): VizEnvelope | null {
+  const { viz, vizSettings, columns, types } = args;
+  if (viz) return isEnvelopeImageViz(viz) ? viz : null;
+  if (!vizSettings || vizSettings.type === 'table' || vizSettings.type === 'pivot') return null;
+  const converted = vizSettingsToEnvelope(
+    vizSettings,
+    columns && types ? toVizColumns(columns, types) : undefined,
+  );
+  return isEnvelopeImageViz(converted) ? converted : null;
 }
 
 export function vizSettingsToEnvelope(
