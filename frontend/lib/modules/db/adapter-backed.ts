@@ -1,5 +1,7 @@
 import { getAdapter } from '@/lib/database/adapter/factory';
 import { IFileSystemDBModule } from '../types';
+import { ITransactionContext } from '@/lib/database/adapter/types';
+import { runWithAccess } from '@/lib/database/with-access';
 import { runMigrationsIfNeeded } from '@/lib/database/run-migrations';
 
 /**
@@ -10,6 +12,11 @@ export class AdapterBackedDBModule implements IFileSystemDBModule {
   async exec<T = unknown>(sql: string, params?: unknown[]) {
     const adapter = await getAdapter();
     return adapter.query<T>(sql, params as any[]);
+  }
+
+  async withAccess<T>(accessContextJson: string, fn: (tx: ITransactionContext) => Promise<T>): Promise<T> {
+    const adapter = await getAdapter();
+    return runWithAccess(adapter, accessContextJson, fn);
   }
 
   async init(): Promise<void> {

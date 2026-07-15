@@ -5,12 +5,39 @@
 import { DbFile, BaseFileContent } from '../types';
 import { getModules } from '../modules/registry';
 import { DEFAULT_CONVERSATION_NAME } from '../constants';
-import { UserFacingError } from '../errors';
+import { UserFacingError, AccessPermissionError } from '../errors';
 import { stripNulChars } from './sanitize-jsonb';
-import { toSql, type AccessPredicate, type AccessVariant } from '@/lib/auth/access-predicate';
+import { toSql, buildAccessContext, type AccessPredicate, type AccessVariant } from '@/lib/auth/access-predicate';
+import type { QueryResult } from '@/lib/database/adapter/types';
 
 /** SQL-enforced permission filter for a read (Access V2 / M1b). */
 export interface AccessQuery { predicate: AccessPredicate; variant?: AccessVariant; }
+
+type QueryFn = <T = unknown>(sql: string, params?: unknown[]) => Promise<QueryResult<T>>;
+
+/**
+ * Access V2 / M1c — execute `fn` under the caller's RLS context. With an
+ * access query and a backend that supports it, every statement `fn` issues
+ * runs in one transaction as the restricted `app_user` role, so the `files`
+ * RLS policies filter reads and refuse out-of-scope writes atomically inside
+ * the database. Without one (system/owner paths, or a backend without
+ * `withAccess`), statements run as before.
+ */
+async function withDbAccess<T>(access: AccessQuery | undefined, fn: (q: QueryFn) => Promise<T>): Promise<T> {
+  const db = getModules().db;
+  if (access && db.withAccess) {
+    const json = buildAccessContext(access.predicate, access.variant);
+    return db.withAccess(json, (tx) => fn((sql, params) => tx.query(sql, params as any[])));
+  }
+  return fn((sql, params) => db.exec(sql, params));
+}
+
+/** An RLS policy refusal (INSERT/UPDATE WITH CHECK) — Postgres error 42501. */
+function isRlsViolation(error: unknown): boolean {
+  const e = error as { code?: string; message?: string } | null;
+  if (!e) return false;
+  return e.code === '42501' || /row-level security/i.test(String(e.message ?? ''));
+}
 
 /**
  * Path uniqueness applies to PUBLISHED files only (partial index
@@ -85,6 +112,7 @@ export class DocumentDB {
     editId?: string,
     draft: boolean = true,
     meta?: Record<string, unknown> | null,
+    access?: AccessQuery,
   ): Promise<number> {
     if (references.some(ref => ref < 0)) {
       throw new Error(
@@ -93,35 +121,38 @@ export class DocumentDB {
       );
     }
 
-    const db = getModules().db;
-
     // Drafts (draft = true, the default) never collide on path. A published-file create
     // (draft = false) at a path another published file already occupies hits the partial unique
     // index — translate it to the same clear "rename" message rather than a raw 23505.
-    const result = await withPathConflictTranslation(() => db.exec<{ id: number }>(`
-      WITH lock AS (
-        SELECT pg_advisory_xact_lock(1) AS lock_acquired
-      ),
-      next_id_gen AS (
-        SELECT GREATEST(COALESCE(MAX(id), 0) + 1, 1000) AS next_id FROM files
-      )
-      INSERT INTO files (id, name, path, type, content, file_references, version, last_edit_id, draft, meta, created_at, updated_at)
-      SELECT next_id, $1, $2, $3, $4, $5, 1, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-      FROM next_id_gen, lock
-      RETURNING id
-    `, [name, path, type, stripNulChars(content), references, editId ?? null, draft, stripNulChars(meta ?? null)]));
-
-    return result.rows[0].id;
+    // The id comes from app_next_file_id() (SECURITY DEFINER): under RLS a scoped
+    // caller sees a filtered table, and a MAX over visible rows would collide with
+    // hidden ids. With an access query the INSERT itself is guarded by the RLS
+    // create policy — an out-of-scope path is refused by the statement.
+    try {
+      const result = await withDbAccess(access, (q) => withPathConflictTranslation(() => q<{ id: number }>(`
+        WITH lock AS (
+          SELECT pg_advisory_xact_lock(1) AS lock_acquired
+        )
+        INSERT INTO files (id, name, path, type, content, file_references, version, last_edit_id, draft, meta, created_at, updated_at)
+        SELECT app_next_file_id(), $1, $2, $3, $4, $5, 1, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM lock
+        RETURNING id
+      `, [name, path, type, stripNulChars(content), references, editId ?? null, draft, stripNulChars(meta ?? null)])));
+      return result.rows[0].id;
+    } catch (error) {
+      if (access && isRlsViolation(error)) {
+        throw new AccessPermissionError('You do not have permission to create this file at this path');
+      }
+      throw error;
+    }
   }
 
-  static async getById(id: number, includeContent: boolean = true): Promise<DbFile | null> {
-    const db = getModules().db;
-
+  static async getById(id: number, includeContent: boolean = true, access?: AccessQuery): Promise<DbFile | null> {
     const query = includeContent
       ? 'SELECT * FROM files WHERE id = $1'
       : 'SELECT id, name, path, type, file_references, created_at, updated_at, version, last_edit_id, draft, meta FROM files WHERE id = $1';
 
-    const result = await db.exec<DbRow>(query, [id]);
+    const result = await withDbAccess(access, (q) => q<DbRow>(query, [id]));
     if (result.rows.length === 0) return null;
 
     return rowToDbFile(result.rows[0], includeContent);
@@ -142,23 +173,22 @@ export class DocumentDB {
     return rowToDbFile(result.rows[0], true);
   }
 
-  static async getByIds(ids: number[], includeContent: boolean = true): Promise<DbFile[]> {
+  static async getByIds(ids: number[], includeContent: boolean = true, access?: AccessQuery): Promise<DbFile[]> {
     // Drop virtual/placeholder IDs (negative, from pathToVirtualId) and any other
     // non-positive-integer values: they have no DB row and can exceed int4 range,
     // which would make `WHERE id IN (...)` throw 22003 ("out of range for integer").
     const dbIds = ids.filter((id) => Number.isInteger(id) && id > 0);
     if (dbIds.length === 0) return [];
 
-    const db = getModules().db;
     const placeholders = dbIds.map((_, i) => `$${i + 1}`).join(',');
     const columns = includeContent
       ? '*'
       : 'id, name, path, type, file_references, created_at, updated_at, version, last_edit_id, draft, meta';
 
-    const result = await db.exec<DbRow>(
+    const result = await withDbAccess(access, (q) => q<DbRow>(
       `SELECT ${columns} FROM files WHERE id IN (${placeholders})`,
       dbIds
-    );
+    ));
 
     return result.rows.map(row => rowToDbFile(row, includeContent));
   }
@@ -188,7 +218,6 @@ export class DocumentDB {
     includeContent: boolean = true,
     access?: AccessQuery
   ): Promise<DbFile[]> {
-    const db = getModules().db;
     const conditions: string[] = [];
     const params: any[] = [];
     let paramIndex = 1;
@@ -250,7 +279,9 @@ export class DocumentDB {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const sql = `SELECT ${columns} FROM files ${whereClause} ORDER BY updated_at DESC`;
-    const result = await db.exec<DbRow>(sql, params);
+    // With an access query, the statement also runs under the caller's RLS
+    // context — the DB policy re-enforces what the injected predicate selects.
+    const result = await withDbAccess(access, (q) => q<DbRow>(sql, params));
 
     return result.rows.map(row => rowToDbFile(row, includeContent));
   }
@@ -262,36 +293,53 @@ export class DocumentDB {
     content: BaseFileContent,
     references: number[],
     editId: string,
-    expectedVersion?: number
+    expectedVersion?: number,
+    access?: AccessQuery,
   ): Promise<
     | { alreadyApplied: true; file: DbRow }
     | { conflict: true; file: DbRow }
     | { file: DbRow }
   > {
-    const db = getModules().db;
+    return withDbAccess(access, async (q) => {
+      // Under an RLS context the read policy already hides forbidden rows, so a
+      // denied caller gets the same "not found" as a missing file.
+      const current = await q<DbRow>('SELECT * FROM files WHERE id = $1', [id]);
+      if (current.rows.length === 0) throw new Error(`File ${id} not found`);
 
-    const current = await db.exec<DbRow>('SELECT * FROM files WHERE id = $1', [id]);
-    if (current.rows.length === 0) throw new Error(`File ${id} not found`);
+      const currentRow = current.rows[0];
 
-    const currentRow = current.rows[0];
+      if (editId && editId === currentRow.last_edit_id) {
+        return { alreadyApplied: true, file: currentRow };
+      }
 
-    if (editId && editId === currentRow.last_edit_id) {
-      return { alreadyApplied: true, file: currentRow };
-    }
+      if (expectedVersion !== undefined && currentRow.version !== expectedVersion) {
+        return { conflict: true, file: currentRow };
+      }
 
-    if (expectedVersion !== undefined && currentRow.version !== expectedVersion) {
-      return { conflict: true, file: currentRow };
-    }
+      // This UPDATE sets draft = false (publish). If another PUBLISHED file already occupies `path`,
+      // the partial unique index rejects it — surface a clear "rename" message, not a raw 23505.
+      // Under an RLS context the UPDATE itself is the write guard: a row the
+      // caller may read but not edit is untouched (0 rows) — refuse atomically
+      // rather than reporting a save that never happened.
+      let updated: QueryResult<unknown>;
+      try {
+        updated = await withPathConflictTranslation(() => q(
+          'UPDATE files SET name = $1, path = $2, content = $3, file_references = $4, version = $5, last_edit_id = $6, draft = false, updated_at = CURRENT_TIMESTAMP WHERE id = $7',
+          [name, path, stripNulChars(content), references, (currentRow.version ?? 1) + 1, editId ?? null, id]
+        ));
+      } catch (error) {
+        if (access && isRlsViolation(error)) {
+          throw new AccessPermissionError('You do not have permission to move this file to that path');
+        }
+        throw error;
+      }
+      if (access && updated.rowCount === 0) {
+        throw new AccessPermissionError('You do not have permission to edit this file');
+      }
 
-    // This UPDATE sets draft = false (publish). If another PUBLISHED file already occupies `path`,
-    // the partial unique index rejects it — surface a clear "rename" message, not a raw 23505.
-    await withPathConflictTranslation(() => db.exec(
-      'UPDATE files SET name = $1, path = $2, content = $3, file_references = $4, version = $5, last_edit_id = $6, draft = false, updated_at = CURRENT_TIMESTAMP WHERE id = $7',
-      [name, path, stripNulChars(content), references, (currentRow.version ?? 1) + 1, editId ?? null, id]
-    ));
-
-    const updated = await db.exec<DbRow>('SELECT * FROM files WHERE id = $1', [id]);
-    return { file: updated.rows[0] };
+      const after = await q<DbRow>('SELECT * FROM files WHERE id = $1', [id]);
+      return { file: after.rows[0] };
+    });
   }
 
   /**
@@ -403,14 +451,15 @@ export class DocumentDB {
     return result.rowCount;
   }
 
-  static async deleteByIds(ids: number[]): Promise<number> {
+  static async deleteByIds(ids: number[], access?: AccessQuery): Promise<number> {
     if (ids.length === 0) return 0;
-    const db = getModules().db;
     const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
-    const result = await db.exec(
+    // Under an RLS context the DELETE policy is the guard: out-of-scope rows
+    // are simply not deleted, and the returned count reflects that.
+    const result = await withDbAccess(access, (q) => q(
       `DELETE FROM files WHERE id IN (${placeholders})`,
       ids
-    );
+    ));
     return result.rowCount;
   }
 

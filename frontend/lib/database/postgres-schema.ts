@@ -513,4 +513,187 @@ export const POSTGRES_SCHEMA = `
   -- Results land in query_cache like any other query (mode-scoped, so guest and
   -- authenticated runs of the same query share one blob). See arch doc §6.
 
+  -- ══════════════════ Access V2 / M1c — transparent RLS on files ══════════════════
+  -- User-scoped queries run as the restricted app_user role with the caller's
+  -- resolved access installed in the app.access session variable (per-transaction,
+  -- via db.withAccess). The policies below make the DATABASE enforce access:
+  -- reads are filtered and writes are refused atomically by the statement itself,
+  -- no matter what SQL runs. ENABLE (not FORCE) row level security keeps the
+  -- owner/system path (migrations, seeding, template import, background jobs —
+  -- plain exec with no context) unrestricted.
+  --
+  -- The policy logic lives entirely in app_access_allows so it can evolve via
+  -- CREATE OR REPLACE — the policies themselves never change. Its semantics are
+  -- the enforcement twin of checkAccess/checkWriteAccess (lib/auth/access-predicate.ts),
+  -- consuming the context JSON built by buildAccessContext — proven row-for-row
+  -- identical by lib/database/__tests__/rls-enforcement.test.ts.
+
+  -- Typeset: '*' (JSON string) or an array of file types.
+  CREATE OR REPLACE FUNCTION app_access_typeset_ok(tset jsonb, ftype text) RETURNS boolean AS $fn$
+  BEGIN
+    IF tset IS NULL THEN RETURN false; END IF;
+    IF jsonb_typeof(tset) = 'string' THEN RETURN tset #>> '{}' = '*'; END IF;
+    RETURN tset ? ftype;
+  END;
+  $fn$ LANGUAGE plpgsql IMMUTABLE;
+
+  CREATE OR REPLACE FUNCTION app_access_typeset_nonempty(tset jsonb) RETURNS boolean AS $fn$
+  BEGIN
+    IF tset IS NULL THEN RETURN false; END IF;
+    IF jsonb_typeof(tset) = 'string' THEN RETURN tset #>> '{}' = '*'; END IF;
+    RETURN jsonb_array_length(tset) > 0;
+  END;
+  $fn$ LANGUAGE plpgsql IMMUTABLE;
+
+  -- Scope: {path, raw, exclude[]} — prefix match with a '/' boundary (or raw
+  -- startsWith), minus excluded subtrees. left()-comparisons, not LIKE, so
+  -- paths containing % or _ cannot widen the match.
+  CREATE OR REPLACE FUNCTION app_access_scope_ok(scopes jsonb, fpath text) RETURNS boolean AS $fn$
+  DECLARE s jsonb; sp text; hit boolean; ex text;
+  BEGIN
+    IF scopes IS NULL THEN RETURN false; END IF;
+    FOR s IN SELECT jsonb_array_elements(scopes) LOOP
+      sp := s ->> 'path';
+      IF COALESCE((s ->> 'raw')::boolean, false) THEN
+        hit := left(fpath, length(sp)) = sp;
+      ELSE
+        hit := fpath = sp OR left(fpath, length(sp) + 1) = sp || '/';
+      END IF;
+      IF hit THEN
+        FOR ex IN SELECT jsonb_array_elements_text(COALESCE(s -> 'exclude', '[]'::jsonb)) LOOP
+          IF fpath = ex OR left(fpath, length(ex) + 1) = ex || '/' THEN hit := false; EXIT; END IF;
+        END LOOP;
+        IF hit THEN RETURN true; END IF;
+      END IF;
+    END LOOP;
+    RETURN false;
+  END;
+  $fn$ LANGUAGE plpgsql IMMUTABLE;
+
+  -- The policy evaluator. op: 'read' | 'create' | 'update' | 'delete'.
+  -- No context (owner path never has one, but policies only apply to app_user) → deny.
+  CREATE OR REPLACE FUNCTION app_access_allows(fpath text, ftype text, op text) RETURNS boolean AS $fn$
+  DECLARE ctx jsonb; g jsonb; home text; fdir text; is_admin boolean;
+  BEGIN
+    BEGIN
+      ctx := NULLIF(current_setting('app.access', true), '')::jsonb;
+    EXCEPTION WHEN OTHERS THEN RETURN false;
+    END;
+    IF ctx IS NULL THEN RETURN false; END IF;
+
+    -- Mode isolation: every principal, every operation.
+    IF NOT (fpath = '/' || (ctx ->> 'mode')
+            OR left(fpath, length(ctx ->> 'mode') + 2) = '/' || (ctx ->> 'mode') || '/') THEN
+      RETURN false;
+    END IF;
+
+    is_admin := COALESCE((ctx ->> 'admin')::boolean, false);
+
+    IF op = 'read' THEN
+      -- Type gate: permitted by at least one grant.
+      IF NOT EXISTS (
+        SELECT 1 FROM jsonb_array_elements(ctx -> 'grants') gr
+        WHERE app_access_typeset_ok(gr -> 'types', ftype)
+      ) THEN RETURN false; END IF;
+      IF ctx ->> 'variant' = 'ui' AND NOT app_access_typeset_ok(ctx -> 'viewTypes', ftype) THEN RETURN false; END IF;
+      IF is_admin THEN RETURN true; END IF;
+      -- Embedded assets travel with their container: type + mode only.
+      IF ctx ->> 'variant' = 'embedded' THEN RETURN true; END IF;
+      FOR g IN SELECT jsonb_array_elements(ctx -> 'grants') LOOP
+        IF app_access_typeset_ok(g -> 'types', ftype) AND app_access_scope_ok(g -> 'scopes', fpath) THEN RETURN true; END IF;
+      END LOOP;
+      -- Ancestor-context rule (hierarchical schema filtering).
+      home := ctx ->> 'homeFolder';
+      IF ftype = 'context' AND home IS NOT NULL THEN
+        fdir := regexp_replace(fpath, '/[^/]*$', '');
+        IF home = fdir OR left(home, length(fdir) + 1) = fdir || '/' THEN RETURN true; END IF;
+      END IF;
+      RETURN false;
+    END IF;
+
+    -- Writes.
+    IF is_admin THEN RETURN true; END IF;
+    -- Base role: create = createTypes × (home | own conversations); delete =
+    -- any type × home (home means full delete rights, incl. cascade children);
+    -- update = createTypes × anything readable (canAccessFile ∩ canCreateFileByRole).
+    IF op = 'create' AND app_access_typeset_ok(ctx -> 'write' -> 'createTypes', ftype)
+       AND app_access_scope_ok(ctx -> 'write' -> 'createScopes', fpath) THEN RETURN true; END IF;
+    IF op = 'delete' AND app_access_scope_ok(ctx -> 'write' -> 'deleteScopes', fpath) THEN RETURN true; END IF;
+    IF op = 'update' AND app_access_typeset_ok(ctx -> 'write' -> 'createTypes', ftype) THEN
+      FOR g IN SELECT jsonb_array_elements(ctx -> 'grants') LOOP
+        IF app_access_typeset_ok(g -> 'types', ftype) AND app_access_scope_ok(g -> 'scopes', fpath) THEN RETURN true; END IF;
+      END LOOP;
+      home := ctx ->> 'homeFolder';
+      IF ftype = 'context' AND home IS NOT NULL THEN
+        fdir := regexp_replace(fpath, '/[^/]*$', '');
+        IF home = fdir OR left(home, length(fdir) + 1) = fdir || '/' THEN RETURN true; END IF;
+      END IF;
+    END IF;
+    -- Group write grants. create/update are type-gated by the grant's
+    -- createTypes; delete mirrors the home-folder rule — "can build in this
+    -- folder" means full delete rights there (cascade folder-deletes must keep
+    -- removing children whose types the grant doesn't list, e.g. contexts).
+    FOR g IN SELECT jsonb_array_elements(ctx -> 'grants') LOOP
+      IF app_access_scope_ok(g -> 'scopes', fpath) THEN
+        IF op = 'delete' AND app_access_typeset_nonempty(g -> 'createTypes') THEN RETURN true; END IF;
+        IF op <> 'delete' AND app_access_typeset_ok(g -> 'createTypes', ftype) THEN RETURN true; END IF;
+      END IF;
+    END LOOP;
+    RETURN false;
+  END;
+  $fn$ LANGUAGE plpgsql STABLE;
+
+  -- Next file id, computed over ALL rows (SECURITY DEFINER: the RLS-filtered
+  -- view of a scoped caller must never drive id generation — a MAX over visible
+  -- rows would collide with hidden ids). Callers hold pg_advisory_xact_lock(1).
+  -- Deliberately NO pinned search_path: the files table must resolve exactly
+  -- like the calling INSERT's (deployments and the test harness both select
+  -- their working schema via search_path). app_user cannot create schemas or
+  -- tables, so it cannot redirect the lookup.
+  CREATE OR REPLACE FUNCTION app_next_file_id() RETURNS integer AS $fn$
+    SELECT GREATEST(COALESCE(MAX(id), 0) + 1, 1000) FROM files
+  $fn$ LANGUAGE sql SECURITY DEFINER;
+
+  -- The restricted role + grants. Degrades gracefully (with a warning) when the
+  -- connection user lacks CREATEROLE: db.withAccess then detects the missing
+  -- role and falls back to plain execution — predicate injection and app-side
+  -- checks still enforce access.
+  DO $rls$
+  BEGIN
+    BEGIN
+      CREATE ROLE app_user NOLOGIN;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+    EXECUTE 'GRANT app_user TO ' || quote_ident(current_user);
+    -- current_schema(), not a fixed name: the schema in effect is chosen by
+    -- search_path (deployment config or the per-file test harness schema).
+    EXECUTE 'GRANT USAGE ON SCHEMA ' || quote_ident(current_schema()) || ' TO app_user';
+    GRANT SELECT, INSERT, UPDATE, DELETE ON files TO app_user;
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE WARNING 'MinusX: could not set up the app_user RLS role (insufficient privilege); database-level access enforcement is disabled, application-level enforcement still applies';
+  END $rls$;
+
+  ALTER TABLE files ENABLE ROW LEVEL SECURITY;
+
+  DO $pol$ BEGIN
+    CREATE POLICY files_rls_read ON files FOR SELECT TO app_user
+      USING (app_access_allows(path, type, 'read'));
+  EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_object THEN NULL; END $pol$;
+
+  DO $pol$ BEGIN
+    CREATE POLICY files_rls_insert ON files FOR INSERT TO app_user
+      WITH CHECK (app_access_allows(path, type, 'create'));
+  EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_object THEN NULL; END $pol$;
+
+  DO $pol$ BEGIN
+    CREATE POLICY files_rls_update ON files FOR UPDATE TO app_user
+      USING (app_access_allows(path, type, 'update'))
+      WITH CHECK (app_access_allows(path, type, 'update'));
+  EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_object THEN NULL; END $pol$;
+
+  DO $pol$ BEGIN
+    CREATE POLICY files_rls_delete ON files FOR DELETE TO app_user
+      USING (app_access_allows(path, type, 'delete'));
+  EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_object THEN NULL; END $pol$;
+
 `;

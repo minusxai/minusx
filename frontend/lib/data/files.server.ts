@@ -91,16 +91,22 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
   async loadFile(id: number, user: EffectiveUser, options?: LoaderOptions): Promise<LoadFileResult> {
     const dbStart = Date.now();
-    const file = await DocumentDB.getById(id);
-
-    if (!file) {
-      throw new FileNotFoundError(id);
-    }
-
     // Load config-based access rule overrides once per request; resolve the
     // group-aware access predicate once and reuse it for the file + its refs.
+    // The read itself runs under the caller's RLS context (M1c): the database
+    // hides forbidden rows even if every later check were skipped.
     const overrides = await this._getOverrides(user);
     const predicate = await resolveAccessPredicateWithGroups(user, overrides);
+    const file = await DocumentDB.getById(id, true, { predicate });
+
+    if (!file) {
+      // The RLS-scoped read is empty for BOTH a missing file and a forbidden
+      // one. Probe the owner path (id-only) to keep the legacy 403 for files
+      // that exist but aren't accessible.
+      const exists = await DocumentDB.getById(id, false);
+      if (exists) throw new AccessPermissionError('You do not have permission to access this file');
+      throw new FileNotFoundError(id);
+    }
 
     if (!checkAccess(file, predicate, 'access')) {
       throw new AccessPermissionError('You do not have permission to access this file');
@@ -109,8 +115,13 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const refStart = Date.now();
     const refIds = await extractReferenceIds(file, resolveChildIds);
     const isConversation = file.type === 'conversation';
+    // Reference filtering depends on the parent file type:
+    //   Folder  → children are filesystem entries; full path check (`access`)
+    //   Content → embedded assets (a dashboard's questions): type + mode only, no
+    //             path (`embedded`) — they travel with the container you can open.
+    const refVariant: AccessVariant = file.type === 'folder' ? 'access' : 'embedded';
     const [references, analytics, conversationAnalytics] = await Promise.all([
-      refIds.length > 0 ? DocumentDB.getByIds(refIds) : Promise.resolve([]),
+      refIds.length > 0 ? DocumentDB.getByIds(refIds, true, { predicate, variant: refVariant }) : Promise.resolve([]),
       getFileAnalyticsSummary(id).catch(() => null),
       isConversation ? getConversationAnalytics(id).catch(() => null) : Promise.resolve(null),
     ]);
@@ -133,12 +144,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       });
     }
 
-    // Reference filtering depends on the parent file type:
-    //   Folder  → children are filesystem entries; full path check (`access`)
-    //   Content → embedded assets (a dashboard's questions): type + mode only, no
-    //             path (`embedded`) — they travel with the container you can open.
-    // Reuse the group-aware predicate resolved above for the whole ref batch.
-    const refVariant: AccessVariant = file.type === 'folder' ? 'access' : 'embedded';
+    // Backstop over the RLS-scoped fetch (same predicate, same variant).
     const filteredReferences = references.filter(ref => checkAccess(ref, predicate, refVariant));
 
     // Apply custom loaders AFTER permission checks (Phase 3)
@@ -160,9 +166,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
   }
 
   async loadFiles(ids: number[], user: EffectiveUser, options?: LoaderOptions): Promise<LoadFilesResult> {
-    const files = await DocumentDB.getByIds(ids);
     const overrides = await this._getOverrides(user);
     const predicate = await resolveAccessPredicateWithGroups(user, overrides);
+    // RLS-scoped read (M1c); the checkAccess filter below stays as a backstop.
+    const files = await DocumentDB.getByIds(ids, true, { predicate });
 
     // Filter by the group-aware access predicate.
     const filteredFiles = files.filter(f => checkAccess(f, predicate, 'access'));
@@ -178,8 +185,11 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const folderRefIds = new Set(folderRefIdArrays.flat());
     const uniqueRefIds = [...new Set([...folderRefIdArrays.flat(), ...contentRefIdArrays.flat()])];
 
+    // One fetch for both ref kinds — use the weaker `embedded` variant (a
+    // superset of `access` for readable types) and apply the exact per-ref
+    // variant in the filter below.
     const [references, analytics] = await Promise.all([
-      uniqueRefIds.length > 0 ? DocumentDB.getByIds(uniqueRefIds) : Promise.resolve([]),
+      uniqueRefIds.length > 0 ? DocumentDB.getByIds(uniqueRefIds, true, { predicate, variant: 'embedded' }) : Promise.resolve([]),
       getFilesAnalyticsSummary(filteredFiles.map(f => f.id)).catch(() => ({})),
     ]);
 
@@ -481,7 +491,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Create file in database (returns numeric ID)
     // Phase 6: Pass references from client (server is dumb, no extraction)
-    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, safeReferences, editId, startAsDraft, input.meta ?? null);
+    // The INSERT runs under the caller's RLS context (M1c): the create policy
+    // re-enforces (type × target path) inside the statement itself.
+    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, safeReferences, editId, startAsDraft, input.meta ?? null,
+      { predicate: writePredicate });
 
     if (!newFileId) {
       throw new Error('Failed to create file');
@@ -639,8 +652,11 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }
     }
 
-    // Phase 6: Server is dumb - just saves what client sends (no extraction)
-    const updateResult = await DocumentDB.update(id, name, path, contentToSave, references, editId ?? hashContent({ id, name, path, content: contentToSave }), expectedVersion);
+    // Phase 6: Server is dumb - just saves what client sends (no extraction).
+    // The UPDATE runs under the caller's RLS context (M1c): the update policy
+    // refuses an out-of-scope edit atomically inside the statement.
+    const updateResult = await DocumentDB.update(id, name, path, contentToSave, references, editId ?? hashContent({ id, name, path, content: contentToSave }), expectedVersion,
+      { predicate: editPredicate });
 
     if ('alreadyApplied' in updateResult && updateResult.alreadyApplied) {
       // Already applied — return the current file as success
@@ -893,12 +909,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
       throw new AccessPermissionError(`Cannot delete protected file: ${file.path}`);
     }
 
+    const deletePredicate = await resolveAccessPredicateWithGroups(user, await this._getOverrides(user));
     if (!isAdmin(user.role)) {
       const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
       if (!file.path.startsWith(resolvedHomeFolder)) {
         // Access V2: a group write grant covering (type, path) also authorizes
         // deletion — additive OR over the home-folder rule.
-        const deletePredicate = await resolveAccessPredicateWithGroups(user, await this._getOverrides(user));
         if (!checkWriteAccess({ type: file.type, path: file.path }, deletePredicate)) {
           throw new AccessPermissionError('You can only delete files in your home folder');
         }
@@ -929,9 +945,11 @@ class FilesDataLayerServer implements IFilesDataLayer {
         );
       }
       const allIds = [...descendants.map(f => f.id), id];
-      deletedCount = await DocumentDB.deleteByIds(allIds);
+      // RLS-guarded (M1c): the delete policy drops out-of-scope rows from the
+      // statement itself, so the count reflects what was actually deletable.
+      deletedCount = await DocumentDB.deleteByIds(allIds, { predicate: deletePredicate });
     } else {
-      deletedCount = await DocumentDB.deleteByIds([id]);
+      deletedCount = await DocumentDB.deleteByIds([id], { predicate: deletePredicate });
       if (deletedCount === 0) {
         throw new FileNotFoundError(id);
       }

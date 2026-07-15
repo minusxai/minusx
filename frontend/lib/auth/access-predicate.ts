@@ -61,6 +61,25 @@ export interface AccessGrant {
 }
 
 /**
+ * Base (role + home-folder) WRITE rights — the legacy write rules, snapshotted
+ * so the RLS write policies (M1c) can enforce them in the database:
+ * - create: role `createTypes` within the home/conversation folders (raw prefix)
+ * - update: role `createTypes` within anything readable (`canAccessFile` ∩ `canCreateFileByRole`)
+ * - delete: any type within the home folder (the static type blocklists stay
+ *   app-side — they're not per-principal, and cascade folder-deletes must keep
+ *   removing their `context` children)
+ * Group grants add to these via each grant's `createTypes` ∩ scopes.
+ */
+export interface BaseWriteRights {
+  /** Role `createTypes` (undefined rule field → permissive, like `canCreateFileByRole`). */
+  createTypes: TypeSet;
+  /** Where the role may CREATE (home + own conversation folder, raw prefix). */
+  createScopes: AccessScope[];
+  /** Where the role may DELETE (home folder, raw prefix). */
+  deleteScopes: AccessScope[];
+}
+
+/**
  * A principal's resolved access, as a self-contained snapshot. Admins bypass
  * mode-scoped path checks (but still obey mode isolation + type).
  */
@@ -73,6 +92,8 @@ export interface AccessPredicate {
   viewTypes: TypeSet;
   /** Non-admin resolved home folder — for the ancestor-context rule; null if none/admin. */
   homeFolder: string | null;
+  /** Base write rights for the RLS write policies; absent for admins (full write). */
+  baseWrite?: BaseWriteRights;
 }
 
 function typeAllowed(type: FileType, set: TypeSet): boolean {
@@ -156,6 +177,46 @@ export function checkWriteAccess(
 /** Does ANY grant permit writing this type somewhere? (pre-path type gate) */
 export function grantsAllowWriteType(p: AccessPredicate, type: FileType): boolean {
   return p.grants.some(g => typeAllowed(type, g.createTypes ?? []) && g.scopes.length > 0);
+}
+
+// ───────────────────── RLS access context (M1c) ──────────────────────────────
+
+/**
+ * Serialize a predicate into the per-transaction `app.access` session variable
+ * consumed by the `app_access_allows(path, type, op)` policy function — the
+ * third enforcement twin, alongside `checkAccess` and `toSql`. The app resolves
+ * WHO can do WHAT (config groups × membership × role rules) and hands the
+ * database the result; the policies evaluate it generically, so the DB refuses
+ * unauthorized rows/writes no matter what SQL runs as `app_user`.
+ *
+ * `excludeSystem` scopes are pre-resolved into explicit `exclude` prefix lists
+ * so the SQL function needs no app constants. Proven row-for-row identical to
+ * `checkAccess` by the RLS parity battery (`__tests__/rls-enforcement.test.ts`).
+ */
+export function buildAccessContext(p: AccessPredicate, variant: AccessVariant = 'access'): string {
+  const sysExclude = HIDDEN_SYSTEM_FOLDERS.map(f => resolvePath(p.mode, f));
+  const scope = (s: AccessScope) => ({
+    path: s.path,
+    raw: !!s.matchRaw,
+    exclude: s.excludeSystem ? sysExclude : [],
+  });
+  return JSON.stringify({
+    admin: p.admin,
+    mode: p.mode,
+    variant,
+    viewTypes: p.viewTypes,
+    homeFolder: p.homeFolder,
+    grants: p.grants.map(g => ({
+      types: g.allowedTypes,
+      createTypes: g.createTypes ?? [],
+      scopes: g.scopes.map(scope),
+    })),
+    write: {
+      createTypes: p.baseWrite?.createTypes ?? [],
+      createScopes: (p.baseWrite?.createScopes ?? []).map(scope),
+      deleteScopes: (p.baseWrite?.deleteScopes ?? []).map(scope),
+    },
+  });
 }
 
 // ───────────────────────── SQL compilation (M1b) ─────────────────────────────

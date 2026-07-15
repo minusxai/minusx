@@ -1,4 +1,4 @@
-import { QueryResult } from '@/lib/database/adapter/types';
+import { QueryResult, ITransactionContext } from '@/lib/database/adapter/types';
 import type { NextRequest, NextResponse } from 'next/server';
 import type { AuthConfigOptions } from '@/lib/auth/auth-config-options';
 import type { LlmConfig } from '@/lib/llm/llm-config-types';
@@ -25,6 +25,14 @@ export interface PresignedUrl {
  */
 export interface IFileSystemDBModule {
   exec<T = unknown>(sql: string, params?: unknown[]): Promise<QueryResult<T>>;
+  /**
+   * Access V2 / M1c — run `fn` in a transaction as the restricted `app_user`
+   * role with the caller's access context installed (`SET LOCAL ROLE` +
+   * `app.access` session var), so the `files` RLS policies enforce permissions
+   * inside the database itself. Optional: backends without it fall back to
+   * plain `exec` (predicate injection + app-side checks still apply).
+   */
+  withAccess?<T>(accessContextJson: string, fn: (tx: ITransactionContext) => Promise<T>): Promise<T>;
   init(): Promise<void>;
   /** Run data migrations if behind LATEST_DATA_VERSION. Idempotent — safe to call on every startup. */
   runMigrations?(): Promise<void>;

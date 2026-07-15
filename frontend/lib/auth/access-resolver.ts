@@ -32,10 +32,11 @@ export function resolveAccessPredicate(user: EffectiveUser, overrides?: AccessRu
   const homeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
   const userId = user.userId?.toString() || user.email;
 
+  const conversationFolder = resolvePath(user.mode, `/logs/conversations/${userId}`);
   const scopes: AccessScope[] = admin ? [] : [
     { path: homeFolder, excludeSystem: true },
     { path: resolvePath(user.mode, '/database') },
-    { path: resolvePath(user.mode, `/logs/conversations/${userId}`), matchRaw: true },
+    { path: conversationFolder, matchRaw: true },
     { path: resolvePath(user.mode, '/logs/runs') },
   ];
 
@@ -46,6 +47,18 @@ export function resolveAccessPredicate(user: EffectiveUser, overrides?: AccessRu
     grants: [{ allowedTypes, scopes }],
     viewTypes,
     homeFolder: admin ? null : homeFolder,
+    // Legacy write rules, snapshotted for the RLS write policies (M1c):
+    // create = createTypes × (home | own conversations), raw prefix matches;
+    // delete = any type × home (static blocklists stay app-side).
+    // `createTypes === undefined` is permissive, matching `canCreateFileByRole`.
+    baseWrite: admin ? undefined : {
+      createTypes: rule ? (rule.createTypes ?? '*') : [],
+      createScopes: [
+        { path: homeFolder, matchRaw: true },
+        { path: conversationFolder, matchRaw: true },
+      ],
+      deleteScopes: [{ path: homeFolder, matchRaw: true }],
+    },
   };
 }
 
