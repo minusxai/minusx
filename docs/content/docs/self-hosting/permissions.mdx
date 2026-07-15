@@ -1,0 +1,44 @@
+---
+title: Users, Roles & Groups
+description: Who can see and edit what — roles, home folders, and folder groups
+---
+
+MinusX access control has three simple pieces. Effective access is always the **union** — being in more groups only ever *adds* access, and there are no deny rules.
+
+## Roles — what kinds of things you can do
+
+Every user has exactly one role:
+
+| Role | Can |
+|---|---|
+| **Admin** | Everything: all files, all settings, user management. |
+| **Editor** | View and build analytics files (questions, dashboards, stories, notebooks, reports, alerts). |
+| **Viewer** | View analytics files; chat with the agent. |
+
+Admin capabilities are fixed (a workspace must always keep at least one admin — the last admin can't be demoted or deleted). Editor and Viewer capabilities can be customized per workspace in **Settings → Groups → Built-in roles**.
+
+## Home folder — everyone's personal space
+
+Each non-admin user has a **home folder** (e.g. `sales/team1`). Their role's full capabilities apply there: editors build, viewers view. Files outside it are invisible to them — except shared system areas (database connections are readable by everyone; each user sees their own conversations).
+
+Home folders nest naturally: a user with home `sales` sees everything under it, including `sales/team1`.
+
+## Groups — shared folders across teams
+
+A **group** grants a set of folders to a set of people at a capability level, *on top of* their role and home folder. Manage them in **Settings → Groups**.
+
+- A group has a **capability preset** — `Can view`, `Can build`, or `Full access` — a set of **folders** (grants cascade to subfolders), and **members**.
+- A user can be in **any number of groups**; access is the union of all of them plus their home folder.
+- Within a group, capability and folders combine: a *view* group over `/finance` lets members open finance dashboards but not edit them. "Many can view, a few can edit" = two groups over the same folder.
+- Groups never bypass system rules: system files stay protected, and connection/config management stays admin-only unless the group explicitly grants it.
+
+## Answering "who can see this?"
+
+**Settings → Groups → Access explorer** answers both directions:
+
+- **Folder → who**: enter a folder, see every person and group with access, and whether they can build or only view.
+- **User → why**: pick a user, see each source of their access — role, home folder, and every group, with what it grants.
+
+## Where enforcement happens
+
+Permissions are enforced in the database query itself — listing, search, and file loads are filtered by a SQL predicate compiled from the user's role, home folder, and live group memberships. Changes to groups take effect immediately, with no re-login.

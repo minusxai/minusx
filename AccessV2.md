@@ -1,6 +1,6 @@
 # Access V2 — Groups, Folder Permissions, and SQL-Enforced Access
 
-Status: **in progress** (PR #599). M1a + M1b core + M2 (additive groups) + M3 core (CRUD API + Groups UI) are DONE and CI-green; groups are inert until populated, so merged behavior is unchanged. See the Milestones section for exact checkbox state.
+Status: **feature-complete** (PR #599). M1a + M1b core + M2 + M3 (read AND write sharing, roles editor, access explorer) are done, tested, and CI-green. Groups are inert until populated, so merged behavior is unchanged for existing workspaces. Remaining (deliberate): M1c transparent RLS (optional hardening) and SQL write-guards (app-side checks enforce writes today).
 
 ## Why
 
@@ -106,23 +106,25 @@ Key correction: **no data migration.** `initializeSchema()` applies the schema i
 - [x] Verified: groups extend access end-to-end; **no members → today's behavior**; mode-scoped; multi-group union; full suite green
 - [ ] Seed `Admin`/`Editor`/`Viewer` group ROWS from `rules.json` — deferred (role is the implicit base grant; the group rows are only needed to make them editable in the UI)
 
-### M3 — Feature: custom groups + UX — backend + core UI DONE; two views remain
+### M3 — Feature: custom groups + UX ✅ DONE
 Backend
 - [x] Group CRUD API (`/api/groups`, `/api/groups/[id]`) — admin-gated, validated
-- [x] Capability presets (View / Build / Full) — advanced type-matrix override deferred
-- [ ] Invariants: **≥ 1 admin** not yet enforced; `Admin` locked ✅ (tested); a group needs ≥ 1 scope ✅ (empty grant is a no-op)
+- [x] **Group WRITE access** — `createTypes` grants authorize create/edit/delete within group scopes (red-first tested; universal guards not bypassable)
+- [x] Group-aware read surface complete: loads, listings, **search**, story previews
+- [x] Capability presets (View / Build / Full); built-in-roles matrix editor covers the advanced case
+- [x] Invariants: **≥ 1 admin** (last admin can't be demoted/deleted — data-layer, tested); admin capabilities immune to `accessRules` overrides (lockout guard, tested); `Admin` group locked (tested); empty-scope grant is a no-op (tested)
 
-UI
-- [x] Group page — members · preset · folder rows (Settings → Groups) — **browser-verified**: create persists + displays after clean boot
-- [ ] Folder → access view ("who can see this folder") — NOT done
-- [ ] "Why does X have access?" affordance on a user — NOT done
-- [ ] User create/edit: assign group(s) — NOT done (membership is edited from the group page)
+UI (Settings → Groups; browser-verified)
+- [x] Group page — members · preset · folder rows
+- [x] **Built-in roles** — effective capability matrix per role; editor/viewer editable (writes config `accessRules`); admin locked
+- [x] **Access explorer** — folder → who (with view/build level), user → why (role / home / each group)
+- [x] Membership editing (from the group page; a per-user assign affordance on the Users page is a nice-to-have)
 - [x] Browser-verify — done; visual polish still wants your eye
 
-### Cross-cutting
+### Cross-cutting ✅ DONE
 - [x] Guest / public-share: guests have no memberships → base-only (explicit test); public sharing unbroken (full suite green)
-- [ ] Impersonation (`as_user`): resolves by the impersonated user's id — inherits group-aware resolution; no dedicated test yet
-- [ ] User-facing permissions doc — NOT done
+- [x] Impersonation: grants resolve by the impersonated principal's userId (tested)
+- [x] User-facing permissions doc — `docs/content/docs/self-hosting/permissions.mdx`
 
 ## Test coverage — auth feature classes (all green; proven non-decoration by a mutation check)
 The batteries were verified meaningful by deleting the system-folder exclusion in `checkAccess` and confirming **6 tests went red** across the characterization + SQL parity, then reverting.

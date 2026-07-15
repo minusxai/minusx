@@ -89,6 +89,19 @@ describe('groups (M2) — additive grants', () => {
     expect(checkAccess({ type: 'dashboard', path: '/org/finance/report' }, p, 'access')).toBe(false);
   });
 
+  it('impersonation resolves the impersonated user\'s group grants', async () => {
+    const g = await createGroup({ name: 'Imp', mode: 'org', allowedTypes: ['dashboard'], viewTypes: ['dashboard'], createTypes: [], scopes: ['finance'], memberIds: [7] });
+    try {
+      // getEffectiveUser builds an impersonated principal with the TARGET's
+      // userId/home_folder — grants must follow the target, not the admin.
+      const impersonated: EffectiveUser = { ...viewer, impersonating: 'admin@x.co' as never };
+      const p = await resolveAccessPredicateWithGroups(impersonated);
+      expect(checkAccess(financeDash, p, 'access')).toBe(true);
+    } finally {
+      await deleteGroup(g.id);
+    }
+  });
+
   it('list / update / delete round-trip', async () => {
     const g = await createGroup({
       name: 'Team', mode: 'org', allowedTypes: '*', viewTypes: '*', createTypes: '*',

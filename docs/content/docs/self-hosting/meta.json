@@ -4,6 +4,7 @@
     "index",
     "installation",
     "configuration",
+    "permissions",
     "llm-providers",
     "telemetry"
   ]
