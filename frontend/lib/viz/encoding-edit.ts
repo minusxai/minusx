@@ -448,6 +448,66 @@ export function setYLogScale(envelope: VizEnvelope, log: boolean): VizEnvelope {
   return next;
 }
 
+// ── Y bounds + line interpolation (V1 AxisConfig yMin/yMax + smoothing, spec-native) ──
+
+/** Explicit Y-axis bounds. domainMin/domainMax (not a full domain pin) so each side is independent. */
+export function getYBounds(spec: Record<string, unknown>): { min: number | null; max: number | null } {
+  const scale = channelDef(spec, 'y')?.scale as Record<string, unknown> | undefined;
+  return {
+    min: typeof scale?.domainMin === 'number' ? scale.domainMin : null,
+    max: typeof scale?.domainMax === 'number' ? scale.domainMax : null,
+  };
+}
+
+/**
+ * Set/clear (null) either Y bound; `undefined` leaves a side as-is. Other scale props
+ * survive. Any active bound also sets `mark.clip` — without it, marks beyond the bound
+ * keep their full extent and the render-time autosize:fit collapses the plot (ECharts
+ * clipped implicitly; Vega-Lite must be told). Clearing both bounds removes the clip.
+ */
+export function setYBounds(envelope: VizEnvelope, bounds: { min?: number | null; max?: number | null }): VizEnvelope {
+  const { next, spec } = cloneEnvelope(envelope);
+  const y = channelDef(spec, 'y');
+  if (!y) return next;
+  const scale = { ...((y.scale as Record<string, unknown> | undefined) ?? {}) };
+  if (bounds.min !== undefined) {
+    if (bounds.min === null) delete scale.domainMin;
+    else scale.domainMin = bounds.min;
+  }
+  if (bounds.max !== undefined) {
+    if (bounds.max === null) delete scale.domainMax;
+    else scale.domainMax = bounds.max;
+  }
+  if (Object.keys(scale).length > 0) y.scale = scale;
+  else delete y.scale;
+
+  const bounded = scale.domainMin !== undefined || scale.domainMax !== undefined;
+  const mark: Record<string, unknown> = typeof spec.mark === 'string' ? { type: spec.mark } : { ...(asPlainRecord(spec.mark) ?? {}) };
+  if (bounded) mark.clip = true;
+  else delete mark.clip;
+  spec.mark = mark;
+  return next;
+}
+
+export type LineInterpolate = 'linear' | 'monotone' | 'step';
+
+/** The line/area interpolation ('linear' is VL's implicit default). */
+export function getLineInterpolate(spec: Record<string, unknown>): LineInterpolate {
+  const mark = asPlainRecord(spec.mark);
+  const interp = mark?.interpolate;
+  return interp === 'monotone' || interp === 'step' ? interp : 'linear';
+}
+
+/** Set the interpolation; 'linear' removes the prop (the default stays implicit). */
+export function setLineInterpolate(envelope: VizEnvelope, interpolate: LineInterpolate): VizEnvelope {
+  const { next, spec } = cloneEnvelope(envelope);
+  const mark: Record<string, unknown> = typeof spec.mark === 'string' ? { type: spec.mark } : { ...(asPlainRecord(spec.mark) ?? {}) };
+  if (interpolate === 'linear') delete mark.interpolate;
+  else mark.interpolate = interpolate;
+  spec.mark = mark;
+  return next;
+}
+
 // ── Envelope-level (source-aware) operations ────────────────────────────────────────
 //
 // The panel operates on envelopes, not bare specs: recipe sources classify/edit via

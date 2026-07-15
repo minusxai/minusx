@@ -15,6 +15,7 @@ import {
   isEnvelopeEditable, getEnvelopeVizType, setEnvelopeVizType, V2_SUPPORTED_VIZ_TYPES,
   getStacked, setStacked, getYLogScale, setYLogScale, getMaxBins, setMaxBins,
   getSeriesColors, setSeriesColor,
+  getYBounds, setYBounds, getLineInterpolate, setLineInterpolate, type LineInterpolate,
   getTableConditionalFormats, setTableConditionalFormats, getVizCss, setVizCss,
   getPivotConfig, setPivotConfig, getVizColumnFormats, mergeVizColumnFormat,
   getRecipeParams, setRecipeParam,
@@ -81,6 +82,9 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
   const [cssDraft, setCssDraft] = useState<string | null>(null);
   // Draft for the histogram Max-bins input — committed on blur (empty = auto).
   const [maxBinsDraft, setMaxBinsDraft] = useState<string | null>(null);
+  // Drafts for the Y-bounds inputs — committed on blur (empty = automatic).
+  const [yMinDraft, setYMinDraft] = useState<string | null>(null);
+  const [yMaxDraft, setYMaxDraft] = useState<string | null>(null);
 
   // Pivot Formulas builder inputs — the same derivation ChartBuilder does for the
   // classic panel: dimension VALUES come from aggregating the result rows.
@@ -251,7 +255,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                 <Text fontSize="xs" color="fg.muted">Horizontal layout</Text>
                 <Text fontSize="10px" color="fg.subtle">Stages run left to right instead of top to bottom</Text>
               </Box>
-              <Switch.Root
+              <Switch.Root colorPalette="teal"
                 aria-label="Horizontal funnel"
                 size="sm"
                 checked={getRecipeParams(envelope).orientation === 'horizontal'}
@@ -272,7 +276,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                 <Text fontSize="xs" color="fg.muted">Skip partial period</Text>
                 <Text fontSize="10px" color="fg.subtle">Compare the last two COMPLETE periods (ignores the in-progress one)</Text>
               </Box>
-              <Switch.Root
+              <Switch.Root colorPalette="teal"
                 aria-label="Skip partial period"
                 size="sm"
                 checked={getRecipeParams(envelope).compareMode === 'previous'}
@@ -284,7 +288,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
             </HStack>
             <HStack justify="space-between">
               <Text fontSize="xs" color="fg.muted">Sparkline</Text>
-              <Switch.Root
+              <Switch.Root colorPalette="teal"
                 aria-label="Toggle sparkline"
                 size="sm"
                 checked={getRecipeParams(envelope).sparkline !== false}
@@ -305,7 +309,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                 <Text fontSize="xs" color="fg.muted">Label</Text>
                 <Text fontSize="10px" color="fg.subtle">Uses the field alias configured in Fields</Text>
               </Box>
-              <Switch.Root
+              <Switch.Root colorPalette="teal"
                 aria-label="Show label"
                 size="sm"
                 checked={getRecipeParams(envelope).showLabel !== false}
@@ -326,7 +330,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                 <Text fontSize="xs" color="fg.muted">Line points</Text>
                 <Text fontSize="10px" color="fg.subtle">Keep individual line values easy to inspect</Text>
               </Box>
-              <Switch.Root
+              <Switch.Root colorPalette="teal"
                 aria-label="Show line points"
                 size="sm"
                 checked={getRecipeParams(envelope).linePoints !== false}
@@ -439,56 +443,110 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
             bind columns in Fields, or ask the agent for deeper customization.
           </Text>
         ) : isUnit && spec ? (
-          <Box display="flex" flexDirection="column" gap={3} py={1}>
+          <Box display="flex" flexDirection="column" gap={2.5} py={1}>
+            {/* Card sections matching the pivot settings look (bg.surface + border + radius). */}
             {/* Stacked / log-y are cartesian concepts — hidden for pie (theta) and
                 heatmap (colour), where they'd silently do nothing sensible. */}
-            {!['heatmap', 'pie'].includes(vizType ?? '') && (<>
-              <HStack justify="space-between">
-                <Text fontSize="xs" color="fg.muted">Stacked</Text>
-                <Switch.Root
-                  aria-label="Toggle stacked"
-                  size="sm"
-                  checked={getStacked(spec)}
-                  onCheckedChange={(e) => onVizChange(setStacked(envelope, e.checked))}
-                >
-                  <Switch.HiddenInput />
-                  <Switch.Control><Switch.Thumb /></Switch.Control>
-                </Switch.Root>
-              </HStack>
-              <HStack justify="space-between">
-                <Text fontSize="xs" color="fg.muted">Log scale (Y)</Text>
-                <Switch.Root
-                  aria-label="Toggle log scale"
-                  size="sm"
-                  checked={getYLogScale(spec)}
-                  onCheckedChange={(e) => onVizChange(setYLogScale(envelope, e.checked))}
-                >
-                  <Switch.HiddenInput />
-                  <Switch.Control><Switch.Thumb /></Switch.Control>
-                </Switch.Root>
-              </HStack>
-            </>)}
-            {vizType === 'histogram' && (
-              <HStack justify="space-between">
-                <Text fontSize="xs" color="fg.muted">Max bins</Text>
-                <Input
-                  aria-label="Max bins"
-                  size="xs"
-                  width="90px"
-                  type="number"
-                  placeholder="auto"
-                  value={maxBinsDraft ?? getMaxBins(spec) ?? ''}
-                  onChange={(e) => setMaxBinsDraft(e.target.value)}
-                  onBlur={() => {
-                    if (maxBinsDraft != null) {
-                      const n = parseInt(maxBinsDraft, 10);
-                      // Empty/invalid clears back to VL's automatic binning (~10 nice bins).
-                      onVizChange(setMaxBins(envelope, Number.isFinite(n) && n > 0 ? n : null));
-                    }
-                    setMaxBinsDraft(null);
-                  }}
-                />
-              </HStack>
+            {(!['heatmap', 'pie'].includes(vizType ?? '') || vizType === 'histogram') && (
+              <Box p={3} bg="bg.surface" borderRadius="md" border="1px solid" borderColor="border.muted" display="flex" flexDirection="column" gap={2.5}>
+                <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+                  Options
+                </Text>
+                {!['heatmap', 'pie'].includes(vizType ?? '') && (<>
+                  <HStack justify="space-between">
+                    <Text fontSize="xs" color="fg.muted">Stacked</Text>
+                    <Switch.Root colorPalette="teal"
+                      aria-label="Toggle stacked"
+                      size="sm"
+                      checked={getStacked(spec)}
+                      onCheckedChange={(e) => onVizChange(setStacked(envelope, e.checked))}
+                    >
+                      <Switch.HiddenInput />
+                      <Switch.Control><Switch.Thumb /></Switch.Control>
+                    </Switch.Root>
+                  </HStack>
+                  <HStack justify="space-between">
+                    <Text fontSize="xs" color="fg.muted">Log scale (Y)</Text>
+                    <Switch.Root colorPalette="teal"
+                      aria-label="Toggle log scale"
+                      size="sm"
+                      checked={getYLogScale(spec)}
+                      onCheckedChange={(e) => onVizChange(setYLogScale(envelope, e.checked))}
+                    >
+                      <Switch.HiddenInput />
+                      <Switch.Control><Switch.Thumb /></Switch.Control>
+                    </Switch.Root>
+                  </HStack>
+                </>)}
+                {vizType === 'histogram' && (
+                  <HStack justify="space-between">
+                    <Text fontSize="xs" color="fg.muted">Max bins</Text>
+                    <Input
+                      aria-label="Max bins"
+                      size="xs"
+                      width="90px"
+                      type="number"
+                      placeholder="auto"
+                      value={maxBinsDraft ?? getMaxBins(spec) ?? ''}
+                      onChange={(e) => setMaxBinsDraft(e.target.value)}
+                      onBlur={() => {
+                        if (maxBinsDraft != null) {
+                          const n = parseInt(maxBinsDraft, 10);
+                          // Empty/invalid clears back to VL's automatic binning (~10 nice bins).
+                          onVizChange(setMaxBins(envelope, Number.isFinite(n) && n > 0 ? n : null));
+                        }
+                        setMaxBinsDraft(null);
+                      }}
+                    />
+                  </HStack>
+                )}
+                {/* Y bounds — hidden for row (its vertical axis is the category, not the measure). */}
+                {!['heatmap', 'pie', 'row'].includes(vizType ?? '') && (
+                  <HStack justify="space-between">
+                    <Text fontSize="xs" color="fg.muted">Y range</Text>
+                    <HStack gap={1}>
+                      {([['min', yMinDraft, setYMinDraft], ['max', yMaxDraft, setYMaxDraft]] as const).map(([side, draft, setDraft]) => (
+                        <Input
+                          key={side}
+                          aria-label={`Y axis ${side}`}
+                          size="xs"
+                          width="72px"
+                          type="number"
+                          placeholder={side === 'min' ? 'min (auto)' : 'max (auto)'}
+                          value={draft ?? getYBounds(spec)[side] ?? ''}
+                          onChange={(e) => setDraft(e.target.value)}
+                          onBlur={() => {
+                            if (draft != null) {
+                              const n = parseFloat(draft);
+                              // Empty/invalid clears that side back to automatic.
+                              onVizChange(setYBounds(envelope, { [side]: Number.isFinite(n) ? n : null }));
+                            }
+                            setDraft(null);
+                          }}
+                        />
+                      ))}
+                    </HStack>
+                  </HStack>
+                )}
+                {/* Line style — only where a line is drawn. */}
+                {['line', 'area'].includes(vizType ?? '') && (
+                  <HStack justify="space-between">
+                    <Text fontSize="xs" color="fg.muted">Line style</Text>
+                    <NativeSelect.Root size="xs" width="110px">
+                      <NativeSelect.Field
+                        aria-label="Line style"
+                        value={getLineInterpolate(spec)}
+                        onChange={(e) => onVizChange(setLineInterpolate(envelope, e.target.value as LineInterpolate))}
+                      >
+                        <option value="linear">Straight</option>
+                        <option value="monotone">Smooth</option>
+                        <option value="step">Step</option>
+                      </NativeSelect.Field>
+                      <NativeSelect.Indicator />
+                    </NativeSelect.Root>
+                  </HStack>
+                )}
+              </Box>
             )}
             {/* Series colors (V1 Style-popover parity): per-series overrides, keyed by
                 series NAME on the color scale. Heatmap's quantitative ramp is excluded. */}
@@ -497,8 +555,8 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
               if (seriesColors.length === 0) return null;
               const shown = seriesColors.slice(0, 12);
               return (
-                <Box>
-                  <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+                <Box p={3} bg="bg.surface" borderRadius="md" border="1px solid" borderColor="border.muted">
+                  <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={2}>
                     {vizType === 'pie' ? 'Slice colors' : 'Series colors'}
                   </Text>
                   <Box display="flex" flexDirection="column" gap={1.5}>
