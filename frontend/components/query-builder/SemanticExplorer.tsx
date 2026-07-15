@@ -29,17 +29,29 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, VStack, HStack, Text, Button, Input, Icon, Grid } from '@chakra-ui/react';
-import { LuPlay, LuPause, LuRefreshCw, LuSigma, LuGroup, LuClock, LuSearch, LuTriangleAlert, LuX, LuTable, LuCheck, LuLayers, LuListFilter } from 'react-icons/lu';
+import { LuPlay, LuPause, LuRefreshCw, LuSigma, LuTag, LuCalendarDays, LuSearch, LuTriangleAlert, LuX, LuTable, LuCheck, LuLayers, LuListFilter, LuHash, LuFingerprint, LuDivide, LuArrowDownToLine, LuArrowUpToLine } from 'react-icons/lu';
+import type { IconType } from 'react-icons';
 import { compileSemanticQuery, validateSemanticQuery, semanticAlias } from '@/lib/semantic/compile';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { searchFields, type SemanticFieldHit } from '@/lib/semantic/models-client';
 import type { ModelStub } from '@/lib/semantic/derive';
-import { VIEWS_SCHEMA, type SemanticModel, type SemanticTimeGrain, type VizSettings } from '@/lib/types';
+import { VIEWS_SCHEMA, type SemanticAggregate, type SemanticModel, type SemanticTimeGrain, type VizSettings } from '@/lib/types';
 import type { SemanticQuerySpec, SemanticQueryFilter } from '@/lib/validation/atlas-schemas';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AddChipButton } from './QueryChip';
 
 const TIME_GRAINS: SemanticTimeGrain[] = ['HOUR', 'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'];
+
+/** One icon per aggregation — the measure list telegraphs HOW each aggregates. */
+const AGG_ICONS: Record<SemanticAggregate, IconType> = {
+  SUM: LuSigma,
+  COUNT: LuHash,
+  COUNT_DISTINCT: LuFingerprint,
+  AVG: LuDivide,
+  MIN: LuArrowDownToLine,
+  MAX: LuArrowUpToLine,
+};
+const aggIcon = (agg?: SemanticAggregate): IconType => (agg && AGG_ICONS[agg]) || LuSigma;
 const OPERATORS: SemanticQueryFilter['operator'][] = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'IN', 'IS NULL', 'IS NOT NULL'];
 
 /** The viz assignment implied by the spec. */
@@ -488,13 +500,13 @@ export function SemanticExplorer({
       <Box borderRight="1px solid" borderColor="border.muted" overflowY="auto" minH={0} minW={0}>
         {fieldSection(
           'Dimensions column', 'Dimensions',
-          <LuGroup size={11} color="var(--chakra-colors-accent-warning)" />,
+          <LuTag size={11} color="var(--chakra-colors-accent-warning)" />,
           visibleDimensions.length,
           visibleDimensions.map((d) => fieldRow(
             d.name,
             spec.dimensions.includes(d.name),
             'accent.warning',
-            <LuGroup size={12} color="var(--chakra-colors-accent-warning)" />,
+            <LuTag size={12} color="var(--chakra-colors-accent-warning)" />,
             () => toggleDimension(d.name),
             `Field dimension: ${d.name}`,
           )),
@@ -502,14 +514,14 @@ export function SemanticExplorer({
         )}
         {fieldSection(
           'Time column', 'Time',
-          <LuClock size={11} color="var(--chakra-colors-accent-secondary)" />,
+          <LuCalendarDays size={11} color="var(--chakra-colors-accent-secondary)" />,
           visibleTemporal.length + (visibleDefaultTime ? 1 : 0),
           <>
             {visibleDefaultTime && fieldRow(
               defaultTimeLabel,
               !!spec.timeGrain && effectiveTimeColumn === model.timeDimension!.column,
               'accent.secondary',
-              <LuClock size={12} color="var(--chakra-colors-accent-secondary)" />,
+              <LuCalendarDays size={12} color="var(--chakra-colors-accent-secondary)" />,
               () => toggleTime(model.timeDimension!.column),
               `Field time: ${defaultTimeLabel}`,
             )}
@@ -517,7 +529,7 @@ export function SemanticExplorer({
               d.name,
               (!!spec.timeGrain && effectiveTimeColumn === d.column) || spec.dimensions.includes(d.name),
               'accent.secondary',
-              <LuClock size={12} color="var(--chakra-colors-accent-secondary)" />,
+              <LuCalendarDays size={12} color="var(--chakra-colors-accent-secondary)" />,
               () => (spec.dimensions.includes(d.name) ? toggleDimension(d.name) : toggleTime(d.column)),
               `Field time: ${d.name}`,
             ))}
@@ -531,14 +543,17 @@ export function SemanticExplorer({
           'Measures column', 'Measures',
           <LuSigma size={11} color="var(--chakra-colors-accent-primary)" />,
           visibleMeasures.length,
-          visibleMeasures.map((m) => fieldRow(
-            m.name,
-            spec.measures.includes(m.name),
-            'accent.primary',
-            <LuSigma size={12} color="var(--chakra-colors-accent-primary)" />,
-            () => toggleMeasure(m.name),
-            `Field measure: ${m.name}`,
-          )),
+          visibleMeasures.map((m) => {
+            const MeasureIcon = aggIcon(m.agg);
+            return fieldRow(
+              m.name,
+              spec.measures.includes(m.name),
+              'accent.primary',
+              <MeasureIcon size={12} color="var(--chakra-colors-accent-primary)" />,
+              () => toggleMeasure(m.name),
+              `Field measure: ${m.name}`,
+            );
+          }),
           query ? 'No matches' : 'No measures',
         )}
       </Box>
@@ -609,7 +624,7 @@ export function SemanticExplorer({
           >
             {h.kind === 'measure'
               ? <LuSigma size={12} color="var(--chakra-colors-accent-primary)" />
-              : <LuGroup size={12} color="var(--chakra-colors-accent-warning)" />}
+              : <LuTag size={12} color="var(--chakra-colors-accent-warning)" />}
             <Text fontSize="xs" fontFamily="mono" flex={1} truncate>{h.name}</Text>
             <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate maxW="90px">{h.model}</Text>
           </HStack>
