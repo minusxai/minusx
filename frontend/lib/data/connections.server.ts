@@ -91,9 +91,11 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     // table set is folder-resolved at query time — no doc, no schema here.
     const datasets = await DocumentDB.listAll('dataset', [modePath], undefined, false);
     if (datasets.length > 0) {
+      // Appended LAST so default-connection selection (new-question templates)
+      // keeps preferring real warehouses when one exists.
       formatted = [
-        { id: -1, name: FILES_CONNECTION, type: 'csv', config: {}, created_at: new Date(0).toISOString(), updated_at: new Date(0).toISOString() },
         ...formatted,
+        { id: -1, name: FILES_CONNECTION, type: 'csv', config: {}, created_at: new Date(0).toISOString(), updated_at: new Date(0).toISOString() },
       ];
     }
 
