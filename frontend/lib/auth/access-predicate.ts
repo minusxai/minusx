@@ -40,19 +40,30 @@ export interface AccessScope {
 }
 
 /**
- * A principal's resolved access, as a self-contained snapshot. Type sets come
- * from the role rules (+ config overrides); scopes are resolved absolute paths.
- * Admins bypass mode-scoped path checks (but still obey mode isolation + type).
+ * One grant = a capability set applied over a set of scopes. Effective access
+ * is the UNION across grants, and WITHIN a grant it's capabilities ∩ scopes —
+ * so a viewer added to an "edit /finance" group edits in finance and only views
+ * elsewhere. The base grant (from the user's role) reproduces today's behavior;
+ * group memberships (M2) append more grants.
+ */
+export interface AccessGrant {
+  /** Types this grant permits (`canAccessFileType` basis for the base grant). */
+  allowedTypes: TypeSet;
+  /** Absolute path prefixes this grant covers (empty for admin = whole mode). */
+  scopes: AccessScope[];
+}
+
+/**
+ * A principal's resolved access, as a self-contained snapshot. Admins bypass
+ * mode-scoped path checks (but still obey mode isolation + type).
  */
 export interface AccessPredicate {
   admin: boolean;
   mode: Mode;
-  /** `canAccessFileType` basis. */
-  allowedTypes: TypeSet;
-  /** `canViewFileType` basis (UI variant only). */
+  /** Access grants — OR'd; within each, types ∩ scopes. */
+  grants: AccessGrant[];
+  /** `canViewFileType` basis (UI variant gate). */
   viewTypes: TypeSet;
-  /** Non-admin path grants (home + database + own conversations + runs). */
-  scopes: AccessScope[];
   /** Non-admin resolved home folder — for the ancestor-context rule; null if none/admin. */
   homeFolder: string | null;
 }
@@ -87,8 +98,8 @@ export function checkAccess(
   p: AccessPredicate,
   variant: AccessVariant = 'access',
 ): boolean {
-  // Type gate — applies to every principal (admin's allowedTypes is '*').
-  if (!typeAllowed(file.type, p.allowedTypes)) return false;
+  // Type gate — the type must be permitted by at least one grant.
+  if (!p.grants.some(g => typeAllowed(file.type, g.allowedTypes))) return false;
   if (variant === 'ui' && !typeAllowed(file.type, p.viewTypes)) return false;
 
   // Mode isolation — applies to every principal, including admins.
@@ -100,9 +111,13 @@ export function checkAccess(
   // Embedded assets skip path scoping (they travel with their container).
   if (variant === 'embedded') return true;
 
-  // Non-admin path grants (OR), then the ancestor-context special case.
-  for (const s of p.scopes) {
-    if (scopeMatches(file.path, s, p.mode)) return true;
+  // Path: OR across grants of (this grant permits the type AND covers the path),
+  // then the ancestor-context special case.
+  for (const g of p.grants) {
+    if (!typeAllowed(file.type, g.allowedTypes)) continue;
+    for (const s of g.scopes) {
+      if (scopeMatches(file.path, s, p.mode)) return true;
+    }
   }
   return isAncestorContext(file.type, file.path, p.homeFolder);
 }
@@ -142,29 +157,32 @@ export function toSql(
   const underPrefixSql = (path: string) => `(${pathCol} = ${ph(path)} OR ${pathCol} LIKE ${ph(path + '/%')})`;
   // raw `startsWith` (conversation folder) — reproduces the legacy boundary-less match.
   const rawPrefixSql = (path: string) => `${pathCol} LIKE ${ph(path + '%')}`;
+  const scopeSql = (s: AccessScope) => {
+    if (s.matchRaw) return rawPrefixSql(s.path);
+    if (s.excludeSystem) {
+      const sys = HIDDEN_SYSTEM_FOLDERS.map(f => underPrefixSql(resolvePath(p.mode, f))).join(' OR ');
+      return `(${underPrefixSql(s.path)} AND NOT (${sys}))`;
+    }
+    return underPrefixSql(s.path);
+  };
 
-  const clauses: string[] = [typeGate(p.allowedTypes)];
+  // Type gate: the type must be permitted by at least one grant.
+  const clauses: string[] = [`(${p.grants.map(g => typeGate(g.allowedTypes)).join(' OR ')})`];
   if (variant === 'ui') clauses.push(typeGate(p.viewTypes));
   clauses.push(underPrefixSql(`/${p.mode}`)); // mode isolation
 
   if (!p.admin && variant !== 'embedded') {
-    const scopeSql: string[] = [];
-    for (const s of p.scopes) {
-      if (s.matchRaw) {
-        scopeSql.push(rawPrefixSql(s.path));
-      } else if (s.excludeSystem) {
-        const sys = HIDDEN_SYSTEM_FOLDERS.map(f => underPrefixSql(resolvePath(p.mode, f))).join(' OR ');
-        scopeSql.push(`(${underPrefixSql(s.path)} AND NOT (${sys}))`);
-      } else {
-        scopeSql.push(underPrefixSql(s.path));
-      }
+    const pathBlocks: string[] = [];
+    for (const g of p.grants) {
+      if (g.scopes.length === 0) continue;
+      pathBlocks.push(`(${typeGate(g.allowedTypes)} AND (${g.scopes.map(scopeSql).join(' OR ')}))`);
     }
     if (p.homeFolder) {
       const dir = `regexp_replace(${pathCol}, '/[^/]*$', '')`;
       const home = ph(p.homeFolder);
-      scopeSql.push(`(${typeCol} = 'context' AND (${home} = ${dir} OR ${home} LIKE ${dir} || '/%'))`);
+      pathBlocks.push(`(${typeCol} = 'context' AND (${home} = ${dir} OR ${home} LIKE ${dir} || '/%'))`);
     }
-    clauses.push(scopeSql.length ? `(${scopeSql.join(' OR ')})` : 'FALSE');
+    clauses.push(pathBlocks.length ? `(${pathBlocks.join(' OR ')})` : 'FALSE');
   }
 
   return { sql: clauses.join(' AND '), params };

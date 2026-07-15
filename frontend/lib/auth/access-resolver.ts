@@ -38,12 +38,12 @@ export function resolveAccessPredicate(user: EffectiveUser, overrides?: AccessRu
     { path: resolvePath(user.mode, '/logs/runs') },
   ];
 
+  // Base grant from the user's role (the seed group). M2 appends group grants.
   return {
     admin,
     mode: user.mode,
-    allowedTypes,
+    grants: [{ allowedTypes, scopes }],
     viewTypes,
-    scopes,
     homeFolder: admin ? null : homeFolder,
   };
 }
