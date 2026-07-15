@@ -14,6 +14,8 @@ import { LuCirclePlus, LuTrash2, LuX } from 'react-icons/lu';
 import SimpleSelect from '@/components/evals/SimpleSelect';
 import { toaster } from '@/components/ui/toaster';
 import { useUsers } from '@/lib/hooks/useUsers';
+import { BuiltinRolesSection } from './BuiltinRolesSection';
+import { AccessExplorer } from './AccessExplorer';
 import type { FileType } from '@/lib/types';
 
 type TypeSet = '*' | FileType[];
@@ -186,6 +188,13 @@ export function GroupsSection() {
           <LuCirclePlus /> Add group
         </Button>
       )}
+
+      <Box borderTopWidth="1px" borderColor="border.default" pt={5}>
+        <BuiltinRolesSection />
+      </Box>
+      <Box borderTopWidth="1px" borderColor="border.default" pt={5}>
+        <AccessExplorer />
+      </Box>
     </VStack>
   );
 }
