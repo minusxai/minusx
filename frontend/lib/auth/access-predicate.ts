@@ -49,6 +49,13 @@ export interface AccessScope {
 export interface AccessGrant {
   /** Types this grant permits (`canAccessFileType` basis for the base grant). */
   allowedTypes: TypeSet;
+  /**
+   * Types this grant permits WRITING (create/edit/delete) within its scopes.
+   * The base (role) grant leaves this empty — base write rights are enforced
+   * by the existing role + home-folder logic; group grants set it from the
+   * group's `createTypes`, making write-sharing additive.
+   */
+  createTypes?: TypeSet;
   /** Absolute path prefixes this grant covers (empty for admin = whole mode). */
   scopes: AccessScope[];
 }
@@ -120,6 +127,35 @@ export function checkAccess(
     }
   }
   return isAncestorContext(file.type, file.path, p.homeFolder);
+}
+
+/**
+ * Can this principal WRITE (create/edit/delete) a file of `type` at `path` via
+ * a GROUP grant? Additive: base users get `false` here (their write rights come
+ * from the existing role + home-folder checks); a group grant answers true when
+ * its `createTypes` include the type AND a scope covers the path. Universal
+ * guards (blocklists, protected paths, location restrictions) are enforced by
+ * the caller and are NOT bypassed by this.
+ */
+export function checkWriteAccess(
+  file: { type: FileType; path: string },
+  p: AccessPredicate,
+): boolean {
+  const modePrefix = `/${p.mode}`;
+  if (!(file.path === modePrefix || file.path.startsWith(modePrefix + '/'))) return false;
+  if (p.admin) return true;
+  for (const g of p.grants) {
+    if (!typeAllowed(file.type, g.createTypes ?? [])) continue;
+    for (const s of g.scopes) {
+      if (scopeMatches(file.path, s, p.mode)) return true;
+    }
+  }
+  return false;
+}
+
+/** Does ANY grant permit writing this type somewhere? (pre-path type gate) */
+export function grantsAllowWriteType(p: AccessPredicate, type: FileType): boolean {
+  return p.grants.some(g => typeAllowed(type, g.createTypes ?? []) && g.scopes.length > 0);
 }
 
 // ───────────────────────── SQL compilation (M1b) ─────────────────────────────

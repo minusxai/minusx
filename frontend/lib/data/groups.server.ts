@@ -49,23 +49,30 @@ function scopePath(mode: Mode, folder: string): string {
  */
 export async function resolveUserGroupGrants(userId: number, mode: Mode): Promise<AccessGrant[]> {
   const db = getModules().db;
-  const res = await db.exec<{ id: number; allowed_types: unknown; folder: string | null }>(
-    `SELECT g.id, g.allowed_types, s.folder
+  const res = await db.exec<{ id: number; allowed_types: unknown; create_types: unknown; folder: string | null }>(
+    `SELECT g.id, g.allowed_types, g.create_types, s.folder
        FROM group_members m
        JOIN groups g ON g.id = m.group_id AND g.mode = $2
        LEFT JOIN group_scopes s ON s.group_id = g.id
       WHERE m.user_id = $1`,
     [userId, mode],
   );
-  const byGroup = new Map<number, { allowedTypes: TypeSet; folders: string[] }>();
+  const byGroup = new Map<number, { allowedTypes: TypeSet; createTypes: TypeSet; folders: string[] }>();
   for (const row of res.rows) {
     let g = byGroup.get(row.id);
-    if (!g) { g = { allowedTypes: parseTypeSet(row.allowed_types), folders: [] }; byGroup.set(row.id, g); }
+    if (!g) {
+      g = { allowedTypes: parseTypeSet(row.allowed_types), createTypes: parseTypeSet(row.create_types), folders: [] };
+      byGroup.set(row.id, g);
+    }
     if (row.folder != null) g.folders.push(row.folder);
   }
   return [...byGroup.values()]
     .filter(g => g.folders.length > 0) // a grant with no scope grants nothing
-    .map(g => ({ allowedTypes: g.allowedTypes, scopes: g.folders.map(f => ({ path: scopePath(mode, f) })) }));
+    .map(g => ({
+      allowedTypes: g.allowedTypes,
+      createTypes: g.createTypes,
+      scopes: g.folders.map(f => ({ path: scopePath(mode, f) })),
+    }));
 }
 
 interface GroupRow {

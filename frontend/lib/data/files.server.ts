@@ -24,7 +24,7 @@ import {
 } from './types';
 import { canAccessFile } from './helpers/permissions';
 import { resolveAccessPredicateWithGroups } from '@/lib/auth/access-resolver';
-import { checkAccess, type AccessVariant } from '@/lib/auth/access-predicate';
+import { checkAccess, checkWriteAccess, grantsAllowWriteType, type AccessVariant } from '@/lib/auth/access-predicate';
 import { extractReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
@@ -324,14 +324,19 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }
     }
     const overrides = await this._getOverrides(user);
+    // Group write grants (Access V2): a group whose createTypes include this
+    // type can authorize creation within its folder scopes — additive OR over
+    // the base role + home-folder rules. Universal guards below still apply.
+    const writePredicate = await resolveAccessPredicateWithGroups(user, overrides);
+    const groupTypeOk = grantsAllowWriteType(writePredicate, type as FileType);
 
     // Check file type access (read permission)
-    if (!canAccessFileType(user.role, type, overrides)) {
+    if (!canAccessFileType(user.role, type, overrides) && !groupTypeOk) {
       throw new AccessPermissionError(`You do not have permission to create files of type: ${type}`);
     }
 
     // Check write permission — createTypes gates both create and edit
-    if (!canCreateFileByRole(user.role, type, overrides)) {
+    if (!canCreateFileByRole(user.role, type, overrides) && !groupTypeOk) {
       throw new AccessPermissionError(`Your role (${user.role}) does not have permission to create ${type} files.`);
     }
 
@@ -384,8 +389,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
       const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
       const canCreateInHomeFolder = finalPath.startsWith(resolvedHomeFolder);
       const canCreateInConversationFolder = finalPath.startsWith(userConversationFolder);
+      // Group write grant covering (type, target path) — Access V2.
+      const canCreateViaGroup = checkWriteAccess({ type: type as FileType, path: finalPath }, writePredicate);
 
-      if (!canCreateInHomeFolder && !canCreateInConversationFolder) {
+      if (!canCreateInHomeFolder && !canCreateInConversationFolder && !canCreateViaGroup) {
         throw new AccessPermissionError('You can only create files in your home folder or conversation folder');
       }
     }
@@ -529,13 +536,19 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     const overrides = await this._getOverrides(user);
 
-    // Check file access (unified: type + mode + path) - Phase 4
-    if (!canAccessFile(existingFile, user, overrides)) {
+    // Base rule: read access (type + mode + path) AND role edit-type gate.
+    // Access V2: a group write grant covering (type, path) is an additive OR —
+    // it does NOT ride on read access alone (a view-only group must not imply
+    // edit), so both base checks fail over to the same group-write test.
+    const editPredicate = await resolveAccessPredicateWithGroups(user, overrides);
+    const canEditViaGroup = checkWriteAccess({ type: existingFile.type, path: existingFile.path }, editPredicate);
+
+    if (!canAccessFile(existingFile, user, overrides) && !canEditViaGroup) {
       throw new AccessPermissionError('You do not have permission to modify this file');
     }
 
     // Check write permission — createTypes gates both create and edit
-    if (!canCreateFileByRole(user.role, existingFile.type, overrides)) {
+    if (!canCreateFileByRole(user.role, existingFile.type, overrides) && !canEditViaGroup) {
       throw new AccessPermissionError(`Your role (${user.role}) does not have permission to edit ${existingFile.type} files.`);
     }
 
@@ -883,7 +896,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (!isAdmin(user.role)) {
       const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
       if (!file.path.startsWith(resolvedHomeFolder)) {
-        throw new AccessPermissionError('You can only delete files in your home folder');
+        // Access V2: a group write grant covering (type, path) also authorizes
+        // deletion — additive OR over the home-folder rule.
+        const deletePredicate = await resolveAccessPredicateWithGroups(user, await this._getOverrides(user));
+        if (!checkWriteAccess({ type: file.type, path: file.path }, deletePredicate)) {
+          throw new AccessPermissionError('You can only delete files in your home folder');
+        }
       }
     }
 
