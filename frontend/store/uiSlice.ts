@@ -17,6 +17,11 @@ interface UIState {
   activeSidebarSection: string | null;
   askForConfirmation: boolean;
   showAdvanced: boolean;
+  /** Viz V2 engine switch (docs/Visualization Arch V2.md §21). Decides the
+   * rendering/editing engine wholesale: off → classic V1 pipeline for every
+   * question (saved `viz` envelopes are ignored); on → V2 for every question
+   * (saved envelope when present, else the V1→V2 converter bridge). */
+  vizV2: boolean;
   fileEditMode: Record<number, boolean>;       // fileId -> editMode (dashboard, story, question, report, alert)
   fileViewMode: Record<number, 'visual' | 'json'>;  // fileId -> active tab
   notebookActiveCell: Record<number, string>;   // notebook fileId -> active cell id (for agent context + highlight)
@@ -55,6 +60,7 @@ const initialState: UIState = {
   activeSidebarSection: null,
   askForConfirmation: false,
   showAdvanced: false,
+  vizV2: false,
   fileEditMode: {},
   fileViewMode: {},
   notebookActiveCell: {},
@@ -132,6 +138,12 @@ const uiSlice = createSlice({
       state.showAdvanced = action.payload;
       if (typeof window !== 'undefined') {
         try { localStorage.setItem('showAdvanced', String(action.payload)); } catch { /* ignore */ }
+      }
+    },
+    setVizV2: (state, action: PayloadAction<boolean>) => {
+      state.vizV2 = action.payload;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('vizV2', String(action.payload)); } catch { /* ignore */ }
       }
     },
     setShowSuggestedQuestions: (state, action: PayloadAction<boolean>) => {
@@ -221,11 +233,12 @@ const uiSlice = createSlice({
         try { localStorage.setItem('homePage', JSON.stringify(state.homePage)); } catch { /* ignore */ }
       }
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
-      const { devMode, askForConfirmation, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, homePage } = action.payload;
+    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
+      const { devMode, askForConfirmation, showAdvanced, vizV2, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, homePage } = action.payload;
       if (devMode !== undefined) state.devMode = devMode;
       if (askForConfirmation !== undefined) state.askForConfirmation = askForConfirmation;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
+      if (vizV2 !== undefined) state.vizV2 = vizV2;
       if (allowChatQueue !== undefined) state.allowChatQueue = allowChatQueue;
       if (queueStrategy !== undefined) state.queueStrategy = queueStrategy;
       if (showSuggestedQuestions !== undefined) state.showSuggestedQuestions = showSuggestedQuestions;
@@ -250,6 +263,7 @@ export const {
   setActiveSidebarSection,
   setAskForConfirmation,
   setShowAdvanced,
+  setVizV2,
   setFileEditMode,
   setFileViewMode,
   setNotebookActiveCell,
@@ -296,6 +310,7 @@ export const selectRightSidebarUIState = createSelector(
 
 export const selectDevMode = (state: RootState) => state.ui.devMode;
 export const selectShowAdvanced = (state: RootState) => state.ui.showAdvanced;
+export const selectVizV2 = (state: RootState) => state.ui.vizV2;
 export const selectAllowChatQueue = (state: RootState) => state.ui.allowChatQueue ?? true;
 export const selectQueueStrategy = (state: RootState) => state.ui.queueStrategy ?? 'end-of-turn';
 export const selectFileEditMode = (state: RootState, fileId: number) => state.ui.fileEditMode[fileId] ?? false;

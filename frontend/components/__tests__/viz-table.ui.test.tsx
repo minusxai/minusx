@@ -1,0 +1,302 @@
+import React from 'react'
+import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { renderWithProviders } from '@/test/helpers/render-with-providers'
+import { makeStore } from '@/store/store'
+import { setVizV2 } from '@/store/uiSlice'
+import { QuestionVisualization } from '@/components/question/QuestionVisualization'
+import { VegaVizPanel } from '@/components/viz/VegaVizPanel'
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas'
+import type { QuestionContent, QueryResult } from '@/lib/types'
+
+// Every case in this file exercises V2 behavior — render with the engine ON.
+const renderV2 = (ui: React.ReactElement) => {
+  const store = makeStore()
+  store.dispatch(setVizV2(true))
+  return renderWithProviders(ui, { store })
+}
+
+// ─── Mocks: heavy renderers not under test ───────────────────────────────────
+
+// The vega renderer must NOT mount for table envelopes — marker div proves routing.
+vi.mock('@/components/viz/VegaChart', () => ({
+  default: () => <div aria-label="Vega chart surface" />,
+}))
+vi.mock('@/components/plotx/ChartBuilder', () => ({
+  ChartBuilder: () => <div aria-label="Classic chart builder" />,
+}))
+vi.mock('@/lib/hooks/useConfigs', () => ({
+  useConfigs: () => ({
+    config: { branding: { agentName: 'Agent' } },
+    configs: [],
+    loading: false,
+    error: null,
+    reloadConfigs: vi.fn(),
+  }),
+}))
+
+// TableV2 stays REAL (full functionality reuse is the point) — mock its duckdb deps.
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, i) => ({ index: i, start: i * 41, end: (i + 1) * 41, size: 41 })),
+    getTotalSize: () => count * 41,
+  }),
+}))
+vi.mock('@/lib/database/duckdb', () => ({
+  calculateColumnStats: vi.fn().mockResolvedValue({}),
+  getColumnType: (t: string) => {
+    if (['INTEGER', 'BIGINT', 'DOUBLE', 'FLOAT', 'DECIMAL'].some(n => t.toUpperCase().includes(n))) return 'number'
+    if (['DATE', 'TIMESTAMP'].some(n => t.toUpperCase().includes(n))) return 'date'
+    return 'text'
+  },
+  loadDataIntoTable: vi.fn().mockResolvedValue(undefined),
+  generateRandomTableName: () => 'test_table',
+}))
+vi.mock('@/lib/chart/histogram', () => ({
+  calculateHistogram: vi.fn().mockResolvedValue([]),
+}))
+
+// ─── Fixtures ────────────────────────────────────────────────────────────────
+
+const tableViz = (extra: Record<string, unknown> = {}): VizEnvelope => ({
+  version: 2,
+  source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null, ...extra },
+}) as unknown as VizEnvelope
+
+const vegaViz: VizEnvelope = {
+  version: 2,
+  source: {
+    kind: 'vega-lite',
+    grammar: 'vega-lite@6',
+    spec: {
+      mark: { type: 'bar' },
+      encoding: {
+        x: { field: 'region', type: 'nominal' },
+        y: { field: 'revenue', type: 'quantitative' },
+      },
+    },
+  },
+} as unknown as VizEnvelope
+
+const DATA: QueryResult = {
+  columns: ['region', 'revenue'],
+  types: ['VARCHAR', 'DOUBLE'],
+  rows: [
+    { region: 'West', revenue: 100 },
+    { region: 'East', revenue: 200 },
+    { region: 'North', revenue: 50 },
+  ],
+}
+
+const content = (viz: VizEnvelope): QuestionContent => ({
+  query: 'SELECT 1',
+  connection_name: 'static',
+  vizSettings: { type: 'table', xCols: [], yCols: [] },
+  viz,
+}) as unknown as QuestionContent
+
+const CONFIG = {
+  showHeader: false,
+  showJsonToggle: false,
+  editable: true,
+  viz: { showTypeButtons: false, showChartBuilder: false, typesButtonsOrientation: 'horizontal' as const, showTitle: false },
+  fixError: false,
+}
+
+function renderViz(viz: VizEnvelope, onVizChange = vi.fn()) {
+  renderV2(
+    <QuestionVisualization
+      currentState={content(viz)}
+      config={CONFIG}
+      loading={false}
+      error={null}
+      data={DATA}
+      onVizTypeChange={vi.fn()}
+      onAxisChange={vi.fn()}
+      onVizChange={onVizChange}
+    />
+  )
+  return onVizChange
+}
+
+// ─── QuestionVisualization routing ───────────────────────────────────────────
+
+describe('QuestionVisualization — table envelope routing', () => {
+  it('renders the real TableV2 (not the vega surface) for a table envelope', () => {
+    renderViz(tableViz())
+    // Real TableV2 bottom bar reports the row count; the vega marker must be absent.
+    expect(screen.getByText('3 rows')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Vega chart surface')).not.toBeInTheDocument()
+  })
+
+  it('still routes vega-lite envelopes to the vega surface', async () => {
+    renderViz(vegaViz)
+    // findBy — the vega renderer is a next/dynamic lazy chunk
+    expect(await screen.findByLabelText('Vega chart surface')).toBeInTheDocument()
+    expect(screen.queryByText('3 rows')).not.toBeInTheDocument()
+  })
+
+  it('applies envelope columnFormats (alias shows in the header)', () => {
+    renderViz(tableViz({ columnFormats: { revenue: { alias: 'Revenue ($)' } } }))
+    expect(screen.getByLabelText('Column header Revenue ($)')).toBeInTheDocument()
+  })
+
+  it('writes header format edits back into the envelope via onVizChange', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderViz(tableViz())
+
+    await user.click(screen.getByLabelText('Format column revenue'))
+    await user.type(screen.getByLabelText('Alias for revenue'), 'Rev')
+
+    expect(onVizChange).toHaveBeenCalled()
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const source = next.source as unknown as { kind: string; columnFormats: Record<string, { alias?: string }> }
+    expect(source.kind).toBe('table')
+    expect(source.columnFormats.revenue.alias).toBeTruthy()
+  })
+
+  it('renders cells with a d3 format from the envelope (unified vocabulary)', () => {
+    renderViz(tableViz({ columnFormats: { revenue: { format: '$,.2f' } } }))
+    expect(screen.getByText('$100.00')).toBeInTheDocument()
+    expect(screen.getByText('$200.00')).toBeInTheDocument()
+  })
+
+  it('V2 table header popover speaks d3: preset click stores a format string', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderViz(tableViz())
+
+    await user.click(screen.getByLabelText('Format column revenue'))
+    await user.click(await screen.findByLabelText('Format $1,234'))
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const source = next.source as unknown as { columnFormats: Record<string, { format?: string }> }
+    expect(source.columnFormats.revenue.format).toBe('$,.0f')
+  })
+
+  it('V2 table header popover shows a non-preset pattern in the custom d3 input', async () => {
+    const user = userEvent.setup()
+    renderViz(tableViz({ columnFormats: { revenue: { format: '.4~s' } } }))
+
+    await user.click(screen.getByLabelText('Format column revenue'))
+
+    const custom = await screen.findByLabelText('Custom d3 format for revenue')
+    expect((custom as HTMLInputElement).value).toBe('.4~s')
+  })
+
+  it('injects the css override scoped to this table instance', () => {
+    renderViz(tableViz({ css: '.mx-th { background: rgb(1, 2, 3); }' }))
+    const styles = Array.from(document.querySelectorAll('style')).map(s => s.textContent ?? '')
+    const scoped = styles.find(s => s.includes('.mx-th'))
+    expect(scoped).toBeTruthy()
+    // Scoped under a container class (CSS nesting) — never a global rule.
+    expect(scoped!.trim().startsWith('.mx-th')).toBe(false)
+  })
+
+  it('exposes the stable class contract on the table DOM', () => {
+    renderViz(tableViz())
+    expect(document.querySelector('.mx-table')).toBeTruthy()
+    expect(document.querySelector('.mx-header-row')).toBeTruthy()
+    expect(document.querySelector('.mx-th')).toBeTruthy()
+    expect(document.querySelector('.mx-row')).toBeTruthy()
+    expect(document.querySelector('.mx-cell')).toBeTruthy()
+    expect(document.querySelector('.mx-col-revenue')).toBeTruthy()
+    expect(document.querySelector('.mx-toolbar')).toBeTruthy()
+  })
+
+  it('zebra striping is a CSS default on parity classes, not an inline style', () => {
+    renderViz(tableViz())
+    // Parity must be computed from the DATA index (virtualization spacers break
+    // nth-child), expressed as classes so agent css can override the default.
+    const rows = Array.from(document.querySelectorAll('.mx-row'))
+    expect(rows.length).toBeGreaterThan(1)
+    expect(rows[0].classList.contains('mx-row-even')).toBe(true)
+    expect(rows[1].classList.contains('mx-row-odd')).toBe(true)
+    // No inline background anywhere — the stripe comes from a stylesheet rule.
+    for (const row of rows) {
+      expect((row as HTMLElement).style.background).toBe('')
+    }
+  })
+})
+
+// ─── VegaVizPanel — table state ──────────────────────────────────────────────
+
+describe('VegaVizPanel — table envelope', () => {
+  function renderPanel(viz: VizEnvelope, onVizChange = vi.fn()) {
+    renderV2(
+      <VegaVizPanel envelope={viz} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
+    )
+    return onVizChange
+  }
+
+  it('Table icon is enabled and selected; no CUSTOM badge', () => {
+    renderPanel(tableViz())
+    const icon = screen.getByLabelText('Table')
+    expect(icon).not.toHaveAttribute('aria-disabled', 'true')
+    expect(screen.queryByLabelText('Custom spec indicator')).not.toBeInTheDocument()
+  })
+
+  it('switching bar → table via the icon produces a table source', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderPanel(vegaViz)
+    await user.click(screen.getByLabelText('Table'))
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    expect((next.source as unknown as { kind: string }).kind).toBe('table')
+  })
+
+  it('Fields tab explains columns are managed on the table itself', () => {
+    renderPanel(tableViz())
+    expect(screen.getByLabelText('Table fields hint')).toBeInTheDocument()
+  })
+
+  it('Settings tab hosts conditional formatting and the CSS override editor', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderPanel(tableViz())
+    await user.click(screen.getByLabelText('Settings tab'))
+
+    expect(screen.getByLabelText('Add conditional formatting rule')).toBeInTheDocument()
+
+    const cssEditor = screen.getByLabelText('CSS overrides')
+    await user.click(cssEditor)
+    await user.type(cssEditor, '.mx-th {{ font-size: 14px; }')
+    await user.tab() // commit on blur
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    expect((next.source as unknown as { css: string }).css).toContain('.mx-th')
+  })
+})
+
+// ─── Colour-scale conditional formatting (heatmap cells on the flat table) ───
+
+describe('Table colour-scale rules', () => {
+  function renderPanel(viz: VizEnvelope, onVizChange = vi.fn()) {
+    renderV2(
+      <VegaVizPanel envelope={viz} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
+    )
+    return onVizChange
+  }
+
+  it('Settings tab can add a colour-scale rule into the envelope', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderPanel(tableViz())
+    await user.click(screen.getByLabelText('Settings tab'))
+    await user.click(screen.getByLabelText('Add color scale rule'))
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    const source = next.source as unknown as { conditionalFormats: Array<Record<string, unknown>> }
+    expect(source.conditionalFormats).toHaveLength(1)
+    expect(source.conditionalFormats[0].scale).toBe('red-yellow-green')
+    expect(source.conditionalFormats[0].column).toBe('region')
+  })
+
+  it('cells of the scaled column get ramp backgrounds (min ≠ max colour)', () => {
+    renderViz(tableViz({
+      conditionalFormats: [{ id: 's1', column: 'revenue', scale: 'red-yellow-green' }],
+    }))
+    const cells = Array.from(document.querySelectorAll('td.mx-col-revenue')) as HTMLElement[]
+    expect(cells.length).toBe(3)
+    const bgs = cells.map(c => c.style.backgroundColor)
+    expect(bgs.every(bg => bg.startsWith('rgba('))).toBe(true)
+    expect(new Set(bgs).size).toBe(3) // three distinct values → three distinct ramp colours
+  })
+})

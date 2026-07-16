@@ -4,19 +4,13 @@ import { Box, Table as ChakraTable, Icon } from '@chakra-ui/react'
 import { Tooltip } from '@/components/ui/tooltip'
 import { LuChevronUp, LuChevronRight, LuSquareFunction } from 'react-icons/lu'
 import type { FormulaResults } from '@/lib/chart/pivot-utils'
+import { makeGroupKey, type PivotDisplayRow as DisplayRow, type PivotColEntry as ColEntry } from '@/lib/chart/pivot-grid'
+import { cssColumnClass } from './table-v2-utils'
+import { getContrastText } from '@/lib/chart/conditional-format-utils'
 
-type DisplayRow =
-  | { type: 'data'; rowIndex: number }
-  | { type: 'subtotal'; level: number; label: string; cells: number[]; rowTotal: number; groupValues: string[] }
-  | { type: 'formula-row'; name: string; cells: number[]; rowTotal: number; dimensionLevel?: number; parentValues?: string[] }
-
-type ColEntry =
-  | { type: 'data'; cellIndex: number }
-  | { type: 'formula-col'; formulaIdx: number; valueIdx: number }
-
-// Shared with PivotTable.tsx (imported back from there) so both files use
-// the exact same group-key encoding.
-export const makeGroupKey = (values: string[]) => values.join('|||')
+// Re-exported for callers that historically imported the group-key encoding
+// from here; the canonical definition lives in the pure grid engine.
+export { makeGroupKey }
 
 // Styling helpers for subtotal rows, extracted verbatim from PivotTable.tsx.
 const getSubtotalBg = (level: number) => level === 0 ? 'accent.teal/20' : 'accent.teal/12'
@@ -42,7 +36,8 @@ interface PivotTableBodyProps {
   numValues: number
   fmt: (value: number, valueIndex?: number) => string
   fmtHeader: (value: string, dimName?: string) => string
-  getCellBg: (value: number, present?: boolean) => string | undefined
+  getCellBg: (value: number, present?: boolean, rowIndex?: number, cellIndex?: number) => string | undefined
+  valueColumns?: string[]
   isPresent: (r: number, c: number) => boolean
   handlePivotCellClick: (rowIndex: number, cellIndex: number, event: React.MouseEvent) => void
   buildTooltipContent: (value: number, rowIndex: number, cellIndex: number, valueIndex?: number, present?: boolean) => React.ReactNode
@@ -73,6 +68,7 @@ export const PivotTableBody = ({
   fmt,
   fmtHeader,
   getCellBg,
+  valueColumns,
   isPresent,
   handlePivotCellClick,
   buildTooltipContent,
@@ -85,6 +81,26 @@ export const PivotTableBody = ({
   COMPACT_CELL_SIZE,
   tooltipContentProps,
 }: PivotTableBodyProps) => {
+  // Shared class contract: every data cell carries .mx-cell plus the value
+  // column's .mx-col-<name> (same selector vocabulary as the flat table).
+  const cellClass = (cellIndex: number): string => {
+    const col = valueColumns?.[cellIndex % (valueColumns.length || 1)]
+    return col ? `mx-cell ${cssColumnClass(col)}` : 'mx-cell'
+  }
+
+  // Concrete colors (rgba/hex — heatmap ramps, conditional rules) paint INLINE
+  // exactly like the flat table; Chakra tokens (e.g. accent.teal/75) stay on
+  // the bg prop.
+  const isConcreteColor = (bg?: string): boolean =>
+    !!bg && (bg.startsWith('#') || bg.startsWith('rgb'))
+
+  // Zebra parity counts DATA rows only (subtotal/formula rows keep accents).
+  const dataRowOrdinals = new Map<number, number>()
+  {
+    let ordinal = 0
+    visibleRows.forEach((dr, i) => { if (dr.type === 'data') dataRowOrdinals.set(i, ordinal++) })
+  }
+
   // Helper: render cells for a row using columnEntries
   const renderDataCells = (rowIndex: number) => {
     return columnEntries.map((entry, i) => {
@@ -92,13 +108,17 @@ export const PivotTableBody = ({
         const value = cells[rowIndex][entry.cellIndex]
         const present = isPresent(rowIndex, entry.cellIndex)
         const cellContent = compact ? null : (present ? fmt(value, entry.cellIndex % numValues) : '')
+        const bgValue = getCellBg(value, present, rowIndex, entry.cellIndex)
+        const inline = isConcreteColor(bgValue)
         const cell = (
           <ChakraTable.Cell
             key={`col-${i}`}
             textAlign="right"
             fontFamily="mono"
             fontSize={compact ? '2xs' : 'sm'}
-            bg={getCellBg(value, present)}
+            className={cellClass(entry.cellIndex)}
+            bg={inline ? undefined : bgValue}
+            style={inline ? { backgroundColor: bgValue, color: getContrastText(bgValue!) } : undefined}
             cursor="pointer"
             onClick={(e) => handlePivotCellClick(rowIndex, entry.cellIndex, e)}
             _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}
@@ -229,7 +249,7 @@ export const PivotTableBody = ({
           const headerColSpan = isSubLevel ? Math.max(1, numRowDims - formulaDimLevel) : (numRowDims || 1)
 
           return (
-            <ChakraTable.Row key={`formula-${displayIndex}`}>
+            <ChakraTable.Row key={`formula-${displayIndex}`} className="mx-row-formula">
               <ChakraTable.Cell
                 colSpan={headerColSpan}
                 fontWeight="600"
@@ -298,7 +318,7 @@ export const PivotTableBody = ({
           const collapsed = collapsedGroups.has(groupKey)
 
           return (
-            <ChakraTable.Row key={`subtotal-${displayIndex}`}>
+            <ChakraTable.Row key={`subtotal-${displayIndex}`} className="mx-row-subtotal">
               <ChakraTable.Cell
                 colSpan={numRowDims - S}
                 fontWeight="700"
@@ -366,7 +386,11 @@ export const PivotTableBody = ({
         // Data row
         const rowIndex = displayRow.rowIndex
         return (
-          <ChakraTable.Row key={`data-${displayIndex}`} _hover={{ bg: 'bg.muted' }}>
+          <ChakraTable.Row
+            key={`data-${displayIndex}`}
+            className={`mx-row ${(dataRowOrdinals.get(displayIndex) ?? 0) % 2 === 1 ? 'mx-row-odd' : 'mx-row-even'}`}
+            _hover={{ bg: 'bg.muted' }}
+          >
             {/* Row dimension headers */}
             {rowSpans[displayIndex]?.map((spanInfo, dimIdx) =>
               spanInfo.show ? (
@@ -398,13 +422,17 @@ export const PivotTableBody = ({
             {hasColFormulas ? renderDataCells(rowIndex) : (
               cells[rowIndex].map((value, colIndex) => {
                 const present = isPresent(rowIndex, colIndex)
+                const bgValue = getCellBg(value, present, rowIndex, colIndex)
+                const inline = isConcreteColor(bgValue)
                 const cell = (
                   <ChakraTable.Cell
                     key={colIndex}
                     textAlign="right"
                     fontFamily="mono"
                     fontSize={compact ? '2xs' : 'sm'}
-                    bg={getCellBg(value, present)}
+                    className={cellClass(colIndex)}
+                    bg={inline ? undefined : bgValue}
+                    style={inline ? { backgroundColor: bgValue, color: getContrastText(bgValue!) } : undefined}
                     cursor="pointer"
                     onClick={(e) => handlePivotCellClick(rowIndex, colIndex, e)}
                     _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}

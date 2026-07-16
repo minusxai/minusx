@@ -4,31 +4,33 @@ import type { ColumnFiltersState, VisibilityState } from '@tanstack/react-table'
 import { getTypeIcon, getTypeColor, type ColumnType } from './table-v2-utils'
 
 interface TableBottomBarProps {
-  colNames: string[]
-  columnTypes: ColumnType[]
-  columnVisibility: VisibilityState
-  setColumnVisibility: React.Dispatch<React.SetStateAction<VisibilityState>>
-  columnFilters: ColumnFiltersState
-  setColumnFilters: React.Dispatch<React.SetStateAction<ColumnFiltersState>>
-  setActiveFilterCol: React.Dispatch<React.SetStateAction<string | null>>
-  showStats: boolean
-  setShowStats: React.Dispatch<React.SetStateAction<boolean>>
+  /** Columns for the visibility menu. Omit (with the setters) for grids without per-column ops (pivot). */
+  colNames?: string[]
+  columnTypes?: ColumnType[]
+  columnVisibility?: VisibilityState
+  setColumnVisibility?: React.Dispatch<React.SetStateAction<VisibilityState>>
+  columnFilters?: ColumnFiltersState
+  setColumnFilters?: React.Dispatch<React.SetStateAction<ColumnFiltersState>>
+  setActiveFilterCol?: React.Dispatch<React.SetStateAction<string | null>>
+  showStats?: boolean
+  setShowStats?: React.Dispatch<React.SetStateAction<boolean>>
   filteredRowCount: number
   totalRowCount: number
   downloadCsv: () => void
 }
 
-/** Bottom control bar: stats toggle, columns visibility menu, clear-filters button,
- * row count summary, and CSV download. */
+/** Shared grid bottom bar (flat table AND pivot): row count + CSV always; stats
+ * toggle, columns visibility menu, and clear-filters render only when their
+ * state setters are provided (the flat table). */
 export const TableBottomBar = ({
-  colNames,
-  columnTypes,
-  columnVisibility,
+  colNames = [],
+  columnTypes = [],
+  columnVisibility = {},
   setColumnVisibility,
-  columnFilters,
+  columnFilters = [],
   setColumnFilters,
   setActiveFilterCol,
-  showStats,
+  showStats = false,
   setShowStats,
   filteredRowCount,
   totalRowCount,
@@ -37,9 +39,12 @@ export const TableBottomBar = ({
   const visibleColumnCount = colNames.filter(c => columnVisibility[c] !== false).length
 
   return (
-    <HStack justify="space-between" align="center" mt={2} px={2} flexShrink={0}>
+    // mx-toolbar: stable class contract — surfaces/css overrides hide chrome with
+    // `.mx-toolbar { display: none }` instead of a prop (no toggles by design).
+    <HStack className="mx-toolbar" justify="space-between" align="center" mt={2} px={2} flexShrink={0}>
       {/* Left: Stats, Columns, Filters */}
       <HStack gap={3}>
+        {setShowStats && (
         <Button
           size="2xs"
           variant={showStats ? 'solid' : 'outline'}
@@ -52,6 +57,8 @@ export const TableBottomBar = ({
           <Icon as={LuChartColumn} boxSize={3} />
           Stats
         </Button>
+        )}
+        {setColumnVisibility && colNames.length > 0 && (
         <Menu.Root closeOnSelect={false}>
           <Menu.Trigger asChild>
             <Button
@@ -144,14 +151,15 @@ export const TableBottomBar = ({
             </Menu.Positioner>
           </Portal>
         </Menu.Root>
-        {columnFilters.length > 0 && (
+        )}
+        {setColumnFilters && columnFilters.length > 0 && (
           <Button
             size="xs"
             variant="ghost"
             color="accent.teal"
             onClick={() => {
               setColumnFilters([])
-              setActiveFilterCol(null)
+              setActiveFilterCol?.(null)
             }}
           >
             <Icon as={LuX} boxSize={3} />
@@ -175,6 +183,7 @@ export const TableBottomBar = ({
           borderColor="border.default"
           _hover={{ bg: 'bg.subtle', borderColor: 'border.emphasized' }}
           onClick={downloadCsv}
+          aria-label="Download CSV"
           data-dev-hide-in-capture="true"
         >
           <Icon as={LuDownload} boxSize={3} />

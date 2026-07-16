@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Box, Text } from '@chakra-ui/react'
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
 import { calculateHistogram } from '@/lib/chart/histogram'
-import { formatNumber, applyPrefixSuffix, formatDateValue } from '@/lib/chart/chart-format'
+import { formatNumber, applyPrefixSuffix, formatDateValue, formatD3Number, formatD3Date } from '@/lib/chart/chart-format'
 import { buildConditionalBg } from '@/lib/chart/conditional-format-utils'
+import { useAppSelector } from '@/store/hooks'
 import type { ColumnFormatConfig, ConditionalFormatRule } from '@/lib/types'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
 import { TableHeaderCell } from './TableHeaderCell'
@@ -55,9 +56,11 @@ interface TableProps {
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
   /** Conditional background-color rules. Applied to cells/rows/columns when their condition matches. */
   conditionalFormats?: ConditionalFormatRule[]
+  /** d3 vocabulary format popovers (Viz V2 table source). */
+  d3Formats?: boolean
 }
 
-export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick, initialColumnSizing, wrapColumns, renderCell, initialSorting, enableDrilldown = true, columnFormats, onColumnFormatsChange, conditionalFormats }: TableProps) => {
+export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick, initialColumnSizing, wrapColumns, renderCell, initialSorting, enableDrilldown = true, columnFormats, onColumnFormatsChange, conditionalFormats, d3Formats }: TableProps) => {
   const [sorting, setSorting] = useState<SortingState>(initialSorting ?? [])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -83,11 +86,23 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
     const cfg = columnFormats?.[col]
     if (cfg) {
       if (type === 'number' && typeof value === 'number') {
+        // `format` (d3) is the unified viz vocabulary and wins; legacy fields fall back.
+        if (cfg.format) {
+          const d3v = formatD3Number(value, cfg.format)
+          if (d3v != null) return d3v
+        }
         const base = cfg.decimalPoints != null ? formatNumber(value, cfg.decimalPoints) : NUMBER_FORMAT.format(value)
         return applyPrefixSuffix(base, cfg.prefix, cfg.suffix)
       }
-      if (type === 'date' && cfg.dateFormat) {
-        return formatDateValue(value instanceof Date ? value.toISOString() : String(value), cfg.dateFormat)
+      if (type === 'date') {
+        if (cfg.format) {
+          const d = value instanceof Date ? value : new Date(String(value))
+          const d3v = isNaN(d.getTime()) ? null : formatD3Date(d, cfg.format)
+          if (d3v != null) return d3v
+        }
+        if (cfg.dateFormat) {
+          return formatDateValue(value instanceof Date ? value.toISOString() : String(value), cfg.dateFormat)
+        }
       }
     }
     return formatValue(value, type)
@@ -95,7 +110,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
 
   const handleFormatChange = useCallback((col: string, cfg: ColumnFormatConfig) => {
     const next: Record<string, ColumnFormatConfig> = { ...(columnFormats ?? {}) }
-    const isEmpty = !cfg.alias && cfg.decimalPoints == null && !cfg.dateFormat && !cfg.prefix && !cfg.suffix
+    const isEmpty = !cfg.alias && !cfg.format && cfg.decimalPoints == null && !cfg.dateFormat && !cfg.prefix && !cfg.suffix
     if (isEmpty) delete next[col]
     else next[col] = cfg
     onColumnFormatsChange?.(next)
@@ -110,11 +125,13 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
   )
 
   // Conditional background-color lookup. No-op (returns undefined) when no rules.
+  // Colour-scale rules ramp differently per colour mode (same as the pivot heatmap).
+  const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const getCellBg = useMemo(() => {
     const typeByName: Record<string, ColumnType> = {}
     colNames.forEach((col, i) => { typeByName[col] = columnTypes[i] })
-    return buildConditionalBg(conditionalFormats, rows, typeByName)
-  }, [conditionalFormats, rows, colNames, columnTypes])
+    return buildConditionalBg(conditionalFormats, rows, typeByName, { isDark: colorMode === 'dark' })
+  }, [conditionalFormats, rows, colNames, columnTypes, colorMode])
 
   // Reset visibility when columns change
   useEffect(() => {
@@ -332,6 +349,11 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
             '&::-webkit-scrollbar-thumb': { background: 'rgba(128,128,128,0.3)', borderRadius: '3px' },
             '&::-webkit-scrollbar-thumb:hover': { background: 'rgba(128,128,128,0.5)' },
             '&::-webkit-scrollbar-corner': { background: 'transparent' },
+            // Zebra stripe DEFAULT — a stylesheet rule (not inline) so css overrides
+            // (.mx-row-odd / .mx-row-even in the scoped `css` field) can restyle it.
+            '& .mx-row-odd': {
+              background: 'var(--chakra-colors-bg-emphasized)',
+            },
             '& .table-v2-row': {},
             '& .table-v2-row:hover': {
               background: 'var(--chakra-colors-bg-muted) !important',
@@ -354,6 +376,9 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
         >
           <Box
             as="table"
+            // mx-* classes are the STABLE contract for css overrides (Viz V2 table
+            // source `css` field / story-level styling) — documented in atlas-schemas.
+            className="mx-table"
             width="100%"
             fontSize="sm"
             borderCollapse="collapse"
@@ -362,7 +387,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
           >
             {/* Header */}
             <Box as="thead" position="sticky" top={0} zIndex={2} bg="bg.muted">
-              <Box as="tr">
+              <Box as="tr" className="mx-header-row">
                 {visibleHeaders.map((header, displayIndex) => (
                   <TableHeaderCell
                     key={header.id}
@@ -375,6 +400,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                     columnFormats={columnFormats}
                     onColumnFormatsChange={onColumnFormatsChange}
                     handleFormatChange={handleFormatChange}
+                    d3Formats={d3Formats}
                     activeFilterCol={activeFilterCol}
                     setActiveFilterCol={setActiveFilterCol}
                     activeFormatCol={activeFormatCol}

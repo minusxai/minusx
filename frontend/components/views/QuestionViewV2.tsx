@@ -37,8 +37,11 @@ import { QueryModeSelector, SemanticExplorer, type QueryTab } from '../query-bui
 import { VizPanel } from '../question/VizPanel';
 import { deriveModelStubs, type ModelStub } from '@/lib/semantic/derive';
 import { useSemanticModels } from '@/lib/hooks/use-semantic-models';
-import { VizTypeSelector } from '../question/VizTypeSelector';
+import { VizTypeSelector, isClassicVizType } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
+import { VegaVizPanel } from '../viz/VegaVizPanel';
+import { vizSettingsToEnvelope } from '@/lib/viz/from-vizsettings';
+import { toVizColumns } from '@/lib/viz/query-data';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
 import { useSemanticCompat } from '@/lib/hooks/use-semantic-compat';
 import { inferVizType, recommendedVizTypes } from '@/lib/semantic/infer-viz';
@@ -119,6 +122,12 @@ interface QuestionViewV2Props {
   onChange: (updates: Partial<QuestionContent>) => void;
   onParameterValueChange?: (paramName: string, value: string | number | null) => void;  // Ephemeral
   onExecute: (overrideParamValues?: Record<string, any>) => void;  // Phase 3: Explicit execute
+
+  /** Viz V2 engine flag (uiSlice `vizV2`, passed down — views are Redux-free).
+   * Decides the Viz panel wholesale: off → classic config panel for every
+   * question (envelopes ignored); on → the V2 Vega panel edits the saved or
+   * converted envelope. */
+  vizV2Enabled?: boolean;
 }
 
 export default function QuestionViewV2({
@@ -145,6 +154,7 @@ export default function QuestionViewV2({
   onChange,
   onParameterValueChange,
   onExecute,
+  vizV2Enabled = false,
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
   const isPreview = mode === 'preview';
@@ -206,6 +216,18 @@ export default function QuestionViewV2({
     if (content.semanticQuery?.table) tables.push(content.semanticQuery.table);
     return tables;
   }, [pickedTables, content.semanticQuery?.table]);
+  // The envelope the Viz panel edits: the saved `viz`, or — for a legacy CHART question
+  // (vizSettings only, the §21 V1→V2 bridge) — the converter's output, so legacy files
+  // open straight into the V2 experience. Edits write a real `viz` via onChange (the
+  // file upgrades on Save). Table/pivot keep the V1 panel until their own migration.
+  const effectiveViz = useMemo(() => {
+    if (!vizV2Enabled) return null; // V2 is opt-in — the classic panel edits everything, envelope or not
+    if (content.viz != null) return content.viz;
+    const legacyType = content.vizSettings?.type;
+    if (!queryData || !legacyType || legacyType === 'table' || legacyType === 'pivot') return null;
+    return vizSettingsToEnvelope(content.vizSettings!, toVizColumns(queryData.columns, queryData.types));
+  }, [content.viz, content.vizSettings, queryData, vizV2Enabled]);
+
 
   // Track container width for responsive layout
   useEffect(() => {
@@ -575,7 +597,7 @@ export default function QuestionViewV2({
     <Box px={3} py={2} display="flex" flexDirection="column" gap={0}>
       <VizTypeSelector
         value={content.vizSettings?.type || 'table'}
-        onChange={handleVizTypeChange}
+        onChange={(type) => { if (isClassicVizType(type)) handleVizTypeChange(type) }}
         orientation="grouped"
         recommended={recommendedTypes}
       />
@@ -790,10 +812,26 @@ export default function QuestionViewV2({
                   </Box>
                 )}
 
+                {/* Viz Mode (V2 envelope): Fields / Settings / Spec subtabs (surgical spec edits).
+                    Legacy CHART questions (vizSettings only, §21 bridge) edit the CONVERTED
+                    envelope through the same panel — the first edit writes a real `viz` onto
+                    the content, so the file upgrades on Save. Table/pivot keep the V1 panel. */}
+                {queryMode === 'viz' && effectiveViz != null && (
+                  <Box flex={1} overflow="auto" px={3} py={2} display="flex" flexDirection="column" gap={0}>
+                    <VegaVizPanel
+                      envelope={effectiveViz}
+                      columns={queryData?.columns ?? []}
+                      types={queryData?.types ?? []}
+                      rows={queryData?.rows}
+                      onVizChange={(viz) => onChange({ viz })}
+                    />
+                  </Box>
+                )}
+
                 {/* Viz Mode (compact layout only): the same config block the
                     wide layout shows in the right-hand VizPanel column (which
                     carries the Auto badge in its header — here it sits on top) */}
-                {effectiveQueryMode === 'viz' && (
+                {effectiveQueryMode === 'viz' && effectiveViz == null && (
                   <Box flex={1} overflow="auto">
                     {autoTypeBadge && (
                       <HStack justify="flex-end" px={3} pt={2}>
@@ -988,6 +1026,7 @@ export default function QuestionViewV2({
                 onTrendConfigChange={handleTrendConfigChange}
                 onMapReady={handleMapReady}
                 onSeriesCountChange={setChartSeriesCount}
+                onVizChange={(viz) => onChange({ viz })}
                 onOpenVizTab={() => {
                   if (showVizPanel) {
                     setVizPanelOpen(true);
@@ -1106,7 +1145,22 @@ export default function QuestionViewV2({
               overflow="hidden"
             >
               <VizPanel headerExtra={autoTypeBadge}>
-                {vizConfigBody}
+                {/* The right column follows the vizV2 flag like the compact Viz
+                    tab: V2 panel (own type grid + Fields/Settings/Spec) edits
+                    the saved or converted envelope; classic config otherwise. */}
+                {effectiveViz != null ? (
+                  <Box px={3} py={2} display="flex" flexDirection="column" gap={0}>
+                    <VegaVizPanel
+                      envelope={effectiveViz}
+                      columns={queryData?.columns ?? []}
+                      types={queryData?.types ?? []}
+                      rows={queryData?.rows}
+                      onVizChange={(viz) => onChange({ viz })}
+                    />
+                  </Box>
+                ) : (
+                  vizConfigBody
+                )}
               </VizPanel>
             </Box>
           )}

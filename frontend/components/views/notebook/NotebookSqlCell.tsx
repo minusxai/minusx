@@ -23,7 +23,7 @@ import SqlEditor from '@/components/query-builder/SqlEditor';
 import ParameterRow from '@/components/params/ParameterRow';
 import DatabaseSelector from '@/components/selectors/DatabaseSelector';
 import { QuestionVisualization } from '@/components/question/QuestionVisualization';
-import { VizTypeSelector } from '@/components/question/VizTypeSelector';
+import { VizTypeSelector, isClassicVizType } from '@/components/question/VizTypeSelector';
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
 import { QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
@@ -237,7 +237,7 @@ export default function NotebookSqlCell({
 
       {queryMode === 'viz' && (
         <Box p={3} display="flex" flexDirection="column" gap={2} maxH="420px" overflow="auto">
-          <VizTypeSelector value={vizType} onChange={(type) => setViz({ type })} orientation="grouped" />
+          <VizTypeSelector value={vizType} onChange={(type) => { if (isClassicVizType(type)) setViz({ type }) }} orientation="grouped" />
           {vizType !== 'table' && data && (
             <VizConfigPanel
               columns={data.columns}

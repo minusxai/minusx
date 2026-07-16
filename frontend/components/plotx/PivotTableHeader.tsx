@@ -46,11 +46,12 @@ export const PivotTableHeader = ({
     <ChakraTable.Header position="sticky" top={0} zIndex={5} bg={headerBg}>
       {/* Column header rows */}
       {augmentedColHeaderRows.map((headerRow, rowIdx) => (
-        <ChakraTable.Row key={rowIdx} bg={headerBg}>
+        <ChakraTable.Row key={rowIdx} className="mx-header-row" bg={headerBg}>
           {/* Row dimension name headers */}
           {rowIdx === 0 && numRowDims > 0 && (
             Array.from({ length: numRowDims }, (_, dimIdx) => (
               <ChakraTable.ColumnHeader
+              className="mx-th"
                 key={`dim-${dimIdx}`}
                 rowSpan={numHeaderRows}
                 fontWeight="700"
@@ -79,6 +80,7 @@ export const PivotTableHeader = ({
           {/* Column headers at this level */}
           {headerRow.map((hdr, colIdx) => (
             <ChakraTable.ColumnHeader
+              className="mx-th"
               key={colIdx}
               colSpan={hdr.colSpan}
               rowSpan={hdr.rowSpan}
@@ -124,6 +126,7 @@ export const PivotTableHeader = ({
           {/* Row total header */}
           {showRowTotals && rowIdx === 0 && (
             <ChakraTable.ColumnHeader
+              className="mx-th"
               rowSpan={numHeaderRows}
               fontWeight="700"
               fontSize="xs"
@@ -145,10 +148,11 @@ export const PivotTableHeader = ({
 
       {/* If no column dimensions, still show a header row with value labels */}
       {augmentedColHeaderRows.length === 0 && (
-        <ChakraTable.Row bg={headerBg}>
+        <ChakraTable.Row className="mx-header-row" bg={headerBg}>
           {numRowDims > 0 && (
             Array.from({ length: numRowDims }, (_, dimIdx) => (
               <ChakraTable.ColumnHeader
+              className="mx-th"
                 key={`dim-${dimIdx}`}
                 fontWeight="700"
                 fontSize="xs"
@@ -172,6 +176,7 @@ export const PivotTableHeader = ({
           )}
           {valueLabels.map((vl, i) => (
             <ChakraTable.ColumnHeader
+              className="mx-th"
               key={i}
               fontWeight="700"
               fontSize="xs"
@@ -188,6 +193,7 @@ export const PivotTableHeader = ({
           ))}
           {showRowTotals && (
             <ChakraTable.ColumnHeader
+              className="mx-th"
               fontWeight="700"
               fontSize="xs"
               textTransform="uppercase"

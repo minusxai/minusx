@@ -16,7 +16,7 @@ import { shallowEqual } from 'react-redux';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, setEphemeral, setFile, type FileId } from '@/store/filesSlice';
 import { clearQueryResult } from '@/store/queryResultsSlice';
-import { selectProposedQuery, selectFileEditMode, selectQuestionCollapsedPanel, setQuestionCollapsedPanel } from '@/store/uiSlice';
+import { selectProposedQuery, selectFileEditMode, selectQuestionCollapsedPanel, setQuestionCollapsedPanel, selectVizV2 } from '@/store/uiSlice';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { editFile, getQueryResult } from '@/lib/file-state/file-state';
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
@@ -81,6 +81,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
   // unrelated write.
   const filesState = useAppSelector(state => state.files.files, shallowEqual);
   const view = useAppSelector(selectView);
+  const vizV2Enabled = useAppSelector(selectVizV2);
 
   const onTogglePanel = useCallback((panel: 'none' | 'left' | 'right') => {
     dispatch(setQuestionCollapsedPanel(panel));
@@ -272,6 +273,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
   return (
     <QuestionViewV2
       viewMode='page'
+      vizV2Enabled={vizV2Enabled}
       content={mergedContent}
       filePath={file?.path}
       questionId={questionId}

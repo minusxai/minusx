@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Tabs, Badge, HStack, 
 import { LuRefreshCw, LuUser, LuX } from 'react-icons/lu';
 import { ColorModeSwitch } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowAdvanced, setVizV2, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
 import { canEdit } from '@/lib/auth/role-helpers';
 import RecordingControl from '@/components/dev/RecordingControl';
 import DataManagementSection from '@/components/settings/DataManagementSection';
@@ -359,6 +359,7 @@ function SettingsContent() {
   const [isClearing, setIsClearing] = useState(false);
   const [isTestingError, setIsTestingError] = useState(false);
   const showAdvanced = useAppSelector((state) => state.ui.showAdvanced);
+  const vizV2 = useAppSelector((state) => state.ui.vizV2);
   const allowChatQueue = useAppSelector((state) => state.ui.allowChatQueue ?? false);
   const queueStrategy = useAppSelector((state) => state.ui.queueStrategy ?? 'end-of-turn');
   const devMode = useAppSelector((state) => state.ui.devMode);
@@ -521,6 +522,19 @@ function SettingsContent() {
         <SwitchControl
           checked={unrestrictedMode}
           onChange={(checked) => dispatch(setUnrestrictedMode(checked))}
+        />
+      ),
+      visible: isEditorOrAdmin,
+    },
+    {
+      tab: 'general',
+      section: 'Experimental Flags',
+      title: 'Viz Engine V2 (Beta)',
+      description: 'Render and edit all charts through the new Vega-based viz engine. When off, everything uses the classic engine.',
+      control: (
+        <SwitchControl
+          checked={vizV2}
+          onChange={(checked) => dispatch(setVizV2(checked))}
         />
       ),
       visible: isEditorOrAdmin,

@@ -5,6 +5,8 @@ import { Box, HStack, Text, IconButton, Icon, GridItem } from '@chakra-ui/react'
 import { LuChevronDown, LuChevronRight, LuDatabase, LuCheck, LuX } from 'react-icons/lu';
 import { QuestionContent, QueryResult, DisplayProps, ExecuteQueryDetails, contentToDetails } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
+import { useAppSelector } from '@/store/hooks';
+import { selectVizV2 } from '@/store/uiSlice';
 
 
 const EXECUTE_SQL_COLLAPSED_COLS = 12; // Narrower when collapsed
@@ -15,6 +17,7 @@ export default function ExecuteQueryDisplay({ toolCallTuple, databaseName, isCom
   const [isThinkingSQL, setIsThinkingSQL] = useState(true); // Collapsed by default
   const [toolCall, toolMessage] = toolCallTuple;
   const hasInitializedExpansion = useRef(false);
+  const vizV2Enabled = useAppSelector(selectVizV2);
 
   // Local state for viz changes (read-only display, but allow viz type switching)
   const [localContent, setLocalContent] = useState<QuestionContent | null>(null);
@@ -220,6 +223,7 @@ export default function ExecuteQueryDisplay({ toolCallTuple, databaseName, isCom
           ) : localContent ? (
             <QuestionViewV2
               viewMode='toolcall'
+              vizV2Enabled={vizV2Enabled}
               content={localContent}
               queryData={queryResult}
               queryLoading={false}
