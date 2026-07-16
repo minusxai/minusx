@@ -748,3 +748,16 @@ Grid for interactive canvas tables.
 - [TanStack Table](https://tanstack.com/table/latest) — headless table engine (renderer-agnostic)
 - [HTML-in-Canvas API origin trial (Chrome 148–150)](https://developer.chrome.com/blog/html-in-canvas-origin-trial) — `drawElementImage()`, a11y-preserving DOM-in-canvas
 - [Google Docs' move to canvas rendering (2021)](https://workspaceupdates.googleblog.com/2021/05/Google-Docs-Canvas-Based-Rendering-Update.html) — the side-DOM a11y precedent
+
+**Round 9 — user A/B comparison (production, agent-authored story).** Side-by-side
+DOM vs canvas tabs on the real "Mxfood Executive Growth Story". All differences
+trace to three root causes: (1) **container queries** (`@2xl:` variants) are not
+evaluated by takumi → smaller headline + single-column grids; fix by pre-resolving
+`@container` rules in the compiled CSS at raster width. (2) **Design-system fonts**
+load via app CSS, not story `@import` → mono/serif substitution; fix by registering
+the design-system font files in renderer.client. (3) **Embed island theming**
+resolved from the top document's color-mode class → dark cards on light stories;
+FIXED: islands are wrapped in Chakra `Theme appearance={storyColorMode}` (the
+canvas equivalent of the iframe owning its document class). Also fixed: fluid
+scaling (raster displayed scaled to container, geometry maps through the scale).
+Remaining punch list = (1) and (2) + per-viz-type embed default heights.

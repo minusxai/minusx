@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box } from '@chakra-ui/react';
+import { Box, Theme } from '@chakra-ui/react';
 import StoryEmbeds, { type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget } from '@/components/views/shared/StoryEmbeds';
 import { renderStoryRaster } from '@/lib/canvas-story/raster';
 import { getStoryRenderer, registerFontFaceCss } from '@/lib/canvas-story/renderer.client';
@@ -267,10 +267,13 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
         onDoubleClick={onDoubleClick}
         aria-label="canvas-story-surface"
       />
+      <Theme asChild appearance={colorMode ?? 'light'}>
+      <Box position="absolute" inset="0" pointerEvents="none" bg="transparent" aria-label="canvas-story-islands">
       {embeds.map(e => (
         <Box
           key={e.index}
           ref={islandRefs.get(e.index)}
+          pointerEvents="auto"
           position="absolute"
           left={`${e.x * scale}px`}
           top={`${e.y * scale}px`}
@@ -295,6 +298,8 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
           colorMode={colorMode}
         />
       ) : null}
+      </Box>
+      </Theme>
     </Box>
   );
 }
