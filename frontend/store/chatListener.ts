@@ -858,8 +858,9 @@ chatListenerMiddleware.startListening({
 /**
  * setDevMode → conversation reloads switch wire views (Conversations V2, /conversations-v2.md).
  * The raw-log cache must never mix slim and full entries, so any toggle invalidates it. Turning
- * dev mode ON additionally re-renders the active, settled conversation from the verbatim log so
- * the inspector (per-turn appState, full tool I/O) has data without a page reload.
+ * dev mode ON additionally re-renders the settled loaded conversations from the verbatim log so
+ * the inspector (per-turn appState, full tool I/O) has data without a page reload. (Not just the
+ * `active` one — a conversation opened via its page loads with setAsActive: false.)
  */
 chatListenerMiddleware.startListening({
   actionCreator: setDevMode,
@@ -868,12 +869,13 @@ chatListenerMiddleware.startListening({
     if (!action.payload) return;
 
     const state = listenerApi.getState() as RootState;
-    const active = Object.values(state.chat.conversations).find(
-      (c) => c.active && c.executionState === 'FINISHED' && Number.isFinite(c.conversationID) && c.conversationID > 0,
+    const settled = Object.values(state.chat.conversations).filter(
+      (c) => c.executionState === 'FINISHED' && Number.isFinite(c.conversationID) && c.conversationID > 0,
     );
-    if (!active) return;
-    try {
-      await renderFromDurableLog(active.conversationID, active, listenerApi.dispatch as AppDispatch, 'FINISHED', 'full');
-    } catch { /* best-effort — the next load fetches full anyway */ }
+    for (const conv of settled) {
+      try {
+        await renderFromDurableLog(conv.conversationID, conv, listenerApi.dispatch as AppDispatch, 'FINISHED', 'full');
+      } catch { /* best-effort — the next load fetches full anyway */ }
+    }
   },
 });
