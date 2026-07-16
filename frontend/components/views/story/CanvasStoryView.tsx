@@ -68,7 +68,10 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const scale = containerW ? Math.min(1, containerW / width) : 1;
+  // Lay the raster out at the real container width (true reflow, like the fluid DOM
+  // path) — quantized to 32px steps so resize doesn't thrash re-renders.
+  const layoutWidth = containerW ? Math.min(width, Math.round(containerW / 32) * 32) : width;
+  const scale = containerW ? Math.min(1, containerW / layoutWidth) : 1;
 
   // ---------- raster ----------
   useEffect(() => {
@@ -82,7 +85,7 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
       const raster = await renderStoryRaster(renderer, {
         html: clean,
         stylesheets: [compiledCss ?? '', fontCss].filter(Boolean),
-        width,
+        width: layoutWidth,
         dpr: DPR,
       });
       if (cancelled) return;
@@ -93,7 +96,7 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
       setResult(raster);
     })().catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
-  }, [html, compiledCss, width]);
+  }, [html, compiledCss, width, layoutWidth]);
 
   // ---------- compositor: bitmap + selection highlight ----------
   const draw = useCallback(() => {
@@ -128,9 +131,9 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
   // ---------- selection ----------
   const toStoryPx = useCallback((e: React.MouseEvent) => {
     const rect = canvasRef.current!.getBoundingClientRect();
-    const scale = width / rect.width;
+    const scale = (result?.width ?? width) / rect.width;
     return [(e.clientX - rect.left) * scale, (e.clientY - rect.top) * scale] as const;
-  }, [width]);
+  }, [result, width]);
 
   const locate = useCallback((x: number, y: number): SelPoint | null => {
     if (!result) return null;
@@ -267,8 +270,7 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
         onDoubleClick={onDoubleClick}
         aria-label="canvas-story-surface"
       />
-      <Theme asChild appearance={colorMode ?? 'light'}>
-      <Box position="absolute" inset="0" pointerEvents="none" bg="transparent" aria-label="canvas-story-islands">
+      <Theme appearance={colorMode ?? 'light'} position="absolute" inset="0" pointerEvents="none" background="transparent" aria-label="canvas-story-islands">
       {embeds.map(e => (
         <Box
           key={e.index}
@@ -298,7 +300,6 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
           colorMode={colorMode}
         />
       ) : null}
-      </Box>
       </Theme>
     </Box>
   );

@@ -1,4 +1,5 @@
 import { buildStoryNodeTree } from '@/lib/canvas-story/node-tree';
+import { resolveContainerQueries } from '@/lib/canvas-story/resolve-container-queries';
 import { extractGeometry } from '@/lib/canvas-story/geometry';
 import { StoryRasterInput, StoryRasterResult, StoryRendererEngine, MeasuredNodeLike } from '@/lib/canvas-story/types';
 
@@ -19,7 +20,7 @@ export async function renderStoryRaster(
     width: input.width * input.dpr,
     devicePixelRatio: input.dpr,
     format: 'png' as const,
-    stylesheets: [...input.stylesheets, ...extractedStylesheets],
+    stylesheets: [...input.stylesheets, ...extractedStylesheets].map(css => resolveContainerQueries(css, input.width)),
   };
   const png = await renderer.render(node, options);
   const measured = (await renderer.measure(node, options)) as MeasuredNodeLike;

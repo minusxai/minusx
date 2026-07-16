@@ -107,3 +107,14 @@ describe('buildStoryNodeTree', () => {
     expect(json).toContain('Hello');
   });
 });
+
+describe('resolveContainerQueries', () => {
+  it('unwraps matching blocks and drops non-matching ones at the raster width', async () => {
+    const { resolveContainerQueries } = await import('@/lib/canvas-story/resolve-container-queries');
+    const css = '.a{color:red}@container (min-width: 672px){.b{display:grid}}@container (width >= 100rem){.c{color:blue}}';
+    const resolved = resolveContainerQueries(css, 1280);
+    expect(resolved).toContain('.b{display:grid}');
+    expect(resolved).not.toContain('.c');
+    expect(resolved).toContain('.a{color:red}');
+  });
+});

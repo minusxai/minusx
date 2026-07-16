@@ -11,7 +11,18 @@ import { StoryRendererEngine } from '@/lib/canvas-story/types';
 
 let rendererPromise: Promise<StoryRendererEngine> | null = null;
 
-const BASE_FONTS = ['/fonts/JetBrainsMono-Regular.ttf', '/fonts/JetBrainsMono-Bold.ttf'];
+// Registration order defines the fallback chain: Inter first so unmatched sans
+// stacks fall back to Inter (not mono). Serif files are registered under the
+// concrete family names in Tailwind's font-serif stack so `font-serif` matches.
+const BASE_FONTS: Array<{ url: string; name?: string }> = [
+  { url: '/fonts/Inter-Variable.ttf' },
+  { url: '/fonts/NotoSerif-Regular.ttf', name: 'Georgia' },
+  { url: '/fonts/NotoSerif-Italic.ttf', name: 'Georgia' },
+  { url: '/fonts/NotoSerif-Regular.ttf', name: 'ui-serif' },
+  { url: '/fonts/NotoSerif-Italic.ttf', name: 'ui-serif' },
+  { url: '/fonts/JetBrainsMono-Regular.ttf' },
+  { url: '/fonts/JetBrainsMono-Bold.ttf' },
+];
 
 async function fetchBuffer(url: string): Promise<ArrayBuffer | null> {
   try {
@@ -26,9 +37,12 @@ async function fetchBuffer(url: string): Promise<ArrayBuffer | null> {
 async function createRenderer(): Promise<StoryRendererEngine> {
   await initWasm({ module_or_path: fetch('/takumi/takumi_wasm_bg.wasm') });
   const renderer = new Renderer();
-  for (const url of BASE_FONTS) {
-    const buf = await fetchBuffer(url);
-    if (buf) await renderer.registerFont(new Uint8Array(buf));
+  for (const font of BASE_FONTS) {
+    const buf = await fetchBuffer(font.url);
+    if (!buf) continue;
+    try {
+      await renderer.registerFont(font.name ? ({ name: font.name, data: new Uint8Array(buf) } as never) : new Uint8Array(buf));
+    } catch { /* best-effort: a bad face must not sink the renderer */ }
   }
   return renderer as unknown as StoryRendererEngine;
 }
