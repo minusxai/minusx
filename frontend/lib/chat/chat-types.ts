@@ -5,6 +5,7 @@
  */
 
 import { CompletedToolCall } from '@/lib/types';
+import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
 
 /**
  * Chat request from the frontend.
@@ -31,6 +32,8 @@ export interface ChatRequest {
       selected?: import('@/lib/types').AgentSkillSelection[];
       user_catalog?: import('@/lib/types').AgentUserSkillCatalogItem[];
     };
+    /** Optional analyst-model override selected in this chat's composer. */
+    model_override?: ChatModelSelection;
   };
   /**
    * Reconnect to an in-flight (or recently finished) turn instead of starting a

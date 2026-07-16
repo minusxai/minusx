@@ -127,6 +127,53 @@ describe('resolveLlmPlan', () => {
     });
     await expect(resolveLlmPlan('analyst')).rejects.toThrow(/unknown provider 'ghost'/);
   });
+
+  it('uses an allowed per-chat analyst model override without changing the configured default', async () => {
+    await setLlmConfig({
+      providers: [{
+        name: 'main-anthropic', provider: 'anthropic', apiKey: 'k',
+        allowedModels: ['claude-sonnet-4-6', 'claude-opus-4-8'],
+      }],
+      assignments: {
+        analyst: { chain: [{ providerName: 'main-anthropic', model: 'claude-sonnet-4-6' }] },
+      },
+    });
+
+    const override = await resolveLlmPlan('analyst', {
+      providerName: 'main-anthropic', model: 'claude-opus-4-8',
+    });
+    const configured = await resolveLlmPlan('analyst');
+
+    expect((override!.model as { id: string }).id).toBe('claude-opus-4-8');
+    expect((configured!.model as { id: string }).id).toBe('claude-sonnet-4-6');
+  });
+
+  it('rejects per-chat models outside the provider allowlist', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'main-anthropic', provider: 'anthropic', apiKey: 'k', allowedModels: ['claude-sonnet-4-6'] }],
+    });
+    await expect(resolveLlmPlan('analyst', {
+      providerName: 'main-anthropic', model: 'claude-opus-4-8',
+    })).rejects.toThrow(/not allowed/);
+  });
+
+  it('rejects a per-chat override for an unconfigured provider', async () => {
+    await setLlmConfig({ providers: [] });
+    await expect(resolveLlmPlan('analyst', {
+      providerName: 'ghost', model: 'claude-sonnet-4-6',
+    })).rejects.toThrow(/not configured/);
+  });
+
+  it('uses server-owned metadata when the configured custom model is selected', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'local', provider: 'custom', baseUrl: 'http://localhost:11434/v1' }],
+      assignments: {
+        analyst: { chain: [{ providerName: 'local', model: 'qwen3:32b', customModel: { contextWindow: 32_000 } }] },
+      },
+    });
+    const plan = await resolveLlmPlan('analyst', { providerName: 'local', model: 'qwen3:32b' });
+    expect((plan!.model as { contextWindow: number }).contextWindow).toBe(32_000);
+  });
 });
 
 describe('buildPlanStep — provider mapping', () => {

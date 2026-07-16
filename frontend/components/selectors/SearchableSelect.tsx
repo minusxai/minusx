@@ -15,7 +15,7 @@
  * option row carries its own label as aria-label.
  */
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Badge, Box, HStack, Icon, Input, Popover, Portal, Text, VStack } from '@chakra-ui/react';
 import { LuCheck, LuChevronDown, LuSearch } from 'react-icons/lu';
 import type { SelectorOption } from './GenericSelector';
@@ -23,6 +23,8 @@ import type { SelectorOption } from './GenericSelector';
 /** SelectorOption plus an optional trailing badge (e.g. "recommended"). */
 export interface SearchableOption extends SelectorOption {
   badge?: string;
+  /** Optional visual section label for grouped option lists. */
+  group?: string;
 }
 
 interface SearchableSelectBaseProps {
@@ -197,9 +199,24 @@ function SearchablePicker({
               ) : (
                 filtered.map((option, index) => {
                   const isSelected = selected.has(option.value);
+                  const showGroup = !!option.group && (index === 0 || filtered[index - 1]?.group !== option.group);
                   return (
+                    <Fragment key={option.value}>
+                      {showGroup && (
+                        <Text
+                          fontSize="2xs"
+                          fontWeight="600"
+                          color="fg.subtle"
+                          textTransform="uppercase"
+                          letterSpacing="wide"
+                          px={2}
+                          pt={index === 0 ? 1 : 2}
+                          pb={0.5}
+                        >
+                          {option.group}
+                        </Text>
+                      )}
                     <Box
-                      key={option.value}
                       role="option"
                       aria-selected={isSelected}
                       aria-label={option.label}
@@ -243,6 +260,7 @@ function SearchablePicker({
                         </HStack>
                       </HStack>
                     </Box>
+                    </Fragment>
                   );
                 })
               )}

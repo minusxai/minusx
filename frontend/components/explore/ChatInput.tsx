@@ -12,6 +12,7 @@ import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, rem
 import RegionCaptureButton from '@/components/screenshot/RegionCaptureButton';
 import DatabaseSelector from '@/components/selectors/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
+import { ModelSelector } from './ModelSelector';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
 import type { DatabaseWithSchema, Attachment, SkillMention, SlashCommand } from '@/lib/types';
@@ -20,6 +21,7 @@ import { handlePastedText } from '@/lib/chat/paste-attachment';
 import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
 import { Tooltip } from '@/components/ui/tooltip';
+import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
 
 interface ChatInputProps {
   onSend: (message: string, attachments: Attachment[]) => void;
@@ -32,6 +34,8 @@ interface ChatInputProps {
   isPreparing?: boolean;
   databaseName: string;
   onDatabaseChange: (name: string) => void;
+  selectedModel?: ChatModelSelection | null;
+  onModelChange?: (model: ChatModelSelection | null) => void;
   container?: 'page' | 'sidebar' | 'floating';
   isCompact: boolean;
   colSpan?: any;
@@ -58,6 +62,8 @@ function ChatInputInner({
   isPreparing = false,
   databaseName,
   onDatabaseChange,
+  selectedModel = null,
+  onModelChange,
   container = 'page',
   isCompact,
   colSpan: colSpanProp,
@@ -575,6 +581,11 @@ function ChatInputInner({
                       size="sm"
                       compact
                     />
+                    <ModelSelector
+                      value={selectedModel}
+                      onChange={onModelChange || (() => {})}
+                      disabled={isAgentRunning || remoteSessionActive}
+                    />
                   </HStack>
 
                   <HStack gap={1}>
@@ -640,7 +651,7 @@ const chatInputPropsEqual = (prev: ChatInputProps, next: ChatInputProps): boolea
   if (!isEqual(prev.whitelistedSchemas, next.whitelistedSchemas)) return false;
   return shallowEqualExcept(prev, next, [
     'availableSkills', 'availableCommands', 'whitelistedSchemas',
-    'onSend', 'onStop', 'onDatabaseChange', 'onContextChange', 'onCommandExecute',
+    'onSend', 'onStop', 'onDatabaseChange', 'onModelChange', 'onContextChange', 'onCommandExecute',
   ]);
 };
 
