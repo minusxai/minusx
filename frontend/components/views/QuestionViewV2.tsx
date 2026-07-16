@@ -123,9 +123,10 @@ interface QuestionViewV2Props {
   onParameterValueChange?: (paramName: string, value: string | number | null) => void;  // Ephemeral
   onExecute: (overrideParamValues?: Record<string, any>) => void;  // Phase 3: Explicit execute
 
-  /** Viz V2 bridge flag (uiSlice `vizV2`, passed down — views are Redux-free):
-   * when set, a legacy chart's Viz panel edits its converted V2 envelope. A
-   * saved `viz` envelope always uses the V2 panel regardless. */
+  /** Viz V2 engine flag (uiSlice `vizV2`, passed down — views are Redux-free).
+   * Decides the Viz panel wholesale: off → classic config panel for every
+   * question (envelopes ignored); on → the V2 Vega panel edits the saved or
+   * converted envelope. */
   vizV2Enabled?: boolean;
 }
 
@@ -220,8 +221,8 @@ export default function QuestionViewV2({
   // open straight into the V2 experience. Edits write a real `viz` via onChange (the
   // file upgrades on Save). Table/pivot keep the V1 panel until their own migration.
   const effectiveViz = useMemo(() => {
+    if (!vizV2Enabled) return null; // V2 is opt-in — the classic panel edits everything, envelope or not
     if (content.viz != null) return content.viz;
-    if (!vizV2Enabled) return null; // bridge is opt-in — legacy questions keep the classic panel
     const legacyType = content.vizSettings?.type;
     if (!queryData || !legacyType || legacyType === 'table' || legacyType === 'pivot') return null;
     return vizSettingsToEnvelope(content.vizSettings!, toVizColumns(queryData.columns, queryData.types));
@@ -1144,7 +1145,22 @@ export default function QuestionViewV2({
               overflow="hidden"
             >
               <VizPanel headerExtra={autoTypeBadge}>
-                {vizConfigBody}
+                {/* The right column follows the vizV2 flag like the compact Viz
+                    tab: V2 panel (own type grid + Fields/Settings/Spec) edits
+                    the saved or converted envelope; classic config otherwise. */}
+                {effectiveViz != null ? (
+                  <Box px={3} py={2} display="flex" flexDirection="column" gap={0}>
+                    <VegaVizPanel
+                      envelope={effectiveViz}
+                      columns={queryData?.columns ?? []}
+                      types={queryData?.types ?? []}
+                      rows={queryData?.rows}
+                      onVizChange={(viz) => onChange({ viz })}
+                    />
+                  </Box>
+                ) : (
+                  vizConfigBody
+                )}
               </VizPanel>
             </Box>
           )}

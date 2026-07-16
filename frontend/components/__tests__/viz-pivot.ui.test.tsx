@@ -2,10 +2,19 @@ import React from 'react'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/helpers/render-with-providers'
+import { makeStore } from '@/store/store'
+import { setVizV2 } from '@/store/uiSlice'
 import { QuestionVisualization } from '@/components/question/QuestionVisualization'
 import { VegaVizPanel } from '@/components/viz/VegaVizPanel'
 import type { VizEnvelope, PivotConfig } from '@/lib/validation/atlas-schemas'
 import type { QuestionContent, QueryResult } from '@/lib/types'
+
+// Every case in this file exercises V2 behavior — render with the engine ON.
+const renderV2 = (ui: React.ReactElement) => {
+  const store = makeStore()
+  store.dispatch(setVizV2(true))
+  return renderWithProviders(ui, { store })
+}
 
 // ─── Mocks: heavy renderers not under test (PivotTable stays REAL) ───────────
 
@@ -65,7 +74,7 @@ const CONFIG_UI = {
 }
 
 function renderViz(viz: VizEnvelope, onVizChange = vi.fn()) {
-  renderWithProviders(
+  renderV2(
     <QuestionVisualization
       currentState={content(viz)}
       config={CONFIG_UI}
@@ -105,7 +114,7 @@ describe('QuestionVisualization — pivot envelope routing', () => {
 
 describe('VegaVizPanel — pivot envelope', () => {
   function renderPanel(viz: VizEnvelope, onVizChange = vi.fn()) {
-    renderWithProviders(
+    renderV2(
       <VegaVizPanel envelope={viz} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
     )
     return onVizChange
@@ -192,7 +201,7 @@ describe('VegaVizPanel — recipe column formats', () => {
   it('recipe zone chips use the SAME d3 popover as native charts; alias edits land in columnFormats', async () => {
     const user = userEvent.setup()
     const onVizChange = vi.fn()
-    renderWithProviders(
+    renderV2(
       <VegaVizPanel envelope={waterfallViz} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
     )
 
@@ -209,7 +218,7 @@ describe('VegaVizPanel — recipe column formats', () => {
   it('recipe format presets store a d3 format string in columnFormats', async () => {
     const user = userEvent.setup()
     const onVizChange = vi.fn()
-    renderWithProviders(
+    renderV2(
       <VegaVizPanel envelope={waterfallViz} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
     )
 
@@ -269,7 +278,7 @@ describe('Pivot on the unified grid', () => {
   it('Settings tab hosts conditional formatting for pivot sources', async () => {
     const user = userEvent.setup()
     const onVizChange = vi.fn()
-    renderWithProviders(
+    renderV2(
       <VegaVizPanel envelope={pivotViz()} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
     )
     await user.click(screen.getByLabelText('Settings tab'))
@@ -286,7 +295,7 @@ describe('Pivot on the unified grid', () => {
 
 describe('VegaVizPanel — pivot sections ride the panel tabs', () => {
   function renderPanel(viz: VizEnvelope) {
-    renderWithProviders(
+    renderV2(
       <VegaVizPanel envelope={viz} columns={DATA.columns} types={DATA.types} onVizChange={vi.fn()} />
     )
   }
@@ -310,7 +319,7 @@ describe('VegaVizPanel — pivot sections ride the panel tabs', () => {
 
   it('classic surfaces keep the internal Fields/Settings tabs', async () => {
     const { PivotAxisBuilder } = await import('@/components/plotx/PivotAxisBuilder')
-    renderWithProviders(
+    renderV2(
       <PivotAxisBuilder
         columns={DATA.columns}
         types={DATA.types}
@@ -328,7 +337,7 @@ describe('VegaVizPanel — pivot sections ride the panel tabs', () => {
 describe('VegaVizPanel — pivot formulas in V2', () => {
   it('Settings tab offers the Formulas builder when dimensions have ≥2 values', async () => {
     const user = userEvent.setup()
-    renderWithProviders(
+    renderV2(
       <VegaVizPanel
         envelope={pivotViz()}
         columns={DATA.columns}
@@ -344,7 +353,7 @@ describe('VegaVizPanel — pivot formulas in V2', () => {
 
   it('without rows the Formulas card is absent (no values to build from)', async () => {
     const user = userEvent.setup()
-    renderWithProviders(
+    renderV2(
       <VegaVizPanel envelope={pivotViz()} columns={DATA.columns} types={DATA.types} onVizChange={vi.fn()} />
     )
     await user.click(screen.getByLabelText('Settings tab'))

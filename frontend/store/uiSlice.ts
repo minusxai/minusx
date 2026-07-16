@@ -17,9 +17,10 @@ interface UIState {
   activeSidebarSection: string | null;
   askForConfirmation: boolean;
   showAdvanced: boolean;
-  /** Viz V2 bridge (docs/Visualization Arch V2.md §21): render + edit legacy
-   * vizSettings charts through the Vega engine via the V1→V2 converter. A saved
-   * `viz` envelope always renders V2 regardless of this flag. */
+  /** Viz V2 engine switch (docs/Visualization Arch V2.md §21). Decides the
+   * rendering/editing engine wholesale: off → classic V1 pipeline for every
+   * question (saved `viz` envelopes are ignored); on → V2 for every question
+   * (saved envelope when present, else the V1→V2 converter bridge). */
   vizV2: boolean;
   fileEditMode: Record<number, boolean>;       // fileId -> editMode (dashboard, story, question, report, alert)
   fileViewMode: Record<number, 'visual' | 'json'>;  // fileId -> active tab

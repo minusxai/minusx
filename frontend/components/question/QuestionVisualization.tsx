@@ -205,9 +205,11 @@ function QuestionVisualizationInner({
     return null;
   }
 
-  // A V2 envelope is authoritative when present (RFC): the vizSettings pipeline is bypassed.
-  // The settings button stays visible for V2 questions — the panel shows the spec inspector.
-  const hasVizV2 = currentState?.viz != null;
+  // The uiSlice `vizV2` flag picks the engine WHOLESALE: off → the classic V1
+  // pipeline renders everything (a saved `viz` envelope is ignored, exact pre-V2
+  // behavior); on → the V2 engine renders everything (saved envelope when
+  // present, else the V1→V2 converter bridge below).
+  const hasVizV2 = vizV2Enabled && currentState?.viz != null;
   // table/pivot kinds render on the DOM tier, never through vega (RFC §10).
   const vizV2Kind = hasVizV2 ? (currentState.viz!.source as unknown as { kind: string }).kind : null;
   const isVizV2Table = vizV2Kind === 'table';
@@ -218,8 +220,6 @@ function QuestionVisualizationInner({
   // no `viz` envelope renders through <VegaChart> via the converter (the question page's
   // Viz panel edits the same converted envelope — see QuestionViewV2); table/pivot keep
   // their DOM renderers. Pure — recomputed from vizSettings each render.
-  // Gated by the uiSlice `vizV2` flag while the bridge is opt-in; a saved `viz`
-  // envelope above is authoritative regardless of the flag.
   const legacyRenderViz = vizV2Enabled && data
     ? resolveLegacyRenderEnvelope({
         hasVizEnvelope: hasVizV2,

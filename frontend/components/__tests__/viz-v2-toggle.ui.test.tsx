@@ -86,11 +86,11 @@ const legacyLineContent = {
   vizSettings: { type: 'line', xCols: ['month'], yCols: ['revenue'] },
 } as unknown as QuestionContent
 
-/** A question saved with an authoritative V2 envelope. */
+/** A question saved with a V2 envelope (plus legacy vizSettings for the V1 path). */
 const envelopeContent = {
   query: 'SELECT 1',
   connection_name: 'static',
-  vizSettings: { type: 'table' },
+  vizSettings: { type: 'line', xCols: ['month'], yCols: ['revenue'] },
   viz: {
     version: 2,
     source: {
@@ -133,13 +133,15 @@ function renderQuestion(content: QuestionContent, { vizV2 }: { vizV2: boolean })
   )
 }
 
-// ─── Viz V2 bridge toggle (docs/Visualization Arch V2.md §21) ────────────────
+// ─── Viz V2 toggle (docs/Visualization Arch V2.md §21) ───────────────────────
 //
-// The uiSlice `vizV2` flag gates ONLY the V1→V2 render bridge (legacy
-// vizSettings converted through the Vega engine). A saved `viz` envelope is
-// always authoritative, regardless of the flag.
+// The uiSlice `vizV2` flag decides the rendering engine WHOLESALE. OFF: the
+// classic V1 pipeline (vizSettings/ECharts) renders everything — even a saved
+// `viz` envelope is ignored, so the app behaves exactly like pre-V2. ON: the
+// V2 engine renders everything — the saved envelope when present, else the
+// V1→V2 converter bridge.
 
-describe('QuestionVisualization — vizV2 bridge toggle', () => {
+describe('QuestionVisualization — vizV2 toggle decides the engine', () => {
   it('toggle OFF: a legacy chart renders the classic ECharts builder, not vega', () => {
     renderQuestion(legacyLineContent, { vizV2: false })
     expect(screen.getByLabelText('Classic chart builder')).toBeInTheDocument()
@@ -152,8 +154,14 @@ describe('QuestionVisualization — vizV2 bridge toggle', () => {
     expect(screen.queryByLabelText('Classic chart builder')).not.toBeInTheDocument()
   })
 
-  it('toggle OFF: a saved V2 envelope still renders through vega (envelope is authoritative)', async () => {
+  it('toggle OFF: even a saved V2 envelope renders through the classic V1 path', () => {
     renderQuestion(envelopeContent, { vizV2: false })
+    expect(screen.getByLabelText('Classic chart builder')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Vega chart surface')).not.toBeInTheDocument()
+  })
+
+  it('toggle ON: a saved V2 envelope renders through vega', async () => {
+    renderQuestion(envelopeContent, { vizV2: true })
     expect(await screen.findByLabelText('Vega chart surface')).toBeInTheDocument()
     expect(screen.queryByLabelText('Classic chart builder')).not.toBeInTheDocument()
   })
@@ -163,9 +171,10 @@ describe('QuestionVisualization — vizV2 bridge toggle', () => {
 //
 // The view is Redux-free (RESTRICT_VIEW_REDUX): the flag arrives as the
 // `vizV2Enabled` prop, sourced from the selector in its containers. With the
-// flag off, a legacy question's Viz tab shows the classic config panel —
-// byte-for-byte main behavior; with it on, the converted envelope opens in the
-// V2 Vega panel (first edit writes a real `viz` onto the content).
+// flag off, the Viz tab shows the classic config panel for EVERY question
+// (envelope or not) — byte-for-byte main behavior; with it on, the saved or
+// converted envelope opens in the V2 Vega panel (first edit writes a real
+// `viz` onto the content).
 
 function renderView(content: QuestionContent, { vizV2Enabled }: { vizV2Enabled: boolean }) {
   renderWithProviders(
@@ -202,9 +211,58 @@ describe('QuestionViewV2 — vizV2Enabled prop gates the V2 editing panel', () =
     expect(screen.queryByLabelText('Classic viz config panel')).not.toBeInTheDocument()
   })
 
-  it('prop OFF: a saved V2 envelope still edits in the Vega panel (envelope is authoritative)', async () => {
+  it('prop OFF: even a saved V2 envelope edits in the classic config panel', async () => {
     renderView(envelopeContent, { vizV2Enabled: false })
     await userEvent.click(screen.getByLabelText('Viz'))
+    expect(await screen.findByLabelText('Classic viz config panel')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Vega viz panel')).not.toBeInTheDocument()
+  })
+
+  it('prop ON: a saved V2 envelope edits in the Vega panel', async () => {
+    renderView(envelopeContent, { vizV2Enabled: true })
+    await userEvent.click(screen.getByLabelText('Viz'))
+    expect(await screen.findByLabelText('Vega viz panel')).toBeInTheDocument()
+  })
+})
+
+// Wide layout (viewMode='page', jsdom width 0 → not compact): the right-hand
+// VizPanel column must follow the same flag — V2 panel (with the V2 type grid)
+// when on, classic config when off.
+describe('QuestionViewV2 — wide-layout right panel follows the flag', () => {
+  function renderWideView(content: QuestionContent, { vizV2Enabled }: { vizV2Enabled: boolean }) {
+    renderWithProviders(
+      <QuestionViewV2
+        viewMode="page"
+        content={content}
+        queryData={DATA}
+        queryLoading={false}
+        queryError={null}
+        queryStale={false}
+        collapsedPanel="none"
+        onTogglePanel={vi.fn()}
+        fileState={{}}
+        onSetFile={vi.fn()}
+        onChange={vi.fn()}
+        onExecute={vi.fn()}
+        vizV2Enabled={vizV2Enabled}
+      />,
+    )
+  }
+
+  it('flag ON: the right column hosts the Vega viz panel (V2 type grid)', async () => {
+    renderWideView(legacyLineContent, { vizV2Enabled: true })
+    expect(await screen.findByLabelText('Vega viz panel')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Classic viz config panel')).not.toBeInTheDocument()
+  })
+
+  it('flag OFF: the right column keeps the classic config panel', async () => {
+    renderWideView(legacyLineContent, { vizV2Enabled: false })
+    expect(await screen.findByLabelText('Classic viz config panel')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Vega viz panel')).not.toBeInTheDocument()
+  })
+
+  it('flag ON: a saved envelope also edits in the right-column Vega panel', async () => {
+    renderWideView(envelopeContent, { vizV2Enabled: true })
     expect(await screen.findByLabelText('Vega viz panel')).toBeInTheDocument()
   })
 })

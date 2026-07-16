@@ -569,7 +569,7 @@ function SettingsContent() {
     {
       tab: 'general',
       title: 'Viz Engine V2 (Beta)',
-      description: 'Render and edit classic charts through the new Vega-based viz engine. Questions saved with a V2 viz always use it.',
+      description: 'Render and edit all charts through the new Vega-based viz engine. When off, everything uses the classic engine.',
       control: (
         <SwitchControl
           checked={vizV2}

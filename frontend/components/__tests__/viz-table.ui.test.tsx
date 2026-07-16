@@ -2,10 +2,19 @@ import React from 'react'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/helpers/render-with-providers'
+import { makeStore } from '@/store/store'
+import { setVizV2 } from '@/store/uiSlice'
 import { QuestionVisualization } from '@/components/question/QuestionVisualization'
 import { VegaVizPanel } from '@/components/viz/VegaVizPanel'
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas'
 import type { QuestionContent, QueryResult } from '@/lib/types'
+
+// Every case in this file exercises V2 behavior — render with the engine ON.
+const renderV2 = (ui: React.ReactElement) => {
+  const store = makeStore()
+  store.dispatch(setVizV2(true))
+  return renderWithProviders(ui, { store })
+}
 
 // ─── Mocks: heavy renderers not under test ───────────────────────────────────
 
@@ -96,7 +105,7 @@ const CONFIG = {
 }
 
 function renderViz(viz: VizEnvelope, onVizChange = vi.fn()) {
-  renderWithProviders(
+  renderV2(
     <QuestionVisualization
       currentState={content(viz)}
       config={CONFIG}
@@ -214,7 +223,7 @@ describe('QuestionVisualization — table envelope routing', () => {
 
 describe('VegaVizPanel — table envelope', () => {
   function renderPanel(viz: VizEnvelope, onVizChange = vi.fn()) {
-    renderWithProviders(
+    renderV2(
       <VegaVizPanel envelope={viz} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
     )
     return onVizChange
@@ -261,7 +270,7 @@ describe('VegaVizPanel — table envelope', () => {
 
 describe('Table colour-scale rules', () => {
   function renderPanel(viz: VizEnvelope, onVizChange = vi.fn()) {
-    renderWithProviders(
+    renderV2(
       <VegaVizPanel envelope={viz} columns={DATA.columns} types={DATA.types} onVizChange={onVizChange} />
     )
     return onVizChange
