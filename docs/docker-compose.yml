@@ -1,8 +1,10 @@
 services:
   docs:
     build:
-      context: .
-      dockerfile: Dockerfile
+      # Repository-root context keeps frontend/compatibility.json as the one
+      # compatibility contract shared by the app, setup script, and docs.
+      context: ..
+      dockerfile: docs/Dockerfile
     container_name: minusx-docs
     restart: unless-stopped
     ports:
