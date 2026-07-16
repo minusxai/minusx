@@ -3,6 +3,7 @@ import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { getConversation, loadMessages, loadLog, isRunLeaseStale, releaseRunLease, appendError, MAX_AUTO_RETRIES, AUTO_RETRY_EXHAUSTED_MESSAGE } from '@/lib/data/conversations.server';
 import { subscribe } from '@/lib/chat/conversation-stream.server';
 import { derivePendingToolCalls } from '@/lib/data/conversation-log';
+import { parseConversationView, projectLogEntryForDisplay } from '@/lib/data/conversation-projection';
 import { isRemoteSessionLive } from '@/lib/data/remote-sessions.server';
 import { endRemoteSession } from '@/lib/chat/remote-session.server';
 import type { ConversationStreamEvent } from '@/lib/data/conversations.types';
@@ -36,8 +37,12 @@ export async function GET(
     return new Response('Forbidden', { status: 403 });
   }
 
-  const sinceParam = new URL(request.url).searchParams.get('since');
+  const streamParams = new URL(request.url).searchParams;
+  const sinceParam = streamParams.get('since');
   let cursor = sinceParam != null && Number.isFinite(Number(sinceParam)) ? Number(sinceParam) : -1;
+  // Conversations V2: catch-up messages are display-projected unless the client (dev mode) asks
+  // for the verbatim log — same contract as GET /api/conversations/:id (see /conversations-v2.md).
+  const view = parseConversationView(streamParams.get('view'));
 
   const encoder = new TextEncoder();
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
@@ -88,7 +93,7 @@ export async function GET(
     const rows = await loadMessages(conversationId, cursor);
     for (const r of rows) {
       if (r.seq == null) continue; // error rows (seq NULL) aren't part of the pi-log cursor stream
-      send({ type: 'message', seq: r.seq, message: r.content });
+      send({ type: 'message', seq: r.seq, message: view === 'full' ? r.content : projectLogEntryForDisplay(r.content) });
       cursor = r.seq;
     }
   };

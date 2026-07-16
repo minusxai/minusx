@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { loadConversation, selectConversation, setRemoteSession, setUserInputResult } from '@/store/chatSlice';
+import { selectDevMode } from '@/store/uiSlice';
 import { parsePiConversation } from '@/lib/conversations-utils';
-import { ConversationsAPI } from '@/lib/data/conversations';
+import { loadConversationDetail } from '@/store/conversation-log-cache';
 import { derivePendingToolCalls, isColdReopenResumable } from '@/lib/data/conversation-log';
 import { clearStaleClarifyAnswers, seedPendingClarifyInputs } from '@/lib/chat/clarify-answer-stash';
 import type { ConversationLog } from '@/orchestrator/types';
@@ -28,6 +29,9 @@ export function useConversation(conversationId?: number) {
   const conversation = useSelector((state: any) =>
     selectConversation(state, conversationId)
   );
+  // Conversations V2 (/conversations-v2.md): non-dev loads get the slim display view;
+  // dev mode loads the verbatim log (per-turn appState for the inspector, full tool I/O).
+  const devMode = useSelector(selectDevMode);
 
   // Compute derived loading state: loading if we need to fetch
   const needsToLoad = !!conversationId && !conversation && attempted !== conversationId;
@@ -50,12 +54,12 @@ export function useConversation(conversationId?: number) {
         // un-migrated legacy file — run the backfill to surface it); we show a clean not-found,
         // never fall back to file-conversations.
         let v3detail = null;
-        try { v3detail = await ConversationsAPI.get(conversationId); } catch { /* not found */ }
+        try { v3detail = await loadConversationDetail(conversationId, devMode ? 'full' : 'display'); } catch { /* not found */ }
         if (!v3detail) {
           throw new Error(`Conversation ${conversationId} not found`);
         }
 
-        const piLog = v3detail.messages.map((m) => m.content) as unknown as ConversationLog;
+        const piLog = v3detail.piLog as ConversationLog;
         const errors = v3detail.errors.map((e) => ({
           source: e.source, message: e.message,
           timestamp: Date.parse(e.createdAt) || Date.now(),
@@ -136,7 +140,7 @@ export function useConversation(conversationId?: number) {
     }
 
     loadFromDB();
-  }, [conversationId, conversation, isLoading, attempted, dispatch]);
+  }, [conversationId, conversation, isLoading, attempted, dispatch, devMode]);
 
   return {
     conversation,
