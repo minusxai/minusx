@@ -1,7 +1,8 @@
 import 'server-only';
 import { combineContent, parseThinkingAnswer, extractXmlBlocks, type ParsedTrustInfo } from '@/lib/utils/xml-parser';
 import type { ConversationLogEntry, QueryResult } from '@/lib/types';
-import type { VizSettings } from '@/lib/validation/atlas-schemas';
+import type { VizSettings, VizEnvelope } from '@/lib/validation/atlas-schemas';
+import { isEnvelopeImageViz } from '@/lib/viz/encoding-edit';
 
 // ── Markdown → Slack mrkdwn conversion ───────────────────────────────────────
 
@@ -289,7 +290,10 @@ const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'area', 'scatter', 'pie',
 
 export interface QueryChart {
   queryResult: QueryResult;
-  vizSettings: VizSettings;
+  /** V1 legacy chart settings (present when the ExecuteQuery used `vizSettings`). */
+  vizSettings?: VizSettings;
+  /** V2 viz envelope (preferred; present when the ExecuteQuery used `viz`). */
+  viz?: VizEnvelope;
 }
 
 /**
@@ -303,13 +307,15 @@ export interface QueryChart {
  * Returns empty array if none found.
  */
 export function extractQueryCharts(log: ConversationLogEntry[], maxCharts: number = 2): QueryChart[] {
-  // Build a map of task unique_id → args for ExecuteQuery tasks
-  const executeQueryTasks = new Map<string, { vizSettings?: string | VizSettings }>();
+  // Build a map of task unique_id → viz args for ExecuteQuery tasks (V2 `viz` envelope
+  // preferred; legacy `vizSettings` fallback).
+  const executeQueryTasks = new Map<string, { vizSettings?: string | VizSettings; viz?: unknown }>();
 
   for (const entry of log) {
     if (entry._type === 'task' && entry.agent === 'ExecuteQuery') {
       executeQueryTasks.set(entry.unique_id, {
         vizSettings: entry.args?.vizSettings,
+        viz: entry.args?.viz,
       });
     }
   }
@@ -333,7 +339,14 @@ export function extractQueryCharts(log: ConversationLogEntry[], maxCharts: numbe
     const queryResult = details?.queryResult;
     if (!queryResult?.rows?.length || !queryResult?.columns?.length) continue;
 
-    // Parse vizSettings
+    // V2 `viz` envelope wins: if the ExecuteQuery carried a chart envelope, render that.
+    const viz = (taskArgs.viz ?? undefined) as VizEnvelope | undefined;
+    if (viz != null) {
+      if (isEnvelopeImageViz(viz)) charts.push({ queryResult, viz });
+      continue; // envelope is authoritative — never fall back to vizSettings
+    }
+
+    // Legacy V1: parse vizSettings (may be a JSON string) and gate on renderable types.
     let vizSettings: VizSettings | undefined;
     if (taskArgs.vizSettings) {
       if (typeof taskArgs.vizSettings === 'string') {

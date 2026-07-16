@@ -5,14 +5,19 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers'
 import { QuestionVisualization } from '@/components/question/QuestionVisualization'
 import QuestionViewV2 from '@/components/views/QuestionViewV2'
 import { makeStore } from '@/store/store'
-import { setVizV2 } from '@/store/uiSlice'
+import { setVizV2, setVizRenderer } from '@/store/uiSlice'
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas'
 import type { QuestionContent, QueryResult } from '@/lib/types'
 
 // ─── Mocks: heavy renderers not under test — markers prove routing ───────────
 
+// The marker exposes the envelope's source kind so tests can tell a directly-
+// rendered saved envelope (kind 'recipe' below) from a just-in-time conversion
+// of vizSettings (kind 'vega-lite').
 vi.mock('@/components/viz/VegaChart', () => ({
-  default: () => <div aria-label="Vega chart surface" />,
+  default: ({ envelope }: { envelope?: { source?: unknown } }) => (
+    <div aria-label={`Vega chart surface ${((envelope?.source as { kind?: string })?.kind) ?? 'unknown'}`} />
+  ),
 }))
 vi.mock('@/components/plotx/ChartBuilder', () => ({
   ChartBuilder: () => <div aria-label="Classic chart builder" />,
@@ -86,7 +91,8 @@ const legacyLineContent = {
   vizSettings: { type: 'line', xCols: ['month'], yCols: ['revenue'] },
 } as unknown as QuestionContent
 
-/** A question saved with a V2 envelope (plus legacy vizSettings for the V1 path). */
+/** A question saved with a V2 envelope (a RECIPE, distinguishable from the
+ * vega-lite output of the JIT converter) plus legacy vizSettings. */
 const envelopeContent = {
   query: 'SELECT 1',
   connection_name: 'static',
@@ -94,15 +100,11 @@ const envelopeContent = {
   viz: {
     version: 2,
     source: {
-      kind: 'vega-lite',
-      grammar: 'vega-lite/v6',
-      spec: {
-        mark: { type: 'line' },
-        encoding: {
-          x: { field: 'month', type: 'nominal' },
-          y: { field: 'revenue', type: 'quantitative', aggregate: 'sum' },
-        },
-      },
+      kind: 'recipe',
+      recipe: 'minusx/funnel@1',
+      bindings: { stage: 'month', value: 'revenue' },
+      params: null,
+      columnFormats: null,
     },
   } as unknown as VizEnvelope,
 } as unknown as QuestionContent
@@ -115,9 +117,10 @@ const CONFIG = {
   fixError: false,
 }
 
-function renderQuestion(content: QuestionContent, { vizV2 }: { vizV2: boolean }) {
+function renderQuestion(content: QuestionContent, { vizV2, renderer = 'vega' }: { vizV2: boolean; renderer?: 'echarts' | 'vega' }) {
   const store = makeStore()
   store.dispatch(setVizV2(vizV2))
+  store.dispatch(setVizRenderer(renderer))
   renderWithProviders(
     <QuestionVisualization
       currentState={content}
@@ -135,34 +138,65 @@ function renderQuestion(content: QuestionContent, { vizV2 }: { vizV2: boolean })
 
 // ─── Viz V2 toggle (docs/Visualization Arch V2.md §21) ───────────────────────
 //
-// The uiSlice `vizV2` flag decides the rendering engine WHOLESALE. OFF: the
-// classic V1 pipeline (vizSettings/ECharts) renders everything — even a saved
-// `viz` envelope is ignored, so the app behaves exactly like pre-V2. ON: the
-// V2 engine renders everything — the saved envelope when present, else the
-// V1→V2 converter bridge.
+// Vega draws EVERY chart — ECharts no longer renders. The uiSlice `vizV2` flag
+// picks the AUTHORITATIVE viz format: OFF (V1, the default until prompts/tools
+// flip) → `vizSettings` is the truth; charts are just-in-time converted for
+// rendering and saved `viz` envelopes are ignored. ON (V2) → a saved envelope
+// is the truth and renders directly (legacy files still convert JIT).
 
-describe('QuestionVisualization — vizV2 toggle decides the engine', () => {
-  it('toggle OFF: a legacy chart renders the classic ECharts builder, not vega', () => {
-    renderQuestion(legacyLineContent, { vizV2: false })
-    expect(screen.getByLabelText('Classic chart builder')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Vega chart surface')).not.toBeInTheDocument()
+describe('viz toggles — defaults', () => {
+  it('V1 (vizSettings) is the authoritative format by default — flips with the prompts/tools PR', () => {
+    expect(makeStore().getState().ui.vizV2).toBe(false)
   })
 
-  it('toggle ON: the same legacy chart renders through the vega bridge', async () => {
-    renderQuestion(legacyLineContent, { vizV2: true })
-    expect(await screen.findByLabelText('Vega chart surface')).toBeInTheDocument()
+  it('vega is the default renderer; echarts is the classic escape hatch', () => {
+    expect(makeStore().getState().ui.vizRenderer).toBe('vega')
+  })
+})
+
+// ─── Renderer toggle: echarts = the exact pre-V2 app ─────────────────────────
+//
+// When the renderer is 'echarts', only V1 is possible: vizSettings drive the
+// classic ECharts pipeline, saved `viz` envelopes are ignored, and the vizV2
+// format flag has no effect.
+
+describe('QuestionVisualization — renderer=echarts forces the classic V1 pipeline', () => {
+  it('a legacy chart renders the classic ECharts builder, no vega', () => {
+    renderQuestion(legacyLineContent, { vizV2: false, renderer: 'echarts' })
+    expect(screen.getByLabelText('Classic chart builder')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Vega chart surface vega-lite')).not.toBeInTheDocument()
+  })
+
+  it('even with vizV2 ON and a saved envelope, echarts renders from vizSettings', () => {
+    renderQuestion(envelopeContent, { vizV2: true, renderer: 'echarts' })
+    expect(screen.getByLabelText('Classic chart builder')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Vega chart surface recipe')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Vega chart surface vega-lite')).not.toBeInTheDocument()
+  })
+})
+
+describe('QuestionVisualization — vega always draws; the toggle picks the authoritative format', () => {
+  it('toggle V1: a legacy chart renders through vega via JIT conversion (not ECharts)', async () => {
+    renderQuestion(legacyLineContent, { vizV2: false })
+    expect(await screen.findByLabelText('Vega chart surface vega-lite')).toBeInTheDocument()
     expect(screen.queryByLabelText('Classic chart builder')).not.toBeInTheDocument()
   })
 
-  it('toggle OFF: even a saved V2 envelope renders through the classic V1 path', () => {
+  it('toggle V1: a saved envelope is IGNORED — vega renders the JIT conversion of vizSettings', async () => {
     renderQuestion(envelopeContent, { vizV2: false })
-    expect(screen.getByLabelText('Classic chart builder')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Vega chart surface')).not.toBeInTheDocument()
+    expect(await screen.findByLabelText('Vega chart surface vega-lite')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Vega chart surface recipe')).not.toBeInTheDocument()
   })
 
-  it('toggle ON: a saved V2 envelope renders through vega', async () => {
+  it('toggle V2: the saved envelope renders directly', async () => {
     renderQuestion(envelopeContent, { vizV2: true })
-    expect(await screen.findByLabelText('Vega chart surface')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Vega chart surface recipe')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Vega chart surface vega-lite')).not.toBeInTheDocument()
+  })
+
+  it('toggle V2: a legacy chart still renders via JIT conversion', async () => {
+    renderQuestion(legacyLineContent, { vizV2: true })
+    expect(await screen.findByLabelText('Vega chart surface vega-lite')).toBeInTheDocument()
     expect(screen.queryByLabelText('Classic chart builder')).not.toBeInTheDocument()
   })
 })
@@ -170,11 +204,13 @@ describe('QuestionVisualization — vizV2 toggle decides the engine', () => {
 // ─── QuestionViewV2 panel gate ───────────────────────────────────────────────
 //
 // The view is Redux-free (RESTRICT_VIEW_REDUX): the flag arrives as the
-// `vizV2Enabled` prop, sourced from the selector in its containers. With the
-// flag off, the Viz tab shows the classic config panel for EVERY question
-// (envelope or not) — byte-for-byte main behavior; with it on, the saved or
-// converted envelope opens in the V2 Vega panel (first edit writes a real
-// `viz` onto the content).
+// `vizV2Enabled` prop, sourced from the selector in its containers.
+// V1 mode (flag off): classic panel for everything — the converter never
+// feeds the editor, nothing ever writes an envelope. V2 mode (flag on): the
+// V2 Vega panel edits the saved envelope, or — for a vizSettings-only chart —
+// its JIT-converted envelope, and the first edit writes a real `viz` onto the
+// content (the file upgrades on Save). Semantic questions are the exception:
+// type inference owns vizSettings, so they keep the classic panel.
 
 function renderView(content: QuestionContent, { vizV2Enabled }: { vizV2Enabled: boolean }) {
   renderWithProviders(
@@ -204,7 +240,7 @@ describe('QuestionViewV2 — vizV2Enabled prop gates the V2 editing panel', () =
     expect(screen.queryByLabelText('Vega viz panel')).not.toBeInTheDocument()
   })
 
-  it('prop ON: the same legacy chart edits its converted envelope in the Vega panel', async () => {
+  it('prop ON: a legacy chart edits its JIT-converted envelope in the Vega panel', async () => {
     renderView(legacyLineContent, { vizV2Enabled: true })
     await userEvent.click(screen.getByLabelText('Viz'))
     expect(await screen.findByLabelText('Vega viz panel')).toBeInTheDocument()
@@ -249,7 +285,7 @@ describe('QuestionViewV2 — wide-layout right panel follows the flag', () => {
     )
   }
 
-  it('flag ON: the right column hosts the Vega viz panel (V2 type grid)', async () => {
+  it('flag ON: a legacy chart gets the Vega viz panel in the right column (JIT envelope)', async () => {
     renderWideView(legacyLineContent, { vizV2Enabled: true })
     expect(await screen.findByLabelText('Vega viz panel')).toBeInTheDocument()
     expect(screen.queryByLabelText('Classic viz config panel')).not.toBeInTheDocument()
@@ -264,5 +300,15 @@ describe('QuestionViewV2 — wide-layout right panel follows the flag', () => {
   it('flag ON: a saved envelope also edits in the right-column Vega panel', async () => {
     renderWideView(envelopeContent, { vizV2Enabled: true })
     expect(await screen.findByLabelText('Vega viz panel')).toBeInTheDocument()
+  })
+
+  it('flag ON: a SEMANTIC question keeps the classic panel (inference/type-lock own vizSettings)', async () => {
+    const semanticContent = {
+      ...legacyLineContent,
+      semanticQuery: { table: 'orders', dimensions: [], measures: [] },
+    } as unknown as QuestionContent
+    renderWideView(semanticContent, { vizV2Enabled: true })
+    expect(await screen.findByLabelText('Classic viz config panel')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Vega viz panel')).not.toBeInTheDocument()
   })
 })

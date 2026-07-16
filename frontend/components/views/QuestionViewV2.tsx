@@ -123,10 +123,12 @@ interface QuestionViewV2Props {
   onParameterValueChange?: (paramName: string, value: string | number | null) => void;  // Ephemeral
   onExecute: (overrideParamValues?: Record<string, any>) => void;  // Phase 3: Explicit execute
 
-  /** Viz V2 engine flag (uiSlice `vizV2`, passed down — views are Redux-free).
-   * Decides the Viz panel wholesale: off → classic config panel for every
-   * question (envelopes ignored); on → the V2 Vega panel edits the saved or
-   * converted envelope. */
+  /** Viz V2 format flag (uiSlice `vizV2`, passed down — views are Redux-free).
+   * Off (V1): classic config panel for every question (saved envelopes ignored).
+   * On (V2): the V2 Vega panel edits the saved `viz` envelope, or a legacy
+   * chart's JIT-converted one — the first edit writes a real `viz` onto the
+   * content (the file upgrades on Save). Semantic questions keep the classic
+   * panel (type inference owns vizSettings). */
   vizV2Enabled?: boolean;
 }
 
@@ -154,7 +156,7 @@ export default function QuestionViewV2({
   onChange,
   onParameterValueChange,
   onExecute,
-  vizV2Enabled = false,
+  vizV2Enabled = false, // matches the product default (uiSlice vizV2); containers pass the live value
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
   const isPreview = mode === 'preview';
@@ -216,17 +218,21 @@ export default function QuestionViewV2({
     if (content.semanticQuery?.table) tables.push(content.semanticQuery.table);
     return tables;
   }, [pickedTables, content.semanticQuery?.table]);
-  // The envelope the Viz panel edits: the saved `viz`, or — for a legacy CHART question
-  // (vizSettings only, the §21 V1→V2 bridge) — the converter's output, so legacy files
-  // open straight into the V2 experience. Edits write a real `viz` via onChange (the
-  // file upgrades on Save). Table/pivot keep the V1 panel until their own migration.
+  // The envelope the Viz panel edits. V1 mode (flag off): none — the classic
+  // panel edits vizSettings and the converter never feeds the editor. V2 mode:
+  // the saved `viz`, or — for a vizSettings-only chart — its JIT-converted
+  // envelope; the first edit writes a real `viz` via onChange (the file
+  // upgrades on Save). Semantic questions keep the classic panel: exploration
+  // infers the chart type into vizSettings (typeLocked), which a written
+  // envelope would sever; their charts still render V2 through the bridge.
   const effectiveViz = useMemo(() => {
-    if (!vizV2Enabled) return null; // V2 is opt-in — the classic panel edits everything, envelope or not
+    if (!vizV2Enabled) return null;
     if (content.viz != null) return content.viz;
+    if (content.semanticQuery != null) return null;
     const legacyType = content.vizSettings?.type;
     if (!queryData || !legacyType || legacyType === 'table' || legacyType === 'pivot') return null;
     return vizSettingsToEnvelope(content.vizSettings!, toVizColumns(queryData.columns, queryData.types));
-  }, [content.viz, content.vizSettings, queryData, vizV2Enabled]);
+  }, [content.viz, content.vizSettings, content.semanticQuery, queryData, vizV2Enabled]);
 
 
   // Track container width for responsive layout

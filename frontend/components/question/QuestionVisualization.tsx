@@ -19,7 +19,7 @@ import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { memo, useState, useEffect, useRef } from 'react';
 import isEqual from 'lodash/isEqual';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection, selectVizV2 } from '@/store/uiSlice';
+import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection, selectVizV2Active, selectVizRenderer } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 import { setRecipeParam } from '@/lib/viz/encoding-edit';
@@ -180,7 +180,8 @@ function QuestionVisualizationInner({
   const dispatch = useAppDispatch();
   const showJson = useAppSelector(state => state.ui.devMode);
   const colorMode = useAppSelector(state => state.ui.colorMode);
-  const vizV2Enabled = useAppSelector(selectVizV2);
+  const vegaDraws = useAppSelector(selectVizRenderer) === 'vega';
+  const vizV2Enabled = useAppSelector(selectVizV2Active);
   const { config: appConfig } = useConfigs();
   const agentName = appConfig.branding.agentName;
 
@@ -205,10 +206,12 @@ function QuestionVisualizationInner({
     return null;
   }
 
-  // The uiSlice `vizV2` flag picks the engine WHOLESALE: off → the classic V1
-  // pipeline renders everything (a saved `viz` envelope is ignored, exact pre-V2
-  // behavior); on → the V2 engine renders everything (saved envelope when
-  // present, else the V1→V2 converter bridge below).
+  // Two toggles (docs/Visualization Arch V2.md §21): `vizRenderer` picks the
+  // engine — 'echarts' is the classic pre-V2 pipeline where only V1 exists;
+  // 'vega' (default) draws every chart. Under vega, the `vizV2` format flag
+  // picks the AUTHORITATIVE format: off (V1) → `vizSettings` is the truth and
+  // saved `viz` envelopes are ignored (the JIT bridge below renders them);
+  // on (V2) → a saved envelope is the truth and renders directly.
   const hasVizV2 = vizV2Enabled && currentState?.viz != null;
   // table/pivot kinds render on the DOM tier, never through vega (RFC §10).
   const vizV2Kind = hasVizV2 ? (currentState.viz!.source as unknown as { kind: string }).kind : null;
@@ -216,11 +219,11 @@ function QuestionVisualizationInner({
   const isVizV2Pivot = vizV2Kind === 'pivot';
   const isChartType = hasVizV2 || (currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table');
 
-  // V1→V2 render bridge (Viz Arch V2 §21 item 1): on EVERY surface, a legacy chart with
-  // no `viz` envelope renders through <VegaChart> via the converter (the question page's
-  // Viz panel edits the same converted envelope — see QuestionViewV2); table/pivot keep
-  // their DOM renderers. Pure — recomputed from vizSettings each render.
-  const legacyRenderViz = vizV2Enabled && data
+  // V1→V2 render bridge (Viz Arch V2 §21 item 1): on EVERY surface, a chart whose
+  // truth is `vizSettings` renders through <VegaChart> via just-in-time conversion —
+  // render-only, nothing is ever written back to the file; table/pivot keep their
+  // DOM renderers. Pure — recomputed from vizSettings each render.
+  const legacyRenderViz = vegaDraws && data
     ? resolveLegacyRenderEnvelope({
         hasVizEnvelope: hasVizV2,
         vizSettings: currentState?.vizSettings,

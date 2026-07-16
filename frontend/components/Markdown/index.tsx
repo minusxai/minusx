@@ -16,7 +16,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { selectActiveConversation, sendMessage } from '@/store/chatSlice';
-import { selectShowSuggestedQuestions, selectShowTrustScore, selectVizV2 } from '@/store/uiSlice';
+import { selectShowSuggestedQuestions, selectShowTrustScore, selectVizV2Active } from '@/store/uiSlice';
 import { selectContextFromPath } from '@/store/filesSlice';
 import { isViewer } from '@/lib/auth/role-helpers';
 import { resolvePath } from '@/lib/mode/path-resolver';
@@ -42,7 +42,7 @@ function InlineChart({ queryData }: { queryData: ReportQueryResult }) {
   // its only reachable effect here is the Show/Hide Viz Config button label, which local
   // state reproduces exactly without leaking into the global page-mode panel state.
   const [collapsedPanel, setCollapsedPanel] = useState<'none' | 'left' | 'right'>('none');
-  const vizV2Enabled = useAppSelector(selectVizV2);
+  const vizV2Enabled = useAppSelector(selectVizV2Active);
 
   const queryResult = useMemo(() => ({
     columns: queryData.columns,

@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Tabs, Badge, HStack, 
 import { LuRefreshCw, LuUser, LuX } from 'react-icons/lu';
 import { ColorModeSwitch } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowAdvanced, setVizV2, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowAdvanced, setVizV2, setVizRenderer, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
 import { canEdit } from '@/lib/auth/role-helpers';
 import RecordingControl from '@/components/dev/RecordingControl';
 import DataManagementSection from '@/components/settings/DataManagementSection';
@@ -360,6 +360,7 @@ function SettingsContent() {
   const [isTestingError, setIsTestingError] = useState(false);
   const showAdvanced = useAppSelector((state) => state.ui.showAdvanced);
   const vizV2 = useAppSelector((state) => state.ui.vizV2);
+  const vizRenderer = useAppSelector((state) => state.ui.vizRenderer);
   const allowChatQueue = useAppSelector((state) => state.ui.allowChatQueue ?? false);
   const queueStrategy = useAppSelector((state) => state.ui.queueStrategy ?? 'end-of-turn');
   const devMode = useAppSelector((state) => state.ui.devMode);
@@ -529,15 +530,32 @@ function SettingsContent() {
     {
       tab: 'general',
       section: 'Experimental Flags',
-      title: 'Viz Engine V2 (Beta)',
-      description: 'Render and edit all charts through the new Vega-based viz engine. When off, everything uses the classic engine.',
+      title: 'Chart Renderer',
+      description: 'Vega is the new chart engine (Beta). ECharts is the classic engine — with it, only classic viz settings apply.',
+      control: (
+        <Flex gap={2}>
+          <Button size="sm" variant={vizRenderer === 'vega' ? 'solid' : 'outline'} onClick={() => dispatch(setVizRenderer('vega'))}>
+            Vega
+          </Button>
+          <Button size="sm" variant={vizRenderer === 'echarts' ? 'solid' : 'outline'} onClick={() => dispatch(setVizRenderer('echarts'))}>
+            ECharts
+          </Button>
+        </Flex>
+      ),
+      visible: isEditorOrAdmin,
+    },
+    {
+      tab: 'general',
+      section: 'Experimental Flags',
+      title: 'Viz V2 Format (Beta)',
+      description: 'Treat saved V2 viz (envelopes) as the source of truth for rendering and editing. When off, classic viz settings stay authoritative and charts are just-in-time converted for the Vega renderer.',
       control: (
         <SwitchControl
           checked={vizV2}
           onChange={(checked) => dispatch(setVizV2(checked))}
         />
       ),
-      visible: isEditorOrAdmin,
+      visible: isEditorOrAdmin && vizRenderer === 'vega',
     },
     {
       tab: 'general',
@@ -656,7 +674,7 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, vizV2, vizRenderer, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

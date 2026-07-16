@@ -224,7 +224,7 @@ export async function processSlackEvent(
       // Upload chart images first (max 2) so they appear before the text reply
       const queryCharts = extractQueryCharts(result.logDiff);
       const renderedCharts = await serverChartImageRenderer.renderCharts(
-        queryCharts.map(c => ({ queryResult: c.queryResult, vizSettings: c.vizSettings })),
+        queryCharts.map(c => ({ queryResult: c.queryResult, vizSettings: c.vizSettings, viz: c.viz })),
         { width: 1024, colorMode: 'dark', addWatermark: true, padding: true, logoSrc: getBrandLogoUrl(installation.config.branding, 'dark') },
       ).catch(err => { console.warn('[Slack] Chart rendering failed:', err); return []; });
       for (const rendered of renderedCharts) {

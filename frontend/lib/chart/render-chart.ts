@@ -54,36 +54,26 @@ function svgToPngBuffer(svg: string): Buffer {
   return Buffer.from(rendered.asPng());
 }
 
-// ── Public API ───────────────────────────────────────────────────────────────
+export interface ComposeJpegOptions {
+  width?: number;
+  height?: number;
+  colorMode?: 'light' | 'dark';
+  padding?: boolean;
+  logoPath?: string;
+}
 
 /**
- * Render a chart to a JPEG buffer (q=85) with logo in the footer.
- *
- * Always includes:
- * - Auto-generated chart title from xCols/yCols
- * - Solid background (dark theme by default)
- * - Logo in bottom-right corner
- * - JetBrains Mono font (embedded, renders correctly in Docker)
- *
- * Returns null for unsupported types (table, pivot) or empty data.
- *
- * Used by: Slack integration, any server-side chart export.
- * For browser-side JPEG upload to S3, use chart-image-client.ts instead.
+ * Composite a rendered chart SVG into the final agent JPEG: Resvg rasterizes the SVG on
+ * a solid theme background, Sharp adds the optional padding strips + logo footer, then
+ * JPEG-encodes at the shared quality. Grammar-agnostic — the ECharts and Vega paths both
+ * feed their SVG here so the two families share one background/logo/quality contract.
  */
-export async function renderChartToJpeg(
-  queryResult: QueryResult,
-  vizSettings: VizSettings,
-  options: import('./render-chart-svg').RenderChartOptions = {},
-): Promise<Buffer | null> {
+export async function composeSvgToJpeg(svg: string, options: ComposeJpegOptions = {}): Promise<Buffer> {
   const width = options.width ?? 512;
   const height = options.height ?? 256;
   const colorMode = options.colorMode ?? 'dark';
-
   const defaultLogoFile = colorMode === 'dark' ? 'logox.svg' : 'logox_dark.svg';
   const logoPath = options.logoPath ?? path.join(process.cwd(), 'public', defaultLogoFile);
-
-  const svg = renderChartToSvg(queryResult, vizSettings, options);
-  if (!svg) return null;
 
   const chartPng = svgToPngBuffer(svg);
 
@@ -119,5 +109,38 @@ export async function renderChartToJpeg(
     .composite(layers)
     .jpeg({ quality: Math.round(AGENT_IMAGE_JPEG_QUALITY * 100) })
     .toBuffer();
+}
+
+// ── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Render a chart to a JPEG buffer (q=85) with logo in the footer.
+ *
+ * Always includes:
+ * - Auto-generated chart title from xCols/yCols
+ * - Solid background (dark theme by default)
+ * - Logo in bottom-right corner
+ * - JetBrains Mono font (embedded, renders correctly in Docker)
+ *
+ * Returns null for unsupported types (table, pivot) or empty data.
+ *
+ * Used by: Slack integration, any server-side chart export.
+ * For browser-side JPEG upload to S3, use chart-image-client.ts instead.
+ */
+export async function renderChartToJpeg(
+  queryResult: QueryResult,
+  vizSettings: VizSettings,
+  options: import('./render-chart-svg').RenderChartOptions = {},
+): Promise<Buffer | null> {
+  const svg = renderChartToSvg(queryResult, vizSettings, options);
+  if (!svg) return null;
+
+  return composeSvgToJpeg(svg, {
+    width: options.width ?? 512,
+    height: options.height ?? 256,
+    colorMode: options.colorMode ?? 'dark',
+    padding: options.padding,
+    logoPath: options.logoPath,
+  });
 }
 
