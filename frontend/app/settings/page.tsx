@@ -469,6 +469,18 @@ function SettingsContent() {
     });
   }, []);
 
+  const handleCanvasRendererToggle = useCallback(async (enabled: boolean) => {
+    await updateConfig({ useCanvasRenderer: enabled });
+    toaster.create({
+      title: enabled ? 'Canvas renderer enabled' : 'Canvas renderer disabled',
+      description: enabled
+        ? 'Stories now render on canvas. Falls back to DOM per story if rendering fails.'
+        : 'Stories render on the DOM again.',
+      type: 'info',
+      duration: 5000,
+    });
+  }, []);
+
   // ── Settings config ──────────────────────────────────────────────
   const settings: SettingEntry[] = useMemo(() => [
     // ── General: Feature Flags (all users) ──
@@ -478,6 +490,18 @@ function SettingsContent() {
       title: 'Appearance: Dark Mode',
       description: 'Switch between light and dark theme',
       control: <ColorModeSwitch />,
+    },
+    {
+      tab: 'general',
+      section: 'Feature Flags',
+      title: 'Use Canvas Renderer',
+      description: 'Render stories on canvas (one bitmap surface) instead of the DOM',
+      control: (
+        <SwitchControl
+          checked={config.useCanvasRenderer ?? false}
+          onChange={handleCanvasRendererToggle}
+        />
+      ),
     },
     {
       tab: 'general',
@@ -676,7 +700,7 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, vizV2, vizRenderer, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, handleCanvasRendererToggle, showAdvanced, vizV2, vizRenderer, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics, config.useCanvasRenderer]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

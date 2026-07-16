@@ -79,6 +79,10 @@ export interface OrgConfig {
   /** Remote Agent Sessions ("Copy to Agent"): lets an external agent drive a chat over HTTP.
    *  OFF by default — enable in Settings → Integrations. Gates minting AND live-session auth. */
   remoteAgentsEnabled?: boolean;
+  /** Render story files on canvas (Takumi raster + embed islands) instead of the
+   *  DOM/iframe path. OFF by default — toggle in Settings → General. Per-story
+   *  fallback to DOM still applies when canvas rendering fails. */
+  useCanvasRenderer?: boolean;
   /** In-app LLM provider config: providers + per-use-case model assignments
    *  (see lib/llm/llm-config-types.ts). Overrides env model config when set;
    *  `apiKey` values are @SECRETS/… refs at rest. */
@@ -114,6 +118,7 @@ export const DEFAULT_CONFIG: OrgConfig = {
   },
   setupWizard: { status: 'pending' },
   analytics: { enabled: true },
+  useCanvasRenderer: false,
 };
 
 /**
@@ -175,6 +180,7 @@ export function mergeConfig(
       : defaults.chartColorPalette,
     analytics: overrides.analytics ?? defaults.analytics,
     remoteAgentsEnabled: overrides.remoteAgentsEnabled ?? defaults.remoteAgentsEnabled,
+    useCanvasRenderer: overrides.useCanvasRenderer ?? defaults.useCanvasRenderer,
     llm: overrides.llm ?? defaults.llm,
   };
 }

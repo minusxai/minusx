@@ -14,3 +14,15 @@ describe('mergeConfig - supportedFileTypes', () => {
     expect(merged.supportedFileTypes).toBe(DEFAULT_CONFIG.supportedFileTypes);
   });
 });
+
+describe('mergeConfig - useCanvasRenderer', () => {
+  it('preserves a useCanvasRenderer override through merge', () => {
+    const merged = mergeConfig(DEFAULT_CONFIG, { useCanvasRenderer: true });
+    expect(merged.useCanvasRenderer).toBe(true);
+  });
+
+  it('defaults useCanvasRenderer to false', () => {
+    const merged = mergeConfig(DEFAULT_CONFIG, {});
+    expect(merged.useCanvasRenderer).toBe(false);
+  });
+});

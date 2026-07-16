@@ -10,6 +10,7 @@ import { StoryContent } from '@/lib/types';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 import { applyStoryHtmlEdit } from '@/lib/file-state/file-state';
 import { STORY_W } from './ScaledStoryFrame';
+import CanvasStoryView from './CanvasStoryView';
 
 // Max on-screen width of the reading column. Stories render FLUID (no transform
 // scale): full-bleed on mobile, capped + centered here on desktop. Authored
@@ -44,6 +45,9 @@ interface StoryViewProps {
   colorMode: 'light' | 'dark';
   /** Design-system stylesheet for the rendered story (persisted or preview-compiled), sourced by the container. */
   compiledCss?: string | null;
+  /** Render on canvas (Settings → "Use Canvas Renderer"), sourced by the container from configs.
+   *  Editing always uses the DOM path; canvas rendering falls back to DOM per story on failure. */
+  useCanvasRenderer?: boolean;
 }
 
 /**
@@ -54,7 +58,7 @@ interface StoryViewProps {
  * `onChange` (so the header's Save persists them and Cancel reverts them); the html is frozen during
  * the session so the iframe doesn't rebuild mid-edit.
  */
-export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss }: StoryViewProps) {
+export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss, useCanvasRenderer = false }: StoryViewProps) {
   const numericId = typeof fileId === 'number' ? fileId : undefined;
   const canEdit = !readOnly && numericId !== undefined;
   const editing = canEdit && headerEditMode;
@@ -115,6 +119,35 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
         {/* data-story-capture → OG share-card preview; data-file-id → the standard FileView capture
             (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
         <Box w="100%" maxW={STORY_MAX_W} {...(numericId !== undefined ? { 'data-story-capture': numericId, 'data-file-id': numericId } : {})}>
+          {useCanvasRenderer && !editing ? (
+            <CanvasStoryView
+              key={`canvas:${hashStory(htmlForRender)}`}
+              html={htmlForRender}
+              compiledCss={compiledCss}
+              width={STORY_W}
+              readOnly={readOnly}
+              colorMode={colorMode}
+              paramValues={content.parameterValues ?? undefined}
+              storyPath={storyPath}
+              fallback={
+                <AgentHtml
+                  key={`${session.key}:${hashStory(htmlForRender)}`}
+                  html={htmlForRender}
+                  width={STORY_W}
+                  fluid
+                  editable={false}
+                  readOnly={readOnly}
+                  colorMode={colorMode}
+                  compiledCss={compiledCss}
+                  filePath={storyPath}
+                  paramValues={content.parameterValues ?? undefined}
+                  onEditNumber={setNumberEdit}
+                  onChange={onStoryChange}
+                  selectionSource={selectionSource}
+                />
+              }
+            />
+          ) : (
           <AgentHtml
             // Remount on external content change (viewing) AND once per edit-session exit (see above).
             key={`${session.key}:${hashStory(htmlForRender)}`}
@@ -131,6 +164,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             onChange={onStoryChange}
             selectionSource={selectionSource}
           />
+          )}
         </Box>
       </Box>
       <NumberQueryEditor request={numberEdit} filePath={storyPath} onClose={() => setNumberEdit(null)} />
