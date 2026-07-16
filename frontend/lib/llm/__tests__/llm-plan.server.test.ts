@@ -6,6 +6,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { saveRawConfig, getRawConfig } from '@/lib/data/configs.server';
 import { isSecretRef } from '@/lib/secrets/config-secret-specs';
+import compatibility from '@/compatibility.json';
 import { resolveLlmPlan, buildPlanStep } from '../llm-plan.server';
 import { MX_USE_CASE_HEADER, type LlmConfig } from '../llm-config-types';
 import { MINUSX_AUTO_MODEL, MINUSX_UNCONFIGURED_KEY } from '../minusx-default';
@@ -44,6 +45,10 @@ describe('resolveLlmPlan', () => {
   });
 
   it('resolves a model-less registry assignment (Auto) to the compatibility default per use case', async () => {
+    // Expected ids come from compatibility.json itself (curation edits move
+    // with the data; the contract test guards the data's validity).
+    const anthropicDefaults = (compatibility.llm.providers as { id: string; defaults?: Record<string, string> }[])
+      .find(p => p.id === 'anthropic')!.defaults!;
     await setLlmConfig({
       providers: [{ name: 'main-anthropic', provider: 'anthropic', apiKey: 'sk-ant-raw-key' }],
       assignments: {
@@ -51,8 +56,8 @@ describe('resolveLlmPlan', () => {
         micro: { chain: [{ providerName: 'main-anthropic' }] },
       },
     });
-    expect(((await resolveLlmPlan('analyst'))!.model as { id: string }).id).toBe('claude-sonnet-5');
-    expect(((await resolveLlmPlan('micro'))!.model as { id: string }).id).toBe('claude-haiku-4-5');
+    expect(((await resolveLlmPlan('analyst'))!.model as { id: string }).id).toBe(anthropicDefaults['analyst']);
+    expect(((await resolveLlmPlan('micro'))!.model as { id: string }).id).toBe(anthropicDefaults['micro']);
   });
 
   it('still requires a model id for registry providers without compatibility defaults', () => {

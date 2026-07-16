@@ -5,7 +5,13 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { makeStore } from '@/store/store';
 import { LlmModelsSection } from '@/components/settings/llm/LlmModelsSection';
 import { configSecretRefPath } from '@/lib/secrets/config-secret-specs';
+import compatibility from '@/compatibility.json';
 import type { OrgConfig } from '@/lib/branding/whitelabel';
+
+// Auto assertions derive from compatibility.json so curation edits don't
+// break them (the contract test guards the data itself).
+const ANTHROPIC_DEFAULTS = (compatibility.llm.providers as { id: string; defaults?: Record<string, string> }[])
+  .find(p => p.id === 'anthropic')!.defaults!;
 
 const REGISTRY = {
   success: true,
@@ -472,7 +478,7 @@ describe('LlmModelsSection', () => {
     await user.click(await screen.findByLabelText('Analyst model auto'));
     // The picker reflects the auto state and names the model auto resolves to.
     await waitFor(() => {
-      expect(screen.getByLabelText('Analyst model')).toHaveTextContent('Auto (claude-sonnet-5)');
+      expect(screen.getByLabelText('Analyst model')).toHaveTextContent(`Auto (${ANTHROPIC_DEFAULTS['analyst']})`);
     });
 
     await user.click(screen.getByLabelText('Save LLM configuration'));
@@ -485,10 +491,13 @@ describe('LlmModelsSection', () => {
   });
 
   it('flags an Auto assignment whose compatibility default is excluded by allowed models', async () => {
+    // The scenario needs distinct defaults: allow only the micro default, so
+    // the analyst auto pick is excluded and the micro one is not.
+    expect(ANTHROPIC_DEFAULTS['analyst']).not.toBe(ANTHROPIC_DEFAULTS['micro']);
     mockFetch();
     renderWithProviders(<LlmModelsSection />, {
       store: storeWithLlm({
-        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k', allowedModels: ['claude-haiku-4-5'] }],
+        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k', allowedModels: [ANTHROPIC_DEFAULTS['micro']] }],
         assignments: {
           analyst: { chain: [{ providerName: 'a' }] },
           micro: { chain: [{ providerName: 'a' }] },
@@ -496,9 +505,9 @@ describe('LlmModelsSection', () => {
       }),
     });
 
-    // Analyst auto default (claude-sonnet-5) is excluded by the allowlist.
-    expect(await screen.findByLabelText('Analyst auto model conflict')).toHaveTextContent('claude-sonnet-5');
-    // Micro auto default (claude-haiku-4-5) is allowed — no conflict.
+    // Analyst auto default is excluded by the allowlist.
+    expect(await screen.findByLabelText('Analyst auto model conflict')).toHaveTextContent(ANTHROPIC_DEFAULTS['analyst']);
+    // Micro auto default is allowed — no conflict.
     expect(screen.queryByLabelText('Micro tasks auto model conflict')).not.toBeInTheDocument();
   });
 
