@@ -76,9 +76,10 @@ export interface MeasuredNodeLike {
 }
 
 /** Default sizes assigned to embed placeholders so layout reserves space for islands. */
+/** Mirrors AgentHtml's sizeEmbedEl defaults (DEFAULT_CHART_H = 400) for parity. */
 export const EMBED_DEFAULT_SIZE: Record<StoryEmbedKind, { width: string | number; height: number }> = {
-  question: { width: '100%', height: 360 },
-  'question-inline': { width: '100%', height: 360 },
+  question: { width: '100%', height: 400 },
+  'question-inline': { width: '100%', height: 400 },
   'number-inline': { width: 90, height: 22 },
   param: { width: 170, height: 34 },
 };

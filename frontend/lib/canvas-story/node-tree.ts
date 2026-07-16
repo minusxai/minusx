@@ -9,8 +9,8 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
  * 1. Entity decoding: takumi's fromHtml does not decode HTML entities.
  * 2. Bare-text blocks emit no measured text runs. Block-level text is wrapped in an
  *    inner container so runs attach to a node whose transform IS the content-box
- *    origin (padding-exact geometry for arbitrary CSS). Inline text nodes are
- *    wrapped as container+text (runs attach to the element itself).
+ *    origin (padding-exact geometry for arbitrary CSS). Inline elements are left
+ *    in native text-node form so the parent block owns all runs in visual order.
  * 3. Embed placeholders (`data-question-id` etc.) get reserved default sizes so
  *    layout leaves room for the live embed islands mounted over them.
  */
@@ -83,8 +83,11 @@ function transform(node: RawNode): RawNode {
     if (!node.tagName) return { ...node, text };
     const { text: _t, ...rest } = node;
     if (INLINE_TAGS.has(node.tagName)) {
-      // inline element: runs attach to the element node itself
-      return { ...rest, type: 'container', children: [{ type: 'text', text }] };
+      // Inline elements stay in fromHtml's native text-node form: takumi then attaches
+      // ALL of the parent block's runs to the block itself, in visual order. Converting
+      // inline nodes to containers splits their runs onto separate nodes, which breaks
+      // document-order selection (phantom endpoints) and run widths.
+      return { ...node, text };
     }
     // block element: a real block-div wrapper survives measurement as its own node,
     // so its transform = the parent's content-box origin (padding-exact geometry)

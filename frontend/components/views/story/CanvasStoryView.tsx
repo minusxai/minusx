@@ -26,7 +26,7 @@ import { numberFromEl } from '@/lib/data/story/story-number';
 import { paramFromPlaceholderEl } from '@/lib/data/story/story-params';
 
 const DPR = 2;
-const SELECTION_FILL = 'rgba(59,130,246,0.30)';
+const SELECTION_FILL = 'rgba(22,160,133,0.35)'; // accent.teal — matches the app's ::selection
 
 export interface CanvasStoryViewProps {
   html: string;
@@ -270,7 +270,23 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
         onDoubleClick={onDoubleClick}
         aria-label="canvas-story-surface"
       />
-      <Theme appearance={colorMode ?? 'light'} position="absolute" inset="0" pointerEvents="none" background="transparent" aria-label="canvas-story-islands">
+      <Theme
+        appearance={colorMode ?? 'light'}
+        position="absolute"
+        inset="0"
+        pointerEvents="none"
+        background="transparent"
+        aria-label="canvas-story-islands"
+        css={{
+          // Replicate the iframe environment the DOM path renders embeds in:
+          // next/font CSS vars are NOT defined inside the iframe, so theme font
+          // tokens fall back to UA defaults there. Unset them here for parity.
+          '--font-inter': 'initial',
+          '--font-jetbrains-mono': 'initial',
+          // Base embed CSS that AgentHtml injects into the iframe (mirror-app-styles).
+          '& .mx-chart-fill': { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+        }}
+      >
       {embeds.map(e => (
         <Box
           key={e.index}
