@@ -20,6 +20,8 @@ import { renderStoryRaster } from '@/lib/canvas-story/raster';
 import { getStoryRenderer, registerFontFaceCss } from '@/lib/canvas-story/renderer.client';
 import type { StoryEmbedBox, StoryRasterResult, StoryTextRun } from '@/lib/canvas-story/types';
 import { sanitizeAgentHtml } from '@/lib/html/sanitize-agent-html';
+import { registerCanvasStoryCapture } from '@/lib/canvas-story/capture-registry';
+import { snapdom } from '@zumer/snapdom';
 import { resolveImportFontCss } from '@/lib/html/resolve-story-fonts';
 import { inlineQuestionFromEl, inlineEmbedToQuestionContent } from '@/lib/data/story/story-question';
 import { numberFromEl } from '@/lib/data/story/story-number';
@@ -257,6 +259,74 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
     window.addEventListener('keydown', onKey);
     return () => { window.removeEventListener('mouseup', onUp); window.removeEventListener('keydown', onKey); };
   }, [selectedText]);
+
+  // ---------- capture pipeline: island bitmaps at idle + composite provider ----------
+  // Islands are live DOM (charts, params). For instant screenshots/crops they are
+  // rasterized AT IDLE into a cache (re-done on island DOM mutations); capture-time
+  // work is then pure canvas composition — snapdom never runs on the capture path.
+  const islandBitmapsRef = useRef<Record<number, { bitmap: ImageBitmap; at: number }>>({});
+  const rasterizeGenRef = useRef(0);
+  // Sequential, settle-delayed island rasterization. NO mutation observers: charts
+  // animate and mutate constantly, which would re-trigger serialization in a loop
+  // and lock the main thread. One pass after the charts settle, a refresh pass
+  // later for slow queries — each island serialized one at a time with yields.
+  useEffect(() => {
+    const gen = ++rasterizeGenRef.current;
+    const els = Object.entries(islandEls).filter((entry): entry is [string, HTMLElement] => !!entry[1]);
+    if (!els.length) return;
+    let cancelled = false;
+    const pass = async () => {
+      for (const [key, el] of els) {
+        if (cancelled || rasterizeGenRef.current !== gen) return;
+        try {
+          const c = await snapdom.toCanvas(el, { scale: DPR, dpr: 1 });
+          const bitmap = await createImageBitmap(c);
+          islandBitmapsRef.current[Number(key)] = { bitmap, at: Date.now() };
+        } catch { /* capture falls back to raster-only for this island */ }
+        await new Promise(r => setTimeout(r, 32)); // yield between islands
+      }
+    };
+    const t1 = setTimeout(() => { void pass(); }, 1500);   // after initial chart render
+    const t2 = setTimeout(() => { void pass(); }, 6000);   // refresh once queries settle
+    return () => { cancelled = true; clearTimeout(t1); clearTimeout(t2); };
+  }, [islandEls]);
+
+  useEffect(() => {
+    const unregister = registerCanvasStoryCapture({
+      surface: () => canvasRef.current,
+      size: () => {
+        const bitmap = bitmapRef.current;
+        return bitmap ? { width: bitmap.width, height: bitmap.height } : null;
+      },
+      // Draw straight from the source bitmaps (story raster + island caches) — no
+      // full-story intermediate canvas, so captures stay cheap at any story size.
+      drawRegion: (ctx, sx, sy, sw, sh, dx, dy, dw, dh) => {
+        const bitmap = bitmapRef.current;
+        const raster = result;
+        if (!bitmap || !raster) return false;
+        const k = dw / sw;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(dx, dy, dw, dh);
+        ctx.drawImage(bitmap, sx, sy, sw, sh, dx, dy, dw, dh);
+        for (const e of raster.embeds) {
+          const cached = islandBitmapsRef.current[e.index];
+          if (!cached) continue;
+          const ix = e.x * DPR, iy = e.y * DPR, iw = e.w * DPR, ih = e.h * DPR;
+          const ox0 = Math.max(sx, ix), oy0 = Math.max(sy, iy);
+          const ox1 = Math.min(sx + sw, ix + iw), oy1 = Math.min(sy + sh, iy + ih);
+          if (ox1 <= ox0 || oy1 <= oy0) continue;
+          const bScaleX = cached.bitmap.width / iw, bScaleY = cached.bitmap.height / ih;
+          ctx.drawImage(
+            cached.bitmap,
+            (ox0 - ix) * bScaleX, (oy0 - iy) * bScaleY, (ox1 - ox0) * bScaleX, (oy1 - oy0) * bScaleY,
+            dx + (ox0 - sx) * k, dy + (oy0 - sy) * (dh / sh), (ox1 - ox0) * k, (oy1 - oy0) * (dh / sh),
+          );
+        }
+        return true;
+      },
+    });
+    return unregister;
+  }, [result]);
 
   // ---------- embed islands ----------
   const embeds = useMemo(() => result?.embeds ?? [], [result]);
