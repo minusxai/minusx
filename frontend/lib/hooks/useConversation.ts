@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch, useSelector, useStore } from 'react-redux';
 import { loadConversation, selectConversation, setRemoteSession, setUserInputResult } from '@/store/chatSlice';
+import { selectDevMode } from '@/store/uiSlice';
 import { parsePiConversation } from '@/lib/conversations-utils';
-import { ConversationsAPI } from '@/lib/data/conversations';
+import { loadConversationDetail } from '@/store/conversation-log-cache';
 import { derivePendingToolCalls, isColdReopenResumable } from '@/lib/data/conversation-log';
 import { clearStaleClarifyAnswers, seedPendingClarifyInputs } from '@/lib/chat/clarify-answer-stash';
 import type { ConversationLog } from '@/orchestrator/types';
@@ -20,6 +21,7 @@ import { createLoadErrorFromException } from '@/lib/types/errors';
  */
 export function useConversation(conversationId?: number) {
   const dispatch = useDispatch();
+  const reduxStore = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<LoadError | null>(null);
   const [attempted, setAttempted] = useState<number | null>(null);
@@ -28,6 +30,14 @@ export function useConversation(conversationId?: number) {
   const conversation = useSelector((state: any) =>
     selectConversation(state, conversationId)
   );
+  // Conversations V2 (/conversations-v2.md): non-dev loads get the slim display view; dev mode
+  // loads the verbatim log (per-turn appState for the inspector, full tool I/O). devMode is read
+  // from the LIVE store at fetch time — not the render-time selector value — because DataLoader
+  // restores it from localStorage in a LAYOUT effect, which fires AFTER this page-level effect:
+  // a dev-mode cold load would otherwise race and fetch slim. A completion re-check upgrades a
+  // load that raced anyway (the flag flipped while the slim fetch was in flight); flips after
+  // completion are covered by the chatListener devMode listener.
+  const devMode = useSelector(selectDevMode);
 
   // Compute derived loading state: loading if we need to fetch
   const needsToLoad = !!conversationId && !conversation && attempted !== conversationId;
@@ -50,12 +60,18 @@ export function useConversation(conversationId?: number) {
         // un-migrated legacy file — run the backfill to surface it); we show a clean not-found,
         // never fall back to file-conversations.
         let v3detail = null;
-        try { v3detail = await ConversationsAPI.get(conversationId); } catch { /* not found */ }
+        const liveDevMode = () => selectDevMode(reduxStore.getState() as never);
+        const view = liveDevMode() ? 'full' as const : 'display' as const;
+        try { v3detail = await loadConversationDetail(conversationId, view); } catch { /* not found */ }
         if (!v3detail) {
           throw new Error(`Conversation ${conversationId} not found`);
         }
+        // Dev mode flipped on while the slim fetch was in flight → upgrade to the full view.
+        if (view === 'display' && liveDevMode()) {
+          v3detail = await loadConversationDetail(conversationId, 'full');
+        }
 
-        const piLog = v3detail.messages.map((m) => m.content) as unknown as ConversationLog;
+        const piLog = v3detail.piLog as ConversationLog;
         const errors = v3detail.errors.map((e) => ({
           source: e.source, message: e.message,
           timestamp: Date.parse(e.createdAt) || Date.now(),
@@ -136,7 +152,7 @@ export function useConversation(conversationId?: number) {
     }
 
     loadFromDB();
-  }, [conversationId, conversation, isLoading, attempted, dispatch]);
+  }, [conversationId, conversation, isLoading, attempted, dispatch, devMode]);
 
   return {
     conversation,

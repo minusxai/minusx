@@ -5,7 +5,16 @@
  * so callers just use relative URLs. The server-side counterpart is lib/data/conversations.server.ts.
  */
 import type { Conversation, ConversationErrorRow, MessageRow } from './conversations.types';
+import type { ConversationView } from './conversation-projection';
 import type { ConversationSummary } from '@/app/api/conversations/route';
+
+/** Options for ConversationsAPI.get (see /conversations-v2.md). */
+export interface GetConversationOpts {
+  /** 'full' = verbatim pi log (dev mode only); default 'display' = slim projection. */
+  view?: ConversationView;
+  /** Return only messages with seq > sinceSeq (incremental post-turn reload). */
+  sinceSeq?: number;
+}
 
 async function unwrap<T>(res: Response): Promise<T> {
   const body = await res.json().catch(() => ({}));
@@ -21,6 +30,9 @@ export interface ConversationDetail {
   conversation: Conversation;
   messages: MessageRow[];
   errors: ConversationErrorRow[];
+  /** Highest committed message seq (-1 if empty). Lets an incremental (`sinceSeq`) caller detect
+   *  server-side truncation (retry/replay rewrote the tail) and fall back to a full fetch. */
+  maxSeq?: number;
 }
 
 export const ConversationsAPI = {
@@ -39,8 +51,12 @@ export const ConversationsAPI = {
     return body.conversations;
   },
 
-  async get(id: number): Promise<ConversationDetail> {
-    const res = await fetch(`/api/conversations/${id}`);
+  async get(id: number, opts: GetConversationOpts = {}): Promise<ConversationDetail> {
+    const qs = new URLSearchParams();
+    if (opts.view === 'full') qs.set('view', 'full'); // 'display' is the server default
+    if (opts.sinceSeq !== undefined) qs.set('since', String(opts.sinceSeq));
+    const query = qs.size > 0 ? `?${qs.toString()}` : '';
+    const res = await fetch(`/api/conversations/${id}${query}`);
     const detail = await unwrap<ConversationDetail>(res);
     // A 2xx with a malformed/empty body (proxy page, truncated/interrupted response) would otherwise
     // pass through as `{}` and crash callers at `detail.messages.map(...)` with a cryptic

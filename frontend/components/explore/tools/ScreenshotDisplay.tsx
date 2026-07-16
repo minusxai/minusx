@@ -55,7 +55,8 @@ export function ScreenshotDetailCard({ msg }: DetailCardProps) {
   }
   return (
     <Box mx={3} mb={2} borderRadius="md" border="1px solid" borderColor="border.default" overflow="hidden" bg="bg.canvas">
-      <Image aria-label={IMG_LABEL} alt={IMG_LABEL} src={url} w="full" objectFit="contain"
+      {/* loading=lazy: slim-view screenshots are lazy URLs — only fetch when scrolled near view. */}
+      <Image aria-label={IMG_LABEL} alt={IMG_LABEL} src={url} loading="lazy" w="full" objectFit="contain"
         cursor="zoom-in" onClick={() => dispatch(openImageLightbox(url))} />
     </Box>
   );
@@ -91,6 +92,7 @@ export default function ScreenshotDisplay({ toolCallTuple }: DisplayProps) {
           aria-label={IMG_LABEL}
           alt={IMG_LABEL}
           src={url}
+          loading="lazy"
           maxH="240px"
           w="full"
           objectFit="contain"

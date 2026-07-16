@@ -5,9 +5,11 @@ import {
   getConversation,
   loadMessages,
   loadErrors,
+  getMaxSeq,
   deleteConversation,
   setGeneratedConversationTitle,
 } from '@/lib/data/conversations.server';
+import { parseConversationView, projectMessageRowForDisplay } from '@/lib/data/conversation-projection';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -18,12 +20,18 @@ function ownsConversation(conv: { ownerUserId: number; mode: string }, user: { u
 }
 
 /**
- * GET /api/conversations/:id
- * Returns the conversation row + its full message log (pi entries) + parallel error stream.
- * The frontend rebuilds the chat from `messages[].content` (each is a verbatim pi log entry).
+ * GET /api/conversations/:id?view=display|full&since=<seq>
+ * Returns the conversation row + its message log (pi entries) + parallel error stream.
+ * The frontend rebuilds the chat from `messages[].content`.
+ *
+ * Conversations V2 (see /conversations-v2.md): the default `display` view projects each entry
+ * to display-grade size (LLM-only payloads stripped); `view=full` (dev mode) returns the
+ * verbatim log. `since` returns only rows with seq > since (incremental post-turn reload);
+ * `maxSeq` in the response lets the client detect server-side truncation (retry/replay) and
+ * fall back to a full fetch. Errors are always returned in full (small, not seq-cursored).
  */
 export const GET = withAuth(async (
-  _request: NextRequest,
+  request: NextRequest,
   user,
   { params }: { params: Promise<{ id: string }> },
 ) => {
@@ -36,11 +44,18 @@ export const GET = withAuth(async (
     if (!conversation) return ApiErrors.notFound('Conversation');
     if (!ownsConversation(conversation, user)) return ApiErrors.forbidden();
 
-    const [messages, errors] = await Promise.all([
-      loadMessages(conversationId),
+    const searchParams = new URL(request.url).searchParams;
+    const view = parseConversationView(searchParams.get('view'));
+    const sinceRaw = searchParams.get('since');
+    const since = sinceRaw != null && Number.isFinite(Number(sinceRaw)) ? Number(sinceRaw) : -1;
+
+    const [messages, errors, maxSeq] = await Promise.all([
+      loadMessages(conversationId, since),
       loadErrors(conversationId),
+      getMaxSeq(conversationId),
     ]);
-    return successResponse({ conversation, messages, errors });
+    const wireMessages = view === 'full' ? messages : messages.map((m) => projectMessageRowForDisplay(m, conversation.mode));
+    return successResponse({ conversation, messages: wireMessages, errors, maxSeq });
   } catch (error) {
     return handleApiError(error);
   }

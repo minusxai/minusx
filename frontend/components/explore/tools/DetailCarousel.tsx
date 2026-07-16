@@ -22,21 +22,26 @@ export function parseToolArgs(msg: MessageWithFlags): Record<string, any> {
   } catch { return {}; }
 }
 
+// In the slim wire view (Conversations V2, /conversations-v2.md) toolResult `content` is dropped
+// server-side and `details` carries the display data — so both parsers fall back to `details`.
 export function parseToolContent(msg: MessageWithFlags): any {
   const toolMsg = msg as any;
+  const content = toolMsg.content;
+  const hasContent = content != null && content !== '' && !(Array.isArray(content) && content.length === 0);
+  if (!hasContent) return toolMsg.details ?? {};
   try {
-    return typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content || {};
-  } catch { return {}; }
+    return typeof content === 'string' ? JSON.parse(content) : content || {};
+  } catch { return toolMsg.details ?? {}; }
 }
 
 export function isToolSuccess(msg: MessageWithFlags): boolean {
   const toolMsg = msg as any;
   const content = toolMsg.content;
-  if (!content || content === '(executing...)') return true;
+  if (!content || content === '(executing...)') return toolMsg.details?.success !== false;
   try {
     const parsed = typeof content === 'string' ? JSON.parse(content) : content;
     return parsed.success !== false;
-  } catch { return true; }
+  } catch { return toolMsg.details?.success !== false; }
 }
 
 export function getToolNameFromMsg(msg: MessageWithFlags): string {
