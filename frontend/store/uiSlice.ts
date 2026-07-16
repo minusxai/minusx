@@ -60,7 +60,7 @@ const initialState: UIState = {
   activeSidebarSection: null,
   askForConfirmation: false,
   showAdvanced: false,
-  vizV2: false,
+  vizV2: true, // V2 is the default engine; the Settings toggle is the classic-engine escape hatch
   fileEditMode: {},
   fileViewMode: {},
   notebookActiveCell: {},

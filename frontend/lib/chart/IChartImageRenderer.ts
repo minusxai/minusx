@@ -1,9 +1,12 @@
 import type { QueryResult } from '@/lib/types'
-import type { VizSettings } from '@/lib/validation/atlas-schemas'
+import type { VizSettings, VizEnvelope } from '@/lib/validation/atlas-schemas'
 
 export interface ChartInput {
   queryResult: QueryResult
-  vizSettings: VizSettings
+  /** Legacy V1 chart settings. Omit when a V2 `viz` envelope is supplied. */
+  vizSettings?: VizSettings
+  /** V2 viz envelope (preferred). Rendered via the Vega pipeline when present. */
+  viz?: VizEnvelope
   titleOverride?: string
 }
 

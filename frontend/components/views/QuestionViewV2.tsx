@@ -154,7 +154,7 @@ export default function QuestionViewV2({
   onChange,
   onParameterValueChange,
   onExecute,
-  vizV2Enabled = false,
+  vizV2Enabled = true, // matches the product default (uiSlice vizV2); containers pass the live value
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
   const isPreview = mode === 'preview';
@@ -221,12 +221,16 @@ export default function QuestionViewV2({
   // open straight into the V2 experience. Edits write a real `viz` via onChange (the
   // file upgrades on Save). Table/pivot keep the V1 panel until their own migration.
   const effectiveViz = useMemo(() => {
-    if (!vizV2Enabled) return null; // V2 is opt-in — the classic panel edits everything, envelope or not
+    if (!vizV2Enabled) return null; // classic engine — the classic panel edits everything, envelope or not
     if (content.viz != null) return content.viz;
+    // Semantic questions keep the classic panel: exploration infers the chart type
+    // into vizSettings (typeLocked flow), which a written envelope would sever. The
+    // CHART still renders V2 through the vizSettings bridge, so panel edits show up.
+    if (content.semanticQuery != null) return null;
     const legacyType = content.vizSettings?.type;
     if (!queryData || !legacyType || legacyType === 'table' || legacyType === 'pivot') return null;
     return vizSettingsToEnvelope(content.vizSettings!, toVizColumns(queryData.columns, queryData.types));
-  }, [content.viz, content.vizSettings, queryData, vizV2Enabled]);
+  }, [content.viz, content.vizSettings, content.semanticQuery, queryData, vizV2Enabled]);
 
 
   // Track container width for responsive layout

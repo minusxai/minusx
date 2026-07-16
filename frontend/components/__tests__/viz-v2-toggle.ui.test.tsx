@@ -141,6 +141,12 @@ function renderQuestion(content: QuestionContent, { vizV2 }: { vizV2: boolean })
 // V2 engine renders everything — the saved envelope when present, else the
 // V1→V2 converter bridge.
 
+describe('vizV2 default', () => {
+  it('the V2 engine is ON by default (rendering flip — files/prompts stay V1)', () => {
+    expect(makeStore().getState().ui.vizV2).toBe(true)
+  })
+})
+
 describe('QuestionVisualization — vizV2 toggle decides the engine', () => {
   it('toggle OFF: a legacy chart renders the classic ECharts builder, not vega', () => {
     renderQuestion(legacyLineContent, { vizV2: false })
@@ -264,5 +270,15 @@ describe('QuestionViewV2 — wide-layout right panel follows the flag', () => {
   it('flag ON: a saved envelope also edits in the right-column Vega panel', async () => {
     renderWideView(envelopeContent, { vizV2Enabled: true })
     expect(await screen.findByLabelText('Vega viz panel')).toBeInTheDocument()
+  })
+
+  it('flag ON: a SEMANTIC question keeps the classic panel (inference/type-lock own vizSettings)', async () => {
+    const semanticContent = {
+      ...legacyLineContent,
+      semanticQuery: { table: 'orders', dimensions: [], measures: [] },
+    } as unknown as QuestionContent
+    renderWideView(semanticContent, { vizV2Enabled: true })
+    expect(await screen.findByLabelText('Classic viz config panel')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Vega viz panel')).not.toBeInTheDocument()
   })
 })
