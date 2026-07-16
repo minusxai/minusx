@@ -1,8 +1,11 @@
 /**
- * V1→V2 bridge on the EDITABLE question surface (Viz Arch V2 §21): a legacy question
- * (vizSettings only, no `viz` envelope) opens straight into the V2 experience — the
- * Viz tab shows the V2 panel over the CONVERTED envelope (not the V1 ChartBuilder),
- * and the first edit writes a real `viz` onto the content (the file upgrades on Save).
+ * V1→V2 render bridge on the EDITABLE question surface (Viz Arch V2 §21) —
+ * RENDER-ONLY contract, default (V1-authoritative) mode: a legacy question
+ * (vizSettings only, no `viz` envelope) renders its CHART through vega via the
+ * just-in-time converter, but stays V1 in the file and in the editor: the Viz
+ * tab shows the CLASSIC config panel, edits go to `vizSettings`, and nothing
+ * ever writes a `viz` envelope onto the content. V2 authoring arrives with the
+ * prompts/tools flip, not before.
  */
 import React from 'react';
 import { screen } from '@testing-library/react';
@@ -47,32 +50,29 @@ function mount(onChange = vi.fn()) {
   return onChange;
 }
 
-describe('legacy question (vizSettings only) on the question surface', () => {
-  it('the Viz tab shows the V2 panel over the converted envelope, not the V1 builder', async () => {
+describe('legacy question (vizSettings only), default mode — vega renders, V1 edits', () => {
+  it('the Viz tab keeps the CLASSIC config panel (no V2 drop zones)', async () => {
     const user = userEvent.setup();
     mount();
 
     await user.click(screen.getByLabelText('Viz'));
 
-    // V2 drop-zone lens present…
-    expect(await screen.findByLabelText('Vega encoding drop zones')).toBeInTheDocument();
-    // …with the converted line chart's zones populated (x + folded measures).
-    expect(screen.getByLabelText('Zone chip week')).toBeInTheDocument();
-    expect(screen.getByLabelText('Zone chip orders')).toBeInTheDocument();
-    expect(screen.getByLabelText('Zone chip revenue')).toBeInTheDocument();
+    // Classic type selector present (the V1 config surface)…
+    expect(await screen.findByLabelText('Line')).toBeInTheDocument();
+    // …and the V2 drop-zone lens absent — the panel never edits a converted envelope.
+    expect(screen.queryByLabelText('Vega encoding drop zones')).not.toBeInTheDocument();
   });
 
-  it('the first V2 edit writes a real `viz` envelope onto the content', async () => {
+  it('panel edits write vizSettings — never a `viz` envelope', async () => {
     const user = userEvent.setup();
     const onChange = mount();
 
     await user.click(screen.getByLabelText('Viz'));
-    // Remove a folded measure — any V2 panel edit must produce content.viz.
-    await screen.findByLabelText('Zone chip revenue');
-    await user.click(screen.getByLabelText('Remove revenue'));
+    await screen.findByLabelText('Bar');
+    await user.click(screen.getByLabelText('Bar'));
 
-    const withViz = onChange.mock.calls.map(c => c[0]).find((c: Record<string, unknown>) => c.viz != null);
-    expect(withViz).toBeTruthy();
-    expect((withViz.viz as { version: number }).version).toBe(2);
+    const calls = onChange.mock.calls.map(c => c[0] as Record<string, unknown>);
+    expect(calls.some(c => (c.vizSettings as { type?: string } | undefined)?.type === 'bar')).toBe(true);
+    expect(calls.every(c => c.viz == null)).toBe(true);
   });
 });

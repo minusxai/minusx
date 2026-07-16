@@ -8,7 +8,8 @@ import { describe, it, expect } from 'vitest';
 import { vizSettingsToEnvelope, resolveLegacyRenderEnvelope, type ConvertibleVizSettings as VizSettings } from '@/lib/viz/from-vizsettings';
 import { materializeRecipe } from '@/lib/viz/viz-templates';
 import { validateVizEnvelope } from '@/lib/viz/validate';
-import { getEnvelopeVizType } from '@/lib/viz/encoding-edit';
+import { getEnvelopeVizType, annotationSplit } from '@/lib/viz/encoding-edit';
+import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme';
 import type { GeoConfig } from '@/lib/validation/atlas-schemas';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { VizResultColumn } from '@/lib/viz/types';
@@ -323,5 +324,82 @@ describe('geo recipe sources', () => {
     expect(b.lng).toBe('lng');
     expect(b.size).toBe('intensity');
     expectMaterializes(e);
+  });
+});
+
+// ─── Legacy style carry-over (§21 items 6/9 — the "robust converter") ─────────
+//
+// V1 style knobs must survive the JIT conversion so a styled V1 chart looks the
+// same under the vega renderer: styleConfig (stacked, colors, opacity,
+// markerSize), axisConfig (yScale/yMin/yMax/yTitle), and annotations. Each maps
+// onto the SAME spec shapes the V2 panel's surgical editors write, so a
+// converted-then-upgraded file stays fully editable.
+describe('legacy style carry-over', () => {
+  const mark = (e: VizEnvelope) => {
+    const m = spec(e).mark;
+    return (typeof m === 'string' ? { type: m } : m) as Record<string, unknown>;
+  };
+
+  it('styleConfig.stacked=false unstacks bars (y.stack: null)', () => {
+    const e = vizSettingsToEnvelope(vs({
+      type: 'bar', xCols: ['month', 'region'], yCols: ['revenue'],
+      styleConfig: { colors: null, opacity: null, markerSize: null, stacked: false, showDataLabels: null, dataLabelColor: null },
+    }));
+    expect(enc(e).y.stack).toBe(null);
+  });
+
+  it('styleConfig.colors carries the effective palette onto the color scale range', () => {
+    const e = vizSettingsToEnvelope(vs({
+      type: 'line', xCols: ['month', 'region'], yCols: ['revenue'],
+      styleConfig: { colors: { '0': 'danger', '1': '#7c3aed' }, opacity: null, markerSize: null, stacked: null, showDataLabels: null, dataLabelColor: null },
+    }));
+    const scale = enc(e).color.scale as Record<string, unknown>;
+    expect(scale.range).toEqual(getEffectiveColorPalette({ '0': 'danger', '1': '#7c3aed' }));
+  });
+
+  it('styleConfig.colors["0"] colors a single-measure mark directly', () => {
+    const e = vizSettingsToEnvelope(vs({
+      type: 'bar', xCols: ['month'], yCols: ['revenue'],
+      styleConfig: { colors: { '0': '#112233' }, opacity: null, markerSize: null, stacked: null, showDataLabels: null, dataLabelColor: null },
+    }));
+    expect(mark(e).color).toBe('#112233');
+  });
+
+  it('axisConfig yScale/log + yMin/yMax + yTitle land on the y channel', () => {
+    const e = vizSettingsToEnvelope(vs({
+      type: 'line', xCols: ['month'], yCols: ['revenue'],
+      axisConfig: { xScale: null, yScale: 'log', xMin: null, xMax: null, yMin: 10, yMax: 1000, yTitle: 'Revenue ($)', dualAxis: null },
+    }));
+    const y = enc(e).y as Record<string, unknown>;
+    const scale = y.scale as Record<string, unknown>;
+    expect(scale.type).toBe('log');
+    expect(scale.domainMin).toBe(10);
+    expect(scale.domainMax).toBe(1000);
+    expect((y.axis as Record<string, unknown>).title).toBe('Revenue ($)');
+  });
+
+  it('styleConfig.opacity + markerSize style the mark (scatter)', () => {
+    const e = vizSettingsToEnvelope(vs({
+      type: 'scatter', xCols: ['month'], yCols: ['revenue'],
+      styleConfig: { colors: null, opacity: 0.5, markerSize: 12, stacked: null, showDataLabels: null, dataLabelColor: null },
+    }));
+    expect(mark(e).opacity).toBe(0.5);
+    expect(typeof mark(e).size).toBe('number');
+    expect(mark(e).size as number).toBeGreaterThan(0);
+  });
+
+  it('annotations become reference-line layers (x-anchored rule + label badge)', () => {
+    const e = vizSettingsToEnvelope(vs({
+      type: 'bar', xCols: ['month'], yCols: ['revenue'],
+      annotations: [{ x: 'Feb', series: null, text: 'Launch' }],
+    }));
+    const s = spec(e);
+    expect(Array.isArray(s.layer)).toBe(true);
+    const split = annotationSplit(s);
+    expect(split).not.toBe(null);
+    expect(split!.annotations.length).toBeGreaterThan(0);
+    expect(JSON.stringify(s)).toContain('Launch');
+    // The base chart survives the wrap intact.
+    expect((split!.unit.encoding as Record<string, Record<string, unknown>>).x.field).toBe('month');
   });
 });
