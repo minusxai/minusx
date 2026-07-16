@@ -43,6 +43,15 @@ export interface LlmProviderEntry {
   baseUrl?: string;
   /** custom only: extra HTTP headers merged into requests. */
   headers?: Record<string, string>;
+  /**
+   * Registry providers only: model ids admins allow for assignments. The
+   * assignment model picker shows ONLY these (plus a currently-assigned model,
+   * so an existing pick never disappears). Absent/empty = all registry models;
+   * 'auto' = the provider's recommended set from compatibility.json, resolved
+   * live (see `lib/llm/compat-models.ts`). A UI-level allowlist — resolution
+   * honors whatever the assignment stores.
+   */
+  allowedModels?: string[] | 'auto';
 }
 
 /** One model pick in an assignment chain. */

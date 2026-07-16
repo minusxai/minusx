@@ -353,7 +353,9 @@ print(p.get('defaults', {}).get('micro', ''))")
     info "Suggested models:"
     compat "
 p = next(p for p in data['llm']['providers'] if p['id'] == '$LLM_PROVIDER_ID')
-for m in p.get('models', []): print(f\"    - {m['id']}  ({m['name']})\")" > /dev/tty
+rec = p.get('recommended', {})
+for uc in ('analyst', 'micro'):
+    for m in rec.get(uc, []): print(f\"    - {m}  ({uc})\")" > /dev/tty
   fi
   ask "Analyst model ${DIM}(main chat/analysis agent)${RESET}" "$analyst_default"; LLM_ANALYST_MODEL="$REPLY_VALUE"
   ask "Micro model ${DIM}(titles, summaries — a small fast model)${RESET}" "${micro_default:-$LLM_ANALYST_MODEL}"; LLM_MICRO_MODEL="$REPLY_VALUE"
