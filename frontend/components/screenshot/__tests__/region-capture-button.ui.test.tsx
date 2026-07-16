@@ -1,8 +1,9 @@
 /**
- * RegionCaptureButton — click → drag-select → the region is captured and uploaded (shared path),
- * registered as a pending upload (so the chat shows a processing chip + blocks send) and, once
- * done, added as an image attachment. If the pending upload is cancelled mid-flight, the finished
- * result is discarded. Capture + upload mocked; we assert the real Redux state transitions.
+ * RegionCaptureButton — click → drag-select → the region is captured, opened in the ANNOTATOR
+ * (brush + undo), and only on confirm uploaded (shared path) + added as an image attachment.
+ * A pending upload is registered for the whole capture→annotate→upload window (processing chip,
+ * blocks send). Cancelling the pending upload or dismissing the annotator discards the result.
+ * Capture + upload mocked; jsdom lacks Image/canvas, so minimal stubs let the real dialog run.
  */
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
@@ -21,6 +22,28 @@ vi.mock('@/components/ui/toaster', () => ({ toaster: { create: vi.fn(() => 'toas
 import { captureRegionBlob } from '@/lib/screenshot/capture';
 import RegionCaptureButton from '../RegionCaptureButton';
 
+// ---- jsdom stubs so the real ImageAnnotatorDialog can load + export an image ----
+beforeAll(() => {
+  URL.createObjectURL = vi.fn(() => 'blob:mock');
+  URL.revokeObjectURL = vi.fn();
+  // Image that "loads" whatever src it is given
+  vi.stubGlobal('Image', class {
+    onload: null | (() => void) = null;
+    onerror: null | (() => void) = null;
+    crossOrigin = '';
+    naturalWidth = 100;
+    naturalHeight = 60;
+    set src(_v: string) { queueMicrotask(() => this.onload?.()); }
+  });
+  const ctxStub = {
+    drawImage: vi.fn(), getImageData: vi.fn(() => ({})), putImageData: vi.fn(),
+    beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(),
+    strokeStyle: '', lineWidth: 0, lineCap: '', lineJoin: '',
+  };
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => ctxStub) as never;
+  HTMLCanvasElement.prototype.toBlob = function (cb: BlobCallback) { cb(new Blob(['annotated'], { type: 'image/jpeg' })); };
+});
+
 const drag = () => {
   fireEvent.click(screen.getByLabelText('Select a screen region to add as context'));
   return screen.findByLabelText('Select a region to send to the agent').then((overlay) => {
@@ -30,18 +53,31 @@ const drag = () => {
   });
 };
 
+const confirmAnnotator = async () => {
+  const confirm = await screen.findByLabelText('annotator-confirm');
+  await waitFor(() => expect(confirm).not.toBeDisabled());
+  fireEvent.click(confirm);
+};
+
 describe('RegionCaptureButton', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (captureRegionBlob as ReturnType<typeof vi.fn>).mockImplementation(async () => new Blob(['x'], { type: 'image/jpeg' }));
   });
 
-  it('captures a dragged region → adds an image attachment, and clears the pending upload', async () => {
+  it('captures a dragged region → opens the annotator; confirming attaches + clears pending', async () => {
     const store = makeStore();
     vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
     renderWithProviders(<RegionCaptureButton />, { store });
 
     await drag();
+
+    // annotator opens with the crop; nothing attached yet, pending upload held open
+    await screen.findByLabelText('annotator-canvas');
+    expect(store.getState().ui.chatAttachments).toHaveLength(0);
+    expect(store.getState().ui.pendingUploads).toHaveLength(1);
+
+    await confirmAnnotator();
 
     await waitFor(() => {
       const atts = store.getState().ui.chatAttachments;
@@ -57,7 +93,7 @@ describe('RegionCaptureButton', () => {
     );
   });
 
-  it('shows a pending upload immediately (before the image finishes)', async () => {
+  it('shows a pending upload immediately (before the capture finishes)', async () => {
     let release!: (b: Blob) => void;
     (captureRegionBlob as ReturnType<typeof vi.fn>).mockReturnValueOnce(new Promise<Blob>((r) => { release = r; }));
     const store = makeStore();
@@ -68,24 +104,34 @@ describe('RegionCaptureButton', () => {
     await waitFor(() => expect(store.getState().ui.pendingUploads).toHaveLength(1));
     expect(store.getState().ui.chatAttachments).toHaveLength(0); // not attached yet
     release(new Blob(['x'], { type: 'image/jpeg' }));
+    await confirmAnnotator();
     await waitFor(() => expect(store.getState().ui.chatAttachments).toHaveLength(1));
   });
 
   it('discards the finished result if the pending upload was cancelled mid-flight', async () => {
-    let release!: (b: Blob) => void;
-    (captureRegionBlob as ReturnType<typeof vi.fn>).mockReturnValueOnce(new Promise<Blob>((r) => { release = r; }));
     const store = makeStore();
     vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
     renderWithProviders(<RegionCaptureButton />, { store });
 
     await drag();
     await waitFor(() => expect(store.getState().ui.pendingUploads).toHaveLength(1));
-    // cancel
+    // cancel while the annotator is open
     store.dispatch(removePendingUpload(store.getState().ui.pendingUploads[0].id));
-    // now the capture finishes — result must be discarded (no attachment)
-    release(new Blob(['x'], { type: 'image/jpeg' }));
+    await confirmAnnotator();
     await new Promise((r) => setTimeout(r, 10));
     expect(store.getState().ui.chatAttachments).toHaveLength(0);
     expect(store.getState().ui.pendingUploads).toHaveLength(0);
+  });
+
+  it('dismissing the annotator discards the crop and clears the pending upload', async () => {
+    const store = makeStore();
+    vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
+    renderWithProviders(<RegionCaptureButton />, { store });
+
+    await drag();
+    await screen.findByLabelText('annotator-canvas');
+    fireEvent.click(await screen.findByLabelText('annotator-cancel'));
+    await waitFor(() => expect(store.getState().ui.pendingUploads).toHaveLength(0));
+    expect(store.getState().ui.chatAttachments).toHaveLength(0);
   });
 });

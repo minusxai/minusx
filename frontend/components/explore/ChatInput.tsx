@@ -8,8 +8,10 @@ import { LuSendHorizontal, LuPaperclip, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
 import { addInputHistoryEntry, selectChatInputHistory } from '@/store/chatSlice';
-import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments, selectPendingUploads, removePendingUpload } from '@/store/uiSlice';
+import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, removeChatAttachment, updateChatAttachment, clearChatAttachments, selectPendingUploads, removePendingUpload } from '@/store/uiSlice';
 import RegionCaptureButton from '@/components/screenshot/RegionCaptureButton';
+import ImageAnnotatorDialog from '@/components/screenshot/ImageAnnotatorDialog';
+import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import DatabaseSelector from '@/components/selectors/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
 import { ModelSelector } from './ModelSelector';
@@ -92,6 +94,7 @@ function ChatInputInner({
   const [isFocused, setIsFocused] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
+  const [annotatingIdx, setAnnotatingIdx] = useState<number | null>(null);
   const attachments = useAppSelector(selectChatAttachments);
   const pendingUploads = useAppSelector(selectPendingUploads);
   // Block send while any image/file is still capturing/uploading (so a quick Enter doesn't
@@ -320,6 +323,19 @@ function ChatInputInner({
     dispatch(removeChatAttachment(index));
   };
 
+  // Attachment annotator: index of the image attachment being annotated, or null.
+  const annotateConfirm = async (blob: Blob) => {
+    if (annotatingIdx === null) return;
+    const att = attachments[annotatingIdx];
+    if (!att) return;
+    try {
+      const url = await uploadBlobOrEmbed(blob, att.name || 'annotated.jpg', 'image/jpeg');
+      dispatch(updateChatAttachment({ index: annotatingIdx, attachment: { ...att, content: url } }));
+    } catch (err) {
+      toaster.create({ title: err instanceof Error ? err.message : 'Could not save the annotated image', type: 'error' });
+    }
+  };
+
   const colSpan = colSpanProp ?? (isFloating ? 12 : isCompact ? 12 : { base: 12, md: 8, lg: 6 });
   const colStart = colStartProp ?? (isFloating ? 1 : isCompact ? 1 : { base: 1, md: 3, lg: 4 });
 
@@ -525,7 +541,9 @@ function ChatInputInner({
                             <img
                               src={att.content}
                               alt={att.name}
-                              style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 2 }}
+                              style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 2, cursor: 'pointer' }}
+                              aria-label={`Annotate attachment ${att.name}`}
+                              onClick={() => setAnnotatingIdx(idx)}
                             />
                           )}
                           <Tooltip content={att.name} positioning={{ placement: 'top' }}>
@@ -635,6 +653,14 @@ function ChatInputInner({
             </Box>
             </Box>
         </GridItem>
+      <ImageAnnotatorDialog
+        isOpen={annotatingIdx !== null}
+        onClose={() => setAnnotatingIdx(null)}
+        imageSrc={annotatingIdx !== null ? attachments[annotatingIdx]?.content ?? null : null}
+        title="Annotate attachment"
+        confirmLabel="Save"
+        onConfirm={annotateConfirm}
+      />
     </Grid>
   );
 }
