@@ -54,6 +54,21 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
   const [result, setResult] = useState<StoryRasterResult | null>(null);
   const [failed, setFailed] = useState(false);
   const [islandEls, setIslandEls] = useState<Record<number, HTMLElement | null>>({});
+  // Fluid display: the raster is laid out at `width` CSS px but displayed scaled to the
+  // container (like AgentHtml's fluid mode). Geometry maps through `scale`.
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [containerW, setContainerW] = useState<number | null>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width;
+      if (w) setContainerW(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const scale = containerW ? Math.min(1, containerW / width) : 1;
 
   // ---------- raster ----------
   useEffect(() => {
@@ -241,12 +256,12 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
   if (failed) return <>{fallback}</>;
 
   return (
-    <Box position="relative" width={`${width}px`} aria-label="canvas-story">
+    <Box ref={containerRef} position="relative" width="100%" maxW={`${width}px`} aria-label="canvas-story">
       <canvas
         ref={canvasRef}
         width={(result?.width ?? width) * DPR}
         height={(result?.height ?? 0) * DPR}
-        style={{ display: 'block', width: `${result?.width ?? width}px`, height: `${result?.height ?? 0}px`, cursor: 'text' }}
+        style={{ display: 'block', width: `${(result?.width ?? width) * scale}px`, height: `${(result?.height ?? 0) * scale}px`, cursor: 'text' }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onDoubleClick={onDoubleClick}
@@ -257,11 +272,11 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
           key={e.index}
           ref={islandRefs.get(e.index)}
           position="absolute"
-          left={`${e.x}px`}
-          top={`${e.y}px`}
-          width={`${e.w}px`}
-          height={e.kind === 'number-inline' || e.kind === 'param' ? undefined : `${e.h}px`}
-          minHeight={`${e.h}px`}
+          left={`${e.x * scale}px`}
+          top={`${e.y * scale}px`}
+          width={`${e.w * scale}px`}
+          height={e.kind === 'number-inline' || e.kind === 'param' ? undefined : `${e.h * scale}px`}
+          minHeight={`${e.h * scale}px`}
           aria-label={`canvas-story-embed-${e.kind}`}
         />
       ))}
