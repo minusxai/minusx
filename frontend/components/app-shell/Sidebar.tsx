@@ -590,7 +590,7 @@ export default function Sidebar() {
                     {effectiveUser?.email || effectiveUser?.name}
                   </Text>
                   <Box h="1px" bg="border.muted" my={3} />
-                  <CreditsUsageBars onClick={() => navigate('/settings')} />
+                  <CreditsUsageBars onClick={() => navigate('/settings?tab=usage')} />
                 </Box>
                 <Box h="1px" bg="border.muted" my={1} />
 
