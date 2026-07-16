@@ -8,7 +8,7 @@ import { GET as getRoute } from '@/app/api/conversations/[id]/route';
 import { GET as streamRoute } from '@/app/api/conversations/[id]/stream/route';
 import { createConversation, appendMessages } from '@/lib/data/conversations.server';
 import type { ConversationStreamEvent, MessageRow } from '@/lib/data/conversations.types';
-import { fixtureLog, rootInvocation, editFileResult } from '@/lib/data/__tests__/projection-fixtures';
+import { fixtureLog, rootInvocation } from '@/lib/data/__tests__/projection-fixtures';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 
@@ -65,7 +65,8 @@ describe('GET /api/conversations/:id — display projection + view/since params'
     const edit = messages[2].content as AnyEntry;
     expect(edit.content).toEqual([]);
     expect(edit.details.__status).toBeUndefined();
-    expect(edit.details.screenshotUrl).toBe((editFileResult as AnyEntry).details.screenshotUrl);
+    // Inline data: screenshots are swapped for the lazy endpoint URL in the display view.
+    expect(edit.details.screenshotUrl).toBe(`/api/conversations/${id}/screenshots/tc-edit-1?mode=org`);
 
     // The wire payload must be a fraction of the stored log (what remains is dominated by the
     // rendered screenshotUrl + capped diff — see the projection unit tests).

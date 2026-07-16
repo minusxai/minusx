@@ -30,8 +30,22 @@ holds multi-MB strings. This is the reported slowness while editing stories.
 | Post-turn reload, old (full re-download) | 5MB+ per message |
 | Post-turn reload, new (`?since=` incremental) | **350–440KB** per message (that turn's rows only) |
 
-The remaining slim weight is almost entirely `details.screenshotUrl` (1.78MB of the 1.9MB) —
-the quantified case for the lazy-screenshot follow-up in Non-goals.
+The remaining slim weight was almost entirely `details.screenshotUrl` (1.78MB of the 1.9MB) —
+which is why screenshots are now **lazy-loaded** (below): with the rewrite, the same cold load
+is ~120KB of JSON plus on-demand images.
+
+### Lazy screenshots
+
+The display view rewrites any toolResult whose `details.screenshotUrl` is an inline `data:` URI
+to `GET /api/conversations/:id/screenshots/:callId?mode=<mode>` (`screenshotUrlFor`). The
+endpoint is fully generic — `callId` addresses the tool call (matched on the entry's
+`toolCallId`; no tool names anywhere) and serves the **first inline image block in that tool
+call's response content** (`extractToolResultImage` — content is the source of truth; `details`
+is never inspected for serving). Same owner+mode gate as the conversation GET; responses are
+`Cache-Control: private, max-age=31536000, immutable` since log entries never change. The
+screenshot `<Image>`s use `loading="lazy"`, so only cards scrolled near the viewport fetch.
+Remote (non-`data:`) screenshot URLs pass through untouched; dev-mode `view=full` keeps the
+verbatim inline copy.
 
 ## Contract
 
@@ -102,9 +116,9 @@ and derives pending frontend-tool calls by matching toolCall ids. We shrink entr
 
 - Entry count & ids identical across views (`log_index`, pending-derivation, fork all safe).
 - Headless/Slack/benchmark paths read via `loadLog` server-side — untouched.
-- Non-goals (future work, separate PRs): lazy-loading `details.screenshotUrl` behind a URL
-  (drops slim view to tens of KB even with base64 mandates); write-path screenshot dedup;
-  migrating tool displays to a formal `details`-only contract.
+- Non-goals (future work, separate PRs): write-path screenshot dedup (storage still carries the
+  image twice; accepted — jsonb-compressed, and some deployments mandate base64); migrating tool
+  displays to a formal `details`-only contract.
 
 ## Test plan (TDD order)
 

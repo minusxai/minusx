@@ -466,3 +466,21 @@ export async function loadErrors(conversationId: number): Promise<ConversationEr
     };
   });
 }
+
+/**
+ * Load one toolResult entry by its toolCallId (Conversations V2 lazy screenshot endpoint).
+ * toolResult rows carry no pi_id, so the match is on the entry's own `toolCallId` field.
+ */
+export async function findToolResultEntry(
+  conversationId: number,
+  toolCallId: string,
+): Promise<ConversationLogEntry | null> {
+  const res = await db().exec<{ content: unknown }>(
+    `SELECT content FROM messages
+      WHERE conversation_id = $1 AND kind = 'toolResult' AND content->>'toolCallId' = $2
+      ORDER BY seq LIMIT 1`,
+    [conversationId, toolCallId],
+  );
+  const row = res.rows[0];
+  return row ? asJson<ConversationLogEntry>(row.content) : null;
+}

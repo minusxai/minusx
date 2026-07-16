@@ -159,15 +159,73 @@ function projectToolResult(entry: AnyEntry): AnyEntry {
 }
 
 /**
- * Project one stored pi log entry to its display-grade form. Never changes entry kind, id,
- * `parent_id`, or timestamps; never returns null.
+ * Where to point lazily-loaded screenshot URLs. When set, any toolResult whose
+ * `details.screenshotUrl` is an inline `data:` URI has it rewritten to
+ * `/api/conversations/:id/screenshots/:toolCallId?mode=<mode>` — the endpoint serves the blob
+ * from the stored (full) log on demand, so the conversation JSON stops carrying pixels.
+ * Generic by design: no tool names involved; non-data URLs (e.g. object-store) pass through.
  */
-export function projectLogEntryForDisplay(entry: ConversationLogEntry): ConversationLogEntry {
+export interface ProjectionTarget {
+  conversationId: number;
+  /** The conversation's mode — embedded in the URL so the image request resolves the same mode. */
+  mode: string;
+}
+
+/** The lazy screenshot URL for a tool call's result (single source of the URL shape). */
+export function screenshotUrlFor(target: ProjectionTarget, toolCallId: string): string {
+  return `/api/conversations/${target.conversationId}/screenshots/${encodeURIComponent(toolCallId)}?mode=${encodeURIComponent(target.mode)}`;
+}
+
+function rewriteScreenshotUrl(entry: AnyEntry, target: ProjectionTarget | undefined): AnyEntry {
+  if (!target) return entry;
+  const details = entry.details as { screenshotUrl?: unknown } | null | undefined;
+  const toolCallId = entry.toolCallId;
+  if (!details || typeof details !== 'object' || typeof toolCallId !== 'string') return entry;
+  if (typeof details.screenshotUrl !== 'string' || !details.screenshotUrl.startsWith('data:')) return entry;
+  return { ...entry, details: { ...details, screenshotUrl: screenshotUrlFor(target, toolCallId) } };
+}
+
+/** A decoded inline image found on a tool result. */
+export interface ToolResultImage {
+  base64: string;
+  mimeType: string;
+}
+
+const DATA_URI_RE = /^data:([\w/+.-]+);base64,([\s\S]+)$/;
+
+/**
+ * Generically extract the first inline image in a tool result's CONTENT — the tool's actual
+ * response, no tool names and no `details` inspection. Block shapes: a pi image block
+ * (`{type:'image', data, mimeType}`) or an `image_url` block whose url is a `data:` URI.
+ * Returns null when the response carries no inline image (remote URLs are not proxied).
+ */
+export function extractToolResultImage(entry: ConversationLogEntry): ToolResultImage | null {
+  const e = entry as unknown as AnyEntry;
+  if (e.role !== 'toolResult' || !Array.isArray(e.content)) return null;
+  for (const block of e.content) {
+    const b = block as { type?: string; data?: unknown; mimeType?: unknown; image_url?: { url?: unknown } };
+    if (b?.type === 'image' && typeof b.data === 'string' && b.data.length > 0) {
+      return { base64: b.data, mimeType: typeof b.mimeType === 'string' ? b.mimeType : 'image/jpeg' };
+    }
+    if (b?.type === 'image_url' && typeof b.image_url?.url === 'string') {
+      const m = b.image_url.url.match(DATA_URI_RE);
+      if (m) return { mimeType: m[1], base64: m[2] };
+    }
+  }
+  return null;
+}
+
+/**
+ * Project one stored pi log entry to its display-grade form. Never changes entry kind, id,
+ * `parent_id`, or timestamps; never returns null. With a `target`, inline screenshot data URIs
+ * are swapped for lazy-load URLs (see {@link ProjectionTarget}).
+ */
+export function projectLogEntryForDisplay(entry: ConversationLogEntry, target?: ProjectionTarget): ConversationLogEntry {
   const e = entry as unknown as AnyEntry;
   let projected: AnyEntry;
   if (e.type === 'toolCall') projected = projectInvocation(e);
   else if (e.role === 'assistant') projected = projectAssistant(e);
-  else if (e.role === 'toolResult') projected = projectToolResult(e);
+  else if (e.role === 'toolResult') projected = rewriteScreenshotUrl(projectToolResult(e), target);
   else projected = e;
   return projected as unknown as ConversationLogEntry;
 }
@@ -176,7 +234,8 @@ export function projectLogEntryForDisplay(entry: ConversationLogEntry): Conversa
  * Project a message row for the display view. `kind: 'error'` rows pass through unchanged;
  * pi rows get `content` projected via `projectLogEntryForDisplay`.
  */
-export function projectMessageRowForDisplay(row: MessageRow): MessageRow {
+export function projectMessageRowForDisplay(row: MessageRow, mode?: string): MessageRow {
   if (row.kind === 'error') return row;
-  return { ...row, content: projectLogEntryForDisplay(row.content) };
+  const target = mode !== undefined ? { conversationId: row.conversationId, mode } : undefined;
+  return { ...row, content: projectLogEntryForDisplay(row.content, target) };
 }

@@ -5,6 +5,8 @@
 import {
   projectLogEntryForDisplay,
   projectMessageRowForDisplay,
+  extractToolResultImage,
+  screenshotUrlFor,
   DISPLAY_DETAILS_CAP_CHARS,
   DISPLAY_UNKNOWN_CONTENT_CAP_CHARS,
   parseConversationView,
@@ -137,6 +139,81 @@ describe('projectLogEntryForDisplay', () => {
     const before = JSON.stringify(fixtureLog).length;
     const after = JSON.stringify(fixtureLog.map(project)).length;
     expect(after).toBeLessThan(before * 0.3);
+  });
+});
+
+describe('lazy screenshot URLs (projection target)', () => {
+  const target = { conversationId: 9, mode: 'tutorial' };
+
+  it('rewrites an inline data: screenshotUrl to the lazy endpoint URL', () => {
+    const p = projectLogEntryForDisplay(editFileResult, target) as AnyEntry;
+    expect(p.details.screenshotUrl).toBe(screenshotUrlFor(target, 'tc-edit-1'));
+    expect(p.details.screenshotUrl).toBe('/api/conversations/9/screenshots/tc-edit-1?mode=tutorial');
+    expect(p.details.diff).toBeDefined(); // rest of details untouched
+  });
+
+  it('without a target, the inline data: URI is kept', () => {
+    const p = project(editFileResult);
+    expect(p.details.screenshotUrl.startsWith('data:')).toBe(true);
+  });
+
+  it('leaves a non-data (remote) screenshotUrl untouched', () => {
+    const remote = {
+      ...(editFileResult as AnyEntry),
+      details: { ...(editFileResult as AnyEntry).details, screenshotUrl: 'https://cdn.example.com/shot.jpg' },
+    } as unknown as ConversationLogEntry;
+    const p = projectLogEntryForDisplay(remote, target) as AnyEntry;
+    expect(p.details.screenshotUrl).toBe('https://cdn.example.com/shot.jpg');
+  });
+
+  it('is idempotent: reprojecting keeps the rewritten URL', () => {
+    const once = projectLogEntryForDisplay(editFileResult, target);
+    const twice = projectLogEntryForDisplay(once, target) as AnyEntry;
+    expect(twice.details.screenshotUrl).toBe(screenshotUrlFor(target, 'tc-edit-1'));
+  });
+
+  it('is generic across tool names (any toolResult declaring a data: screenshotUrl)', () => {
+    const mystery = {
+      ...(unknownToolResult as AnyEntry),
+      details: { success: true, screenshotUrl: 'data:image/png;base64,QUJD' },
+    } as unknown as ConversationLogEntry;
+    const p = projectLogEntryForDisplay(mystery, target) as AnyEntry;
+    expect(p.details.screenshotUrl).toBe(screenshotUrlFor(target, 'tc-mystery-1'));
+  });
+});
+
+describe('extractToolResultImage — first image block in the tool call response', () => {
+  it('finds a pi image block ({type:image, data, mimeType})', () => {
+    const img = extractToolResultImage(editFileResult);
+    expect(img).not.toBeNull();
+    expect(img!.mimeType).toBe('image/jpeg');
+    expect(img!.base64).toBe('i'.repeat(60_000));
+  });
+
+  it('finds an image_url block whose url is a data: URI', () => {
+    const entry = {
+      role: 'toolResult', toolCallId: 'tc-x', toolName: 'Whatever', isError: false, timestamp: 1, parent_id: null,
+      content: [
+        { type: 'text', text: 'ok' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,QUJDRA==' } },
+      ],
+    } as unknown as ConversationLogEntry;
+    expect(extractToolResultImage(entry)).toEqual({ mimeType: 'image/png', base64: 'QUJDRA==' });
+  });
+
+  it('never reads details — only the response content', () => {
+    const entry = {
+      role: 'toolResult', toolCallId: 'tc-y', toolName: 'Whatever', isError: false, timestamp: 1, parent_id: null,
+      content: [{ type: 'text', text: 'no image here' }],
+      details: { screenshotUrl: 'data:image/png;base64,QUJD' },
+    } as unknown as ConversationLogEntry;
+    expect(extractToolResultImage(entry)).toBeNull();
+  });
+
+  it('returns null for image-less results and non-toolResult entries', () => {
+    expect(extractToolResultImage(searchFilesResult)).toBeNull();
+    expect(extractToolResultImage(rootInvocation)).toBeNull();
+    expect(extractToolResultImage(assistantWithToolCall)).toBeNull();
   });
 });
 

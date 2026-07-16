@@ -93,7 +93,13 @@ export async function GET(
     const rows = await loadMessages(conversationId, cursor);
     for (const r of rows) {
       if (r.seq == null) continue; // error rows (seq NULL) aren't part of the pi-log cursor stream
-      send({ type: 'message', seq: r.seq, message: view === 'full' ? r.content : projectLogEntryForDisplay(r.content) });
+      send({
+        type: 'message',
+        seq: r.seq,
+        message: view === 'full'
+          ? r.content
+          : projectLogEntryForDisplay(r.content, { conversationId, mode: conversation.mode }),
+      });
       cursor = r.seq;
     }
   };

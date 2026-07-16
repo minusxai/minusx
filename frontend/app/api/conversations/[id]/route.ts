@@ -54,7 +54,7 @@ export const GET = withAuth(async (
       loadErrors(conversationId),
       getMaxSeq(conversationId),
     ]);
-    const wireMessages = view === 'full' ? messages : messages.map(projectMessageRowForDisplay);
+    const wireMessages = view === 'full' ? messages : messages.map((m) => projectMessageRowForDisplay(m, conversation.mode));
     return successResponse({ conversation, messages: wireMessages, errors, maxSeq });
   } catch (error) {
     return handleApiError(error);
