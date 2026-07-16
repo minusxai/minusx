@@ -30,9 +30,10 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
+import { selectCreditsEnabled } from '@/store/configsSlice';
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
 
-type TabId = 'general' | 'homepage' | 'dev' | 'data' | 'users' | 'appearance' | 'configs' | 'styles' | 'messaging' | 'integrations' | 'models';
+type TabId = 'general' | 'usage' | 'homepage' | 'dev' | 'data' | 'users' | 'appearance' | 'configs' | 'styles' | 'messaging' | 'integrations' | 'models';
 
 interface SettingEntry {
   tab: TabId;
@@ -367,6 +368,7 @@ function SettingsContent() {
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
   const showExpandedMessages = useAppSelector((state) => state.ui.showExpandedMessages ?? false);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
+  const creditsEnabled = useAppSelector(selectCreditsEnabled);
   const { config } = useConfigs();
 
   const searchParams = useSearchParams();
@@ -672,6 +674,7 @@ function SettingsContent() {
         </Box>
       ),
     },
+    { id: 'usage', label: 'Usage', visible: creditsEnabled, custom: <CreditsUsageCards /> },
     {
       id: 'integrations',
       label: 'Integrations',
@@ -741,7 +744,7 @@ function SettingsContent() {
       ),
     },
     { id: 'homepage', label: 'Home Page', visible: isAdvancedAdmin, custom: <HomePageSettings /> },
-  ], [isAdmin, isAdvancedAdmin, mode]);
+  ], [isAdmin, isAdvancedAdmin, mode, creditsEnabled]);
 
   const breadcrumbItems = [
     { label: 'Home', href: '/' },
@@ -790,7 +793,6 @@ function SettingsContent() {
             </VStack>
           </Box>
         )}
-        {tab.id === 'general' && <CreditsUsageCards />}
         {[...sectionMap.entries()].map(([sectionName, entries]) => (
           <Box key={sectionName || '__default__'} bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
             {sectionName && (
@@ -837,6 +839,7 @@ function SettingsContent() {
           onValueChange={(details) => setActiveTab(details.value as TabId)}
           variant="line"
           colorPalette="teal"
+          lazyMount
           unmountOnExit
         >
           <Tabs.List mb={6} overflowX="auto" flexWrap="nowrap" css={{ '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}>
