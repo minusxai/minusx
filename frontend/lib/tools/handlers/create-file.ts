@@ -16,6 +16,8 @@ import { getStore } from '@/store/store';
 import { getTemplateDefaults } from '@/lib/data/story/template-defaults';
 import { readFiles, getQueryResult, createDraftFile, editFile as editFileOp } from '@/lib/file-state/file-state';
 import { markupToContent } from '@/lib/data/story/file-markup';
+import { validateVizRemote } from '@/lib/viz/validate-remote';
+import { formatVizIssues } from '@/lib/viz/types';
 import { compressAugmentedFile } from '@/lib/chat/compress-augmented';
 import { compressedToAugmentedFiles } from '@/lib/projection/from-compressed';
 import type { AugmentedToolDetails } from '@/lib/projection/messages';
@@ -59,6 +61,19 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
       return { content: { success: false, error: err }, details: { success: false, error: err } };
     }
     content = { ...((content as Record<string, unknown>) ?? {}), ...parsed.content };
+  }
+
+  // Inline viz validation (RFC §11, compiler model): a new question carrying a V2
+  // envelope is validated BEFORE creation. Columns are unknown (the query hasn't
+  // run), so field checks are skipped — schema/policy/recipe/css errors reject.
+  const createViz = (content as { viz?: unknown } | undefined)?.viz;
+  if (file_type === 'question' && createViz != null) {
+    const verdict = await validateVizRemote(createViz, undefined);
+    if (!verdict.ok) {
+      const err = 'Viz validation failed — the file was NOT created. Fix the issues and retry:\n'
+        + formatVizIssues(verdict.issues);
+      return { content: { success: false, error: err, vizIssues: verdict.issues }, details: { success: false, error: err } };
+    }
   }
 
   // --- Page-context guards for background file creation ---

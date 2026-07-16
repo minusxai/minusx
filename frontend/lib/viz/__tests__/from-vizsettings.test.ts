@@ -5,7 +5,8 @@
  * is renderable: recipe sources materialize; vega-lite sources validate against columns.
  */
 import { describe, it, expect } from 'vitest';
-import { vizSettingsToEnvelope, resolveLegacyRenderEnvelope, type ConvertibleVizSettings as VizSettings } from '@/lib/viz/from-vizsettings';
+import { vizSettingsToEnvelope, resolveLegacyRenderEnvelope } from '@/lib/viz/from-vizsettings';
+import type { VizSettings } from '@/lib/validation/atlas-schemas';
 import { materializeRecipe } from '@/lib/viz/viz-templates';
 import { validateVizEnvelope } from '@/lib/viz/validate';
 import { getEnvelopeVizType, annotationSplit } from '@/lib/viz/encoding-edit';

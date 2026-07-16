@@ -53,6 +53,8 @@ export default function DataManagementSection() {
   const [isResettingTutorial, setIsResettingTutorial] = useState(false);
   const [showResetTutorialConfirm, setShowResetTutorialConfirm] = useState(false);
   const [resetTutorialStatus, setResetTutorialStatus] = useState<{ success: boolean; message: string } | null>(null);
+  const [isBackfillingViz, setIsBackfillingViz] = useState(false);
+  const [vizBackfillStatus, setVizBackfillStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [expandedErrors, setExpandedErrors] = useState<'export' | 'validate' | 'import' | 'migrate' | null>(null);
   const [uploadedData, setUploadedData] = useState<any>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -365,6 +367,29 @@ export default function DataManagementSection() {
     }
   };
 
+  const handleVizBackfill = async () => {
+    setIsBackfillingViz(true);
+    setVizBackfillStatus(null);
+    try {
+      const result = await fetchWithCache('/api/viz/backfill', {
+        method: 'POST',
+        cacheStrategy: API.admin.vizBackfill.cache,
+      });
+      const d = result.data ?? {};
+      const skippedNote = d.skipped?.length ? `, ${d.skipped.length} skipped (${d.skipped.map((s: { name: string; reason: string }) => `${s.name}: ${s.reason}`).slice(0, 3).join('; ')}${d.skipped.length > 3 ? '…' : ''})` : '';
+      setVizBackfillStatus({
+        success: result.success === true,
+        message: result.success
+          ? `${d.upgraded} upgraded, ${d.alreadyV2} already V2${skippedNote}`
+          : (result.error || 'Backfill failed'),
+      });
+    } catch (error) {
+      setVizBackfillStatus({ success: false, message: 'Failed to run viz backfill' });
+    } finally {
+      setIsBackfillingViz(false);
+    }
+  };
+
   return (
     <Box>
       <VStack align="stretch" gap={0} divideY="1px">
@@ -504,6 +529,50 @@ export default function DataManagementSection() {
               : 'Apply pending database migrations'}
           </Text>
           <MigrationStatusDisplay result={migrateStatus} expandedErrors={expandedErrors} setExpandedErrors={setExpandedErrors} />
+        </Box>
+
+        {/* Viz V2 backfill */}
+        <Box py={4} px={4}>
+          <Flex justify="space-between" align="center" mb={vizBackfillStatus ? 2 : 0}>
+            <Flex align="center" gap={2}>
+              <Text fontSize="sm" fontWeight="medium" fontFamily="mono">
+                Backfill Viz V2 Envelopes
+              </Text>
+              {vizBackfillStatus && (
+                <Icon fontSize="lg" color={vizBackfillStatus.success ? 'accent.teal' : 'accent.danger'}>
+                  {vizBackfillStatus.success ? <LuCircleCheck /> : <LuCircleX />}
+                </Icon>
+              )}
+            </Flex>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleVizBackfill}
+              disabled={isBackfillingViz}
+              fontFamily="mono"
+              aria-label="Backfill Viz V2 envelopes"
+            >
+              {isBackfillingViz ? (
+                <>
+                  <Icon fontSize="md" mr={1}>
+                    <LuLoader className="animate-spin" />
+                  </Icon>
+                  Backfilling...
+                </>
+              ) : (
+                'Backfill'
+              )}
+            </Button>
+          </Flex>
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={vizBackfillStatus ? 2 : 0}>
+            Add a V2 viz to every question that lacks one (converted from its classic settings using real result columns).
+            Non-destructive: classic viz settings are never modified, so switching the format default back remains possible.
+          </Text>
+          {vizBackfillStatus && (
+            <Text fontSize="xs" fontFamily="mono" color={vizBackfillStatus.success ? 'accent.teal' : 'accent.danger'}>
+              {vizBackfillStatus.message}
+            </Text>
+          )}
         </Box>
 
         {/* Import */}

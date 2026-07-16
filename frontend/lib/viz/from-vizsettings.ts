@@ -29,23 +29,12 @@
  * Remaining gaps, deferred with the ECharts retirement: dualAxis on non-combo types,
  * showDataLabels, x-axis scale/bounds, and style knobs on recipe types.
  */
-import type { VizSettings as AtlasVizSettings, VizEnvelope, ColumnFormatConfig } from '@/lib/validation/atlas-schemas';
+import type { VizSettings, VizEnvelope, ColumnFormatConfig } from '@/lib/validation/atlas-schemas';
 import { VIZ_GRAMMAR_VEGA_LITE } from '@/lib/validation/atlas-schemas';
 import type { VizColumnKind, VizResultColumn } from './types';
 import { addYField, setChannelField, setVizType, isEnvelopeImageViz, setStacked, setYLogScale, setYBounds, addReferenceLine, type SpecVizType } from './encoding-edit';
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme';
 import { toVizColumns } from './query-data';
-
-/**
- * `choropleth`/`point_map` join the authorable VIZ_TYPES union only alongside the
- * agent-skill documentation for them (the bundled-prompts test binds the two); the
- * converter accepts them ahead of that so the geo recipes are exercised end-to-end.
- * Collapse back to the plain atlas `VizSettings` once the union carries both.
- */
-export type ConvertibleVizSettings = Omit<AtlasVizSettings, 'type'> & {
-  type: AtlasVizSettings['type'] | 'choropleth' | 'point_map';
-};
-type VizSettings = ConvertibleVizSettings;
 
 const KIND_TO_VL_TYPE: Record<VizColumnKind, string> = {
   quantitative: 'quantitative',

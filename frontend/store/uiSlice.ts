@@ -69,7 +69,7 @@ const initialState: UIState = {
   askForConfirmation: false,
   showAdvanced: false,
   vizRenderer: 'vega',
-  vizV2: false, // V1 (vizSettings) stays authoritative until the prompts/tools PR flips the default
+  vizV2: true, // V2 (saved envelopes) is authoritative; flip back to false to restore classic-format behavior workspace-wide
   fileEditMode: {},
   fileViewMode: {},
   notebookActiveCell: {},

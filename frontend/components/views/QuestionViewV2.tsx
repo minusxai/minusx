@@ -162,7 +162,7 @@ export default function QuestionViewV2({
   onChange,
   onParameterValueChange,
   onExecute,
-  vizV2Enabled = false, // matches the product default (uiSlice vizV2); containers pass the live value
+  vizV2Enabled = true, // matches the product default (uiSlice vizV2); containers pass the live value
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
   const isPreview = mode === 'preview';

@@ -145,8 +145,8 @@ function renderQuestion(content: QuestionContent, { vizV2, renderer = 'vega' }: 
 // is the truth and renders directly (legacy files still convert JIT).
 
 describe('viz toggles — defaults', () => {
-  it('V1 (vizSettings) is the authoritative format by default — flips with the prompts/tools PR', () => {
-    expect(makeStore().getState().ui.vizV2).toBe(false)
+  it('V2 (saved envelopes) is the authoritative format by default — the agent authors V2 now', () => {
+    expect(makeStore().getState().ui.vizV2).toBe(true)
   })
 
   it('vega is the default renderer; echarts is the classic escape hatch', () => {

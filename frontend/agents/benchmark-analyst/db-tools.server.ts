@@ -21,7 +21,8 @@ import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { executeFuzzyMatch } from '@/lib/connections/fuzzy-match-tool';
 import { renderChartToJpeg } from '@/lib/chart/render-chart';
-import type { VizSettings } from '@/lib/validation/atlas-schemas';
+import { renderVizEnvelopeToJpeg } from '@/lib/chart/render-viz-image';
+import type { VizSettings, VizEnvelope } from '@/lib/validation/atlas-schemas';
 import {
   BaseExecuteQuery,
   BaseSearchDBSchema,
@@ -94,6 +95,18 @@ export class ExecuteQuery extends BaseExecuteQuery {
   ): Promise<Buffer | null> {
     try {
       return await renderChartToJpeg(queryResult, vizSettings as VizSettings, { width: 512, colorMode: 'dark' });
+    } catch {
+      return null; // fall back to row data on any render failure
+    }
+  }
+
+  /** Server-side Vega envelope → JPEG render of the result viz (the V2 path). */
+  protected override async _renderVizEnvelopeJpeg(
+    queryResult: QueryResult,
+    viz: VizEnvelope,
+  ): Promise<Buffer | null> {
+    try {
+      return await renderVizEnvelopeToJpeg(viz, queryResult.rows, { width: 512, colorMode: 'dark' });
     } catch {
       return null; // fall back to row data on any render failure
     }

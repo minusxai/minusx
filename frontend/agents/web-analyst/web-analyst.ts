@@ -9,6 +9,7 @@ import { getAgentModelOrTestFallback, getAnalystModelOptions } from '@/agents/an
 import {
   EditFile,
   CreateFile,
+  DetachViz,
   ReadFiles,
   Navigate,
   ReviewFile,
@@ -21,6 +22,7 @@ import {
 export {
   EditFile,
   CreateFile,
+  DetachViz,
   ReadFiles,
   Navigate,
   ReviewFile,
@@ -59,6 +61,7 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     CheckFileHealth.schema,
     EditFile.schema,
     CreateFile.schema,
+    DetachViz.schema,
     Navigate.schema,
     ReviewFile.schema,
     ClarifyFrontend.schema,
