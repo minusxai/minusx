@@ -58,7 +58,12 @@ const ALREADY_V2: QuestionContent = {
 const mockUser = (u: EffectiveUser) =>
   (getEffectiveUser as unknown as { mockResolvedValue: (v: EffectiveUser) => void }).mockResolvedValue(u);
 
-const post = () => POST(new NextRequest('http://localhost/api/viz/backfill', { method: 'POST' }));
+const post = (body: Record<string, unknown> = {}) =>
+  POST(new NextRequest('http://localhost/api/viz/backfill', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }));
 
 describe('POST /api/viz/backfill', () => {
   setupTestDb(TEST_DB_PATH, { withTestConnection: true });
@@ -110,7 +115,7 @@ describe('POST /api/viz/backfill', () => {
     expect(untouched.viz).toEqual(ALREADY_V2.viz);
   });
 
-  it('is idempotent — a second run upgrades nothing', async () => {
+  it('default (fill) mode is idempotent — a second run upgrades nothing', async () => {
     const f = await FilesAPI.createFile({ name: 'Legacy Line', path: '/org/legacy-line', type: 'question', content: LEGACY_BAR }, ADMIN);
     await FilesAPI.saveFile(f.data.id, 'Legacy Line', '/org/legacy-line', LEGACY_BAR, [], ADMIN);
     await post();
@@ -118,6 +123,71 @@ describe('POST /api/viz/backfill', () => {
     const body = await res.json();
     expect(body.data.upgraded).toBe(0);
     expect(body.data.alreadyV2).toBeGreaterThanOrEqual(1);
+  });
+
+  it('dry run reports counts without writing anything', async () => {
+    const f = await FilesAPI.createFile({ name: 'Dry Bar', path: '/org/dry-bar', type: 'question', content: LEGACY_BAR }, ADMIN);
+    await FilesAPI.saveFile(f.data.id, 'Dry Bar', '/org/dry-bar', LEGACY_BAR, [], ADMIN);
+
+    const res = await post({ dryRun: true });
+    const body = await res.json();
+    expect(body.data.dryRun).toBe(true);
+    expect(body.data.upgraded).toBe(1);
+
+    const { data } = await FilesAPI.loadFiles([f.data.id], ADMIN);
+    expect((data[0].content as QuestionContent).viz ?? null).toBe(null); // nothing written
+  });
+
+  it('overwrite mode re-derives an existing chart envelope from vizSettings (vizSettings untouched)', async () => {
+    // A chart-type vizSettings whose saved envelope was edited (different mark).
+    const edited = {
+      ...LEGACY_BAR,
+      viz: {
+        version: 2,
+        source: {
+          kind: 'vega-lite', grammar: 'vega-lite@6',
+          spec: { mark: { type: 'line' }, encoding: { x: { field: 'month', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative', aggregate: 'sum' } } },
+        },
+      },
+    } as unknown as QuestionContent;
+    const f = await FilesAPI.createFile({ name: 'Edited Bar', path: '/org/edited-bar', type: 'question', content: edited }, ADMIN);
+    await FilesAPI.saveFile(f.data.id, 'Edited Bar', '/org/edited-bar', edited, [], ADMIN);
+
+    const res = await post({ overwrite: true });
+    const body = await res.json();
+    expect(body.data.overwritten).toBeGreaterThanOrEqual(1);
+
+    const { data } = await FilesAPI.loadFiles([f.data.id], ADMIN);
+    const c = data[0].content as QuestionContent;
+    const spec = (c.viz!.source as unknown as { spec: { mark: { type: string } } }).spec;
+    expect(spec.mark.type).toBe('bar'); // re-derived from vizSettings (bar), replacing the edited line
+    expect(c.vizSettings).toEqual(LEGACY_BAR.vizSettings); // never touched
+  });
+
+  it('overwrite mode NEVER downgrades a chart envelope to a DOM-tier one', async () => {
+    // vizSettings is the table template default, but the envelope is a hand-authored chart
+    // (the post-V2 authoring pattern) — re-deriving would replace the chart with a table.
+    const authored = {
+      ...LEGACY_BAR,
+      vizSettings: { type: 'table' },
+      viz: {
+        version: 2,
+        source: {
+          kind: 'vega-lite', grammar: 'vega-lite@6',
+          spec: { mark: { type: 'rect' }, encoding: { x: { field: 'month', type: 'ordinal' }, y: { field: 'revenue', type: 'quantitative' } } },
+        },
+      },
+    } as unknown as QuestionContent;
+    const f = await FilesAPI.createFile({ name: 'Authored Heatmap', path: '/org/authored-heatmap', type: 'question', content: authored }, ADMIN);
+    await FilesAPI.saveFile(f.data.id, 'Authored Heatmap', '/org/authored-heatmap', authored, [], ADMIN);
+
+    const res = await post({ overwrite: true });
+    const body = await res.json();
+    expect(body.data.skipped.some((s: { id: number }) => s.id === f.data.id)).toBe(true);
+
+    const { data } = await FilesAPI.loadFiles([f.data.id], ADMIN);
+    const c = data[0].content as QuestionContent;
+    expect((c.viz!.source as unknown as { spec: { mark: { type: string } } }).spec.mark.type).toBe('rect'); // untouched
   });
 
   it('rejects non-admins', async () => {

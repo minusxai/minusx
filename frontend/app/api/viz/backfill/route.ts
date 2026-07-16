@@ -21,6 +21,7 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { vizSettingsToEnvelope } from '@/lib/viz/from-vizsettings';
+import { isEnvelopeImageViz } from '@/lib/viz/encoding-edit';
 import { toVizColumns } from '@/lib/viz/query-data';
 import { getCachedResultBounded } from '@/lib/query-cache/execute.server';
 import { resolveCachePolicy } from '@/lib/query-cache/policy.server';
@@ -65,19 +66,27 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     if (!isAdmin(user.role)) return NextResponse.json({ success: false, error: 'Admin only' }, { status: 403 });
 
+    const body = await req.json().catch(() => ({} as Record<string, unknown>));
+    const dryRun = body?.dryRun === true;
+    // Overwrite: re-derive envelopes from vizSettings even when one exists (rerun-safe —
+    // vizSettings is never modified, so a rerun converges on the same derivation).
+    const overwrite = body?.overwrite === true;
+
     // Full-depth listing: questions live at arbitrary folder depths.
     const listing = await FilesAPI.getFiles({ type: 'question', depth: 1_000 }, user);
     const ids = listing.data.map(f => f.id);
     const files = ids.length > 0 ? (await FilesAPI.loadFiles(ids, user)).data : [];
 
-    let upgraded = 0;
-    let alreadyV2 = 0;
+    let upgraded = 0;    // envelopes added where none existed
+    let overwritten = 0; // envelopes re-derived over an existing one (overwrite mode)
+    let alreadyV2 = 0;   // left alone (fill mode)
     const skipped: Array<{ id: number; name: string; reason: string }> = [];
 
     // Serial on purpose: an explicit admin action; each miss executes a real query.
     for (const file of files) {
       const content = file.content as QuestionContent;
-      if (content.viz != null) { alreadyV2++; continue; }
+      const existing = content.viz ?? null;
+      if (existing != null && !overwrite) { alreadyV2++; continue; }
       const vizType = content.vizSettings?.type;
       if (!vizType) { skipped.push({ id: file.id, name: file.name, reason: 'no vizSettings' }); continue; }
       try {
@@ -90,15 +99,25 @@ export async function POST(req: NextRequest) {
           columns = await resultColumns(content, user);
         }
         const viz = vizSettingsToEnvelope(content.vizSettings, columns);
+        // Downgrade guard: never replace a hand-authored CHART envelope with a DOM-tier
+        // derivation (post-V2 files carry the template's table vizSettings while the real
+        // chart lives only in `viz` — re-deriving would destroy it).
+        if (existing != null && isEnvelopeImageViz(existing) && !isEnvelopeImageViz(viz)) {
+          skipped.push({ id: file.id, name: file.name, reason: 'existing chart envelope; vizSettings would downgrade it to table/pivot' });
+          continue;
+        }
         // Additive write: `viz` joins the content; vizSettings stays byte-identical.
-        await FilesAPI.saveFile(file.id, file.name, file.path, { ...content, viz }, file.references ?? [], user);
-        upgraded++;
+        if (!dryRun) {
+          await FilesAPI.saveFile(file.id, file.name, file.path, { ...content, viz }, file.references ?? [], user);
+        }
+        if (existing != null) overwritten++;
+        else upgraded++;
       } catch (err) {
         skipped.push({ id: file.id, name: file.name, reason: err instanceof Error ? err.message : 'conversion failed' });
       }
     }
 
-    return NextResponse.json({ success: true, data: { total: files.length, upgraded, alreadyV2, skipped } });
+    return NextResponse.json({ success: true, data: { total: files.length, upgraded, overwritten, alreadyV2, skipped, dryRun } });
   } catch (error) {
     return handleApiError(error);
   }

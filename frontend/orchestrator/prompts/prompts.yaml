@@ -198,8 +198,8 @@ templates:
     - **PublishAll**: Call this if the user requests you to save changes. Opens a review modal showing all dirty files. Returns immediately if nothing is dirty.
 
     ### Query Execution
-    - **ExecuteQuery(query: string, connectionId: string, parameters?: object, vizSettings?: object, rawData?: bool, maxChars?: int)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. When you pass a renderable-chart `vizSettings`, you get an IMAGE of the chart + a summary (not the rows) — pass **rawData: true** for the row table instead. Without vizSettings (or a non-renderable viz) you always get the rows. Row text is truncated at maxChars chars (default 10k, max 100k); if `truncated: true`, narrow the query (WHERE/LIMIT), raise maxChars, or page with OFFSET.
-    - Note: For visualizations, xCols (first is x-axis, rest are grouping cols) and yCols (values) are supported. For more complex vizSettings, use the `LoadSkill("visualizations")` to get detailed config instructions.
+    - **ExecuteQuery(query: string, connectionId: string, parameters?: object, viz?: object, rawData?: bool, maxChars?: int)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. To chart the result, pass `viz` — a V2 viz ENVELOPE (same shape as a question's `viz`: `{{"version": 2, "source": {{"kind": "vega-lite", "grammar": "vega-lite@6", "spec": {{…}}}}}}`, plain JSON here — no markup braces); a chart envelope returns an IMAGE of the chart + a summary (not the rows) — pass **rawData: true** for the row table instead. Without a chart viz you always get the rows. Row text is truncated at maxChars chars (default 10k, max 100k); if `truncated: true`, narrow the query (WHERE/LIMIT), raise maxChars, or page with OFFSET.
+    - Note: the envelope grammar (specs, recipes, formats) is in the **visualizations** skill — `LoadSkill("visualizations")`. A legacy `vizSettings` argument still exists for old conversations; do not use it for new charts.
 
     ### Navigation & Interaction
     - **Navigate(file_id?: int, path?: string, newFileType?: string)**: Navigate the user to a file, folder, or new file page.
@@ -1180,7 +1180,7 @@ templates:
       {schema_notebook}
       ```
       - **cells**: ordered `<item>` list rendered top-to-bottom. Every cell has a stable string `<id>` (never reuse ids) and an optional `<name>`.
-      - **SQL cell** (`<type>sql</type>`): a full inline question — `<query>`, `<vizSettings>`, `<parameters>`, `<parameterValues>`, and `<connection_name>`. Same shape as a standalone question (minus description). Use `LoadSkill("visualizations")` / `LoadSkill("parameters")` as needed.
+      - **SQL cell** (`<type>sql</type>`): a full inline question — `<query>`, `<viz>` (a V2 envelope, same markup form as on questions — the way to chart a cell), `<parameters>`, `<parameterValues>`, and `<connection_name>`. Same shape as a standalone question (minus description). A legacy `<vizSettings>` may also be present: when `<viz>` exists it is authoritative and vizSettings is ignored — NEVER modify or delete `<vizSettings>` (rollback path). Use `LoadSkill("visualizations")` / `LoadSkill("parameters")` as needed.
       - **Text cell** (`<type>text</type>`): `<content>` is markdown.
 
       ### Active cell — edit the RIGHT cell
@@ -1188,7 +1188,7 @@ templates:
       - Unless the user says otherwise, scope edits to THAT cell. Match within it (anchor on its `id`, then the field you're changing) and do NOT modify other cells.
 
       ### Notebook Page Behavior
-      - Edit in place with EditFile: change a cell's `query`/`vizSettings`, edit a text cell's `content`, rename a cell, or add/remove cells in the `cells` array.
+      - Edit in place with EditFile: change a cell's `query`/`viz`, edit a text cell's `content`, rename a cell, or add/remove cells in the `cells` array.
       - To ADD a cell, insert a new `<item>` into `<cells>` with a fresh unique `<id>`. New SQL cells must set `<connection_name>` (copy it from a neighboring SQL cell unless told otherwise).
       - When adding/removing `:paramName` tokens in a SQL cell, keep that cell's `<parameters>` in sync (same rule as questions) — EditFile bypasses the UI auto-sync.
       - Keep edits minimal and targeted: a notebook may have many cells, so never rewrite the whole `<cells>` list when a single-cell change will do.
@@ -1299,6 +1299,7 @@ prompts:
 
     ## Chart Visualization in Slack
     When running ExecuteQuery, include appropriate `vizSettings` so the results can be visualized as a chart image in Slack.
+    (For charts these types cannot express, ExecuteQuery also accepts `viz` — a V2 Vega-Lite envelope, see `LoadSkill("visualizations")`; when both are set the envelope wins.)
     - Use `bar` for vertical comparisons across categories (e.g., revenue by month)
     - Use `row` for horizontal bar comparisons (e.g., ranked lists, long category labels)
     - Use `line` for trends over time (e.g., daily users over 30 days)

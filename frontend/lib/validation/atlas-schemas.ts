@@ -578,6 +578,9 @@ export const NotebookSqlCell = Type.Object({
   name: Nullable(Type.String({ description: 'optional cell name' })),
   query: Type.String({ description: 'SQL query string, may contain :paramName tokens' }),
   vizSettings: VizSettings,
+  viz: NullableD(VizEnvelope,
+    'Viz V2 envelope (docs/Visualization Arch V2.md). When present it is AUTHORITATIVE — the cell renders ' +
+    'from viz and legacy vizSettings is ignored. Omit to keep rendering via vizSettings.'),
   parameters: Nullable(Type.Array(QuestionParameter)),
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
   connection_name: Type.String({ description: 'connection name (empty string if none)' }),
