@@ -19,7 +19,7 @@ import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import * as storeModule from '@/store/store';
 import { makeStore } from '@/store/store';
 import { createConversation, sendMessage, selectConversation } from '@/store/chatSlice';
-import { setDevMode } from '@/store/uiSlice';
+import { setDevMode, setBulkUiFlags } from '@/store/uiSlice';
 import type { RootState } from '@/store/store';
 import { getTestDbPath } from './test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -117,5 +117,22 @@ describe('chatListener finalize — incremental + view-aware conversation reload
     const gets = conversationGets(conv.id);
     expect(gets.length).toBeGreaterThan(0);
     expect(gets.some((u) => u.includes('view=full'))).toBe(true);
+  });
+
+  it('localStorage devMode restore (setBulkUiFlags) upgrades an already-loaded conversation to view=full', async () => {
+    // Cold-load race: the conversation page effect can fetch (slim) BEFORE DataLoader restores
+    // devMode from localStorage via setBulkUiFlags — the restore must re-render from the full log.
+    const conv = await createConversationServer({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+    await runTurn(conv.id, 'question', 'answer', true); // loads slim (devMode off)
+    fetchLog = [];
+
+    store.dispatch(setBulkUiFlags({ devMode: true }));
+    await vi.waitFor(() => {
+      expect(conversationGets(conv.id).some((u) => u.includes('view=full'))).toBe(true);
+    }, { timeout: 4000, interval: 20 });
+
+    // And the transcript survives the upgrade.
+    const messages = selectConversation(store.getState() as RootState, conv.id)!.messages;
+    expect(messages.some((m) => m.role === 'user' && m.content === 'question')).toBe(true);
   });
 });

@@ -22,17 +22,17 @@ holds multi-MB strings. This is the reported slowness while editing stories.
 
 ### Measured results (dashboard→story conversion + 3 story edits, 27 entries, real LLM)
 
-| Wire | Size |
+| Wire (all live-measured in the browser) | Size |
 |---|---|
-| Full view (old behavior, and dev-mode today) | **5.14MB** |
-| Slim display view (non-dev cold load) | **1.95MB** (−62%) |
-| Slim minus inline review screenshots (5 × ~356KB base64) | **~120KB** (−97.6%) |
+| Full view (old behavior for everyone; dev-mode cold load today) | **5.02MB** |
+| Slim cold load, pre-lazy-screenshots | 1.95MB (−62%) |
+| **Slim cold load with lazy screenshots (shipped)** | **122.1KB** (−97.6%) |
+| Screenshot images (on demand, viewport-lazy, cached immutable) | ~230KB each, only when scrolled to |
 | Post-turn reload, old (full re-download) | 5MB+ per message |
-| Post-turn reload, new (`?since=` incremental) | **350–440KB** per message (that turn's rows only) |
+| Post-turn reload, new (`?since=` incremental, non-dev) | **~360–440KB** per screenshot-bearing edit; drops to ~10KB once that turn's screenshot is also a URL |
 
-The remaining slim weight was almost entirely `details.screenshotUrl` (1.78MB of the 1.9MB) —
-which is why screenshots are now **lazy-loaded** (below): with the rewrite, the same cold load
-is ~120KB of JSON plus on-demand images.
+The remaining pre-lazy slim weight was almost entirely `details.screenshotUrl` (1.78MB of the
+1.9MB) — which is why screenshots are lazy-loaded (below).
 
 ### Lazy screenshots
 
@@ -108,9 +108,12 @@ and derives pending frontend-tool calls by matching toolCall ids. We shrink entr
   (now slim) full log — cheap — and dispatches. Invalidated on manual/auto retry (server
   truncates-and-replays the tail), on any mismatch, and on every devMode toggle (slim and full
   entries must never mix).
-- Toggling devMode **on** re-renders the active, settled conversation from the verbatim log
-  (chatListener `setDevMode` listener) so the per-turn appState inspector has data without a
-  page reload.
+- Toggling devMode **on** re-renders the settled loaded conversations from the verbatim log
+  (chatListener listener on `setDevMode` AND `setBulkUiFlags` — the localStorage restore at
+  boot) so the per-turn appState inspector has data without a page reload. `useConversation`
+  additionally reads devMode from the live store at fetch time and re-checks on completion —
+  page-level effects fire before DataLoader's layout effect, so a dev-mode cold load would
+  otherwise race and fetch slim.
 
 ## Invariants / non-goals
 
