@@ -44,8 +44,8 @@ Thumbs.db
 .env.local
 .env.*.local
 
-# Documentation
-docs/
+# Documentation markdown is not needed by the app image. The docs image uses
+# docs/*.mdx and its own package files from the repository-root build context.
 *.md
 !README.md
 
