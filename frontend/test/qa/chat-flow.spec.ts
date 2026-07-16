@@ -83,8 +83,17 @@ test.describe('real-LLM chat flows', () => {
     expect(await sendChat(page, 'Reply with just the word: hello'), 'composer should be driveable').toBe(true);
     await assertChatReplied(page, 1);
 
-    const callId = await firstLlmCallId(page);
-    expect(callId, 'the conversation should expose an lllm_call_id').toBeTruthy();
+    // Conversations V2 (/conversations-v2.md): per-call debug ids (llmDebug/lllm_call_id) ride the
+    // FULL wire view only — the default display view strips them. Enable the debug (dev mode) view
+    // first; the toggle re-renders the settled transcript from the verbatim log.
+    await enableDebugUi(page);
+    let callId: string | null = null;
+    await expect
+      .poll(
+        async () => (callId = await firstLlmCallId(page)),
+        { message: 'the conversation should expose an lllm_call_id once the debug view is on', timeout: 30_000 },
+      )
+      .toBeTruthy();
 
     // The debug view reads stats (llm_call_events) + logs (llm_logs) from the
     // LOCAL tables, keyed by the same call id. Poll until both the request and
