@@ -64,7 +64,24 @@ export function embedKindOf(node: { attributes?: Record<string, string> } | null
   return null;
 }
 
+/** takumi renders no ::marker — inject bullet/number text into list items. */
+function injectListMarkers(node: RawNode): void {
+  if (node.tagName !== 'ul' && node.tagName !== 'ol') return;
+  node.style = { paddingLeft: 24, ...(node.style ?? {}) };
+  let n = 0;
+  for (const child of node.children ?? []) {
+    if (child.tagName !== 'li') continue;
+    const marker = node.tagName === 'ol' ? `${++n}. ` : '\u2022 ';
+    if (child.type === 'text' && typeof child.text === 'string') {
+      child.text = marker + child.text;
+    } else {
+      child.children = [{ type: 'text', text: marker }, ...(child.children ?? [])];
+    }
+  }
+}
+
 function transform(node: RawNode): RawNode {
+  injectListMarkers(node);
   const embed = embedKindOf(node);
   if (embed) {
     const size = EMBED_DEFAULT_SIZE[embed.kind];

@@ -118,3 +118,18 @@ describe('resolveContainerQueries', () => {
     expect(resolved).toContain('.a{color:red}');
   });
 });
+
+describe('list markers', () => {
+  it('injects bullet markers into ul items so lists match the DOM', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    const result = await renderStoryRaster(renderer, {
+      html: '<div class="story"><ul><li>alpha point</li><li>beta point</li></ul></div>',
+      stylesheets: ['.story{padding:16px;background:#fff;color:#111;font-size:16px}'],
+      width: 400, dpr: 1,
+    });
+    const texts = result.runs.map(r => r.text).join('|');
+    expect(texts).toContain('• alpha point');
+    expect(texts).toContain('• beta point');
+  });
+});

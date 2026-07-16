@@ -26,7 +26,7 @@ import { numberFromEl } from '@/lib/data/story/story-number';
 import { paramFromPlaceholderEl } from '@/lib/data/story/story-params';
 
 const DPR = 2;
-const SELECTION_FILL = 'rgba(22,160,133,0.35)'; // accent.teal — matches the app's ::selection
+const SELECTION_FILL = '#16a085'; // accent.teal — matches the app's ::selection (solid; glyphs re-drawn white inside)
 
 export interface CanvasStoryViewProps {
   html: string;
@@ -49,6 +49,7 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
   const { html, compiledCss, width, readOnly, paramValues, onParamValuesChange, storyPath, colorMode, fallback } = props;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const bitmapRef = useRef<ImageBitmap | null>(null);
+  const selectionBitmapRef = useRef<ImageBitmap | null>(null);
   const selRef = useRef<{ a: SelPoint; b: SelPoint } | null>(null);
   const draggingRef = useRef(false);
   const [result, setResult] = useState<StoryRasterResult | null>(null);
@@ -69,9 +70,10 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
     return () => ro.disconnect();
   }, []);
   // Lay the raster out at the real container width (true reflow, like the fluid DOM
-  // path) — quantized to 32px steps so resize doesn't thrash re-renders.
-  const layoutWidth = containerW ? Math.min(width, Math.round(containerW / 32) * 32) : width;
-  const scale = containerW ? Math.min(1, containerW / layoutWidth) : 1;
+  // path). Quantize UP to 16px steps (resize thrash guard) and scale down to fill the
+  // container edge-to-edge — rounding down would inset the story vs the DOM path.
+  const layoutWidth = containerW ? Math.ceil(containerW / 16) * 16 : width;
+  const scale = containerW ? containerW / layoutWidth : 1;
 
   // ---------- raster ----------
   useEffect(() => {
@@ -94,6 +96,23 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
       if (cancelled) return;
       bitmapRef.current = bitmap;
       setResult(raster);
+      // Second pass: the same story with every glyph white — composited inside the
+      // selection region so selected text renders white-on-teal exactly like the
+      // DOM's ::selection. Best-effort; plain highlight if it fails.
+      try {
+        const whiteRaster = await renderStoryRaster(renderer, {
+          html: clean,
+          stylesheets: [
+            compiledCss ?? '', fontCss,
+            'div,p,span,h1,h2,h3,h4,h5,h6,li,ul,ol,blockquote,em,strong,b,i,a,td,th,figcaption,code,small{color:#ffffff !important}',
+          ].filter(Boolean),
+          width: layoutWidth,
+          dpr: DPR,
+        });
+        if (!cancelled) {
+          selectionBitmapRef.current = await createImageBitmap(new Blob([whiteRaster.png as BlobPart], { type: 'image/png' }));
+        }
+      } catch { selectionBitmapRef.current = null; }
     })().catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
   }, [html, compiledCss, width, layoutWidth]);
@@ -116,14 +135,36 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
         : runIndex(raster.runs, p.run) - runIndex(raster.runs, q.run));
     const ai = runIndex(raster.runs, a.run);
     const bi = runIndex(raster.runs, b.run);
-    ctx.fillStyle = SELECTION_FILL;
+    // Selection bands, DOM-equivalent: solid ::selection color covering the full line
+    // leading (no gaps between lines of a block), white glyphs composited inside.
+    const bands: Array<{ x: number; y: number; w: number; h: number }> = [];
     raster.runs.forEach((r, i) => {
       if (i < ai || i > bi) return;
       let x0 = r.x, x1 = r.x + r.w;
       if (i === ai) x0 = r.x + (a.off / Math.max(1, r.text.length)) * r.w;
       if (i === bi) x1 = r.x + (b.off / Math.max(1, r.text.length)) * r.w;
-      if (x1 > x0) ctx.fillRect(x0 * DPR, r.y * DPR, (x1 - x0) * DPR, r.h * DPR);
+      if (x1 <= x0) return;
+      // extend to the next selected line's top within the same block (fills leading)
+      let h = r.h;
+      for (let j = i + 1; j <= bi && j < raster.runs.length; j++) {
+        const n = raster.runs[j];
+        if (n.block !== r.block) break;
+        if (n.y > r.y + 1) { h = Math.min(n.y - r.y, r.h * 1.6); break; }
+      }
+      bands.push({ x: x0, y: r.y, w: x1 - x0, h });
     });
+    if (!bands.length) return;
+    ctx.fillStyle = SELECTION_FILL;
+    for (const bd of bands) ctx.fillRect(bd.x * DPR, bd.y * DPR, bd.w * DPR, bd.h * DPR);
+    const whiteBitmap = selectionBitmapRef.current;
+    if (whiteBitmap) {
+      ctx.save();
+      ctx.beginPath();
+      for (const bd of bands) ctx.rect(bd.x * DPR, bd.y * DPR, bd.w * DPR, bd.h * DPR);
+      ctx.clip();
+      ctx.drawImage(whiteBitmap, 0, 0);
+      ctx.restore();
+    }
   }, [result]);
 
   useEffect(() => { draw(); }, [draw]);
@@ -259,7 +300,7 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
   if (failed) return <>{fallback}</>;
 
   return (
-    <Box ref={containerRef} position="relative" width="100%" maxW={`${width}px`} aria-label="canvas-story">
+    <Box ref={containerRef} position="relative" width="100%" aria-label="canvas-story">
       <canvas
         ref={canvasRef}
         width={(result?.width ?? width) * DPR}
