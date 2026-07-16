@@ -20,6 +20,19 @@ re-fetches the **entire** conversation (`ConversationsAPI.get`), re-parses it, a
 Redux copy — so long conversations re-download megabytes per message and Redux permanently
 holds multi-MB strings. This is the reported slowness while editing stories.
 
+### Measured results (dashboard→story conversion + 3 story edits, 27 entries, real LLM)
+
+| Wire | Size |
+|---|---|
+| Full view (old behavior, and dev-mode today) | **5.14MB** |
+| Slim display view (non-dev cold load) | **1.95MB** (−62%) |
+| Slim minus inline review screenshots (5 × ~356KB base64) | **~120KB** (−97.6%) |
+| Post-turn reload, old (full re-download) | 5MB+ per message |
+| Post-turn reload, new (`?since=` incremental) | **350–440KB** per message (that turn's rows only) |
+
+The remaining slim weight is almost entirely `details.screenshotUrl` (1.78MB of the 1.9MB) —
+the quantified case for the lazy-screenshot follow-up in Non-goals.
+
 ## Contract
 
 > **`content` is the LLM's channel. `details` is the client's channel.**
