@@ -528,6 +528,19 @@ function SettingsContent() {
     },
     {
       tab: 'general',
+      section: 'Experimental Flags',
+      title: 'Viz Engine V2 (Beta)',
+      description: 'Render and edit all charts through the new Vega-based viz engine. When off, everything uses the classic engine.',
+      control: (
+        <SwitchControl
+          checked={vizV2}
+          onChange={(checked) => dispatch(setVizV2(checked))}
+        />
+      ),
+      visible: isEditorOrAdmin,
+    },
+    {
+      tab: 'general',
       section: 'Feature Flags',
       title: 'Allow Chat Queue',
       description: 'Send follow-up chat messages while the agent is still working.',
@@ -566,17 +579,6 @@ function SettingsContent() {
       ),
     },
     // ── General: Developer Tools toggle (admin only, unlabeled card) ──
-    {
-      tab: 'general',
-      title: 'Viz Engine V2 (Beta)',
-      description: 'Render and edit all charts through the new Vega-based viz engine. When off, everything uses the classic engine.',
-      control: (
-        <SwitchControl
-          checked={vizV2}
-          onChange={(checked) => dispatch(setVizV2(checked))}
-        />
-      ),
-    },
     {
       tab: 'general',
       title: 'Developer Tabs',
