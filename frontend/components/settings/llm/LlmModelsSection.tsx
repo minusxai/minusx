@@ -22,13 +22,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Box, Button, Dialog, Flex, HStack, Input, Text, VStack } from '@chakra-ui/react';
 import { LuCheck, LuCirclePlus, LuPlug, LuSettings2, LuTrash2, LuX } from 'react-icons/lu';
-import SimpleSelect from '@/components/evals/SimpleSelect';
+import { SearchableSelect, SearchableMultiSelect } from '@/components/selectors/SearchableSelect';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { useAppSelector } from '@/store/hooks';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { toaster } from '@/components/ui/toaster';
 import { isSecretRef } from '@/lib/secrets/config-secret-specs';
-import compatibility from '@/compatibility.json';
+import {
+  COMPAT_PROVIDERS, compatDefaultModel, filterAllowedModels, recommendedModelIds, resolveAllowedModels,
+} from '@/lib/llm/compat-models';
 import {
   CUSTOM_PROVIDER, LLM_USE_CASES, MINUSX_PROVIDER, findMinusxProvider,
   type LlmConfig, type LlmModelChoice, type LlmProviderEntry, type LlmUseCase,
@@ -42,10 +44,23 @@ interface RegistryProvider { slug: string; models: { id: string; name: string }[
  * and the docs tables), so the featured set is defined exactly once.
  * The rest of the registry follows alphabetically.
  */
-const FEATURED_PROVIDERS = compatibility.llm.providers.map(p => p.id);
+const FEATURED_PROVIDERS = COMPAT_PROVIDERS.map(p => p.id);
 const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
-  compatibility.llm.providers.map(p => [p.id, p.name]),
+  COMPAT_PROVIDERS.map(p => [p.id, p.name]),
 );
+
+/** Picker options for a provider's registry models: recommended-first (for the use case; union when none), id as subtitle. */
+function toModelOptions(slug: string, models: { id: string; name: string }[], useCase?: LlmUseCase) {
+  const recommended = recommendedModelIds(slug, useCase);
+  return models
+    .map(m => ({
+      value: m.id,
+      label: m.name === m.id ? m.id : m.name,
+      subtitle: m.name === m.id ? undefined : m.id,
+      badge: recommended.has(m.id) ? 'recommended' : undefined,
+    }))
+    .sort((a, b) => Number(!!b.badge) - Number(!!a.badge));
+}
 
 // No ambiguous 'default' entry — the default level is LOW and shows as the
 // pre-selected option, so what's selected is always what runs.
@@ -54,7 +69,7 @@ const DEFAULT_REASONING = 'low';
 
 const USE_CASE_TITLES: Record<LlmUseCase, { title: string; description: string }> = {
   analyst: { title: 'Analyst', description: 'The main chat/analysis agent (Explore, Question, Dashboard, Slack, reports).' },
-  micro: { title: 'Micro tasks', description: 'Low-stakes single-turn helpers (titles, descriptions, summaries).' },
+  micro: { title: 'Micro tasks', description: 'Low-stakes single-turn helpers (titles, classification, quick summaries).' },
 };
 
 function providerLabel(slug: string): string {
@@ -130,6 +145,11 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
       // user-customized name is left alone.
       if (patch.provider !== undefined && prev && (prev.name === '' || prev.name === prev.provider || prev.name === autoName(prev.provider, next.providers, index))) {
         patch = { ...patch, name: autoName(patch.provider, next.providers, index) };
+      }
+      // An allowlist names models of the OLD provider's registry — a type
+      // switch invalidates it wholesale.
+      if (patch.provider !== undefined && prev && patch.provider !== prev.provider) {
+        patch = { ...patch, allowedModels: undefined };
       }
       const updated = { ...prev, ...patch };
       next.providers[index] = updated;
@@ -213,13 +233,13 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
     }
   };
 
-  /** Model used for a provider's connectivity test: its first chain use, else the registry's first model. */
+  /** Model used for a provider's connectivity test: its first chain use, else the first allowed model, else the registry's first. */
   const testModelFor = (entry: LlmProviderEntry): string | undefined => {
     for (const useCase of LLM_USE_CASES) {
       const hit = draft.assignments?.[useCase]?.chain?.find(c => c.providerName === (entry.name || entry.provider) && c.model);
       if (hit?.model) return hit.model;
     }
-    return modelsFor(entry.provider)[0]?.id;
+    return filterAllowedModels(entry, modelsFor(entry.provider))[0]?.id;
   };
 
   const testProvider = async (entry: LlmProviderEntry) => {
@@ -291,17 +311,18 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
             const isBedrock = entry.provider === 'amazon-bedrock';
             const result = testResults[entry.name || entry.provider];
             const label = entry.name || entry.provider || `provider ${index + 1}`;
+            const entryModels = modelsFor(entry.provider);
             return (
               <Box key={index} borderWidth="1px" borderColor="border.muted" borderRadius="md" p={4} aria-label={`LLM provider ${label}`}>
                 <Flex gap={3} wrap="wrap" align="flex-end">
                   <Box minW="180px">
                     <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Provider</Text>
-                    <SimpleSelect
+                    <SearchableSelect
                       value={entry.provider}
                       onChange={(provider) => setProvider(index, { provider })}
                       options={providerTypeOptions}
-                      placeholder="Search providers…"
-                      ariaLabel={`LLM provider ${label} type`}
+                      placeholder="Pick a provider…"
+                      label={`LLM provider ${label} type`}
                     />
                   </Box>
                   {showNameField(entry) && (
@@ -341,6 +362,17 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
                         placeholder="us-east-1"
                         onChange={(e) => setProvider(index, { awsRegion: e.target.value || undefined })}
                         aria-label={`LLM provider ${label} AWS region`}
+                      />
+                    </Box>
+                  )}
+                  {!isMinusx && entryModels.length > 0 && (
+                    <Box minW="200px">
+                      <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Allowed models</Text>
+                      <AllowedModelsPicker
+                        entry={entry}
+                        models={entryModels}
+                        label={`LLM provider ${label} allowed models`}
+                        onChange={(allowedModels) => setProvider(index, { allowedModels })}
                       />
                     </Box>
                   )}
@@ -436,6 +468,71 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
   );
 }
 
+/** Small Auto toggle rendered beside a picker (lit teal while active). */
+function AutoButton({ active, onClick, label, title }: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  title?: string;
+}) {
+  return (
+    <Button
+      size="sm" fontFamily="mono"
+      variant={active ? 'solid' : 'outline'}
+      bg={active ? 'accent.teal' : undefined}
+      color={active ? 'white' : undefined}
+      onClick={onClick}
+      aria-label={label}
+      title={title}
+    >
+      Auto
+    </Button>
+  );
+}
+
+/**
+ * Provider-level allowed-models picker. Three states for `allowedModels`:
+ * undefined (all models), 'auto' (the recommended set from compatibility.json,
+ * resolved live so curation updates propagate), or an explicit id list. The
+ * Auto button beside the picker toggles 'auto' ↔ unrestricted; while auto,
+ * the recommended models show checked, and toggling one materializes the set
+ * into an explicit list with the change applied.
+ */
+function AllowedModelsPicker({ entry, models, label, onChange }: {
+  entry: LlmProviderEntry;
+  models: { id: string; name: string }[];
+  label: string;
+  onChange: (allowedModels: string[] | 'auto' | undefined) => void;
+}) {
+  const stored = entry.allowedModels;
+  const isAuto = stored === 'auto';
+  const values = isAuto ? (resolveAllowedModels(entry) ?? []) : (Array.isArray(stored) ? stored : []);
+  // No recommendations for this provider in compatibility.json = no Auto to offer.
+  const hasRecommendations = recommendedModelIds(entry.provider).size > 0;
+  return (
+    <HStack gap={1.5}>
+      <Box flex="1" minW="160px">
+        <SearchableMultiSelect
+          values={values}
+          options={toModelOptions(entry.provider, models)}
+          placeholder="All models"
+          summary={(v) => (isAuto ? 'Auto (recommended)' : `${v.length} allowed`)}
+          label={label}
+          onChange={(next) => onChange(next.length > 0 ? next : undefined)}
+        />
+      </Box>
+      {hasRecommendations && (
+        <AutoButton
+          active={isAuto}
+          onClick={() => onChange(isAuto ? undefined : 'auto')}
+          label={`${label} auto`}
+          title="Allow exactly the recommended models"
+        />
+      )}
+    </HStack>
+  );
+}
+
 function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: {
   useCase: LlmUseCase;
   chain: LlmModelChoice[];
@@ -467,8 +564,16 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
 
   const entry = step ? providers.find(p => (p.name || p.provider) === step.providerName) : undefined;
   const slug = entry?.provider ?? '';
-  const registryModels = slug ? modelsFor(slug) : [];
+  // The provider's allowlist bounds the picker; a currently-assigned model
+  // always stays visible so an existing pick never silently disappears.
+  const registryModels = slug ? filterAllowedModels(entry, modelsFor(slug), step?.model) : [];
   const reasoning = (step?.options?.['reasoning'] as string | undefined) ?? DEFAULT_REASONING;
+
+  // "Auto" (no stored model) resolves to the compatibility default for this
+  // use case — flag it when the provider's allowlist excludes that default.
+  const autoDefault = slug ? compatDefaultModel(slug, useCase) : undefined;
+  const allowed = resolveAllowedModels(entry);
+  const autoConflict = !!step && !step.model && !!autoDefault && !!allowed && !allowed.includes(autoDefault);
 
   return (
     <Box borderWidth="1px" borderColor="border.muted" borderRadius="md" p={4} aria-label={`Model assignment ${meta.title}`}>
@@ -476,15 +581,16 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
       <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>{meta.description}</Text>
       <VStack align="stretch" gap={2}>
         {step ? (
+          <>
           <Flex gap={3} wrap="wrap" align="flex-end">
             <Box minW="200px">
               <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Provider</Text>
-              <SimpleSelect
+              <SearchableSelect
                 value={step.providerName}
                 onChange={(providerName) => setStep({ providerName })}
                 options={providerOptions}
                 placeholder="Provider…"
-                ariaLabel={`${meta.title} provider`}
+                label={`${meta.title} provider`}
               />
             </Box>
             {slug === MINUSX_PROVIDER ? (
@@ -492,23 +598,35 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
             ) : (
               <Box minW="260px">
                 <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Model</Text>
-                {registryModels.length > 0 ? (
-                  <SimpleSelect
-                    value={step.model ?? ''}
-                    onChange={(model) => setStep({ model })}
-                    options={registryModels.map(m => ({ value: m.id, label: m.name === m.id ? m.id : `${m.name} (${m.id})` }))}
-                    placeholder="Search models…"
-                    ariaLabel={`${meta.title} model`}
-                  />
-                ) : (
-                  <Input
-                    size="sm" fontSize="xs" fontFamily="mono"
-                    value={step.model ?? ''}
-                    placeholder="model id (e.g. qwen3:32b)"
-                    onChange={(e) => setStep({ model: e.target.value || undefined })}
-                    aria-label={`${meta.title} model`}
-                  />
-                )}
+                <HStack gap={1.5}>
+                  <Box flex="1" minW="180px">
+                    {registryModels.length > 0 ? (
+                      <SearchableSelect
+                        value={step.model ?? ''}
+                        onChange={(model) => setStep({ model })}
+                        options={toModelOptions(slug, registryModels, useCase)}
+                        placeholder={autoDefault ? `Auto (${autoDefault})` : 'Pick a model…'}
+                        label={`${meta.title} model`}
+                      />
+                    ) : (
+                      <Input
+                        size="sm" fontSize="xs" fontFamily="mono"
+                        value={step.model ?? ''}
+                        placeholder="model id (e.g. qwen3:32b)"
+                        onChange={(e) => setStep({ model: e.target.value || undefined })}
+                        aria-label={`${meta.title} model`}
+                      />
+                    )}
+                  </Box>
+                  {autoDefault && (
+                    <AutoButton
+                      active={!step.model}
+                      onClick={() => setStep({ model: undefined })}
+                      label={`${meta.title} model auto`}
+                      title={`Automatically use ${autoDefault}`}
+                    />
+                  )}
+                </HStack>
               </Box>
             )}
             {slug !== MINUSX_PROVIDER && (
@@ -528,6 +646,15 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
               />
             )}
           </Flex>
+          {autoConflict && (
+            <HStack gap={1} aria-label={`${meta.title} auto model conflict`}>
+              <LuX size={12} color="var(--chakra-colors-red-500)" />
+              <Text fontSize="xs" fontFamily="mono" color="red.500">
+                Auto picks {autoDefault}, which is not in this provider&apos;s allowed models. Allow it or pick a model explicitly.
+              </Text>
+            </HStack>
+          )}
+          </>
         ) : (
           <Button
             size="xs" variant="outline" fontFamily="mono" alignSelf="flex-start"

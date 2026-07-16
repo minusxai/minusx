@@ -11,8 +11,17 @@ const REGISTRY = {
   success: true,
   data: {
     providers: [
-      { slug: 'anthropic', models: [{ id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', reasoning: true, input: ['text'], contextWindow: 200000 }] },
+      {
+        slug: 'anthropic',
+        models: [
+          { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', reasoning: true, input: ['text'], contextWindow: 200000 },
+          { id: 'claude-3-opus', name: 'Claude 3 Opus', reasoning: false, input: ['text'], contextWindow: 200000 },
+          { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', reasoning: true, input: ['text'], contextWindow: 200000 },
+        ],
+      },
       { slug: 'openai', models: [{ id: 'gpt-4.1', name: 'GPT-4.1', reasoning: false, input: ['text'], contextWindow: 128000 }] },
+      // A registry provider with NO compatibility.json curation (no recommended/defaults).
+      { slug: 'mistral', models: [{ id: 'mistral-large', name: 'Mistral Large', reasoning: false, input: ['text'], contextWindow: 128000 }] },
     ],
   },
 };
@@ -38,6 +47,22 @@ function storeWithLlm(llm: OrgConfig['llm'], mode: string = 'org') {
     configs: { config: { ...config, llm }, loaded: true },
     auth: { user: { id: 1, email: 'a@b.c', name: 'A', role: 'admin', mode }, loading: false },
   } as never);
+}
+
+/**
+ * Open a model picker by label. Until the registry fetch resolves, the model
+ * control renders as a free-text input — wait for the picker (a button) to
+ * replace it before clicking.
+ */
+async function openModelPicker(user: ReturnType<typeof userEvent.setup>, label: string) {
+  await waitFor(() => expect(screen.getByLabelText(label).tagName).toBe('BUTTON'));
+  await user.click(screen.getByLabelText(label));
+}
+
+/** Close an open picker by re-clicking its trigger (toggles), waiting for the popover to unmount. */
+async function closePicker(user: ReturnType<typeof userEvent.setup>, label: string, goneOption: string) {
+  await user.click(screen.getByLabelText(label));
+  await waitFor(() => expect(screen.queryByLabelText(goneOption)).not.toBeInTheDocument());
 }
 
 describe('LlmModelsSection', () => {
@@ -91,8 +116,7 @@ describe('LlmModelsSection', () => {
 
     await user.click(await screen.findByLabelText('Add LLM provider'));
     // New entry defaults to the managed MinusX provider, auto-named.
-    const typeInput = screen.getByLabelText('LLM provider minusx type') as HTMLInputElement;
-    expect(typeInput.value).toBe('MinusX (managed)');
+    expect(screen.getByLabelText('LLM provider minusx type')).toHaveTextContent('MinusX (managed)');
 
     await user.type(screen.getByLabelText('LLM provider minusx API key'), 'mx-key-123');
     await user.click(screen.getByLabelText('Save LLM configuration'));
@@ -314,6 +338,244 @@ describe('LlmModelsSection', () => {
       expect(body.llm.providers).toHaveLength(1);
       expect(body.llm.assignments.analyst.chain).toHaveLength(1);
       expect(body.llm.assignments.analyst.chain[0].providerName).toBe('o');
+    });
+  });
+
+  it('picks allowed models per provider and saves them to allowedModels', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'anthropic', provider: 'anthropic', apiKey: 'k' }] }),
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('LLM provider anthropic allowed models'));
+    await user.click(await screen.findByLabelText('Claude Haiku 4.5'));
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      expect(configCall).toBeTruthy();
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.providers[0].allowedModels).toEqual(['claude-haiku-4-5']);
+    });
+  });
+
+  it('shows no allowed-models picker for the managed MinusX provider', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'minusx', provider: 'minusx', apiKey: 'k' }] }),
+    });
+    expect(await screen.findByLabelText('LLM provider minusx')).toBeInTheDocument();
+    expect(screen.queryByLabelText('LLM provider minusx allowed models')).not.toBeInTheDocument();
+  });
+
+  it('filters the assignment model picker to the provider allowedModels', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k', allowedModels: ['claude-haiku-4-5'] }],
+        assignments: { analyst: { chain: [{ providerName: 'a' }] } },
+      }),
+    });
+    const user = userEvent.setup();
+
+    await openModelPicker(user, 'Analyst model');
+    expect(await screen.findByLabelText('Claude Haiku 4.5')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Claude Sonnet 4.6')).not.toBeInTheDocument();
+  });
+
+  it('shows all registry models in the assignment picker when no allowlist is set', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+        assignments: { analyst: { chain: [{ providerName: 'a' }] } },
+      }),
+    });
+    const user = userEvent.setup();
+
+    await openModelPicker(user, 'Analyst model');
+    expect(await screen.findByLabelText('Claude Haiku 4.5')).toBeInTheDocument();
+    expect(screen.getByLabelText('Claude Sonnet 4.6')).toBeInTheDocument();
+  });
+
+  it('keeps a currently-assigned model visible even when outside the allowlist', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k', allowedModels: ['claude-haiku-4-5'] }],
+        assignments: { analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] } },
+      }),
+    });
+    const user = userEvent.setup();
+
+    // The existing pick still shows on the trigger and in the list. (The
+    // trigger swaps from free-text input to picker once the registry loads —
+    // re-query until then.)
+    await waitFor(() => {
+      expect(screen.getByLabelText('Analyst model')).toHaveTextContent('Claude Sonnet 4.6');
+    });
+    await user.click(screen.getByLabelText('Analyst model'));
+    expect(await screen.findByLabelText('Claude Sonnet 4.6')).toBeInTheDocument();
+    expect(screen.getByLabelText('Claude Haiku 4.5')).toBeInTheDocument();
+  });
+
+  it('badges recommended models per use case (compatibility.json) and sorts them first', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+        assignments: {
+          analyst: { chain: [{ providerName: 'a' }] },
+          micro: { chain: [{ providerName: 'a' }] },
+        },
+      }),
+    });
+    const user = userEvent.setup();
+
+    // Analyst: Sonnet is recommended for analyst; Haiku (micro-only) and the
+    // uncurated Opus are not.
+    await openModelPicker(user, 'Analyst model');
+    expect(await screen.findByLabelText('Claude Sonnet 4.6 recommended')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Claude Haiku 4.5 recommended')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Claude 3 Opus recommended')).not.toBeInTheDocument();
+    await closePicker(user, 'Analyst model', 'Claude Sonnet 4.6');
+
+    // Micro: only Haiku is recommended, and it sorts above the others
+    // (registry order puts it last).
+    await openModelPicker(user, 'Micro tasks model');
+    expect(await screen.findByLabelText('Claude Haiku 4.5 recommended')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Claude Sonnet 4.6 recommended')).not.toBeInTheDocument();
+    const haiku = screen.getByLabelText('Claude Haiku 4.5');
+    const sonnet = screen.getByLabelText('Claude Sonnet 4.6');
+    expect(haiku.compareDocumentPosition(sonnet) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await closePicker(user, 'Micro tasks model', 'Claude Sonnet 4.6');
+
+    // The provider-level allowed-models picker has no use case: it badges the
+    // union of all use cases' recommendations.
+    await user.click(screen.getByLabelText('LLM provider a allowed models'));
+    expect(await screen.findByLabelText('Claude Sonnet 4.6 recommended')).toBeInTheDocument();
+    expect(screen.getByLabelText('Claude Haiku 4.5 recommended')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Claude 3 Opus recommended')).not.toBeInTheDocument();
+  });
+
+  it('an Auto button beside the model picker clears the pick back to the compatibility default', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+        assignments: { analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] } },
+      }),
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('Analyst model auto'));
+    // The picker reflects the auto state and names the model auto resolves to.
+    await waitFor(() => {
+      expect(screen.getByLabelText('Analyst model')).toHaveTextContent('Auto (claude-sonnet-5)');
+    });
+
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.assignments.analyst.chain[0].providerName).toBe('a');
+      expect(body.llm.assignments.analyst.chain[0].model).toBeUndefined();
+    });
+  });
+
+  it('flags an Auto assignment whose compatibility default is excluded by allowed models', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k', allowedModels: ['claude-haiku-4-5'] }],
+        assignments: {
+          analyst: { chain: [{ providerName: 'a' }] },
+          micro: { chain: [{ providerName: 'a' }] },
+        },
+      }),
+    });
+
+    // Analyst auto default (claude-sonnet-5) is excluded by the allowlist.
+    expect(await screen.findByLabelText('Analyst auto model conflict')).toHaveTextContent('claude-sonnet-5');
+    // Micro auto default (claude-haiku-4-5) is allowed — no conflict.
+    expect(screen.queryByLabelText('Micro tasks auto model conflict')).not.toBeInTheDocument();
+  });
+
+  it("an Auto button beside allowed models stores 'auto' and toggles back to all", async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'anthropic', provider: 'anthropic', apiKey: 'k' }] }),
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('LLM provider anthropic allowed models auto'));
+    expect(screen.getByLabelText('LLM provider anthropic allowed models')).toHaveTextContent('Auto (recommended)');
+
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.providers[0].allowedModels).toBe('auto');
+    });
+
+    // Toggling Auto off returns to unrestricted (All models).
+    await user.click(screen.getByLabelText('LLM provider anthropic allowed models auto'));
+    expect(screen.getByLabelText('LLM provider anthropic allowed models')).toHaveTextContent('All models');
+  });
+
+  it("an 'auto' allowlist bounds the assignment picker to the recommended union", async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k', allowedModels: 'auto' }],
+        assignments: { analyst: { chain: [{ providerName: 'a' }] } },
+      }),
+    });
+    const user = userEvent.setup();
+
+    await openModelPicker(user, 'Analyst model');
+    expect(await screen.findByLabelText('Claude Sonnet 4.6')).toBeInTheDocument();
+    expect(screen.getByLabelText('Claude Haiku 4.5')).toBeInTheDocument();
+    // Uncurated model: outside the recommended union → filtered out.
+    expect(screen.queryByLabelText('Claude 3 Opus')).not.toBeInTheDocument();
+  });
+
+  it('hides both Auto buttons for providers without compatibility recommendations', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'mistral', provider: 'mistral', apiKey: 'k' }],
+        assignments: { analyst: { chain: [{ providerName: 'mistral' }] } },
+      }),
+    });
+
+    // The pickers themselves render (the registry serves models)…
+    expect(await screen.findByLabelText('LLM provider mistral allowed models')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Analyst model').tagName).toBe('BUTTON'));
+    // …but with nothing recommended, there is no Auto to offer.
+    expect(screen.queryByLabelText('LLM provider mistral allowed models auto')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Analyst model auto')).not.toBeInTheDocument();
+  });
+
+  it('switching a provider type clears its allowedModels (they belong to the old registry)', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'anthropic', provider: 'anthropic', apiKey: 'k', allowedModels: ['claude-haiku-4-5'] }],
+      }),
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('LLM provider anthropic type'));
+    await user.click(await screen.findByLabelText('OpenAI'));
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.providers[0].provider).toBe('openai');
+      expect(body.llm.providers[0].allowedModels).toBeUndefined();
     });
   });
 });

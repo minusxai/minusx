@@ -43,6 +43,23 @@ describe('resolveLlmPlan', () => {
     }
   });
 
+  it('resolves a model-less registry assignment (Auto) to the compatibility default per use case', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'main-anthropic', provider: 'anthropic', apiKey: 'sk-ant-raw-key' }],
+      assignments: {
+        analyst: { chain: [{ providerName: 'main-anthropic' }] },
+        micro: { chain: [{ providerName: 'main-anthropic' }] },
+      },
+    });
+    expect(((await resolveLlmPlan('analyst'))!.model as { id: string }).id).toBe('claude-sonnet-5');
+    expect(((await resolveLlmPlan('micro'))!.model as { id: string }).id).toBe('claude-haiku-4-5');
+  });
+
+  it('still requires a model id for registry providers without compatibility defaults', () => {
+    expect(() => buildPlanStep({ name: 'm', provider: 'mistral' }, { providerName: 'm' }, 'analyst'))
+      .toThrow(/model id/);
+  });
+
   it('resolves an assignment chain with secret-resolved API keys', async () => {
     await setLlmConfig({
       providers: [{ name: 'main-anthropic', provider: 'anthropic', apiKey: 'sk-ant-raw-key' }],

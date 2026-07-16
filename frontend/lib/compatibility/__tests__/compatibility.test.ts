@@ -16,12 +16,11 @@ type CompatField = {
   required?: boolean; secret?: boolean; default?: string | number; options?: string[]; note?: string;
 };
 type CompatConnectionType = { type: string; name: string; cli: boolean; fields: CompatField[] };
-type CompatModel = { id: string; name: string };
 type CompatProvider = {
   id: string; name: string; kind: 'managed' | 'registry' | 'custom';
   credentials: CompatField[];
-  models?: CompatModel[];
   defaults?: Record<string, string>;
+  recommended?: Record<string, string[]>;
 };
 
 const llmProviders = compatibility.llm.providers as CompatProvider[];
@@ -41,19 +40,23 @@ describe('compatibility.json — LLM providers', () => {
     }
   });
 
-  it('registry provider models + defaults resolve against the baked registry', () => {
+  it('registry providers declare per-use-case recommended models (incl. the default), resolvable in the baked registry', () => {
     for (const p of llmProviders.filter(p => p.kind === 'registry')) {
       const baked = new Set(listModels(p.id).map(m => m.id));
-      expect(p.models!.length).toBeGreaterThan(0);
-      for (const m of p.models!) {
-        expect(baked.has(m.id), `${p.id}/${m.id} not in baked registry`).toBe(true);
-      }
-      const modelIds = new Set(p.models!.map(m => m.id));
+      expect(p.recommended, `${p.id} missing recommended map`).toBeTruthy();
       for (const useCase of LLM_USE_CASES) {
-        const def = p.defaults![useCase];
+        const rec = p.recommended![useCase];
+        expect(rec?.length, `${p.id} missing ${useCase} recommended models`).toBeGreaterThan(0);
+        for (const id of rec!) {
+          expect(baked.has(id), `${p.id}/${id} not in baked registry`).toBe(true);
+        }
+        const def = p.defaults?.[useCase];
         expect(def, `${p.id} missing ${useCase} default`).toBeTruthy();
-        expect(modelIds.has(def), `${p.id} ${useCase} default ${def} not in its models list`).toBe(true);
+        expect(rec, `${p.id} ${useCase} default must be recommended`).toContain(def);
       }
+      // `models` was retired in favor of `recommended` — a reappearing key
+      // means a consumer (install.sh / docs) is reading stale curation.
+      expect((p as { models?: unknown }).models, `${p.id} still carries the retired models key`).toBeUndefined();
     }
   });
 

@@ -31,27 +31,19 @@
             "secret": true
           }
         ],
-        "models": [
-          {
-            "id": "claude-sonnet-5",
-            "name": "Claude Sonnet 5"
-          },
-          {
-            "id": "claude-opus-4-8",
-            "name": "Claude Opus 4.8"
-          },
-          {
-            "id": "claude-sonnet-4-6",
-            "name": "Claude Sonnet 4.6"
-          },
-          {
-            "id": "claude-haiku-4-5",
-            "name": "Claude Haiku 4.5"
-          }
-        ],
         "defaults": {
-          "analyst": "claude-sonnet-5",
+          "analyst": "claude-sonnet-4-6",
           "micro": "claude-haiku-4-5"
+        },
+        "recommended": {
+          "analyst": [
+            "claude-sonnet-5",
+            "claude-opus-4-8",
+            "claude-sonnet-4-6"
+          ],
+          "micro": [
+            "claude-haiku-4-5"
+          ]
         }
       },
       {
@@ -67,35 +59,22 @@
             "secret": true
           }
         ],
-        "models": [
-          {
-            "id": "gpt-5.6-luna",
-            "name": "GPT-5.6 Luna"
-          },
-          {
-            "id": "gpt-5.6-sol",
-            "name": "GPT-5.6 Sol"
-          },
-          {
-            "id": "gpt-5.5",
-            "name": "GPT-5.5"
-          },
-          {
-            "id": "gpt-5.4",
-            "name": "GPT-5.4"
-          },
-          {
-            "id": "gpt-5.4-mini",
-            "name": "GPT-5.4 mini"
-          },
-          {
-            "id": "gpt-5.4-nano",
-            "name": "GPT-5.4 nano"
-          }
-        ],
         "defaults": {
-          "analyst": "gpt-5.6-luna",
-          "micro": "gpt-5.4-nano"
+          "analyst": "gpt-5.6-terra",
+          "micro": "gpt-5.6-luna"
+        },
+        "recommended": {
+          "analyst": [
+            "gpt-5.6-luna",
+            "gpt-5.6-sol",
+            "gpt-5.5",
+            "gpt-5.4"
+          ],
+          "micro": [
+            "gpt-5.4-mini",
+            "gpt-5.4-nano",
+            "gpt-5.6-luna"
+          ]
         }
       },
       {
@@ -111,27 +90,19 @@
             "secret": true
           }
         ],
-        "models": [
-          {
-            "id": "gemini-3.1-pro-preview",
-            "name": "Gemini 3.1 Pro"
-          },
-          {
-            "id": "gemini-3.5-flash",
-            "name": "Gemini 3.5 Flash"
-          },
-          {
-            "id": "gemini-2.5-pro",
-            "name": "Gemini 2.5 Pro"
-          },
-          {
-            "id": "gemini-2.5-flash",
-            "name": "Gemini 2.5 Flash"
-          }
-        ],
         "defaults": {
           "analyst": "gemini-3.1-pro-preview",
           "micro": "gemini-3.5-flash"
+        },
+        "recommended": {
+          "analyst": [
+            "gemini-3.1-pro-preview",
+            "gemini-2.5-pro"
+          ],
+          "micro": [
+            "gemini-3.5-flash",
+            "gemini-2.5-flash"
+          ]
         }
       },
       {
@@ -154,31 +125,23 @@
             "default": "us-east-1"
           }
         ],
-        "models": [
-          {
-            "id": "global.anthropic.claude-sonnet-5",
-            "name": "Claude Sonnet 5 (global)"
-          },
-          {
-            "id": "global.anthropic.claude-opus-4-8",
-            "name": "Claude Opus 4.8 (global)"
-          },
-          {
-            "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-            "name": "Claude Haiku 4.5 (global)"
-          },
-          {
-            "id": "us.anthropic.claude-sonnet-5",
-            "name": "Claude Sonnet 5 (us)"
-          },
-          {
-            "id": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-            "name": "Claude Haiku 4.5 (us)"
-          }
-        ],
         "defaults": {
-          "analyst": "global.anthropic.claude-sonnet-5",
+          "analyst": "global.anthropic.claude-sonnet-4-6",
           "micro": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+        },
+        "recommended": {
+          "analyst": [
+            "global.anthropic.claude-sonnet-4-6",
+            "global.anthropic.claude-sonnet-5",
+            "global.anthropic.claude-opus-4-8",
+            "us.anthropic.claude-sonnet-5",
+            "us.anthropic.claude-opus-4-8",
+            "us.anthropic.claude-sonnet-4-6"
+          ],
+          "micro": [
+            "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+            "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+          ]
         }
       },
       {

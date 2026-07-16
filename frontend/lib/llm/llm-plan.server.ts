@@ -31,6 +31,7 @@ import {
   findLlmProvider, findMinusxProvider,
   type LlmConfig, type LlmModelChoice, type LlmProviderEntry, type LlmUseCase,
 } from './llm-config-types';
+import { compatDefaultModel } from './compat-models';
 
 /**
  * Build one executable plan step from a provider entry + model choice.
@@ -62,16 +63,18 @@ export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, u
   }
 
   // Registry provider (anthropic / openai / google / amazon-bedrock / …).
-  if (!choice.model) throw new Error(`LLM provider '${entry.name}': model id is required`);
+  // No stored model = "Auto": the per-use-case default from compatibility.json.
+  const modelId = choice.model || compatDefaultModel(entry.provider, useCase);
+  if (!modelId) throw new Error(`LLM provider '${entry.name}': model id is required (no compatibility default for '${entry.provider}')`);
   let model;
   try {
-    model = getModel(entry.provider, choice.model);
+    model = getModel(entry.provider, modelId);
   } catch (registryError) {
     // Model id newer than the baked pi-ai registry: resolve via the live
     // models.dev catalog (same wire API as the provider's baked models).
-    const live = catalog?.get(entry.provider)?.get(choice.model);
+    const live = catalog?.get(entry.provider)?.get(modelId);
     if (!live) throw registryError;
-    model = buildRegistryModel(entry.provider, choice.model, live);
+    model = buildRegistryModel(entry.provider, modelId, live);
   }
   if (entry.provider === 'amazon-bedrock') {
     if (entry.awsRegion) options['region'] = entry.awsRegion;
