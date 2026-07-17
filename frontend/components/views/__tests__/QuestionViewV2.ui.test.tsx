@@ -23,6 +23,7 @@ import { screen, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
 import { setFile } from '@/store/filesSlice';
+import { setQueryResult } from '@/store/queryResultsSlice';
 import { selectQuestionCollapsedPanel } from '@/store/uiSlice';
 import type { QuestionContent, DbFile } from '@/lib/types';
 
@@ -105,15 +106,36 @@ function makeQuestionFile(
   } as DbFile;
 }
 
-function setup(contentOverrides: Partial<QuestionContent> = {}) {
+function setup(
+  contentOverrides: Partial<QuestionContent> = {},
+  fileOverrides: Partial<DbFile> = {},
+) {
   const testStore = storeModule.makeStore();
   vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
-  testStore.dispatch(setFile({ file: makeQuestionFile(contentOverrides), references: [] }));
+  testStore.dispatch(setFile({ file: makeQuestionFile(contentOverrides, fileOverrides), references: [] }));
   return testStore;
 }
 
 function renderQuestion(store: ReturnType<typeof storeModule.makeStore>) {
   return renderWithProviders(<QuestionContainerV2 fileId={FILE_ID} />, { store });
+}
+
+// A DRAFT question seeded with a cached result: the viz column only renders once
+// there's query data, so tests that need the panel visible seed it here. Draft is
+// key — it makes the container skip both auto-execute-on-mount and the
+// useQueryResult fetch, so the seeded cache survives and feeds the selector
+// (a non-draft file would immediately re-execute and clobber the seed). The
+// (query, params, database) triple must match what QuestionContainerV2 reads:
+// query 'SELECT 1', no params ({}), connection 'demo_db'.
+function setupWithData() {
+  const store = setup({ query: 'SELECT 1', connection_name: 'demo_db' }, { draft: true });
+  store.dispatch(setQueryResult({
+    query: 'SELECT 1',
+    params: {},
+    database: 'demo_db',
+    data: { columns: ['value'], types: ['number'], rows: [[1]] },
+  }));
+  return store;
 }
 
 describe('QuestionViewV2 (mounted via QuestionContainerV2) — Redux integration', () => {
@@ -206,13 +228,29 @@ describe('QuestionViewV2 — three-column layout (viz panel on the right)', () =
     vi.restoreAllMocks();
   });
 
-  it('the viz panel is open by default and collapses to a slim strip via the handle chevron', () => {
-    const store = setup({ query: 'SELECT 1', connection_name: 'demo_db' });
+  it('hides the viz column entirely until the query has run (no empty "configure" panel)', () => {
+    // No seeded result → no query data → the viz column (and its collapse
+    // controls) should not render at all.
+    const empty = setup({ query: 'SELECT 1', connection_name: 'demo_db' });
+    renderQuestion(empty);
+    expect(screen.queryByLabelText('Viz panel')).toBeNull();
+    expect(screen.queryByLabelText('Collapse viz panel')).toBeNull();
+
+    // Once there IS query data, the column appears.
+    const withData = setupWithData();
+    renderQuestion(withData);
+    expect(screen.getByLabelText('Viz panel')).toBeInTheDocument();
+  });
+
+  it('the viz panel is open by default (with data) and collapses to a slim strip via a chevron', () => {
+    const store = setupWithData();
     renderQuestion(store);
 
     expect(screen.getByLabelText('Viz panel')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText('Collapse viz panel'));
+    // Two collapse chevrons live on the panel: the edge-rail one (where the old
+    // grip sat) and the header one. Either collapses the column.
+    fireEvent.click(screen.getAllByLabelText('Collapse viz panel')[0]);
     expect(screen.queryByLabelText('Viz panel')).toBeNull();
 
     fireEvent.click(screen.getByLabelText('Expand viz panel'));
@@ -220,18 +258,25 @@ describe('QuestionViewV2 — three-column layout (viz panel on the right)', () =
   });
 
   it('the mode selector has no Viz tab in the wide layout — viz lives in the right panel', () => {
-    const store = setup({ query: 'SELECT 1', connection_name: 'demo_db' });
+    const store = setupWithData();
     renderQuestion(store);
 
     expect(screen.getByLabelText('SQL')).toBeInTheDocument();
     expect(screen.queryByLabelText('Viz')).toBeNull();
   });
 
-  it('the viz handle has chevrons on BOTH sides, like the left handle — the left one collapses the data panel', () => {
-    const store = setup({ query: 'SELECT 1', connection_name: 'demo_db' });
+  it('the viz panel is a fixed-width column — no drag handle, no redundant data-collapse chevron', () => {
+    const store = setupWithData();
     renderQuestion(store);
 
-    fireEvent.click(screen.getByLabelText('Collapse data panel'));
+    // The viz resize handle is gone, so its redundant "Collapse data panel"
+    // chevron no longer exists.
+    expect(screen.queryByLabelText('Collapse data panel')).toBeNull();
+    // Collapse is still offered (edge rail + header chevrons).
+    expect(screen.getAllByLabelText('Collapse viz panel').length).toBeGreaterThan(0);
+
+    // Data (results) is still collapsible — from the left handle's chevron.
+    fireEvent.click(screen.getByLabelText('Collapse results panel'));
     expect(selectQuestionCollapsedPanel(store.getState())).toBe('right');
     // the viz panel itself stays open
     expect(screen.getByLabelText('Viz panel')).toBeInTheDocument();
