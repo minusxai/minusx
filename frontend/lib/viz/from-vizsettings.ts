@@ -381,10 +381,13 @@ export function vizSettingsToEnvelope(
     }
 
     case 'combo': {
+      // V1 dual-axis semantics: yCols → bars (left axis), yRightCols → line (right).
+      // A combo defined with two yCols and no right axis falls back to yCols[1].
       const measures = yCols.filter(nonEmpty);
+      const rightMeasure = (vizSettings.yRightCols ?? []).find(nonEmpty);
       return recipeEnvelope(
         'minusx/combo@1',
-        compact({ x: first(xCols), bar: measures[0], line: measures[1] ?? measures[0] }) as Record<string, string>,
+        compact({ x: first(xCols), bar: measures[0], line: rightMeasure ?? measures[1] ?? measures[0] }) as Record<string, string>,
         null,
         columnFormats,
       );

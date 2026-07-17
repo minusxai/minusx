@@ -176,6 +176,12 @@ describe('recipe sources (non-geo)', () => {
     expectMaterializes(e);
   });
 
+  it('combo: yRightCols is the LINE (V1 dual-axis semantics: yCols→bars, yRightCols→line)', () => {
+    const e = vizSettingsToEnvelope(vs({ type: 'combo', xCols: ['week'], yCols: ['revenue'], yRightCols: ['orders'] }));
+    expect(src(e).bindings).toEqual({ x: 'week', bar: 'revenue', line: 'orders' });
+    expectMaterializes(e);
+  });
+
   it('single_value → minusx/single-value@1 { value }, styling from singleValueConfig', () => {
     const e = vizSettingsToEnvelope(vs({
       type: 'single_value', yCols: ['mrr'],

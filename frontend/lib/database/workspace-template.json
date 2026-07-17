@@ -432,55 +432,30 @@
         "query": "SELECT \n  DATE_TRUNC('week', created_at) as week,\n  COUNT(*) as orders,\n  SUM(total) as revenue\nFROM mxfood.orders\nGROUP BY DATE_TRUNC('week', created_at)\nORDER BY week",
         "connection_name": "static",
         "vizSettings": {
-          "type": "line",
+          "type": "combo",
           "xCols": [
             "week"
           ],
           "yCols": [
-            "orders",
             "revenue"
+          ],
+          "yRightCols": [
+            "orders"
           ]
         },
         "parameters": [],
         "viz": {
           "version": 2,
           "source": {
-            "kind": "vega-lite",
-            "grammar": "vega-lite@6",
-            "spec": {
-              "mark": {
-                "type": "line"
-              },
-              "encoding": {
-                "x": {
-                  "field": "week",
-                  "type": "temporal"
-                },
-                "y": {
-                  "field": "__mx_value",
-                  "type": "quantitative",
-                  "aggregate": "sum",
-                  "title": null
-                },
-                "color": {
-                  "field": "__mx_key",
-                  "type": "nominal",
-                  "title": null
-                }
-              },
-              "transform": [
-                {
-                  "fold": [
-                    "orders",
-                    "revenue"
-                  ],
-                  "as": [
-                    "__mx_key",
-                    "__mx_value"
-                  ]
-                }
-              ]
-            }
+            "kind": "recipe",
+            "recipe": "minusx/combo@1",
+            "bindings": {
+              "x": "week",
+              "bar": "revenue",
+              "line": "orders"
+            },
+            "params": null,
+            "columnFormats": null
           }
         }
       },
