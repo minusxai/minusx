@@ -46,10 +46,10 @@ export async function POST(req: NextRequest) {
       const content = file.content as QuestionContent;
       const existing = content.viz ?? null;
       if (existing != null && !overwrite) { alreadyV2++; continue; }
-      const vizType = content.vizSettings?.type;
-      if (!vizType) { skipped.push({ id: file.id, name: file.name, reason: 'no vizSettings' }); continue; }
+      const vizSettings = content.vizSettings;
+      if (!vizSettings?.type) { skipped.push({ id: file.id, name: file.name, reason: 'no vizSettings' }); continue; }
       try {
-        const viz = vizSettingsToEnvelopeStatic(content.vizSettings, content.query);
+        const viz = vizSettingsToEnvelopeStatic(vizSettings, content.query);
         // Downgrade guard: never replace a hand-authored CHART envelope with a DOM-tier
         // derivation (post-V2 files carry the template's table vizSettings while the real
         // chart lives only in `viz` — re-deriving would destroy it).

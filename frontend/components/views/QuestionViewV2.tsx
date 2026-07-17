@@ -24,7 +24,7 @@ import {
   LuRefreshCw,
   LuTable2,
 } from 'react-icons/lu';
-import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType, type DbFile } from '@/lib/types';
+import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType, type VizSettings, type DbFile } from '@/lib/types';
 import SqlEditor from '../query-builder/SqlEditor';
 import ParameterRow from '../params/ParameterRow';
 import DatabaseSelector from '../selectors/DatabaseSelector';
@@ -427,8 +427,12 @@ export default function QuestionViewV2({
     [semanticSpec],
   );
 
+  // vizSettings is optional (viz-first files omit it) — classic-panel edits start
+  // from a just-in-time table base when it's absent.
+  const baseVizSettings = (): VizSettings => content.vizSettings ?? { type: 'table' };
+
   const handleVizTypeChange = (type: VisualizationType) => {
-    onChange({ vizSettings: { ...content.vizSettings, type, typeLocked: true } });
+    onChange({ vizSettings: { ...baseVizSettings(), type, typeLocked: true } });
   };
 
   // The Auto badge: locked → unlock and immediately re-infer from the spec;
@@ -437,13 +441,13 @@ export default function QuestionViewV2({
     if (vizTypeLocked) {
       onChange({
         vizSettings: {
-          ...content.vizSettings,
+          ...baseVizSettings(),
           typeLocked: false,
           ...(semanticSpec ? { type: inferVizType(semanticSpec) } : {}),
         },
       });
     } else {
-      onChange({ vizSettings: { ...content.vizSettings, typeLocked: true } });
+      onChange({ vizSettings: { ...baseVizSettings(), typeLocked: true } });
     }
   };
 
@@ -451,7 +455,7 @@ export default function QuestionViewV2({
   const handleAxisChange = (xCols: string[], yCols: string[]) => {
     onChange({
       vizSettings: {
-        ...content.vizSettings,
+        ...baseVizSettings(),
         xCols,
         yCols
       }
@@ -461,7 +465,7 @@ export default function QuestionViewV2({
   const handleYRightColsChange = (yRightCols: string[]) => {
     onChange({
       vizSettings: {
-        ...content.vizSettings,
+        ...baseVizSettings(),
         yRightCols,
       }
     });
@@ -470,7 +474,7 @@ export default function QuestionViewV2({
   const handleTooltipColsChange = (tooltipCols: string[]) => {
     onChange({
       vizSettings: {
-        ...content.vizSettings,
+        ...baseVizSettings(),
         tooltipCols,
       }
     });
@@ -478,40 +482,40 @@ export default function QuestionViewV2({
 
   // Handle pivot config change
   const handlePivotConfigChange = (pivotConfig: import('@/lib/types').PivotConfig) => {
-    onChange({ vizSettings: { ...content.vizSettings, pivotConfig } });
+    onChange({ vizSettings: { ...baseVizSettings(), pivotConfig } });
   };
 
   // Handle geo config change
   const handleGeoConfigChange = (geoConfig: import('@/lib/types').GeoConfig) => {
-    onChange({ vizSettings: { ...content.vizSettings, geoConfig } });
+    onChange({ vizSettings: { ...baseVizSettings(), geoConfig } });
   };
 
   // Handle column formats change
   const handleColumnFormatsChange = (columnFormats: Record<string, import('@/lib/types').ColumnFormatConfig>) => {
-    onChange({ vizSettings: { ...content.vizSettings, columnFormats } });
+    onChange({ vizSettings: { ...baseVizSettings(), columnFormats } });
   };
 
   // Handle conditional formatting rule changes (table viz)
   const handleConditionalFormatsChange = (conditionalFormats: import('@/lib/types').ConditionalFormatRule[]) => {
-    onChange({ vizSettings: { ...content.vizSettings, conditionalFormats } });
+    onChange({ vizSettings: { ...baseVizSettings(), conditionalFormats } });
   };
 
   // Handle shared visual style changes
   const handleStyleConfigChange = (styleConfig: import('@/lib/types').VisualizationStyleConfig) => {
-    onChange({ vizSettings: { ...content.vizSettings, styleConfig } });
+    onChange({ vizSettings: { ...baseVizSettings(), styleConfig } });
   };
 
   const handleAnnotationsChange = (annotations: import('@/lib/types').ChartAnnotation[]) => {
-    onChange({ vizSettings: { ...content.vizSettings, annotations } });
+    onChange({ vizSettings: { ...baseVizSettings(), annotations } });
   };
 
   const handleTrendConfigChange = (trendConfig: import('@/lib/types').TrendConfig) => {
-    onChange({ vizSettings: { ...content.vizSettings, trendConfig } });
+    onChange({ vizSettings: { ...baseVizSettings(), trendConfig } });
   };
 
   // Handle axis config change (scale type)
   const handleAxisConfigChange = (axisConfig: import('@/lib/types').AxisConfig) => {
-    onChange({ vizSettings: { ...content.vizSettings, axisConfig } });
+    onChange({ vizSettings: { ...baseVizSettings(), axisConfig } });
   };
 
   const parameters = useMemo(() => content.parameters || [], [content.parameters]);
@@ -846,7 +850,7 @@ export default function QuestionViewV2({
                           semanticQuery: spec,
                           query: sql,
                           vizSettings: {
-                            ...content.vizSettings,
+                            ...baseVizSettings(),
                             ...(vizTypeLocked ? {} : { type: viz.type }),
                             xCols: viz.xCols,
                             yCols: viz.yCols,

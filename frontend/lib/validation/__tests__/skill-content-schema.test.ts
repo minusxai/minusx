@@ -6,6 +6,7 @@
  * `{ref}` template engine.
  */
 import { describe, it, expect } from 'vitest';
+import { validateFileState } from '../content-validators';
 import {
   contentSchemaText,
   SCHEMA_TEMPLATE_VARS,
@@ -72,5 +73,27 @@ describe('contentSchemaText — live per-file-type content schema for skills', (
       'schema_question', 'schema_dashboard', 'schema_story', 'schema_notebook', 'schema_context',
     ]);
     expect(SCHEMA_TEMPLATE_VARS.schema_question).toBe(contentSchemaText('question'));
+  });
+});
+
+// vizSettings is OPTIONAL (viz-first): viz-only content — no vizSettings — must
+// validate for both questions and notebook SQL cells. On a rollback to the
+// classic format such files fall back at render time; nothing injects a
+// placeholder into authored content.
+describe('vizSettings optionality (viz-first authoring)', () => {
+  it('a question without vizSettings validates', () => {
+    const err = validateFileState({
+      type: 'question',
+      content: { description: '', query: 'SELECT 1', connection_name: 'db', parameters: [], viz: { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } } },
+    });
+    expect(err).toBeNull();
+  });
+
+  it('a notebook SQL cell without vizSettings validates', () => {
+    const err = validateFileState({
+      type: 'notebook',
+      content: { description: '', cells: [{ type: 'sql', id: 'c1', name: null, query: 'SELECT 1', parameters: [], parameterValues: {}, connection_name: 'db', viz: { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } } }] },
+    });
+    expect(err).toBeNull();
   });
 });

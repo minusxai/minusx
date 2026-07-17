@@ -103,7 +103,7 @@ export default function ExecuteQueryDisplay({ toolCallTuple, databaseName, isCom
 
   // Set initial expansion state only once when data is available
   useEffect(() => {
-    if (!hasInitializedExpansion.current && queryResult && queryResult.columns && queryResult.columns.length > 0 && question?.vizSettings.type !== 'table') {
+    if (!hasInitializedExpansion.current && queryResult && queryResult.columns && queryResult.columns.length > 0 && question?.vizSettings?.type !== 'table') {
       setIsExpanded(true);
       setIsThinkingSQL(false);
       hasInitializedExpansion.current = true;

@@ -19,6 +19,9 @@ vi.mock('@/components/viz/VegaChart', () => ({
     <div aria-label={`Vega chart surface ${((envelope?.source as { kind?: string })?.kind) ?? 'unknown'}`} />
   ),
 }))
+vi.mock('@/components/plotx/TableV2', () => ({
+  TableV2: () => <div aria-label="Table surface" />,
+}))
 vi.mock('@/components/plotx/ChartBuilder', () => ({
   ChartBuilder: () => <div aria-label="Classic chart builder" />,
 }))
@@ -310,5 +313,43 @@ describe('QuestionViewV2 — wide-layout right panel follows the flag', () => {
     renderWideView(semanticContent, { vizV2Enabled: true })
     expect(await screen.findByLabelText('Classic viz config panel')).toBeInTheDocument()
     expect(screen.queryByLabelText('Vega viz panel')).not.toBeInTheDocument()
+  })
+})
+
+// ─── Viz-only files (no vizSettings at all) ──────────────────────────────────
+//
+// vizSettings is OPTIONAL: viz-first files are born without it. On a rollback
+// (vizV2 OFF, or the echarts escape hatch) such a file must fall back to the
+// table just-in-time — never render blank. Nothing writes a placeholder.
+
+describe('viz-only files — rollback falls back to table JIT', () => {
+  const VIZ_ONLY = {
+    query: 'SELECT 1',
+    connection_name: 'db',
+    viz: {
+      version: 2,
+      source: {
+        kind: 'vega-lite',
+        grammar: 'vega-lite@6',
+        spec: { mark: 'bar', encoding: { x: { field: 'month', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } } },
+      },
+    },
+  } as unknown as QuestionContent
+
+  it('V2 active (default): the envelope renders directly', async () => {
+    renderQuestion(VIZ_ONLY, { vizV2: true })
+    expect(await screen.findByLabelText('Vega chart surface vega-lite')).toBeInTheDocument()
+  })
+
+  it('rollback to V1 format: falls back to the table, not a blank surface', async () => {
+    renderQuestion(VIZ_ONLY, { vizV2: false })
+    expect(await screen.findByLabelText('Table surface')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Vega chart surface vega-lite')).not.toBeInTheDocument()
+  })
+
+  it('echarts escape hatch: falls back to the table, not a blank surface', async () => {
+    renderQuestion(VIZ_ONLY, { vizV2: true, renderer: 'echarts' })
+    expect(await screen.findByLabelText('Table surface')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Classic chart builder')).not.toBeInTheDocument()
   })
 })

@@ -9,13 +9,14 @@ import { getTemplateDefaults } from '../template-defaults';
 import type { QuestionContent } from '@/lib/types';
 
 describe('getTemplateDefaults question → V2', () => {
-  it('scaffolds a viz envelope (kind:table), viz authoritative over vizSettings', () => {
+  it('scaffolds a viz envelope (kind:table); born viz-only, no vizSettings', () => {
     const content = getTemplateDefaults('question') as QuestionContent;
     expect(content.viz).toBeTruthy();
     expect(content.viz!.version).toBe(2);
     expect((content.viz!.source as unknown as { kind: string }).kind).toBe('table');
-    // vizSettings stays (schema requires it; viz overrides) until item 5.
-    expect(content.vizSettings?.type).toBe('table');
+    // vizSettings is optional (viz-first): new questions are born WITHOUT it —
+    // on rollback the classic pipeline falls back to a table just-in-time.
+    expect('vizSettings' in content).toBe(false);
   });
 
   it('threads the seed query through', () => {

@@ -308,35 +308,35 @@ export default function ChartCarousel({
                 <Box px={3} py={2} display="flex" flexDirection="column" gap={0}>
                   <VizTypeSelector
                     value={localContent.vizSettings?.type || 'table'}
-                    onChange={(type) => { if (isClassicVizType(type)) handleContentChange({ vizSettings: { ...localContent!.vizSettings, type } }) }}
+                    onChange={(type) => { if (isClassicVizType(type)) handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), type } }) }}
                     orientation="grouped"
                   />
                   {localContent.vizSettings?.type && localContent.vizSettings.type !== 'table' && (
                     <VizConfigPanel
                       columns={current.queryResult.columns}
                       types={current.queryResult.types}
-                      chartType={localContent.vizSettings.type}
+                      chartType={localContent.vizSettings?.type ?? 'table'}
                       initialXCols={localContent.vizSettings?.xCols ?? undefined}
                       initialYCols={localContent.vizSettings?.yCols ?? undefined}
                       initialYRightCols={localContent.vizSettings?.yRightCols ?? undefined}
-                      onAxisChange={(xCols, yCols) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, xCols, yCols } })}
-                      onYRightColsChange={(yRightCols) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, yRightCols } })}
+                      onAxisChange={(xCols, yCols) => handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), xCols, yCols } })}
+                      onYRightColsChange={(yRightCols) => handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), yRightCols } })}
                       initialTooltipCols={localContent.vizSettings?.tooltipCols ?? undefined}
-                      onTooltipColsChange={(tooltipCols) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, tooltipCols } })}
+                      onTooltipColsChange={(tooltipCols) => handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), tooltipCols } })}
                       initialPivotConfig={localContent.vizSettings?.pivotConfig ?? undefined}
-                      onPivotConfigChange={(pivotConfig) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, pivotConfig } })}
+                      onPivotConfigChange={(pivotConfig) => handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), pivotConfig } })}
                       initialGeoConfig={localContent.vizSettings?.geoConfig ?? undefined}
-                      onGeoConfigChange={(geoConfig) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, geoConfig } })}
+                      onGeoConfigChange={(geoConfig) => handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), geoConfig } })}
                       initialColumnFormats={localContent.vizSettings?.columnFormats ?? undefined}
-                      onColumnFormatsChange={(columnFormats) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, columnFormats } })}
+                      onColumnFormatsChange={(columnFormats) => handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), columnFormats } })}
                       styleConfig={localContent.vizSettings?.styleConfig ?? undefined}
-                      onStyleConfigChange={(styleConfig) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, styleConfig } })}
+                      onStyleConfigChange={(styleConfig) => handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), styleConfig } })}
                       axisConfig={localContent.vizSettings?.axisConfig ?? undefined}
-                      onAxisConfigChange={(axisConfig) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, axisConfig } })}
+                      onAxisConfigChange={(axisConfig) => handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), axisConfig } })}
                       annotations={localContent.vizSettings?.annotations ?? undefined}
-                      onAnnotationsChange={(annotations) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, annotations } })}
+                      onAnnotationsChange={(annotations) => handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), annotations } })}
                       trendConfig={localContent.vizSettings?.trendConfig ?? undefined}
-                      onTrendConfigChange={(trendConfig) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, trendConfig } })}
+                      onTrendConfigChange={(trendConfig) => handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), trendConfig } })}
                       seriesCount={chartSeriesCount}
                       getMapView={getMapView}
                     />
@@ -368,8 +368,8 @@ export default function ChartCarousel({
               loading={false}
               error={null}
               data={current.queryResult}
-              onVizTypeChange={(type) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, type } })}
-              onAxisChange={(xCols, yCols) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, xCols, yCols } })}
+              onVizTypeChange={(type) => handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), type } })}
+              onAxisChange={(xCols, yCols) => handleContentChange({ vizSettings: { ...(localContent!.vizSettings ?? { type: 'table' as const }), xCols, yCols } })}
               onMapReady={handleMapReady}
               onSeriesCountChange={setChartSeriesCount}
             />

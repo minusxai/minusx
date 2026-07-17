@@ -465,12 +465,15 @@ describe('v37 — add viz envelopes to questions and notebook cells', () => {
 
   it('adds a viz derived from vizSettings; vizSettings stays byte-identical', () => {
     const vizSettings = { type: 'bar', xCols: ['region'], yCols: ['revenue'] };
+    // Snapshot BEFORE migrating — comparing against the live object would be a
+    // tautology (an in-place mutation would change both sides identically).
+    const before = structuredClone(vizSettings);
     const doc = makeDoc(1, { content: { query: 'SELECT 1', vizSettings, connection_name: 'db' } as any });
     const out = v37(initData([doc], 36));
     const c = out.documents![0].content as any;
     expect(c.viz?.version).toBe(2);
     expect(c.viz.source.kind).toBe('vega-lite');
-    expect(c.vizSettings).toEqual(vizSettings);
+    expect(c.vizSettings).toEqual(before);
   });
 
   it('never overwrites an existing viz', () => {

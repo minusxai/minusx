@@ -82,13 +82,13 @@ describe('story-question — embed → QuestionContent projection (for rendering
     const c = inlineEmbedToQuestionContent(embed);
     expect(c.query).toBe(embed.query);
     expect(c.connection_name).toBe('duckdb');
-    expect(c.vizSettings.type).toBe('single_value');
+    expect(c.vizSettings?.type).toBe('single_value');
     expect(c.parameters).toEqual(embed.parameters);
   });
 
   it('a bare inline question still yields a valid QuestionContent (table viz default)', () => {
     const c = inlineEmbedToQuestionContent({ query: 'SELECT 1', connection: '' });
-    expect(c.vizSettings.type).toBe('table');
+    expect(c.vizSettings?.type).toBe('table');
     expect(c.connection_name).toBe('');
     expect(c.parameters).toEqual([]);
   });

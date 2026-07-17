@@ -277,3 +277,38 @@ describe('fileToMarkup / markupToContent — strChild edge cases (other-issues a
     if (back.ok) expect(back.content.description).toBe('ends with brace }');
   });
 });
+
+// Viz-first authoring: the agent authors `<viz>` envelopes and never
+// `<vizSettings>` — the schema keeps vizSettings OPTIONAL so viz-only markup is
+// valid as-is (no placeholder is injected; on a rollback to the classic format,
+// a file without vizSettings falls back at render time).
+describe('markupToContent — vizSettings is optional (viz-first authoring)', () => {
+  const VIZ = '<viz><version>2</version><source><kind>table</kind></source></viz>';
+
+  it('a question without <vizSettings> parses clean, with NO placeholder injected', () => {
+    const back = markupToContent('question', `<query>SELECT 1</query><connection_name>db</connection_name>${VIZ}`);
+    expect(back.ok).toBe(true);
+    if (back.ok) expect('vizSettings' in back.content).toBe(false);
+  });
+
+  it('SQL cells without <vizSettings> parse clean, with NO placeholder injected', () => {
+    const markup = `<cells>
+      <item><type>sql</type><id>c1</id><query>SELECT 1</query><connection_name>db</connection_name>${VIZ}</item>
+      <item><type>text</type><id>c2</id><content>hello</content></item>
+    </cells>`;
+    const back = markupToContent('notebook', markup);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      const cells = back.content.cells as Record<string, unknown>[];
+      expect('vizSettings' in cells[0]).toBe(false);
+      expect('vizSettings' in cells[1]).toBe(false);
+    }
+  });
+
+  it('an authored <vizSettings> round-trips untouched', () => {
+    const back = markupToContent('question',
+      '<query>SELECT 1</query><connection_name>db</connection_name><vizSettings><type>bar</type><xCols><item>m</item></xCols><yCols><item>v</item></yCols></vizSettings>');
+    expect(back.ok).toBe(true);
+    if (back.ok) expect(back.content.vizSettings).toEqual({ type: 'bar', xCols: ['m'], yCols: ['v'] });
+  });
+});

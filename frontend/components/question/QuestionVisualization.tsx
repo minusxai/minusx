@@ -217,7 +217,11 @@ function QuestionVisualizationInner({
   const vizV2Kind = hasVizV2 ? (currentState.viz!.source as unknown as { kind: string }).kind : null;
   const isVizV2Table = vizV2Kind === 'table';
   const isVizV2Pivot = vizV2Kind === 'pivot';
-  const isChartType = hasVizV2 || (currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table');
+  // vizSettings is OPTIONAL (viz-first files omit it): when the classic format is
+  // authoritative and there is no vizSettings, fall back to the table just-in-time
+  // — a viz-only file must never render blank on rollback.
+  const legacyVizType = currentState?.vizSettings?.type ?? 'table';
+  const isChartType = hasVizV2 || legacyVizType !== 'table';
 
   // V1→V2 render bridge (Viz Arch V2 §21 item 1): on EVERY surface, a chart whose
   // truth is `vizSettings` renders through <VegaChart> via just-in-time conversion —
@@ -452,7 +456,7 @@ function QuestionVisualizationInner({
         {/* Data content */}
         {!error && (
           <Box
-            p={currentState?.vizSettings?.type === 'table' && config.showHeader ? 6 : 0}
+            p={(hasVizV2 ? isVizV2Table : legacyVizType === 'table') && config.showHeader ? 6 : 0}
             flex="1"
             display="flex"
             flexDirection="column"
@@ -532,7 +536,7 @@ function QuestionVisualizationInner({
                     {chartDownloadOverlay(currentState.viz!)}
                   </Box>
                 )}
-                {!hasVizV2 && currentState?.vizSettings?.type === 'table' && (
+                {!hasVizV2 && legacyVizType === 'table' && (
                   <Box flex="1" minHeight="0" overflow="hidden" display="flex" width={"100%"} alignItems={"stretch"} flexDirection={"column"}>
                     <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.connection_name} enableDrilldown={config.enableDrilldown !== false} columnFormats={currentState.vizSettings?.columnFormats ?? undefined} onColumnFormatsChange={config.editable ? onColumnFormatsChange : undefined} conditionalFormats={currentState.vizSettings?.conditionalFormats ?? undefined} />
                   </Box>

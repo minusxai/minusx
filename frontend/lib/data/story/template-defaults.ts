@@ -18,12 +18,10 @@ export function getTemplateDefaults(type: FileType, options?: { query?: string }
       return {
         description: '',
         query: options?.query || '',
-        // Viz Arch V2 §21 item 3: new questions are V2 — an authoritative `viz` envelope
-        // (a DOM-tier table) renders + edits through the V2 pipeline. The `vizSettings`
-        // placeholder stays only because the schema still requires it (`viz` overrides it);
-        // item 5 drops the field and makes `viz` required.
+        // Viz Arch V2: new questions are born viz-only — an authoritative `viz` envelope
+        // (a DOM-tier table). `vizSettings` is optional (legacy rollback field, never
+        // authored); when absent, the classic pipeline falls back to a table at render time.
         viz: { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } },
-        vizSettings: { type: 'table' },
         parameters: [],
         connection_name: '',
       } as QuestionContent;
