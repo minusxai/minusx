@@ -93,7 +93,12 @@ export function useStoryRaster(
       bitmapRef.current?.close(); // release the previous raster's pixel memory eagerly
       bitmapRef.current = bitmap;
       setResult(raster);
-    })().catch(() => { if (!cancelled) setFailed(true); });
+    })().catch((err) => {
+      // Deliberate observability: the DOM fallback is silent by design, which has
+      // repeatedly masked real pipeline regressions ("why is this page on DOM?").
+      console.warn('[canvas-story] raster failed — falling back to DOM renderer:', err);
+      if (!cancelled) setFailed(true);
+    });
     return () => { cancelled = true; };
   }, [html, compiledCss, layoutWidth, containerW, embedSizesKey]);
 
