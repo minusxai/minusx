@@ -35,10 +35,14 @@ export function DataLoader() {
       if (confirm !== null) flags.askForConfirmation = confirm === 'true';
       const advanced = localStorage.getItem('showAdvanced');
       if (advanced !== null) flags.showAdvanced = advanced === 'true';
-      const vizV2 = localStorage.getItem('vizV2');
+      // '_v2' keys: the pre-flip 'vizV2'/'vizRenderer' values are deliberately never read,
+      // so stale opt-outs from before the vega+V2 default flip don't pin a browser to V1
+      const vizV2 = localStorage.getItem('vizV2_v2');
       if (vizV2 !== null) flags.vizV2 = vizV2 === 'true';
-      const vizRenderer = localStorage.getItem('vizRenderer');
+      const vizRenderer = localStorage.getItem('vizRenderer_v2');
       if (vizRenderer === 'echarts' || vizRenderer === 'vega') flags.vizRenderer = vizRenderer;
+      localStorage.removeItem('vizV2');
+      localStorage.removeItem('vizRenderer');
       const suggestedQuestions = localStorage.getItem('showSuggestedQuestions');
       if (suggestedQuestions !== null) flags.showSuggestedQuestions = suggestedQuestions === 'true';
       const trustScore = localStorage.getItem('showTrustScore');

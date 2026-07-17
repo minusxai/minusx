@@ -152,13 +152,15 @@ const uiSlice = createSlice({
     setVizV2: (state, action: PayloadAction<boolean>) => {
       state.vizV2 = action.payload;
       if (typeof window !== 'undefined') {
-        try { localStorage.setItem('vizV2', String(action.payload)); } catch { /* ignore */ }
+        // '_v2' key suffix: retired the pre-flip 'vizV2'/'vizRenderer' keys so every
+        // browser picks up the new vega+V2 defaults once (same pattern as allowChatQueue_v2)
+        try { localStorage.setItem('vizV2_v2', String(action.payload)); } catch { /* ignore */ }
       }
     },
     setVizRenderer: (state, action: PayloadAction<'echarts' | 'vega'>) => {
       state.vizRenderer = action.payload;
       if (typeof window !== 'undefined') {
-        try { localStorage.setItem('vizRenderer', action.payload); } catch { /* ignore */ }
+        try { localStorage.setItem('vizRenderer_v2', action.payload); } catch { /* ignore */ }
       }
     },
     setShowSuggestedQuestions: (state, action: PayloadAction<boolean>) => {
