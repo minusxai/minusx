@@ -694,6 +694,16 @@ which both fixed the white-on-white selection bug and halved raster work + bitma
 ImageBitmaps are `close()`d on replacement and unmount (story raster + island caches);
 all observers/timers/listeners/providers unregister on unmount.
 
+**Round 13 — DOM-exact root padding (`@container` ancestor semantics).** A `@container`
+query matches an element's ANCESTOR container, so a variant class on the container
+element itself (the story root's own `@2xl:px-12`) never applies in the DOM. The static
+resolver now scopes every unwrapped rule to `.\@container` descendants — handling both
+emission forms: classic (`@container{.sel{…}}`) and Tailwind v4 nested
+(`.sel{@container{…}}`, the form real compiledCss documents use). Canvas root padding
+now matches the DOM exactly. Remaining known visual delta vs the DOM: balanced heading
+wrap (neutralized for geometry correctness, round 11) and sub-word font-metric drift on
+@import'd serif faces.
+
 ## 5. Risks & open questions
 
 1. **Raster quality vs today's DOM view.** With canvas as the viewer there is
