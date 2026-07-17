@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { shallowEqual } from 'react-redux';
 import { Box, Center, Dialog, Flex, HStack, Icon, Portal, Spinner, Text } from '@chakra-ui/react';
 import { LuChevronRight, LuMessageSquare, LuX } from 'react-icons/lu';
@@ -53,6 +53,7 @@ async function mintSession(shareId: string, body: Record<string, unknown>): Prom
 
 export default function SharePageClient({ shareId }: { shareId: string }) {
   const dispatch = useAppDispatch();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const skipLead = searchParams.has('skip_lead');
 
@@ -78,7 +79,18 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
     (async () => {
       try {
         const s = await mintSession(shareId, { skipLead });
-        if (!cancelled) { applySession(s); setStatus('ready'); }
+        if (!cancelled) {
+          applySession(s);
+          setStatus('ready');
+          // Pin the share's mode in the URL (the app's mode-propagation pattern):
+          // without it, a logged-in owner's session mode (org) shadows the guest
+          // cookie on API calls and the shared file loads EMPTY from the wrong mode.
+          const qs = new URLSearchParams(window.location.search);
+          if (!qs.get('mode')) {
+            qs.set('mode', s.mode);
+            router.replace(`${window.location.pathname}?${qs.toString()}`, { scroll: false });
+          }
+        }
       } catch {
         if (!cancelled) setStatus('error');
       }
@@ -143,6 +155,13 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
         <Text color="fg.muted">This link is invalid or has been revoked.</Text>
       </Center>
     );
+  }
+
+  // Wait for the pinned mode to land in the URL before mounting the story: the
+  // global fetch patch appends `mode` from the URL, so a fetch issued before the
+  // pin would load the file from the signed-in user's mode (org → empty file).
+  if (session.mode !== 'org' && searchParams.get('mode') !== session.mode) {
+    return <Center h="100vh" bg="bg.canvas"><Spinner size="xl" color="primary" /></Center>;
   }
 
   const showChat = session.chatEnabled;
