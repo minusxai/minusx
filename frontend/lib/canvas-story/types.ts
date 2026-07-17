@@ -7,8 +7,22 @@
  * All geometry is in CSS pixels relative to the story's top-left, at the given width.
  */
 
-/** Device pixel ratio for story rasters (crisp on retina; capture math shares it). */
-export const STORY_DPR = 2;
+/** Maximum device pixel ratio for story rasters. */
+export const STORY_MAX_DPR = 2;
+
+/**
+ * Effective raster DPR: the device's real pixel ratio, clamped to [1, 2]. A fixed
+ * DPR 2 wasted 4x bitmap memory (~100MB on a long story) on 1x displays — old
+ * hardware pays that most. Callers must use the dpr RECORDED ON THE RESULT for
+ * geometry math; this function only decides the dpr for the NEXT raster.
+ */
+export function storyDpr(): number {
+  const d = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  return Math.min(Math.max(d, 1), STORY_MAX_DPR);
+}
+
+/** @deprecated geometry consumers should read `result.dpr`; kept for the raster cap. */
+export const STORY_DPR = STORY_MAX_DPR;
 
 /** One laid-out fragment of text (a line piece within a block). Document order. */
 export interface StoryTextRun {
@@ -81,6 +95,8 @@ export interface StoryRasterResult {
   embeds: StoryEmbedBox[];
   /** Editable text blocks (p, headings, li, blockquote, …) for the canvas editor. */
   blocks: StoryBlockBox[];
+  /** The dpr this raster was produced at — ALL device-px geometry math uses this. */
+  dpr: number;
 }
 
 /**

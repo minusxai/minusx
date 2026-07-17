@@ -11,7 +11,7 @@
 
 import { getStoryRenderer } from '@/lib/canvas-story/renderer.client';
 import { renderStoryRaster } from '@/lib/canvas-story/raster';
-import { STORY_DPR } from '@/lib/canvas-story/types';
+import { storyDpr } from '@/lib/canvas-story/types';
 
 /** A live pixel source inside the island (vega/echarts canvas), island-relative CSS px. */
 export interface IslandCanvasBox {
@@ -23,7 +23,7 @@ export interface IslandCanvasBox {
 }
 
 export interface IslandRaster {
-  /** Rasterized HTML chrome at STORY_DPR (canvas elements left as blank boxes). */
+  /** Rasterized HTML chrome at the story dpr (canvas elements left as blank boxes). */
   chrome: ImageBitmap;
   /** Island size in CSS px at raster time. */
   width: number;
@@ -102,7 +102,7 @@ export async function rasterizeIslandChrome(host: HTMLElement): Promise<IslandRa
     html,
     stylesheets: [],
     width: Math.max(1, Math.ceil(width)),
-    dpr: STORY_DPR,
+    dpr: storyDpr(),
   });
   const chrome = await createImageBitmap(new Blob([raster.png as BlobPart], { type: 'image/png' }));
   return { chrome, canvases, width, height };

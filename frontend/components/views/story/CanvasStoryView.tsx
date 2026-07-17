@@ -19,7 +19,7 @@
 import { Box, Theme } from '@chakra-ui/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import StoryEmbeds from '@/components/views/shared/StoryEmbeds';
-import { STORY_DPR } from '@/lib/canvas-story/types';
+import { storyDpr } from '@/lib/canvas-story/types';
 import { useStoryRaster } from '@/lib/canvas-story/use-story-raster';
 import { useCanvasSelection } from '@/lib/canvas-story/use-canvas-selection';
 import { useEmbedIslands } from '@/lib/canvas-story/use-embed-islands';
@@ -88,15 +88,16 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
     if (!canvas || !ctx) return;
     if (!editor.active) { selection.redraw(); return; }
     const b = editor.active.box;
-    const sx = Math.max(0, Math.round((b.x - 8) * STORY_DPR));
-    const sy = Math.max(0, Math.round((b.y + 2) * STORY_DPR));
+    const dpr = result?.dpr ?? storyDpr();
+    const sx = Math.max(0, Math.round((b.x - 8) * dpr));
+    const sy = Math.max(0, Math.round((b.y + 2) * dpr));
     let fill = colorMode === 'dark' ? '#111827' : '#ffffff';
     try {
       const px = ctx.getImageData(sx, sy, 1, 1).data;
       fill = `rgb(${px[0]},${px[1]},${px[2]})`;
     } catch { /* tainted/edge — fall back to theme bg */ }
     ctx.fillStyle = fill;
-    ctx.fillRect(b.x * STORY_DPR, b.y * STORY_DPR, b.w * STORY_DPR, b.h * STORY_DPR);
+    ctx.fillRect(b.x * dpr, b.y * dpr, b.w * dpr, b.h * dpr);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- redraw identity churns with result; mask depends on the active block only
   }, [editor.active, colorMode]);
 
@@ -106,8 +107,8 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
     <Box ref={containerRef} position="relative" width="100%" aria-label="canvas-story">
       <canvas
         ref={canvasRef}
-        width={(result?.width ?? width) * STORY_DPR}
-        height={(result?.height ?? 0) * STORY_DPR}
+        width={(result?.width ?? width) * (result?.dpr ?? storyDpr())}
+        height={(result?.height ?? 0) * (result?.dpr ?? storyDpr())}
         style={{ display: 'block', width: `${(result?.width ?? width) * scale}px`, height: `${(result?.height ?? 0) * scale}px`, cursor: 'text' }}
         onMouseDown={onCanvasMouseDown}
         onMouseMove={editable ? undefined : selection.onMouseMove}

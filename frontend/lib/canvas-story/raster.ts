@@ -67,5 +67,6 @@ export async function renderStoryRaster(
     runs,
     embeds,
     blocks,
+    dpr: input.dpr,
   };
 }

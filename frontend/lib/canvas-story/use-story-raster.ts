@@ -1,9 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { renderStoryRaster } from '@/lib/canvas-story/raster';
-import { getStoryRenderer, registerFontFaceCss } from '@/lib/canvas-story/renderer.client';
-import { STORY_DPR, type StoryRasterResult } from '@/lib/canvas-story/types';
+import { rasterStory } from '@/lib/canvas-story/worker-client';
+import { storyDpr, type StoryRasterResult } from '@/lib/canvas-story/types';
 import { sanitizeAgentHtml } from '@/lib/html/sanitize-agent-html';
 import { resolveImportFontCss } from '@/lib/html/resolve-story-fonts';
 
@@ -75,18 +74,28 @@ export function useStoryRaster(
     if (containerW === null) return; // wait for the measured width — render once, correctly
     let cancelled = false;
     (async () => {
-      const renderer = await getStoryRenderer();
       const clean = sanitizeAgentHtml(html);
       const importUrls = [...clean.matchAll(/@import\s+url\((['"]?)([^)'"]+)\1\)/g)].map(m => m[2]);
       const fontCss = importUrls.length ? await resolveImportFontCss(importUrls) : '';
-      if (fontCss) await registerFontFaceCss(renderer, fontCss);
-      const raster = await renderStoryRaster(renderer, {
+      // Load the story's webfonts in the TOP document too: the block editor overlay
+      // and live islands render real DOM text, and without these @font-face rules
+      // they'd fall back to system fonts — a visible seam vs the raster.
+      if (fontCss && typeof document !== 'undefined') {
+        let styleEl = document.getElementById('mx-story-fonts') as HTMLStyleElement | null;
+        if (!styleEl) {
+          styleEl = document.createElement('style');
+          styleEl.id = 'mx-story-fonts';
+          document.head.appendChild(styleEl);
+        }
+        if (styleEl.textContent !== fontCss) styleEl.textContent = fontCss;
+      }
+      const raster = await rasterStory({
         html: clean,
         stylesheets: [compiledCss ?? '', fontCss].filter(Boolean),
         width: layoutWidth,
-        dpr: STORY_DPR,
+        dpr: storyDpr(),
         embedSizes: embedSizesKey ? JSON.parse(embedSizesKey) : undefined,
-      });
+      }, fontCss || undefined);
       if (cancelled) return;
       const bitmap = await createImageBitmap(new Blob([raster.png as BlobPart], { type: 'image/png' }));
       if (cancelled) return;

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { locatePoint, selectionBands, selectionText, wordAt, type RunSelection } from '@/lib/canvas-story/selection';
-import { STORY_DPR, type StoryRasterResult } from '@/lib/canvas-story/types';
+import type { StoryRasterResult } from '@/lib/canvas-story/types';
 
 /**
  * Canvas text selection: drag to select, double-click for a word, cmd/ctrl+C to copy.
@@ -40,8 +40,9 @@ export function useCanvasSelection(
     ctx.drawImage(bitmap, 0, 0);
     if (!selRef.current) return;
     ctx.fillStyle = SELECTION_FILL;
+    const dpr = result.dpr;
     for (const b of selectionBands(result.runs, selRef.current)) {
-      ctx.fillRect(b.x * STORY_DPR, b.y * STORY_DPR, b.w * STORY_DPR, b.h * STORY_DPR);
+      ctx.fillRect(b.x * dpr, b.y * dpr, b.w * dpr, b.h * dpr);
     }
   }, [canvasRef, bitmapRef, result]);
 

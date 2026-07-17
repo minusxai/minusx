@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { registerCanvasStoryCapture } from '@/lib/canvas-story/capture-registry';
 import { rasterizeIslandChrome, type IslandCanvasBox } from '@/lib/canvas-story/island-raster';
-import { STORY_DPR, type StoryRasterResult } from '@/lib/canvas-story/types';
+import type { StoryRasterResult } from '@/lib/canvas-story/types';
 
 /**
  * Snapdom-free captures for canvas stories — images come straight from canvases.
@@ -80,14 +80,15 @@ export function useStoryCapture(
         ctx.fillRect(dx, dy, dw, dh);
         ctx.drawImage(bitmap, sx, sy, sw, sh, dx, dy, dw, dh);
 
+        const dpr = result.dpr;
         for (const e of result.embeds) {
           const host = islandEls[e.index];
-          const ix = e.x * STORY_DPR, iy = e.y * STORY_DPR, iw = e.w * STORY_DPR, ih = e.h * STORY_DPR;
+          const ix = e.x * dpr, iy = e.y * dpr, iw = e.w * dpr, ih = e.h * dpr;
           if (ix + iw < sx || ix > sx + sw || iy + ih < sy || iy > sy + sh) continue;
 
           const entry = chromeCache.current.get(e.index);
           if (entry) {
-            ctx.drawImage(entry.chrome, ...place(ix, iy, entry.width * STORY_DPR, entry.height * STORY_DPR));
+            ctx.drawImage(entry.chrome, ...place(ix, iy, entry.width * dpr, entry.height * dpr));
           }
           // Live chart pixels, straight off each chart's own canvas. Positions come
           // from the prepared entry when available, else read synchronously now.
@@ -100,7 +101,7 @@ export function useStoryCapture(
             : []);
           for (const b of boxes) {
             if (!b.el.isConnected || b.el.width === 0) continue;
-            ctx.drawImage(b.el, ...place(ix + b.x * STORY_DPR, iy + b.y * STORY_DPR, b.w * STORY_DPR, b.h * STORY_DPR));
+            ctx.drawImage(b.el, ...place(ix + b.x * dpr, iy + b.y * dpr, b.w * dpr, b.h * dpr));
           }
         }
 
