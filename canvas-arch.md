@@ -742,6 +742,18 @@ click-away / blur / cmd+Enter (Escape cancels; untouched blocks commit nothing) 
 `onStoryChange` (the same contract as the DOM path) → re-raster. Param controls and
 number query editors continue to work through their live islands.
 
+**Round 17 — snapdom fully eradicated from the canvas path (lazy capture, straight
+from canvases).** The idle snapdom island pre-rasterization is gone. Vega charts render
+with vega's CANVAS renderer inside canvas stories (CanvasRenderContext), so captures
+read chart pixels directly off each chart's own <canvas>. Island HTML chrome (card,
+title, single-value text) is rasterized LAZILY at capture time through takumi
+(island-raster.ts: subtree serialization with inlined computed styles), cached until
+the island changes. The capture provider gained async `prepare()`; drawRegion then
+composites synchronously: story bitmap → island chrome → live chart canvases.
+Measured on a 6-island story: prepare ~112ms (all islands), drawRegion ~25ms — and
+zero main-thread idle passes, zero DOM serialization, no snapdom import anywhere in
+lib/canvas-story.
+
 **Text editing on canvas (older design note, superseded by round 16).** Edit mode deliberately renders DOM today
 (canvas is read-mode only). A full canvas text editor (caret, IME, bidi, composition)
 is a large standalone project; the pragmatic path if edit-on-canvas is wanted:

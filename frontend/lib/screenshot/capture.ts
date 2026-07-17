@@ -189,19 +189,22 @@ function captureFromCanvasStory(element: HTMLElement, opts: CaptureOptions): Pro
   const scale = opts.maxWidth != null ? opts.maxWidth / cssWidth : (opts.pixelRatio ?? 0.75);
   const w = Math.max(1, Math.round(cssWidth * scale));
   const h = Math.max(1, Math.round(size.height * (w / size.width)));
-  const out = document.createElement('canvas');
-  out.width = w;
-  out.height = h;
-  const ctx = out.getContext('2d');
-  if (!ctx) return null;
-  if (!provider.drawRegion(ctx, 0, 0, size.width, size.height, 0, 0, w, h)) return null;
-  return canvasToBlob(out, blobType(opts.format), opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
+  return (async () => {
+    await provider.prepare?.(); // lazy island-chrome rasters (takumi) — capture-time only
+    const out = document.createElement('canvas');
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext('2d');
+    if (!ctx) throw new Error('2d context unavailable');
+    if (!provider.drawRegion(ctx, 0, 0, size.width, size.height, 0, 0, w, h)) throw new Error('drawRegion failed');
+    return canvasToBlob(out, blobType(opts.format), opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
+  })();
 }
 
 /**
  * Crop directly from a canvas-rendered story: any region inside the story surface is
- * drawn from the story's source bitmaps (raster + idle-cached island bitmaps) —
- * snapdom never runs on the capture path. Returns null when no canvas story hosts
+ * drawn from the story's source bitmaps (raster + lazily takumi-rastered island
+ * chrome + live chart canvases) — snapdom never runs on the capture path. Returns null when no canvas story hosts
  * the selection.
  */
 function cropFromCanvasStory(
@@ -226,13 +229,16 @@ function cropFromCanvasStory(
   const sw = selection.width * scale;
   const sh = selection.height * scale;
   const { w, h } = cappedOutputDims(sw, sh, maxOutputPx);
-  const out = document.createElement('canvas');
-  out.width = w;
-  out.height = h;
-  const ctx = out.getContext('2d');
-  if (!ctx) return null;
-  if (!provider.drawRegion(ctx, sx, sy, sw, sh, 0, 0, w, h)) return null;
-  return canvasToBlob(out, (format ?? 'jpeg') === 'png' ? 'image/png' : 'image/jpeg', quality ?? AGENT_IMAGE_JPEG_QUALITY);
+  return (async () => {
+    await provider.prepare?.(); // lazy island-chrome rasters (takumi) — capture-time only
+    const out = document.createElement('canvas');
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext('2d');
+    if (!ctx) throw new Error('2d context unavailable');
+    if (!provider.drawRegion(ctx, sx, sy, sw, sh, 0, 0, w, h)) throw new Error('drawRegion failed');
+    return canvasToBlob(out, (format ?? 'jpeg') === 'png' ? 'image/png' : 'image/jpeg', quality ?? AGENT_IMAGE_JPEG_QUALITY);
+  })();
 }
 
 /** Capture a FileView (question/dashboard/story/notebook/report) by its `data-file-id`. */

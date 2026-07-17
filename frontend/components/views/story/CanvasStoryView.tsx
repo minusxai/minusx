@@ -26,6 +26,7 @@ import { useEmbedIslands } from '@/lib/canvas-story/use-embed-islands';
 import { useIslandMeasurement } from '@/lib/canvas-story/use-island-measurement';
 import { useBlockEditor, type ActiveBlockEdit } from '@/lib/canvas-story/use-block-editor';
 import { useStoryCapture } from '@/lib/canvas-story/use-story-capture';
+import { CanvasRenderContext } from '@/lib/canvas-story/canvas-render-context';
 
 export interface CanvasStoryViewProps {
   html: string;
@@ -113,6 +114,7 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
         onDoubleClick={editable ? undefined : selection.onDoubleClick}
         aria-label="canvas-story-surface"
       />
+      <CanvasRenderContext.Provider value={true}>
       <Theme
         appearance={colorMode ?? 'light'}
         position="absolute"
@@ -160,6 +162,7 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
           />
         ) : null}
       </Theme>
+      </CanvasRenderContext.Provider>
       {editor.active && (
         <BlockEditorOverlay
           key={`${editor.active.ref.tag}:${editor.active.ref.occurrence}:${editor.active.ref.text.slice(0, 24)}`}

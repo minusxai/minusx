@@ -18,6 +18,8 @@ export interface CanvasStoryCaptureProvider {
   surface: () => HTMLCanvasElement | null;
   /** Full story size in device pixels. */
   size: () => { width: number; height: number } | null;
+  /** Lazily build island chrome rasters (takumi) — await before drawRegion. */
+  prepare?: () => Promise<void>;
   /** Draw story region [sx,sy,sw,sh] (device px) into ctx at [dx,dy,dw,dh]. */
   drawRegion: (
     ctx: CanvasRenderingContext2D,

@@ -1,65 +1,50 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { snapdom } from '@zumer/snapdom';
 import { registerCanvasStoryCapture } from '@/lib/canvas-story/capture-registry';
+import { rasterizeIslandChrome, type IslandCanvasBox } from '@/lib/canvas-story/island-raster';
 import { STORY_DPR, type StoryRasterResult } from '@/lib/canvas-story/types';
 
 /**
- * Snapdom-free captures for canvas stories.
+ * Snapdom-free captures for canvas stories — images come straight from canvases.
  *
- * Islands are live DOM (charts, params) — the one part the raster can't cover. They
- * are rasterized AT IDLE into a bitmap cache, sequentially with yields, on settle
- * timers rather than mutation observers (charts animate constantly; observing them
- * re-triggers serialization in a loop and locks the main thread). Capture time is
- * then pure canvas composition: the registered provider draws any story region
- * straight from the source bitmaps (story raster + island caches) into the caller's
- * context — no snapdom and no full-story intermediate canvas on the capture path.
+ * The story surface is already a bitmap. Islands contribute two kinds of pixels:
+ *  - charts: vega draws with its CANVAS renderer inside canvas stories
+ *    (canvas-render-context), so capture reads the live chart <canvas> directly;
+ *  - HTML chrome (card, title, single-value text): rasterized LAZILY at capture
+ *    time through takumi (island-raster.ts) and cached until the island changes.
+ *
+ * `prepare()` builds the pending chrome rasters (async, capture-time only);
+ * `drawRegion()` then composites synchronously: story bitmap → island chrome →
+ * live chart canvases. Nothing here serializes the DOM to images.
  */
+
+interface ChromeEntry {
+  chrome: ImageBitmap;
+  canvases: IslandCanvasBox[];
+  width: number;
+  height: number;
+}
+
 export function useStoryCapture(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   bitmapRef: React.RefObject<ImageBitmap | null>,
   result: StoryRasterResult | null,
   islandEls: Record<number, HTMLElement | null>,
 ): void {
-  const islandBitmapsRef = useRef<Record<number, ImageBitmap>>({});
-  const rasterizeGenRef = useRef(0);
+  const chromeCache = useRef<Map<number, ChromeEntry>>(new Map());
+
+  // Chrome rasters go stale whenever the islands or layout change; rebuild lazily.
+  useEffect(() => {
+    const cache = chromeCache.current;
+    for (const e of cache.values()) e.chrome.close();
+    cache.clear();
+  }, [islandEls, result]);
 
   useEffect(() => () => {
-    for (const b of Object.values(islandBitmapsRef.current)) b.close();
-    islandBitmapsRef.current = {};
+    for (const e of chromeCache.current.values()) e.chrome.close();
+    chromeCache.current.clear();
   }, []);
-
-  useEffect(() => {
-    const gen = ++rasterizeGenRef.current;
-    const els = Object.entries(islandEls).filter((entry): entry is [string, HTMLElement] => !!entry[1]);
-    if (!els.length) return;
-    let cancelled = false;
-    const pass = async () => {
-      for (const [key, el] of els) {
-        if (cancelled || rasterizeGenRef.current !== gen) return;
-        // Never cache an island that is still loading — a spinner frozen into the
-        // bitmap would appear in every capture until the next pass (or forever,
-        // after the last one). Skipped islands keep their previous bitmap, or fall
-        // back to the raster-only region until a later pass catches them settled.
-        if (el.querySelector('.chakra-spinner, [aria-busy="true"]')) continue;
-        try {
-          // embedFonts: island text uses document-level webfonts (next/font Inter,
-          // JetBrains Mono) — without embedding, snapdom's clone can't resolve the
-          // families and captured charts fall back to the UA serif.
-          const c = await snapdom.toCanvas(el, { scale: STORY_DPR, dpr: 1, embedFonts: true });
-          const bitmap = await createImageBitmap(c);
-          islandBitmapsRef.current[Number(key)]?.close(); // release the stale bitmap
-          islandBitmapsRef.current[Number(key)] = bitmap;
-        } catch { /* capture falls back to raster-only for this island */ }
-        await new Promise(r => setTimeout(r, 32)); // yield between islands
-      }
-    };
-    // Backoff schedule: early pass for cached-fast charts, later passes for slow
-    // queries — the spinner guard above makes extra passes cheap no-ops once settled.
-    const timers = [1500, 6000, 15000, 30000].map(ms => setTimeout(() => { void pass(); }, ms));
-    return () => { cancelled = true; timers.forEach(clearTimeout); };
-  }, [islandEls]);
 
   useEffect(() => {
     return registerCanvasStoryCapture({
@@ -68,30 +53,60 @@ export function useStoryCapture(
         const bitmap = bitmapRef.current;
         return bitmap ? { width: bitmap.width, height: bitmap.height } : null;
       },
+      prepare: async () => {
+        for (const [key, el] of Object.entries(islandEls)) {
+          const idx = Number(key);
+          if (!el || chromeCache.current.has(idx)) continue;
+          try {
+            chromeCache.current.set(idx, await rasterizeIslandChrome(el));
+          } catch { /* island contributes live canvases only */ }
+        }
+      },
       drawRegion: (ctx, sx, sy, sw, sh, dx, dy, dw, dh) => {
         const bitmap = bitmapRef.current;
         if (!bitmap || !result) return false;
         const kx = dw / sw;
         const ky = dh / sh;
+        // Map a story-space device-px rect to the destination and draw via cb.
+        const place = (x: number, y: number, w: number, h: number) =>
+          [dx + (x - sx) * kx, dy + (y - sy) * ky, w * kx, h * ky] as const;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(dx, dy, dw, dh);
+        ctx.clip();
+
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(dx, dy, dw, dh);
         ctx.drawImage(bitmap, sx, sy, sw, sh, dx, dy, dw, dh);
+
         for (const e of result.embeds) {
-          const cached = islandBitmapsRef.current[e.index];
-          if (!cached) continue;
+          const host = islandEls[e.index];
           const ix = e.x * STORY_DPR, iy = e.y * STORY_DPR, iw = e.w * STORY_DPR, ih = e.h * STORY_DPR;
-          const ox0 = Math.max(sx, ix), oy0 = Math.max(sy, iy);
-          const ox1 = Math.min(sx + sw, ix + iw), oy1 = Math.min(sy + sh, iy + ih);
-          if (ox1 <= ox0 || oy1 <= oy0) continue;
-          const bx = cached.width / iw, by = cached.height / ih;
-          ctx.drawImage(
-            cached,
-            (ox0 - ix) * bx, (oy0 - iy) * by, (ox1 - ox0) * bx, (oy1 - oy0) * by,
-            dx + (ox0 - sx) * kx, dy + (oy0 - sy) * ky, (ox1 - ox0) * kx, (oy1 - oy0) * ky,
-          );
+          if (ix + iw < sx || ix > sx + sw || iy + ih < sy || iy > sy + sh) continue;
+
+          const entry = chromeCache.current.get(e.index);
+          if (entry) {
+            ctx.drawImage(entry.chrome, ...place(ix, iy, entry.width * STORY_DPR, entry.height * STORY_DPR));
+          }
+          // Live chart pixels, straight off each chart's own canvas. Positions come
+          // from the prepared entry when available, else read synchronously now.
+          const boxes: IslandCanvasBox[] = entry?.canvases ?? (host
+            ? [...host.querySelectorAll('canvas')].map(c => {
+                const hr = host.getBoundingClientRect();
+                const cr = c.getBoundingClientRect();
+                return { el: c, x: cr.left - hr.left, y: cr.top - hr.top, w: cr.width, h: cr.height };
+              })
+            : []);
+          for (const b of boxes) {
+            if (!b.el.isConnected || b.el.width === 0) continue;
+            ctx.drawImage(b.el, ...place(ix + b.x * STORY_DPR, iy + b.y * STORY_DPR, b.w * STORY_DPR, b.h * STORY_DPR));
+          }
         }
+
+        ctx.restore();
         return true;
       },
     });
-  }, [canvasRef, bitmapRef, result]);
+  }, [canvasRef, bitmapRef, result, islandEls]);
 }
