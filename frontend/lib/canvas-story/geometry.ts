@@ -68,7 +68,7 @@ export function extractGeometry(
     if (src?.tagName && EDITABLE_BLOCK_TAGS.has(src.tagName)) {
       const text = subtreeText(m);
       if (text) {
-        const key = `${src.tagName}\u0000${text.replace(/\s+/g, '')}`; // align with edit-blocks' whitespace-insensitive matching
+        const key = `${src.tagName}\u0000${text.replace(/\s+/g, '').toLowerCase()}`; // align with edit-blocks' whitespace/case-insensitive matching
         const occurrence = occurrences.get(key) ?? 0;
         occurrences.set(key, occurrence + 1);
         blocks.push({ tag: src.tagName, text, occurrence, x: x / dpr, y: y / dpr, w: m.width / dpr, h: m.height / dpr });

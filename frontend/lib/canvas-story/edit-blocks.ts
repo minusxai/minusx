@@ -15,9 +15,11 @@ export interface BlockRef {
   occurrence: number;
 }
 
-// Whitespace-INSENSITIVE matching: takumi splits letter-spaced/wrapped text into
-// runs whose joined form has different spacing than the DOM's textContent.
-const normalize = (s: string): string => s.replace(/\s+/g, '');
+// Whitespace- and CASE-insensitive matching: takumi splits letter-spaced/wrapped
+// text into runs whose joined form has different spacing than the DOM's
+// textContent, and `text-transform: uppercase` makes the RENDERED text differ in
+// case from the source (e.g. an h3 titled in lowercase, displayed uppercase).
+const normalize = (s: string): string => s.replace(/\s+/g, '').toLowerCase();
 
 function findBlockEl(doc: Document, ref: BlockRef): Element | null {
   let seen = 0;
@@ -33,6 +35,37 @@ function findBlockEl(doc: Document, ref: BlockRef): Element | null {
 export function getBlockHtml(storyHtml: string, ref: BlockRef): string | null {
   const doc = new DOMParser().parseFromString(storyHtml, 'text/html');
   return findBlockEl(doc, ref)?.outerHTML ?? null;
+}
+
+/** An ancestor of the edited block — enough to rebuild its cascade context. */
+export interface BlockAncestor {
+  tag: string;
+  className: string;
+  /** The ancestor's inline style — kept because it may define CSS variables. */
+  style: string;
+}
+
+/**
+ * The block + its ancestor chain (outermost first, `<body>` excluded). The editor
+ * overlay rebuilds these wrappers inside its shadow root so descendant selectors
+ * (`.subtle-band .highlights li { … }`), inherited properties, and CSS variables
+ * (`--navy` on an ancestor) style the block exactly as the story does.
+ */
+export function getBlockContext(storyHtml: string, ref: BlockRef): { html: string; ancestors: BlockAncestor[] } | null {
+  const doc = new DOMParser().parseFromString(storyHtml, 'text/html');
+  const el = findBlockEl(doc, ref);
+  if (!el) return null;
+  const ancestors: BlockAncestor[] = [];
+  for (let n = el.parentElement; n && n !== doc.body; n = n.parentElement) {
+    ancestors.unshift({ tag: n.tagName.toLowerCase(), className: n.getAttribute('class') ?? '', style: n.getAttribute('style') ?? '' });
+  }
+  return { html: el.outerHTML, ancestors };
+}
+
+/** All of the story's own `<style>` CSS (custom classes, CSS variables). */
+export function extractStoryStyles(storyHtml: string): string {
+  const doc = new DOMParser().parseFromString(storyHtml, 'text/html');
+  return [...doc.querySelectorAll('style')].map(st => st.textContent ?? '').join('\n');
 }
 
 /**

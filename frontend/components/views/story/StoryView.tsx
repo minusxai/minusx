@@ -123,7 +123,10 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             <CanvasStoryView
               // While editing, render the LIVE story (each block commit re-rasters from
               // source — the overlay owns the caret, so there's no cursor to preserve).
-              key={`canvas:${hashStory(editing ? liveStory : htmlForRender)}`}
+              // STABLE key: unlike the iframe path, the canvas path re-rasters on an html
+              // prop change while keeping the old bitmap on screen — keying by content
+              // hash would remount the whole surface (blank flash) on every block commit.
+              key="canvas"
               html={editing ? liveStory : htmlForRender}
               compiledCss={compiledCss}
               width={STORY_W}

@@ -25,6 +25,7 @@ import { useCanvasSelection } from '@/lib/canvas-story/use-canvas-selection';
 import { useEmbedIslands } from '@/lib/canvas-story/use-embed-islands';
 import { useIslandMeasurement } from '@/lib/canvas-story/use-island-measurement';
 import { useBlockEditor, type ActiveBlockEdit } from '@/lib/canvas-story/use-block-editor';
+import { extractStoryStyles } from '@/lib/canvas-story/edit-blocks';
 import { useStoryCapture } from '@/lib/canvas-story/use-story-capture';
 import { CanvasRenderContext } from '@/lib/canvas-story/canvas-render-context';
 
@@ -76,9 +77,9 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
   const { embeds, islandEls, islandRefs, targets } = useEmbedIslands(result);
   useIslandMeasurement(embeds, islandEls, scale, islandSizes, setIslandSizes);
   useStoryCapture(canvasRef, bitmapRef, result, islandEls);
-  // The story root's class attr — gives the editor overlay's shadow tree the same
-  // cascade context (fonts, colors) the block has inside the story.
-  const rootClassName = useMemo(() => html.match(/class="([^"]*)"/)?.[1] ?? '', [html]);
+  // The story's own <style> CSS (custom classes, CSS variables like --navy) — the
+  // editor overlay needs it alongside compiledCss or blocks change color on edit.
+  const storyStyles = useMemo(() => (editable ? extractStoryStyles(html) : ''), [editable, html]);
 
   // While a block is being edited, mask its region on the raster (sampled bg color)
   // so the original text doesn't show through behind the overlay editor.
@@ -98,8 +99,11 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
     } catch { /* tainted/edge — fall back to theme bg */ }
     ctx.fillStyle = fill;
     ctx.fillRect(b.x * dpr, b.y * dpr, b.w * dpr, b.h * dpr);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- redraw identity churns with result; mask depends on the active block only
-  }, [editor.active, colorMode]);
+    // `result` IS a dependency: committing one block re-rasters and repaints the whole
+    // canvas, which would otherwise wipe the mask under a still-open editor (ghost text).
+    // This effect is declared after the selection hook's repaint, so mask lands on top.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- redraw identity churns with result; mask depends on active block + repaints
+  }, [editor.active, colorMode, result]);
 
   if (failed) return <>{fallback}</>;
 
@@ -171,7 +175,7 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
           scale={scale}
           layoutWidth={result?.width ?? width}
           compiledCss={compiledCss ?? ''}
-          rootClassName={rootClassName}
+          storyStyles={storyStyles}
           onCommit={editor.commit}
           onCancel={editor.cancel}
         />
@@ -186,14 +190,15 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
  * renders with its real styles while being a native contenteditable (caret, IME,
  * shortcuts all come from the browser). Commit on blur / cmd+Enter; Escape cancels.
  */
-function BlockEditorOverlay({ active, scale, layoutWidth, compiledCss, rootClassName, onCommit, onCancel }: {
+function BlockEditorOverlay({ active, scale, layoutWidth, compiledCss, storyStyles, onCommit, onCancel }: {
   active: ActiveBlockEdit;
   scale: number;
   /** Story layout width — the shadow wrapper must be this wide so the story's
    *  @container variants (headline sizes etc.) resolve as they do in the raster. */
   layoutWidth: number;
   compiledCss: string;
-  rootClassName: string;
+  /** The story's own <style> CSS — custom classes + CSS variables. */
+  storyStyles: string;
   onCommit: (outerHtml: string) => void;
   onCancel: () => void;
 }) {
@@ -203,11 +208,25 @@ function BlockEditorOverlay({ active, scale, layoutWidth, compiledCss, rootClass
     const host = hostRef.current;
     if (!host) return;
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
+    // Rebuild the block's ANCESTOR CHAIN so descendant selectors, inherited props,
+    // and CSS variables apply exactly as in the story — with layout neutralized so
+    // the block sits at the host's origin. Ancestor inline styles come first (they
+    // may define variables); the neutralizers override their layout effects.
+    const NEUTRAL = 'padding:0;margin:0;border:0;background:transparent;box-shadow:none;width:auto;max-width:none;min-height:0;min-width:0;display:block';
+    const escapeAttr = (v: string) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const chain = active.ancestors.length ? active.ancestors : [{ tag: 'div', className: '', style: '' }];
+    const open = chain.map((a, i) => {
+      const size = i === 0
+        ? `width:${layoutWidth}px;transform:scale(${scale});transform-origin:0 0;`
+        : '';
+      return `<${a.tag} class="${escapeAttr(a.className)}" style="${escapeAttr(a.style)};${NEUTRAL};${size}">`;
+    }).join('');
+    const close = chain.map(a => `</${a.tag}>`).reverse().join('');
     shadow.innerHTML = `<style>${compiledCss}
+${storyStyles}
 :host{display:block}
 #mx-edit{outline:2px solid #16a085;outline-offset:2px;min-height:1em;background:inherit}</style>` +
-      `<div class="${rootClassName}" style="width:${layoutWidth}px;transform:scale(${scale});transform-origin:0 0;padding:0;margin:0;max-width:none;background:transparent">` +
-      `<div id="mx-edit" contenteditable="true" style="width:${Math.ceil(active.box.w)}px">${active.html}</div></div>`;
+      `${open}<div id="mx-edit" contenteditable="true" style="width:${Math.ceil(active.box.w)}px">${active.html}</div>${close}`;
     const edit = shadow.getElementById('mx-edit') as HTMLElement | null;
     if (!edit) return;
     const block = edit.firstElementChild as HTMLElement | null;

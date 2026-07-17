@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useState } from 'react';
-import { getBlockHtml, replaceBlockHtml, type BlockRef } from '@/lib/canvas-story/edit-blocks';
+import { useCallback, useMemo, useState } from 'react';
+import { getBlockContext, replaceBlockHtml, type BlockAncestor, type BlockRef } from '@/lib/canvas-story/edit-blocks';
 import type { StoryBlockBox, StoryRasterResult } from '@/lib/canvas-story/types';
 
 /**
@@ -17,6 +17,8 @@ export interface ActiveBlockEdit {
   box: StoryBlockBox;
   /** The block's current outerHTML — the editor seed. */
   html: string;
+  /** Ancestor chain (outermost first) — rebuilt in the overlay for cascade context. */
+  ancestors: BlockAncestor[];
 }
 
 export interface BlockEditor {
@@ -35,6 +37,18 @@ export function useBlockEditor(
 ): BlockEditor {
   const [active, setActive] = useState<ActiveBlockEdit | null>(null);
 
+  // Committing one block re-rasters the story; blocks BELOW the edit may shift. The
+  // exposed active edit derives its box from the CURRENT raster geometry (matched by
+  // ref) so an open overlay tracks the block's new position; the seed box is the
+  // fallback when the ref no longer matches (e.g. the open block itself was edited).
+  const liveActive = useMemo(() => {
+    if (!active || !result) return active;
+    const match = result.blocks.find(
+      b => b.tag === active.ref.tag && b.text === active.ref.text && b.occurrence === active.ref.occurrence,
+    );
+    return match ? { ...active, box: match } : active;
+  }, [active, result]);
+
   const openAt = useCallback((x: number, y: number): boolean => {
     if (!enabled || !result) return false;
     const hit = result.blocks
@@ -42,9 +56,9 @@ export function useBlockEditor(
       .sort((a, b) => a.w * a.h - b.w * b.h)[0];
     if (!hit) return false;
     const ref: BlockRef = { tag: hit.tag, text: hit.text, occurrence: hit.occurrence };
-    const html = getBlockHtml(storyHtml, ref);
-    if (!html) return false;
-    setActive({ ref, box: hit, html });
+    const ctx = getBlockContext(storyHtml, ref);
+    if (!ctx) return false;
+    setActive({ ref, box: hit, html: ctx.html, ancestors: ctx.ancestors });
     return true;
   }, [enabled, result, storyHtml]);
 
@@ -62,5 +76,5 @@ export function useBlockEditor(
 
   const cancel = useCallback(() => setActive(null), []);
 
-  return { active, openAt, commit, cancel };
+  return { active: liveActive, openAt, commit, cancel };
 }
