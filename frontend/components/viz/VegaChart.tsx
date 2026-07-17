@@ -13,7 +13,7 @@ import { Box, Text, IconButton, VStack } from '@chakra-ui/react';
 import { ChartError } from '@/components/plotx/ChartError';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, injectNamedAssets } from '@/lib/viz/render-vega';
+import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, computeXLabelAngle, injectNamedAssets } from '@/lib/viz/render-vega';
 import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/viz-templates';
 import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
 import { SharedTooltip } from '@/lib/viz/shared-tooltip';
@@ -125,7 +125,12 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     const el = containerRef.current;
     const spec = vlSpecRef.current;
     if (!el || !spec) return;
-    const next = JSON.stringify(computeLegendPlan(spec, rowsRef.current, el.clientWidth) ?? null);
+    // One fingerprint for every compile-time-planned constant (legend wrap +
+    // x label angle) — a resize that flips either decision rebuilds the view.
+    const next = JSON.stringify({
+      legend: computeLegendPlan(spec, rowsRef.current, el.clientWidth) ?? null,
+      xAngle: computeXLabelAngle(spec, rowsRef.current, el.clientWidth),
+    });
     if (next !== legendPlanRef.current) setLegendEpoch(e => e + 1);
   }, []);
 
@@ -155,8 +160,11 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         const legendPlan = vlSpecRef.current
           ? computeLegendPlan(vlSpecRef.current, rowsRef.current, el.clientWidth)
           : null;
-        legendPlanRef.current = JSON.stringify(legendPlan ?? null);
-        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan });
+        const xLabelAngle = vlSpecRef.current
+          ? computeXLabelAngle(vlSpecRef.current, rowsRef.current, el.clientWidth)
+          : null;
+        legendPlanRef.current = JSON.stringify({ legend: legendPlan ?? null, xAngle: xLabelAngle });
+        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan, xLabelAngle });
         // Shared-tooltip charts get a guide-line rule injected BEHIND the data (before parse).
         const tooltipPlan = vlSpecRef.current ? buildTooltipPlan(vlSpecRef.current) : null;
         const hasGuide = tooltipPlan ? injectGuideMark(vegaSpec as Record<string, unknown>) : false;
