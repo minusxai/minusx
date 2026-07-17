@@ -228,6 +228,11 @@ Connection schemas are enriched with column-level metadata (category, null count
 
 ### Development Patterns & Best Practices
 
+**Deep modules (Ousterhout) — the guiding design principle for this repository.** Modules should have simple, narrow interfaces hiding substantial implementation ("A Philosophy of Software Design"). Concretely:
+- A feature's complexity belongs in ONE cohesive module (e.g. `lib/canvas-story/` owns the entire canvas-render pipeline: raster, selection model, hooks, capture); callers compose a few deep hooks/functions rather than orchestrating internals.
+- Components should be thin compositions — if a component grows past ~150 lines of logic, extract the subsystems into hooks/pure modules under the owning `lib/` module (pure logic in plain `.ts` files so it's unit-testable without a DOM).
+- Prefer making an existing module deeper (adding capability behind the same interface) over adding a new shallow module or a pass-through layer. Classitis, tiny wrappers, and config-forwarding layers are code smells.
+
 **Code Smells to Avoid** (project-specific; ESLint enforces several)
 - **Inline/dynamic imports** — ALWAYS import at the top of the file. `const { foo } = await import('./bar')` signals a circular dependency or poor module design; fix the architecture (extract shared code) rather than working around it. Never use inline imports to "fix" circular deps. ESLint rule `no-restricted-syntax` enforces this.
 - **Direct Redux state mutation** — always use slice actions.

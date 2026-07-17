@@ -7,6 +7,9 @@
  * All geometry is in CSS pixels relative to the story's top-left, at the given width.
  */
 
+/** Device pixel ratio for story rasters (crisp on retina; capture math shares it). */
+export const STORY_DPR = 2;
+
 /** One laid-out fragment of text (a line piece within a block). Document order. */
 export interface StoryTextRun {
   text: string;

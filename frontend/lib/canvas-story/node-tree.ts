@@ -17,6 +17,10 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
 
 const INLINE_TAGS = immutableSet(['span', 'a', 'strong', 'em', 'b', 'i', 'u', 's', 'code', 'small', 'sub', 'sup', 'mark', 'abbr']);
 
+// Non-content elements whose text must never become runs (a <title> would emit a
+// phantom run of the whole heading that hijacks selection hit-testing).
+const NON_CONTENT_TAGS = immutableSet(['title', 'script', 'style', 'head', 'meta', 'link', 'noscript', 'template']);
+
 const NAMED_ENTITIES: Record<string, string> = {
   amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
   mdash: '—', ndash: '–', hellip: '…', rsquo: '’', lsquo: '‘',
@@ -119,7 +123,11 @@ function transform(node: RawNode): RawNode {
       }],
     };
   }
-  if (node.children) node.children = node.children.map(transform);
+  if (node.children) {
+    node.children = node.children
+      .filter(c => !c.tagName || !NON_CONTENT_TAGS.has(c.tagName))
+      .map(transform);
+  }
   return node;
 }
 

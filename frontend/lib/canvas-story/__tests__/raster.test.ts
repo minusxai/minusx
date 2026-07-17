@@ -98,6 +98,46 @@ describe('canvas-story raster pipeline', () => {
   });
 });
 
+describe('text-wrap neutralization (selection-boundary correctness)', () => {
+  let renderer: Renderer;
+  beforeAll(async () => {
+    renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+  });
+
+  // takumi's render honors text-wrap:balance but measure() wraps greedily, so
+  // balanced headings would render one wrap point while the runs report another —
+  // selection bands then cover the wrong words. The raster pipeline must force
+  // greedy wrap in the CSS it feeds the engine so pixels and geometry agree.
+  it('renders balanced headings with the SAME wrap the measured runs report', async () => {
+    const html = '<div class="s"><h1>Mxfood closed 2025 with broad-based scale across orders, revenue, and active users.</h1></div>';
+    const css = '.s{width:1104px;padding:48px;background:#fff} h1{font-size:56px;font-weight:800;line-height:1.1;margin:0;text-wrap:balance}';
+    const raster = await renderStoryRaster(renderer, { html, stylesheets: [css], width: 1104, dpr: 1 });
+    // Greedy wrap puts "revenue," on line 2; balanced render would push it to
+    // line 3 while the runs still claim line 2. With neutralization both agree —
+    // assert the run layout is the greedy one (which is what gets rendered too).
+    const line2 = raster.runs.filter(r => r.y > raster.runs[0].y + 10 && r.y < raster.runs[0].y + 130);
+    expect(line2.map(r => r.text).join('')).toContain('revenue,');
+  });
+});
+
+describe('non-content nodes', () => {
+  let renderer: Renderer;
+  beforeAll(async () => {
+    renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+  });
+
+  it('emits no runs for title/style/script elements', async () => {
+    const html = '<div class="s"><title>Phantom Heading Text</title><script>let x=1</scr' + 'ipt><p>Real content.</p></div>';
+    const raster = await renderStoryRaster(renderer, { html, stylesheets: ['.s{width:400px;background:#fff}'], width: 400, dpr: 1 });
+    const texts = raster.runs.map(r => r.text).join(' ');
+    expect(texts).toContain('Real content.');
+    expect(texts).not.toContain('Phantom');
+    expect(texts).not.toContain('x=1');
+  });
+});
+
 describe('buildStoryNodeTree', () => {
   it('wraps bare-text blocks so they emit runs and keeps embed attrs', () => {
     const { node } = buildStoryNodeTree('<div><p>Hello</p><div data-question-id="7"></div></div>');

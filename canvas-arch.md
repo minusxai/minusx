@@ -664,6 +664,36 @@ worker/OffscreenCanvas plumbing (mechanical); further font-relative-unit
 divergences of the `ch` kind (golden tests will surface them); CJK/Arabic
 font subset strategy.
 
+## 4.8 Production hardening rounds (2026-07-17)
+
+**Round 10 — snapdom-free captures.** With the canvas renderer ON, screenshots and crops
+never run snapdom: embed islands are rasterized to ImageBitmaps at idle (sequential,
+settle-timer-driven — never mutation observers, which feed back on animating charts), and a
+window-registered provider (`capture-registry.ts`) exposes `drawRegion()`, which composites
+any story region straight from the source bitmaps into the caller's context. No full-story
+intermediate canvas exists on any path. Measured: full app-state capture ~1.0–1.4s
+(was 6.5s + main-thread freezes), crop-to-annotator ~1–2s, `drawRegion` itself ~0.1ms.
+
+**Round 11 — selection-boundary correctness (root cause: `text-wrap: balance`).**
+Story headings use `[text-wrap:balance]`. takumi's *render* honors it but *measure()*
+always wraps greedily — so the PNG wrapped one word earlier than the run geometry claimed,
+and selection bands covered the wrong words (the "skipped fragment" bug). Fix:
+`neutralizeBalancedTextWrap()` rewrites `text-wrap: balance|pretty → initial` in every
+stylesheet fed to the engine, so pixels and geometry agree by construction. Tradeoff:
+canvas headings wrap greedily where the DOM balances them (a wrap-distribution difference
+on multi-line headings only). Also fixed: `<title>`/`<script>`/`<style>` nodes are dropped
+from the node tree (a `<title>` emitted a phantom run of the whole heading that hijacked
+hit-testing).
+
+**Round 12 — deep-module refactor + perf/memory.** `lib/canvas-story/` now owns the whole
+feature behind four deep hooks — `useStoryRaster` (measure-gated single first raster at the
+real container width; no nominal-width flash), `useCanvasSelection` (pure selection model in
+`selection.ts`, unit-tested; translucent teal wash replaces the white-glyph second raster —
+which both fixed the white-on-white selection bug and halved raster work + bitmap memory),
+`useEmbedIslands`, `useStoryCapture`. `CanvasStoryView` is a ~120-line composition.
+ImageBitmaps are `close()`d on replacement and unmount (story raster + island caches);
+all observers/timers/listeners/providers unregister on unmount.
+
 ## 5. Risks & open questions
 
 1. **Raster quality vs today's DOM view.** With canvas as the viewer there is
