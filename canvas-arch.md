@@ -704,6 +704,26 @@ now matches the DOM exactly. Remaining known visual delta vs the DOM: balanced h
 wrap (neutralized for geometry correctness, round 11) and sub-word font-metric drift on
 @import'd serif faces.
 
+**Round 14 — multi-style story campaign findings (6 agent-generated stories, canvas vs DOM).**
+Fixed from the sweep: (a) takumi ignores `ch` units → `max-w-[24ch]`/`[62ch]` constraints
+were no-ops on canvas (headlines/prose ran full width); `normalizeChUnits` translates
+1ch → 0.5em. (b) Inline islands (numbers, params) reserved a fixed 90×22 box — inline
+numbers rendered detached from the text flow (or invisible inside display headings);
+`useIslandMeasurement` measures the mounted island's true content size and re-rasters
+with per-embed overrides so text reflows around real sizes (one settle pass, tolerance-
+gated). (c) Island capture bitmaps froze loading spinners (fixed 1.5s/6s passes) and
+rendered chart text in a serif: passes now back off (1.5/6/15/30s), skip islands that
+still contain a spinner/aria-busy, and pass `embedFonts: true` so next/font families
+resolve in snapdom's clone. Remaining known deltas: balanced heading wrap (greedy on
+canvas — geometry correctness tradeoff), sub-word metric drift on @import serif faces.
+
+**Text editing on canvas (open design note).** Edit mode deliberately renders DOM today
+(canvas is read-mode only). A full canvas text editor (caret, IME, bidi, composition)
+is a large standalone project; the pragmatic path if edit-on-canvas is wanted:
+keep the canvas raster as the surface and overlay a DOM contenteditable ONLY for the
+block being edited (canvas everywhere else), swapping the block back into the raster
+on blur — Figma-style. Estimated as its own multi-week track; not part of this PR.
+
 ## 5. Risks & open questions
 
 1. **Raster quality vs today's DOM view.** With canvas as the viewer there is

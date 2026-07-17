@@ -22,17 +22,26 @@ export function neutralizeBalancedTextWrap(css: string): string {
   return css.replace(/(text-wrap(?:-style)?\s*:\s*)(balance|pretty)/gi, '$1initial');
 }
 
+/**
+ * takumi ignores `ch` units entirely (a `max-width: 24ch` is a no-op), so measure-
+ * constrained headlines and prose (`max-w-[62ch]`) render full-width — a large wrap
+ * divergence from the DOM. Translate to the standard approximation 1ch ≈ 0.5em.
+ */
+export function normalizeChUnits(css: string): string {
+  return css.replace(/(\d*\.?\d+)ch\b/g, (_, n: string) => `${parseFloat(n) * 0.5}em`);
+}
+
 export async function renderStoryRaster(
   renderer: StoryRendererEngine,
   input: StoryRasterInput,
 ): Promise<StoryRasterResult> {
-  const { node, extractedStylesheets } = buildStoryNodeTree(input.html);
+  const { node, extractedStylesheets } = buildStoryNodeTree(input.html, input.embedSizes);
   const options = {
     width: input.width * input.dpr,
     devicePixelRatio: input.dpr,
     format: 'png' as const,
     stylesheets: [...input.stylesheets, ...extractedStylesheets]
-      .map(css => neutralizeBalancedTextWrap(resolveContainerQueries(css, input.width))),
+      .map(css => normalizeChUnits(neutralizeBalancedTextWrap(resolveContainerQueries(css, input.width)))),
   };
   const png = await renderer.render(node, options);
   const measured = (await renderer.measure(node, options)) as MeasuredNodeLike;

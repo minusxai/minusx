@@ -121,6 +121,40 @@ describe('text-wrap neutralization (selection-boundary correctness)', () => {
   });
 });
 
+describe('embed size overrides (island measure-feedback)', () => {
+  it('lays out placeholders at the overridden size and reflows surrounding text', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    const html = '<div class="s"><p>Revenue hit <span data-number-inline="rev"></span> this month.</p></div>';
+    const css = '.s{width:600px;padding:16px;background:#fff;color:#111;font-size:16px}';
+    const base = await renderStoryRaster(renderer, { html, stylesheets: [css], width: 600, dpr: 1 });
+    const sized = await renderStoryRaster(renderer, { html, stylesheets: [css], width: 600, dpr: 1, embedSizes: { 0: { width: 200, height: 40 } } });
+    expect(base.embeds[0].w).toBe(90);   // default reservation
+    expect(sized.embeds[0].w).toBe(200); // override applied
+    expect(sized.embeds[0].h).toBe(40);
+    // surrounding text reflows: the run after the embed starts further right or wraps
+    const after = (r: typeof base) => r.runs.find(x => x.text.includes('this month'));
+    expect(after(sized)!.x).not.toBe(after(base)!.x);
+  });
+});
+
+describe('ch-unit normalization (takumi ignores ch)', () => {
+  it('max-width in ch constrains wrap like the equivalent em value', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    const html = '<div class="root"><h1>The business closed 2025 with high volume, rising revenue, and broadening user activity.</h1></div>';
+    const mk = (extra: string) => renderStoryRaster(renderer, {
+      html,
+      stylesheets: [`.root{padding:24px;background:#fff;color:#111;width:1104px} h1{font-size:56px;line-height:1.1;margin:0;${extra}}`],
+      width: 1104, dpr: 1,
+    });
+    const unconstrained = await mk('');
+    const ch = await mk('max-width:24ch');
+    const lines = (r: { runs: Array<{ y: number }> }) => new Set(r.runs.map(x => Math.round(x.y))).size;
+    expect(lines(ch)).toBeGreaterThan(lines(unconstrained)); // 24ch → 12em actually narrows the box
+  });
+});
+
 describe('non-content nodes', () => {
   let renderer: Renderer;
   beforeAll(async () => {

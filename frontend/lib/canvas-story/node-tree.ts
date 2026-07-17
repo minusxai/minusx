@@ -84,16 +84,18 @@ function injectListMarkers(node: RawNode): void {
   }
 }
 
-function transform(node: RawNode): RawNode {
+function transform(node: RawNode, state: { embedIndex: number; embedSizes?: Record<number, { width: number; height: number }> }): RawNode {
   injectListMarkers(node);
   const embed = embedKindOf(node);
   if (embed) {
+    const idx = state.embedIndex++;
+    const override = state.embedSizes?.[idx];
     const size = EMBED_DEFAULT_SIZE[embed.kind];
     const inline = embed.kind === 'number-inline' || embed.kind === 'param';
     node.style = {
       ...(node.style ?? {}),
-      width: size.width,
-      height: size.height,
+      width: override?.width ?? size.width,
+      height: override?.height ?? size.height,
       ...(inline ? { display: 'inline-block' } : {}),
     };
     node.children = []; // placeholders render as reserved space only
@@ -126,15 +128,18 @@ function transform(node: RawNode): RawNode {
   if (node.children) {
     node.children = node.children
       .filter(c => !c.tagName || !NON_CONTENT_TAGS.has(c.tagName))
-      .map(transform);
+      .map(c => transform(c, state));
   }
   return node;
 }
 
-export function buildStoryNodeTree(html: string): { node: RawNode; extractedStylesheets: string[] } {
+export function buildStoryNodeTree(
+  html: string,
+  embedSizes?: Record<number, { width: number; height: number }>,
+): { node: RawNode; extractedStylesheets: string[] } {
   const parsed = fromHtml(html) as { node: RawNode; stylesheets?: string[] };
   return {
-    node: transform(parsed.node),
+    node: transform(parsed.node, { embedIndex: 0, embedSizes }),
     extractedStylesheets: parsed.stylesheets ?? [],
   };
 }

@@ -17,12 +17,13 @@
  */
 
 import { Box, Theme } from '@chakra-ui/react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import StoryEmbeds from '@/components/views/shared/StoryEmbeds';
 import { STORY_DPR } from '@/lib/canvas-story/types';
 import { useStoryRaster } from '@/lib/canvas-story/use-story-raster';
 import { useCanvasSelection } from '@/lib/canvas-story/use-canvas-selection';
 import { useEmbedIslands } from '@/lib/canvas-story/use-embed-islands';
+import { useIslandMeasurement } from '@/lib/canvas-story/use-island-measurement';
 import { useStoryCapture } from '@/lib/canvas-story/use-story-capture';
 
 export interface CanvasStoryViewProps {
@@ -38,13 +39,24 @@ export interface CanvasStoryViewProps {
   fallback: React.ReactNode;
 }
 
+// Concrete font stacks for embed islands (iframe-parity fallbacks). Defined BOTH on
+// the Theme wrapper and inline on every island host: snapdom captures the island
+// subtree only, so var definitions on ancestors outside it are lost in the clone —
+// captured charts then fall back to the UA serif. Inline style survives the clone.
+const ISLAND_FONT_VARS = {
+  '--font-inter': "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+  '--font-jetbrains-mono': "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace",
+} as React.CSSProperties;
+
 export default function CanvasStoryView(props: CanvasStoryViewProps) {
   const { html, compiledCss, width, readOnly, paramValues, onParamValuesChange, storyPath, colorMode, fallback } = props;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const { containerRef, result, bitmapRef, failed, scale } = useStoryRaster(html, compiledCss, width);
+  const [islandSizes, setIslandSizes] = useState<Record<number, { width: number; height: number }>>();
+  const { containerRef, result, bitmapRef, failed, scale } = useStoryRaster(html, compiledCss, width, islandSizes);
   const selection = useCanvasSelection(canvasRef, bitmapRef, result);
   const { embeds, islandEls, islandRefs, targets } = useEmbedIslands(result);
+  useIslandMeasurement(embeds, islandEls, scale, islandSizes, setIslandSizes);
   useStoryCapture(canvasRef, bitmapRef, result, islandEls);
 
   if (failed) return <>{fallback}</>;
@@ -71,9 +83,8 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
         css={{
           // Replicate the iframe environment the DOM path renders embeds in:
           // next/font CSS vars are NOT defined inside the iframe, so theme font
-          // tokens fall back to UA defaults there. Unset them here for parity.
-          '--font-inter': 'initial',
-          '--font-jetbrains-mono': 'initial',
+          // tokens fall back there. Concrete stacks (see ISLAND_FONT_VARS).
+          ...ISLAND_FONT_VARS,
           // Base embed CSS that AgentHtml injects into the iframe (mirror-app-styles).
           '& .mx-chart-fill': { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
         }}
@@ -83,6 +94,7 @@ export default function CanvasStoryView(props: CanvasStoryViewProps) {
             key={e.index}
             ref={islandRefs.get(e.index)}
             pointerEvents="auto"
+            style={ISLAND_FONT_VARS}
             position="absolute"
             left={`${e.x * scale}px`}
             top={`${e.y * scale}px`}

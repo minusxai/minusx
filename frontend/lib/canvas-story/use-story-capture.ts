@@ -38,8 +38,16 @@ export function useStoryCapture(
     const pass = async () => {
       for (const [key, el] of els) {
         if (cancelled || rasterizeGenRef.current !== gen) return;
+        // Never cache an island that is still loading — a spinner frozen into the
+        // bitmap would appear in every capture until the next pass (or forever,
+        // after the last one). Skipped islands keep their previous bitmap, or fall
+        // back to the raster-only region until a later pass catches them settled.
+        if (el.querySelector('.chakra-spinner, [aria-busy="true"]')) continue;
         try {
-          const c = await snapdom.toCanvas(el, { scale: STORY_DPR, dpr: 1 });
+          // embedFonts: island text uses document-level webfonts (next/font Inter,
+          // JetBrains Mono) — without embedding, snapdom's clone can't resolve the
+          // families and captured charts fall back to the UA serif.
+          const c = await snapdom.toCanvas(el, { scale: STORY_DPR, dpr: 1, embedFonts: true });
           const bitmap = await createImageBitmap(c);
           islandBitmapsRef.current[Number(key)]?.close(); // release the stale bitmap
           islandBitmapsRef.current[Number(key)] = bitmap;
@@ -47,9 +55,10 @@ export function useStoryCapture(
         await new Promise(r => setTimeout(r, 32)); // yield between islands
       }
     };
-    const t1 = setTimeout(() => { void pass(); }, 1500);   // after initial chart render
-    const t2 = setTimeout(() => { void pass(); }, 6000);   // refresh once queries settle
-    return () => { cancelled = true; clearTimeout(t1); clearTimeout(t2); };
+    // Backoff schedule: early pass for cached-fast charts, later passes for slow
+    // queries — the spinner guard above makes extra passes cheap no-ops once settled.
+    const timers = [1500, 6000, 15000, 30000].map(ms => setTimeout(() => { void pass(); }, ms));
+    return () => { cancelled = true; timers.forEach(clearTimeout); };
   }, [islandEls]);
 
   useEffect(() => {

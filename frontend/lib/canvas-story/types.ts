@@ -47,6 +47,13 @@ export interface StoryRasterInput {
   width: number;
   /** Device pixel ratio for the bitmap (geometry is still returned in CSS px). */
   dpr: number;
+  /**
+   * Measured island sizes (CSS px) keyed by embed doc-order index. Live embeds
+   * (inline numbers, params) don't have a knowable size until they mount — the
+   * view measures them once settled and re-rasters so text reflows around the
+   * REAL size instead of the default reservation (WYSIWYG feedback loop).
+   */
+  embedSizes?: Record<number, { width: number; height: number }>;
 }
 
 export interface StoryRasterResult {

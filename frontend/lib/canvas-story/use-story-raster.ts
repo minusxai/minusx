@@ -33,7 +33,13 @@ export interface StoryRasterState {
   scale: number;
 }
 
-export function useStoryRaster(html: string, compiledCss: string | null | undefined, nominalWidth: number): StoryRasterState {
+export function useStoryRaster(
+  html: string,
+  compiledCss: string | null | undefined,
+  nominalWidth: number,
+  /** Measured island sizes (layout px, by embed index) — triggers a reflow re-raster. */
+  embedSizes?: Record<number, { width: number; height: number }>,
+): StoryRasterState {
   const bitmapRef = useRef<ImageBitmap | null>(null);
   const [result, setResult] = useState<StoryRasterResult | null>(null);
   const [failed, setFailed] = useState(false);
@@ -62,6 +68,9 @@ export function useStoryRaster(html: string, compiledCss: string | null | undefi
   const layoutWidth = containerW ? Math.ceil(containerW / 16) * 16 : nominalWidth;
   const scale = containerW ? containerW / layoutWidth : 1;
 
+  // Object identity is unstable across renders; key the effect on the VALUE.
+  const embedSizesKey = embedSizes && Object.keys(embedSizes).length ? JSON.stringify(embedSizes) : '';
+
   useEffect(() => {
     if (containerW === null) return; // wait for the measured width — render once, correctly
     let cancelled = false;
@@ -76,6 +85,7 @@ export function useStoryRaster(html: string, compiledCss: string | null | undefi
         stylesheets: [compiledCss ?? '', fontCss].filter(Boolean),
         width: layoutWidth,
         dpr: STORY_DPR,
+        embedSizes: embedSizesKey ? JSON.parse(embedSizesKey) : undefined,
       });
       if (cancelled) return;
       const bitmap = await createImageBitmap(new Blob([raster.png as BlobPart], { type: 'image/png' }));
@@ -85,7 +95,7 @@ export function useStoryRaster(html: string, compiledCss: string | null | undefi
       setResult(raster);
     })().catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
-  }, [html, compiledCss, layoutWidth, containerW]);
+  }, [html, compiledCss, layoutWidth, containerW, embedSizesKey]);
 
   return { containerRef, result, bitmapRef, failed, scale };
 }
