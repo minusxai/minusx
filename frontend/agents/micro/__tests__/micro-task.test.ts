@@ -72,7 +72,20 @@ describe('runMicroTask', () => {
     microFaux.setResponses([() => fauxAssistantMessage('   ', { stopReason: 'stop' })]);
     await expect(
       runMicroTask('title', { input: 'x', subject: 'a question', instructions: '' }, USER),
-    ).rejects.toThrow(/no result/);
+    ).rejects.toThrow(/produced no result \(the model returned an empty reply\)/);
+  });
+
+  // Regression: an LLM failure (missing API key, unconfigured use-case model, provider error)
+  // surfaced to the browser as a bare 500 "produced no result" — the actual cause was logged to the
+  // server console and dropped, leaving "[FeedSummary] Error: Micro-task 'feed_summary' produced no
+  // result" undiagnosable from the client. The cause must travel with the error.
+  it('reports the underlying LLM failure instead of masking it as "no result"', async () => {
+    microFaux.setResponses([
+      () => { throw new Error('No API key for provider: minusx'); },
+    ]);
+    await expect(
+      runMicroTask('title', { input: 'x', subject: 'a question', instructions: '' }, USER),
+    ).rejects.toThrow(/No API key for provider: minusx/);
   });
 
   // feed_summary is a registered micro task (its prompts use {agent_name,

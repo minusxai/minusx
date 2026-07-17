@@ -100,6 +100,15 @@ function planFromConfig(llm: LlmConfig | undefined, useCase: LlmUseCase, catalog
   // No assignment: a configured minusx provider handles every use case.
   const minusx = findMinusxProvider(llm);
   if (minusx) return buildPlanStep(minusx, { providerName: minusx.name }, useCase);
+  // A workspace that configured only chat (the `analyst` assignment) has no `micro` model, so the
+  // low-stakes micro helpers (feed summary, auto-title, description) would otherwise fall through to
+  // the unconfigured MinusX gateway and 500. Reuse the analyst model for `micro` rather than fail —
+  // one configured provider then powers everything. (`micro` keeps its own assignment when present.)
+  if (useCase === 'micro') {
+    const analystChoice = llm?.assignments?.analyst?.chain?.[0];
+    const analystEntry = analystChoice && findLlmProvider(llm, analystChoice.providerName);
+    if (analystChoice && analystEntry) return buildPlanStep(analystEntry, analystChoice, 'micro', catalog);
+  }
   return null;
 }
 
