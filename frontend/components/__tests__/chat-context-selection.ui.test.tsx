@@ -43,8 +43,16 @@ vi.mock('@/lib/hooks/useContext', () => ({
 // Send button that invokes the real onSend the way ChatInput would.
 vi.mock('@/components/explore/ChatInput', () => ({
   __esModule: true,
-  default: ({ onSend }: { onSend: (msg: string, atts: unknown[]) => void }) =>
+  default: ({ onSend, onModelChange }: {
+    onSend: (msg: string, atts: unknown[]) => void;
+    onModelChange: (model: { providerName: string; model: string }) => void;
+  }) => React.createElement(React.Fragment, null,
+    React.createElement('button', {
+      'aria-label': 'Select chat model',
+      onClick: () => onModelChange({ providerName: 'openai-team', model: 'gpt-5.4' }),
+    }),
     React.createElement('button', { 'aria-label': 'Send message', onClick: () => onSend('hello', []) }),
+  ),
 }));
 
 import ChatInterface from '@/components/explore/ChatInterface';
@@ -71,6 +79,25 @@ describe('Chat honors the selected context file', () => {
     await waitFor(() => {
       const conv = store.getState().chat.conversations[1];
       expect(conv.agent_args?.context_file_id).toBe(SELECTED_CONTEXT_ID);
+    });
+  });
+
+  it('sends the selected chat model as an analyst override', async () => {
+    const store = makeStore();
+    store.dispatch(createConversation({ conversationID: 1, agent: 'AnalystAgent' }));
+
+    renderWithProviders(
+      <ChatInterface conversationId={1} contextPath="/org/selected-context" container="page" appState={null} />,
+      { store },
+    );
+
+    fireEvent.click(await screen.findByLabelText('Select chat model'));
+    fireEvent.click(screen.getByLabelText('Send message'));
+
+    await waitFor(() => {
+      expect(store.getState().chat.conversations[1].agent_args?.model_override).toEqual({
+        providerName: 'openai-team', model: 'gpt-5.4',
+      });
     });
   });
 });

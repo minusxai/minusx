@@ -69,6 +69,31 @@ export interface LlmModelChoice {
 }
 
 /**
+ * A user-selected model override for an individual chat. Deliberately smaller
+ * than `LlmModelChoice`: call options and custom endpoint metadata remain
+ * server-owned configuration and can never be injected by the browser.
+ */
+export interface ChatModelSelection {
+  /** References `LlmProviderEntry.name`. */
+  providerName: string;
+  /** Concrete model id. Omitted only for a managed MinusX provider. */
+  model?: string;
+}
+
+/** Picker-safe model metadata returned to authenticated chat clients. */
+export interface ChatModelOption extends ChatModelSelection {
+  providerLabel: string;
+  modelLabel: string;
+}
+
+/** Model-picker payload. Omitting an override remains the source of truth for
+ * using the live Settings → Models assignment represented by `defaultModel`. */
+export interface ChatModelCatalog {
+  defaultModel: ChatModelOption;
+  models: ChatModelOption[];
+}
+
+/**
  * One use case's model pick. The `chain` array is a stable storage shape;
  * only the FIRST entry is used (fallbacks were deliberately removed — one
  * model per use case; extra entries in hand-edited configs are ignored).

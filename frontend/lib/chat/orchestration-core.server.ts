@@ -78,6 +78,7 @@ import type {
   CompletedToolCallResult,
 } from '@/lib/chat/chat-types';
 import { estimateContextSize, type ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
+import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
 
 
 import { immutableSet, immutableMap } from '@/lib/utils/immutable-collections';
@@ -347,6 +348,19 @@ export async function setupOrchestration(
     typeof (agentArgs as { connection_id?: unknown }).connection_id === 'string'
       ? (agentArgs as { connection_id: string }).connection_id
       : undefined;
+  const rawModelOverride = (agentArgs as { model_override?: unknown }).model_override;
+  const modelOverride: ChatModelSelection | undefined = rawModelOverride
+    && typeof rawModelOverride === 'object'
+    && typeof (rawModelOverride as { providerName?: unknown }).providerName === 'string'
+    && ((rawModelOverride as { model?: unknown }).model === undefined
+      || typeof (rawModelOverride as { model?: unknown }).model === 'string')
+      ? {
+          providerName: (rawModelOverride as { providerName: string }).providerName,
+          ...((rawModelOverride as { model?: string }).model
+            ? { model: (rawModelOverride as { model: string }).model }
+            : {}),
+        }
+      : undefined;
 
   // The client sends only POINTERS (context_file_id, context_version,
   // connection_id) — the server resolves the actual context docs, catalog,
@@ -440,7 +454,7 @@ export async function setupOrchestration(
   // DB-backed model config (workspace-level — every mode shares the org
   // config's `llm` providers): resolve the per-use-case model chain on every
   // call; unconfigured workspaces default to the MinusX gateway.
-  orch.resolveLlmPlan = buildLlmPlanResolver();
+  orch.resolveLlmPlan = buildLlmPlanResolver(modelOverride);
 
   // Resume path: frontend sends back [ToolCall, ToolMessage][] tuples.
   // ToolMessage (from Redux/executeToolCall) lacks .function — patch it from

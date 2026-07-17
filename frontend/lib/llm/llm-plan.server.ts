@@ -29,9 +29,9 @@ import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import {
   MINUSX_PROVIDER, CUSTOM_PROVIDER,
   findLlmProvider, findMinusxProvider,
-  type LlmConfig, type LlmModelChoice, type LlmProviderEntry, type LlmUseCase,
+  type ChatModelSelection, type LlmConfig, type LlmModelChoice, type LlmProviderEntry, type LlmUseCase,
 } from './llm-config-types';
-import { compatDefaultModel } from './compat-models';
+import { compatDefaultModel, resolveAllowedModels } from './compat-models';
 
 /**
  * Build one executable plan step from a provider entry + model choice.
@@ -103,6 +103,37 @@ function planFromConfig(llm: LlmConfig | undefined, useCase: LlmUseCase, catalog
   return null;
 }
 
+/** Build a chat-scoped analyst override from server-owned provider config. */
+function planFromChatSelection(
+  llm: LlmConfig | undefined,
+  selection: ChatModelSelection,
+  catalog: ModelCatalog | null,
+): LlmPlanStep {
+  const entry = findLlmProvider(llm, selection.providerName);
+  if (!entry) throw new Error(`Chat model provider '${selection.providerName}' is not configured`);
+
+  if (entry.provider !== MINUSX_PROVIDER && !selection.model) {
+    throw new Error(`Chat model provider '${selection.providerName}' requires a model id`);
+  }
+
+  const allowed = resolveAllowedModels(entry);
+  if (selection.model && allowed && !allowed.includes(selection.model)) {
+    throw new Error(`Model '${selection.model}' is not allowed for provider '${selection.providerName}'`);
+  }
+
+  // A custom endpoint's model capabilities live only in the server-owned
+  // assignment. The browser selects that known model id, never its metadata.
+  if (entry.provider === CUSTOM_PROVIDER) {
+    const configured = llm?.assignments?.analyst?.chain?.[0];
+    if (configured?.providerName !== selection.providerName || configured.model !== selection.model) {
+      throw new Error(`Model '${selection.model}' is not allowed for custom provider '${selection.providerName}'`);
+    }
+    return buildPlanStep(entry, configured, 'analyst', catalog);
+  }
+
+  return buildPlanStep(entry, selection, 'analyst', catalog);
+}
+
 function isTestEnv(): boolean {
   // eslint-disable-next-line no-restricted-syntax -- deterministic tests: unconfigured workspaces stay on faux static models under vitest
   return process.env.NODE_ENV === 'test' || !!process.env.VITEST;
@@ -121,16 +152,25 @@ function minusxDefaultPlan(useCase: LlmUseCase): LlmPlanStep {
  * unconfigured workspace gets the MinusX-gateway default. `null` only in test
  * environments (agents keep their faux static models).
  */
-export async function resolveLlmPlan(useCase: LlmUseCase): Promise<LlmPlanStep | null> {
+export async function resolveLlmPlan(
+  useCase: LlmUseCase,
+  chatSelection?: ChatModelSelection,
+): Promise<LlmPlanStep | null> {
   // E2E builds force every agent onto its faux provider — DB config must not override.
   if (E2E_MODE) return null;
   const raw = await getRawConfig(DEFAULT_MODE);
   const llm = raw.llm as LlmConfig | undefined;
+  if (chatSelection && useCase === 'analyst' && !llm) {
+    throw new Error(`Chat model provider '${chatSelection.providerName}' is not configured`);
+  }
   if (llm) {
     const resolved = await resolveConfigSecrets(llm);
     // Live catalog only matters for model ids newer than the baked registry;
     // fetch is cached in-process and null-safe (baked-only fallback).
     const catalog = await getModelCatalog();
+    if (chatSelection && useCase === 'analyst') {
+      return planFromChatSelection(resolved, chatSelection, catalog);
+    }
     const plan = planFromConfig(resolved, useCase, catalog);
     if (plan) return plan;
   }
@@ -138,6 +178,8 @@ export async function resolveLlmPlan(useCase: LlmUseCase): Promise<LlmPlanStep |
 }
 
 /** Orchestrator hook: per-call plan resolution (workspace-level, mode-independent). */
-export function buildLlmPlanResolver(): (useCase: LlmUseCase) => Promise<LlmPlanStep | null> {
-  return (useCase) => resolveLlmPlan(useCase);
+export function buildLlmPlanResolver(
+  chatSelection?: ChatModelSelection,
+): (useCase: LlmUseCase) => Promise<LlmPlanStep | null> {
+  return (useCase) => resolveLlmPlan(useCase, useCase === 'analyst' ? chatSelection : undefined);
 }

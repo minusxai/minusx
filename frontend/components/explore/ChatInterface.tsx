@@ -47,6 +47,7 @@ import { selectDisableAppStateImages } from '@/store/configsSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import ToolDebugBar from './ToolDebugBar';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
+import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
 
 // next/dynamic with ssr:false prevents pdfjs-dist (browser-only, uses DOMMatrix at module init)
 // from being evaluated during SSR prerendering. This is an intentional SSR boundary, not a
@@ -150,6 +151,7 @@ export default function ChatInterface({
   const viewMode = showExpandedMessages ? 'detailed' : 'compact';
   const [continueChatConfirmed, setContinueChatConfirmed] = useState(false)
   const [isPreparing, setIsPreparing] = useState(false)
+  const [selectedModel, setSelectedModel] = useState<ChatModelSelection | null>(null);
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
@@ -238,6 +240,15 @@ export default function ChatInterface({
 
   const isNewConversation = !providedConversationId;
   const conversationID = conversation?.conversationID;
+
+  // Keep the choice scoped to this chat. In-session Redux agent args retain it
+  // when switching away and back; no explicit choice uses Settings → Models.
+  useEffect(() => {
+    const stored = conversation?.agent_args?.model_override as ChatModelSelection | undefined;
+    setSelectedModel(stored ?? null);
+    // Only switch selection when the active conversation itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationID]);
 
   // AI-generated conversation title (shown in the header). Existing conversations
   // carry it from the full load (useConversation) — zero extra cost. A brand-new
@@ -602,6 +613,7 @@ export default function ChatInterface({
       },
       ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
       ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
+      ...(selectedModel ? { model_override: selectedModel } : {}),
     };
   }, [
     appState,
@@ -615,6 +627,7 @@ export default function ChatInterface({
     database,
     getSkillsFromMessage,
     selectedDatabase,
+    selectedModel,
     store,
     uniqueSkills,
   ]);
@@ -1146,6 +1159,8 @@ export default function ChatInterface({
               disabled={isLoading}
               databaseName={selectedDatabase || ''}
               onDatabaseChange={handleDatabaseChange}
+              selectedModel={selectedModel}
+              onModelChange={setSelectedModel}
               container={container}
               isCompact={isCompact}
               colSpan={colSpan}

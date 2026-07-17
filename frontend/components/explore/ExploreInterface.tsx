@@ -14,6 +14,9 @@ import { shallowEqual } from 'react-redux';
 import { useContext } from '@/lib/hooks/useContext';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { ContextContent } from '@/lib/types';
+import type { AppState } from '@/lib/appState';
+
+const EXPLORE_APP_STATE: AppState = { type: 'explore', state: null };
 // ============================================================================
 // Main Explore Interface Component
 // ============================================================================
@@ -162,7 +165,7 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
               conversationId={conversationId}
               contextPath={contextPath}
               contextVersion={selectedVersion}
-              appState={undefined}
+              appState={EXPLORE_APP_STATE}
               container="page"
               onContextChange={(path, version) => {
                 setSelectedContextPath(path);
