@@ -717,6 +717,19 @@ still contain a spinner/aria-busy, and pass `embedFonts: true` so next/font fami
 resolve in snapdom's clone. Remaining known deltas: balanced heading wrap (greedy on
 canvas — geometry correctness tradeoff), sub-word metric drift on @import serif faces.
 
+**Round 15 — production-story hardening.** A production-representative story (fluid
+`clamp()/cqi` typography, real `<table>` KPI grids, `overflow-x:auto` inline styles,
+preflight-styled lists) silently fell back to DOM: takumi hard-throws on any inline
+style value it can't parse, and one declaration aborted the whole render. Fixes:
+`resolveFluidCss` (static clamp/min/max + cqi/cqw evaluation at the raster width, for
+stylesheets AND inline styles), overflow auto/scroll→hidden mapping, a strip-and-retry
+net (parse takumi's "invalid value for X", strip the property, retry — bounded), flex
+emulation for table layout (takumi has none; rows→flex, cells share width by colSpan),
+and opt-in list markers (Tailwind preflight = list-style none; unconditional injection
+double-marked lists). Known approximations: cqi resolves against the story root width
+(not the nearest CSS container), wide tables clip at the story edge (raster can't
+scroll — matches capture semantics).
+
 **Text editing on canvas (open design note).** Edit mode deliberately renders DOM today
 (canvas is read-mode only). A full canvas text editor (caret, IME, bidi, composition)
 is a large standalone project; the pragmatic path if edit-on-canvas is wanted:
