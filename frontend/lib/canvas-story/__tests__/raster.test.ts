@@ -149,13 +149,61 @@ describe('buildStoryNodeTree', () => {
 });
 
 describe('resolveContainerQueries', () => {
-  it('unwraps matching blocks and drops non-matching ones at the raster width', async () => {
+  it('unwraps matching blocks scoped to container DESCENDANTS and drops non-matching ones', async () => {
     const { resolveContainerQueries } = await import('@/lib/canvas-story/resolve-container-queries');
     const css = '.a{color:red}@container (min-width: 672px){.b{display:grid}}@container (width >= 100rem){.c{color:blue}}';
     const resolved = resolveContainerQueries(css, 1280);
-    expect(resolved).toContain('.b{display:grid}');
+    // @container matches an ANCESTOR container, so unwrapped rules must not hit
+    // the container element itself — only its descendants.
+    expect(resolved).toContain('.\\@container .b{display:grid}');
     expect(resolved).not.toContain('.c');
     expect(resolved).toContain('.a{color:red}');
+  });
+
+  it('resolves Tailwind NESTED form (selector outside, @container inside) with descendant scoping', async () => {
+    const { resolveContainerQueries } = await import('@/lib/canvas-story/resolve-container-queries');
+    const css = '.\\@2xl\\:px-12 {\n  @container (width >= 42rem) {\n    padding-inline: 48px;\n  }\n}';
+    const resolved = resolveContainerQueries(css, 1104);
+    expect(resolved.replace(/\s+/g, '')).toContain('.\\@container.\\@2xl\\:px-12{padding-inline:48px');
+    expect(resolveContainerQueries(css, 400).replace(/\s+/g, '')).not.toContain('padding-inline');
+  });
+
+  it('nested-form container variants do not pad the container element itself', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    // Tailwind v4 nested emission, as stored in real compiledCss documents.
+    const css = '.root{padding-left:24px;background:#fff;color:#111;font-size:16px}' +
+      '.p12x{ @container (width >= 42rem){ padding-left:48px; } }';
+    const rootHtml = '<div class="root p12x @container"><p>Anchored text</p></div>';
+    const rootRaster = await renderStoryRaster(renderer, { html: rootHtml, stylesheets: [css], width: 800, dpr: 1 });
+    expect(rootRaster.runs.find(r => r.text.includes('Anchored'))!.x).toBeCloseTo(24, 0);
+    const nestedHtml = '<div class="root @container"><section class="p12x"><p>Nested text</p></section></div>';
+    const nestedRaster = await renderStoryRaster(renderer, { html: nestedHtml, stylesheets: [css], width: 800, dpr: 1 });
+    expect(nestedRaster.runs.find(r => r.text.includes('Nested'))!.x).toBeCloseTo(72, 0);
+  });
+
+  it('container-variant rules do not apply to the container element itself (root padding)', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    // Mirrors the story root: `px-6 @2xl:px-12` ON the @container element. In the
+    // DOM the @2xl rule never matches (no ancestor container), so padding stays 24.
+    const css = '.root{padding-left:24px;background:#fff;color:#111;font-size:16px}' +
+      '@container (min-width: 672px){.p12{padding-left:48px}}';
+    const html = '<div class="root p12 @container"><p>Anchored text</p></div>';
+    const raster = await renderStoryRaster(renderer, { html, stylesheets: [css], width: 800, dpr: 1 });
+    const run = raster.runs.find(r => r.text.includes('Anchored'));
+    expect(run!.x).toBeCloseTo(24, 0);
+  });
+
+  it('container-variant rules DO apply to descendants of the container', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    const css = '.root{padding-left:24px;background:#fff;color:#111;font-size:16px}' +
+      '@container (min-width: 672px){.p12{padding-left:48px}}';
+    const html = '<div class="root @container"><section class="p12"><p>Nested text</p></section></div>';
+    const raster = await renderStoryRaster(renderer, { html, stylesheets: [css], width: 800, dpr: 1 });
+    const run = raster.runs.find(r => r.text.includes('Nested'));
+    expect(run!.x).toBeCloseTo(72, 0); // 24 (root) + 48 (section, @container rule applied)
   });
 });
 
