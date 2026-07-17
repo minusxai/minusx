@@ -48,6 +48,7 @@ import { useSemanticCompat } from '@/lib/hooks/use-semantic-compat';
 import { inferVizType, recommendedVizTypes } from '@/lib/semantic/infer-viz';
 import SpreadsheetSourceEditor from '@/components/spreadsheet/SpreadsheetSourceEditor';
 import { QUESTION_SPREADSHEET_LIMITS } from '@/lib/spreadsheet/materialize';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // Which side of the split view is collapsed (or neither). Page mode persists this
 // globally in Redux (state.ui.questionCollapsedPanel); toolcall mode keeps it local
@@ -55,15 +56,17 @@ import { QUESTION_SPREADSHEET_LIMITS } from '@/lib/spreadsheet/materialize';
 type CollapsedPanel = 'none' | 'left' | 'right';
 
 // ---------------------------------------------------------------------------
-// Panel sizing — THE one place to tune the three-column layout. Everything is
-// a percentage of the container width; the center (data/plot) column takes
-// whatever the other two leave. min/max bound the drag handles.
+// Panel sizing — THE one place to tune the three-column layout. The left
+// (query) column is a resizable percentage of the container width; the center
+// (data/plot) column takes whatever is left. The right (viz settings) column
+// is a FIXED pixel width — there's no use case for dragging it, and a fixed
+// width keeps the icon grid / config controls legible instead of squeezed.
 // ---------------------------------------------------------------------------
 const PANEL_LAYOUT = {
-  /** Left column: the GUI/SQL query surface. */
+  /** Left column: the GUI/SQL query surface (resizable). min/max bound the drag handle. */
   left: { initial: 35, min: 25, max: 65 },
-  /** Right column: the viz settings panel. */
-  viz: { initial: 20, min: 15, max: 25 },
+  /** Right column: the viz settings panel — fixed pixel width, not draggable. */
+  viz: { width: 320 },
 } as const;
 
 /**
@@ -304,13 +307,11 @@ export default function QuestionViewV2({
   // right-hand VizPanel column; compact (stacked) keeps the Viz tab since
   // there is no room for a third column.
   const showVizPanel = !useCompactLayout && showVizControls;
+  // The viz column only makes sense once there are results to configure against.
+  // Until the query has run (no queryData), hide the whole column — an empty
+  // "Run the query to configure the viz." panel is just noise.
+  const showVizColumn = showVizPanel && !!queryData;
   const [vizPanelOpen, setVizPanelOpen] = useState(true);
-  // Viz panel resize state (percentage, like the left panel; see PANEL_LAYOUT)
-  const [vizPanelWidth, setVizPanelWidth] = useState<number>(PANEL_LAYOUT.viz.initial);
-  const [isVizResizing, setIsVizResizing] = useState(false);
-  const vizResizeStartX = useRef<number>(0);
-  const vizResizeStartWidth = useRef<number>(PANEL_LAYOUT.viz.initial);
-  const vizRafRef = useRef<number | null>(null);
 
   // Fully derived mode: until the user explicitly picks a tab, Semantic is the
   // resting state whenever the query detects. A Semantic choice that loses its
@@ -378,43 +379,6 @@ export default function QuestionViewV2({
       }
     };
   }, [isResizing, handleResizeMove, handleResizeEnd]);
-
-  // Viz panel resize (mirrors the left handle; drag left = wider panel)
-  const handleVizResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsVizResizing(true);
-    vizResizeStartX.current = e.clientX;
-    vizResizeStartWidth.current = vizPanelWidth;
-  }, [vizPanelWidth]);
-
-  useEffect(() => {
-    if (!isVizResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (vizRafRef.current) cancelAnimationFrame(vizRafRef.current);
-      vizRafRef.current = requestAnimationFrame(() => {
-        if (!mainContentRef.current) return;
-        const containerRect = mainContentRef.current.getBoundingClientRect();
-        const deltaPercent = ((vizResizeStartX.current - e.clientX) / containerRect.width) * 100;
-        setVizPanelWidth(Math.max(PANEL_LAYOUT.viz.min, Math.min(PANEL_LAYOUT.viz.max, vizResizeStartWidth.current + deltaPercent)));
-      });
-    };
-    const handleMouseUp = () => {
-      if (vizRafRef.current) {
-        cancelAnimationFrame(vizRafRef.current);
-        vizRafRef.current = null;
-      }
-      setIsVizResizing(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      if (vizRafRef.current) cancelAnimationFrame(vizRafRef.current);
-    };
-  }, [isVizResizing]);
 
   // Debounce timer ref for param/ref sync
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -765,46 +729,74 @@ export default function QuestionViewV2({
               overflow="hidden"
             >
             {<Box flexShrink={0}>
-              {/* Tab selector + DB selector row */}
-              <HStack px={3} py={2} gap={2} align="center">
-                {!spreadsheetHasData && <>
-                <Box flex={1} minWidth={0}>
-                  <QueryModeSelector
-                    mode={effectiveQueryMode}
-                    active={effectiveSourceFamily === 'query'}
-                    onModeChange={(m: QueryTab) => { activateQuery(); setUserPickedMode(true); setQueryMode(m); }}
-                    showSemanticTab={showSemanticTab}
-                    canUseSemantic={canUseSemantic}
-                    showVizTab={showVizControls && useCompactLayout}
-                    canUseViz={!!queryData}
-                  />
-                </Box>
-                <Box flexShrink={0}>
-                  <DatabaseSelector
-                    value={content.connection_name || ''}
-                    onChange={handleDatabaseChange}
-                  />
-                </Box>
-                </>}
-                {!spreadsheetHasData && !queryHasData && <Box h="28px" w="1px" bg="border.default" flexShrink={0} />}
+              {/* Query-mode tabs, then the database selector right beside them so
+                  the active connection reads as part of the query surface. The DB
+                  collapses to an icon+check only when there's a single connection;
+                  with several it stays a full labeled dropdown (so you can't miss
+                  which one a query runs against). The Spreadsheet toggle hugs the
+                  right edge while the query block is present, and drops to the left
+                  once that block vanishes (spreadsheet is the active source). */}
+              <HStack px={3} py={2} gap={1.5} align="center">
+                {!spreadsheetHasData && (
+                  <Box flexShrink={0}>
+                    <QueryModeSelector
+                      mode={effectiveQueryMode}
+                      active={effectiveSourceFamily === 'query'}
+                      onModeChange={(m: QueryTab) => { activateQuery(); setUserPickedMode(true); setQueryMode(m); }}
+                      showSemanticTab={showSemanticTab}
+                      canUseSemantic={canUseSemantic}
+                      showVizTab={showVizControls && useCompactLayout}
+                      canUseViz={!!queryData}
+                    />
+                  </Box>
+                )}
+                {!spreadsheetHasData && (
+                  <Box flexShrink={1} minWidth={0}>
+                    <DatabaseSelector
+                      value={content.connection_name || ''}
+                      onChange={handleDatabaseChange}
+                      compact
+                    />
+                  </Box>
+                )}
+                {/* Spacer only while the query block is shown — pushes the
+                    spreadsheet toggle to the right; absent, it sits on the left. */}
+                {!spreadsheetHasData && <Box flex={1} minWidth={0} />}
                 {!queryHasData && (
-                  <HStack
-                    as="button"
-                    gap={1}
-                    justify="center"
-                    px={3}
-                    py={1.5}
-                    borderRadius="sm"
-                    bg={effectiveSourceFamily === 'spreadsheet' ? 'accent.teal' : 'bg.muted'}
-                    color={effectiveSourceFamily === 'spreadsheet' ? 'white' : 'fg.subtle'}
-                    aria-label="Spreadsheet"
-                    onClick={activateSpreadsheet}
-                    transition="all 0.15s ease"
-                    _hover={{ color: effectiveSourceFamily === 'spreadsheet' ? 'white' : 'fg.muted' }}
-                  >
-                    <LuTable2 size={13} />
-                    <Text fontSize="xs" fontFamily="mono" fontWeight="600">Spreadsheet</Text>
-                  </HStack>
+                  <Tooltip content="Build from a pasted or typed spreadsheet" showArrow openDelay={300} positioning={{ placement: 'top' }}>
+                    <HStack
+                      as="button"
+                      role="group"
+                      gap={0}
+                      flexShrink={0}
+                      px={1.5}
+                      py={1}
+                      borderRadius="md"
+                      bg={effectiveSourceFamily === 'spreadsheet' ? 'accent.teal' : 'transparent'}
+                      color={effectiveSourceFamily === 'spreadsheet' ? 'white' : 'fg.subtle'}
+                      cursor="pointer"
+                      aria-label="Spreadsheet"
+                      onClick={activateSpreadsheet}
+                      transition="all 0.15s ease"
+                      _hover={{
+                        bg: effectiveSourceFamily === 'spreadsheet' ? 'accent.teal' : 'bg.muted',
+                        color: effectiveSourceFamily === 'spreadsheet' ? 'white' : 'fg.muted',
+                      }}
+                    >
+                      <Box flexShrink={0} display="flex"><LuTable2 size={14} /></Box>
+                      {/* Label collapsed to 0-width at rest; expands on hover or while active */}
+                      <Box
+                        maxW={effectiveSourceFamily === 'spreadsheet' ? '120px' : '0px'}
+                        opacity={effectiveSourceFamily === 'spreadsheet' ? 1 : 0}
+                        overflow="hidden"
+                        whiteSpace="nowrap"
+                        transition="max-width 0.2s ease, opacity 0.15s ease"
+                        css={{ '[role=group]:hover &': { maxWidth: '120px', opacity: 1 } }}
+                      >
+                        <Text fontSize="xs" fontFamily="mono" fontWeight="600" pl={1}>Spreadsheet</Text>
+                      </Box>
+                    </HStack>
+                  </Tooltip>
                 )}
               </HStack>
 
@@ -1113,96 +1105,63 @@ export default function QuestionViewV2({
           </Box>
           {/* End Center Panel */}
 
-          {/* Viz Panel Resize Handle — mirrors the left handle */}
-          {showVizPanel && vizPanelOpen && (
+          {/* Collapse rail — a slim, NON-draggable divider between the data and
+              viz columns, carrying just the collapse chevron centered on the
+              border (where the old resize grip sat). No drag: the viz column is
+              a fixed width (see PANEL_LAYOUT.viz). */}
+          {showVizColumn && vizPanelOpen && (
             <Box
               display="flex"
               alignItems="center"
               justifyContent="center"
               width="8px"
-              cursor="col-resize"
-              onMouseDown={handleVizResizeStart}
-              userSelect="none"
               flexShrink={0}
               position="relative"
               role="group"
             >
+              {/* Vertical edge line */}
               <Box
                 position="absolute"
                 top="0"
                 bottom="0"
                 width="2px"
-                bg={isVizResizing ? 'accent.teal' : 'border.muted'}
+                bg="border.muted"
                 _groupHover={{ bg: 'accent.teal' }}
                 transition="all 0.15s ease"
                 borderRadius="full"
               />
+              {/* Collapse chevron pill, centered on the edge */}
               <Box
+                as="button"
                 position="absolute"
                 top="50%"
                 transform="translateY(-50%)"
                 display="flex"
-                flexDirection="column"
                 alignItems="center"
                 justifyContent="center"
                 width="20px"
-                height="72px"
-                bg={isVizResizing ? 'accent.teal' : 'bg.emphasized'}
-                _groupHover={{ bg: 'accent.teal' }}
+                height="36px"
+                bg="bg.emphasized"
+                color="fg.muted"
+                _groupHover={{ bg: 'accent.teal', color: 'white' }}
                 borderRadius="md"
-                transition="all 0.15s ease"
                 boxShadow="sm"
-                gap={0}
+                cursor="pointer"
+                transition="all 0.15s ease"
+                aria-label="Collapse viz panel"
+                onClick={() => setVizPanelOpen(false)}
               >
-                <Box
-                  cursor="pointer"
-                  p={1}
-                  borderRadius="sm"
-                  onClick={() => toggleCollapsedPanel('right')}
-                  onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
-                  aria-label="Collapse data panel"
-                  role="button"
-                  _hover={{ opacity: 0.7 }}
-                >
-                  <Box
-                    as={LuChevronLeft}
-                    fontSize="xs"
-                    color={isVizResizing ? 'white' : 'fg.muted'}
-                    _groupHover={{ color: 'white' }}
-                  />
-                </Box>
-                <Box
-                  as={LuGripVertical}
-                  fontSize="sm"
-                  color={isVizResizing ? 'white' : 'fg.muted'}
-                  _groupHover={{ color: 'white' }}
-                  transition="color 0.15s ease"
-                />
-                <Box
-                  cursor="pointer"
-                  p={1}
-                  borderRadius="sm"
-                  onClick={() => setVizPanelOpen(false)}
-                  onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
-                  aria-label="Collapse viz panel"
-                  role="button"
-                  _hover={{ opacity: 0.7 }}
-                >
-                  <Box
-                    as={LuChevronRight}
-                    fontSize="xs"
-                    color={isVizResizing ? 'white' : 'fg.muted'}
-                    _groupHover={{ color: 'white' }}
-                  />
-                </Box>
+                <LuChevronRight size={14} />
               </Box>
             </Box>
           )}
 
-          {/* Right Column: the viz panel — chart config for ALL questions */}
-          {showVizPanel && vizPanelOpen && (
+          {/* Right Column: the viz panel — chart config for ALL questions.
+              Fixed pixel width, not draggable (see PANEL_LAYOUT.viz); collapse
+              lives on the edge rail's chevron and the panel header's chevron. */}
+          {showVizColumn && vizPanelOpen && (
             <Box
-              width={`calc(${vizPanelWidth}% - 8px)`}
+              width={`${PANEL_LAYOUT.viz.width}px`}
               flexShrink={0}
               my={2}
               mr={2}
@@ -1212,7 +1171,7 @@ export default function QuestionViewV2({
               bg="bg.canvas"
               overflow="hidden"
             >
-              <VizPanel headerExtra={autoTypeBadge}>
+              <VizPanel headerExtra={autoTypeBadge} onCollapse={() => setVizPanelOpen(false)}>
                 {/* The right column follows the vizV2 flag like the compact Viz
                     tab: V2 panel (own type grid + Fields/Settings/Spec) edits
                     the saved or converted envelope; classic config otherwise. */}
@@ -1234,7 +1193,7 @@ export default function QuestionViewV2({
           )}
 
           {/* Collapsed Viz Panel Strip */}
-          {showVizPanel && !vizPanelOpen && (
+          {showVizColumn && !vizPanelOpen && (
             <Box
               bg="accent.teal/30"
               border="1px solid"

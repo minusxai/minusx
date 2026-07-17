@@ -36,6 +36,12 @@ function DatabaseSelectorInner({
   // Check if connections are loading from Redux (this fixes the "No connection" flash bug)
   const connectionsLoading = useAppSelector(selectConnectionsLoading);
 
+  // Compact mode is only for the unambiguous single-connection case (icon + check).
+  // With MORE than one connection the active database must stay visible at all times —
+  // a collapsed icon makes it easy to miss that a query is running against the wrong
+  // connection — so fall back to the full labeled dropdown.
+  const effectiveCompact = compact && options.length <= 1;
+
   // Wrap the caller's onChange in a stable identity so handleChange below is
   // also stable (it only depends on connectionsMap, which is already stable
   // through the hook's own memoisation).
@@ -59,7 +65,7 @@ function DatabaseSelectorInner({
       size={size}
       color="accent.primary"
       label="Database selector"
-      compact={compact}
+      compact={effectiveCompact}
       compactLabel="Database"
     />
   );

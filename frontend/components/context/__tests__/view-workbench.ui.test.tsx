@@ -11,6 +11,7 @@ import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import ViewWorkbench from '@/components/context/ViewWorkbench';
 import * as storeModule from '@/store/store';
+import { setQueryResult } from '@/store/queryResultsSlice';
 import type { ViewDef } from '@/lib/types';
 
 const ZONE_REVENUE: ViewDef = {
@@ -39,11 +40,22 @@ function setup(props: Partial<React.ComponentProps<typeof ViewWorkbench>> = {}) 
 
 describe('ViewWorkbench', () => {
   it('renders the REAL question editor — the SQL tab and viz panel, not a bespoke box', async () => {
-    setup({ view: ZONE_REVENUE });
+    const { testStore } = setup({ view: ZONE_REVENUE });
+    // The viz column only renders once the query has data — QuestionViewV2 hides
+    // the "configure the viz" panel until a run produces results. Seed a cached
+    // result for the virtual file's query so the panel shows; the virtual file's
+    // auto-execute fires an (unmocked, failing) fetch in jsdom, but that only
+    // sets loading/error and preserves this seeded data.
+    testStore.dispatch(setQueryResult({
+      query: ZONE_REVENUE.sql,
+      params: {},
+      database: 'warehouse',
+      data: { columns: ['zone_name', 'revenue'], types: ['string', 'number'], rows: [['A', 1]] },
+    }));
     // These come from QuestionViewV2 (QueryModeSelector + the right-hand viz
     // panel), so their presence proves reuse.
     expect(await screen.findByLabelText('SQL')).toBeTruthy();
-    expect(screen.getByLabelText('Viz panel')).toBeTruthy();
+    expect(await screen.findByLabelText('Viz panel')).toBeTruthy();
   });
 
   it('seeds the editor with the view\'s SQL and connection', async () => {
