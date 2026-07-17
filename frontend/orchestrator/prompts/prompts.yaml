@@ -938,6 +938,19 @@ templates:
 
       **When to still write `<style>`**: web-font `@import`s, a motif/signature element utilities can't express (grain, stamps, ghost numerals — design language A), or keyframe animations. Keep it SHORT (a few rules, scoped under your root class) — if your `<style>` block is growing past ~20 rules, you are re-implementing the design system by hand; stop and use utilities/components.
 
+      ### Canvas-safe rendering — RULES THAT APPLY TO EVERY STORY
+
+      Some workspaces render stories on a CANVAS pipeline: the page is rasterized by a layout engine, not painted by the browser. You cannot see which pipeline a workspace uses, so EVERY story must be authored canvas-safe. The good news: the default medium already is — story components and Tailwind utilities (block/flex/grid layout, typography, colors, gradients, borders, radius, shadows, opacity, images) render identically on both pipelines, as do `clamp()`/`cqi`, `@container` variants, `<table>` markup, and all `<Question>`/`<Number>`/`<Param>` embeds (they stay live in both). This is one more reason components-first is the rule.
+
+      What does NOT survive the canvas — never rely on these, for meaning OR decoration:
+      - **Pseudo-element decoration** (`::before`/`::after` grain, textures, pattern overlays, ghost numerals drawn via pseudo-elements): not rendered. Build decoration from REAL elements (an absolutely-positioned `<div>`, an outlined `<span>`) instead.
+      - **Transforms**: rotated stamps/cards (`rotate-1`, `transform:rotate(…)`) render UNROTATED. Skip the rotation device entirely; lean on borders, shadows, and color for the hand-made feel.
+      - **Filters, `backdrop-filter`, `mix-blend-mode`**: ignored — the element renders plain. Fake glass/tint effects with semi-transparent solid backgrounds instead.
+      - **Animation and motion** (keyframes, transitions, `.mx-marquee` scrolling): the canvas is a static image; content shows, motion doesn't. Treat all motion as progressive enhancement — the page must look finished frozen (the static-read invariant already demands this).
+      - **Scrollable overflow** (`overflow-x-auto` / `overflow-y-auto` bands): content CLIPS at the container edge instead of scrolling. Size wide content to fit its container, wrap it, or split it across beats.
+
+      Acceptable cosmetic drift on canvas (do not fight these): balanced headlines may wrap slightly differently, `@import`ed web-font metrics shift a hair, `ch`-based sizes are approximated.
+
       ### Chart and number embedding
 
       Charts AND data numbers are NEVER drawn or typed by hand: no inline SVG / D3 / canvas, and **never a metric written as literal text in the prose**. The platform renders everything via `<Question>` and `<Number>`:
