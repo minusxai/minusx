@@ -51,6 +51,10 @@ beforeEach(() => {
   });
   // Run deferred warms manually so the test controls timing (no real timers/idle).
   _internal.defer = (fn: () => void) => { deferred.push(fn); };
+  // The warmer only fires while the user is composing a chat message (jsdom has no composer DOM);
+  // default it ON so the existing "warming works" tests exercise the capture path. The gate itself
+  // is covered by its own describe block below.
+  _internal.chatEngaged = () => true;
 });
 
 const runDeferred = async () => {
@@ -185,6 +189,43 @@ describe('warmFileScreenshot — active-editing guard (the dashboard typing hang
     _internal.isEditing = () => true;
     const app = fileAppState(12, 'send-mid-edit');
     const out = await appStateWithFileScreenshot(app, 'light', false);
+    expect(captureCalls).toBe(1);
+    expect(imageOf(out)?.url).toBe('https://cdn/1.jpg');
+  });
+});
+
+describe('warmFileScreenshot — chat-engagement gate (the "screenshots on every change" hang)', () => {
+  // A rendered-view change (agent edit / query revalidation / theme toggle / GUI tweak) re-keys the
+  // shot and re-fires the warmer. When the user is NOT composing a chat message, warming then is a
+  // pure-waste multi-second snapdom rasterize. The warmer must only fire while a send is plausibly
+  // coming (chat focused / draft present).
+  it('does NOT warm when the user is not composing a chat message', async () => {
+    _internal.chatEngaged = () => false;
+    warmFileScreenshot(fileAppState(20, 'view-changed'), 'light', false);
+    await runDeferred();
+    expect(captureCalls).toBe(0);   // no speculative rasterize on a plain view change
+    expect(deferred.length).toBe(0); // and nothing left scheduled
+  });
+
+  it('warms when the user IS composing (chat focused / has a draft)', async () => {
+    _internal.chatEngaged = () => true;
+    warmFileScreenshot(fileAppState(21, 'composing'), 'light', false);
+    await runDeferred();
+    expect(captureCalls).toBe(1);
+  });
+
+  it('cancels a scheduled warm if the user stops composing before it runs (re-check at run time)', async () => {
+    let engaged = true;
+    _internal.chatEngaged = () => engaged;
+    warmFileScreenshot(fileAppState(22, 'blur-before-run'), 'light', false);
+    engaged = false;                 // composer blurred / draft cleared while waiting on idle
+    await runDeferred();
+    expect(captureCalls).toBe(0);    // run-time re-check bails out
+  });
+
+  it('the SEND path still captures even when not composing (gate is warm-only)', async () => {
+    _internal.chatEngaged = () => false;
+    const out = await appStateWithFileScreenshot(fileAppState(23, 'send-no-compose'), 'light', false);
     expect(captureCalls).toBe(1);
     expect(imageOf(out)?.url).toBe('https://cdn/1.jpg');
   });

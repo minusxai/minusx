@@ -51,6 +51,27 @@ function defaultDefer(fn: () => void): void {
 }
 
 /**
+ * True while the user is genuinely COMPOSING a chat message — the chat input is focused or holds a
+ * draft. Speculative warming is gated on this: the warmer's whole purpose is to have the image
+ * ready for a SEND, so warming only makes sense when a send is plausibly coming. Without this gate
+ * the warmer fired on EVERY rendered-view change — an agent edit landing, a query result
+ * revalidating (SWR), a color-mode toggle, a GUI-builder tweak — each a synchronous multi-second
+ * `snapdom` rasterize of the whole file view (measured ~4s on an 11-card dashboard). That is the
+ * "every time I make changes it takes screenshots and the app hangs" bug: making changes is not
+ * chatting, so with this gate those changes cost nothing. The SEND path is unaffected — it always
+ * captures on demand (with the existing "preparing" indicator) so the agent always gets the image.
+ */
+function defaultChatEngaged(): boolean {
+  if (typeof document === 'undefined') return false;
+  const inputs = document.querySelectorAll('[aria-label="Chat message input"]');
+  for (const el of Array.from(inputs)) {
+    if (el === document.activeElement || el.contains(document.activeElement)) return true; // focused
+    if ((el.textContent ?? '').trim().length > 0) return true; // holds a draft
+  }
+  return false;
+}
+
+/**
  * True while the user is actively editing INSIDE the target file view (focus on an input /
  * textarea / contenteditable within `[data-file-id]`, including inside a same-origin iframe —
  * the story editor). Used to hold the warmer off during a typing session: every text edit
@@ -86,12 +107,14 @@ export const _internal = {
   upload: (blob: Blob): Promise<string> => uploadBlobOrEmbed(blob, 'file.jpg', 'image/jpeg'),
   defer: defaultDefer as (fn: () => void) => void,
   isEditing: defaultIsEditing as (fileId: number) => boolean,
+  chatEngaged: defaultChatEngaged as (fileId: number) => boolean,
   reset(): void {
     lastShot = null;
     inflightKey = null;
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = null;
     this.isEditing = defaultIsEditing;
+    this.chatEngaged = defaultChatEngaged;
   },
 };
 
@@ -156,9 +179,15 @@ export function warmFileScreenshot(
   const info = appStateShotKey(appState, colorMode);
   if (!info) return;
   if (lastShot?.key === info.key || inflightKey === info.key) return;
+  // Only warm when a send is plausibly coming (chat focused / has a draft). Otherwise a mere view
+  // change — agent edit, query revalidation, theme toggle, GUI tweak — would trigger a multi-second
+  // rasterize the user never asked for. See defaultChatEngaged.
+  if (!_internal.chatEngaged(info.id)) return;
   _internal.defer(() => {
     // Re-check at run time: another warm may have populated this facet while we waited on idle.
     if (lastShot?.key === info.key || inflightKey === info.key) return;
+    // The user may have blurred the composer / cleared the draft while we waited on idle.
+    if (!_internal.chatEngaged(info.id)) return;
     // Actively editing the view (typing in a dashboard text block / the story editor): the view is
     // churning and a synchronous ~1s rasterize NOW would hang the typing session. Reschedule; the
     // warm lands once the editor blurs. (The SEND path is unaffected — it always captures fresh.)
