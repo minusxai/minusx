@@ -533,7 +533,10 @@ export class Orchestrator {
         rootInv.arguments,
         rootInv.context,
         invocationId,
-        this.projectRootThreadHistory(),
+        // Exclude the turn being reconstructed: its user message renders from `arguments`
+        // and its entries come back via the toolThread below — projecting it into the
+        // history as well duplicated the whole current turn in every post-resume call.
+        this.projectRootThreadHistory(invocationId),
         this.collectToolThread(invocationId),
       ) as MXAgent;
     }
@@ -612,11 +615,25 @@ export class Orchestrator {
     return new Cls(this, normalizeParameters(Cls.schema.parameters, parameters), ctx, id, threadHistory, toolThread);
   }
 
-  protected projectRootThreadHistory(): Message[] {
+  /**
+   * Prior-turn history for a root agent, projected from the log. `excludeRootId` skips that
+   * invocation's user message AND its entries: on RESUME the current turn's root is already in
+   * the log (committed eagerly at turn start), and its entries belong to the reconstructed
+   * agent's toolThread — including them here rendered the whole current turn TWICE in every
+   * post-resume LLM call (user message and all). Prior turns are history; the current turn is
+   * the live thread.
+   */
+  protected projectRootThreadHistory(excludeRootId?: string): Message[] {
     const out: Message[] = [];
     let currentRootId: string | null = null;
     for (const e of this.log) {
       if (this.isAgentInvocation(e) && e.parent_id === null) {
+        if (excludeRootId !== undefined && e.id === excludeRootId) {
+          // The excluded turn's children are gated off via currentRootId = its id being
+          // skipped too: entries match `parent_id === currentRootId`, so clearing it drops them.
+          currentRootId = null;
+          continue;
+        }
         // Tag each prior user turn with the page context it was sent with (`_appState`, read off
         // the invocation's stored context). The projection pass (`projectMessages`) renders + diffs
         // it against the whole conversation so unchanged app state collapses across turns. Carried
