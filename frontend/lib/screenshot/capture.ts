@@ -4,10 +4,15 @@
  * of reading it from Redux via a hook. `useScreenshot` delegates here so there is a
  * single capture implementation.
  *
- * Browser-only (uses the DOM + snapdom). snapdom deep-clones the subtree WITH its styles,
- * including Shadow DOM — which html-to-image's <foreignObject> approach could not, so
- * shadow-scoped content (e.g. story charts) now rasterizes correctly. It also embeds fonts
- * and caches resources/style-maps internally, so there is no separate font-embed step.
+ * Browser-only. snapdom deep-clones the subtree WITH its styles and embeds fonts, so it can capture
+ * main-document React views (dashboards/questions/notebooks/reports) whose CSS lives in the PARENT
+ * document's stylesheets — those would serialize unstyled any other way. That is now its ONLY job:
+ * stories route to their own renderer's capture first (canvas → takumi bitmaps; svg → serializing the
+ * live <svg> surface), and only fall through to here on the classic DOM renderer.
+ *
+ * NOTE: nothing in this app uses Shadow DOM (a prior version of this comment claimed otherwise) —
+ * agent HTML is isolated in a same-origin IFRAME, chosen over a shadow root precisely so its
+ * `@import` web-fonts load natively. See components/views/shared/AgentHtml.tsx.
  */
 import { snapdom } from '@zumer/snapdom';
 import { getCanvasStoryCapture } from '@/lib/canvas-story/capture-registry';
