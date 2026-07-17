@@ -37,6 +37,23 @@ export interface FileTypeAccessOverride {
  */
 export type AccessRulesOverride = Partial<Record<UserRole, FileTypeAccessOverride>>;
 
+/** The engine that renders story files. See {@link CompanyConfig.storyRenderer}. */
+export type StoryRenderer = 'dom' | 'canvas' | 'svg';
+
+export const STORY_RENDERERS: readonly StoryRenderer[] = ['dom', 'canvas', 'svg'] as const;
+
+/**
+ * The active story renderer for a config. Single source of truth for the choice, including
+ * back-compat: workspaces configured before the union stored `useCanvasRenderer: true`, which must
+ * keep rendering on canvas rather than silently reverting to DOM.
+ */
+export function resolveStoryRenderer(
+  config: { storyRenderer?: StoryRenderer; useCanvasRenderer?: boolean } | null | undefined,
+): StoryRenderer {
+  if (config?.storyRenderer) return config.storyRenderer;
+  return config?.useCanvasRenderer ? 'canvas' : 'dom';
+}
+
 export interface OrgBranding {
   displayName: string;  // Workspace display name
   agentName: string;    // Agent name
@@ -79,9 +96,16 @@ export interface OrgConfig {
   /** Remote Agent Sessions ("Copy to Agent"): lets an external agent drive a chat over HTTP.
    *  OFF by default — enable in Settings → Integrations. Gates minting AND live-session auth. */
   remoteAgentsEnabled?: boolean;
-  /** Render story files on canvas (Takumi raster + embed islands) instead of the
-   *  DOM/iframe path. OFF by default — toggle in Settings → General. Per-story
-   *  fallback to DOM still applies when canvas rendering fails. */
+  /** Which engine renders story files (Settings → General). One setting, not a flag per engine:
+   *  exactly one renderer is active, so a union has no invalid states (canvas+svg can't both be on).
+   *   - 'dom'    — AgentHtml in a same-origin iframe (default). Captured via snapdom.
+   *   - 'canvas' — Takumi raster + embed islands. Captures straight from its bitmaps.
+   *   - 'svg'    — AgentHtml in an iframe, story body inside <svg><foreignObject>. Captures by
+   *                serializing that live SVG (browser-rendered, snapdom-free).
+   *  'canvas' and 'svg' fall back to DOM per story when rendering fails. */
+  storyRenderer?: StoryRenderer;
+  /** @deprecated Legacy boolean superseded by {@link storyRenderer}. Still READ for workspaces whose
+   *  stored config predates the union (resolveStoryRenderer maps true → 'canvas'); never written. */
   useCanvasRenderer?: boolean;
   /** In-app LLM provider config: providers + per-use-case model assignments
    *  (see lib/llm/llm-config-types.ts). Overrides env model config when set;
@@ -118,7 +142,9 @@ export const DEFAULT_CONFIG: OrgConfig = {
   },
   setupWizard: { status: 'pending' },
   analytics: { enabled: true },
-  useCanvasRenderer: false,
+  // storyRenderer is deliberately NOT defaulted here — resolveStoryRenderer is the single place the
+  // 'dom' default lives. Defaulting it here too would shadow the legacy useCanvasRenderer fallback
+  // (a stored 'true' would lose to an injected 'dom' and silently revert those workspaces).
 };
 
 /**
@@ -180,7 +206,11 @@ export function mergeConfig(
       : defaults.chartColorPalette,
     analytics: overrides.analytics ?? defaults.analytics,
     remoteAgentsEnabled: overrides.remoteAgentsEnabled ?? defaults.remoteAgentsEnabled,
-    useCanvasRenderer: overrides.useCanvasRenderer ?? defaults.useCanvasRenderer,
+    // Both renderer fields pass through UNDEFAULTED: resolveStoryRenderer owns the precedence
+    // (storyRenderer → legacy useCanvasRenderer → 'dom'). Injecting a default here would shadow the
+    // legacy fallback for workspaces that predate the union.
+    ...(overrides.storyRenderer !== undefined ? { storyRenderer: overrides.storyRenderer } : {}),
+    ...(overrides.useCanvasRenderer !== undefined ? { useCanvasRenderer: overrides.useCanvasRenderer } : {}),
     llm: overrides.llm ?? defaults.llm,
   };
 }

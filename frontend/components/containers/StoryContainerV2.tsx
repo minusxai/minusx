@@ -18,6 +18,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectIsDirty } from '@/store/filesSlice';
 import { useStoryPreviewCss } from '@/lib/hooks/use-story-preview-css';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import { resolveStoryRenderer } from '@/lib/branding/whitelabel';
 import { selectFileEditMode } from '@/store/uiSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -68,7 +69,7 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
         storyName={numericId !== undefined ? file.name : undefined}
         colorMode={effectiveColorMode}
         compiledCss={compiledCss}
-        useCanvasRenderer={config.useCanvasRenderer ?? false}
+        storyRenderer={resolveStoryRenderer(config)}
       />
       {canShare && numericId !== undefined && (
         <ShareModal fileId={numericId} fileName={file.name} isOpen={shareOpen} onClose={() => setShareOpen(false)} />
