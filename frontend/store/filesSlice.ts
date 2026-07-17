@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction, createSelector, weakMapMemoize } from '@reduxjs/toolkit';
-import type { DbFile, FileType, DocumentContent, AssetReference, DatabaseSchema } from '@/lib/types';
+import type { DbFile, FileType, DocumentContent, AssetReference, DatabaseSchema, SpreadsheetSource } from '@/lib/types';
 import type { FileInfo } from '@/lib/data/types';
 import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import type { RootState } from './store';
@@ -21,6 +21,7 @@ export interface ExecutedSnapshot {
   query: string;
   params: Record<string, any>;
   database: string;
+  spreadsheet?: SpreadsheetSource;
 }
 
 export type EphemeralChanges = Partial<DbFile['content']> & {

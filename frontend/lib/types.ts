@@ -15,6 +15,7 @@ export type {
   AggregationFunction, FormulaOperator, VisualizationType, ParameterType,
   PivotValueConfig, PivotFormula, PivotConfig, ColumnFormatConfig, ConditionalFormatRule, ConditionFormatRule, ColorScaleFormatRule, VizSettings, AxisConfig, AxisScale, VisualizationStyleConfig, ChartAnnotation, TrendConfig, TrendCompareMode, SingleValueConfig,
   QuestionParameter,
+  SpreadsheetColumn, SpreadsheetSource,
   QuestionContent,
   FileReference, InlineAsset,
   DashboardContent, DashboardLayout, DashboardLayoutItem,

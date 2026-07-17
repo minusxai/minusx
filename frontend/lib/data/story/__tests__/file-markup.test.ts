@@ -26,6 +26,22 @@ describe('fileToMarkup / markupToContent — question (no wrapper, raw SQL)', ()
       expect(back.content.vizSettings).toMatchObject({ type: 'bar', xCols: ['m'], yCols: ['r'] });
     }
   });
+
+  it('round-trips the complete direct-data spreadsheet without a special codec', () => {
+    const content = {
+      description: 'manual input', query: '', connection_name: '',
+      vizSettings: { type: 'table' }, parameters: [],
+      spreadsheet: {
+        version: 1,
+        columns: [{ name: 'region', type: 'text' }, { name: 'revenue', type: 'number' }],
+        rows: [['West', '12.5'], ['East', null]],
+      },
+    };
+    const markup = fileToMarkup('question', content);
+    const back = markupToContent('question', markup);
+    expect(back.ok).toBe(true);
+    if (back.ok) expect(back.content.spreadsheet).toEqual(content.spreadsheet);
+  });
 });
 
 describe('markupToContent — Record-typed fields never coerce to strings', () => {

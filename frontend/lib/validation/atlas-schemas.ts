@@ -415,6 +415,19 @@ export const SemanticQuerySpec = Type.Object({
 }, { title: 'SemanticQuerySpec' });
 export type SemanticQuerySpec = Static<typeof SemanticQuerySpec>;
 
+export const SpreadsheetColumn = Type.Object({
+  name: Type.String(),
+  type: StringEnum(['auto', 'text', 'number', 'boolean', 'date']),
+}, { title: 'SpreadsheetColumn' });
+export type SpreadsheetColumn = Static<typeof SpreadsheetColumn>;
+
+export const SpreadsheetSource = Type.Object({
+  version: Type.Literal(1),
+  columns: Type.Array(SpreadsheetColumn),
+  rows: Type.Array(Type.Array(Nullable(Type.String()))),
+}, { title: 'SpreadsheetSource' });
+export type SpreadsheetSource = Static<typeof SpreadsheetSource>;
+
 export const QuestionContent = Type.Object({
   description: Nullable(Type.String()),
   query: Type.String({ description: 'SQL query string, may contain :paramName tokens' }),
@@ -424,6 +437,8 @@ export const QuestionContent = Type.Object({
   connection_name: Type.String({ description: 'connection name (empty string if none)' }),
   cachePolicy: Nullable(CachePolicy),
   semanticQuery: NullableD(SemanticQuerySpec, 'Semantic-tier state; query holds the compiled SQL'),
+  spreadsheet: Type.Optional(NullableD(SpreadsheetSource,
+    'Direct data entered in the spreadsheet editor. Mutually exclusive with query-backed sources.')),
   viz: NullableD(VizEnvelope,
     'Viz V2 envelope (docs/Visualization Arch V2.md). When present it is AUTHORITATIVE — the chart renders ' +
     'from viz and legacy vizSettings is ignored. Omit to keep rendering via vizSettings.'),

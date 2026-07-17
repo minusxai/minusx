@@ -67,6 +67,10 @@ vi.mock('@/lib/hooks/useConfigs', () => ({
   useConfigs: () => ({ config: { branding: { agentName: 'MinusX' } }, loading: false }),
 }));
 
+vi.mock('@/components/spreadsheet/SpreadsheetSourceEditor', () => ({
+  default: () => <div aria-label="Spreadsheet editor" />,
+}));
+
 import QuestionContainerV2 from '@/components/containers/QuestionContainerV2';
 
 const FILE_ID = 4242;
@@ -117,17 +121,62 @@ describe('QuestionViewV2 (mounted via QuestionContainerV2) — Redux integration
     vi.restoreAllMocks();
   });
 
-  it('renders the question surface (SQL editor + database selector)', async () => {
+  it('shows GUI/SQL, the database, and a separated Spreadsheet tab for an empty question', async () => {
     const store = setup();
     renderQuestion(store);
 
     // The Monaco editor is loaded via next/dynamic, so it mounts asynchronously.
     expect(await screen.findByLabelText('SQL editor')).toBeInTheDocument();
     expect(screen.getByLabelText('Database selector')).toBeInTheDocument();
+    expect(screen.getByLabelText('Spreadsheet')).toBeInTheDocument();
+  });
+
+  it('switches an empty source to Spreadsheet and hides query controls after data exists', async () => {
+    const store = setup();
+    renderQuestion(store);
+
+    fireEvent.click(screen.getByLabelText('Spreadsheet'));
+    expect(await screen.findByLabelText('Spreadsheet editor')).toBeInTheDocument();
+    expect(screen.queryByLabelText('SQL editor')).toBeNull();
+    const content = store.getState().files.files[FILE_ID].persistableChanges as Partial<QuestionContent>;
+    expect(content).toMatchObject({ spreadsheet: { version: 1, columns: [], rows: [] } });
+  });
+
+  it('hides Spreadsheet when SQL has content, and hides GUI/SQL/DB when spreadsheet data exists', async () => {
+    const queryStore = setup({ query: 'SELECT 1', connection_name: 'demo_db' });
+    const first = renderQuestion(queryStore);
+    expect(screen.queryByLabelText('Spreadsheet')).toBeNull();
+    first.unmount();
+
+    const sheetStore = setup({
+      spreadsheet: { version: 1, columns: [{ name: 'value', type: 'auto' }], rows: [['1']] },
+      query: '', connection_name: '',
+    });
+    renderQuestion(sheetStore);
+    expect(await screen.findByLabelText('Spreadsheet editor')).toBeInTheDocument();
+    expect(screen.queryByLabelText('SQL')).toBeNull();
+    expect(screen.queryByLabelText('Database selector')).toBeNull();
+  });
+
+  it('materializes spreadsheet questions without calling /api/query', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const store = setup({
+      spreadsheet: {
+        version: 1,
+        columns: [{ name: 'amount', type: 'number' }],
+        rows: [['12.5']],
+      },
+      query: '',
+      connection_name: '',
+    });
+    renderQuestion(store);
+
+    expect(await screen.findByLabelText('Spreadsheet editor')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/query'))).toBe(false);
   });
 
   it('dispatches setQuestionCollapsedPanel when the query (left) panel is collapsed/expanded', () => {
-    const store = setup();
+    const store = setup({ query: 'SELECT 1', connection_name: 'demo_db' });
     renderQuestion(store);
 
     expect(selectQuestionCollapsedPanel(store.getState())).toBe('none');
@@ -140,7 +189,7 @@ describe('QuestionViewV2 (mounted via QuestionContainerV2) — Redux integration
   });
 
   it('dispatches setQuestionCollapsedPanel when the results (right) panel is collapsed/expanded', () => {
-    const store = setup();
+    const store = setup({ query: 'SELECT 1', connection_name: 'demo_db' });
     renderQuestion(store);
 
     fireEvent.click(screen.getByLabelText('Collapse results panel'));
@@ -158,7 +207,7 @@ describe('QuestionViewV2 — three-column layout (viz panel on the right)', () =
   });
 
   it('the viz panel is open by default and collapses to a slim strip via the handle chevron', () => {
-    const store = setup();
+    const store = setup({ query: 'SELECT 1', connection_name: 'demo_db' });
     renderQuestion(store);
 
     expect(screen.getByLabelText('Viz panel')).toBeInTheDocument();
@@ -171,7 +220,7 @@ describe('QuestionViewV2 — three-column layout (viz panel on the right)', () =
   });
 
   it('the mode selector has no Viz tab in the wide layout — viz lives in the right panel', () => {
-    const store = setup();
+    const store = setup({ query: 'SELECT 1', connection_name: 'demo_db' });
     renderQuestion(store);
 
     expect(screen.getByLabelText('SQL')).toBeInTheDocument();
@@ -179,7 +228,7 @@ describe('QuestionViewV2 — three-column layout (viz panel on the right)', () =
   });
 
   it('the viz handle has chevrons on BOTH sides, like the left handle — the left one collapses the data panel', () => {
-    const store = setup();
+    const store = setup({ query: 'SELECT 1', connection_name: 'demo_db' });
     renderQuestion(store);
 
     fireEvent.click(screen.getByLabelText('Collapse data panel'));

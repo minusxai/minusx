@@ -14,6 +14,7 @@ import { extractInlineQuestions } from '@/lib/data/story/story-question';
 import { extractInlineNumbers } from '@/lib/data/story/story-number';
 import { bindReferencedParams, buildQueryParamValues } from '@/lib/sql/sql-params';
 import type { DocumentContent, QuestionContent, QuestionParameter, QueryResult, NotebookContent } from '@/lib/types';
+import { getQuestionExecution } from '@/lib/spreadsheet/question-source';
 
 /**
  * Extracts inherited params from a file's content directly.
@@ -74,8 +75,9 @@ export function buildEffectiveReference(refFile: FileState, inheritedParams: Rec
   const effectiveParamsDict = content.parameters?.length
     ? resolveEffectiveParams(content.parameters, ownParamValues, inheritedParams)
     : {};
-  const effectiveQueryResultId = content.query && content.connection_name
-    ? getQueryHash(content.query, effectiveParamsDict, content.connection_name)
+  const execution = getQuestionExecution(content, inheritedParams);
+  const effectiveQueryResultId = execution
+    ? getQueryHash(execution.query, execution.params, execution.database)
     : refFile.queryResultId;
   return {
     ...stripped,
@@ -157,10 +159,8 @@ export function augmentWithParams(
   // Dashboards do not execute their own query; only their references do.
   if (fileState.type === 'question') {
     const content = selectMergedContent(state, fileState.id) as QuestionContent;
-    if (content?.query) {
-      const params = resolveEffectiveParams(content.parameters || [], content.parameterValues ?? {}, inheritedParams);
-      setCachedResult(result, state, content.query, params, content.connection_name);
-    }
+    const execution = getQuestionExecution(content, inheritedParams);
+    if (execution) setCachedResult(result, state, execution.query, execution.params, execution.database);
   }
 
   // Notebook SQL cells are inline questions — collect each cell's cached result

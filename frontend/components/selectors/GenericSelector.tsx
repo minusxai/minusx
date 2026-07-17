@@ -331,7 +331,7 @@ function GenericSelectorInner({
         aria-label={label}
       >
         <HStack gap={sizeStyles.gap} align="center">
-          <Box w={2} h={2} borderRadius="full" bg={color} />
+          <Icon as={LuCheck} boxSize={sizeStyles.iconSize} color={color} strokeWidth={3} />
           {defaultIcon && <Icon as={defaultIcon} boxSize={sizeStyles.iconSize} color={color} />}
           <Text fontSize={sizeStyles.fontSize} color={color} fontWeight="500" {...truncateStyles}>
             {singleOptionLabel}

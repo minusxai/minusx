@@ -15,6 +15,7 @@ import { QuestionVisualization, ContainerConfig } from '@/components/question/Qu
 import { QuestionContent, QuestionParameter } from '@/lib/types';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
+import { useSpreadsheetResult } from '@/lib/hooks/use-spreadsheet-result';
 
 
 interface EmbeddedQuestionContainerProps {
@@ -75,8 +76,10 @@ export default function EmbeddedQuestionContainer({
     localQuestion.query || '',
     queryParams,
     localQuestion.connection_name || '', // Empty string if missing, rely on skip to prevent execution
-    { skip: !localQuestion.query || !localQuestion.connection_name, filePath, cachePolicy: cachePolicyOpt } // Skip if no query or no database
+    { skip: !!localQuestion.spreadsheet || !localQuestion.query || !localQuestion.connection_name, filePath, cachePolicy: cachePolicyOpt } // Skip if direct data or no query/database
   );
+  const spreadsheetResult = useSpreadsheetResult(localQuestion.spreadsheet, { skip: !localQuestion.spreadsheet });
+  const activeResult = localQuestion.spreadsheet ? spreadsheetResult : { queryData, loading, error, isStale, refetch };
 
   // Update handler - propagate changes to parent if onChange provided
   const handleChange = useCallback((updates: Partial<QuestionContent>) => {
@@ -140,10 +143,10 @@ export default function EmbeddedQuestionContainer({
     <QuestionVisualization
       currentState={localQuestion}
       config={config}
-      loading={loading}
-      error={error}
-      data={queryData}
-      onRetry={refetch}
+      loading={activeResult.loading}
+      error={activeResult.error}
+      data={'data' in activeResult ? activeResult.data : activeResult.queryData}
+      onRetry={activeResult.refetch}
       onVizTypeChange={handleVizTypeChange}
       onAxisChange={handleAxisChange}
     />

@@ -33,6 +33,7 @@ import type {
   QuestionContent,
   QueryResult,
 } from '@/lib/types';
+import { runSpreadsheetSource } from '@/lib/spreadsheet/materialize';
 
 // ---------------------------------------------------------------------------
 // Internal implementations (take explicit user param)
@@ -136,6 +137,18 @@ async function executeQueriesForFile(
   const execQuestion = async (q: DbFile): Promise<void> => {
     if (q.type !== 'question') return;
     const content = q.content as QuestionContent;
+    if (content.spreadsheet) {
+      const materialized = runSpreadsheetSource(content.spreadsheet);
+      if (materialized.ok) results.push(materialized.data);
+      else {
+        results.push({
+          columns: [], types: [], rows: [],
+          id: getQueryHash(`spreadsheet:invalid:${q.id}`, {}, ''),
+          error: materialized.errors.map(error => error.message).join(' '),
+        } as QueryResult & { error: string });
+      }
+      return;
+    }
     await runOne(content.query, content.connection_name, content.parameters, content.parameterValues ?? {});
   };
 

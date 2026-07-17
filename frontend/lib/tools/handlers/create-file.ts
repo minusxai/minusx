@@ -28,6 +28,8 @@ import { selectUnrestrictedMode } from '@/store/uiSlice';
 import type { FrontendToolHandler } from './types';
 import { deterministicAgentRubric } from './file-review';
 import { vizWarningForQuestion } from './viz-warning';
+import { cacheSpreadsheetSource } from '@/lib/spreadsheet/result-cache';
+import { getSpreadsheetExecution } from '@/lib/spreadsheet/materialize';
 
 export const createFileHandler: FrontendToolHandler = async (args, context) => {
   const { file_type, name } = args;
@@ -165,7 +167,16 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
     const updatedState = getStore().getState();
     const finalContent = selectMergedContent(updatedState, draftId) as any;
 
-    if (finalContent?.query && finalContent?.connection_name) {
+    if (finalContent?.spreadsheet) {
+      const materialized = cacheSpreadsheetSource(finalContent.spreadsheet);
+      if (materialized.ok) {
+        const execution = getSpreadsheetExecution(finalContent.spreadsheet);
+        getStore().dispatch(setEphemeral({
+          fileId: draftId as FileId,
+          changes: { lastExecuted: { ...execution, spreadsheet: finalContent.spreadsheet } },
+        }));
+      }
+    } else if (finalContent?.query && finalContent?.connection_name) {
       const params = finalContent.parameterValues || {};
 
       // Show loading in the viz immediately

@@ -11,6 +11,7 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { QuestionContent, DatabaseWithSchema, connectionTypeToDialect } from '@/lib/types';
 import { FileNotFoundError } from '@/lib/errors';
 import { inferColumnsLocal } from '@/lib/sql/infer-columns';
+import { runSpreadsheetSource } from '@/lib/spreadsheet/materialize';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -47,6 +48,15 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         );
       }
       const questionContent = questionResult.data.content as QuestionContent;
+      if (questionContent.spreadsheet) {
+        const materialized = runSpreadsheetSource(questionContent.spreadsheet);
+        if (!materialized.ok) {
+          return NextResponse.json({ columns: [], errors: materialized.errors }, { status: 400 });
+        }
+        return NextResponse.json({
+          columns: materialized.data.columns.map((name, index) => ({ name, type: materialized.data.types[index] })),
+        });
+      }
       query = questionContent.query;
       queryConnectionName = questionContent.connection_name;
     } else if (typeof sql === 'string' && sql.trim() && typeof connectionName === 'string') {
