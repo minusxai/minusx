@@ -64,6 +64,8 @@
     "@types/geojson": "^7946.0.16",
     "@types/js-yaml": "^4.0.9",
     "@types/pg": "^8.16.0",
+    "@univerjs/preset-sheets-core": "^0.25.1",
+    "@univerjs/presets": "^0.25.1",
     "@zumer/snapdom": "^2.12.9",
     "acorn": "^8.17.0",
     "acorn-jsx": "^5.3.2",
