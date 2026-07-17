@@ -182,8 +182,11 @@ describe('ChatInput: sidebar control layout', () => {
     expect(screen.queryByLabelText('Press Escape to collapse chat')).not.toBeInTheDocument();
   });
 
-  it('shows clickable shortcut tips and inserts the selected token', async () => {
-    const user = userEvent.setup();
+  it.each([
+    ['floating', false],
+    ['sidebar', true],
+    ['page', false],
+  ] as const)('shows one non-interactive pro tip in the %s composer', async (container, isCompact) => {
     const store = storeModule.makeStore();
     renderWithProviders(
       <ChatInput
@@ -192,22 +195,20 @@ describe('ChatInput: sidebar control layout', () => {
         isAgentRunning={false}
         databaseName="test_db"
         onDatabaseChange={vi.fn()}
-        container="floating"
-        isCompact={false}
+        container={container}
+        isCompact={isCompact}
       />,
       { store },
     );
 
     const editor = screen.getByLabelText('Chat editor');
-    fireEvent.focus(editor);
+    if (container === 'floating') fireEvent.focus(editor);
     await waitFor(() => expect(screen.getByText('Pro tip')).toBeInTheDocument());
-    expect(screen.getByLabelText('Insert @@ for questions and dashboards')).toBeInTheDocument();
-    expect(screen.getByLabelText('Insert # for skills')).toBeInTheDocument();
-    expect(screen.getByLabelText('Insert / for commands')).toBeInTheDocument();
-
-    await user.click(screen.getByLabelText('Insert @ for tables and columns'));
-    expect(editor).toHaveValue('@');
-    expect(screen.queryByText('Pro tip')).not.toBeInTheDocument();
+    const proTipBar = screen.getByTestId('chat-pro-tip-bar');
+    expect(proTipBar).toHaveTextContent(/Use\s*(?:@{1,2}|#|\/)\s*to/);
+    expect(proTipBar.querySelector('code')).toHaveTextContent(/^(?:@{1,2}|#|\/)$/);
+    expect(screen.queryByRole('button', { name: /Insert .* for/ })).not.toBeInTheDocument();
+    expect(editor).toHaveValue('');
   });
 
 });

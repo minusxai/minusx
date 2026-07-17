@@ -23,11 +23,11 @@ import { toaster } from '@/components/ui/toaster';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
 
-const CHAT_SHORTCUT_TIPS = [
-  { token: '@', label: 'tables & columns', ariaLabel: 'tables and columns' },
-  { token: '@@', label: 'questions & dashboards', ariaLabel: 'questions and dashboards' },
-  { token: '#', label: 'skills', ariaLabel: 'skills' },
-  { token: '/', label: 'commands', ariaLabel: 'commands' },
+const CHAT_PRO_TIPS = [
+  { shortcut: '@', detail: 'to mention tables & columns' },
+  { shortcut: '@@', detail: 'to mention questions & dashboards' },
+  { shortcut: '#', detail: 'to invoke skills' },
+  { shortcut: '/', detail: 'to run commands' },
 ] as const;
 
 interface ChatInputProps {
@@ -99,6 +99,7 @@ function ChatInputInner({
   const [isFocused, setIsFocused] = useState(false);
   const [chatSettingsOpen, setChatSettingsOpen] = useState(false);
   const [escapeCollapsed, setEscapeCollapsed] = useState(false);
+  const [proTip, setProTip] = useState<(typeof CHAT_PRO_TIPS)[number]>(CHAT_PRO_TIPS[0]);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const [annotatingIdx, setAnnotatingIdx] = useState<number | null>(null);
@@ -129,6 +130,12 @@ function ChatInputInner({
     setIsMac(navigator.platform.toUpperCase().indexOf('MAC') >= 0);
   }, []);
   const shortcutKey = isMac ? '⌘+k' : 'Ctrl+k';
+
+  // Keep the hint stable while this composer is mounted. Starting with the first
+  // entry avoids server/client hydration differences; the client then picks one.
+  useEffect(() => {
+    setProTip(CHAT_PRO_TIPS[Math.floor(Math.random() * CHAT_PRO_TIPS.length)]);
+  }, []);
 
   // Global Cmd+K shortcut for floating mode
   useEffect(() => {
@@ -238,17 +245,6 @@ function ChatInputInner({
     }
     historyCursorRef.current = null;
     draftBeforeHistoryRef.current = value;
-  });
-
-  const insertShortcut = useStableCallback((token: string) => {
-    const separator = input.length > 0 && !/\s$/.test(input) ? ' ' : '';
-    const nextValue = `${input}${separator}${token}`;
-    setEscapeCollapsed(false);
-    setInput(nextValue);
-    historyCursorRef.current = null;
-    draftBeforeHistoryRef.current = nextValue;
-    editorRef.current?.setText(nextValue);
-    editorRef.current?.focus();
   });
 
   // Large pastes (1000s of lines) bog down the Lexical editor — stage them as a
@@ -416,83 +412,79 @@ function ChatInputInner({
               }
             }}
             >
-            {isFloating && !isCollapsed && (
+            {!isCollapsed && (
               <HStack
                 px={3}
-                pt={2.5}
-                pb={0.5}
+                py={2}
                 gap={3}
                 justify="space-between"
-                display={{ base: 'none', md: 'flex' }}
+                align="center"
+                display="flex"
+                bg="bg.muted"
+                borderTopLeftRadius="xl"
+                borderTopRightRadius="xl"
+                borderBottom="1px solid"
+                borderColor="border.muted"
+                data-testid="chat-pro-tip-bar"
               >
-                {!hasContent && !disabled && !chatLocked && !isPreparing ? (
-                  <HStack gap={2.5} minW={0} overflow="hidden" fontFamily="mono">
-                    <Text
-                      fontSize="2xs"
-                      fontWeight="700"
-                      color="fg.subtle"
-                      textTransform="uppercase"
-                      letterSpacing="wide"
-                      whiteSpace="nowrap"
-                    >
-                      Pro tip
-                    </Text>
-                    {CHAT_SHORTCUT_TIPS.map((tip) => (
-                      <HStack
-                        as="button"
-                        type="button"
-                        key={tip.token}
-                        gap={1}
-                        color="fg.muted"
-                        whiteSpace="nowrap"
-                        cursor="pointer"
-                        transition="color 0.15s ease"
-                        _hover={{ color: 'fg.default' }}
-                        aria-label={`Insert ${tip.token} for ${tip.ariaLabel}`}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => insertShortcut(tip.token)}
-                      >
-                        <Box
-                          px={1}
-                          py={0.5}
-                          borderRadius="sm"
-                          bg="accent.teal/10"
-                          color="accent.teal"
-                          fontSize="2xs"
-                          fontWeight="700"
-                          lineHeight="1"
-                        >
-                          {tip.token}
-                        </Box>
-                        <Text fontSize="2xs">{tip.label}</Text>
-                      </HStack>
-                    ))}
-                  </HStack>
-                ) : <Box />}
-                <HStack
-                  gap={1.5}
-                  color="fg.subtle"
-                  flexShrink={0}
-                  aria-label="Press Escape to collapse chat"
-                >
-                  <Box
-                    as="kbd"
-                    px={1}
-                    py={0.5}
-                    border="1px solid"
-                    borderColor="border.default"
-                    borderRadius="sm"
+                {!disabled && !chatLocked && !isPreparing ? (
+                  <Text
+                    minW={0}
+                    overflow="hidden"
+                    color="fg.muted"
                     fontFamily="mono"
                     fontSize="2xs"
-                    lineHeight="1"
-                    bg="bg.surface"
+                    lineHeight="short"
+                    textOverflow="ellipsis"
+                    whiteSpace="nowrap"
                   >
-                    Esc
-                  </Box>
-                  <Text fontSize="2xs" fontFamily="mono" whiteSpace="nowrap">
-                    collapse
+                    <Box as="span" fontWeight="700">Pro tip</Box>
+                    {' · '}
+                    Use
+                    {' '}
+                    <Box
+                      as="code"
+                      px={1}
+                      py={0.5}
+                      borderRadius="sm"
+                      color="accent.teal"
+                      fontFamily="mono"
+                      fontSize="inherit"
+                      fontWeight="700"
+                      lineHeight="1"
+                    >
+                      {proTip.shortcut}
+                    </Box>
+                    {' '}
+                    {proTip.detail}
                   </Text>
-                </HStack>
+                ) : <Box />}
+                {isFloating && (
+                  <HStack
+                    gap={1.5}
+                    color="fg.subtle"
+                    flexShrink={0}
+                    aria-label="Press Escape to collapse chat"
+                  >
+                    <Box
+                      as="kbd"
+                      px={1}
+                      py={0.5}
+                      border="1px solid"
+                      borderColor="border.default"
+                      borderRadius="sm"
+                      fontFamily="mono"
+                      fontSize="2xs"
+                      lineHeight="1"
+                      bg="bg.surface"
+                    >
+                      Esc
+                    </Box>
+                    <Text fontSize="2xs" fontFamily="mono" whiteSpace="nowrap">
+                      collapse
+                    </Text>
+                  </HStack>
+                )}
               </HStack>
             )}
             <VStack gap={0} align="stretch">
