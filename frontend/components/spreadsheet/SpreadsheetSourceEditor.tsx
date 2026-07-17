@@ -8,6 +8,7 @@ import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/locales/en-
 import '@univerjs/preset-sheets-core/lib/index.css';
 import type { SpreadsheetSource } from '@/lib/types';
 import { QUESTION_SPREADSHEET_LIMITS, type SpreadsheetLimits } from '@/lib/spreadsheet/materialize';
+import { LuPlay } from 'react-icons/lu';
 
 interface SpreadsheetSourceEditorProps {
   source: SpreadsheetSource;
@@ -255,7 +256,7 @@ export default function SpreadsheetSourceEditor({
           {source.rows.length.toLocaleString()} rows · {source.columns.length} columns
         </Text>
         {!readOnly && onRun && (
-          <Button size="sm" bg="accent.teal" color="white" aria-label="Run spreadsheet" loading={isRunning} onClick={onRun}>Run</Button>
+          <Button size="sm" bg="accent.teal" color="white" aria-label="Run spreadsheet" loading={isRunning} onClick={onRun}><LuPlay fill="white"/></Button>
         )}
       </HStack>
     </Box>
