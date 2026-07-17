@@ -19,8 +19,10 @@ vi.mock('@/lib/hooks/useConfigs', () => ({
   useConfigs: () => ({ config: { branding: { agentName: 'MinusX' }, city: 'SF', allowedVizTypes: undefined } }),
 }));
 vi.mock('@/lib/hooks/useConversation', () => ({
-  useConversation: () => ({
-    conversation: { conversationID: 1, executionState: 'FINISHED', messages: [], pending_tool_calls: [], agent_args: {} },
+  useConversation: (conversationId?: number) => ({
+    conversation: conversationId
+      ? { conversationID: 1, executionState: 'FINISHED', messages: [], pending_tool_calls: [], agent_args: {} }
+      : null,
     isLoading: false,
     error: null,
   }),
@@ -43,10 +45,12 @@ vi.mock('@/lib/hooks/useContext', () => ({
 // Send button that invokes the real onSend the way ChatInput would.
 vi.mock('@/components/explore/ChatInput', () => ({
   __esModule: true,
-  default: ({ onSend, onModelChange }: {
+  default: ({ onSend, onModelChange, selectedModel }: {
     onSend: (msg: string, atts: unknown[]) => void;
     onModelChange: (model: { providerName: string; model: string }) => void;
+    selectedModel: { providerName: string; model?: string } | null;
   }) => React.createElement(React.Fragment, null,
+    React.createElement('span', { 'data-testid': 'chat-model' }, selectedModel?.model ?? 'default'),
     React.createElement('button', {
       'aria-label': 'Select chat model',
       onClick: () => onModelChange({ providerName: 'openai-team', model: 'gpt-5.4' }),
@@ -56,6 +60,7 @@ vi.mock('@/components/explore/ChatInput', () => ({
 }));
 
 import ChatInterface from '@/components/explore/ChatInterface';
+import { setChatModelSelection } from '@/store/uiSlice';
 
 describe('Chat honors the selected context file', () => {
   beforeEach(() => {
@@ -98,6 +103,26 @@ describe('Chat honors the selected context file', () => {
       expect(store.getState().chat.conversations[1].agent_args?.model_override).toEqual({
         providerName: 'openai-team', model: 'gpt-5.4',
       });
+    });
+  });
+
+  it('shares model selection bidirectionally with the sidebar chat', async () => {
+    const store = makeStore();
+    store.dispatch(setChatModelSelection({ providerName: 'openai-team', model: 'gpt-5.6' }));
+
+    renderWithProviders(
+      <ChatInterface contextPath="/org/selected-context" container="sidebar" appState={null} />,
+      { store },
+    );
+
+    expect(await screen.findByTestId('chat-model')).toHaveTextContent('gpt-5.6');
+
+    fireEvent.click(screen.getByLabelText('Select chat model'));
+    await waitFor(() => {
+      expect(store.getState().ui.chatModelSelection).toEqual({
+        providerName: 'openai-team', model: 'gpt-5.4',
+      });
+      expect(screen.getByTestId('chat-model')).toHaveTextContent('gpt-5.4');
     });
   });
 });

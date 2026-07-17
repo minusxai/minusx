@@ -40,7 +40,7 @@ vi.mock('@/components/chat/LexicalMentionEditor', () => {
   return {
     __esModule: true,
     LexicalMentionEditor: React.forwardRef(function MockLexicalMentionEditor(props: any, ref: any) {
-      const { placeholder, disabled, onSubmit, onChange, onArrowKey, onLargePaste } = props;
+      const { placeholder, disabled, onSubmit, onChange, onArrowKey, onLargePaste, onFocus, onBlur } = props;
       const [value, setValue] = React.useState('');
       React.useImperativeHandle(ref, () => ({
         clear: vi.fn(),
@@ -51,6 +51,8 @@ vi.mock('@/components/chat/LexicalMentionEditor', () => {
         'aria-label': 'Chat editor',
         placeholder,
         disabled,
+        onFocus,
+        onBlur,
         value,
         // Mirror the real PastePlugin: hand the pasted text to onLargePaste and,
         // if it claims the paste (returns true), suppress the inline insert.
@@ -95,6 +97,120 @@ import { uploadFile } from '@/lib/object-store/client';
 import { extractTextFromDocument } from '@/lib/utils/attachment-extract';
 
 import ChatInput from '@/components/explore/ChatInput';
+
+// ─── ChatInput: sidebar control layout ───
+
+describe('ChatInput: sidebar control layout', () => {
+  it('keeps one stable footer row with settings on the left and actions on the right', () => {
+    const store = storeModule.makeStore();
+    renderWithProviders(
+      <ChatInput
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        isAgentRunning={false}
+        databaseName="test_db"
+        onDatabaseChange={vi.fn()}
+        container="sidebar"
+        isCompact={true}
+      />,
+      { store },
+    );
+
+    expect(screen.getByTestId('chat-control-bar')).toHaveStyle({
+      flexDirection: 'row',
+      alignItems: 'center',
+    });
+    expect(screen.getByLabelText('Chat settings')).toBeInTheDocument();
+    expect(screen.queryByTestId('chat-selector-controls')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chat-input-actions')).toHaveStyle({
+      flexShrink: '0',
+    });
+  });
+
+  it('keeps the floating composer expanded while chat settings owns focus', async () => {
+    const user = userEvent.setup();
+    const store = storeModule.makeStore();
+    renderWithProviders(
+      <ChatInput
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        isAgentRunning={false}
+        databaseName="test_db"
+        onDatabaseChange={vi.fn()}
+        container="floating"
+        isCompact={false}
+      />,
+      { store },
+    );
+
+    const editor = screen.getByLabelText('Chat editor');
+    const shell = editor.closest('[data-collapsed]');
+    expect(shell).toHaveAttribute('data-collapsed', 'true');
+
+    fireEvent.focus(editor);
+    await waitFor(() => expect(shell).toHaveAttribute('data-collapsed', 'false'));
+    expect(screen.getByLabelText('Press Escape to collapse chat')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Chat settings'));
+    await waitFor(() => expect(shell).toHaveAttribute('data-collapsed', 'false'));
+    expect(screen.getByText('Tune the next response')).toBeInTheDocument();
+  });
+
+  it('collapses the expanded floating composer with Escape', async () => {
+    const user = userEvent.setup();
+    const store = storeModule.makeStore();
+    renderWithProviders(
+      <ChatInput
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        isAgentRunning={false}
+        databaseName="test_db"
+        onDatabaseChange={vi.fn()}
+        container="floating"
+        isCompact={false}
+      />,
+      { store },
+    );
+
+    const editor = screen.getByLabelText('Chat editor');
+    const shell = editor.closest('[data-collapsed]');
+    fireEvent.focus(editor);
+    await waitFor(() => expect(shell).toHaveAttribute('data-collapsed', 'false'));
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(shell).toHaveAttribute('data-collapsed', 'true'));
+    expect(screen.queryByLabelText('Press Escape to collapse chat')).not.toBeInTheDocument();
+  });
+
+  it('shows clickable shortcut tips and inserts the selected token', async () => {
+    const user = userEvent.setup();
+    const store = storeModule.makeStore();
+    renderWithProviders(
+      <ChatInput
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        isAgentRunning={false}
+        databaseName="test_db"
+        onDatabaseChange={vi.fn()}
+        container="floating"
+        isCompact={false}
+      />,
+      { store },
+    );
+
+    const editor = screen.getByLabelText('Chat editor');
+    fireEvent.focus(editor);
+    await waitFor(() => expect(screen.getByText('Pro tip')).toBeInTheDocument());
+    expect(screen.getByLabelText('Insert @@ for questions and dashboards')).toBeInTheDocument();
+    expect(screen.getByLabelText('Insert # for skills')).toBeInTheDocument();
+    expect(screen.getByLabelText('Insert / for commands')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Insert @ for tables and columns'));
+    expect(editor).toHaveValue('@');
+    expect(screen.queryByText('Pro tip')).not.toBeInTheDocument();
+  });
+
+});
 
 // ─── ChatInput: image attachment ──────────────────────────────────────────────
 

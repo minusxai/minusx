@@ -21,7 +21,7 @@ import { ConversationsAPI } from '@/lib/data/conversations';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { toaster } from '@/components/ui/toaster';
-import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setSidebarPendingSlashCommand } from '@/store/uiSlice';
+import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setChatModelSelection, setSidebarPendingSlashCommand } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
 import { appStateWithFileScreenshot } from '@/lib/screenshot/app-state-screenshot';
 import ExampleQuestions from './message/ExampleQuestions';
@@ -147,7 +147,16 @@ export default function ChatInterface({
   const viewMode = showExpandedMessages ? 'detailed' : 'compact';
   const [continueChatConfirmed, setContinueChatConfirmed] = useState(false)
   const [isPreparing, setIsPreparing] = useState(false)
-  const [selectedModel, setSelectedModel] = useState<ChatModelSelection | null>(null);
+  const [localSelectedModel, setLocalSelectedModel] = useState<ChatModelSelection | null>(null);
+  const sharedSelectedModel = useAppSelector(state => state.ui.chatModelSelection);
+  const selectedModel = container === 'sidebar' ? sharedSelectedModel : localSelectedModel;
+  const setSelectedModel = useCallback((model: ChatModelSelection | null) => {
+    if (container === 'sidebar') {
+      dispatch(setChatModelSelection(model));
+    } else {
+      setLocalSelectedModel(model);
+    }
+  }, [container, dispatch]);
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
@@ -231,6 +240,7 @@ export default function ChatInterface({
   // when switching away and back; no explicit choice uses Settings → Models.
   useEffect(() => {
     const stored = conversation?.agent_args?.model_override as ChatModelSelection | undefined;
+    if (container === 'sidebar' && !conversation) return;
     setSelectedModel(stored ?? null);
     // Only switch selection when the active conversation itself changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

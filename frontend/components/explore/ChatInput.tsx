@@ -12,9 +12,7 @@ import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, rem
 import RegionCaptureButton from '@/components/screenshot/RegionCaptureButton';
 import ImageAnnotatorDialog from '@/components/screenshot/ImageAnnotatorDialog';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
-import DatabaseSelector from '@/components/selectors/DatabaseSelector';
-import { ContextSelector } from './ContextSelector';
-import { ModelSelector } from './ModelSelector';
+import ChatSettingsPopover from './ChatSettingsPopover';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
 import type { DatabaseWithSchema, Attachment, SkillMention, SlashCommand } from '@/lib/types';
@@ -24,6 +22,13 @@ import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
+
+const CHAT_SHORTCUT_TIPS = [
+  { token: '@', label: 'tables & columns', ariaLabel: 'tables and columns' },
+  { token: '@@', label: 'questions & dashboards', ariaLabel: 'questions and dashboards' },
+  { token: '#', label: 'skills', ariaLabel: 'skills' },
+  { token: '/', label: 'commands', ariaLabel: 'commands' },
+] as const;
 
 interface ChatInputProps {
   onSend: (message: string, attachments: Attachment[]) => void;
@@ -92,6 +97,8 @@ function ChatInputInner({
   // Use Redux for draft text (persists across unmount)
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
+  const [chatSettingsOpen, setChatSettingsOpen] = useState(false);
+  const [escapeCollapsed, setEscapeCollapsed] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const [annotatingIdx, setAnnotatingIdx] = useState<number | null>(null);
@@ -110,7 +117,9 @@ function ChatInputInner({
 
   const isFloating = container === 'floating';
   const hasContent = input.trim().length > 0 || attachments.length > 0;
-  const isCollapsed = isFloating && !isFocused && !hasContent;
+  const isCollapsed = isFloating
+    && !chatSettingsOpen
+    && (escapeCollapsed || (!isFocused && !hasContent));
 
   // Detect platform for keyboard shortcut display. Resolved in an effect, NOT during render:
   // a `typeof window` branch renders 'Ctrl+k' on the server and '⌘+k' on a Mac client, and that
@@ -133,6 +142,19 @@ function ChatInputInner({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFloating]);
+
+  useEffect(() => {
+    if (!isFloating || isCollapsed) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || chatSettingsOpen) return;
+      event.preventDefault();
+      setEscapeCollapsed(true);
+      setIsFocused(false);
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [chatSettingsOpen, isCollapsed, isFloating]);
 
   // Clear input only after preparation completes (isPreparing: true → false)
   // so the text stays visible (greyed) while chart images are being uploaded.
@@ -216,6 +238,17 @@ function ChatInputInner({
     }
     historyCursorRef.current = null;
     draftBeforeHistoryRef.current = value;
+  });
+
+  const insertShortcut = useStableCallback((token: string) => {
+    const separator = input.length > 0 && !/\s$/.test(input) ? ' ' : '';
+    const nextValue = `${input}${separator}${token}`;
+    setEscapeCollapsed(false);
+    setInput(nextValue);
+    historyCursorRef.current = null;
+    draftBeforeHistoryRef.current = nextValue;
+    editorRef.current?.setText(nextValue);
+    editorRef.current?.focus();
   });
 
   // Large pastes (1000s of lines) bog down the Lexical editor — stage them as a
@@ -358,6 +391,8 @@ function ChatInputInner({
             >
             <Box
             ref={containerRef}
+            data-collapsed={isCollapsed}
+            position="relative"
             border="1px solid"
             borderColor={isDraggingOver ? 'accent.teal' : isFloating ? 'fg.default/30' : 'border.default'}
             boxShadow={isDraggingOver ? '0 0 0 1px var(--chakra-colors-accent-teal)' : isFloating ? 'lg' : undefined}
@@ -381,10 +416,94 @@ function ChatInputInner({
               }
             }}
             >
+            {isFloating && !isCollapsed && (
+              <HStack
+                px={3}
+                pt={2.5}
+                pb={0.5}
+                gap={3}
+                justify="space-between"
+                display={{ base: 'none', md: 'flex' }}
+              >
+                {!hasContent && !disabled && !chatLocked && !isPreparing ? (
+                  <HStack gap={2.5} minW={0} overflow="hidden" fontFamily="mono">
+                    <Text
+                      fontSize="2xs"
+                      fontWeight="700"
+                      color="fg.subtle"
+                      textTransform="uppercase"
+                      letterSpacing="wide"
+                      whiteSpace="nowrap"
+                    >
+                      Pro tip
+                    </Text>
+                    {CHAT_SHORTCUT_TIPS.map((tip) => (
+                      <HStack
+                        as="button"
+                        type="button"
+                        key={tip.token}
+                        gap={1}
+                        color="fg.muted"
+                        whiteSpace="nowrap"
+                        cursor="pointer"
+                        transition="color 0.15s ease"
+                        _hover={{ color: 'fg.default' }}
+                        aria-label={`Insert ${tip.token} for ${tip.ariaLabel}`}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => insertShortcut(tip.token)}
+                      >
+                        <Box
+                          px={1}
+                          py={0.5}
+                          borderRadius="sm"
+                          bg="accent.teal/10"
+                          color="accent.teal"
+                          fontSize="2xs"
+                          fontWeight="700"
+                          lineHeight="1"
+                        >
+                          {tip.token}
+                        </Box>
+                        <Text fontSize="2xs">{tip.label}</Text>
+                      </HStack>
+                    ))}
+                  </HStack>
+                ) : <Box />}
+                <HStack
+                  gap={1.5}
+                  color="fg.subtle"
+                  flexShrink={0}
+                  aria-label="Press Escape to collapse chat"
+                >
+                  <Box
+                    as="kbd"
+                    px={1}
+                    py={0.5}
+                    border="1px solid"
+                    borderColor="border.default"
+                    borderRadius="sm"
+                    fontFamily="mono"
+                    fontSize="2xs"
+                    lineHeight="1"
+                    bg="bg.surface"
+                  >
+                    Esc
+                  </Box>
+                  <Text fontSize="2xs" fontFamily="mono" whiteSpace="nowrap">
+                    collapse
+                  </Text>
+                </HStack>
+              </HStack>
+            )}
             <VStack gap={0} align="stretch">
                 {/* Editor row with inline send button (collapsed only) */}
                 <HStack gap={0} align="center" pr={isCollapsed ? 3 : 0}>
-                  <Box flex="1" px={1} py={isCollapsed ? 0 : 2} transition="padding 0.25s ease">
+                  <Box
+                    flex="1"
+                    px={1}
+                    py={isCollapsed ? 0 : 2}
+                    transition="padding 0.25s ease"
+                  >
                     <Box
                       maxHeight={isCollapsed ? '40px' : '200px'}
                       overflow={isCollapsed ? 'hidden' : 'auto'}
@@ -400,7 +519,10 @@ function ChatInputInner({
                         onChange={handleInputChange}
                         onLargePaste={handleLargePaste}
                         onArrowKey={handleHistoryArrow}
-                        onFocus={() => setIsFocused(true)}
+                        onFocus={() => {
+                          setEscapeCollapsed(false);
+                          setIsFocused(true);
+                        }}
                         onBlur={() => {
                           // Delay check so activeElement updates after blur
                           requestAnimationFrame(() => {
@@ -423,6 +545,7 @@ function ChatInputInner({
                       <IconButton
                         aria-label="Attach file or image"
                         onClick={() => {
+                          setEscapeCollapsed(false);
                           setIsFocused(true);
                           setTimeout(() => fileInputRef.current?.click(), 300);
                         }}
@@ -579,74 +702,72 @@ function ChatInputInner({
                   transition={isFloating ? 'max-height 0.2s ease 0.05s, opacity 0.2s ease 0.05s' : undefined}
                 >
                   <HStack
-                  px={3}
-                  pb={2}
-                  pt={1}
-                  justify="space-between"
-                  gap={2}
+                    px={3}
+                    pb={2}
+                    pt={1}
+                    justify="space-between"
+                    gap={1}
+                    minW={0}
+                    data-testid="chat-control-bar"
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
                   >
-                  {/* Left controls - Context + Database status indicators */}
-                  <HStack gap={1.5} align="center">
-                    <ContextSelector
+                    <ChatSettingsPopover
+                      databaseName={databaseName}
+                      onDatabaseChange={onDatabaseChange}
+                      selectedModel={selectedModel}
+                      onModelChange={onModelChange || (() => {})}
+                      modelDisabled={isAgentRunning || remoteSessionActive}
                       selectedContextPath={selectedContextPath || null}
                       selectedVersion={selectedVersion}
-                      onSelectContext={onContextChange || (() => {})}
-                      compact
+                      onContextChange={onContextChange || (() => {})}
+                      onOpenChange={setChatSettingsOpen}
                     />
-                    <DatabaseSelector
-                      value={databaseName}
-                      onChange={({ connection_name }) => onDatabaseChange(connection_name)}
-                      size="sm"
-                      compact
-                    />
-                    <ModelSelector
-                      value={selectedModel}
-                      onChange={onModelChange || (() => {})}
-                      disabled={isAgentRunning || remoteSessionActive}
-                    />
-                  </HStack>
 
-                  <HStack gap={1}>
-                    <Tooltip content="Attach file or image (PDF, DOCX, TXT, PNG, JPG…)" positioning={{ placement: 'top' }}>
-                      <IconButton
-                        aria-label="Attach file or image"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isAgentRunning}
-                        variant="ghost"
-                        size="xs"
-                        color="fg.muted"
-                        _hover={{ color: 'accent.teal' }}
-                        _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-                        borderRadius="md"
-                        flexShrink={0}
-                      >
-                        <Icon as={LuPaperclip} boxSize={3.5} />
-                      </IconButton>
-                    </Tooltip>
+                    <HStack
+                      gap={1}
+                      data-testid="chat-input-actions"
+                      style={{ flexShrink: 0 }}
+                    >
+                      <Tooltip content="Attach file or image (PDF, DOCX, TXT, PNG, JPG…)" positioning={{ placement: 'top' }}>
+                        <IconButton
+                          aria-label="Attach file or image"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isAgentRunning}
+                          variant="ghost"
+                          size="xs"
+                          color="fg.muted"
+                          _hover={{ color: 'accent.teal' }}
+                          _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
+                          borderRadius="md"
+                          flexShrink={0}
+                        >
+                          <Icon as={LuPaperclip} boxSize={3.5} />
+                        </IconButton>
+                      </Tooltip>
 
-                    <Tooltip content="Select a screen region to add as context" positioning={{ placement: 'top' }}>
-                      <span><RegionCaptureButton /></span>
-                    </Tooltip>
+                      <Tooltip content="Select a screen region to add as context" positioning={{ placement: 'top' }}>
+                        <span><RegionCaptureButton /></span>
+                      </Tooltip>
 
-                    {isPreparing ? (
-                      <Spinner size="sm" color="accent.teal" flexShrink={0} />
-                    ) : (
-                      <IconButton
-                        aria-label="Send message"
-                        onClick={handleSend}
-                        disabled={disabled || !input.trim() || connectionsLoading || contextsLoading || chatLocked || hasPendingUploads}
-                        bg="accent.teal"
-                        color="white"
-                        _hover={{ bg: 'accent.teal', opacity: 0.9 }}
-                        _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-                        size="xs"
-                        borderRadius="md"
-                        flexShrink={0}
-                      >
-                        <Icon as={LuSendHorizontal} boxSize={3.5} />
-                      </IconButton>
-                    )}
-                  </HStack>
+                      {isPreparing ? (
+                        <Spinner size="sm" color="accent.teal" flexShrink={0} />
+                      ) : (
+                        <IconButton
+                          aria-label="Send message"
+                          onClick={handleSend}
+                          disabled={disabled || !input.trim() || connectionsLoading || contextsLoading || chatLocked || hasPendingUploads}
+                          bg="accent.teal"
+                          color="white"
+                          _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+                          _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
+                          size="xs"
+                          borderRadius="md"
+                          flexShrink={0}
+                        >
+                          <Icon as={LuSendHorizontal} boxSize={3.5} />
+                        </IconButton>
+                      )}
+                    </HStack>
                   </HStack>
                 </Box>
             </VStack>
