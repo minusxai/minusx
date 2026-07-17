@@ -729,11 +729,13 @@ export default function QuestionViewV2({
               overflow="hidden"
             >
             {<Box flexShrink={0}>
-              {/* Query-mode tabs on the left; the context selectors (database,
-                  spreadsheet) are icon-first and hug the right edge so the row
-                  stays tidy even in a narrow left panel. Both selectors reveal
-                  their label on hover (and the DB opens a menu when there's more
-                  than one connection) — see the compact GenericSelector. */}
+              {/* Query-mode tabs, then the database selector right beside them so
+                  the active connection reads as part of the query surface. The DB
+                  collapses to an icon+check only when there's a single connection;
+                  with several it stays a full labeled dropdown (so you can't miss
+                  which one a query runs against). The Spreadsheet toggle hugs the
+                  right edge while the query block is present, and drops to the left
+                  once that block vanishes (spreadsheet is the active source). */}
               <HStack px={3} py={2} gap={1.5} align="center">
                 {!spreadsheetHasData && (
                   <Box flexShrink={0}>
@@ -748,9 +750,8 @@ export default function QuestionViewV2({
                     />
                   </Box>
                 )}
-                <Box flex={1} minWidth={0} />
                 {!spreadsheetHasData && (
-                  <Box flexShrink={0}>
+                  <Box flexShrink={1} minWidth={0}>
                     <DatabaseSelector
                       value={content.connection_name || ''}
                       onChange={handleDatabaseChange}
@@ -758,7 +759,9 @@ export default function QuestionViewV2({
                     />
                   </Box>
                 )}
-                {!spreadsheetHasData && !queryHasData && <Box h="18px" w="1px" bg="border.default" flexShrink={0} />}
+                {/* Spacer only while the query block is shown — pushes the
+                    spreadsheet toggle to the right; absent, it sits on the left. */}
+                {!spreadsheetHasData && <Box flex={1} minWidth={0} />}
                 {!queryHasData && (
                   <Tooltip content="Build from a pasted or typed spreadsheet" showArrow openDelay={300} positioning={{ placement: 'top' }}>
                     <HStack
