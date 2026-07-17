@@ -174,7 +174,9 @@ function schemalessTypeAttr(value: string | number | boolean): string {
 }
 
 function fieldToJsx(tag: string, value: unknown, schema: JsonSchema, ctx: SchemaCtx, depth: number): string {
-  if (value == null) return '';
+  // Preserve explicit nulls inside arrays (spreadsheet blank cells are positional).
+  // Optional object properties still omit null/undefined as before.
+  if (value == null) return tag === 'item' ? `${pad(depth)}<item>{null}</item>` : '';
   const s = unwrap(schema, ctx);
   const p = pad(depth);
 

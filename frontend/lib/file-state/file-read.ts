@@ -28,13 +28,15 @@ import { FilesAPI, getFiles } from '@/lib/data/files';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import { isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
-import { paramTypeMap, buildQueryParamValues } from '@/lib/sql/sql-params';
+import { paramTypeMap } from '@/lib/sql/sql-params';
 import { getRootParams } from '@/lib/data/helpers/param-resolution';
 import type { AugmentedFile, QuestionContent } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { getQueryResult } from '@/lib/file-state/query-results';
+import { cacheSpreadsheetSource } from '@/lib/spreadsheet/result-cache';
+import { getQuestionExecution } from '@/lib/spreadsheet/question-source';
 import { hashString, PromiseManager } from '@/lib/file-state/shared';
 import type {
   ReadFilesOptions,
@@ -188,14 +190,19 @@ export async function readFiles(
       for (const { f, inherited } of entries) {
         if (f.type !== 'question') continue;
         const content = f.content as QuestionContent | undefined;
-        if (!content?.query || !content?.connection_name) continue;
-        const params = content.parameters ?? [];
+        const execution = getQuestionExecution(content, inherited);
+        if (!execution) continue;
+        if (execution.kind === 'spreadsheet') {
+          cacheSpreadsheetSource(execution.spreadsheet);
+          continue;
+        }
+        const params = content?.parameters ?? [];
         const types = paramTypeMap(params);
         runs.push(getQueryResult({
-          query: content.query,
-          params: buildQueryParamValues(params, content.parameterValues ?? {}, inherited),
+          query: execution.query,
+          params: execution.params,
           parameterTypes: types,
-          database: content.connection_name,
+          database: execution.database,
           filePath: f.path,
           fileId: f.id,
           fileVersion: f.version,

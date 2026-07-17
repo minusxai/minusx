@@ -7,7 +7,7 @@
  * No Redux. No server-only APIs. Pure functions only.
  */
 import { getQueryHash } from '@/lib/utils/query-hash';
-import { buildQueryParamValues } from '@/lib/sql/sql-params';
+import { getQuestionExecution } from '@/lib/spreadsheet/question-source';
 import { sortObjectKeysDeep } from '@/lib/chat/file-encoding';
 import { fileToMarkup } from '@/lib/data/story/file-markup';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
@@ -66,10 +66,8 @@ function stripQueryResultId(file: DbFile): DbFile['content'] {
 function computeQueryResultId(file: DbFile): string | undefined {
   if (file.type !== 'question' || !file.content) return undefined;
   const content = file.content as QuestionContent;
-  if (!content.query || !content.connection_name) return undefined;
-  // Key on the CANONICAL params (effective + None-coerced) — same as execution/lookup — so the
-  // queryResultId matches the id the executed result is stored under (see resolveEffectiveParams).
-  return getQueryHash(content.query, buildQueryParamValues(content.parameters ?? [], content.parameterValues ?? {}, {}), content.connection_name);
+  const execution = getQuestionExecution(content);
+  return execution ? getQueryHash(execution.query, execution.params, execution.database) : undefined;
 }
 
 /**
@@ -154,10 +152,8 @@ function deriveFacets(fs: FileState): DerivedFacets {
   let queryResultId = fs.queryResultId;
   if (fs.type === 'question') {
     const qc = mergedContent as QuestionContent;
-    if (qc?.query && qc?.connection_name) {
-      // Canonical params (effective + None-coerced) — matches execution/lookup keying.
-      queryResultId = getQueryHash(qc.query, buildQueryParamValues(qc.parameters ?? [], qc.parameterValues ?? {}, {}), qc.connection_name);
-    }
+    const execution = getQuestionExecution(qc);
+    if (execution) queryResultId = getQueryHash(execution.query, execution.params, execution.database);
   }
   // Notebooks: drop system-managed cached cell results from the model's view.
   // The agent already gets cell results via queryResults; the raw snapshots would

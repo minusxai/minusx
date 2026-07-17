@@ -27,6 +27,8 @@ import type { FrontendToolHandler } from './types';
 import { renderFileChartImageBlocks } from './chart-images';
 import { deterministicAgentRubric, reviewFile } from './file-review';
 import { vizWarningForQuestion } from './viz-warning';
+import { cacheSpreadsheetSource } from '@/lib/spreadsheet/result-cache';
+import { getSpreadsheetExecution } from '@/lib/spreadsheet/materialize';
 
 /**
  * Checks whether any parameter's source changed and, if so, verifies the referenced
@@ -200,7 +202,16 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
     const updatedState = getStore().getState();
     const finalContent = selectMergedContent(updatedState, fileId) as any;
 
-    if (finalContent?.query && finalContent?.connection_name) {
+    if (finalContent?.spreadsheet) {
+      const materialized = cacheSpreadsheetSource(finalContent.spreadsheet);
+      if (materialized.ok) {
+        const execution = getSpreadsheetExecution(finalContent.spreadsheet);
+        getStore().dispatch(setEphemeral({
+          fileId: fileId as FileId,
+          changes: { lastExecuted: { ...execution, spreadsheet: finalContent.spreadsheet } },
+        }));
+      }
+    } else if (finalContent?.query && finalContent?.connection_name) {
       const params = finalContent.parameterValues || {};
 
       // Show loading in the viz immediately by clearing cached result and setting lastExecuted
