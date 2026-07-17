@@ -23,11 +23,7 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { toaster } from '@/components/ui/toaster';
 import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setSidebarPendingSlashCommand } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
-import {
-  appStateWithFileScreenshot,
-  warmFileScreenshot,
-  appStateShotKey,
-} from '@/lib/screenshot/app-state-screenshot';
+import { appStateWithFileScreenshot } from '@/lib/screenshot/app-state-screenshot';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../file-browser/FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
@@ -164,20 +160,10 @@ export default function ChatInterface({
   // instead of subscribing — otherwise this parent re-renders every time any
   // unrelated query result lands or the user toggles colorMode.
   const store = useAppStore();
-
-  // Proactively warm the app-state screenshot cache OFF the send path (debounced, on browser idle),
-  // so the ~1s snapdom rasterize of the current view is already done by the time the user presses
-  // Enter — the send path then attaches the cached image without blocking. colorMode changes rarely,
-  // so subscribing here is cheap; `shotKey` encodes the rendered facet (markup / results / theme) so
-  // we only re-warm when the view actually changes, not on every unrelated re-render.
-  const warmColorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
-  const warmDisableImages = useAppSelector(selectDisableAppStateImages);
-  const shotKey = useMemo(() => appStateShotKey(appState, warmColorMode)?.key ?? null, [appState, warmColorMode]);
-  useEffect(() => {
-    if (!shotKey) return;
-    warmFileScreenshot(appState, warmColorMode, warmDisableImages);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shotKey, warmDisableImages]);
+  // The app-state screenshot is captured LAZILY on send (appStateWithFileScreenshot), never warmed
+  // speculatively — a synchronous multi-second snapdom rasterize must not fire on every view change
+  // (agent edit / query revalidation / theme toggle / GUI tweak) while the user is editing or typing.
+  // See lib/screenshot/app-state-screenshot.ts.
 
   const chatSkills = contextInfo.availableSkills;
 
