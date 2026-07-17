@@ -42,7 +42,10 @@ describe('chatListener: in-flight tool-call guard', () => {
 
     // First firing → starts executing tc1, which stays in-flight (gated).
     store.dispatch(updateConversation({ conversationID: CONV, log_index: 1, completed_tool_calls: [], pending_tool_calls: pending as never }));
-    await vi.waitFor(() => expect(h.executeToolCall).toHaveBeenCalledTimes(1), { timeout: 2000, interval: 10 });
+    // Generous timeout: the listener middleware effect runs async, and a loaded CI shard can take
+    // >2s to schedule it — the 2s cap flaked as "called 0 times". This only bounds the wait for the
+    // FIRST execution; the guard itself is still asserted below.
+    await vi.waitFor(() => expect(h.executeToolCall).toHaveBeenCalledTimes(1), { timeout: 15000, interval: 10 });
 
     // Re-fire the listener (what completeToolCall → updateConversation does in prod) while tc1 is still in-flight.
     store.dispatch(updateConversation({ conversationID: CONV, log_index: 2, completed_tool_calls: [], pending_tool_calls: pending as never }));
