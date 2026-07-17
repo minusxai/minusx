@@ -242,6 +242,7 @@ templates:
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
 
       ### Data Source — query vs spreadsheet (mutually exclusive)
+      **Which to use:** if answering needs a database, use a **query**. If the data comes from the USER (they pasted/typed it, gave you numbers to chart, or want dummy/sample/example data) and no connection is involved, use a **spreadsheet** — do NOT stand up a query or invent SQL for user-supplied or made-up data.
       A question is backed by EXACTLY ONE source. Never populate both:
       - **Query source** (default) — SQL against a connection. Set `<query>` + `<connection_name>`; do NOT emit a `<spreadsheet>` element. Use for anything that reads from the database.
       - **Spreadsheet source** — data the user hands you directly (pastes, dictates, or asks you to "just add", "type in", "enter", "make a table of…") with NO database behind it. Emit `<spreadsheet>` and set `<query></query>` and `<connection_name></connection_name>` to empty. NEVER fabricate SQL to invent rows — if there is no data source, use a spreadsheet.
