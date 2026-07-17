@@ -1,10 +1,10 @@
 /**
- * POST /api/viz/backfill — the non-destructive Viz V2 migration (Data Management).
- * For every question that still lacks a `viz` envelope, it executes the question's
- * query (through the shared query cache), converts `vizSettings` with the REAL
- * result columns (so temporal axes survive), and writes the envelope ALONGSIDE
- * the untouched vizSettings. Idempotent: envelope-bearing files are skipped;
- * flipping the workspace back to V1 still works because vizSettings remains.
+ * POST /api/viz/backfill — the non-destructive, EXECUTELESS Viz V2 re-derivation
+ * (Data Management). File-level: no query ever runs — envelopes derive from
+ * `vizSettings` + query-text signals (same converter as the v37 migration) and
+ * are written ALONGSIDE the untouched vizSettings. `dryRun` reports without
+ * writing; `overwrite` re-derives existing envelopes (downgrade-guarded).
+ * Flipping the workspace back to V1 always works because vizSettings remains.
  */
 vi.mock('@/lib/auth/auth-helpers', () => ({
   getEffectiveUser: vi.fn(),
@@ -18,14 +18,6 @@ import { setupTestDb } from '@/test/harness/test-db';
 import { FilesAPI } from '@/lib/data/files.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { QuestionContent } from '@/lib/types';
-import { DuckDBInstance } from '@duckdb/node-api';
-import os from 'os';
-import path from 'path';
-import fs from 'fs';
-
-// A real (empty) duckdb file — VALUES queries need no tables, but the connector
-// opens read-only, so the file must exist.
-const DUCK_PATH = path.join(os.tmpdir(), 'viz-backfill-test.duckdb');
 
 const TEST_DB_PATH = getTestDbPath('viz_backfill');
 
@@ -68,25 +60,7 @@ const post = (body: Record<string, unknown> = {}) =>
 describe('POST /api/viz/backfill', () => {
   setupTestDb(TEST_DB_PATH, { withTestConnection: true });
 
-  beforeAll(async () => {
-    if (!fs.existsSync(DUCK_PATH)) {
-      const instance = await DuckDBInstance.create(DUCK_PATH);
-      const conn = await instance.connect();
-      conn.closeSync();
-    }
-  });
-
-  beforeEach(async () => {
-    mockUser(ADMIN);
-    // Query execution resolves connections by PATH (`/org/database/<name>`).
-    await FilesAPI.createFile({
-      name: 'default_db',
-      path: '/org/database/default_db',
-      type: 'connection',
-      content: { name: 'default_db', type: 'duckdb', config: { file_path: DUCK_PATH } } as never,
-      options: { returnExisting: true, createPath: true },
-    }, ADMIN);
-  });
+  beforeEach(() => mockUser(ADMIN));
 
   it('adds envelopes to legacy questions, skips V2 ones, never touches vizSettings', async () => {
     // createFile makes DRAFTS (invisible to listings); saveFile publishes.

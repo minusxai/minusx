@@ -1,5 +1,5 @@
 {
-  "version": 35,
+  "version": 37,
   "users": [
     {
       "id": 1,
@@ -25,7 +25,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 1003,
@@ -39,7 +40,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 28,
@@ -52,7 +54,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 2,
@@ -66,7 +69,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 3,
@@ -80,7 +84,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 4,
@@ -94,7 +99,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 10,
@@ -395,7 +401,20 @@
             "avg_order_value"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "recipe",
+            "recipe": "minusx/trend@1",
+            "bindings": {
+              "date": "week_start",
+              "value": "avg_order_value"
+            },
+            "params": null,
+            "columnFormats": null
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -422,7 +441,48 @@
             "revenue"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "line"
+              },
+              "encoding": {
+                "x": {
+                  "field": "week",
+                  "type": "temporal"
+                },
+                "y": {
+                  "field": "__mx_value",
+                  "type": "quantitative",
+                  "aggregate": "sum",
+                  "title": null
+                },
+                "color": {
+                  "field": "__mx_key",
+                  "type": "nominal",
+                  "title": null
+                }
+              },
+              "transform": [
+                {
+                  "fold": [
+                    "orders",
+                    "revenue"
+                  ],
+                  "as": [
+                    "__mx_key",
+                    "__mx_value"
+                  ]
+                }
+              ]
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -449,7 +509,34 @@
             "revenue"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "bar"
+              },
+              "encoding": {
+                "x": {
+                  "field": "week_start",
+                  "type": "temporal"
+                },
+                "y": {
+                  "field": "revenue",
+                  "type": "quantitative",
+                  "aggregate": "sum"
+                },
+                "color": {
+                  "field": "category_name",
+                  "type": "nominal"
+                }
+              }
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -490,7 +577,30 @@
             ]
           }
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "pivot",
+            "config": {
+              "rows": [
+                "day_of_week"
+              ],
+              "columns": [
+                "hour_range"
+              ],
+              "values": [
+                {
+                  "column": "avg_orders",
+                  "aggFunction": "SUM"
+                }
+              ]
+            },
+            "columnFormats": null,
+            "conditionalFormats": null,
+            "css": null
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -516,7 +626,20 @@
             "orders"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "recipe",
+            "recipe": "minusx/trend@1",
+            "bindings": {
+              "date": "month",
+              "value": "orders"
+            },
+            "params": null,
+            "columnFormats": null
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -542,7 +665,20 @@
             "revenue"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "recipe",
+            "recipe": "minusx/trend@1",
+            "bindings": {
+              "date": "month",
+              "value": "revenue"
+            },
+            "params": null,
+            "columnFormats": null
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -568,7 +704,20 @@
             "active_users"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "recipe",
+            "recipe": "minusx/trend@1",
+            "bindings": {
+              "date": "month",
+              "value": "active_users"
+            },
+            "params": null,
+            "columnFormats": null
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -595,7 +744,48 @@
             "returning_users"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "area"
+              },
+              "encoding": {
+                "x": {
+                  "field": "week",
+                  "type": "temporal"
+                },
+                "y": {
+                  "field": "__mx_value",
+                  "type": "quantitative",
+                  "aggregate": "sum",
+                  "title": null
+                },
+                "color": {
+                  "field": "__mx_key",
+                  "type": "nominal",
+                  "title": null
+                }
+              },
+              "transform": [
+                {
+                  "fold": [
+                    "new_users",
+                    "returning_users"
+                  ],
+                  "as": [
+                    "__mx_key",
+                    "__mx_value"
+                  ]
+                }
+              ]
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -621,7 +811,30 @@
             "user_count"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "arc"
+              },
+              "encoding": {
+                "theta": {
+                  "field": "user_count",
+                  "type": "quantitative",
+                  "aggregate": "sum"
+                },
+                "color": {
+                  "field": "user_type",
+                  "type": "nominal"
+                }
+              }
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -647,7 +860,30 @@
             "revenue"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "arc"
+              },
+              "encoding": {
+                "theta": {
+                  "field": "revenue",
+                  "type": "quantitative",
+                  "aggregate": "sum"
+                },
+                "color": {
+                  "field": "platform",
+                  "type": "nominal"
+                }
+              }
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -673,7 +909,30 @@
             "revenue"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "bar"
+              },
+              "encoding": {
+                "x": {
+                  "field": "zone_name",
+                  "type": "nominal"
+                },
+                "y": {
+                  "field": "revenue",
+                  "type": "quantitative",
+                  "aggregate": "sum"
+                }
+              }
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -699,7 +958,20 @@
             "users"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "recipe",
+            "recipe": "minusx/funnel@1",
+            "bindings": {
+              "stage": "stage",
+              "value": "users"
+            },
+            "params": null,
+            "columnFormats": null
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -726,7 +998,34 @@
             "total_sessions"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "bar"
+              },
+              "encoding": {
+                "x": {
+                  "field": "date",
+                  "type": "temporal"
+                },
+                "y": {
+                  "field": "total_sessions",
+                  "type": "quantitative",
+                  "aggregate": "sum"
+                },
+                "color": {
+                  "field": "platform",
+                  "type": "nominal"
+                }
+              }
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -753,7 +1052,48 @@
             "events_per_session"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "line"
+              },
+              "encoding": {
+                "x": {
+                  "field": "month_start",
+                  "type": "temporal"
+                },
+                "y": {
+                  "field": "__mx_value",
+                  "type": "quantitative",
+                  "aggregate": "sum",
+                  "title": null
+                },
+                "color": {
+                  "field": "__mx_key",
+                  "type": "nominal",
+                  "title": null
+                }
+              },
+              "transform": [
+                {
+                  "fold": [
+                    "avg_sessions_per_user_per_week",
+                    "events_per_session"
+                  ],
+                  "as": [
+                    "__mx_key",
+                    "__mx_value"
+                  ]
+                }
+              ]
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -779,7 +1119,30 @@
             "conversion_rate_pct"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "bar"
+              },
+              "encoding": {
+                "x": {
+                  "field": "week",
+                  "type": "temporal"
+                },
+                "y": {
+                  "field": "conversion_rate_pct",
+                  "type": "quantitative",
+                  "aggregate": "sum"
+                }
+              }
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -798,7 +1161,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 1004,
@@ -812,7 +1176,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 1006,
@@ -826,7 +1191,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 29,
@@ -837,7 +1203,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 30,
@@ -848,7 +1215,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 31,
@@ -859,7 +1227,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 36,
@@ -901,7 +1270,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 37,
@@ -922,7 +1292,30 @@
             "events"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "bar"
+              },
+              "encoding": {
+                "x": {
+                  "field": "file_type",
+                  "type": "nominal"
+                },
+                "y": {
+                  "field": "events",
+                  "type": "quantitative",
+                  "aggregate": "sum"
+                }
+              }
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -948,7 +1341,30 @@
             "files_created"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "line"
+              },
+              "encoding": {
+                "x": {
+                  "field": "day",
+                  "type": "temporal"
+                },
+                "y": {
+                  "field": "files_created",
+                  "type": "quantitative",
+                  "aggregate": "sum"
+                }
+              }
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -968,7 +1384,16 @@
         "vizSettings": {
           "type": "table"
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "table",
+            "columnFormats": null,
+            "conditionalFormats": null,
+            "css": null
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -988,7 +1413,16 @@
         "vizSettings": {
           "type": "table"
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "table",
+            "columnFormats": null,
+            "conditionalFormats": null,
+            "css": null
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -1014,7 +1448,30 @@
             "active_users"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "line"
+              },
+              "encoding": {
+                "x": {
+                  "field": "day",
+                  "type": "temporal"
+                },
+                "y": {
+                  "field": "active_users",
+                  "type": "quantitative",
+                  "aggregate": "sum"
+                }
+              }
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -1040,7 +1497,30 @@
             "calls"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "bar"
+              },
+              "encoding": {
+                "x": {
+                  "field": "model",
+                  "type": "nominal"
+                },
+                "y": {
+                  "field": "calls",
+                  "type": "quantitative",
+                  "aggregate": "sum"
+                }
+              }
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -1066,7 +1546,30 @@
             "tokens"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "line"
+              },
+              "encoding": {
+                "x": {
+                  "field": "day",
+                  "type": "temporal"
+                },
+                "y": {
+                  "field": "tokens",
+                  "type": "quantitative",
+                  "aggregate": "sum"
+                }
+              }
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -1092,7 +1595,30 @@
             "total_cost_usd"
           ]
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "vega-lite",
+            "grammar": "vega-lite@6",
+            "spec": {
+              "mark": {
+                "type": "bar"
+              },
+              "encoding": {
+                "x": {
+                  "field": "week",
+                  "type": "temporal"
+                },
+                "y": {
+                  "field": "total_cost_usd",
+                  "type": "quantitative",
+                  "aggregate": "sum"
+                }
+              }
+            }
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -1112,7 +1638,16 @@
         "vizSettings": {
           "type": "table"
         },
-        "parameters": []
+        "parameters": [],
+        "viz": {
+          "version": 2,
+          "source": {
+            "kind": "table",
+            "columnFormats": null,
+            "conditionalFormats": null,
+            "css": null
+          }
+        }
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
@@ -1311,7 +1846,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 7,
@@ -1320,7 +1856,9 @@
       "type": "config",
       "content": {
         "name": "config",
-        "analytics": { "enabled": true },
+        "analytics": {
+          "enabled": true
+        },
         "setupWizard": {
           "status": "complete"
         },
@@ -1347,7 +1885,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 8,
@@ -1361,7 +1900,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 6,
@@ -2168,7 +2708,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 1000,
@@ -2177,7 +2718,9 @@
       "type": "config",
       "content": {
         "name": "config",
-        "analytics": { "enabled": true },
+        "analytics": {
+          "enabled": true
+        },
         "branding": {
           "displayName": "{{ORG_NAME}}",
           "agentName": "MinusX",
@@ -2206,7 +2749,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 1001,
@@ -2220,7 +2764,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 1005,
@@ -2234,7 +2779,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 1007,
@@ -2252,7 +2798,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 9,
@@ -2270,7 +2817,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 32,
@@ -2281,7 +2829,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 33,
@@ -2289,7 +2838,9 @@
       "path": "/internals/configs/config",
       "type": "config",
       "content": {
-        "analytics": { "enabled": true },
+        "analytics": {
+          "enabled": true
+        },
         "setupWizard": {
           "status": "complete"
         },
@@ -2316,7 +2867,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 34,
@@ -2329,7 +2881,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 35,
@@ -2345,7 +2898,8 @@
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",
       "last_edit_id": "from_migration",
-      "version": 1
+      "version": 1,
+      "references": []
     },
     {
       "id": 48,

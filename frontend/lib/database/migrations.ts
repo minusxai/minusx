@@ -8,6 +8,8 @@ import { LATEST_DATA_VERSION, LATEST_SCHEMA_VERSION, MINIMUM_SUPPORTED_DATA_VERS
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import workspaceTemplate from './workspace-template.json';
 import { remapStoryQuestionIds } from '@/lib/data/story/story-question';
+import { vizSettingsToEnvelopeStatic } from '@/lib/viz/from-vizsettings';
+import type { QuestionContent, NotebookContent } from '@/lib/types';
 
 type DataMigration = (data: InitData) => InitData;
 type SchemaMigration = null;  // Null means "recreate DB with new schema"
@@ -99,11 +101,57 @@ function v36ShiftUserFileIds(data: InitData): InitData {
  * the initial seed data. MINIMUM_SUPPORTED_DATA_VERSION is now 35, so any export
  * below that version is rejected — re-import from a fresh export.
  */
+/**
+ * V37 — Viz Arch V2: add a `viz` envelope to every question and notebook SQL cell
+ * that lacks one, derived FILE-LEVEL from its `vizSettings` (no query execution —
+ * column kinds come from vizSettingsToEnvelopeStatic's conservative name heuristic).
+ *
+ * Non-destructive by design: `vizSettings` is NEVER modified (it remains the V1
+ * rollback path if the vizV2 format default is switched back), and an existing
+ * `viz` is never overwritten (hand-authored envelopes win). The Data Management
+ * "Backfill Viz V2 Envelopes" action is the re-runnable overwrite variant.
+ */
+function v37AddVizEnvelopes(data: InitData): InitData {
+  const documents = (data.documents ?? []).map(doc => {
+    if (doc.type === 'question') {
+      const content = doc.content as QuestionContent;
+      if (content?.vizSettings == null || content.viz != null) return doc;
+      try {
+        return { ...doc, content: { ...content, viz: vizSettingsToEnvelopeStatic(content.vizSettings, content.query) } };
+      } catch {
+        return doc; // an unconvertible vizSettings keeps rendering via the runtime bridge
+      }
+    }
+    if (doc.type === 'notebook') {
+      const content = doc.content as NotebookContent;
+      if (!Array.isArray(content?.cells)) return doc;
+      let changed = false;
+      const cells = content.cells.map(cell => {
+        if (cell.type !== 'sql' || cell.vizSettings == null || cell.viz != null) return cell;
+        try {
+          changed = true;
+          return { ...cell, viz: vizSettingsToEnvelopeStatic(cell.vizSettings, cell.query) };
+        } catch {
+          return cell;
+        }
+      });
+      return changed ? { ...doc, content: { ...content, cells } } : doc;
+    }
+    return doc;
+  });
+  return { ...data, documents };
+}
+
 export const MIGRATIONS: MigrationEntry[] = [
   {
     dataVersion: 36,
     description: 'Shift all non-system file IDs to ≥ 1000 (reserve 1–99 for system template; /org files 100–112 also shifted)',
     dataMigration: v36ShiftUserFileIds,
+  },
+  {
+    dataVersion: 37,
+    description: 'Viz Arch V2: add file-level `viz` envelopes to questions and notebook SQL cells (vizSettings untouched; existing viz preserved)',
+    dataMigration: v37AddVizEnvelopes,
   },
 ];
 

@@ -53,14 +53,14 @@ function initData(documents: DbFile[], version = 35): InitData {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('Migration registry', () => {
-  it('contains exactly the V36 migration', () => {
-    expect(MIGRATIONS).toHaveLength(1);
-    expect(MIGRATIONS[0].dataVersion).toBe(36);
+  it('contains exactly the V36 and V37 migrations, in order', () => {
+    expect(MIGRATIONS).toHaveLength(2);
+    expect(MIGRATIONS.map(m => m.dataVersion)).toEqual([36, 37]);
   });
 
-  it('MINIMUM_SUPPORTED_DATA_VERSION is 35 (one below current)', () => {
+  it('MINIMUM_SUPPORTED_DATA_VERSION stays 35 (v35 exports migrate through the chain)', () => {
     expect(MINIMUM_SUPPORTED_DATA_VERSION).toBe(35);
-    expect(LATEST_DATA_VERSION).toBe(36);
+    expect(LATEST_DATA_VERSION).toBe(37);
   });
 });
 
@@ -142,9 +142,9 @@ describe('V36: shift all non-system file IDs to ≥ 1000', () => {
     expect(byOldId[112].id).toBe(1009); // /org/logs/conversations/context — shifted
   });
 
-  it('bumps data version to 36', () => {
+  it('bumps data version to the latest (37) from 35 through the chain', () => {
     const result = applyMigrations(initData([makeDoc(500)]), 35);
-    expect(result.version).toBe(36);
+    expect(result.version).toBe(37);
   });
 
   // ── ID remapping ─────────────────────────────────────────────────────────────
@@ -453,5 +453,49 @@ describe('applyMigrations — non-array file_references (regression)', () => {
     const result = applyMigrations(data, 35);
     const shifted = result.documents!.find(d => d.name === 'doc-500')!;
     expect(shifted.references).toEqual([1001]);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// V37 — file-level Viz V2 envelopes (no query execution; heuristic kinds)
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('v37 — add viz envelopes to questions and notebook cells', () => {
+  const v37 = MIGRATIONS.find(m => m.dataVersion === 37)!.dataMigration!;
+
+  it('adds a viz derived from vizSettings; vizSettings stays byte-identical', () => {
+    const vizSettings = { type: 'bar', xCols: ['region'], yCols: ['revenue'] };
+    const doc = makeDoc(1, { content: { query: 'SELECT 1', vizSettings, connection_name: 'db' } as any });
+    const out = v37(initData([doc], 36));
+    const c = out.documents![0].content as any;
+    expect(c.viz?.version).toBe(2);
+    expect(c.viz.source.kind).toBe('vega-lite');
+    expect(c.vizSettings).toEqual(vizSettings);
+  });
+
+  it('never overwrites an existing viz', () => {
+    const viz = { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } };
+    const doc = makeDoc(1, { content: { query: '', vizSettings: { type: 'bar' }, viz, connection_name: '' } as any });
+    const out = v37(initData([doc], 36));
+    expect((out.documents![0].content as any).viz).toEqual(viz);
+  });
+
+  it('upgrades notebook SQL cells (text cells untouched)', () => {
+    const doc = makeDoc(1, {
+      type: 'notebook',
+      content: {
+        description: null,
+        cells: [
+          { type: 'sql', id: 'c1', name: null, query: 'SELECT 1', vizSettings: { type: 'line', xCols: ['order_date'], yCols: ['n'] }, parameters: [], parameterValues: {}, connection_name: 'db' },
+          { type: 'text', id: 'c2', name: null, content: 'hello' },
+        ],
+      } as any,
+    });
+    const out = v37(initData([doc], 36));
+    const cells = (out.documents![0].content as any).cells;
+    expect(cells[0].viz?.version).toBe(2);
+    expect(cells[0].vizSettings).toEqual({ type: 'line', xCols: ['order_date'], yCols: ['n'] });
+    expect(cells[1].viz).toBeUndefined();
+    expect(cells[1].content).toBe('hello');
   });
 });

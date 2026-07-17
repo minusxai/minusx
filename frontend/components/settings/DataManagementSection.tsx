@@ -583,9 +583,10 @@ export default function DataManagementSection() {
             </Flex>
           </Flex>
           <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={vizBackfillStatus ? 2 : 0}>
-            Derive a V2 viz for every question from its classic settings (executing each query for real result columns).
-            Rerun-safe: reruns re-derive and overwrite the V2 viz, but hand-authored charts are never downgraded, and
-            classic viz settings are NEVER modified — switching the format default back always remains possible.
+            Derive a V2 viz for every question in this mode from its classic settings — file-level, no queries are
+            executed (the v37 migration does this automatically; this button is the re-runnable pass). Reruns re-derive
+            and overwrite the V2 viz, but hand-authored charts are never downgraded, and classic viz settings are NEVER
+            modified — switching the format default back always remains possible.
           </Text>
           {vizBackfillStatus && (
             <Text fontSize="xs" fontFamily="mono" color={vizBackfillStatus.success ? 'accent.teal' : 'accent.danger'}>

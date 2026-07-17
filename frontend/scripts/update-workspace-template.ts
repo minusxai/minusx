@@ -13,7 +13,8 @@
  */
 
 import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { applyMigrations } from '../lib/database/migrations';
 import type { InitData } from '../lib/database/import-export';
 import { LATEST_DATA_VERSION } from '../lib/database/constants';
@@ -28,8 +29,9 @@ const DUMMY: Record<string, string> = {
   '{{TIMESTAMP}}':           '2020-01-01T00:00:00.000Z',
 };
 
-const TEMPLATE_PATH = join(__dirname, '../lib/database/workspace-template.json');
-const PREVIEW_PATH  = join(__dirname, '../lib/database/workspace-template.preview.json');
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const TEMPLATE_PATH = join(SCRIPT_DIR, '../lib/database/workspace-template.json');
+const PREVIEW_PATH  = join(SCRIPT_DIR, '../lib/database/workspace-template.preview.json');
 
 function substitute(raw: string): string {
   let s = raw;
