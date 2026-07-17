@@ -10,22 +10,23 @@ import { loadSkillFromTree } from '@/agents/skill-content';
 /**
  * Page type → skills preloaded into the system prompt.
  *
- * Viz-authoring pages (question/dashboard/story/notebook) preload `visualizations`
- * so the agent knows the FULL viz schema (geo, pivot, combo/dual-axis, single_value,
- * …) from the first turn — otherwise a blank question page starts viz-blind and has
- * to LoadSkill("visualizations") before it can author anything beyond a basic chart.
+ * Viz-authoring pages (question/dashboard/story/notebook) preload `questions`,
+ * which carries the full `<viz>` envelope grammar (Vega-Lite specs, shipped
+ * recipes, table/pivot sources) — so the agent can author any chart from the
+ * first turn. The legacy VizSettings deep-dive skill is gone: vizSettings is
+ * ignore-only for the agent (never authored, never modified).
  */
 export const PAGE_SKILL_MAP: Record<string, string[]> = {
-  question: ['questions', 'visualizations'],
-  dashboard: ['dashboards', 'questions', 'visualizations'],
+  question: ['questions'],
+  dashboard: ['dashboards', 'questions'],
   context: ['contexts'],
   report: ['reports'],
   alert: ['alerts'],
-  explore: ['explore'],
-  folder: ['explore'],
-  slack: ['explore'],
-  story: ['stories', 'questions', 'visualizations'],
-  notebook: ['notebooks', 'questions', 'visualizations'],
+  explore: ['explore', 'questions'],
+  folder: ['explore', 'questions'],
+  slack: ['explore', 'questions'],
+  story: ['stories', 'questions'],
+  notebook: ['notebooks', 'questions'],
 };
 
 /** Used when the page type is unknown or null. */

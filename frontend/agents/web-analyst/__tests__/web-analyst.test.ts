@@ -87,13 +87,13 @@ describe('WebAnalystAgent — UIE pause/resume bridge', () => {
 describe('LoadSkill tool', () => {
   it('resolves a system skill server-side and returns its content', async () => {
     const orch = new Orchestrator([], []);
-    const tool = new LoadSkill(orch, { name: 'visualizations' }, ctx);
+    const tool = new LoadSkill(orch, { name: 'parameters' }, ctx);
     const res = await tool.run();
     if (res instanceof Object && 'role' in res) throw new Error('expected ToolResponse');
     const payload = payloadOf((res as { content: { type: string }[] }).content);
     expect(payload.success).toBe(true);
-    expect(payload.skill).toBe('visualizations');
-    expect(String(payload.content)).toContain('## Visualizations');
+    expect(payload.skill).toBe('parameters');
+    expect(String(payload.content)).toContain('## Parameters');
   });
 
   it('defers KNOWN user-defined skills (in the catalog) to the frontend via UserInputException', async () => {

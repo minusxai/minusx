@@ -6,7 +6,6 @@
 
 import { describe, it, expect } from 'vitest';
 import { renderPrompt, listSkills, getSkill } from '../index';
-import { VizSettings } from '@/lib/validation/atlas-schemas';
 
 const SYSTEM_VARS = {
   agent_name: 'MinusX',
@@ -39,52 +38,73 @@ describe('bundled prompts (standalone-safe, no backend filesystem)', () => {
   });
 });
 
-// The analyst learns complex viz config exclusively from this skill (the tool
-// schemas keep vizSettings permissive on purpose so a chart mistake never blocks
-// the data query). Combo/dual-axis was undocumented here, so the model invented
-// dead keys (`yAxisRight`, `seriesTypes`) — these tests pin the documentation.
-describe('visualizations skill — combo + previously-undocumented chart types', () => {
-  const viz = getSkill('visualizations') ?? '';
-  const vizDescription = listSkills()['visualizations'] ?? '';
+// Viz-first posture (Viz V2): the `<viz>` envelope is the DEFAULT authoring
+// format everywhere the agent is taught charts. Legacy vizSettings stays
+// documented (rollback path, Slack cheat-sheet) but must never be presented as
+// the format to author for new charts.
+describe('viz-first prompts — envelope is the default authoring format', () => {
+  const questions = getSkill('questions') ?? '';
+  const questionsDescription = listSkills()['questions'] ?? '';
 
-  it('documents combo dual-axis configuration', () => {
-    for (const token of ['combo', 'yRightCols', 'dualAxis', 'styleConfig']) {
-      expect(viz).toContain(token);
+  it('the envelope grammar + shipped recipes live in the questions skill', () => {
+    for (const token of ['<kind>vega-lite</kind>', 'minusx/funnel@1', '<kind>recipe</kind>', '<kind>table</kind>']) {
+      expect(questions).toContain(token);
     }
   });
 
-  it('documents the other previously-missing chart types', () => {
-    for (const token of ['waterfall', 'trend', 'single_value']) {
-      expect(viz).toContain(token);
-    }
+  it('the questions skill teaches viz as the default and vizSettings as legacy-only', () => {
+    expect(questions).toMatch(/author EVERY new chart as a `<viz>` envelope/i);
+    expect(questions).toMatch(/Legacy VizSettings[\s\S]*do NOT author it for new charts/);
   });
 
-  it('advertises combo in the skill description so the agent loads it', () => {
-    expect(vizDescription).toContain('combo');
+  it('spreadsheet questions are charted via <viz>, not vizSettings', () => {
+    expect(questions).toMatch(/spreadsheet data — author `<viz>`/);
   });
 
-  // Drift guard: every VizSettings field the skill teaches must still exist on
-  // the TypeBox single-source. Rename a field there and this fails, forcing a
-  // docs update instead of silently teaching the model a dead key.
-  it('only teaches real VizSettings fields (drift guard)', () => {
-    const vizKeys = Object.keys((VizSettings as unknown as { properties: Record<string, unknown> }).properties);
-    for (const field of ['xCols', 'yCols', 'yRightCols', 'axisConfig', 'styleConfig', 'trendConfig']) {
-      expect(vizKeys).toContain(field);
-    }
+  it('skill catalog descriptions reflect the envelope-first split', () => {
+    expect(questionsDescription).toContain('viz envelope');
   });
 
-  // Sync guard: every viz type in the TypeBox `type` enum must be documented in
-  // the skill. Add a new type to VIZ_TYPES in atlas-schemas.ts and this fails
-  // until it's taught here — keeps the prose docs in lock-step with the source
-  // without injecting a (semantically poorer) raw schema dump into the prompt.
-  it('documents every viz type defined in the TypeBox source', () => {
-    const typeEnum = (VizSettings as unknown as {
-      properties: { type: { enum?: string[] } };
-    }).properties.type.enum ?? [];
-    expect(typeEnum.length).toBeGreaterThan(0);
-    for (const t of typeEnum) {
-      // `table` needs no config section, but is still named in the type list.
-      expect(viz, `viz type '${t}' is not documented in the visualizations skill`).toContain(t);
-    }
+  // The legacy VizSettings deep-dive skill is deleted outright: vizSettings is
+  // ignore-only for the agent (never authored, never modified), so its schema
+  // needs no documentation. The envelope grammar lives in the questions skill.
+  it('the legacy visualizations skill no longer exists', () => {
+    expect(listSkills()['visualizations']).toBeUndefined();
+    expect(getSkill('visualizations')).toBeFalsy();
+    expect(getSkill('questions') ?? '').not.toContain('preloaded below');
+  });
+
+  it('the analyst tool docs point envelope-seekers at the questions skill (which explore/slack pages do not preload)', () => {
+    const out = renderPrompt('default.system', SYSTEM_VARS);
+    expect(out).toContain('LoadSkill("questions")');
+    expect(out).not.toMatch(/envelope grammar[^\n]*LoadSkill\("visualizations"\)/);
+  });
+
+  it('allowed_viz_types restriction covers V2 recipe equivalents, not just vizSettings.type', () => {
+    const out = renderPrompt('default.system', SYSTEM_VARS);
+    expect(out).toMatch(/allowed visualization types[\s\S]{0,600}recipe equivalent/i);
+  });
+
+  it('the Slack chart section is viz-envelope-first and points at the questions skill', () => {
+    const out = renderPrompt('slack_addendum', {});
+    expect(out).toContain('LoadSkill("questions")');
+    expect(out).toMatch(/include an appropriate `viz` envelope/);
+    expect(out).not.toMatch(/include appropriate `vizSettings`/);
+    // vizSettings may only appear as the do-not-use legacy note
+    expect(out).not.toMatch(/Use `bar` for vertical comparisons/);
+  });
+
+  it('onboarding dashboard prompt authors <viz> envelopes, never vizSettings', () => {
+    const out = renderPrompt('onboarding_dashboard.system', {
+      agent_name: 'MinusX',
+      schema: '',
+      context: '',
+      connection_id: 'conn',
+      max_steps: '25',
+      dashboards_skill: '',
+    });
+    expect(out).toContain('<viz>');
+    expect(out).toContain('<kind>vega-lite</kind>');
+    expect(out).not.toContain('vizSettings');
   });
 });

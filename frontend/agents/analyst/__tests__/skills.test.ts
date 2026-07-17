@@ -61,20 +61,20 @@ describe('getPageType', () => {
 describe('getPreloadedSkillNames', () => {
   it('maps page type to skills and appends the restricted nav skill by default', () => {
     expect(getPreloadedSkillNames({ pageType: 'question', selected: [], unrestrictedMode: false }))
-      .toEqual(['questions', 'visualizations', 'navigation_restricted']);
+      .toEqual(['questions', 'navigation_restricted']);
     expect(getPreloadedSkillNames({ pageType: 'dashboard', selected: [], unrestrictedMode: false }))
-      .toEqual(['dashboards', 'questions', 'visualizations', 'navigation_restricted']);
+      .toEqual(['dashboards', 'questions', 'navigation_restricted']);
   });
 
-  it('preloads the visualizations skill on every viz-authoring page (so a blank question page knows geo/pivot/etc.)', () => {
+  it('preloads the questions skill (envelope grammar + recipes) on every viz-authoring page', () => {
     for (const pageType of ['question', 'dashboard', 'story', 'notebook']) {
       expect(getPreloadedSkillNames({ pageType, selected: [], unrestrictedMode: false }),
-        `${pageType} should preload visualizations`).toContain('visualizations');
+        `${pageType} should preload questions`).toContain('questions');
     }
   });
 
-  it('does NOT preload visualizations on non-viz page types', () => {
-    for (const pageType of ['context', 'report', 'alert', 'explore', 'folder']) {
+  it('never preloads the deleted legacy visualizations skill', () => {
+    for (const pageType of ['question', 'dashboard', 'story', 'notebook', 'context', 'report', 'alert', 'explore', 'folder', null]) {
       expect(getPreloadedSkillNames({ pageType, selected: [], unrestrictedMode: false }),
         `${pageType} should not preload visualizations`).not.toContain('visualizations');
     }
@@ -93,12 +93,12 @@ describe('getPreloadedSkillNames', () => {
       { type: 'user', name: 'my_kb_skill', content: 'x' }, // user → ignored
     ];
     expect(getPreloadedSkillNames({ pageType: 'explore', selected, unrestrictedMode: false }))
-      .toEqual(['explore', 'alerts', 'navigation_restricted']);
+      .toEqual(['explore', 'questions', 'alerts', 'navigation_restricted']);
   });
 
   it('uses the unrestricted nav skill when unrestrictedMode is true', () => {
     expect(getPreloadedSkillNames({ pageType: 'explore', selected: [], unrestrictedMode: true }))
-      .toEqual(['explore', 'navigation_unrestricted']);
+      .toEqual(['explore', 'questions', 'navigation_unrestricted']);
   });
 });
 

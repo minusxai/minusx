@@ -2,7 +2,7 @@
  * The per-file-type content schema injected into each file's skill must be the LIVE schema derived
  * from the TypeBox source of truth (atlas-schemas.ts) — never a hand-typed example that can drift.
  * These tests pin that: the rendered text reflects the actual *Content defs, is valid JSON, stays
- * compact (viz deferred to the visualizations skill), and is safe to splice through the prompt
+ * compact (the legacy viz schema is deliberately not inlined), and is safe to splice through the prompt
  * `{ref}` template engine.
  */
 import { describe, it, expect } from 'vitest';
@@ -49,7 +49,7 @@ describe('contentSchemaText — live per-file-type content schema for skills', (
     expect(n.properties).toHaveProperty('cells');
   });
 
-  it('collapses vizSettings to a pointer — full viz schema stays in the visualizations skill', () => {
+  it('collapses vizSettings to a pointer — the legacy viz schema is never inlined', () => {
     const q = contentSchemaText('question');
     expect(q).toContain('vizSettings');
     expect(q).not.toContain('ChoroplethConfig'); // a viz-only def — must NOT be inlined here
