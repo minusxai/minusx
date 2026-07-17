@@ -366,11 +366,14 @@ function SharedStory({ fileId }: { fileId: number }) {
   if (!ready || !mergedContent) {
     return <Center h="60vh"><Spinner size="lg" /></Center>;
   }
-  // fileId is intentionally NOT forwarded to StoryView here (read-only share render, no editing) —
-  // headerEditMode/storyPath/storyName mirror what StoryView would compute with no fileId.
+  // fileId is intentionally NOT forwarded to StoryView here (read-only share render, no editing).
+  // storyPath IS forwarded: embedded charts execute /api/query with filePath, and the guest
+  // guard rejects any query without one ("Guests must execute within a shared page") before
+  // it can check the page's query allowlist — shares need the path for live charts to run.
   // Published render: the persisted compiledCss is always fresh (recomputed on every save).
   // The story's declared colorMode pins the surface (the page-level dispatch also syncs the app
   // chrome, but this keeps the iframe correct even before that effect lands).
   const effectiveColorMode = (mergedContent.colorMode as 'light' | 'dark' | null | undefined) ?? colorMode;
-  return <StoryView content={mergedContent} readOnly headerEditMode={false} storyPath={undefined} storyName={undefined} colorMode={effectiveColorMode} compiledCss={(mergedContent as CompiledCssStoryContent).compiledCss} useCanvasRenderer={useCanvasRenderer} />;
+  const storyPath = (file as { path?: string } | undefined)?.path;
+  return <StoryView content={mergedContent} readOnly headerEditMode={false} storyPath={storyPath} storyName={undefined} colorMode={effectiveColorMode} compiledCss={(mergedContent as CompiledCssStoryContent).compiledCss} useCanvasRenderer={useCanvasRenderer} />;
 }
