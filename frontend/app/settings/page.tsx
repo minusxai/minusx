@@ -32,6 +32,19 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { selectCreditsEnabled } from '@/store/configsSlice';
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
+import { STORY_RENDERERS, resolveStoryRenderer, type StoryRenderer } from '@/lib/branding/whitelabel';
+
+const STORY_RENDERER_LABELS: Record<StoryRenderer, string> = {
+  dom: 'DOM',
+  svg: 'SVG',
+  canvas: 'Canvas',
+};
+
+const STORY_RENDERER_DESCRIPTIONS: Record<StoryRenderer, string> = {
+  dom: 'Stories render in an iframe (classic). Captures go through snapdom.',
+  svg: 'Stories render inside an SVG foreignObject — captures serialize the live surface, no snapdom.',
+  canvas: 'Stories render as one bitmap surface (Takumi). Falls back to DOM per story if rendering fails.',
+};
 
 type TabId = 'general' | 'usage' | 'homepage' | 'dev' | 'data' | 'users' | 'appearance' | 'configs' | 'styles' | 'messaging' | 'integrations' | 'models';
 
@@ -371,6 +384,8 @@ function SettingsContent() {
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
   const creditsEnabled = useAppSelector(selectCreditsEnabled);
   const { config } = useConfigs();
+  // Single source of truth for the active renderer, incl. the legacy useCanvasRenderer fallback.
+  const activeStoryRenderer = resolveStoryRenderer(config);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -469,13 +484,12 @@ function SettingsContent() {
     });
   }, []);
 
-  const handleCanvasRendererToggle = useCallback(async (enabled: boolean) => {
-    await updateConfig({ useCanvasRenderer: enabled });
+  const handleStoryRendererChange = useCallback(async (value: string) => {
+    const renderer = value as StoryRenderer;
+    await updateConfig({ storyRenderer: renderer });
     toaster.create({
-      title: enabled ? 'Canvas renderer enabled' : 'Canvas renderer disabled',
-      description: enabled
-        ? 'Stories now render on canvas. Falls back to DOM per story if rendering fails.'
-        : 'Stories render on the DOM again.',
+      title: `Story renderer: ${STORY_RENDERER_LABELS[renderer]}`,
+      description: STORY_RENDERER_DESCRIPTIONS[renderer],
       type: 'info',
       duration: 5000,
     });
@@ -494,13 +508,21 @@ function SettingsContent() {
     {
       tab: 'general',
       section: 'Feature Flags',
-      title: 'Use Canvas Renderer',
-      description: 'Render stories on canvas (one bitmap surface) instead of the DOM',
+      title: 'Story Renderer',
+      description: 'Which engine renders stories. DOM is the classic iframe. SVG renders the same DOM inside an SVG so captures serialize the live surface (no snapdom). Canvas renders one bitmap surface (Takumi).',
       control: (
-        <SwitchControl
-          checked={config.useCanvasRenderer ?? false}
-          onChange={handleCanvasRendererToggle}
-        />
+        <Flex gap={2}>
+          {STORY_RENDERERS.map((r) => (
+            <Button
+              key={r}
+              size="sm"
+              variant={activeStoryRenderer === r ? 'solid' : 'outline'}
+              onClick={() => handleStoryRendererChange(r)}
+            >
+              {STORY_RENDERER_LABELS[r]}
+            </Button>
+          ))}
+        </Flex>
       ),
     },
     {
@@ -700,7 +722,7 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, handleCanvasRendererToggle, showAdvanced, vizV2, vizRenderer, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics, config.useCanvasRenderer]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, handleStoryRendererChange, showAdvanced, vizV2, vizRenderer, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics, activeStoryRenderer]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

@@ -8,6 +8,7 @@ import NumberQueryEditor from '@/components/views/story/NumberQueryEditor';
 import { StoryEmptyState } from '@/components/views/shared/empty-states';
 import { StoryContent } from '@/lib/types';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
+import type { StoryRenderer } from '@/lib/branding/whitelabel';
 import { applyStoryHtmlEdit } from '@/lib/file-state/file-state';
 import { STORY_W } from './ScaledStoryFrame';
 import CanvasStoryView from './CanvasStoryView';
@@ -45,9 +46,9 @@ interface StoryViewProps {
   colorMode: 'light' | 'dark';
   /** Design-system stylesheet for the rendered story (persisted or preview-compiled), sourced by the container. */
   compiledCss?: string | null;
-  /** Render on canvas (Settings → "Use Canvas Renderer"), sourced by the container from configs.
-   *  Editing always uses the DOM path; canvas rendering falls back to DOM per story on failure. */
-  useCanvasRenderer?: boolean;
+  /** Which engine renders the story (Settings → "Story Renderer"), sourced by the container from
+   *  configs. 'canvas' and 'svg' fall back to the DOM path per story on failure. */
+  storyRenderer?: StoryRenderer;
 }
 
 /**
@@ -58,7 +59,7 @@ interface StoryViewProps {
  * `onChange` (so the header's Save persists them and Cancel reverts them); the html is frozen during
  * the session so the iframe doesn't rebuild mid-edit.
  */
-export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss, useCanvasRenderer = false }: StoryViewProps) {
+export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss, storyRenderer = 'dom' }: StoryViewProps) {
   const numericId = typeof fileId === 'number' ? fileId : undefined;
   const canEdit = !readOnly && numericId !== undefined;
   const editing = canEdit && headerEditMode;
@@ -119,7 +120,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
         {/* data-story-capture → OG share-card preview; data-file-id → the standard FileView capture
             (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
         <Box w="100%" maxW={STORY_MAX_W} {...(numericId !== undefined ? { 'data-story-capture': numericId, 'data-file-id': numericId } : {})}>
-          {useCanvasRenderer ? (
+          {storyRenderer === 'canvas' ? (
             <CanvasStoryView
               // While editing, render the LIVE story (each block commit re-rasters from
               // source — the overlay owns the caret, so there's no cursor to preserve).
@@ -161,6 +162,9 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             html={htmlForRender}
             width={STORY_W}
             fluid
+            // 'svg' mounts the same story body inside <svg><foreignObject> in the same iframe, so the
+            // capture can serialize the live surface instead of re-deriving it with snapdom.
+            surface={storyRenderer === 'svg' ? 'svg' : 'dom'}
             editable={editing}
             readOnly={readOnly}
             colorMode={colorMode}

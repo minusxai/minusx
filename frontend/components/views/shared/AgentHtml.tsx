@@ -8,6 +8,7 @@ import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
 import { AGENT_IFRAME_CSP } from '@/lib/html/agent-iframe-csp';
 import { serializeEditedStory } from '@/lib/html/serialize-story';
 import { collectStoryFontImports, resolveImportFontCss } from '@/lib/html/resolve-story-fonts';
+import { mountStorySurface, type StorySurface, type StorySurfaceKind } from '@/lib/story-surface';
 import StoryEmbeds, {
   type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget,
 } from '@/components/views/shared/StoryEmbeds';
@@ -32,6 +33,13 @@ interface AgentHtmlProps {
    * authored flow layout reflow, instead of pinning to `width`px.
    */
   fluid?: boolean;
+  /**
+   * Where the story body mounts inside the iframe (see lib/story-surface):
+   *  - 'dom' (default) — the body IS document.body; captured via snapdom.
+   *  - 'svg' — the body sits in <svg><foreignObject>, so a capture can serialize the LIVE surface
+   *    (browser-rendered, snapdom-free). Renders and behaves identically either way.
+   */
+  surface?: StorySurfaceKind;
   /**
    * Inline edit mode: makes the story's text contenteditable (charts stay
    * locked as atomic, non-editable islands). Read the edited HTML back via the
@@ -89,11 +97,12 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource, onChange, filePath, colorMode, compiledCss },
+  { html, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'dom', paramValues, onParamValuesChange, onEditNumber, selectionSource, onChange, filePath, colorMode, compiledCss },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const docRef = useRef<Document | null>(null);
+  const surfaceRef = useRef<StorySurface | null>(null);
   const reactRootRef = useRef<Root | null>(null);
   const [targets, setTargets] = useState<ChartTarget[]>([]);
   const [inlineTargets, setInlineTargets] = useState<InlineChartTarget[]>([]);
@@ -148,11 +157,18 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       tw.textContent = compiledCss;
       doc.head.appendChild(tw);
     }
+    // Where the story body lives: document.body ('dom') or an <svg><foreignObject> in it ('svg').
+    // Everything downstream (embeds, editing, serialization, height) targets `surface.root`, so the
+    // renderer difference is confined to lib/story-surface.
+    const surface = mountStorySurface(doc, surfaceKind, width);
+    surfaceRef.current = surface;
     // @import web-fonts load natively inside an iframe (unlike a shadow root) — no hoisting needed.
-    doc.body.innerHTML = sanitized;
+    surface.root.innerHTML = sanitized;
     mirrorAppStyles(doc);
 
     // A hidden host for the nested React root that portals the live embeds into the placeholders below.
+    // Stays on document.body (NOT the surface root): it renders nothing itself, and keeping it out of
+    // the SVG surface means it never lands in a serialized capture.
     const embedRoot = doc.createElement('div');
     embedRoot.setAttribute('data-mx-embed-root', '');
     embedRoot.style.display = 'none';
@@ -173,7 +189,9 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         // Belt-and-braces: never let the authored document force horizontal scroll/cutoff of the page.
         'img,svg,video,table,pre{max-width:100%!important}img,video{height:auto!important}' +
         'html,body{max-width:100%!important;overflow-x:hidden!important}';
-      doc.body.appendChild(shim);
+      // Into the surface root, not the body: on the SVG surface the shim must sit inside the
+      // serialized subtree or a capture would render without it (uncapped chart widths).
+      surface.root.appendChild(shim);
     }
 
     // Sizing contract: honor explicit px sizes, default a missing height, clamp below-minimum boxes.
@@ -250,16 +268,21 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     setParamTargets(paramsFound);
 
     // Content-driven height: keep the iframe as tall as its content (no inner scrollbar).
+    // On the SVG surface there's an extra link in the chain — an <svg> does NOT auto-size to its
+    // foreignObject content (it would sit at the 150px default), so the measured height must be
+    // pushed into the svg+foreignObject before the iframe is sized to it.
     let ro: ResizeObserver | undefined;
     const syncHeight = () => {
-      if (height === undefined && iframeRef.current && docRef.current) {
-        iframeRef.current.style.height = `${docRef.current.body.scrollHeight}px`;
-      }
+      const s = surfaceRef.current;
+      if (height !== undefined || !iframeRef.current || !docRef.current || !s) return;
+      const contentHeight = s.measureHeight();
+      s.applyHeight(contentHeight);
+      iframeRef.current.style.height = `${contentHeight}px`;
     };
     syncHeight();
     if (height === undefined && typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(syncHeight);
-      ro.observe(doc.body);
+      ro.observe(surface.root);
       // The body lives in another document, where ResizeObserver delivery is not guaranteed.
       // Observing the iframe element itself (same-document) makes pane-width changes (side-chat
       // toggle) — which rewrap the fluid story to a different content height — always resync.
@@ -294,7 +317,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       tearingDown = true;
       if (root) setTimeout(() => { try { root.unmount(); } catch { /* detached doc nodes */ } }, 0);
     };
-  }, [sanitized, fluid, height, compiledCss]); // colorMode handled separately so it doesn't rebuild the doc
+  }, [sanitized, fluid, height, compiledCss, surfaceKind, width]); // colorMode handled separately so it doesn't rebuild the doc
 
   // Render (and re-render) the nested embeds root with the latest targets/props.
   useEffect(() => {
@@ -353,13 +376,13 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   // Inline edit mode: make the story's top-level text containers contenteditable while keeping chart
   // embeds locked as atomic, non-editable islands. Runs after the doc + targets exist.
   useEffect(() => {
-    const doc = docRef.current;
-    if (!doc) return;
-    Array.from(doc.body.children).forEach(el => {
+    const root = surfaceRef.current?.root;
+    if (!root) return;
+    Array.from(root.children).forEach(el => {
       if (el.tagName === 'STYLE' || el.hasAttribute('data-mx-embed-root')) return;
       (el as HTMLElement).contentEditable = editable ? 'true' : 'inherit';
     });
-    doc.body.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline],[data-number-inline]').forEach(el => {
+    root.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline],[data-number-inline]').forEach(el => {
       el.contentEditable = 'false';
     });
   }, [editable, targets, inlineTargets, numberTargets, sanitized]);
@@ -374,16 +397,24 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   // "story goes blank after the agent edits" bug). No user input → nothing to sync → no echo.
   useEffect(() => {
     const doc = docRef.current;
-    if (!doc || !editable || !onChange) return;
+    const root = surfaceRef.current?.root;
+    if (!doc || !root || !editable || !onChange) return;
     let t = 0;
     let userEdited = false;
-    const flush = () => { if (userEdited && docRef.current) onChange(serializeEditedStory(docRef.current.body, [])); };
+    // Serialize the SURFACE ROOT, never document.body: on the SVG surface the body also holds the
+    // <svg> wrapper + the hidden embed host, which would corrupt the saved story.
+    const flush = () => {
+      const r = surfaceRef.current?.root;
+      if (userEdited && r) onChange(serializeEditedStory(r, []));
+    };
     const schedule = () => { userEdited = true; if (t) window.clearTimeout(t); t = window.setTimeout(() => { t = 0; flush(); }, 400); };
-    doc.body.addEventListener('input', schedule);
-    doc.body.addEventListener('focusout', flush);
+    // Listen on the document: events from the editable content bubble up either way, and the SVG
+    // surface's content is same-document DOM, so this is identical for both surfaces.
+    doc.addEventListener('input', schedule);
+    doc.addEventListener('focusout', flush);
     return () => {
-      doc.body.removeEventListener('input', schedule);
-      doc.body.removeEventListener('focusout', flush);
+      doc.removeEventListener('input', schedule);
+      doc.removeEventListener('focusout', flush);
       if (t) window.clearTimeout(t);
     };
   }, [editable, onChange, targets]);
@@ -391,8 +422,8 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   // Read the edited story back out as a clean content.story string.
   useImperativeHandle(ref, () => ({
     serialize: () => {
-      const doc = docRef.current;
-      return doc ? serializeEditedStory(doc.body, []) : null;
+      const root = surfaceRef.current?.root;
+      return root ? serializeEditedStory(root, []) : null;
     },
   }), []);
 

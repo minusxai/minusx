@@ -4,13 +4,19 @@
  * of reading it from Redux via a hook. `useScreenshot` delegates here so there is a
  * single capture implementation.
  *
- * Browser-only (uses the DOM + snapdom). snapdom deep-clones the subtree WITH its styles,
- * including Shadow DOM — which html-to-image's <foreignObject> approach could not, so
- * shadow-scoped content (e.g. story charts) now rasterizes correctly. It also embeds fonts
- * and caches resources/style-maps internally, so there is no separate font-embed step.
+ * Browser-only. snapdom deep-clones the subtree WITH its styles and embeds fonts, so it can capture
+ * main-document React views (dashboards/questions/notebooks/reports) whose CSS lives in the PARENT
+ * document's stylesheets — those would serialize unstyled any other way. That is now its ONLY job:
+ * stories route to their own renderer's capture first (canvas → takumi bitmaps; svg → serializing the
+ * live <svg> surface), and only fall through to here on the classic DOM renderer.
+ *
+ * NOTE: nothing in this app uses Shadow DOM (a prior version of this comment claimed otherwise) —
+ * agent HTML is isolated in a same-origin IFRAME, chosen over a shadow root precisely so its
+ * `@import` web-fonts load natively. See components/views/shared/AgentHtml.tsx.
  */
 import { snapdom } from '@zumer/snapdom';
 import { getCanvasStoryCapture } from '@/lib/canvas-story/capture-registry';
+import { findStorySvg, serializeStorySvg, svgToImage } from '@/lib/story-surface/serialize';
 import { AGENT_IMAGE_MAX_PX, AGENT_IMAGE_PIXEL_RATIO, AGENT_IMAGE_JPEG_QUALITY } from './constants';
 import type { ScreenshotOptions } from './types';
 
@@ -21,12 +27,83 @@ const bgFor = (colorMode: 'light' | 'dark'): string => (colorMode === 'dark' ? '
 /** snapdom blob type for the requested output format. */
 const blobType = (format: ScreenshotOptions['format']): 'png' | 'jpeg' => (format === 'png' ? 'png' : 'jpeg');
 
+/**
+ * Full-element capture from an SVG-rendered story: serialize the live `<svg>` surface (styles cloned
+ * in, fonts inlined, scroll baked) and let the browser rasterize it. Returns null when `element`
+ * doesn't host one — dashboards/questions/notebooks are main-document React whose styles live in the
+ * PARENT document's stylesheets, so they'd serialize unstyled; those still need snapdom.
+ */
+async function captureFromSvgStory(element: HTMLElement, opts: CaptureOptions): Promise<Blob | null> {
+  const svg = findStorySvg(element);
+  if (!svg) return null;
+  const cssWidth = svg.getBoundingClientRect().width || svg.width.baseVal.value;
+  const cssHeight = svg.getBoundingClientRect().height || svg.height.baseVal.value;
+  if (!cssWidth || !cssHeight) return null;
+  const scale = opts.maxWidth != null ? opts.maxWidth / cssWidth : (opts.pixelRatio ?? 0.75);
+  const img = await svgToImage(await serializeStorySvg(svg));
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, Math.round(cssWidth * scale));
+  out.height = Math.max(1, Math.round(cssHeight * scale));
+  const ctx = out.getContext('2d');
+  if (!ctx) return null;
+  ctx.fillStyle = opts.backgroundColor ?? bgFor(opts.colorMode);
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(img, 0, 0, out.width, out.height);
+  return canvasToBlob(out, blobType(opts.format) === 'png' ? 'image/png' : 'image/jpeg', opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
+}
+
+/**
+ * Crop directly from an SVG-rendered story: serialize the live surface and cut the selection out of
+ * it. Mirrors cropFromCanvasStory — including the containment check: coordinates here are relative to
+ * the STORY SVG's box, so a selection straying outside it (page chrome, chat panel) must fall through
+ * to snapdom rather than be cropped against the wrong origin. Returns null when no SVG story hosts
+ * the selection.
+ */
+async function cropFromSvgStory(
+  selection: { x: number; y: number; width: number; height: number },
+  opts: CaptureOptions & { target?: HTMLElement },
+  maxOutputPx: number,
+): Promise<Blob | null> {
+  const host = opts.target ?? (typeof document !== 'undefined' ? document.body : null);
+  if (!host) return null;
+  const svg = findStorySvg(host);
+  if (!svg) return null;
+  const box = svg.getBoundingClientRect();
+  const inside = selection.x >= box.left && selection.y >= box.top
+    && selection.x + selection.width <= box.right && selection.y + selection.height <= box.bottom;
+  if (!inside) return null;
+  if (!box.width || !box.height) return null;
+
+  const img = await svgToImage(await serializeStorySvg(svg));
+  // The rasterized image is the SVG at its intrinsic size; map viewport → image space through the
+  // svg's own box (NOT the page target), then downscale to the output cap.
+  const ratio = (img.naturalWidth || box.width) / box.width;
+  const sx = (selection.x - box.left) * ratio;
+  const sy = (selection.y - box.top) * ratio;
+  const sw = selection.width * ratio;
+  const sh = selection.height * ratio;
+  const { w, h } = cappedOutputDims(sw, sh, maxOutputPx);
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  const ctx = out.getContext('2d');
+  if (!ctx) return null;
+  ctx.fillStyle = opts.backgroundColor ?? bgFor(opts.colorMode);
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+  return canvasToBlob(out, (opts.format ?? 'jpeg') === 'png' ? 'image/png' : 'image/jpeg', opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
+}
+
 /** Render a single DOM element to an image Blob (jpeg by default). */
 export async function captureElementBlob(element: HTMLElement, opts: CaptureOptions): Promise<Blob> {
   // Canvas story renderer: the story is already pixels — composite (raster + island
   // bitmaps, maintained at idle) and scale, skipping snapdom's DOM re-serialization.
   const direct = captureFromCanvasStory(element, opts);
   if (direct) return direct;
+  // SVG story renderer: the story is already an <svg> — serialize the LIVE surface and let the
+  // browser rasterize it, so the capture is the same renderer the user is looking at.
+  const fromSvg = await captureFromSvgStory(element, opts);
+  if (fromSvg) return fromSvg;
   // Always scale the RASTER, never snapdom's `width` — `width` re-lays-out the element at that width
   // (e.g. a fixed-width story rewraps and its fixed CSS heights collide), whereas `scale` downscales
   // the captured bitmap with no reflow. maxWidth → scale to hit that width; else use pixelRatio
@@ -152,6 +229,10 @@ export async function captureRegionBlob(
   // touching islands (live DOM charts/params) still need snapdom to include them.
   const direct = cropFromCanvasStory(selection, opts.format, opts.quality, maxOutputPx);
   if (direct) return direct;
+  // SVG story renderer: same idea — crop straight from the serialized live surface when the
+  // selection lies fully inside it. Null (not an SVG story, e.g. a dashboard) → snapdom.
+  const fromSvg = await cropFromSvgStory(selection, opts, maxOutputPx);
+  if (fromSvg) return fromSvg;
   // snapdom returns the rasterized canvas directly (dpr:1 so `scale` is the literal pixel ratio).
   const source = await snapdom.toCanvas(target, {
     scale: pixelRatio,
