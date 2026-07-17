@@ -17,6 +17,8 @@ export type QueryTab = 'semantic' | 'sql' | 'viz';
 
 interface QueryModeSelectorProps {
   mode: QueryTab;
+  /** Whether this source family is active (false leaves all tabs visually unselected). */
+  active?: boolean;
   onModeChange: (mode: QueryTab) => void;
   /** Whether the Semantic tab is shown at all (context defines models). Default false. */
   showSemanticTab?: boolean;
@@ -40,6 +42,7 @@ const TAB_ITEMS: Array<{ key: QueryTab; label: string; gated?: 'semantic' | 'viz
 
 export function QueryModeSelector({
   mode,
+  active = true,
   onModeChange,
   showSemanticTab = false,
   canUseSemantic = true,
@@ -57,7 +60,7 @@ export function QueryModeSelector({
   return (
     <HStack gap={0} bg="bg.muted" borderRadius="md" p="2px">
       {tabs.map(({ key, label, gated, Icon }) => {
-        const isActive = mode === key;
+        const isActive = active && mode === key;
         const isDisabled =
           (gated === 'semantic' && !canUseSemantic) || (gated === 'viz' && !canUseViz);
         const tooltip =

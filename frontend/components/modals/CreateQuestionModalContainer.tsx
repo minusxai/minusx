@@ -13,6 +13,9 @@ import { selectView } from '@/store/authSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
 import { QuestionContent, type DbFile } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
+import { useSpreadsheetResult } from '@/lib/hooks/use-spreadsheet-result';
+import { cacheSpreadsheetSource } from '@/lib/spreadsheet/result-cache';
+import { getSpreadsheetExecution } from '@/lib/spreadsheet/materialize';
 
 interface CreateQuestionModalContainerProps {
   isOpen: boolean;
@@ -104,18 +107,29 @@ export default function CreateQuestionModalContainer({
 
   // Query execution state
   const lastExecuted = (file?.ephemeralChanges as any)?.lastExecuted;
-  const queryToExecute = lastExecuted || {
+  const currentSpreadsheetExecution = mergedContent?.spreadsheet
+    ? { ...getSpreadsheetExecution(mergedContent.spreadsheet), spreadsheet: mergedContent.spreadsheet }
+    : null;
+  const queryToExecute = lastExecuted || currentSpreadsheetExecution || {
     query: mergedContent?.query || '',
     params: mergedContent?.parameterValues || {},
     database: mergedContent?.connection_name
   };
 
-  const { data: queryData, loading: queryLoading, error: queryError, isStale: queryStale } = useQueryResult(
+  const sqlResult = useQueryResult(
     queryToExecute.query,
     queryToExecute.params,
     queryToExecute.database,
-    { skip: !queryToExecute.query }
+    { skip: !!queryToExecute.spreadsheet || !queryToExecute.query }
   );
+  const spreadsheetResult = useSpreadsheetResult(queryToExecute.spreadsheet, {
+    skip: !queryToExecute.spreadsheet || !lastExecuted,
+  });
+  const [spreadsheetRunError, setSpreadsheetRunError] = useState<string | null>(null);
+  const queryData = queryToExecute.spreadsheet ? spreadsheetResult.data : sqlResult.data;
+  const queryLoading = queryToExecute.spreadsheet ? spreadsheetResult.loading : sqlResult.loading;
+  const queryError = spreadsheetRunError ?? (queryToExecute.spreadsheet ? spreadsheetResult.error : sqlResult.error);
+  const queryStale = queryToExecute.spreadsheet ? spreadsheetResult.isStale : sqlResult.isStale;
 
   // Don't use useEffect for cleanup - it causes unmount issues
   // Instead, cleanup in the cancel/close handlers
@@ -138,11 +152,9 @@ export default function CreateQuestionModalContainer({
     const baseParams = mergedContent.parameterValues || {};
     const params = dashboardParamValues ? { ...baseParams, ...dashboardParamValues } : baseParams;
 
-    const initialQuery = {
-      query: mergedContent.query || '',
-      params,
-      database: mergedContent.connection_name
-    };
+    const initialQuery = mergedContent.spreadsheet
+      ? { ...getSpreadsheetExecution(mergedContent.spreadsheet), spreadsheet: mergedContent.spreadsheet }
+      : { query: mergedContent.query || '', params, database: mergedContent.connection_name };
 
     const changes: any = { lastExecuted: initialQuery };
     // Set parameterValues directly so the UI inputs show dashboard values
@@ -169,6 +181,23 @@ export default function CreateQuestionModalContainer({
   // Handle query execution
   const handleExecute = useCallback(() => {
     if (!mergedContent || !effectiveId) return;
+
+    if (mergedContent.spreadsheet) {
+      const result = cacheSpreadsheetSource(mergedContent.spreadsheet);
+      if (!result.ok) {
+        setSpreadsheetRunError(result.errors.length === 1
+          ? result.errors[0].message
+          : `${result.errors[0].message} (${result.errors.length} validation errors)`);
+        return;
+      }
+      setSpreadsheetRunError(null);
+      const execution = getSpreadsheetExecution(mergedContent.spreadsheet);
+      dispatch(setEphemeral({
+        fileId: effectiveId,
+        changes: { lastExecuted: { ...execution, spreadsheet: mergedContent.spreadsheet } },
+      }));
+      return;
+    }
 
     const newQuery = {
       query: mergedContent.query,

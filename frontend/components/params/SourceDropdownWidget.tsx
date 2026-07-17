@@ -11,6 +11,7 @@ import { QuestionContent } from '@/lib/types';
 import type { QuestionParameterSource } from '@/lib/validation/atlas-schemas';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { ROW_H, formatNumStr } from './paramInputShared';
+import { useSpreadsheetResult } from '@/lib/hooks/use-spreadsheet-result';
 
 interface SourceDropdownWidgetProps {
   source: QuestionParameterSource;
@@ -27,12 +28,14 @@ export function SourceDropdownWidget({ source, paramType, currentValue, paramNam
   const augmented = useFile(source.id);
   const content = augmented?.fileState.content as QuestionContent | undefined | null;
 
-  const { data, loading, error } = useQueryResult(
+  const sqlResult = useQueryResult(
     content?.query ?? '',
     (content?.parameterValues ?? {}) as Record<string, any>,
     content?.connection_name ?? '',
-    { skip: !content?.query }
+    { skip: !!content?.spreadsheet || !content?.query }
   );
+  const spreadsheetResult = useSpreadsheetResult(content?.spreadsheet, { skip: !content?.spreadsheet });
+  const { data, loading, error } = content?.spreadsheet ? spreadsheetResult : sqlResult;
 
   // Extract distinct values from source.column, formatted for display
   const values = useMemo<string[] | null>(() => {

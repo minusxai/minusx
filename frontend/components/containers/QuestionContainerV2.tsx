@@ -27,6 +27,9 @@ import { selectEffectiveUser, selectView } from '@/store/authSlice';
 import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { viewAtLeast } from '@/lib/view/view-types';
 import { useSearchParams } from 'next/navigation';
+import { useSpreadsheetResult } from '@/lib/hooks/use-spreadsheet-result';
+import { cacheSpreadsheetSource } from '@/lib/spreadsheet/result-cache';
+import { getSpreadsheetExecution } from '@/lib/spreadsheet/materialize';
 
 interface QuestionContainerV2Props {
   fileId: FileId;
@@ -107,13 +110,17 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
   // lastExecuted tracks what was most recently *explicitly* executed (user click or auto-execute).
   // We display results for lastExecuted so edits don't wipe out visible results mid-typing.
   const lastExecuted = file?.ephemeralChanges?.lastExecuted;
-  const queryToExecute = lastExecuted || {
+  const currentSpreadsheetExecution = mergedContent?.spreadsheet
+    ? { ...getSpreadsheetExecution(mergedContent.spreadsheet), spreadsheet: mergedContent.spreadsheet }
+    : null;
+  const queryToExecute = lastExecuted || currentSpreadsheetExecution || {
     query: mergedContent?.query || '',
     // Canonical params (effective + None-coerced) so the execution cache key matches the
     // augmentation lookup / queryResultId — see buildQueryParamValues / resolveEffectiveParams.
     params: buildQueryParamValues(mergedContent?.parameters ?? [], mergedContent?.parameterValues ?? {}, {}),
     database: mergedContent?.connection_name || ''
   };
+  const executedSpreadsheet = queryToExecute.spreadsheet;
 
   // Build a name→type map from the declared parameters so asyncpg can coerce date strings
   const parameterTypes = useMemo(() => {
@@ -140,7 +147,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
   useEffect(() => {
     const q = queryToExecute.query;
     const db = queryToExecute.database;
-    if (!q || !db || (file?.draft && !lastExecuted)) return;
+    if (executedSpreadsheet || !q || !db || (file?.draft && !lastExecuted)) return;
     fetch('/api/query-estimate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -154,15 +161,23 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryToExecute.query, queryToExecute.database]);
+  }, [queryToExecute.query, queryToExecute.database, executedSpreadsheet]);
 
   // Phase 3: Use useQueryResult hook for query execution with caching
-  const { data: queryData, loading: queryLoading, error: queryError, isStale: queryStale } = useQueryResult(
+  const sqlResult = useQueryResult(
     queryToExecute.query,
     queryToExecute.params,
     queryToExecute.database,
-    { skip: !queryToExecute.query || (!!file?.draft && !lastExecuted), parameterTypes, filePath: file?.path, cachePolicy: cachePolicyOpt }
+    { skip: !!executedSpreadsheet || !queryToExecute.query || (!!file?.draft && !lastExecuted), parameterTypes, filePath: file?.path, cachePolicy: cachePolicyOpt }
   );
+  const spreadsheetResult = useSpreadsheetResult(executedSpreadsheet, {
+    skip: !executedSpreadsheet || (!!file?.draft && !lastExecuted),
+  });
+  const [spreadsheetRunError, setSpreadsheetRunError] = useState<string | null>(null);
+  const queryData = executedSpreadsheet ? spreadsheetResult.data : sqlResult.data;
+  const queryLoading = executedSpreadsheet ? spreadsheetResult.loading : sqlResult.loading;
+  const queryError = spreadsheetRunError ?? (executedSpreadsheet ? spreadsheetResult.error : sqlResult.error);
+  const queryStale = executedSpreadsheet ? spreadsheetResult.isStale : sqlResult.isStale;
 
   // Phase 3: Update current state handler - uses editFile from file-state.ts
   const handleChange = useCallback((updates: Partial<QuestionContent>) => {
@@ -177,6 +192,23 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
   // this WITHOUT force, so navigating to a question stays cache-served.
   const handleExecute = useCallback((overrideParamValues?: Record<string, any>, opts?: { force?: boolean }) => {
     if (!mergedContent) return;
+
+    if (mergedContent.spreadsheet) {
+      const result = cacheSpreadsheetSource(mergedContent.spreadsheet);
+      if (!result.ok) {
+        setSpreadsheetRunError(result.errors.length === 1
+          ? result.errors[0].message
+          : `${result.errors[0].message} (${result.errors.length} validation errors)`);
+        return;
+      }
+      setSpreadsheetRunError(null);
+      const execution = getSpreadsheetExecution(mergedContent.spreadsheet);
+      dispatch(setEphemeral({
+        fileId,
+        changes: { lastExecuted: { ...execution, spreadsheet: mergedContent.spreadsheet } },
+      }));
+      return;
+    }
 
     // Priority: explicit override > URL params merged with content > content params
     const baseValues = mergedContent.parameterValues ?? {};
@@ -225,6 +257,14 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
   // doesn't become reactive to mergedContent, which would auto-execute on every edit.
   useEffect(() => {
     if (!mergedContent || !hasAutoExecutedRef.current || lastExecuted) return;
+    if (mergedContent.spreadsheet) {
+      const execution = getSpreadsheetExecution(mergedContent.spreadsheet);
+      dispatch(setEphemeral({
+        fileId,
+        changes: { lastExecuted: { ...execution, spreadsheet: mergedContent.spreadsheet } },
+      }));
+      return;
+    }
     const baseValues = mergedContent.parameterValues || {};
     const sourceValues = urlParamOverrides ? { ...baseValues, ...urlParamOverrides } : baseValues;
     const restoredParams = buildQueryParamValues(mergedContent.parameters ?? [], sourceValues, {});

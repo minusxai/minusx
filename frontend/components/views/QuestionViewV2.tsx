@@ -22,6 +22,7 @@ import {
   LuChevronRight,
   LuGripVertical,
   LuRefreshCw,
+  LuTable2,
 } from 'react-icons/lu';
 import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType, type DbFile } from '@/lib/types';
 import SqlEditor from '../query-builder/SqlEditor';
@@ -45,6 +46,8 @@ import { toVizColumns } from '@/lib/viz/query-data';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
 import { useSemanticCompat } from '@/lib/hooks/use-semantic-compat';
 import { inferVizType, recommendedVizTypes } from '@/lib/semantic/infer-viz';
+import SpreadsheetSourceEditor from '@/components/spreadsheet/SpreadsheetSourceEditor';
+import { QUESTION_SPREADSHEET_LIMITS } from '@/lib/spreadsheet/materialize';
 
 // Which side of the split view is collapsed (or neither). Page mode persists this
 // globally in Redux (state.ui.questionCollapsedPanel); toolcall mode keeps it local
@@ -169,6 +172,34 @@ export default function QuestionViewV2({
   const { connections } = useConnections();
   const connectionType = content.connection_name ? connections[content.connection_name]?.metadata?.type : undefined;
   const dialect = connectionTypeToDialect(connectionType ?? '');
+  // Query mode state (Semantic, SQL, or Viz). Declared before source callbacks
+  // because an empty source can switch between query and spreadsheet freely.
+  const [queryMode, setQueryMode] = useState<QueryTab>('sql');
+  const [userPickedMode, setUserPickedMode] = useState(false);
+  type SourceFamily = 'query' | 'spreadsheet';
+  const spreadsheetHasData = !!content.spreadsheet
+    && (content.spreadsheet.columns.length > 0 || content.spreadsheet.rows.length > 0);
+  const queryHasData = !!content.query?.trim();
+  const [sourceFamily, setSourceFamily] = useState<SourceFamily>(() =>
+    content.spreadsheet ? 'spreadsheet' : 'query',
+  );
+  const effectiveSourceFamily: SourceFamily = spreadsheetHasData
+    ? 'spreadsheet'
+    : queryHasData ? 'query' : sourceFamily;
+
+  const activateSpreadsheet = useCallback(() => {
+    if (queryHasData) return;
+    setSourceFamily('spreadsheet');
+    setUserPickedMode(false);
+    setQueryMode('sql');
+    if (!content.spreadsheet) onChange({ spreadsheet: { version: 1, columns: [], rows: [] } });
+  }, [content.spreadsheet, onChange, queryHasData]);
+
+  const activateQuery = useCallback(() => {
+    if (spreadsheetHasData) return;
+    setSourceFamily('query');
+    if (content.spreadsheet) onChange({ spreadsheet: null });
+  }, [content.spreadsheet, onChange, spreadsheetHasData]);
 
   // editMode: managed by FileHeader in Redux, supplied as a prop (see Props doc above).
   // The JSON/XML "Code view" is rendered centrally by FileView, so this view only
@@ -201,9 +232,6 @@ export default function QuestionViewV2({
   // whenever the current SQL reliably detects as a semantic query (or a spec
   // was persisted); SQL otherwise. No explicit choice needed on mount — the
   // detection effect below promotes to Semantic exactly once.
-  const [queryMode, setQueryMode] = useState<QueryTab>('sql');
-  const [userPickedMode, setUserPickedMode] = useState(false);
-
   // Semantic tier: one derived model per whitelisted table. Stubs (names only)
   // come from the schema already in the store; full model vocabulary is fetched
   // ON DEMAND for the tables in play — never in bulk (multi-MB on large
@@ -739,10 +767,12 @@ export default function QuestionViewV2({
             {<Box flexShrink={0}>
               {/* Tab selector + DB selector row */}
               <HStack px={3} py={2} gap={2} align="center">
+                {!spreadsheetHasData && <>
                 <Box flex={1} minWidth={0}>
                   <QueryModeSelector
                     mode={effectiveQueryMode}
-                    onModeChange={(m: QueryTab) => { setUserPickedMode(true); setQueryMode(m); }}
+                    active={effectiveSourceFamily === 'query'}
+                    onModeChange={(m: QueryTab) => { activateQuery(); setUserPickedMode(true); setQueryMode(m); }}
                     showSemanticTab={showSemanticTab}
                     canUseSemantic={canUseSemantic}
                     showVizTab={showVizControls && useCompactLayout}
@@ -755,13 +785,34 @@ export default function QuestionViewV2({
                     onChange={handleDatabaseChange}
                   />
                 </Box>
+                </>}
+                {!spreadsheetHasData && !queryHasData && <Box h="28px" w="1px" bg="border.default" flexShrink={0} />}
+                {!queryHasData && (
+                  <HStack
+                    as="button"
+                    gap={1}
+                    justify="center"
+                    px={3}
+                    py={1.5}
+                    borderRadius="sm"
+                    bg={effectiveSourceFamily === 'spreadsheet' ? 'accent.teal' : 'bg.muted'}
+                    color={effectiveSourceFamily === 'spreadsheet' ? 'white' : 'fg.subtle'}
+                    aria-label="Spreadsheet"
+                    onClick={activateSpreadsheet}
+                    transition="all 0.15s ease"
+                    _hover={{ color: effectiveSourceFamily === 'spreadsheet' ? 'white' : 'fg.muted' }}
+                  >
+                    <LuTable2 size={13} />
+                    <Text fontSize="xs" fontFamily="mono" fontWeight="600">Spreadsheet</Text>
+                  </HStack>
+                )}
               </HStack>
 
             </Box>}
 
               <Box flex={1} minHeight={0} display="flex" flexDirection="column" overflow="hidden">
                 {/* SQL Mode: Monaco Editor */}
-                {effectiveQueryMode === 'sql' && (
+                {effectiveSourceFamily === 'query' && effectiveQueryMode === 'sql' && (
                   <SqlEditor
                     readOnly={isPreview || !fullMode || readOnly}
                     value={isPreview ? (originalQuery ?? content.query) : content.query}
@@ -788,7 +839,7 @@ export default function QuestionViewV2({
                     the query; the chart TYPE follows the inference only while
                     UNLOCKED — any manual pick (vizSettings.typeLocked) is
                     respected until the Auto badge hands control back. */}
-                {effectiveQueryMode === 'semantic' && showSemanticTab && (
+                {effectiveSourceFamily === 'query' && effectiveQueryMode === 'semantic' && showSemanticTab && (
                   <Box flex={1} overflow="hidden" display="flex" flexDirection="column" minHeight={0}>
                     <SemanticExplorer
                       models={semanticModels}
@@ -816,6 +867,17 @@ export default function QuestionViewV2({
                       onToggleAutoRun={() => setSemanticAutoRun((a) => !a)}
                     />
                   </Box>
+                )}
+
+                {effectiveSourceFamily === 'spreadsheet' && content.spreadsheet && (
+                  <SpreadsheetSourceEditor
+                    source={content.spreadsheet}
+                    onChange={(spreadsheet) => onChange({ spreadsheet })}
+                    onRun={handleExecute}
+                    isRunning={queryLoading && !queryData}
+                    limits={QUESTION_SPREADSHEET_LIMITS}
+                    readOnly={isPreview || !fullMode || readOnly}
+                  />
                 )}
 
                 {/* Viz Mode (V2 envelope): Fields / Settings / Spec subtabs (surgical spec edits).
@@ -984,7 +1046,7 @@ export default function QuestionViewV2({
             // my={!useCompactLayout ? 2 : 0}
             mr={0}
           >
-            {parameters.length > 0 && (
+            {effectiveSourceFamily !== 'spreadsheet' && parameters.length > 0 && (
               <ParameterRow
                 parameters={parameters}
                 parameterValues={content.parameterValues ?? undefined}
@@ -995,7 +1057,7 @@ export default function QuestionViewV2({
                 database={content.connection_name}
               />
             )}
-            {!content.query?.trim() && !queryData ? (
+            {!content.query?.trim() && !content.spreadsheet && !queryData ? (
               /* Empty state when no query written yet */
               <Box flex="1" display="flex" bg="bg.canvas" borderRadius="lg" overflow="hidden">
                 <QuestionEmptyState />
