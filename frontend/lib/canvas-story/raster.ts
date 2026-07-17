@@ -1,5 +1,6 @@
-import { buildStoryNodeTree } from '@/lib/canvas-story/node-tree';
+import { buildStoryNodeTree, stripStyleProp } from '@/lib/canvas-story/node-tree';
 import { resolveContainerQueries } from '@/lib/canvas-story/resolve-container-queries';
+import { resolveFluidCss } from '@/lib/canvas-story/resolve-fluid-css';
 import { extractGeometry } from '@/lib/canvas-story/geometry';
 import { StoryRasterInput, StoryRasterResult, StoryRendererEngine, MeasuredNodeLike } from '@/lib/canvas-story/types';
 
@@ -35,15 +36,28 @@ export async function renderStoryRaster(
   renderer: StoryRendererEngine,
   input: StoryRasterInput,
 ): Promise<StoryRasterResult> {
-  const { node, extractedStylesheets } = buildStoryNodeTree(input.html, input.embedSizes);
+  const { node, extractedStylesheets } = buildStoryNodeTree(input.html, input.embedSizes, input.width);
   const options = {
     width: input.width * input.dpr,
     devicePixelRatio: input.dpr,
     format: 'png' as const,
     stylesheets: [...input.stylesheets, ...extractedStylesheets]
-      .map(css => normalizeChUnits(neutralizeBalancedTextWrap(resolveContainerQueries(css, input.width)))),
+      .map(css => resolveFluidCss(normalizeChUnits(neutralizeBalancedTextWrap(resolveContainerQueries(css, input.width))), input.width)),
   };
-  const png = await renderer.render(node, options);
+  // Resilience net: takumi hard-throws on any inline style value it can't parse,
+  // which would push the whole story to the DOM fallback over one declaration.
+  // Parse the offending property out of the error, strip it everywhere, retry.
+  let png: Uint8Array | Buffer | undefined;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      png = await renderer.render(node, options);
+      break;
+    } catch (err) {
+      const prop = attempt < 6 ? String(err).match(/invalid value for (\w+)/)?.[1] : undefined;
+      if (!prop) throw err;
+      stripStyleProp(node as { style?: Record<string, unknown>; children?: unknown[] }, prop);
+    }
+  }
   const measured = (await renderer.measure(node, options)) as MeasuredNodeLike;
   const { runs, embeds } = extractGeometry(node as never, measured, input.dpr);
   return {

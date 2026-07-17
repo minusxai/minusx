@@ -138,6 +138,69 @@ describe('embed size overrides (island measure-feedback)', () => {
   });
 });
 
+describe('fluid CSS resolution (clamp / container units)', () => {
+  it('resolves clamp() with cqi args to a concrete px at the raster width', async () => {
+    const { resolveFluidCss } = await import('@/lib/canvas-story/resolve-fluid-css');
+    // 1.55cqi at 1104px = 17.112px; clamp(15.04, 17.112, 16.8) = 16.8
+    expect(resolveFluidCss('h1{font-size:clamp(0.94rem, 1.55cqi, 1.05rem)}', 1104))
+      .toBe('h1{font-size:16.8px}');
+    // preferred value within bounds passes through as computed px
+    expect(resolveFluidCss('p{font-size:clamp(1rem, 2cqi, 3rem)}', 1104))
+      .toBe('p{font-size:22.08px}');
+  });
+
+  it('resolves bare cqi/cqw units and leaves unresolvable functions with their preferred value', async () => {
+    const { resolveFluidCss } = await import('@/lib/canvas-story/resolve-fluid-css');
+    expect(resolveFluidCss('.x{width:50cqw;margin:2cqi}', 800)).toBe('.x{width:400px;margin:16px}');
+    // em args can't be resolved statically — fall back to the preferred (middle) value
+    expect(resolveFluidCss('.y{font-size:clamp(1em, 2cqi, 3em)}', 800)).toBe('.y{font-size:16px}');
+  });
+
+  it('resolves fluid values in INLINE style attributes too', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    const raster = await renderStoryRaster(renderer, {
+      html: '<div class="s"><p style="font-size: clamp(0.94rem, 1.55cqi, 1.05rem); margin: 2cqi 0">Inline fluid works.</p></div>',
+      stylesheets: ['.s{width:800px;padding:16px;background:#fff;color:#111}'],
+      width: 800, dpr: 1,
+    });
+    expect(raster.runs.map(r => r.text).join(' ')).toContain('Inline fluid works.');
+  });
+
+  it('maps unsupported overflow values in inline styles (auto/scroll -> hidden)', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    const raster = await renderStoryRaster(renderer, {
+      html: '<div class="s"><div style="overflow-x: auto; overflow-y: scroll"><p>Scrollable table region.</p></div></div>',
+      stylesheets: ['.s{width:800px;padding:16px;background:#fff;color:#111}'],
+      width: 800, dpr: 1,
+    });
+    expect(raster.runs.map(r => r.text).join(' ')).toContain('Scrollable table region.');
+  });
+
+  it('strips any OTHER inline property takumi rejects and retries instead of failing', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    const raster = await renderStoryRaster(renderer, {
+      html: '<div class="s"><p style="overflow-y: overlay">Survives bad declarations.</p></div>',
+      stylesheets: ['.s{width:800px;padding:16px;background:#fff;color:#111}'],
+      width: 800, dpr: 1,
+    });
+    expect(raster.runs.map(r => r.text).join(' ')).toContain('Survives bad declarations.');
+  });
+
+  it('renders a story using clamp()+cqi typography instead of failing', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    const raster = await renderStoryRaster(renderer, {
+      html: '<div class="s"><p class="fluid">Fluid type works.</p></div>',
+      stylesheets: ['.s{width:800px;padding:16px;background:#fff;color:#111}.fluid{font-size:clamp(0.94rem, 1.55cqi, 1.05rem)}'],
+      width: 800, dpr: 1,
+    });
+    expect(raster.runs.map(r => r.text).join(' ')).toContain('Fluid type works.');
+  });
+});
+
 describe('ch-unit normalization (takumi ignores ch)', () => {
   it('max-width in ch constrains wrap like the equivalent em value', async () => {
     const renderer = new Renderer();
@@ -241,12 +304,50 @@ describe('resolveContainerQueries', () => {
   });
 });
 
+describe('table layout emulation (takumi has no table layout)', () => {
+  it('lays <td> cells of one row side by side, not stacked', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    const raster = await renderStoryRaster(renderer, {
+      html: '<div class="s"><table><tbody><tr><td>Alpha cell</td><td>Beta cell</td><td>Gamma cell</td></tr>' +
+        '<tr><td>Second row</td><td>More data</td><td>Even more</td></tr></tbody></table></div>',
+      stylesheets: ['.s{width:900px;padding:16px;background:#fff;color:#111;font-size:14px}'],
+      width: 900, dpr: 1,
+    });
+    const run = (t: string) => {
+      const r = raster.runs.find(x => x.text.includes(t));
+      expect(r, t).toBeTruthy();
+      return r!;
+    };
+    // same row → same y, increasing x
+    expect(Math.abs(run('Alpha cell').y - run('Beta cell').y)).toBeLessThan(2);
+    expect(run('Beta cell').x).toBeGreaterThan(run('Alpha cell').x);
+    expect(run('Gamma cell').x).toBeGreaterThan(run('Beta cell').x);
+    // next row below
+    expect(run('Second row').y).toBeGreaterThan(run('Alpha cell').y + 5);
+  });
+});
+
 describe('list markers', () => {
+  it('does NOT inject markers for plain lists (Tailwind preflight = list-style none)', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    const result = await renderStoryRaster(renderer, {
+      html: '<div class="story"><ul><li>- alpha manual dash</li></ul></div>',
+      stylesheets: ['.story{padding:16px;background:#fff;color:#111;font-size:16px}'],
+      width: 400, dpr: 1,
+    });
+    const text = result.runs.map(r => r.text).join(' ');
+    expect(text).toContain('- alpha manual dash');
+    expect(text).not.toContain('\u2022');
+  });
+
+
   it('injects bullet markers into ul items so lists match the DOM', async () => {
     const renderer = new Renderer();
     await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
     const result = await renderStoryRaster(renderer, {
-      html: '<div class="story"><ul><li>alpha point</li><li>beta point</li></ul></div>',
+      html: '<div class="story"><ul class="list-disc"><li>alpha point</li><li>beta point</li></ul></div>',
       stylesheets: ['.story{padding:16px;background:#fff;color:#111;font-size:16px}'],
       width: 400, dpr: 1,
     });

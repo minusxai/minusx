@@ -1,6 +1,7 @@
 import { fromHtml } from '@takumi-rs/helpers/html';
 import { EMBED_DEFAULT_SIZE, StoryEmbedKind } from '@/lib/canvas-story/types';
 import { immutableSet } from '@/lib/utils/immutable-collections';
+import { resolveFluidCss } from '@/lib/canvas-story/resolve-fluid-css';
 
 /**
  * Build a takumi node tree from story HTML, applying the transforms the raster
@@ -68,9 +69,17 @@ export function embedKindOf(node: { attributes?: Record<string, string> } | null
   return null;
 }
 
-/** takumi renders no ::marker — inject bullet/number text into list items. */
+/** takumi renders no ::marker — inject bullet/number text into list items.
+ *  ONLY for lists that opt back in (`list-disc`/`list-decimal` class or an inline
+ *  list-style): Tailwind's preflight sets `list-style: none` on all lists, so the
+ *  DOM shows no markers by default — unconditional injection double-marked lists
+ *  that carry their own dashes/numbering in text. */
 function injectListMarkers(node: RawNode): void {
   if (node.tagName !== 'ul' && node.tagName !== 'ol') return;
+  const cls = node.className ?? '';
+  const inlineStyle = String(node.style?.listStyle ?? node.style?.listStyleType ?? '');
+  const wantsMarkers = /\blist-(disc|decimal)\b/.test(cls) || /(disc|decimal)/.test(inlineStyle);
+  if (!wantsMarkers) return;
   node.style = { paddingLeft: 24, ...(node.style ?? {}) };
   let n = 0;
   for (const child of node.children ?? []) {
@@ -84,8 +93,57 @@ function injectListMarkers(node: RawNode): void {
   }
 }
 
-function transform(node: RawNode, state: { embedIndex: number; embedSizes?: Record<number, { width: number; height: number }> }): RawNode {
+interface TransformState {
+  embedIndex: number;
+  embedSizes?: Record<number, { width: number; height: number }>;
+  /** Raster width — resolves fluid values (clamp/cqi) in INLINE styles. */
+  width: number;
+}
+
+/** Inline style values takumi rejects hard-fail the WHOLE raster — sanitize them:
+ *  fluid functions/container units resolve at the known width (like the stylesheet
+ *  pipeline), and overflow `auto`/`scroll` map to `hidden` (a raster cannot scroll;
+ *  clipping matches what a capture of the DOM would show). */
+function resolveFluidStyle(node: RawNode, width: number): void {
+  if (!node.style) return;
+  for (const [k, v] of Object.entries(node.style)) {
+    if (typeof v !== 'string') continue;
+    let value = v;
+    if (/\b(?:clamp|min|max)\(|\dcq[iw]\b/.test(value)) value = resolveFluidCss(value, width);
+    if (/^overflow/.test(k) && /^(auto|scroll)$/.test(value.trim())) value = 'hidden';
+    if (value !== v) node.style[k] = value;
+  }
+}
+
+/** Strip a property (by css/camelCase name) from every node — the retry path for
+ *  inline values takumi rejects that we have no better mapping for. */
+export function stripStyleProp(node: { style?: Record<string, unknown>; children?: unknown[] }, prop: string): void {
+  const camel = prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+  if (node.style && camel in node.style) delete node.style[camel];
+  for (const child of node.children ?? []) stripStyleProp(child as { style?: Record<string, unknown>; children?: unknown[] }, prop);
+}
+
+/** takumi has no table layout (flex/grid/block only) — real <table> markup would
+ *  collapse to stacked blocks, vertically exploding KPI grids. Emulate with flex:
+ *  rows become flex rows, cells share the width equally (colSpan-weighted). */
+function emulateTableLayout(node: RawNode): void {
+  const tag = node.tagName;
+  if (tag === 'table') {
+    node.style = { width: '100%', ...(node.style ?? {}), display: 'block' };
+  } else if (tag === 'thead' || tag === 'tbody' || tag === 'tfoot') {
+    node.style = { ...(node.style ?? {}), display: 'block', width: '100%' };
+  } else if (tag === 'tr') {
+    node.style = { width: '100%', ...(node.style ?? {}), display: 'flex', flexDirection: 'row' };
+  } else if (tag === 'td' || tag === 'th') {
+    const span = parseInt(node.attributes?.colspan ?? '1', 10) || 1;
+    node.style = { minWidth: 0, ...(node.style ?? {}), flexGrow: span, flexBasis: 0 };
+  }
+}
+
+function transform(node: RawNode, state: TransformState): RawNode {
   injectListMarkers(node);
+  emulateTableLayout(node);
+  resolveFluidStyle(node, state.width);
   const embed = embedKindOf(node);
   if (embed) {
     const idx = state.embedIndex++;
@@ -136,10 +194,11 @@ function transform(node: RawNode, state: { embedIndex: number; embedSizes?: Reco
 export function buildStoryNodeTree(
   html: string,
   embedSizes?: Record<number, { width: number; height: number }>,
+  width = 1280,
 ): { node: RawNode; extractedStylesheets: string[] } {
   const parsed = fromHtml(html) as { node: RawNode; stylesheets?: string[] };
   return {
-    node: transform(parsed.node, { embedIndex: 0, embedSizes }),
+    node: transform(parsed.node, { embedIndex: 0, embedSizes, width }),
     extractedStylesheets: parsed.stylesheets ?? [],
   };
 }
