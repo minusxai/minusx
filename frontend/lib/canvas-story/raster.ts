@@ -59,12 +59,13 @@ export async function renderStoryRaster(
     }
   }
   const measured = (await renderer.measure(node, options)) as MeasuredNodeLike;
-  const { runs, embeds } = extractGeometry(node as never, measured, input.dpr);
+  const { runs, embeds, blocks } = extractGeometry(node as never, measured, input.dpr);
   return {
     png: png instanceof Uint8Array ? png : new Uint8Array(png),
     width: measured.width / input.dpr,
     height: measured.height / input.dpr,
     runs,
     embeds,
+    blocks,
   };
 }

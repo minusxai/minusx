@@ -18,6 +18,8 @@ export interface CanvasSelectionHandlers {
   onMouseDown: (e: React.MouseEvent) => void;
   onMouseMove: (e: React.MouseEvent) => void;
   onDoubleClick: (e: React.MouseEvent) => void;
+  /** Repaint the surface (bitmap + selection) — e.g. after the editor mask clears. */
+  redraw: () => void;
 }
 
 export function useCanvasSelection(
@@ -95,5 +97,5 @@ export function useCanvasSelection(
     return () => { window.removeEventListener('mouseup', onUp); window.removeEventListener('keydown', onKey); };
   }, [result]);
 
-  return { onMouseDown, onMouseMove, onDoubleClick };
+  return { onMouseDown, onMouseMove, onDoubleClick, redraw: draw };
 }

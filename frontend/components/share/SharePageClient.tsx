@@ -339,6 +339,9 @@ function SharedStory({ fileId }: { fileId: number }) {
   const { fileState: file } = useFile(fileId) ?? {};
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as StoryContent | undefined;
   const colorMode = useAppSelector(state => state.ui.colorMode);
+  // Public shares default to the DOM renderer (guests can't read the workspace's
+  // canvas toggle); `?use=canvas` opts a link into the canvas renderer explicitly.
+  const useCanvasRenderer = useSearchParams().get('use') === 'canvas';
 
   const ready = useMemo(() => Boolean(file && !file.loading && mergedContent), [file, mergedContent]);
   if (!ready || !mergedContent) {
@@ -350,5 +353,5 @@ function SharedStory({ fileId }: { fileId: number }) {
   // The story's declared colorMode pins the surface (the page-level dispatch also syncs the app
   // chrome, but this keeps the iframe correct even before that effect lands).
   const effectiveColorMode = (mergedContent.colorMode as 'light' | 'dark' | null | undefined) ?? colorMode;
-  return <StoryView content={mergedContent} readOnly headerEditMode={false} storyPath={undefined} storyName={undefined} colorMode={effectiveColorMode} compiledCss={(mergedContent as CompiledCssStoryContent).compiledCss} />;
+  return <StoryView content={mergedContent} readOnly headerEditMode={false} storyPath={undefined} storyName={undefined} colorMode={effectiveColorMode} compiledCss={(mergedContent as CompiledCssStoryContent).compiledCss} useCanvasRenderer={useCanvasRenderer} />;
 }

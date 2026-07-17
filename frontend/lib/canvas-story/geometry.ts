@@ -1,5 +1,6 @@
-import { MeasuredNodeLike, StoryEmbedBox, StoryTextRun } from '@/lib/canvas-story/types';
+import { MeasuredNodeLike, StoryBlockBox, StoryEmbedBox, StoryTextRun } from '@/lib/canvas-story/types';
 import { embedKindOf } from '@/lib/canvas-story/node-tree';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 
 /**
  * Extract interaction geometry by walking the source node tree in parallel with the
@@ -21,13 +22,28 @@ interface SrcNodeLike {
   children?: SrcNodeLike[];
 }
 
+/** Tags the canvas text editor treats as directly editable blocks. */
+const EDITABLE_BLOCK_TAGS = immutableSet(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'figcaption', 'td', 'th']);
+
+function subtreeText(m: MeasuredNodeLike): string {
+  const parts: string[] = [];
+  const visit = (n: MeasuredNodeLike) => {
+    for (const r of n.runs ?? []) parts.push(r.text);
+    for (const c of n.children ?? []) visit(c);
+  };
+  visit(m);
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
 export function extractGeometry(
   srcRoot: SrcNodeLike,
   measuredRoot: MeasuredNodeLike,
   dpr: number,
-): { runs: StoryTextRun[]; embeds: StoryEmbedBox[] } {
+): { runs: StoryTextRun[]; embeds: StoryEmbedBox[]; blocks: StoryBlockBox[] } {
   const runs: StoryTextRun[] = [];
   const embeds: StoryEmbedBox[] = [];
+  const blocks: StoryBlockBox[] = [];
+  const occurrences = new Map<string, number>();
   let blockSeq = 0;
   let embedSeq = 0;
 
@@ -47,6 +63,16 @@ export function extractGeometry(
         attributes: { ...(src?.attributes ?? {}) },
       });
       return; // placeholders have no content of interest below them
+    }
+
+    if (src?.tagName && EDITABLE_BLOCK_TAGS.has(src.tagName)) {
+      const text = subtreeText(m);
+      if (text) {
+        const key = `${src.tagName}\u0000${text.replace(/\s+/g, '')}`; // align with edit-blocks' whitespace-insensitive matching
+        const occurrence = occurrences.get(key) ?? 0;
+        occurrences.set(key, occurrence + 1);
+        blocks.push({ tag: src.tagName, text, occurrence, x: x / dpr, y: y / dpr, w: m.width / dpr, h: m.height / dpr });
+      }
     }
 
     const blockId = blockSeq++;
@@ -70,5 +96,5 @@ export function extractGeometry(
   }
 
   walk(srcRoot, measuredRoot);
-  return { runs, embeds };
+  return { runs, embeds, blocks };
 }

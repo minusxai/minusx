@@ -119,14 +119,18 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
         {/* data-story-capture → OG share-card preview; data-file-id → the standard FileView capture
             (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
         <Box w="100%" maxW={STORY_MAX_W} {...(numericId !== undefined ? { 'data-story-capture': numericId, 'data-file-id': numericId } : {})}>
-          {useCanvasRenderer && !editing ? (
+          {useCanvasRenderer ? (
             <CanvasStoryView
-              key={`canvas:${hashStory(htmlForRender)}`}
-              html={htmlForRender}
+              // While editing, render the LIVE story (each block commit re-rasters from
+              // source — the overlay owns the caret, so there's no cursor to preserve).
+              key={`canvas:${hashStory(editing ? liveStory : htmlForRender)}`}
+              html={editing ? liveStory : htmlForRender}
               compiledCss={compiledCss}
               width={STORY_W}
               readOnly={readOnly}
               colorMode={colorMode}
+              editable={editing}
+              onStoryChange={onStoryChange}
               paramValues={content.parameterValues ?? undefined}
               storyPath={storyPath}
               fallback={

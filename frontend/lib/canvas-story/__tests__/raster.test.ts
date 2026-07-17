@@ -304,6 +304,27 @@ describe('resolveContainerQueries', () => {
   });
 });
 
+describe('editable block geometry', () => {
+  it('emits block boxes with tag, joined text, and occurrence for text blocks', async () => {
+    const renderer = new Renderer();
+    await renderer.registerFont(MONO.buffer.slice(MONO.byteOffset, MONO.byteOffset + MONO.byteLength));
+    const raster = await renderStoryRaster(renderer, {
+      html: '<div class="s"><h1>Title here</h1><p>First para</p><p>First para</p></div>',
+      stylesheets: ['.s{width:600px;padding:16px;background:#fff;color:#111;font-size:16px}'],
+      width: 600, dpr: 1,
+    });
+    const h1 = raster.blocks.find(b => b.tag === 'h1');
+    expect(h1).toBeTruthy();
+    expect(h1!.text).toBe('Title here');
+    expect(h1!.h).toBeGreaterThan(10);
+    const paras = raster.blocks.filter(b => b.tag === 'p');
+    expect(paras).toHaveLength(2);
+    expect(paras[0].occurrence).toBe(0);
+    expect(paras[1].occurrence).toBe(1); // second identical-text <p> distinguishes by occurrence
+    expect(paras[1].y).toBeGreaterThan(paras[0].y);
+  });
+});
+
 describe('table layout emulation (takumi has no table layout)', () => {
   it('lays <td> cells of one row side by side, not stacked', async () => {
     const renderer = new Renderer();

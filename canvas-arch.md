@@ -730,7 +730,19 @@ double-marked lists). Known approximations: cqi resolves against the story root 
 (not the nearest CSS container), wide tables clip at the story edge (raster can't
 scroll — matches capture semantics).
 
-**Text editing on canvas (open design note).** Edit mode deliberately renders DOM today
+**Round 16 — CANVAS TEXT EDITING (shipped).** Edit mode now stays on canvas. Click a
+text block → `useBlockEditor` hit-tests the raster's block geometry (blocks emitted by
+extractGeometry with tag + normalized text + occurrence), maps it to the story source
+(`edit-blocks.ts`, whitespace-insensitive matching; DOMParser round-trip preserves
+head-hoisted <style> blocks), and opens `BlockEditorOverlay`: an absolutely-positioned
+host whose SHADOW ROOT carries the compiled story CSS + root-class cascade at the story
+layout width (so @container variants resolve) — a native contenteditable with real
+caret/IME. The raster masks the block behind the editor (sampled bg). Commit on
+click-away / blur / cmd+Enter (Escape cancels; untouched blocks commit nothing) →
+`onStoryChange` (the same contract as the DOM path) → re-raster. Param controls and
+number query editors continue to work through their live islands.
+
+**Text editing on canvas (older design note, superseded by round 16).** Edit mode deliberately renders DOM today
 (canvas is read-mode only). A full canvas text editor (caret, IME, bidi, composition)
 is a large standalone project; the pragmatic path if edit-on-canvas is wanted:
 keep the canvas raster as the surface and overlay a DOM contenteditable ONLY for the

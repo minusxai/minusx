@@ -56,6 +56,21 @@ export interface StoryRasterInput {
   embedSizes?: Record<number, { width: number; height: number }>;
 }
 
+/** An editable text block's laid-out box (canvas text editing): identified for
+ *  source mapping by (tag, normalized text, occurrence) — robust to the transforms
+ *  between the story HTML and the takumi node tree. */
+export interface StoryBlockBox {
+  tag: string;
+  /** Normalized (whitespace-collapsed) text content of the block. */
+  text: string;
+  /** Index among blocks with the same (tag, text) in document order. */
+  occurrence: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface StoryRasterResult {
   /** Encoded PNG of the full story at width*dpr device pixels. */
   png: Uint8Array;
@@ -64,6 +79,8 @@ export interface StoryRasterResult {
   height: number;
   runs: StoryTextRun[];
   embeds: StoryEmbedBox[];
+  /** Editable text blocks (p, headings, li, blockquote, …) for the canvas editor. */
+  blocks: StoryBlockBox[];
 }
 
 /**

@@ -70,6 +70,9 @@ export function buildQueryParamValues(
     let v: unknown = externalValues && p.name in externalValues ? externalValues[p.name] : ownValues?.[p.name];
     if (v === undefined) v = p.type === 'number' ? null : '';
     if (isEmptyNumeric(v, p.type)) v = null;
+    // Param CONTROLS emit strings; a "12" bound to `$1 * INTERVAL '1 week'` makes the
+    // engine throw a binder error (STRING × INTERVAL). Declared numbers bind as numbers.
+    if (p.type === 'number' && typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) v = Number(v);
     out[p.name] = v;
   }
   return out;
