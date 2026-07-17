@@ -241,6 +241,32 @@ templates:
       - **VizSettings**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`, `combo`, `waterfall`, `trend`, `single_value`. The full viz schema — combo / dual-axis (`yRightCols` + `axisConfig.dualAxis`), pivot (`pivotConfig`), geo (`geoConfig`), trend, waterfall, single_value (`singleValueConfig`) — is in the **visualizations** instructions preloaded below; consult it before authoring any non-basic chart.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
 
+      ### Data Source — query vs spreadsheet (mutually exclusive)
+      A question is backed by EXACTLY ONE source. Never populate both:
+      - **Query source** (default) — SQL against a connection. Set `<query>` + `<connection_name>`; do NOT emit a `<spreadsheet>` element. Use for anything that reads from the database.
+      - **Spreadsheet source** — data the user hands you directly (pastes, dictates, or asks you to "just add", "type in", "enter", "make a table of…") with NO database behind it. Emit `<spreadsheet>` and set `<query></query>` and `<connection_name></connection_name>` to empty. NEVER fabricate SQL to invent rows — if there is no data source, use a spreadsheet.
+      - Switching sources: to convert a question from query→spreadsheet, add `<spreadsheet>` and blank out `<query>`/`<connection_name>` in the same edit; for spreadsheet→query, remove the `<spreadsheet>` element and set `<query>`/`<connection_name>`.
+
+      #### Spreadsheet markup
+      ```xml
+      <spreadsheet>
+        <version>1</version>
+        <columns>
+          <item><name>region</name><type>text</type></item>
+          <item><name>revenue</name><type>number</type></item>
+        </columns>
+        <rows>
+          <item><item>West</item><item>12.5</item></item>
+          <item><item>East</item><item>{null}</item></item>
+        </rows>
+      </spreadsheet>
+      ```
+      - `version` is always `1`. `columns` is `{ name, type }` where `type` is `auto` (infer — safe default), `text`, `number`, `boolean`, or `date`.
+      - `rows` is a list of rows; each row is a list of cells. **Cell order is positional — the Nth cell aligns to the Nth column.** Every row must have exactly as many cells as there are columns.
+      - All cell values are written as strings (e.g. `<item>12.5</item>`, not typed); `type` on the column governs interpretation. Use `<item>{null}</item>` for a blank/missing cell — do NOT drop the `<item>` (that would misalign the row).
+      - To ADD rows, insert new `<item>` rows into `<rows>` (EditFile, matching the existing `<rows>`…`</rows>` or a neighboring row). To ADD a column, append an `<item>` to `<columns>` AND add a matching cell to EVERY row. To edit one cell, oldMatch/newMatch just that `<item>` value.
+      - Viz applies on top of spreadsheet data — set `<vizSettings>` (default `table`) exactly as for a query question.
+
       ### Question Page Behavior
       - Users typically expect direct edits to the question in the current page. Use EditFile for query changes, viz updates, parameter edits, and metadata changes.
       - Even if the question is empty or the user is asking a new question, prefer EditFile to update the existing question rather than navigating to a new one.
