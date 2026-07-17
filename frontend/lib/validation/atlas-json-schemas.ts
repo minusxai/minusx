@@ -57,7 +57,7 @@ export const atlasSchema: Record<string, unknown> = topLevel({
 // ── vizSettings stripping (used for per-file-type SKILL prompt schemas) ──────
 const VIZ_NOTE = {
   type: 'object',
-  description: 'vizSettings — see ExecuteQuery.vizSettings for schema',
+  description: 'LEGACY vizSettings — IGNORE; never modify or delete it (rollback path). Author charts in `viz` (the Vega-Lite envelope) instead.',
 };
 
 /**

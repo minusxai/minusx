@@ -6,6 +6,8 @@ import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 import { formatContextDocsSection } from '@/lib/sql/context-docs';
 import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
+import { PAGE_SKILL_MAP, buildPreloadedSkillsContent } from '@/agents/analyst/skills';
+import { PROMPTS } from '@/orchestrator/prompts';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-slack-api',
@@ -42,12 +44,20 @@ export class SlackAgent extends RemoteAnalystAgent {
       // Same shared formatter as the web prompt + docs sidebar, so Slack sees the
       // user's Default Context Docs + on-demand Context Library identically.
       context: formatContextDocsSection(ctx.resolvedContextDocs ?? { docs: [] }),
-      // Slack stays skill-minimal — the slack_addendum carries its own guidance and
-      // steers away from the UI/file/navigation behaviors the web skills describe.
+      // Slack stays otherwise skill-minimal (no catalog, and — unlike the
+      // analyst's getPreloadedSkillNames — no nav/UI skill appended; the
+      // slack_addendum carries its own guidance). The preloaded set comes from
+      // PAGE_SKILL_MAP['slack'], which includes `questions` — the home of the
+      // `<viz>` envelope grammar (Vega-Lite specs, shipped recipes, table/pivot
+      // sources) the agent needs to chart ExecuteQuery results in Slack.
       skills_catalog: '',
       connection_id: ctx.connectionId ?? '',
       home_folder: ctx.homeFolder ?? '',
-      preloaded_skills: '',
+      preloaded_skills: buildPreloadedSkillsContent({
+        tree: PROMPTS,
+        skillNames: PAGE_SKILL_MAP['slack'] ?? [],
+        selected: [],
+      }),
     });
     const addendum = renderPrompt('slack_addendum', {});
     return `${base}\n\n${addendum}`;

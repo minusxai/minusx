@@ -198,7 +198,7 @@ templates:
     - **PublishAll**: Call this if the user requests you to save changes. Opens a review modal showing all dirty files. Returns immediately if nothing is dirty.
 
     ### Query Execution
-    - **ExecuteQuery(query: string, connectionId: string, parameters?: object, viz?: object, rawData?: bool, maxChars?: int)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. To chart the result, pass `viz` — a V2 viz ENVELOPE (same shape as a question's `viz`: `{{"version": 2, "source": {{"kind": "vega-lite", "grammar": "vega-lite@6", "spec": {{…}}}}}}`, plain JSON here — no markup braces); a chart envelope returns an IMAGE of the chart + a summary (not the rows) — pass **rawData: true** for the row table instead. Without a chart viz you always get the rows. Row text is truncated at maxChars chars (default 10k, max 100k); if `truncated: true`, narrow the query (WHERE/LIMIT), raise maxChars, or page with OFFSET.
+    - **ExecuteQuery(query: string, connectionId: string, parameters?: object, viz?: object, rawData?: bool, maxChars?: int)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. To chart the result, pass `viz` — a viz envelope, i.e. a Vega-Lite v6 spec (or a shipped recipe / table / pivot source) wrapped in the version-2 envelope (same shape as a question's `viz`: `{{"version": 2, "source": {{"kind": "vega-lite", "grammar": "vega-lite@6", "spec": {{…}}}}}}`, plain JSON here — no markup braces); a chart envelope returns an IMAGE of the chart + a summary (not the rows) — pass **rawData: true** for the row table instead. Without a chart viz you always get the rows. Row text is truncated at maxChars chars (default 10k, max 100k); if `truncated: true`, narrow the query (WHERE/LIMIT), raise maxChars, or page with OFFSET.
     - Note: the envelope grammar (specs, recipes, formats) is in the **questions** skill — `LoadSkill("questions")` if it is not already preloaded. A legacy `vizSettings` argument still exists for old conversations; do not use it for new charts.
 
     ### Navigation & Interaction
@@ -1064,7 +1064,7 @@ templates:
       {schema_notebook}
       ```
       - **cells**: ordered `<item>` list rendered top-to-bottom. Every cell has a stable string `<id>` (never reuse ids) and an optional `<name>`.
-      - **SQL cell** (`<type>sql</type>`): a full inline question — `<query>`, `<viz>` (a V2 envelope, same markup form as on questions — the way to chart a cell), `<parameters>`, `<parameterValues>`, and `<connection_name>`. Same shape as a standalone question (minus description). A legacy `<vizSettings>` may also be present: when `<viz>` exists it is authoritative and vizSettings is ignored — NEVER modify or delete `<vizSettings>` (rollback path). Use `LoadSkill("parameters")` as needed.
+      - **SQL cell** (`<type>sql</type>`): a full inline question — `<query>`, `<viz>` (a viz envelope — a Vega-Lite v6 spec, shipped recipe, or table/pivot source; same markup form as on questions — the way to chart a cell), `<parameters>`, `<parameterValues>`, and `<connection_name>`. Same shape as a standalone question (minus description). A legacy `<vizSettings>` may also be present: when `<viz>` exists it is authoritative and vizSettings is ignored — NEVER modify or delete `<vizSettings>` (rollback path). Use `LoadSkill("parameters")` as needed.
       - **Text cell** (`<type>text</type>`): `<content>` is markdown.
 
       ### Active cell — edit the RIGHT cell
@@ -1182,10 +1182,7 @@ prompts:
     - Also, Slack does not render table markdown, so always send tabular data in code blocks with appropriate formatting if you really need to show it.
 
     ## Chart Visualization in Slack
-    When running ExecuteQuery, include an appropriate `viz` envelope so the results can be visualized as a chart image in Slack. It is plain JSON (no markup braces): `{{"version": 2, "source": {{"kind": "vega-lite", "grammar": "vega-lite@6", "spec": {{…}}}}}}` — the full envelope grammar + shipped recipes are in the questions skill, `LoadSkill("questions")`. A legacy `vizSettings` argument still exists; do NOT use it for new charts (when both are set the envelope wins).
-    - Spec charts (`kind: vega-lite`, Vega-Lite v6): `"mark": "bar"` for comparisons across categories (e.g., revenue by month; swap x/y for horizontal bars — ranked lists, long labels), `"line"` for trends over time, `"area"` for cumulative/stacked trends, `"arc"` with `theta` (`"aggregate": "sum"`) + `color` for proportional breakdowns, `"point"` for correlations between two numeric columns
-    - Recipe charts (`kind: recipe`): `minusx/funnel@1` for sequential stage data, `minusx/radar@1` for multi-dimensional comparison, `minusx/trend@1` for KPI cards — bindings are in the questions skill
-    - Spec `encoding` field names must EXACTLY match the query's result columns (aliases included); OMIT `data`/`width`/`height` — result injection, theming, and sizing are automatic
+    When running ExecuteQuery, include an appropriate `viz` envelope so the results can be visualized as a chart image in Slack. The envelope grammar — Vega-Lite v6 specs, shipped recipes, table/pivot sources — is in the preloaded questions skill; as an ExecuteQuery argument the envelope is plain JSON (no markup expression braces). A legacy `vizSettings` argument still exists; do NOT use it for new charts (when both are set the envelope wins).
     - Omit `viz` when a chart would not add value — e.g., single-row results, lookups, or lists of text
     - The chart image is rendered server-side and posted alongside your text reply — you do not need to mention the chart explicitly
     - You do not need to render a chart for EVERY query, only when it adds value. We only send 2 charts per response to avoid overwhelming the Slack thread.

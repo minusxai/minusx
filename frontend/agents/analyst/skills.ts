@@ -15,6 +15,10 @@ import { loadSkillFromTree } from '@/agents/skill-content';
  * recipes, table/pivot sources) — so the agent can author any chart from the
  * first turn. The legacy VizSettings deep-dive skill is gone: vizSettings is
  * ignore-only for the agent (never authored, never modified).
+ *
+ * The `slack` row is consumed by SlackAgent.getSystemPrompt directly (via
+ * buildPreloadedSkillsContent — it does NOT go through getPreloadedSkillNames,
+ * so no nav skill is appended there).
  */
 export const PAGE_SKILL_MAP: Record<string, string[]> = {
   question: ['questions'],

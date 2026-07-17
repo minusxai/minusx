@@ -77,6 +77,8 @@ describe('viz-first prompts — envelope is the default authoring format', () =>
   it('the analyst tool docs point envelope-seekers at the questions skill (which explore/slack pages do not preload)', () => {
     const out = renderPrompt('default.system', SYSTEM_VARS);
     expect(out).toContain('LoadSkill("questions")');
+    // the envelope is named by grammar, not just "V2"
+    expect(out).toMatch(/viz envelope, i\.e\. a Vega-Lite v6 spec/);
     expect(out).not.toMatch(/envelope grammar[^\n]*LoadSkill\("visualizations"\)/);
   });
 
@@ -85,12 +87,13 @@ describe('viz-first prompts — envelope is the default authoring format', () =>
     expect(out).toMatch(/allowed visualization types[\s\S]{0,600}recipe equivalent/i);
   });
 
-  it('the Slack chart section is viz-envelope-first and points at the questions skill', () => {
+  it('the Slack chart section is viz-envelope-first and defers to the preloaded questions skill', () => {
     const out = renderPrompt('slack_addendum', {});
-    expect(out).toContain('LoadSkill("questions")');
     expect(out).toMatch(/include an appropriate `viz` envelope/);
+    expect(out).toContain('preloaded questions skill');
     expect(out).not.toMatch(/include appropriate `vizSettings`/);
-    // vizSettings may only appear as the do-not-use legacy note
+    // the grammar itself is NOT restated here — it lives in the preloaded questions skill
+    expect(out).not.toContain('"version": 2');
     expect(out).not.toMatch(/Use `bar` for vertical comparisons/);
   });
 

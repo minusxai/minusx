@@ -208,10 +208,10 @@ const EXECUTE_QUERY_BASE_FIELDS = {
     description: 'Query parameters as key-value pairs, substituted for `:name` placeholders in the SQL.',
   })),
   viz: Type.Optional(Type.Unknown({
-    description: 'Optional V2 viz ENVELOPE (same shape as a question\'s `viz`: {version:2, source:{kind, …}}). When set to a chart (anything but a table/pivot source) you get an IMAGE of the chart (plus a summary) instead of the row data — unless rawData is true. Preferred over `vizSettings`; when both are set the envelope wins.',
+    description: 'Optional viz ENVELOPE — a Vega-Lite v6 spec (or recipe/table/pivot source) wrapped as {version:2, source:{kind, …}}; same shape as a question\'s `viz`. When set to a chart (anything but a table/pivot source) you get an IMAGE of the chart (plus a summary) instead of the row data — unless rawData is true. Preferred over `vizSettings`; when both are set the envelope wins.',
   })),
   vizSettings: Type.Optional(Type.Unknown({
-    description: 'LEGACY (V1) chart settings — prefer `viz` (the V2 envelope). Same shape as a question\'s vizSettings. When set to a renderable chart, you get an IMAGE of the chart (plus a summary) instead of the row data — unless rawData is true.',
+    description: 'LEGACY (V1) chart settings — prefer `viz` (the Vega-Lite envelope). Same shape as a question\'s vizSettings. When set to a renderable chart, you get an IMAGE of the chart (plus a summary) instead of the row data — unless rawData is true.',
   })),
   rawData: Type.Optional(Type.Boolean({
     description: 'Default false. When vizSettings is a renderable chart, the result is returned as an IMAGE + summary; set rawData true to get the row data instead. Without vizSettings (or a non-renderable viz) rows are always returned.',
