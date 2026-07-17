@@ -17,7 +17,7 @@ import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLe
 import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/viz-templates';
 import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
 import { SharedTooltip } from '@/lib/viz/shared-tooltip';
-import { injectGuideMark } from '@/lib/viz/guide-mark';
+import { injectGuideMark, GUIDE_WIDTH, GUIDE_OPACITY, GUIDE_BAND_OPACITY } from '@/lib/viz/guide-mark';
 import { useInCanvasStory } from '@/lib/canvas-story/canvas-render-context';
 
 // Tooltip value/x formatters. Tooltips show the FULL number ("2,574", not the axis's
@@ -230,7 +230,9 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           const formatX = makeXFormatter(plan);
           const v = view; // default per-mark tooltip already suppressed pre-run (above)
 
-          const setGuide = (on: boolean, px = -1) => {
+          // bandW > 0 (bar/band x scale) → grow the guide to the whole category slot, an
+          // ECharts `axisPointer: 'shadow'`. 0 (line/area/scatter — point/linear x) → thin line.
+          const setGuide = (on: boolean, px = -1, bandW = 0) => {
             if (!hasGuide) return;
             v.signal('mxGuideOn', on ? 1 : 0);
             if (on) {
@@ -238,6 +240,8 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
               // Grow the guide to the (now-settled) plot height ONLY on hover; it rests at
               // 0 so it never feeds the autosize:fit solve on first paint (see guide-mark.ts).
               v.signal('mxGuideH', Number(v.height()) || 0);
+              v.signal('mxGuideW', bandW > 0 ? bandW : GUIDE_WIDTH);
+              v.signal('mxGuideOpacity', bandW > 0 ? GUIDE_BAND_OPACITY : GUIDE_OPACITY);
             }
             v.runAsync().catch(() => { /* race on unmount */ });
           };
@@ -251,6 +255,8 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
             const svg = el.querySelector('svg');
             const xs = v.scale('x') as (((d: unknown) => number) & { bandwidth?: () => number }) | undefined;
             if (!svg || typeof xs !== 'function') { hideAll(); return; }
+            // Band scales (bar charts) expose bandwidth() → the full category-slot width.
+            const bandW = typeof xs.bandwidth === 'function' ? xs.bandwidth() : 0;
             const rect = svg.getBoundingClientRect();
             const origin = (v as unknown as { _origin?: [number, number] })._origin ?? [0, 0];
             const width = Number(v.width());
@@ -264,7 +270,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
               const sv = entry.xPlot ?? (plan.xTemporal ? new Date(entry.xRaw as string | number | Date) : entry.xRaw);
               let px = xs(sv);
               if (typeof px !== 'number' || Number.isNaN(px)) continue;
-              if (typeof xs.bandwidth === 'function') px += xs.bandwidth() / 2;
+              px += bandW / 2; // band scales anchor at the slot's left edge → shift to center
               const d = Math.abs(px - dataX);
               if (d < bestDist) { bestDist = d; best = entry; bestPx = px; }
             }
@@ -281,7 +287,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
             // value-sorting only applies to real multi-series (wide/long) charts.
             const sortByValue = plan.series.kind === 'wide' || plan.series.kind === 'long';
             controller.show(renderSharedTooltipHtml(best, { xTitle: plan.xTitle, colorFor, formatX, formatValue: fmtTooltipValue, sortByValue }), e.clientX, e.clientY);
-            setGuide(true, bestPx);
+            setGuide(true, bestPx, bandW);
           };
           const onMove = (e: PointerEvent) => {
             pending = e;
