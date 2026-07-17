@@ -2,7 +2,7 @@ import 'server-only';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { hashContent } from '@/lib/utils/query-hash';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, mergeConfig } from '@/lib/branding/whitelabel';
+import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, mergeConfig, resolveStoryRenderer } from '@/lib/branding/whitelabel';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { Mode, DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { validateOrgConfig } from '@/lib/validation/config-validators';
@@ -78,6 +78,7 @@ class ConfigsDataLayerServer {
   }
 
   private async _loadConfigs(mode: Mode = DEFAULT_MODE): Promise<GetConfigsResult> {
+    let config: OrgConfig = DEFAULT_CONFIG;
     try {
       // Load from database
       const configPath = resolvePath(mode, '/configs/config');
@@ -89,8 +90,7 @@ class ConfigsDataLayerServer {
         // Validate structure
         if (validateOrgConfig(dbContent)) {
           // Merge with defaults (database overrides defaults)
-          const merged = mergeConfig(DEFAULT_CONFIG, dbContent);
-          return { config: merged };
+          config = mergeConfig(DEFAULT_CONFIG, dbContent);
         } else {
           console.warn('[Configs] Invalid config structure in database, using defaults');
         }
@@ -99,8 +99,18 @@ class ConfigsDataLayerServer {
       console.log('[Configs] Using default config (document not found)', error);
     }
 
-    // Fall back to defaults
-    return { config: DEFAULT_CONFIG };
+    // storyRenderer is WORKSPACE-level rendering infrastructure (like the `llm` config resolved by
+    // lib/llm/llm-plan.server.ts): a single engine choice for the whole workspace, set once in org
+    // Settings. Stories are viewed per-mode (a tutorial story SSRs in tutorial mode), so overlay the
+    // ORG value onto every non-org mode — otherwise a canvas setting saved in org Settings silently
+    // fails to apply to tutorial stories, which read their own config's stale copy. org is
+    // AUTHORITATIVE (replace, not fill-if-absent); the org branch below recurses exactly once.
+    if (mode !== DEFAULT_MODE) {
+      const { config: orgConfig } = await this._loadConfigs(DEFAULT_MODE);
+      config = { ...config, storyRenderer: resolveStoryRenderer(orgConfig) };
+    }
+
+    return { config };
   }
 }
 
