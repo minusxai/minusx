@@ -134,6 +134,19 @@ function coerceUnionScalar(text: string, branches: JsonSchema[]): unknown {
   if (hasNum && text !== '' && /^-?\d+(\.\d+)?$/.test(text)) return Number(text);
   if (hasStr) return text;
   if (hasNum) { const n = Number(text); return Number.isNaN(n) ? text : n; }
+  // Object-typed unions (e.g. Nullable Record fields like parameterValues) must NEVER
+  // yield a string — a "" here wedges the file: schema-invalid so publish is blocked,
+  // and unrepairable via markup because every empty form parses back to "".
+  if (branches.some((b) => b && b.type === 'object')) {
+    const hasNull = branches.some((b) => b && b.type === 'null');
+    if (text !== '') {
+      try {
+        const v = JSON.parse(text);
+        if (v && typeof v === 'object') return v;
+      } catch { /* not JSON — fall through to the empty value */ }
+    }
+    return hasNull ? null : {};
+  }
   return text;
 }
 
@@ -226,6 +239,17 @@ function coerce(text: string, s: JsonSchema, typeAttr: string | undefined): unkn
   if (s) {
     if (s.type === 'number' || s.type === 'integer') return Number(text);
     if (s.type === 'boolean') return text === 'true';
+    if (s.type === 'object') {
+      // Record fields must never coerce to strings (a "" wedges the file — see
+      // coerceUnionScalar). Parse JSON bodies; anything else becomes a valid {}.
+      if (text !== '') {
+        try {
+          const v = JSON.parse(text);
+          if (v && typeof v === 'object') return v;
+        } catch { /* not JSON — fall through to the empty object */ }
+      }
+      return {};
+    }
     return text; // string (or enum)
   }
   if (typeAttr) return coerceTyped(text, typeAttr);
@@ -298,6 +322,24 @@ function elementToValue(node: JsxElement, schema: JsonSchema, ctx: SchemaCtx): u
       obj[child.tag] = elementToValue(child, s && s.properties ? s.properties[child.tag] : undefined, ctx);
     }
     return obj;
+  }
+
+  // Properties-less object schema (a Record like parameterValues): children form a
+  // free-form map; an empty/scalar body parses to a valid object — never a string.
+  if (s && s.type === 'object') {
+    if (childEls.length > 0) {
+      const obj: Record<string, unknown> = {};
+      for (const child of childEls) obj[child.tag] = elementToValue(child, undefined, ctx);
+      return obj;
+    }
+    const text = textOf(node).trim();
+    if (text !== '') {
+      try {
+        const v = JSON.parse(text);
+        if (v && typeof v === 'object') return v;
+      } catch { /* not JSON — fall through to the empty object */ }
+    }
+    return {};
   }
 
   return coerce(textOf(node).trim(), s, typeName);

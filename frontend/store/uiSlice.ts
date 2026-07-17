@@ -203,6 +203,11 @@ const uiSlice = createSlice({
     removeChatAttachment: (state, action: PayloadAction<number>) => {
       state.chatAttachments.splice(action.payload, 1);
     },
+    updateChatAttachment: (state, action: PayloadAction<{ index: number; attachment: Attachment }>) => {
+      if (action.payload.index >= 0 && action.payload.index < state.chatAttachments.length) {
+        state.chatAttachments[action.payload.index] = action.payload.attachment;
+      }
+    },
     clearChatAttachments: (state) => {
       state.chatAttachments = [];
     },
@@ -287,6 +292,7 @@ export const {
   setQuestionCollapsedPanel,
   addChatAttachment,
   removeChatAttachment,
+  updateChatAttachment,
   clearChatAttachments,
   addPendingUpload,
   removePendingUpload,

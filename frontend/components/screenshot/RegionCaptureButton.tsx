@@ -3,11 +3,12 @@
 /**
  * RegionCaptureButton — the chat-input trigger for "select a screen region → add as context".
  * Click it to enter drag-select mode (a portaled RegionSelectOverlay); on selection it captures
- * that region (captureRegionBlob, excluding the overlay itself), uploads it via the SAME path as
- * pasted images (uploadBlobOrEmbed), and adds it as an image attachment (addChatAttachment) — so
+ * that region (captureRegionBlob, excluding the overlay itself), opens the annotator (brush +
+ * undo) so the user can mark up the crop, then uploads the annotated image via the SAME path as
+ * pasted images (uploadBlobOrEmbed) and adds it as an image attachment (addChatAttachment) — so
  * it flows to the agent exactly like any other image attachment.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { IconButton, Icon } from '@chakra-ui/react';
 import { LuScan } from 'react-icons/lu';
@@ -18,11 +19,16 @@ import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { captureRegionBlob } from '@/lib/screenshot/capture';
 import { toaster } from '@/components/ui/toaster';
 import RegionSelectOverlay, { type SelectionRect } from '@/components/screenshot/RegionSelectOverlay';
+import ImageAnnotatorDialog from '@/components/screenshot/ImageAnnotatorDialog';
 
 export default function RegionCaptureButton() {
   const dispatch = useAppDispatch();
   const colorMode = useAppSelector(s => s.ui.colorMode);
   const [selecting, setSelecting] = useState(false);
+  // Captured crop waiting in the annotator: object URL + the pending-upload id it holds open.
+  const [pendingCrop, setPendingCrop] = useState<{ objectUrl: string; uploadId: string } | null>(null);
+
+  useEffect(() => () => { if (pendingCrop) URL.revokeObjectURL(pendingCrop.objectUrl); }, [pendingCrop]);
 
   const handleSelect = useCallback(async (rect: SelectionRect) => {
     // Snapshot the capture target AND its viewport rect NOW — synchronously, in the same layout frame
@@ -37,7 +43,7 @@ export default function RegionCaptureButton() {
     const targetBox = (target ?? document.body).getBoundingClientRect();
     setSelecting(false);
     // Register a pending upload so the chat input shows a "processing" chip and blocks send until
-    // the image is ready (cancellable). Then YIELD so that chip paints before the capture runs —
+    // the annotator resolves (cancellable). Then YIELD so that chip paints before the capture runs —
     // the capture is synchronous DOM-clone + rasterize work that briefly freezes the main thread.
     const uploadId = crypto.randomUUID();
     dispatch(addPendingUpload({ id: uploadId, name: 'Screen selection' }));
@@ -50,18 +56,38 @@ export default function RegionCaptureButton() {
         // Exclude the selection overlay from its own screenshot.
         filter: (node) => !(node instanceof HTMLElement && node.hasAttribute('data-region-select-overlay')),
       });
-      const url = await uploadBlobOrEmbed(blob, 'selection.jpg', 'image/jpeg');
-      // Cancel = discard on finish: only attach if the pending upload wasn't cancelled meanwhile.
-      const cancelled = !selectPendingUploads(getStore().getState()).some(u => u.id === uploadId);
-      dispatch(removePendingUpload(uploadId));
-      if (!cancelled) {
-        dispatch(addChatAttachment({ type: 'image', name: 'Screen selection', content: url, metadata: {} }));
-      }
+      // Hand the crop to the annotator; attach happens on confirm (annotateConfirm below).
+      setPendingCrop({ objectUrl: URL.createObjectURL(blob), uploadId });
     } catch (err) {
       dispatch(removePendingUpload(uploadId));
       toaster.create({ title: err instanceof Error ? err.message : 'Could not capture the selection', type: 'error' });
     }
   }, [colorMode, dispatch]);
+
+  const annotateConfirm = useCallback(async (blob: Blob) => {
+    if (!pendingCrop) return;
+    try {
+      const url = await uploadBlobOrEmbed(blob, 'selection.jpg', 'image/jpeg');
+      // Cancel = discard on finish: only attach if the pending upload wasn't cancelled meanwhile.
+      const cancelled = !selectPendingUploads(getStore().getState()).some(u => u.id === pendingCrop.uploadId);
+      dispatch(removePendingUpload(pendingCrop.uploadId));
+      if (!cancelled) {
+        dispatch(addChatAttachment({ type: 'image', name: 'Screen selection', content: url, metadata: {} }));
+      }
+    } catch (err) {
+      dispatch(removePendingUpload(pendingCrop.uploadId));
+      toaster.create({ title: err instanceof Error ? err.message : 'Could not upload the selection', type: 'error' });
+    }
+  }, [dispatch, pendingCrop]);
+
+  const annotateClose = useCallback(() => {
+    if (pendingCrop) {
+      // Dialog dismissed without confirming → discard the crop entirely.
+      dispatch(removePendingUpload(pendingCrop.uploadId));
+      URL.revokeObjectURL(pendingCrop.objectUrl);
+      setPendingCrop(null);
+    }
+  }, [dispatch, pendingCrop]);
 
   return (
     <>
@@ -79,6 +105,14 @@ export default function RegionCaptureButton() {
       </IconButton>
       {selecting && typeof document !== 'undefined' &&
         createPortal(<RegionSelectOverlay onSelect={handleSelect} onCancel={() => setSelecting(false)} />, document.body)}
+      <ImageAnnotatorDialog
+        isOpen={pendingCrop !== null}
+        onClose={annotateClose}
+        imageSrc={pendingCrop?.objectUrl ?? null}
+        title="Annotate selection"
+        confirmLabel="Attach"
+        onConfirm={annotateConfirm}
+      />
     </>
   );
 }

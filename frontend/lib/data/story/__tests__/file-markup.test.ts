@@ -28,6 +28,37 @@ describe('fileToMarkup / markupToContent — question (no wrapper, raw SQL)', ()
   });
 });
 
+describe('markupToContent — Record-typed fields never coerce to strings', () => {
+  // Every natural agent spelling of an "empty" Record field must yield a
+  // schema-valid value (null for Nullable records), never the string "" —
+  // parameterValues:"" wedged a draft: unpublishable AND unrepairable via markup,
+  // because every empty markup form round-tripped back to "".
+  const BODY = '<story><div class="s"><h1>Hi</h1></div></story>';
+
+  it.each([
+    ['paired empty', '<parameterValues></parameterValues>'],
+    ['whitespace body', '<parameterValues>\n</parameterValues>'],
+    ['self-closing', '<parameterValues />'],
+    ['empty string literal', '<parameterValues>{""}</parameterValues>'],
+  ])('empty form (%s) parses to an empty record, not ""', (_label, pv) => {
+    const back = markupToContent('story', `${BODY}\n${pv}`);
+    expect(back.ok, !back.ok ? back.error : '').toBe(true);
+    if (back.ok) expect(back.content.parameterValues ?? {}).toEqual({});
+  });
+
+  it('child elements parse as a free-form record', () => {
+    const back = markupToContent('story', `${BODY}\n<parameterValues><city>NYC</city><limit>5</limit></parameterValues>`);
+    expect(back.ok, !back.ok ? back.error : '').toBe(true);
+    if (back.ok) expect(back.content.parameterValues).toEqual({ city: 'NYC', limit: 5 });
+  });
+
+  it('JSON-literal escape hatch still round-trips', () => {
+    const back = markupToContent('story', `${BODY}\n<parameterValues>{{"city":"NYC"}}</parameterValues>`);
+    expect(back.ok, !back.ok ? back.error : '').toBe(true);
+    if (back.ok) expect(back.content.parameterValues).toEqual({ city: 'NYC' });
+  });
+});
+
 describe('fileToMarkup / markupToContent — story (jsx field inline)', () => {
   it('emits the HTML body inline as a <story> jsx field with <Question/> embeds', () => {
     const content = {

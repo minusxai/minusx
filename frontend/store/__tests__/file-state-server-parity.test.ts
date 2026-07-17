@@ -52,6 +52,7 @@ import {
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile } from '@/lib/chat/compress-augmented';
 import { readFilesServer, getAppStateServer } from '@/lib/file-state/file-state.server';
+import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 import { GET as fileGetHandler, PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
@@ -303,14 +304,17 @@ describe('Client-Server File State Parity', () => {
   // ============================================================================
 
   it('parameter inheritance: queryResultId uses dashboard override, not question default, on both paths', async () => {
+    // Hash with the CANONICAL assembly rule (buildQueryParamValues): declared
+    // number params coerce numeric strings — the executed values, not the raw ones.
+    const limitParams = [{ name: 'limit', type: 'number' as const }];
     const inheritedHash = getQueryHash(
       'SELECT month, total FROM sales LIMIT :limit',
-      { limit: '10' },
+      buildQueryParamValues(limitParams as never, {}, { limit: '10' }),
       'test_db'
     );
     const standaloneHash = getQueryHash(
       'SELECT month, total FROM sales LIMIT :limit',
-      { limit: '5' },
+      buildQueryParamValues(limitParams as never, {}, { limit: '5' }),
       'test_db'
     );
     // These should actually differ — if they're equal the test setup is wrong
@@ -448,7 +452,7 @@ describe('Client-Server File State Parity', () => {
     // ------------------------------------------------------------------
     const inheritedHash = getQueryHash(
       'SELECT month, total FROM sales LIMIT :limit',
-      { limit: '10' },
+      buildQueryParamValues([{ name: 'limit', type: 'number' as const }] as never, {}, { limit: '10' }),
       'test_db'
     );
 

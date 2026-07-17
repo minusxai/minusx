@@ -18,6 +18,7 @@ import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/v
 import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
 import { SharedTooltip } from '@/lib/viz/shared-tooltip';
 import { injectGuideMark } from '@/lib/viz/guide-mark';
+import { useInCanvasStory } from '@/lib/canvas-story/canvas-render-context';
 
 // Tooltip value/x formatters. Tooltips show the FULL number ("2,574", not the axis's
 // "2.6k") and a readable date — the chart's own d3 format is for the axis, not here.
@@ -100,6 +101,9 @@ function promoteFontAttrs(root: HTMLElement): void {
 }
 
 export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChartProps) {
+  // Inside a canvas-rendered story, draw with vega's CANVAS renderer: captures then
+  // read chart pixels straight off the chart's own <canvas> (no DOM serialization).
+  const inCanvasStory = useInCanvasStory();
   // Latest callback without retriggering the build effect.
   const onViewChangeRef = useRef(onViewChange);
   useEffect(() => { onViewChangeRef.current = onViewChange; });
@@ -159,7 +163,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         if (cancelled) return;
         el.replaceChildren(); // drop any stale chart DOM from a failed predecessor
         view = createVegaView(vegaSpec, rowsRef.current, {
-          renderer: 'svg',
+          renderer: inCanvasStory ? 'canvas' : 'svg',
           container: el,
           tooltipTheme: colorMode,
           parserConfig,
