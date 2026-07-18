@@ -176,9 +176,9 @@ describe('ChatSettingsPopover', () => {
 
     await user.click(agent);
     expect(screen.getByRole('option', { name: 'Analyst agent' })).toBeInTheDocument();
-    const customAgents = screen.getByRole('option', { name: 'Custom agents' });
+    const customAgents = screen.getByRole('option', { name: 'Specialized agents' });
     expect(customAgents).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByLabelText('Custom agents Coming soon')).toBeInTheDocument();
+    expect(screen.getByLabelText('Specialized agents Coming soon')).toBeInTheDocument();
     await user.click(customAgents);
     expect(agent).toHaveTextContent('Analyst agent');
   });

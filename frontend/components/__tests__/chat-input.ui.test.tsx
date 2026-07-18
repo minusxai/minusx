@@ -214,7 +214,7 @@ describe('ChatInput: sidebar control layout', () => {
 
     const editor = screen.getByLabelText('Chat editor');
     if (container === 'floating') fireEvent.focus(editor);
-    await waitFor(() => expect(screen.getByText('Pro tip')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('ProTip')).toBeInTheDocument());
     const proTipBar = screen.getByTestId('chat-pro-tip-bar');
     expect(proTipBar).toHaveTextContent(/Use\s*(?:@{1,2}|#|\/)\s*to/);
     expect(proTipBar.querySelector('code')).toHaveTextContent(/^(?:@{1,2}|#|\/)$/);

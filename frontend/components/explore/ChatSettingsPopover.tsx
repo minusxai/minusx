@@ -382,24 +382,23 @@ export default function ChatSettingsPopover({
               >
                 {canChooseContext && (
                   <Box minW={0} gridArea="knowledge" data-testid="chat-setting-knowledge">
-                    <HStack gap={2} mb={2}>
-                      <Box minW={0}>
-                        <HStack gap={1.5}>
-                          <Icon as={LuBookOpen} boxSize={3.5} color="accent.teal" />
-                          <Text
-                            fontSize="2xs"
-                            fontWeight="700"
-                            color="fg.default"
-                            textTransform="uppercase"
-                            letterSpacing="wide"
-                          >
-                            Knowledge base
-                          </Text>
-                        </HStack>
-                        <Text fontSize="2xs" color="fg.muted" mt={0.5}>
-                          Ground answers with context
-                        </Text>
-                      </Box>
+                    <HStack gap={2} mb={2} align="center" minW={0}>
+                      <Icon as={LuBookOpen} boxSize={3.5} color="accent.teal" flexShrink={0} />
+                      <Text
+                        fontSize="2xs"
+                        fontWeight="700"
+                        color="fg.default"
+                        textTransform="uppercase"
+                        letterSpacing="wide"
+                        lineHeight="1"
+                        flexShrink={0}
+                      >
+                        Knowledge base
+                      </Text>
+                      <Text aria-hidden="true" fontSize="2xs" color="fg.subtle" lineHeight="1" flexShrink={0}>·</Text>
+                      <Text truncate minW={0} fontSize="2xs" color="fg.muted" lineHeight="1">
+                        Company context
+                      </Text>
                     </HStack>
                     <SettingsCombobox
                       options={contextOptions}
@@ -416,24 +415,23 @@ export default function ChatSettingsPopover({
                 )}
 
                 <Box minW={0} gridArea="database" data-testid="chat-setting-database">
-                  <HStack gap={2} mb={2}>
-                    <Box minW={0}>
-                      <HStack gap={1.5}>
-                        <Icon as={LuDatabase} boxSize={3.5} color="accent.teal" />
-                        <Text
-                          fontSize="2xs"
-                          fontWeight="700"
-                          color="fg.default"
-                          textTransform="uppercase"
-                          letterSpacing="wide"
-                        >
-                          Database
-                        </Text>
-                      </HStack>
-                      <Text fontSize="2xs" color="fg.muted" mt={0.5}>
-                        Query this source
-                      </Text>
-                    </Box>
+                  <HStack gap={2} mb={2} align="center" minW={0}>
+                    <Icon as={LuDatabase} boxSize={3.5} color="accent.teal" flexShrink={0} />
+                    <Text
+                      fontSize="2xs"
+                      fontWeight="700"
+                      color="fg.default"
+                      textTransform="uppercase"
+                      letterSpacing="wide"
+                      lineHeight="1"
+                      flexShrink={0}
+                    >
+                      Database
+                    </Text>
+                    <Text aria-hidden="true" fontSize="2xs" color="fg.subtle" lineHeight="1" flexShrink={0}>·</Text>
+                    <Text truncate minW={0} fontSize="2xs" color="fg.muted" lineHeight="1">
+                      Query source
+                    </Text>
                   </HStack>
                   <SettingsCombobox
                     options={databaseComboboxOptions}
@@ -446,24 +444,23 @@ export default function ChatSettingsPopover({
                 </Box>
 
                 <Box minW={0} gridArea="llm" data-testid="chat-setting-llm">
-                  <HStack gap={2} mb={2}>
-                    <Box minW={0}>
-                      <HStack gap={1.5}>
-                        <Icon as={LuBrainCircuit} boxSize={3.5} color="accent.teal" />
-                        <Text
-                          fontSize="2xs"
-                          fontWeight="700"
-                          color="fg.default"
-                          textTransform="uppercase"
-                          letterSpacing="wide"
-                        >
-                          LLM
-                        </Text>
-                      </HStack>
-                      <Text fontSize="2xs" color="fg.muted" mt={0.5}>
-                        LLM powering the agent
-                      </Text>
-                    </Box>
+                  <HStack gap={2} mb={2} align="center" minW={0}>
+                    <Icon as={LuBrainCircuit} boxSize={3.5} color="accent.teal" flexShrink={0} />
+                    <Text
+                      fontSize="2xs"
+                      fontWeight="700"
+                      color="fg.default"
+                      textTransform="uppercase"
+                      letterSpacing="wide"
+                      lineHeight="1"
+                      flexShrink={0}
+                    >
+                      LLM
+                    </Text>
+                    <Text aria-hidden="true" fontSize="2xs" color="fg.subtle" lineHeight="1" flexShrink={0}>·</Text>
+                    <Text truncate minW={0} fontSize="2xs" color="fg.muted" lineHeight="1">
+                      Agent's primary LLM
+                    </Text>
                   </HStack>
                   <SettingsCombobox
                     options={modelOptions}
@@ -476,24 +473,23 @@ export default function ChatSettingsPopover({
                 </Box>
 
                 <Box minW={0} gridArea="agent" data-testid="chat-setting-agent">
-                  <HStack gap={2} mb={2}>
-                    <Box minW={0}>
-                      <HStack gap={1.5}>
-                        <Icon as={LuBot} boxSize={3.5} color="accent.teal" />
-                        <Text
-                          fontSize="2xs"
-                          fontWeight="700"
-                          color="fg.default"
-                          textTransform="uppercase"
-                          letterSpacing="wide"
-                        >
-                          Agent
-                        </Text>
-                      </HStack>
-                      <Text fontSize="2xs" color="fg.muted" mt={0.5}>
-                        Purpose-built specialists
-                      </Text>
-                    </Box>
+                  <HStack gap={2} mb={2} align="center" minW={0}>
+                    <Icon as={LuBot} boxSize={3.5} color="accent.teal" flexShrink={0} />
+                    <Text
+                      fontSize="2xs"
+                      fontWeight="700"
+                      color="fg.default"
+                      textTransform="uppercase"
+                      letterSpacing="wide"
+                      lineHeight="1"
+                      flexShrink={0}
+                    >
+                      Agent
+                    </Text>
+                    <Text aria-hidden="true" fontSize="2xs" color="fg.subtle" lineHeight="1" flexShrink={0}>·</Text>
+                    <Text truncate minW={0} fontSize="2xs" color="fg.muted" lineHeight="1">
+                      Purpose-built specialists
+                    </Text>
                   </HStack>
                   <SettingsCombobox
                     options={AGENT_OPTIONS}
