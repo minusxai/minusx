@@ -1,0 +1,172 @@
+/**
+ * POST /api/viz/backfill — the non-destructive, EXECUTELESS Viz V2 re-derivation
+ * (Data Management). File-level: no query ever runs — envelopes derive from
+ * `vizSettings` + query-text signals (same converter as the v37 migration) and
+ * are written ALONGSIDE the untouched vizSettings. `dryRun` reports without
+ * writing; `overwrite` re-derives existing envelopes (downgrade-guarded).
+ * Flipping the workspace back to V1 always works because vizSettings remains.
+ */
+vi.mock('@/lib/auth/auth-helpers', () => ({
+  getEffectiveUser: vi.fn(),
+}));
+
+import { NextRequest } from 'next/server';
+import { POST } from '@/app/api/viz/backfill/route';
+import { getEffectiveUser } from '@/lib/auth/auth-helpers';
+import { getTestDbPath } from '@/store/__tests__/test-utils';
+import { setupTestDb } from '@/test/harness/test-db';
+import { FilesAPI } from '@/lib/data/files.server';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import type { QuestionContent } from '@/lib/types';
+
+const TEST_DB_PATH = getTestDbPath('viz_backfill');
+
+const ADMIN: EffectiveUser = {
+  userId: 1,
+  email: 'test@example.com',
+  name: 'Test',
+  role: 'admin',
+  home_folder: '/org',
+  mode: 'org',
+};
+
+const VIEWER: EffectiveUser = { ...ADMIN, role: 'viewer' };
+
+const LEGACY_BAR: QuestionContent = {
+  description: '',
+  query: "SELECT * FROM (VALUES ('Jan', 10), ('Feb', 25)) AS t(month, revenue)",
+  vizSettings: { type: 'bar', xCols: ['month'], yCols: ['revenue'] },
+  parameters: [],
+  connection_name: 'default_db',
+  references: [],
+} as unknown as QuestionContent;
+
+const ALREADY_V2: QuestionContent = {
+  ...LEGACY_BAR,
+  vizSettings: { type: 'table' },
+  viz: { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } },
+} as unknown as QuestionContent;
+
+const mockUser = (u: EffectiveUser) =>
+  (getEffectiveUser as unknown as { mockResolvedValue: (v: EffectiveUser) => void }).mockResolvedValue(u);
+
+const post = (body: Record<string, unknown> = {}) =>
+  POST(new NextRequest('http://localhost/api/viz/backfill', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }));
+
+describe('POST /api/viz/backfill', () => {
+  setupTestDb(TEST_DB_PATH, { withTestConnection: true });
+
+  beforeEach(() => mockUser(ADMIN));
+
+  it('adds envelopes to legacy questions, skips V2 ones, never touches vizSettings', async () => {
+    // createFile makes DRAFTS (invisible to listings); saveFile publishes.
+    const legacy = await FilesAPI.createFile({ name: 'Legacy Bar', path: '/org/legacy-bar', type: 'question', content: LEGACY_BAR }, ADMIN);
+    await FilesAPI.saveFile(legacy.data.id, 'Legacy Bar', '/org/legacy-bar', LEGACY_BAR, [], ADMIN);
+    const v2 = await FilesAPI.createFile({ name: 'Already V2', path: '/org/already-v2', type: 'question', content: ALREADY_V2 }, ADMIN);
+    await FilesAPI.saveFile(v2.data.id, 'Already V2', '/org/already-v2', ALREADY_V2, [], ADMIN);
+
+    const res = await post();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.upgraded).toBe(1);
+    expect(body.data.alreadyV2).toBe(1);
+
+    const { data } = await FilesAPI.loadFiles([legacy.data.id, v2.data.id], ADMIN);
+    const upgraded = data.find(f => f.id === legacy.data.id)!.content as QuestionContent;
+    // The envelope was written from the REAL result columns…
+    expect(upgraded.viz).toBeTruthy();
+    const source = upgraded.viz!.source as unknown as { kind: string; spec: { encoding: Record<string, { field: string }> } };
+    expect(source.kind).toBe('vega-lite');
+    expect(source.spec.encoding.x.field).toBe('month');
+    // …and vizSettings is byte-identical (the V1 rollback path).
+    expect(upgraded.vizSettings).toEqual(LEGACY_BAR.vizSettings);
+
+    const untouched = data.find(f => f.id === v2.data.id)!.content as QuestionContent;
+    expect(untouched.viz).toEqual(ALREADY_V2.viz);
+  });
+
+  it('default (fill) mode is idempotent — a second run upgrades nothing', async () => {
+    const f = await FilesAPI.createFile({ name: 'Legacy Line', path: '/org/legacy-line', type: 'question', content: LEGACY_BAR }, ADMIN);
+    await FilesAPI.saveFile(f.data.id, 'Legacy Line', '/org/legacy-line', LEGACY_BAR, [], ADMIN);
+    await post();
+    const res = await post();
+    const body = await res.json();
+    expect(body.data.upgraded).toBe(0);
+    expect(body.data.alreadyV2).toBeGreaterThanOrEqual(1);
+  });
+
+  it('dry run reports counts without writing anything', async () => {
+    const f = await FilesAPI.createFile({ name: 'Dry Bar', path: '/org/dry-bar', type: 'question', content: LEGACY_BAR }, ADMIN);
+    await FilesAPI.saveFile(f.data.id, 'Dry Bar', '/org/dry-bar', LEGACY_BAR, [], ADMIN);
+
+    const res = await post({ dryRun: true });
+    const body = await res.json();
+    expect(body.data.dryRun).toBe(true);
+    expect(body.data.upgraded).toBe(1);
+
+    const { data } = await FilesAPI.loadFiles([f.data.id], ADMIN);
+    expect((data[0].content as QuestionContent).viz ?? null).toBe(null); // nothing written
+  });
+
+  it('overwrite mode re-derives an existing chart envelope from vizSettings (vizSettings untouched)', async () => {
+    // A chart-type vizSettings whose saved envelope was edited (different mark).
+    const edited = {
+      ...LEGACY_BAR,
+      viz: {
+        version: 2,
+        source: {
+          kind: 'vega-lite', grammar: 'vega-lite@6',
+          spec: { mark: { type: 'line' }, encoding: { x: { field: 'month', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative', aggregate: 'sum' } } },
+        },
+      },
+    } as unknown as QuestionContent;
+    const f = await FilesAPI.createFile({ name: 'Edited Bar', path: '/org/edited-bar', type: 'question', content: edited }, ADMIN);
+    await FilesAPI.saveFile(f.data.id, 'Edited Bar', '/org/edited-bar', edited, [], ADMIN);
+
+    const res = await post({ overwrite: true });
+    const body = await res.json();
+    expect(body.data.overwritten).toBeGreaterThanOrEqual(1);
+
+    const { data } = await FilesAPI.loadFiles([f.data.id], ADMIN);
+    const c = data[0].content as QuestionContent;
+    const spec = (c.viz!.source as unknown as { spec: { mark: { type: string } } }).spec;
+    expect(spec.mark.type).toBe('bar'); // re-derived from vizSettings (bar), replacing the edited line
+    expect(c.vizSettings).toEqual(LEGACY_BAR.vizSettings); // never touched
+  });
+
+  it('overwrite mode NEVER downgrades a chart envelope to a DOM-tier one', async () => {
+    // vizSettings is the table template default, but the envelope is a hand-authored chart
+    // (the post-V2 authoring pattern) — re-deriving would replace the chart with a table.
+    const authored = {
+      ...LEGACY_BAR,
+      vizSettings: { type: 'table' },
+      viz: {
+        version: 2,
+        source: {
+          kind: 'vega-lite', grammar: 'vega-lite@6',
+          spec: { mark: { type: 'rect' }, encoding: { x: { field: 'month', type: 'ordinal' }, y: { field: 'revenue', type: 'quantitative' } } },
+        },
+      },
+    } as unknown as QuestionContent;
+    const f = await FilesAPI.createFile({ name: 'Authored Heatmap', path: '/org/authored-heatmap', type: 'question', content: authored }, ADMIN);
+    await FilesAPI.saveFile(f.data.id, 'Authored Heatmap', '/org/authored-heatmap', authored, [], ADMIN);
+
+    const res = await post({ overwrite: true });
+    const body = await res.json();
+    expect(body.data.skipped.some((s: { id: number }) => s.id === f.data.id)).toBe(true);
+
+    const { data } = await FilesAPI.loadFiles([f.data.id], ADMIN);
+    const c = data[0].content as QuestionContent;
+    expect((c.viz!.source as unknown as { spec: { mark: { type: string } } }).spec.mark.type).toBe('rect'); // untouched
+  });
+
+  it('rejects non-admins', async () => {
+    mockUser(VIEWER);
+    const res = await post();
+    expect(res.status).toBe(403);
+  });
+});

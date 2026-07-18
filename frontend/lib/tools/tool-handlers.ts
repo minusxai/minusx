@@ -23,6 +23,7 @@ import { screenshotHandler } from './handlers/screenshot';
 import { reviewFileHandler } from './handlers/review-file';
 import { editFileHandler } from './handlers/edit-file';
 import { createFileHandler } from './handlers/create-file';
+import { detachVizHandler } from './handlers/detach-viz';
 import { publishAllHandler } from './handlers/publish-all';
 
 // ============================================================================
@@ -155,6 +156,11 @@ registerFrontendTool('EditFile', editFileHandler);
  * CreateFile - Create a new virtual file (draft, any type)
  */
 registerFrontendTool('CreateFile', createFileHandler);
+
+/**
+ * DetachViz - Detach a question's recipe chart into its editable kind:'vega' spec
+ */
+registerFrontendTool('DetachViz', detachVizHandler);
 
 /**
  * PublishAll - Open PublishModal for user to review and publish all unsaved changes

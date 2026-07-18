@@ -5,7 +5,8 @@
  * is renderable: recipe sources materialize; vega-lite sources validate against columns.
  */
 import { describe, it, expect } from 'vitest';
-import { vizSettingsToEnvelope, resolveLegacyRenderEnvelope, type ConvertibleVizSettings as VizSettings } from '@/lib/viz/from-vizsettings';
+import { vizSettingsToEnvelope, vizSettingsToEnvelopeStatic, resolveLegacyRenderEnvelope } from '@/lib/viz/from-vizsettings';
+import type { VizSettings } from '@/lib/validation/atlas-schemas';
 import { materializeRecipe } from '@/lib/viz/viz-templates';
 import { validateVizEnvelope } from '@/lib/viz/validate';
 import { getEnvelopeVizType, annotationSplit } from '@/lib/viz/encoding-edit';
@@ -172,6 +173,12 @@ describe('recipe sources (non-geo)', () => {
     const e = vizSettingsToEnvelope(vs({ type: 'combo', xCols: ['month'], yCols: ['revenue', 'orders'] }));
     expect(src(e).recipe).toBe('minusx/combo@1');
     expect(src(e).bindings).toEqual({ x: 'month', bar: 'revenue', line: 'orders' });
+    expectMaterializes(e);
+  });
+
+  it('combo: yRightCols is the LINE (V1 dual-axis semantics: yCols→bars, yRightCols→line)', () => {
+    const e = vizSettingsToEnvelope(vs({ type: 'combo', xCols: ['week'], yCols: ['revenue'], yRightCols: ['orders'] }));
+    expect(src(e).bindings).toEqual({ x: 'week', bar: 'revenue', line: 'orders' });
     expectMaterializes(e);
   });
 
@@ -401,5 +408,44 @@ describe('legacy style carry-over', () => {
     expect(JSON.stringify(s)).toContain('Launch');
     // The base chart survives the wrap intact.
     expect((split!.unit.encoding as Record<string, Record<string, unknown>>).x.field).toBe('month');
+  });
+});
+
+// ─── Static conversion (no result columns — pure/file-level) ──────────────────
+//
+// Used where queries CANNOT run: the v37 data migration and the executeless
+// backfill. Column kinds come from a CONSERVATIVE name heuristic: only
+// near-certain date names go temporal — an ambiguous name ('month', 'year')
+// stays nominal, because typing label strings ('Jan') as temporal BREAKS the
+// axis while nominal merely renders plainer.
+describe('static conversion (heuristic column kinds)', () => {
+  it('near-certain date names type the x channel temporal', () => {
+    for (const col of ['order_date', 'created_at', 'timestamp', 'date', 'event_time']) {
+      const e = vizSettingsToEnvelopeStatic(vs({ type: 'line', xCols: [col], yCols: ['revenue'] }));
+      expect(enc(e).x.type, col).toBe('temporal');
+    }
+  });
+
+  it('ambiguous names stay nominal (month labels are strings — temporal would break)', () => {
+    for (const col of ['month', 'year', 'week', 'region', 'status']) {
+      const e = vizSettingsToEnvelopeStatic(vs({ type: 'bar', xCols: [col], yCols: ['revenue'] }));
+      expect(enc(e).x.type, col).toBe('nominal');
+    }
+  });
+
+  it('derives temporal from the QUERY TEXT when the column name alone is ambiguous', () => {
+    const query = "SELECT DATE_TRUNC('week', created_at) AS week, SUM(x) AS revenue FROM t GROUP BY 1";
+    const e = vizSettingsToEnvelopeStatic(vs({ type: 'line', xCols: ['week'], yCols: ['revenue'] }), query);
+    expect(enc(e).x.type).toBe('temporal');
+    // Same column name WITHOUT the query signal stays nominal.
+    const bare = vizSettingsToEnvelopeStatic(vs({ type: 'line', xCols: ['week'], yCols: ['revenue'] }));
+    expect(enc(bare).x.type).toBe('nominal');
+  });
+
+  it('produces the same envelope as the columned converter, modulo kinds', () => {
+    const e = vizSettingsToEnvelopeStatic(vs({ type: 'bar', xCols: ['region'], yCols: ['revenue'] }));
+    expect(src(e).kind).toBe('vega-lite');
+    expect(enc(e).x.field).toBe('region');
+    expect(enc(e).y.field).toBe('revenue');
   });
 });

@@ -30,6 +30,7 @@ const NullableD = <T extends TSchema>(schema: T, description: string) =>
 const VIZ_TYPES = [
   'table', 'bar', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot',
   'trend', 'waterfall', 'combo', 'radar', 'geo', 'single_value', 'row',
+  'choropleth', 'point_map',
 ] as const;
 export const VisualizationType = StringEnum(VIZ_TYPES);
 export type VisualizationType = Static<typeof VisualizationType>;
@@ -431,7 +432,9 @@ export type SpreadsheetSource = Static<typeof SpreadsheetSource>;
 export const QuestionContent = Type.Object({
   description: Nullable(Type.String()),
   query: Type.String({ description: 'SQL query string, may contain :paramName tokens' }),
-  vizSettings: VizSettings,
+  vizSettings: NullableD(VizSettings,
+    'LEGACY classic chart settings (rollback path). Optional: viz-first files omit it; when absent the ' +
+    'classic pipeline falls back at render time. When viz is present it is authoritative and this is ignored.'),
   parameters: Nullable(Type.Array(QuestionParameter)),
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
   connection_name: Type.String({ description: 'connection name (empty string if none)' }),
@@ -576,7 +579,12 @@ export const NotebookSqlCell = Type.Object({
   id: Type.String({ description: 'stable cell id (uuid) — never reused; enables future cell-to-cell references' }),
   name: Nullable(Type.String({ description: 'optional cell name' })),
   query: Type.String({ description: 'SQL query string, may contain :paramName tokens' }),
-  vizSettings: VizSettings,
+  vizSettings: NullableD(VizSettings,
+    'LEGACY classic chart settings (rollback path). Optional: viz-first cells omit it; when absent the ' +
+    'classic pipeline falls back at render time. When viz is present it is authoritative and this is ignored.'),
+  viz: NullableD(VizEnvelope,
+    'Viz V2 envelope (docs/Visualization Arch V2.md). When present it is AUTHORITATIVE — the cell renders ' +
+    'from viz and legacy vizSettings is ignored. Omit to keep rendering via vizSettings.'),
   parameters: Nullable(Type.Array(QuestionParameter)),
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
   connection_name: Type.String({ description: 'connection name (empty string if none)' }),

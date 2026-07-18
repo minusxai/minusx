@@ -53,6 +53,9 @@ export default function DataManagementSection() {
   const [isResettingTutorial, setIsResettingTutorial] = useState(false);
   const [showResetTutorialConfirm, setShowResetTutorialConfirm] = useState(false);
   const [resetTutorialStatus, setResetTutorialStatus] = useState<{ success: boolean; message: string } | null>(null);
+  const [isBackfillingViz, setIsBackfillingViz] = useState(false);
+  const [vizBackfillStatus, setVizBackfillStatus] = useState<{ success: boolean; message: string; skipped?: Array<{ id: number; name: string; reason: string }> } | null>(null);
+  const [showVizSkipped, setShowVizSkipped] = useState(false);
   const [expandedErrors, setExpandedErrors] = useState<'export' | 'validate' | 'import' | 'migrate' | null>(null);
   const [uploadedData, setUploadedData] = useState<any>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -365,6 +368,33 @@ export default function DataManagementSection() {
     }
   };
 
+  const handleVizBackfill = async (dryRun: boolean) => {
+    setIsBackfillingViz(true);
+    setVizBackfillStatus(null);
+    try {
+      // overwrite: reruns re-derive every envelope from the (never-modified) classic
+      // settings, so the backfill converges instead of accumulating stale derivations.
+      const result = await fetchWithCache('/api/viz/backfill', {
+        method: 'POST',
+        body: JSON.stringify({ dryRun, overwrite: true }),
+        cacheStrategy: API.admin.vizBackfill.cache,
+      });
+      const d = result.data ?? {};
+      setShowVizSkipped(false);
+      setVizBackfillStatus({
+        success: result.success === true,
+        message: result.success
+          ? `${dryRun ? 'Dry run: ' : ''}${d.upgraded} added, ${d.overwritten} re-derived, ${d.skipped?.length ?? 0} skipped`
+          : (result.error || 'Backfill failed'),
+        skipped: result.success ? (d.skipped ?? []) : [],
+      });
+    } catch (error) {
+      setVizBackfillStatus({ success: false, message: 'Failed to run viz backfill' });
+    } finally {
+      setIsBackfillingViz(false);
+    }
+  };
+
   return (
     <Box>
       <VStack align="stretch" gap={0} divideY="1px">
@@ -504,6 +534,95 @@ export default function DataManagementSection() {
               : 'Apply pending database migrations'}
           </Text>
           <MigrationStatusDisplay result={migrateStatus} expandedErrors={expandedErrors} setExpandedErrors={setExpandedErrors} />
+        </Box>
+
+        {/* Viz V2 backfill */}
+        <Box py={4} px={4}>
+          <Flex justify="space-between" align="center" mb={vizBackfillStatus ? 2 : 0}>
+            <Flex align="center" gap={2}>
+              <Text fontSize="sm" fontWeight="medium" fontFamily="mono">
+                Backfill Viz V2 Envelopes
+              </Text>
+              {vizBackfillStatus && (
+                <Icon fontSize="lg" color={vizBackfillStatus.success ? 'accent.teal' : 'accent.danger'}>
+                  {vizBackfillStatus.success ? <LuCircleCheck /> : <LuCircleX />}
+                </Icon>
+              )}
+            </Flex>
+            <Flex gap={2}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleVizBackfill(true)}
+                disabled={isBackfillingViz}
+                fontFamily="mono"
+                aria-label="Dry run Viz V2 backfill"
+              >
+                Dry run
+              </Button>
+              <Button
+                size="sm"
+                variant="solid"
+                colorPalette="teal"
+                onClick={() => handleVizBackfill(false)}
+                disabled={isBackfillingViz}
+                fontFamily="mono"
+                aria-label="Backfill Viz V2 envelopes"
+              >
+                {isBackfillingViz ? (
+                  <>
+                    <Icon fontSize="md" mr={1}>
+                      <LuLoader className="animate-spin" />
+                    </Icon>
+                    Running...
+                  </>
+                ) : (
+                  'Run backfill'
+                )}
+              </Button>
+            </Flex>
+          </Flex>
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={vizBackfillStatus ? 2 : 0}>
+            Derive a V2 viz for every question in this mode from its classic settings — file-level, no queries are
+            executed (the v37 migration does this automatically; this button is the re-runnable pass). Reruns re-derive
+            and overwrite the V2 viz, but hand-authored charts are never downgraded, and classic viz settings are NEVER
+            modified — switching the format default back always remains possible.
+          </Text>
+          {vizBackfillStatus && (
+            <Text fontSize="xs" fontFamily="mono" color={vizBackfillStatus.success ? 'accent.teal' : 'accent.danger'}>
+              {vizBackfillStatus.message}
+            </Text>
+          )}
+          {(vizBackfillStatus?.skipped?.length ?? 0) > 0 && (
+            <Box mt={1}>
+              <Flex
+                as="button"
+                align="center"
+                gap={1}
+                cursor="pointer"
+                onClick={() => setShowVizSkipped(v => !v)}
+                aria-label="Toggle skipped files list"
+                color="fg.muted"
+              >
+                <Icon fontSize="sm">{showVizSkipped ? <LuChevronDown /> : <LuChevronRight />}</Icon>
+                <Text fontSize="xs" fontFamily="mono">
+                  {vizBackfillStatus!.skipped!.length} skipped file{vizBackfillStatus!.skipped!.length === 1 ? '' : 's'}
+                </Text>
+              </Flex>
+              {showVizSkipped && (
+                <VStack align="stretch" gap={1} mt={1} maxH="200px" overflowY="auto" pl={5}>
+                  {vizBackfillStatus!.skipped!.map(s => (
+                    <Text key={s.id} fontSize="xs" fontFamily="mono" color="fg.muted">
+                      <a href={`/f/${s.id}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }} aria-label={`Open skipped file ${s.name}`}>
+                        #{s.id} {s.name}
+                      </a>
+                      {' — '}{s.reason}
+                    </Text>
+                  ))}
+                </VStack>
+              )}
+            </Box>
+          )}
         </Box>
 
         {/* Import */}

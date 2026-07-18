@@ -57,7 +57,7 @@ export const atlasSchema: Record<string, unknown> = topLevel({
 // ── vizSettings stripping (used for per-file-type SKILL prompt schemas) ──────
 const VIZ_NOTE = {
   type: 'object',
-  description: 'vizSettings — see ExecuteQuery.vizSettings for schema',
+  description: 'LEGACY vizSettings — IGNORE; never modify or delete it (rollback path). Author charts in `viz` (the Vega-Lite envelope) instead.',
 };
 
 /**
@@ -87,8 +87,9 @@ function stripVizDeep(node: unknown): void {
 // ── Per-file-type content schema for SKILL prompts ───────────────────────────
 // Each file type's skill embeds the LIVE content schema (below) instead of a hand-typed example,
 // so the prompt the LLM sees can never drift from the actual validation schema. Source of truth =
-// the TypeBox `*Content` defs in atlas-schemas.ts. vizSettings is collapsed to a pointer (the full
-// viz schema lives in the visualizations skill), matching the no-viz tool schema.
+// the TypeBox `*Content` defs in atlas-schemas.ts. vizSettings is collapsed to a pointer (the
+// legacy viz schema is deliberately undocumented — agents author `<viz>` envelopes, taught in the
+// questions skill), matching the no-viz tool schema.
 const CONTENT_DEF_BY_TYPE = {
   question: 'QuestionContent',
   dashboard: 'DashboardContent',

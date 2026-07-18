@@ -342,6 +342,14 @@ export const API = {
         deduplicate: true,  // Prevent accidental double-reset
       },
     },
+    vizBackfill: {
+      url: '/api/viz/backfill',
+      method: 'POST',
+      cache: {
+        ttl: 0,  // No caching for mutations
+        deduplicate: true,  // One backfill at a time
+      },
+    },
   },
 
   // Auth API (for login/register)

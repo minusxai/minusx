@@ -8,7 +8,8 @@ import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
 import type { Tool, ImageContent } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
-import { isImageViz, shouldDropRows } from '@/lib/chart/query-presentation';
+import { shouldDropRows, selectExecuteQueryImage } from '@/lib/chart/query-presentation';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { type BenchmarkAnalystContext, type ConnectionInfo, publicConnectionMetadata } from './types';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 import { searchDatabaseSchema, capSchemaResult } from '@/lib/search/schema-search';
@@ -206,8 +207,11 @@ const EXECUTE_QUERY_BASE_FIELDS = {
   parameters: Type.Optional(Type.Record(Type.String(), Type.Unknown(), {
     description: 'Query parameters as key-value pairs, substituted for `:name` placeholders in the SQL.',
   })),
+  viz: Type.Optional(Type.Unknown({
+    description: 'Optional viz ENVELOPE — a Vega-Lite v6 spec (or recipe/table/pivot source) wrapped as {version:2, source:{kind, …}}; same shape as a question\'s `viz`. When set to a chart (anything but a table/pivot source) you get an IMAGE of the chart (plus a summary) instead of the row data — unless rawData is true. Preferred over `vizSettings`; when both are set the envelope wins.',
+  })),
   vizSettings: Type.Optional(Type.Unknown({
-    description: 'Optional chart settings to visualize the result (same shape as a question\'s vizSettings). When set to a renderable chart, you get an IMAGE of the chart (plus a summary) instead of the row data — unless rawData is true.',
+    description: 'LEGACY (V1) chart settings — prefer `viz` (the Vega-Lite envelope). Same shape as a question\'s vizSettings. When set to a renderable chart, you get an IMAGE of the chart (plus a summary) instead of the row data — unless rawData is true.',
   })),
   rawData: Type.Optional(Type.Boolean({
     description: 'Default false. When vizSettings is a renderable chart, the result is returned as an IMAGE + summary; set rawData true to get the row data instead. Without vizSettings (or a non-renderable viz) rows are always returned.',
@@ -373,12 +377,14 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
     // image is cheap + conveys shape — see isImageViz). `rawData` is additive: it ADDITIONALLY keeps
     // the row data in the summary. Falls back to rows when the image can't be rendered (e.g. headless
     // base with no renderer). Consistent with ReadFiles / EditFile.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const vizSettings = this.parameters.vizSettings as any;
-    const vizType: string | undefined = vizSettings?.type;
+    // The V2 `viz` envelope wins over legacy `vizSettings` (see selectExecuteQueryImage).
+    const imageSource = selectExecuteQueryImage({ viz: this.parameters.viz, vizSettings: this.parameters.vizSettings });
     let imageContent: ImageContent | null = null;
-    if (isImageViz(vizType) && vizSettings) {
-      const jpeg = await this._renderVizJpeg({ columns, types, rows: result.rows, finalQuery: result.finalQuery }, vizSettings);
+    if (imageSource) {
+      const queryResult = { columns, types, rows: result.rows, finalQuery: result.finalQuery };
+      const jpeg = imageSource.kind === 'envelope'
+        ? await this._renderVizEnvelopeJpeg(queryResult, imageSource.viz)
+        : await this._renderVizJpeg(queryResult, imageSource.vizSettings);
       if (jpeg) imageContent = { type: 'image', data: jpeg.toString('base64'), mimeType: 'image/jpeg' };
     }
 
@@ -419,6 +425,17 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
   protected async _renderVizJpeg(
     _queryResult: QueryResult,
     _vizSettings: unknown,
+  ): Promise<Buffer | null> {
+    return null;
+  }
+
+  /**
+   * Render a V2 viz ENVELOPE to a JPEG buffer. Base returns null (no native renderer in
+   * the shared/benchmark build); the server subclass overrides with `renderVizEnvelopeToJpeg`.
+   */
+  protected async _renderVizEnvelopeJpeg(
+    _queryResult: QueryResult,
+    _viz: VizEnvelope,
   ): Promise<Buffer | null> {
     return null;
   }

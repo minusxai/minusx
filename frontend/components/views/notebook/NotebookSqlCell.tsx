@@ -139,7 +139,7 @@ export default function NotebookSqlCell({
   }, [runNonce, run, cell.query]);
 
   const setViz = useCallback(
-    (patch: Partial<VizSettings>) => handleChange({ vizSettings: { ...cell.vizSettings, ...patch } }),
+    (patch: Partial<VizSettings>) => handleChange({ vizSettings: { ...(cell.vizSettings ?? { type: 'table' as const }), ...patch } }),
     [handleChange, cell.vizSettings],
   );
 

@@ -102,25 +102,25 @@ export default function EmbeddedQuestionContainer({
   }, [question]);
 
   // Handlers for visualization changes (updates local state + propagates to parent)
-  const handleVizTypeChange = useCallback((type: QuestionContent['vizSettings']['type']) => {
+  const handleVizTypeChange = useCallback((type: NonNullable<QuestionContent['vizSettings']>['type']) => {
     const newQuestion = {
       ...localQuestion,
-      vizSettings: { ...localQuestion.vizSettings, type }
+      vizSettings: { ...(localQuestion.vizSettings ?? { type: 'table' as const }), type }
     };
     setLocalQuestion(newQuestion);
     if (onChange) {
-      onChange({ vizSettings: { ...localQuestion.vizSettings, type } });
+      onChange({ vizSettings: { ...(localQuestion.vizSettings ?? { type: 'table' as const }), type } });
     }
   }, [localQuestion, onChange]);
 
   const handleAxisChange = useCallback((xCols: string[], yCols: string[]) => {
     const newQuestion = {
       ...localQuestion,
-      vizSettings: { ...localQuestion.vizSettings, xCols, yCols }
+      vizSettings: { ...(localQuestion.vizSettings ?? { type: 'table' as const }), xCols, yCols }
     };
     setLocalQuestion(newQuestion);
     if (onChange) {
-      onChange({ vizSettings: { ...localQuestion.vizSettings, xCols, yCols } });
+      onChange({ vizSettings: { ...(localQuestion.vizSettings ?? { type: 'table' as const }), xCols, yCols } });
     }
   }, [localQuestion, onChange]);
 

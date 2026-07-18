@@ -18,7 +18,10 @@ export function getTemplateDefaults(type: FileType, options?: { query?: string }
       return {
         description: '',
         query: options?.query || '',
-        vizSettings: { type: 'table' },
+        // Viz Arch V2: new questions are born viz-only — an authoritative `viz` envelope
+        // (a DOM-tier table). `vizSettings` is optional (legacy rollback field, never
+        // authored); when absent, the classic pipeline falls back to a table at render time.
+        viz: { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } },
         parameters: [],
         connection_name: '',
       } as QuestionContent;

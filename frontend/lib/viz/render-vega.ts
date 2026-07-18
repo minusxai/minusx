@@ -357,9 +357,69 @@ function injectLegendPlan(vegaSpec: Record<string, unknown>, plan: LegendWrapPla
   }
 }
 
+/**
+ * Adaptive x-axis label angle (house default). Vega-Lite's discrete-axis default
+ * is labelAngle -90 — every category chart rendered vertical labels. Like the
+ * legend wrap, the angle is planned HERE in plain JS from the actual labels and
+ * the true container width (mono font → label widths are exact), then baked in
+ * before compile:
+ *   0 (horizontal) when the widest label fits its band step,
+ *   -45 (slanted) when crowded but the steps still give slant room,
+ *   null for ultra-dense axes (≲16px steps, e.g. heatmap week columns) — leave
+ *   Vega-Lite's vertical default, the only orientation that survives that density.
+ * Authored settings win: an explicit x-axis labelAngle (or axis: null) → null.
+ */
+const XLABEL_CHAR_PX = 6.6;     // JetBrains Mono advance width at the 11px label size
+const XLABEL_PADDING_PX = 10;   // breathing room between neighboring horizontal labels
+const XLABEL_MIN_SLANT_STEP_PX = 16; // below this even -45 labels collide
+const XLABEL_Y_GUTTER_PX = 55;  // y-axis labels + title the plot area can't use
+const XLABEL_SCAN_CAP = 400;    // distinct-label scan bound (dense axes exit via null anyway)
+
+export function computeXLabelAngle(
+  spec: Record<string, unknown>,
+  rows: Record<string, unknown>[],
+  containerWidth: number,
+): number | null {
+  const unit = annotationSplit(spec)?.unit ?? null;
+  if (!unit) return null; // composed spec — not ours to touch
+  const x = (unit.encoding as Record<string, Record<string, unknown>> | undefined)?.x;
+  if (!x || typeof x.field !== 'string') return null;
+  if (x.type !== 'nominal' && x.type !== 'ordinal') return null; // continuous axes are horizontal already
+  if (x.axis === null) return null; // axis disabled by the author
+  const axis = x.axis as Record<string, unknown> | undefined;
+  if (axis && 'labelAngle' in axis) return null; // authored angle wins
+
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const v = row[x.field];
+    if (v != null) seen.add(String(v));
+    if (seen.size > XLABEL_SCAN_CAP) break;
+  }
+  if (seen.size === 0) return null;
+
+  const available = Math.max(containerWidth - (hasYField(unit) ? XLABEL_Y_GUTTER_PX : 0), 60);
+  const step = available / seen.size;
+  const maxLabelPx = Math.max(...[...seen].map(l => l.length)) * XLABEL_CHAR_PX;
+  if (maxLabelPx + XLABEL_PADDING_PX <= step) return 0;
+  if (step >= XLABEL_MIN_SLANT_STEP_PX) return -45;
+  return null;
+}
+
+/** Bake a planned x label angle onto the (unit or annotated-base) x encoding. */
+function injectXLabelAngle(prepared: Record<string, unknown>, angle: number): void {
+  const unit = annotationSplit(prepared)?.unit ?? null;
+  const x = (unit?.encoding as Record<string, Record<string, unknown>> | undefined)?.x;
+  if (!x || x.axis === null) return;
+  const axis = (x.axis ?? {}) as Record<string, unknown>;
+  if ('labelAngle' in axis) return;
+  x.axis = { ...axis, labelAngle: angle };
+}
+
 export interface CompileVegaLiteOptions {
   /** Planned legend wrap (computeLegendPlan) — null/undefined = single row. */
   legendPlan?: LegendWrapPlan | null;
+  /** Planned x label angle (computeXLabelAngle) — null/undefined = VL defaults. */
+  xLabelAngle?: number | null;
 }
 
 export function compileVegaLite(
@@ -371,6 +431,7 @@ export function compileVegaLite(
   // mutate their inputs (normalization, Symbol(vega_id) tagging). Never hand them
   // shared state — deep-clone here (specs are small).
   const prepared = prepareVegaLiteSpec(JSON.parse(JSON.stringify(spec)) as Record<string, unknown>);
+  if (options?.xLabelAngle != null) injectXLabelAngle(prepared, options.xLabelAngle);
   // Responsive container fill (`width/height: 'container'` is only valid for
   // single/layer specs). Without an explicit width, VL STEP-SIZES discrete axes
   // (band-step × category count) — a 3-category bar renders ~60px wide instead of
@@ -483,7 +544,10 @@ export async function renderEnvelopeToCanvas(
 ): Promise<HTMLCanvasElement> {
   const resolved = resolveEnvelopeSpec(envelope);
   if (!resolved.ok) throw new Error(resolved.error);
-  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode);
+  const xLabelAngle = resolved.engine === 'vega-lite'
+    ? computeXLabelAngle(resolved.spec, rows, opts.width ?? 640)
+    : null;
+  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { xLabelAngle });
   const view = createVegaView(vegaSpec, rows, {
     renderer: 'none', parserConfig, width: opts.width, height: opts.height,
   });
@@ -505,7 +569,10 @@ export async function renderEnvelopeToSvg(
 ): Promise<string> {
   const resolved = resolveEnvelopeSpec(envelope);
   if (!resolved.ok) throw new Error(resolved.error);
-  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode);
+  const xLabelAngle = resolved.engine === 'vega-lite'
+    ? computeXLabelAngle(resolved.spec, rows, size?.width ?? 640)
+    : null;
+  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { xLabelAngle });
   const view = createVegaView(vegaSpec, rows, { renderer: 'none', parserConfig, ...size });
   try {
     await injectNamedAssets(view, resolved.assets);

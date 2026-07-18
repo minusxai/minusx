@@ -29,23 +29,12 @@
  * Remaining gaps, deferred with the ECharts retirement: dualAxis on non-combo types,
  * showDataLabels, x-axis scale/bounds, and style knobs on recipe types.
  */
-import type { VizSettings as AtlasVizSettings, VizEnvelope, ColumnFormatConfig } from '@/lib/validation/atlas-schemas';
+import type { VizSettings, VizEnvelope, ColumnFormatConfig } from '@/lib/validation/atlas-schemas';
 import { VIZ_GRAMMAR_VEGA_LITE } from '@/lib/validation/atlas-schemas';
 import type { VizColumnKind, VizResultColumn } from './types';
 import { addYField, setChannelField, setVizType, isEnvelopeImageViz, setStacked, setYLogScale, setYBounds, addReferenceLine, type SpecVizType } from './encoding-edit';
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme';
 import { toVizColumns } from './query-data';
-
-/**
- * `choropleth`/`point_map` join the authorable VIZ_TYPES union only alongside the
- * agent-skill documentation for them (the bundled-prompts test binds the two); the
- * converter accepts them ahead of that so the geo recipes are exercised end-to-end.
- * Collapse back to the plain atlas `VizSettings` once the union carries both.
- */
-export type ConvertibleVizSettings = Omit<AtlasVizSettings, 'type'> & {
-  type: AtlasVizSettings['type'] | 'choropleth' | 'point_map';
-};
-type VizSettings = ConvertibleVizSettings;
 
 const KIND_TO_VL_TYPE: Record<VizColumnKind, string> = {
   quantitative: 'quantitative',
@@ -242,6 +231,50 @@ function applyLegacyStyle(envelope: VizEnvelope, vizSettings: VizSettings): VizE
   return env;
 }
 
+// ── Static conversion (no result columns — pure/file-level) ─────────────────────────
+//
+// For contexts where the query CANNOT run (the v37 data migration, the executeless
+// backfill): column kinds come from a CONSERVATIVE name heuristic. Only near-certain
+// date names go temporal — an ambiguous name ('month', 'year', 'week') stays nominal,
+// because typing label strings ('Jan') as temporal BREAKS the vega axis while nominal
+// merely renders plainer. Anything imperfect self-heals: the first V2-panel edit (and
+// the render bridge for un-upgraded files) re-derives with live result columns.
+const TEMPORAL_COL_NAME = /(^|_)(date|datetime|timestamp)(_|$)|_at$|_time$|^time$/i;
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** True when the QUERY TEXT proves the column is a date — `DATE_TRUNC(…) AS col`,
+ *  `…::date AS col`, `CAST(… AS DATE/TIMESTAMP) AS col`. Complements the name
+ *  heuristic for ambiguous names like `week`. */
+function queryProvesTemporal(query: string, col: string): boolean {
+  const c = escapeRegExp(col);
+  return (
+    new RegExp(`(date_trunc|date_bin|time_bucket)\\s*\\([^)]*\\)\\s+as\\s+"?${c}"?\\b`, 'i').test(query) ||
+    new RegExp(`::\\s*(date|timestamp\\w*)\\s+as\\s+"?${c}"?\\b`, 'i').test(query) ||
+    new RegExp(`cast\\s*\\([^)]*as\\s+(date|timestamp\\w*)\\s*\\)\\s+as\\s+"?${c}"?\\b`, 'i').test(query)
+  );
+}
+
+/** Heuristic column kinds for every column a VizSettings references. */
+export function heuristicVizColumns(vizSettings: VizSettings, query?: string): VizResultColumn[] {
+  const names = [
+    ...(vizSettings.xCols ?? []),
+    ...(vizSettings.yCols ?? []),
+    ...(vizSettings.yRightCols ?? []),
+  ].filter((c): c is string => typeof c === 'string' && c.length > 0);
+  return [...new Set(names)].map(name => ({
+    name,
+    kind: TEMPORAL_COL_NAME.test(name) || (query != null && queryProvesTemporal(query, name))
+      ? 'temporal'
+      : 'nominal',
+  }));
+}
+
+/** File-level converter: like {@link vizSettingsToEnvelope} but with heuristic kinds. */
+export function vizSettingsToEnvelopeStatic(vizSettings: VizSettings, query?: string): VizEnvelope {
+  return vizSettingsToEnvelope(vizSettings, heuristicVizColumns(vizSettings, query));
+}
+
 /**
  * V1 → V2 render bridge (§21 item 1). On EVERY surface — dashboards, notebook cells,
  * stories, embeds, and the editable question page — a legacy question with no `viz`
@@ -348,10 +381,13 @@ export function vizSettingsToEnvelope(
     }
 
     case 'combo': {
+      // V1 dual-axis semantics: yCols → bars (left axis), yRightCols → line (right).
+      // A combo defined with two yCols and no right axis falls back to yCols[1].
       const measures = yCols.filter(nonEmpty);
+      const rightMeasure = (vizSettings.yRightCols ?? []).find(nonEmpty);
       return recipeEnvelope(
         'minusx/combo@1',
-        compact({ x: first(xCols), bar: measures[0], line: measures[1] ?? measures[0] }) as Record<string, string>,
+        compact({ x: first(xCols), bar: measures[0], line: rightMeasure ?? measures[1] ?? measures[0] }) as Record<string, string>,
         null,
         columnFormats,
       );

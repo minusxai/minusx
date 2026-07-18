@@ -128,6 +128,34 @@ export class CreateFile extends MXTool<typeof CreateFileParams, RemoteAnalystCon
   }
 }
 
+// ─── DetachViz ───────────────────────────────────────────────────────────────
+// Schema MUST match `registerFrontendTool('DetachViz', ...)` in tool-handlers.ts.
+const DetachVizParams = Type.Object({
+  fileId: Type.Number({ description: 'The question file whose recipe chart to detach.' }),
+});
+
+const DETACH_VIZ_DESCRIPTION = `Detach a question's RECIPE chart into its FULL editable spec, so you can then customize ANYTHING the recipe's params/bindings can't express — a specific mark color, dashed strokes, an extra layer, a per-point label, a custom scale, moving the legend inside the plot.
+
+WHEN TO USE — only as the escape hatch, after params/bindings can't do it:
+1. If a recipe PARAM expresses the ask (colorScale, markColor, mapName, center/zoom, basemap, barOpacity…) → just EditFile the param. Do NOT detach.
+2. If a BINDING expresses it (add a size column for bubbles, destination coords for flows) → rebind. Do NOT detach.
+3. Only if NEITHER can → DetachViz, then EditFile the spec.
+Detaching turns the chart into a \`custom\` viz: it drops the friendly param controls AND future recipe upgrades (until re-attached), so prefer params whenever one fits.
+
+HOW IT WORKS: native-engine recipes (radar/trend/single-value/choropleth/point-map) detach to a native Vega spec (\`kind: 'vega'\`); Vega-Lite recipes (funnel/waterfall/combo) to \`kind: 'vega-lite'\`. The response returns the file's CURRENT markup with the full spec inlined — build your EditFile \`oldMatch\` from that \`currentMarkup\` (the app-state markup is now stale). The original recipe is kept in \`detachedFrom\`, so it's REVERSIBLE ("Reset to recipe"). No-op if the chart is already a raw spec or not a recipe.`;
+
+export class DetachViz extends MXTool<typeof DetachVizParams, RemoteAnalystContext> {
+  static readonly schema: Tool<typeof DetachVizParams> = {
+    name: 'DetachViz',
+    description: DETACH_VIZ_DESCRIPTION,
+    parameters: DetachVizParams,
+  };
+
+  async run(): Promise<ToolResponse> {
+    throw new UserInputException(this.id);
+  }
+}
+
 // SetJsx / EditJsx were removed in File Architecture v2 — the agent edits a document's
 // jsx body through EditFile (the markup's <jsx> block), same as any other file.
 

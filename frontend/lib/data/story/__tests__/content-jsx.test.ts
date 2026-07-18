@@ -131,6 +131,37 @@ describe('content ⇄ jsx — NotebookCell union (sql vs text cell discriminatio
       expect((v.cells[1] as { query?: string }).query).toBeUndefined();
     }
   });
+
+  it('round-trips a SQL cell carrying a V2 `viz` envelope (Viz Arch V2 — cells author V2 like questions)', () => {
+    const viz = {
+      version: 2,
+      source: {
+        kind: 'vega-lite',
+        grammar: 'vega-lite@6',
+        spec: {
+          mark: { type: 'bar' },
+          encoding: {
+            x: { field: 'month', type: 'nominal' },
+            y: { field: 'revenue', type: 'quantitative', aggregate: 'sum' },
+          },
+        },
+      },
+    };
+    const value = {
+      description: 'nb',
+      cells: [
+        { type: 'sql', id: 'c1', name: null, query: 'SELECT 1', vizSettings: { type: 'table' }, viz, parameters: [], parameterValues: {}, connection_name: 'static', references: [] },
+      ],
+    };
+    const { back } = roundtrip(value, nbSchema);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      const cell = (back.value as typeof value).cells[0] as { viz?: typeof viz; vizSettings: unknown };
+      expect(cell.viz).toEqual(viz);
+      // vizSettings coexists untouched — the V1 rollback path, exactly as on questions.
+      expect(cell.vizSettings).toEqual({ type: 'table' });
+    }
+  });
 });
 
 describe('content ⇄ jsx — schemaless config (type="…")', () => {

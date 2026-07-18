@@ -9,7 +9,7 @@
  * tooltip-suppression ordering in VegaChart — covered by vega-chart-render.ui.test.tsx.)
  */
 import { describe, it, expect } from 'vitest';
-import { injectGuideMark } from '../guide-mark';
+import { injectGuideMark, GUIDE_WIDTH, GUIDE_OPACITY } from '../guide-mark';
 
 const compiledBar = () => ({
   marks: [{ type: 'rect', from: { data: 'main' }, encode: {} }],
@@ -31,6 +31,26 @@ describe('injectGuideMark', () => {
     expect(names).toContain('mxGuidePx');
     expect(names).toContain('mxGuideOn');
     expect(names).toContain('mxGuideH');
+  });
+
+  it('declares mxGuideW / mxGuideOpacity signals resting at the thin-line defaults', () => {
+    const spec = compiledBar();
+    injectGuideMark(spec);
+    const w = spec.signals.find((s: { name: string }) => s.name === 'mxGuideW') as { value: number };
+    const op = spec.signals.find((s: { name: string }) => s.name === 'mxGuideOpacity') as { value: number };
+    // Rests at the thin-line width/opacity; VegaChart widens it to the band on hover for bars.
+    expect(w.value).toBe(GUIDE_WIDTH);
+    expect(op.value).toBe(GUIDE_OPACITY);
+  });
+
+  it('drives the rule width + opacity from the signals (so the guide can grow to a band)', () => {
+    const spec = compiledBar();
+    injectGuideMark(spec);
+    const rule = spec.marks[0] as unknown as {
+      encode: { update: { strokeWidth: { signal: string }; opacity: { signal: string } } };
+    };
+    expect(rule.encode.update.strokeWidth.signal).toBe('mxGuideW');
+    expect(rule.encode.update.opacity.signal).toBe('mxGuideOn * mxGuideOpacity');
   });
 
   it('rests mxGuideH at 0 so the guide adds no bounds to the autosize:fit solve', () => {
