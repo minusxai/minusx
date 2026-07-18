@@ -15,7 +15,7 @@ describe('extractInlineFileQueries — inline queries per file type', () => {
 
   it('story → inline <Question> and inline <Number> embeds', () => {
     const html =
-      inlineQuestionToPlaceholder({ query: 'SELECT a FROM t', connection: 'duck', vizSettings: { type: 'table', yCols: ['a'] } }) +
+      inlineQuestionToPlaceholder({ query: 'SELECT a FROM t', connection: 'duck' }) +
       numberToPlaceholder({ query: 'SELECT SUM(x) AS m FROM t', connection: 'pg', col: 'm' });
     const out = extractInlineFileQueries('story', { story: html });
     expect(out).toEqual(expect.arrayContaining([

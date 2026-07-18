@@ -161,7 +161,7 @@ describe('ReadFiles', () => {
 
   it('runs a story\'s INLINE questions and includes their query results (live numbers for the agent)', async () => {
     const inlineQuery = 'SELECT 42 AS answer';
-    const body = `<div class="story"><h1>KPI</h1>${inlineQuestionToPlaceholder({ query: inlineQuery, connection: 'test', vizSettings: { type: 'single_value', yCols: ['answer'] } })}</div>`;
+    const body = `<div class="story"><h1>KPI</h1>${inlineQuestionToPlaceholder({ query: inlineQuery, connection: 'test' })}</div>`;
     const story = await FilesAPI.createFile(
       { name: 'inline-kpi-story', path: `${TEST_FOLDER}/inline-kpi-story`, type: 'story', content: { description: 'x', story: body } as unknown as DocumentContent },
       ADMIN,

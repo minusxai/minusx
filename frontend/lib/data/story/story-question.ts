@@ -12,6 +12,7 @@
  * Pure (client + server safe).
  */
 import type { QuestionParameter, VizSettings, QuestionContent, VizEnvelope, SpreadsheetSource } from '@/lib/validation/atlas-schemas';
+import { vizSettingsToEnvelopeStatic } from '@/lib/viz/from-vizsettings';
 import { escAttr, escTemplate, serializeJsonAttr, parseJsonAttr } from './html-attr';
 
 /** An inline question embedded directly in a story body (no saved file). Its data comes from
@@ -21,9 +22,9 @@ export interface InlineQuestionEmbed {
   query?: string;
   /** connection name the query runs against ('' if none) — maps to QuestionContent.connection_name. */
   connection: string;
-  /** LEGACY partial viz settings; defaults (table) are filled when projected to a QuestionContent. */
-  vizSettings?: Partial<VizSettings>;
-  /** Viz V2 envelope — AUTHORITATIVE when present (vizSettings is then ignored, like on a saved question). */
+  /** Viz V2 envelope — the ONLY viz representation an embed carries. Legacy VizSettings inputs
+   *  (old story bodies, old-style viz attrs) are auto-upgraded to an envelope at the parse
+   *  boundary; omitted → renders as a default table. */
   viz?: VizEnvelope;
   /** direct tabular data (the spreadsheet editor's source) — rendered without executing any SQL. */
   spreadsheet?: SpreadsheetSource;
@@ -32,11 +33,32 @@ export interface InlineQuestionEmbed {
   height?: string;
 }
 
+/** The projection default for a viz-less embed — identical to a new question file's default
+ *  (template-defaults.ts). Never persisted into the story body (see questionContentToInlineEmbed). */
+const DEFAULT_TABLE_ENVELOPE: VizEnvelope = {
+  version: 2,
+  source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null },
+};
+const isDefaultTableEnvelope = (v: VizEnvelope): boolean =>
+  JSON.stringify(v) === JSON.stringify(DEFAULT_TABLE_ENVELOPE);
+
 /** Narrow a jsx/JSON `viz` attribute value to a Viz V2 envelope (vs a legacy Partial<VizSettings>). */
 export function vizEnvelopeFromAttr(v: unknown): VizEnvelope | undefined {
   if (v && typeof v === 'object' && !Array.isArray(v)
     && (v as { version?: unknown }).version === 2 && !!(v as { source?: unknown }).source) {
     return v as VizEnvelope;
+  }
+  return undefined;
+}
+
+/** An inline embed's viz input → a V2 envelope. Envelopes pass through; a legacy-shaped
+ *  VizSettings object (old story bodies / old agent habits) is AUTO-UPGRADED via the shipped
+ *  V1→V2 converter, so the embed model only ever carries envelopes. */
+function inlineVizFromValue(v: unknown, query?: string): VizEnvelope | undefined {
+  const env = vizEnvelopeFromAttr(v);
+  if (env) return env;
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    return vizSettingsToEnvelopeStatic({ type: 'table', ...(v as Partial<VizSettings>) } as VizSettings, query);
   }
   return undefined;
 }
@@ -71,9 +93,8 @@ export function inlineQuestionFromJsxAttrs(attrs: Record<string, unknown>): Inli
   const e: InlineQuestionEmbed = { connection: typeof attrs.connection === 'string' ? attrs.connection : '' };
   if (raw) e.query = normalizeInlineQuery(raw);
   if (spreadsheet) e.spreadsheet = spreadsheet;
-  const env = vizEnvelopeFromAttr(attrs.viz);
+  const env = inlineVizFromValue(attrs.viz, e.query);
   if (env) e.viz = env;
-  else if (attrs.viz && typeof attrs.viz === 'object' && !Array.isArray(attrs.viz)) e.vizSettings = attrs.viz as Partial<VizSettings>;
   if (Array.isArray(attrs.params)) e.parameters = attrs.params as QuestionParameter[];
   if (typeof attrs.height === 'string' || typeof attrs.height === 'number') e.height = String(attrs.height);
   return e;
@@ -84,7 +105,6 @@ export function inlineQuestionToPlaceholder(e: InlineQuestionEmbed): string {
   const payload: Record<string, unknown> = { connection_name: e.connection };
   if (e.query) payload.query = e.query;
   if (e.spreadsheet) payload.spreadsheet = e.spreadsheet;
-  if (e.vizSettings) payload.vizSettings = e.vizSettings;
   if (e.viz) payload.viz = e.viz;
   if (e.parameters) payload.parameters = e.parameters;
   if (e.height) payload.height = e.height;
@@ -105,8 +125,10 @@ function payloadToEmbed(payload: Record<string, unknown> | null | undefined): In
   // (authored before the fix) still parses + runs correctly.
   if (rawQuery) e.query = normalizeInlineQuery(rawQuery);
   if (spreadsheet) e.spreadsheet = spreadsheet;
-  if (payload?.vizSettings) e.vizSettings = payload.vizSettings as Partial<VizSettings>;
-  const env = vizEnvelopeFromAttr(payload?.viz);
+  // `viz` (envelope) wins; a stored LEGACY `vizSettings` payload (pre-envelope story bodies)
+  // is auto-upgraded so existing stories keep their charts. The upgrade persists on the next
+  // save round-trip (the placeholder only ever writes `viz`).
+  const env = vizEnvelopeFromAttr(payload?.viz) ?? (payload?.vizSettings ? inlineVizFromValue(payload.vizSettings, e.query) : undefined);
   if (env) e.viz = env;
   if (payload?.parameters) e.parameters = payload.parameters as QuestionParameter[];
   if (typeof payload?.height === 'string') e.height = payload.height;
@@ -178,13 +200,15 @@ export function updateInlineQuestionInHtml(html: string, index: number, embed: I
 }
 
 /** Reverse of {@link inlineEmbedToQuestionContent}: an edited QuestionContent (from the modal's
- *  throwaway draft) back to the inline embed stored in the story body. */
+ *  throwaway draft) back to the inline embed stored in the story body. A legacy-only content viz
+ *  (the editor ran with Viz V2 off) is upgraded to an envelope; the projection's default table
+ *  envelope is omitted so a viz-less embed stays viz-less in the markup. */
 export function questionContentToInlineEmbed(c: QuestionContent, height?: string): InlineQuestionEmbed {
   const e: InlineQuestionEmbed = { connection: c.connection_name ?? '' };
   if (c.query) e.query = c.query;
   if (c.spreadsheet) e.spreadsheet = c.spreadsheet;
-  if (c.viz) e.viz = c.viz;
-  else if (c.vizSettings) e.vizSettings = c.vizSettings;
+  const env = c.viz ?? (c.vizSettings ? inlineVizFromValue(c.vizSettings, c.query) : undefined);
+  if (env && !isDefaultTableEnvelope(env)) e.viz = env;
   if (c.parameters?.length) e.parameters = c.parameters;
   if (height) e.height = height;
   return e;
@@ -241,7 +265,6 @@ export function inlineQuestionToJsx(e: InlineQuestionEmbed): string {
   if (e.spreadsheet) a.push(`spreadsheet={${JSON.stringify(e.spreadsheet)}}`);
   a.push(`connection="${escAttr(e.connection)}"`);
   if (e.viz) a.push(`viz={${JSON.stringify(e.viz)}}`);
-  else if (e.vizSettings) a.push(`viz={${JSON.stringify(e.vizSettings)}}`);
   if (e.parameters) a.push(`params={${JSON.stringify(e.parameters)}}`);
   if (e.height) a.push(`height="${escAttr(e.height)}"`);
   return `<Question ${a.join(' ')} />`;
@@ -268,15 +291,15 @@ export function embeddedQuestionCount(content: unknown, type?: string | null): n
 }
 
 /** Project an inline embed to a full QuestionContent the renderer/query stack consumes.
- *  A V2 `viz` envelope is authoritative (legacy vizSettings suppressed, like on saved files);
- *  a `spreadsheet` renders directly (no SQL execution, query stays ''). */
+ *  The `viz` envelope is authoritative (a viz-less embed gets the default table envelope,
+ *  matching a new question file); a `spreadsheet` renders directly (no SQL, query stays ''). */
 export function inlineEmbedToQuestionContent(e: InlineQuestionEmbed): QuestionContent {
   return {
     description: null,
     query: e.query ?? '',
     connection_name: e.connection,
-    vizSettings: e.viz ? null : ({ type: 'table', ...(e.vizSettings ?? {}) } as VizSettings),
-    viz: e.viz ?? null,
+    vizSettings: null,
+    viz: e.viz ?? DEFAULT_TABLE_ENVELOPE,
     spreadsheet: e.spreadsheet ?? null,
     parameters: e.parameters ?? [],
     parameterValues: null,

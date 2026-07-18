@@ -15,6 +15,7 @@ import StoryEmbeds, {
 import StorySelectionPopover from '@/components/views/story/StorySelectionPopover';
 import { paramFromPlaceholderEl, type StoryParam } from '@/lib/data/story/story-params';
 import { inlineQuestionFromEl, inlineEmbedToQuestionContent, savedQuestionVizFromEl } from '@/lib/data/story/story-question';
+import { envelopeVizType } from '@/lib/viz/viz-templates';
 import { numberFromEl } from '@/lib/data/story/story-number';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 
@@ -224,7 +225,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     doc.querySelectorAll<HTMLElement>('[data-question-inline]').forEach(el => {
       const embed = inlineQuestionFromEl(el);
       if (!embed) return;
-      const isSingleValue = embed.vizSettings?.type === 'single_value';
+      const isSingleValue = envelopeVizType(embed.viz) === 'single_value';
       sizeEmbedEl(el, isSingleValue ? SINGLE_VALUE_MIN_H : MIN_CHART_H, isSingleValue ? SINGLE_VALUE_DEFAULT_H : DEFAULT_CHART_H);
       inlineFound.push({ el, content: inlineEmbedToQuestionContent(embed), bare: isSingleValue, embed });
     });

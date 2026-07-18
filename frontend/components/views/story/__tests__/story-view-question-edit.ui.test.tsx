@@ -109,6 +109,7 @@ describe('StoryView — question edit write-back', () => {
     );
     expect(h.staged).toHaveLength(1);
     const embeds = extractInlineQuestions(h.staged[0].story);
-    expect(embeds).toEqual([{ query: 'SELECT 2', connection: 'duckdb', vizSettings: { type: 'table' }, height: '250px' }]);
+    // the projection's default table envelope is omitted on the way back — viz-less stays viz-less
+    expect(embeds).toEqual([{ query: 'SELECT 2', connection: 'duckdb', height: '250px' }]);
   });
 });

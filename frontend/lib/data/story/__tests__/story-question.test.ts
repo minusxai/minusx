@@ -9,11 +9,17 @@ import {
   type InlineQuestionEmbed,
 } from '../story-question';
 import type { VizEnvelope, SpreadsheetSource, VizSettings, QuestionContent } from '@/lib/validation/atlas-schemas';
+import { serializeJsonAttr } from '../html-attr';
+
+const svEnvelope = {
+  version: 2,
+  source: { kind: 'recipe', recipe: 'minusx/single-value@1', bindings: { value: 'mrr' }, params: { label: 'MRR' }, columnFormats: null },
+} as VizEnvelope;
 
 const embed: InlineQuestionEmbed = {
   query: 'SELECT SUM(mrr) AS mrr\nFROM metrics\nWHERE month = :month AND mrr > 0',
   connection: 'duckdb',
-  vizSettings: { type: 'single_value', yCols: ['mrr'], singleValueConfig: { prefix: '$', suffix: ' MRR' } },
+  viz: svEnvelope,
   parameters: [{ name: 'month', type: 'date', label: null, source: null }],
   height: '200px',
 };
@@ -22,7 +28,7 @@ describe('story-question — jsx attrs ⇄ inline embed', () => {
   it('builds an embed from <Question query=… connection=… viz=… params=…> attrs', () => {
     const e = inlineQuestionFromJsxAttrs({
       query: embed.query, connection: 'duckdb',
-      viz: embed.vizSettings, params: embed.parameters, height: '200px',
+      viz: embed.viz, params: embed.parameters, height: '200px',
     });
     expect(e).toEqual(embed);
   });
@@ -74,9 +80,45 @@ describe('story-question — placeholder → <Question/> jsx (agent view)', () =
     // raw multi-line SQL kept in a template literal (no \n escaping)
     expect(jsx).toContain('query={`SELECT SUM(mrr) AS mrr\nFROM metrics');
     expect(jsx).toContain('connection="duckdb"');
-    expect(jsx).toContain('"type":"single_value"');
+    expect(jsx).toContain('"recipe":"minusx/single-value@1"');
     // and inlineQuestionToJsx produces the same jsx
     expect(inlineQuestionToJsx(embed)).toBe(jsx);
+  });
+});
+
+describe('story-question — legacy VizSettings inputs are AUTO-UPGRADED to V2 envelopes', () => {
+  it('a legacy-shaped viz attr converts to an envelope at parse (the embed model is envelope-only)', () => {
+    const e = inlineQuestionFromJsxAttrs({
+      query: 'SELECT month, revenue FROM t', connection: 'duckdb',
+      viz: { type: 'single_value', yCols: ['revenue'], singleValueConfig: { label: 'Revenue' } },
+    });
+    expect(e!.viz?.version).toBe(2);
+    expect(e!.viz?.source).toMatchObject({ kind: 'recipe', recipe: 'minusx/single-value@1', bindings: { value: 'revenue' } });
+    expect((e as unknown as Record<string, unknown>).vizSettings).toBeUndefined();
+  });
+
+  it('a STORED legacy payload (existing story bodies) converts on read', () => {
+    const legacyPayload = {
+      query: 'SELECT month, revenue FROM t', connection_name: 'duckdb',
+      vizSettings: { type: 'bar', xCols: ['month'], yCols: ['revenue'] },
+    };
+    const html = `<div data-question-inline="${serializeJsonAttr(legacyPayload)}" style="width:100%;height:430px"></div>`;
+    const [e] = extractInlineQuestions(html);
+    expect(e.viz?.version).toBe(2);
+    expect(e.viz?.source.kind).toBe('vega-lite');
+    expect((e as unknown as Record<string, unknown>).vizSettings).toBeUndefined();
+  });
+
+  it('questionContentToInlineEmbed converts a legacy-only content viz to an envelope', () => {
+    const c = {
+      description: null, query: 'SELECT month, revenue FROM t', connection_name: 'duckdb',
+      vizSettings: { type: 'bar', xCols: ['month'], yCols: ['revenue'] } as VizSettings,
+      viz: null, parameters: [], parameterValues: null,
+    } as QuestionContent;
+    const back = questionContentToInlineEmbed(c);
+    expect(back.viz?.version).toBe(2);
+    expect(back.viz?.source.kind).toBe('vega-lite');
+    expect((back as unknown as Record<string, unknown>).vizSettings).toBeUndefined();
   });
 });
 
@@ -92,16 +134,9 @@ const sheet: SpreadsheetSource = {
 };
 
 describe('story-question — V2 viz envelope on inline embeds', () => {
-  it('a viz attr shaped like an envelope ({version:2, source}) lands on embed.viz, not vizSettings', () => {
+  it('a viz attr shaped like an envelope ({version:2, source}) lands on embed.viz verbatim', () => {
     const e = inlineQuestionFromJsxAttrs({ query: 'SELECT 1', connection: 'duckdb', viz: envelope });
     expect(e).toEqual({ query: 'SELECT 1', connection: 'duckdb', viz: envelope });
-    expect(e!.vizSettings).toBeUndefined();
-  });
-
-  it('a legacy-shaped viz attr still lands on vizSettings (back-compat)', () => {
-    const e = inlineQuestionFromJsxAttrs({ query: 'SELECT 1', viz: { type: 'bar', yCols: ['x'] } });
-    expect(e!.vizSettings).toEqual({ type: 'bar', yCols: ['x'] });
-    expect(e!.viz).toBeUndefined();
   });
 
   it('envelope survives the placeholder round-trip and the jsx round-trip', () => {
@@ -245,24 +280,27 @@ describe('story-question — modal write-back transforms (story HTML in, story H
     const content = inlineEmbedToQuestionContent({ query: 'SELECT 1', connection: 'duckdb', viz: envelope, height: '250px' });
     const back = questionContentToInlineEmbed(content, '250px');
     expect(back).toEqual({ query: 'SELECT 1', connection: 'duckdb', viz: envelope, height: '250px' });
-    // spreadsheet variant
+    // spreadsheet variant — the projection's DEFAULT table envelope is omitted on the way
+    // back, so a viz-less embed stays viz-less in the markup
     const sheetContent = inlineEmbedToQuestionContent({ connection: '', spreadsheet: sheet });
-    expect(questionContentToInlineEmbed(sheetContent)).toEqual({ connection: '', spreadsheet: sheet, vizSettings: { type: 'table' } });
+    expect(questionContentToInlineEmbed(sheetContent)).toEqual({ connection: '', spreadsheet: sheet });
   });
 });
 
 describe('story-question — embed → QuestionContent projection (for rendering)', () => {
-  it('maps connection→connection_name, viz→vizSettings, params→parameters; fills defaults', () => {
+  it('maps connection→connection_name, viz→viz (authoritative), params→parameters', () => {
     const c = inlineEmbedToQuestionContent(embed);
     expect(c.query).toBe(embed.query);
     expect(c.connection_name).toBe('duckdb');
-    expect(c.vizSettings?.type).toBe('single_value');
+    expect(c.viz).toEqual(svEnvelope);
+    expect(c.vizSettings ?? null).toBeNull();
     expect(c.parameters).toEqual(embed.parameters);
   });
 
-  it('a bare inline question still yields a valid QuestionContent (table viz default)', () => {
+  it('a bare inline question still yields a valid QuestionContent (V2 table envelope default)', () => {
     const c = inlineEmbedToQuestionContent({ query: 'SELECT 1', connection: '' });
-    expect(c.vizSettings?.type).toBe('table');
+    expect(c.viz).toEqual({ version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } });
+    expect(c.vizSettings ?? null).toBeNull();
     expect(c.connection_name).toBe('');
     expect(c.parameters).toEqual([]);
   });
