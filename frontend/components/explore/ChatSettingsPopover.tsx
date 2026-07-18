@@ -55,18 +55,18 @@ export interface ChatSettingsPopoverProps {
 
 type ComboboxOption = SearchableOption;
 
-const GENERAL_AGENT = 'general';
+const ANALYST_AGENT = 'analyst';
 const AGENT_OPTIONS: ComboboxOption[] = [
   {
-    value: GENERAL_AGENT,
-    label: 'General agent',
+    value: ANALYST_AGENT,
+    label: 'Analyst agent',
     subtitle: 'Default assistant',
     badge: 'Default',
   },
   {
     value: 'custom',
-    label: 'Custom agents',
-    subtitle: 'Create a specialist for your team',
+    label: 'Specialized agents',
+    subtitle: '',
     badge: 'Coming soon',
     disabled: true,
   },
@@ -289,9 +289,9 @@ export default function ChatSettingsPopover({
             minW={0}
             maxW="100px"
             flexShrink={1}
-            title="General agent"
+            title="Analyst agent"
           >
-            General agent
+            Analyst agent
           </Text>
           <Text aria-hidden="true" fontSize="xs" color="fg.subtle" flexShrink={0}>·</Text>
           {!compactSummary && <Icon as={LuBrainCircuit} boxSize={3.5} color="fg.subtle" flexShrink={0} />}
@@ -497,10 +497,10 @@ export default function ChatSettingsPopover({
                   </HStack>
                   <SettingsCombobox
                     options={AGENT_OPTIONS}
-                    value={GENERAL_AGENT}
+                    value={ANALYST_AGENT}
                     onChange={() => undefined}
                     label="Agent"
-                    placeholder="General agent"
+                    placeholder="Analyst agent"
                   />
                 </Box>
               </Box>

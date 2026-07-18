@@ -124,7 +124,7 @@ describe('ChatInput: sidebar control layout', () => {
     expect(settings).toBeInTheDocument();
     expect(settings).toHaveAttribute('data-compact-summary', 'true');
     expect(settings).toHaveTextContent('test_db');
-    expect(settings).toHaveTextContent('General agent');
+    expect(settings).toHaveTextContent('Analyst agent');
     expect(screen.queryByTestId('chat-selector-controls')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-input-actions')).toHaveStyle({
       flexShrink: '0',

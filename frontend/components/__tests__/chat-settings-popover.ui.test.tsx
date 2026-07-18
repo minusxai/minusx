@@ -123,9 +123,9 @@ describe('ChatSettingsPopover', () => {
 
     const trigger = screen.getByLabelText('Chat settings');
     expect(trigger).toHaveTextContent('warehouse');
-    expect(trigger).toHaveTextContent('General agent');
+    expect(trigger).toHaveTextContent('Analyst agent');
     await waitFor(() => expect(trigger).toHaveTextContent('GPT-5.4'));
-    expect(trigger).toHaveTextContent(/warehouse.*General agent.*GPT-5\.4/);
+    expect(trigger).toHaveTextContent(/warehouse.*Analyst agent.*GPT-5\.4/);
     expect(screen.queryByLabelText('Database')).not.toBeInTheDocument();
 
     await user.click(trigger);
@@ -143,7 +143,7 @@ describe('ChatSettingsPopover', () => {
     expect(screen.getByTestId('chat-setting-llm')).toBeInTheDocument();
     expect(screen.getByTestId('chat-setting-agent')).toHaveTextContent('Purpose-built specialists');
     const agent = screen.getByLabelText('Agent');
-    expect(agent).toHaveTextContent('General agent');
+    expect(agent).toHaveTextContent('Analyst agent');
 
     await user.click(knowledgeBase);
     expect(screen.getByRole('option', { name: 'testing' })).toBeInTheDocument();
@@ -175,11 +175,11 @@ describe('ChatSettingsPopover', () => {
     expect(trigger).not.toHaveTextContent('gpt-5.5');
 
     await user.click(agent);
-    expect(screen.getByRole('option', { name: 'General agent' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Analyst agent' })).toBeInTheDocument();
     const customAgents = screen.getByRole('option', { name: 'Custom agents' });
     expect(customAgents).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByLabelText('Custom agents Coming soon')).toBeInTheDocument();
     await user.click(customAgents);
-    expect(agent).toHaveTextContent('General agent');
+    expect(agent).toHaveTextContent('Analyst agent');
   });
 });

@@ -450,7 +450,7 @@ function ChatInputInner({
                     textOverflow="ellipsis"
                     whiteSpace="nowrap"
                   >
-                    <Box as="span" fontWeight="700">Pro tip</Box>
+                    <Box as="span" fontWeight="700">ProTip</Box>
                     {' · '}
                     Use
                     <Box
