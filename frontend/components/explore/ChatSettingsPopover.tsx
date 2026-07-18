@@ -271,22 +271,18 @@ export default function ChatSettingsPopover({
           data-compact-summary={compactSummary}
         >
           <Icon as={LuSettings2} boxSize={3.5} flexShrink={0} />
-          {!compactSummary && (
-            <>
-              <Text
-                truncate
-                fontSize="xs"
-                minW={0}
-                maxW="120px"
-                flexShrink={1}
-                title={databaseName || 'No database'}
-              >
-                {databaseName || 'No database'}
-              </Text>
-              <Text aria-hidden="true" fontSize="xs" color="fg.subtle" flexShrink={0}>·</Text>
-              <Icon as={LuBot} boxSize={3.5} color="fg.subtle" flexShrink={0} />
-            </>
-          )}
+          <Text
+            truncate
+            fontSize="xs"
+            minW={0}
+            maxW={compactSummary ? '90px' : '120px'}
+            flexShrink={1}
+            title={databaseName || 'No database'}
+          >
+            {databaseName || 'No database'}
+          </Text>
+          <Text aria-hidden="true" fontSize="xs" color="fg.subtle" flexShrink={0}>·</Text>
+          {!compactSummary && <Icon as={LuBot} boxSize={3.5} color="fg.subtle" flexShrink={0} />}
           <Text
             truncate
             fontSize="xs"

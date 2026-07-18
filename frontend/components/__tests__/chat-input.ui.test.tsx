@@ -123,7 +123,7 @@ describe('ChatInput: sidebar control layout', () => {
     const settings = screen.getByLabelText('Chat settings');
     expect(settings).toBeInTheDocument();
     expect(settings).toHaveAttribute('data-compact-summary', 'true');
-    expect(settings).not.toHaveTextContent('test_db');
+    expect(settings).toHaveTextContent('test_db');
     expect(settings).toHaveTextContent('General agent');
     expect(screen.queryByTestId('chat-selector-controls')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-input-actions')).toHaveStyle({
