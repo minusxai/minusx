@@ -67,7 +67,7 @@ describe('Files Data Layer - getTemplate', () => {
       expect(result.content).toMatchObject({
         description: '',
         query: '',
-        vizSettings: { type: 'table' },
+        viz: { version: 2, source: { kind: 'table' } },
         parameters: [],
         connection_name: 'default_db'
       });
