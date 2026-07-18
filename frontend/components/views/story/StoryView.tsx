@@ -5,11 +5,17 @@ import { Box } from '@chakra-ui/react';
 
 import AgentHtml, { type NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
 import NumberQueryEditor from '@/components/views/story/NumberQueryEditor';
+import StoryQuestionEditor from '@/components/views/story/StoryQuestionEditor';
+import type { StoryQuestionEditRequest } from '@/components/views/shared/StoryEmbeds';
 import { StoryEmptyState } from '@/components/views/shared/empty-states';
-import { StoryContent } from '@/lib/types';
+import { StoryContent, QuestionContent } from '@/lib/types';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 import type { StoryRenderer } from '@/lib/branding/whitelabel';
 import { applyStoryHtmlEdit } from '@/lib/file-state/file-state';
+import {
+  updateSavedQuestionVizInHtml, updateInlineQuestionInHtml, questionContentToInlineEmbed,
+} from '@/lib/data/story/story-question';
 import { STORY_W } from './ScaledStoryFrame';
 import CanvasStoryView from './CanvasStoryView';
 
@@ -67,6 +73,9 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
   // Inline <Number> query editing opens the full SqlEditor in a light-DOM modal (Monaco can't live
   // in the story iframe). The story's path feeds schema/connection autocomplete.
   const [numberEdit, setNumberEdit] = useState<NumberQueryEditRequest | null>(null);
+  // Question-embed editing (saved / override / ephemeral) opens the shared question modal at the
+  // StoryView level (see StoryQuestionEditor); applies land as pure story-HTML transforms.
+  const [questionEdit, setQuestionEdit] = useState<StoryQuestionEditRequest | null>(null);
   // Select-to-chat provenance: only for an owned story (canEdit); the popover itself is gated to edit
   // mode inside AgentHtml. The selection is rich-text (HTML).
   const selectionSource: EditWithAgentSource | undefined =
@@ -107,6 +116,20 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
     setSession(s => ({ ...s, lastEmitted: story }));
     if (numericId !== undefined) applyStoryHtmlEdit({ fileId: numericId, story });
   }, [numericId]);
+
+  // Question-modal write-backs: pure transforms over the CURRENT story body, staged like any other
+  // story edit (header Save persists, Cancel reverts). The content change makes StoryView adopt the
+  // new html and cleanly rebuild the iframe — exactly what we want after a modal apply.
+  const onApplySavedViz = useCallback((req: Extract<StoryQuestionEditRequest, { kind: 'saved' }>, viz: VizEnvelope) => {
+    if (numericId === undefined) return;
+    applyStoryHtmlEdit({ fileId: numericId, story: updateSavedQuestionVizInHtml(content.story ?? '', req.questionId, req.occurrence, viz) });
+  }, [numericId, content.story]);
+
+  const onApplyInline = useCallback((req: Extract<StoryQuestionEditRequest, { kind: 'inline' }>, edited: QuestionContent) => {
+    if (numericId === undefined) return;
+    const embed = questionContentToInlineEmbed(edited, req.embed.height);
+    applyStoryHtmlEdit({ fileId: numericId, story: updateInlineQuestionInHtml(content.story ?? '', req.index, embed) });
+  }, [numericId, content.story]);
 
   if (!content.story) {
     return <StoryEmptyState />;
@@ -150,6 +173,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
                   filePath={storyPath}
                   paramValues={content.parameterValues ?? undefined}
                   onEditNumber={setNumberEdit}
+                  onEditQuestion={editing ? setQuestionEdit : undefined}
                   onChange={onStoryChange}
                   selectionSource={selectionSource}
                 />
@@ -172,6 +196,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             filePath={storyPath}
             paramValues={content.parameterValues ?? undefined}
             onEditNumber={setNumberEdit}
+            onEditQuestion={editing ? setQuestionEdit : undefined}
             onChange={onStoryChange}
             selectionSource={selectionSource}
           />
@@ -179,6 +204,13 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
         </Box>
       </Box>
       <NumberQueryEditor request={numberEdit} filePath={storyPath} onClose={() => setNumberEdit(null)} />
+      <StoryQuestionEditor
+        request={questionEdit}
+        storyPath={storyPath}
+        onClose={() => setQuestionEdit(null)}
+        onApplySavedViz={onApplySavedViz}
+        onApplyInline={onApplyInline}
+      />
     </Box>
   );
 }

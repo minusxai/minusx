@@ -322,7 +322,7 @@ function collectEmbeddedQuestions(
       })
       .filter((q): q is EmbeddedQuestion => q !== null);
     const inline = extractInlineQuestions(html).map((e, i): EmbeddedQuestion => ({
-      id: 0, inlineIndex: i + 1, query: e.query, parameters: e.parameters ?? [],
+      id: 0, inlineIndex: i + 1, query: e.query ?? '', parameters: e.parameters ?? [],
     }));
     return [...saved, ...inline];
   }

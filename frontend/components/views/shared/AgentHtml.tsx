@@ -10,11 +10,11 @@ import { serializeEditedStory } from '@/lib/html/serialize-story';
 import { collectStoryFontImports, resolveImportFontCss } from '@/lib/html/resolve-story-fonts';
 import { mountStorySurface, type StorySurface, type StorySurfaceKind } from '@/lib/story-surface';
 import StoryEmbeds, {
-  type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget,
+  type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget, type StoryQuestionEditRequest,
 } from '@/components/views/shared/StoryEmbeds';
 import StorySelectionPopover from '@/components/views/story/StorySelectionPopover';
 import { paramFromPlaceholderEl, type StoryParam } from '@/lib/data/story/story-params';
-import { inlineQuestionFromEl, inlineEmbedToQuestionContent } from '@/lib/data/story/story-question';
+import { inlineQuestionFromEl, inlineEmbedToQuestionContent, savedQuestionVizFromEl } from '@/lib/data/story/story-question';
 import { numberFromEl } from '@/lib/data/story/story-number';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 
@@ -52,6 +52,8 @@ interface AgentHtmlProps {
   onParamValuesChange?: (values: Record<string, unknown>) => void;
   /** Request to edit an inline `<Number>`'s query (opens a light-DOM Monaco drawer). */
   onEditNumber?: (req: NumberQueryEditRequest) => void;
+  /** Request to edit a question embed (saved / override / ephemeral) in the story-level modal. */
+  onEditQuestion?: (req: StoryQuestionEditRequest) => void;
   /** When set, a "Interact with {agentName}" pill appears on text selection (edit mode only). */
   selectionSource?: EditWithAgentSource;
   /** Fired (debounced) with the serialized story while editing, so the caller can sync dirty state. */
@@ -97,7 +99,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'dom', paramValues, onParamValuesChange, onEditNumber, selectionSource, onChange, filePath, colorMode, compiledCss },
+  { html, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'dom', paramValues, onParamValuesChange, onEditNumber, onEditQuestion, selectionSource, onChange, filePath, colorMode, compiledCss },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -216,7 +218,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       const questionId = parseInt(el.getAttribute('data-question-id') || '', 10);
       if (Number.isNaN(questionId)) return;
       sizeEmbedEl(el);
-      found.push({ el, questionId });
+      found.push({ el, questionId, vizOverride: savedQuestionVizFromEl(el) });
     });
     const inlineFound: InlineChartTarget[] = [];
     doc.querySelectorAll<HTMLElement>('[data-question-inline]').forEach(el => {
@@ -224,7 +226,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       if (!embed) return;
       const isSingleValue = embed.vizSettings?.type === 'single_value';
       sizeEmbedEl(el, isSingleValue ? SINGLE_VALUE_MIN_H : MIN_CHART_H, isSingleValue ? SINGLE_VALUE_DEFAULT_H : DEFAULT_CHART_H);
-      inlineFound.push({ el, content: inlineEmbedToQuestionContent(embed), bare: isSingleValue });
+      inlineFound.push({ el, content: inlineEmbedToQuestionContent(embed), bare: isSingleValue, embed });
     });
     const numbersFound: NumberTarget[] = [];
     doc.querySelectorAll<HTMLElement>('[data-number-inline]').forEach(el => {
@@ -335,11 +337,12 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         paramValues={paramValues}
         onParamValuesChange={onParamValuesChange}
         onEditNumber={onEditNumber}
+        onEditQuestion={onEditQuestion}
         storyPath={filePath}
         colorMode={colorMode}
       />,
     );
-  }, [targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, filePath, colorMode]);
+  }, [targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, filePath, colorMode]);
 
   // Keep the iframe's color-mode class in sync without rebuilding the whole document.
   useEffect(() => {

@@ -11,19 +11,42 @@
  *
  * Pure (client + server safe).
  */
-import type { QuestionParameter, VizSettings, QuestionContent } from '@/lib/validation/atlas-schemas';
+import type { QuestionParameter, VizSettings, QuestionContent, VizEnvelope, SpreadsheetSource } from '@/lib/validation/atlas-schemas';
 import { escAttr, escTemplate, serializeJsonAttr, parseJsonAttr } from './html-attr';
 
-/** An inline question embedded directly in a story body (no saved file). */
+/** An inline question embedded directly in a story body (no saved file). Its data comes from
+ *  EITHER an inline SQL `query` (against `connection`) OR an inline `spreadsheet` (direct rows,
+ *  no connection) — at least one must be present. */
 export interface InlineQuestionEmbed {
-  query: string;
+  query?: string;
   /** connection name the query runs against ('' if none) — maps to QuestionContent.connection_name. */
   connection: string;
-  /** partial viz settings; defaults (table) are filled when projected to a QuestionContent. */
+  /** LEGACY partial viz settings; defaults (table) are filled when projected to a QuestionContent. */
   vizSettings?: Partial<VizSettings>;
+  /** Viz V2 envelope — AUTHORITATIVE when present (vizSettings is then ignored, like on a saved question). */
+  viz?: VizEnvelope;
+  /** direct tabular data (the spreadsheet editor's source) — rendered without executing any SQL. */
+  spreadsheet?: SpreadsheetSource;
   parameters?: QuestionParameter[];
   /** render height for the embed div (e.g. '200px'); presentational only. */
   height?: string;
+}
+
+/** Narrow a jsx/JSON `viz` attribute value to a Viz V2 envelope (vs a legacy Partial<VizSettings>). */
+export function vizEnvelopeFromAttr(v: unknown): VizEnvelope | undefined {
+  if (v && typeof v === 'object' && !Array.isArray(v)
+    && (v as { version?: unknown }).version === 2 && !!(v as { source?: unknown }).source) {
+    return v as VizEnvelope;
+  }
+  return undefined;
+}
+
+function spreadsheetFromAttr(v: unknown): SpreadsheetSource | undefined {
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const s = v as { version?: unknown; columns?: unknown; rows?: unknown };
+    if (s.version === 1 && Array.isArray(s.columns) && Array.isArray(s.rows)) return v as SpreadsheetSource;
+  }
+  return undefined;
 }
 
 /**
@@ -39,13 +62,18 @@ export function normalizeInlineQuery(q: string): string {
   return q.replace(/\\r\\n|\\r|\\n/g, '\n').replace(/\\t/g, '\t');
 }
 
-/** Build an inline embed from a `<Question>` element's parsed jsx attributes. Null if no `query`. */
+/** Build an inline embed from a `<Question>` element's parsed jsx attributes.
+ *  Null when there is neither a `query` nor a `spreadsheet` (not an inline question). */
 export function inlineQuestionFromJsxAttrs(attrs: Record<string, unknown>): InlineQuestionEmbed | null {
   const raw = typeof attrs.query === 'string' ? attrs.query : '';
-  if (!raw) return null;
-  const query = normalizeInlineQuery(raw);
-  const e: InlineQuestionEmbed = { query, connection: typeof attrs.connection === 'string' ? attrs.connection : '' };
-  if (attrs.viz && typeof attrs.viz === 'object' && !Array.isArray(attrs.viz)) e.vizSettings = attrs.viz as Partial<VizSettings>;
+  const spreadsheet = spreadsheetFromAttr(attrs.spreadsheet);
+  if (!raw && !spreadsheet) return null;
+  const e: InlineQuestionEmbed = { connection: typeof attrs.connection === 'string' ? attrs.connection : '' };
+  if (raw) e.query = normalizeInlineQuery(raw);
+  if (spreadsheet) e.spreadsheet = spreadsheet;
+  const env = vizEnvelopeFromAttr(attrs.viz);
+  if (env) e.viz = env;
+  else if (attrs.viz && typeof attrs.viz === 'object' && !Array.isArray(attrs.viz)) e.vizSettings = attrs.viz as Partial<VizSettings>;
   if (Array.isArray(attrs.params)) e.parameters = attrs.params as QuestionParameter[];
   if (typeof attrs.height === 'string' || typeof attrs.height === 'number') e.height = String(attrs.height);
   return e;
@@ -53,8 +81,11 @@ export function inlineQuestionFromJsxAttrs(attrs: Record<string, unknown>): Inli
 
 /** Inline embed → the `<div data-question-inline>` placeholder stored inside `content.story` HTML. */
 export function inlineQuestionToPlaceholder(e: InlineQuestionEmbed): string {
-  const payload: Record<string, unknown> = { query: e.query, connection_name: e.connection };
+  const payload: Record<string, unknown> = { connection_name: e.connection };
+  if (e.query) payload.query = e.query;
+  if (e.spreadsheet) payload.spreadsheet = e.spreadsheet;
   if (e.vizSettings) payload.vizSettings = e.vizSettings;
+  if (e.viz) payload.viz = e.viz;
   if (e.parameters) payload.parameters = e.parameters;
   if (e.height) payload.height = e.height;
   const h = (e.height ? String(e.height) : '430px').replace(/["']/g, '');
@@ -64,16 +95,21 @@ export function inlineQuestionToPlaceholder(e: InlineQuestionEmbed): string {
 const INLINE_Q_DIV_RE = /<div\s+([^>]*?data-question-inline="[^"]*"[^>]*?)>\s*<\/div>/g;
 
 function payloadToEmbed(payload: Record<string, unknown> | null | undefined): InlineQuestionEmbed | null {
-  if (typeof payload?.query !== 'string') return null;
+  const rawQuery = typeof payload?.query === 'string' ? payload.query : '';
+  const spreadsheet = spreadsheetFromAttr(payload?.spreadsheet);
+  if (!rawQuery && !spreadsheet) return null;
   const e: InlineQuestionEmbed = {
-    // Defensive: also normalize on read, so any embed already stored with literal \n escapes
-    // (authored before the fix) still parses + runs correctly.
-    query: normalizeInlineQuery(payload.query),
-    connection: typeof payload.connection_name === 'string' ? payload.connection_name : '',
+    connection: typeof payload?.connection_name === 'string' ? payload.connection_name : '',
   };
-  if (payload.vizSettings) e.vizSettings = payload.vizSettings as Partial<VizSettings>;
-  if (payload.parameters) e.parameters = payload.parameters as QuestionParameter[];
-  if (typeof payload.height === 'string') e.height = payload.height;
+  // Defensive: also normalize on read, so any embed already stored with literal \n escapes
+  // (authored before the fix) still parses + runs correctly.
+  if (rawQuery) e.query = normalizeInlineQuery(rawQuery);
+  if (spreadsheet) e.spreadsheet = spreadsheet;
+  if (payload?.vizSettings) e.vizSettings = payload.vizSettings as Partial<VizSettings>;
+  const env = vizEnvelopeFromAttr(payload?.viz);
+  if (env) e.viz = env;
+  if (payload?.parameters) e.parameters = payload.parameters as QuestionParameter[];
+  if (typeof payload?.height === 'string') e.height = payload.height;
   return e;
 }
 
@@ -89,6 +125,84 @@ export function inlineQuestionFromEl(el: { getAttribute(name: string): string | 
 }
 
 const SAVED_Q_DIV_RE = /data-question-id="(\d+)"/g;
+const SAVED_Q_FULL_DIV_RE = /<div\s+data-question-id=["'](\d+)["']([^>]*)>\s*<\/div>/g;
+
+/** Saved embed → the `<div data-question-id>` placeholder. A Viz V2 envelope override (when the
+ *  story restyles the question WITHOUT editing the saved file) rides as `data-question-viz`. */
+export function savedQuestionToPlaceholder(id: number, height?: string, viz?: VizEnvelope): string {
+  const h = (height ? String(height) : '430px').replace(/["']/g, '');
+  const vizAttr = viz ? ` data-question-viz="${serializeJsonAttr(viz)}"` : '';
+  return `<div data-question-id="${id}"${vizAttr} style="width:100%;height:${h}"></div>`;
+}
+
+/** Read a saved embed's viz override from its rendered placeholder element (entity-decoded by the
+ *  browser). Null when there is no override — the saved question's own viz then renders as-is. */
+export function savedQuestionVizFromEl(el: { getAttribute(name: string): string | null }): VizEnvelope | null {
+  return vizEnvelopeFromAttr(parseJsonAttr<unknown>(el.getAttribute('data-question-viz'))) ?? null;
+}
+
+/** Apply a story's viz override to a saved question's content: a FULL viz replace (the override
+ *  envelope becomes authoritative; legacy vizSettings is suppressed so it can't leak through on
+ *  fallback). No-op (same reference) without an override. */
+export function applyVizOverride(content: QuestionContent, override: VizEnvelope | null | undefined): QuestionContent {
+  if (!override) return content;
+  return { ...content, viz: override, vizSettings: null };
+}
+
+const heightFromPlaceholderAttrs = (rest: string): string | undefined =>
+  rest.match(/height:\s*([^;"']+)/)?.[1]?.trim();
+
+/**
+ * Set / replace / remove (viz=null) the viz override on the `occurrence`-th (0-based) saved
+ * placeholder with `questionId`, preserving its height. Pure story-HTML transform — the modal's
+ * write-back for a saved embed's story-level viz override.
+ */
+export function updateSavedQuestionVizInHtml(
+  html: string, questionId: number, occurrence: number, viz: VizEnvelope | null,
+): string {
+  let seen = 0;
+  return html.replace(SAVED_Q_FULL_DIV_RE, (whole, id: string, rest: string) => {
+    if (Number(id) !== questionId || seen++ !== occurrence) return whole;
+    return savedQuestionToPlaceholder(questionId, heightFromPlaceholderAttrs(rest), viz ?? undefined);
+  });
+}
+
+/**
+ * Replace the `index`-th (0-based, document order) inline-question placeholder with `embed`.
+ * Pure story-HTML transform — the modal's write-back for an ephemeral question edit.
+ */
+export function updateInlineQuestionInHtml(html: string, index: number, embed: InlineQuestionEmbed): string {
+  let seen = 0;
+  return html.replace(INLINE_Q_DIV_RE, (whole) =>
+    seen++ === index ? inlineQuestionToPlaceholder(embed) : whole);
+}
+
+/** Reverse of {@link inlineEmbedToQuestionContent}: an edited QuestionContent (from the modal's
+ *  throwaway draft) back to the inline embed stored in the story body. */
+export function questionContentToInlineEmbed(c: QuestionContent, height?: string): InlineQuestionEmbed {
+  const e: InlineQuestionEmbed = { connection: c.connection_name ?? '' };
+  if (c.query) e.query = c.query;
+  if (c.spreadsheet) e.spreadsheet = c.spreadsheet;
+  if (c.viz) e.viz = c.viz;
+  else if (c.vizSettings) e.vizSettings = c.vizSettings;
+  if (c.parameters?.length) e.parameters = c.parameters;
+  if (height) e.height = height;
+  return e;
+}
+
+/** Rewrite a story HTML's saved-question placeholders back to `<Question id=… />` jsx (for
+ *  buildStoryJsx), preserving a viz override and a non-default height. */
+export function placeholdersToSavedQuestionJsx(html: string | null | undefined): string {
+  return (html ?? '').replace(SAVED_Q_FULL_DIV_RE, (_whole, id: string, rest: string) => {
+    const a: string[] = [`id={${id}}`];
+    const vm = rest.match(/data-question-viz="([^"]*)"/);
+    const env = vm ? vizEnvelopeFromAttr(parseJsonAttr<unknown>(vm[1])) : undefined;
+    if (env) a.push(`viz={${JSON.stringify(env)}}`);
+    const h = heightFromPlaceholderAttrs(rest);
+    if (h && h !== '430px') a.push(`height="${escAttr(h)}"`);
+    return `<Question ${a.join(' ')} />`;
+  });
+}
 
 /** Extract the saved-question file ids a story body embeds (the `data-question-id` placeholders). */
 export function extractSavedQuestionIds(html: string | null | undefined): number[] {
@@ -122,8 +236,12 @@ export function extractInlineQuestions(html: string | null | undefined): InlineQ
  *  String attrs are entity-escaped (escAttr): JSX attribute strings don't process `\"` escapes,
  *  so a raw quote in a value would end the attribute early and fail the whole-document parse. */
 export function inlineQuestionToJsx(e: InlineQuestionEmbed): string {
-  const a: string[] = [`query={\`${escTemplate(e.query)}\`}`, `connection="${escAttr(e.connection)}"`];
-  if (e.vizSettings) a.push(`viz={${JSON.stringify(e.vizSettings)}}`);
+  const a: string[] = [];
+  if (e.query) a.push(`query={\`${escTemplate(e.query)}\`}`);
+  if (e.spreadsheet) a.push(`spreadsheet={${JSON.stringify(e.spreadsheet)}}`);
+  a.push(`connection="${escAttr(e.connection)}"`);
+  if (e.viz) a.push(`viz={${JSON.stringify(e.viz)}}`);
+  else if (e.vizSettings) a.push(`viz={${JSON.stringify(e.vizSettings)}}`);
   if (e.parameters) a.push(`params={${JSON.stringify(e.parameters)}}`);
   if (e.height) a.push(`height="${escAttr(e.height)}"`);
   return `<Question ${a.join(' ')} />`;
@@ -149,13 +267,17 @@ export function embeddedQuestionCount(content: unknown, type?: string | null): n
   return (c?.assets ?? []).filter((a) => a?.type === 'question').length;
 }
 
-/** Project an inline embed to a full QuestionContent the renderer/query stack consumes. */
+/** Project an inline embed to a full QuestionContent the renderer/query stack consumes.
+ *  A V2 `viz` envelope is authoritative (legacy vizSettings suppressed, like on saved files);
+ *  a `spreadsheet` renders directly (no SQL execution, query stays ''). */
 export function inlineEmbedToQuestionContent(e: InlineQuestionEmbed): QuestionContent {
   return {
     description: null,
-    query: e.query,
+    query: e.query ?? '',
     connection_name: e.connection,
-    vizSettings: { type: 'table', ...(e.vizSettings ?? {}) } as VizSettings,
+    vizSettings: e.viz ? null : ({ type: 'table', ...(e.vizSettings ?? {}) } as VizSettings),
+    viz: e.viz ?? null,
+    spreadsheet: e.spreadsheet ?? null,
     parameters: e.parameters ?? [],
     parameterValues: null,
   };

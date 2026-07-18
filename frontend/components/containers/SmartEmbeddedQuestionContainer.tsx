@@ -5,6 +5,8 @@ import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName } from '@/store/filesSlice';
 import { QuestionContent, QuestionParameter } from '@/lib/types';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import { applyVizOverride } from '@/lib/data/story/story-question';
 import EmbeddedQuestionContainer from './EmbeddedQuestionContainer';
 import { Box, Spinner, Text, HStack, IconButton, Menu, Portal, Icon } from '@chakra-ui/react';
 import { Link } from '@/components/ui/Link';
@@ -25,6 +27,7 @@ interface SmartEmbeddedQuestionContainerProps {
   readOnly?: boolean;  // Public read-only view (e.g. shared story): no actions menu, plain title (no auth-gated link)
   enableDrilldown?: boolean;  // Click-to-drill-down on data points (off for story embeds, on for dashboards)
   showActionsMenu?: boolean;  // Show the "..." (Explain/Edit/Remove) header menu. Default true (dashboards); stories pass their edit-mode flag so the menu only appears while editing.
+  vizOverride?: VizEnvelope | null;  // Story-level FULL viz replace for this embed — the saved question file is untouched.
 }
 
 function SmartEmbeddedQuestionContainerInner({
@@ -40,6 +43,7 @@ function SmartEmbeddedQuestionContainerInner({
   readOnly = false,
   enableDrilldown = true,
   showActionsMenu = true,
+  vizOverride,
 }: SmartEmbeddedQuestionContainerProps) {
   const { explainQuestion } = useExplainQuestion();
 
@@ -66,9 +70,14 @@ function SmartEmbeddedQuestionContainerInner({
   const loading = !file || file.loading;
 
   // Get merged content (includes any edits) — a proper QuestionContent for the embedded question.
-  const mergedContent = useAppSelector(state =>
+  const rawMergedContent = useAppSelector(state =>
     selectMergedContent(state, questionId)
   ) as QuestionContent | undefined;
+  // A story-level viz override FULLY replaces the question's viz (saved file untouched).
+  const mergedContent = useMemo(
+    () => (rawMergedContent ? applyVizOverride(rawMergedContent, vizOverride) : rawMergedContent),
+    [rawMergedContent, vizOverride],
+  );
 
   // Use effective name so pending renames are reflected immediately in the dashboard card
   const effectiveName = useAppSelector(state => selectEffectiveName(state, questionId));
@@ -316,6 +325,7 @@ const SmartEmbeddedQuestionContainer = React.memo(SmartEmbeddedQuestionContainer
   prev.dashboardId === next.dashboardId &&
   prev.readOnly === next.readOnly &&
   prev.enableDrilldown === next.enableDrilldown &&
-  prev.showActionsMenu === next.showActionsMenu
+  prev.showActionsMenu === next.showActionsMenu &&
+  prev.vizOverride === next.vizOverride
 );
 export default SmartEmbeddedQuestionContainer;
