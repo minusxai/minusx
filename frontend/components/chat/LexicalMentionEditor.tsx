@@ -25,6 +25,8 @@ interface LexicalMentionEditorProps {
   onSubmit?: () => void;
   onChange?: (serialized: string) => void;
   singleLine?: boolean;
+  /** Tighter multiline sizing for constrained surfaces such as side chat. */
+  compact?: boolean;
   onFocus?: () => void;
   onBlur?: () => void;
   whitelistedSchemas?: DatabaseWithSchema[];
@@ -72,6 +74,15 @@ const SINGLE_LINE_STYLES: React.CSSProperties = {
 };
 const MULTI_LINE_STYLES: React.CSSProperties = {
   minHeight: '72px',
+  outline: 'none',
+  fontFamily: 'monospace',
+  fontSize: '14px',
+  padding: '8px',
+};
+const COMPACT_MULTI_LINE_STYLES: React.CSSProperties = {
+  minHeight: '56px',
+  maxHeight: '120px',
+  boxSizing: 'border-box',
   outline: 'none',
   fontFamily: 'monospace',
   fontSize: '14px',
@@ -296,6 +307,7 @@ const LexicalMentionEditorInner = forwardRef<LexicalMentionEditorRef, LexicalMen
       onSubmit,
       onChange,
       singleLine = false,
+      compact = false,
       onFocus,
       onBlur,
       whitelistedSchemas,
@@ -381,7 +393,10 @@ const LexicalMentionEditorInner = forwardRef<LexicalMentionEditorRef, LexicalMen
           <Box position="relative">
             <RichTextPlugin
               contentEditable={
-                <ContentEditable aria-label={ariaLabel} style={singleLine ? SINGLE_LINE_STYLES : MULTI_LINE_STYLES} />
+                <ContentEditable
+                  aria-label={ariaLabel}
+                  style={singleLine ? SINGLE_LINE_STYLES : compact ? COMPACT_MULTI_LINE_STYLES : MULTI_LINE_STYLES}
+                />
               }
               placeholder={
                 <Box

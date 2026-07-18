@@ -120,14 +120,18 @@ describe('ChatInput: sidebar control layout', () => {
       flexDirection: 'row',
       alignItems: 'center',
     });
-    expect(screen.getByLabelText('Chat settings')).toBeInTheDocument();
+    const settings = screen.getByLabelText('Chat settings');
+    expect(settings).toBeInTheDocument();
+    expect(settings).toHaveAttribute('data-compact-summary', 'true');
+    expect(settings).not.toHaveTextContent('test_db');
+    expect(settings).toHaveTextContent('General agent');
     expect(screen.queryByTestId('chat-selector-controls')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-input-actions')).toHaveStyle({
       flexShrink: '0',
     });
   });
 
-  it('keeps the floating composer expanded while chat settings owns focus', async () => {
+  it('keeps the floating composer expanded while settings owns focus, then collapses after one outside click', async () => {
     const user = userEvent.setup();
     const store = storeModule.makeStore();
     renderWithProviders(
@@ -153,7 +157,14 @@ describe('ChatInput: sidebar control layout', () => {
 
     await user.click(screen.getByLabelText('Chat settings'));
     await waitFor(() => expect(shell).toHaveAttribute('data-collapsed', 'false'));
-    expect(screen.getByText('Tune the next response')).toBeInTheDocument();
+    expect(screen.getByText('Configure this chat')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Agent'));
+    expect(screen.getByLabelText('Agent search')).toBeInTheDocument();
+    await user.click(document.body);
+
+    await waitFor(() => expect(screen.queryByText('Configure this chat')).not.toBeInTheDocument());
+    await waitFor(() => expect(shell).toHaveAttribute('data-collapsed', 'true'));
   });
 
   it('collapses the expanded floating composer with Escape', async () => {

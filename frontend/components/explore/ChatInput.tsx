@@ -247,6 +247,18 @@ function ChatInputInner({
     draftBeforeHistoryRef.current = value;
   });
 
+  const handleChatSettingsOpenChange = useStableCallback((nextOpen: boolean) => {
+    setChatSettingsOpen(nextOpen);
+    if (nextOpen || !isFloating || hasContent) return;
+
+    // Popover focus is portaled outside this shell, and focus restoration can leave
+    // the editor's old `isFocused` flag behind. Closing settings is an explicit signal
+    // that an empty floating composer should return to its pill state.
+    setEscapeCollapsed(true);
+    setIsFocused(false);
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+
   // Large pastes (1000s of lines) bog down the Lexical editor — stage them as a
   // text-attachment chip instead of inserting inline. Returns true to claim the
   // paste so the editor suppresses the inline insert.
@@ -414,8 +426,8 @@ function ChatInputInner({
             >
             {!isCollapsed && (
               <HStack
-                px={3}
-                py={2}
+                px={container === 'sidebar' ? 2.5 : 3}
+                py={container === 'sidebar' ? 1.5 : 2}
                 gap={3}
                 justify="space-between"
                 align="center"
@@ -441,7 +453,6 @@ function ChatInputInner({
                     <Box as="span" fontWeight="700">Pro tip</Box>
                     {' · '}
                     Use
-                    {' '}
                     <Box
                       as="code"
                       px={1}
@@ -455,7 +466,6 @@ function ChatInputInner({
                     >
                       {proTip.shortcut}
                     </Box>
-                    {' '}
                     {proTip.detail}
                   </Text>
                 ) : <Box />}
@@ -507,6 +517,7 @@ function ChatInputInner({
                         databaseName={databaseName}
                         disabled={disabled || isPreparing || chatLocked}
                         singleLine={isCollapsed}
+                        compact={container === 'sidebar'}
                         onSubmit={handleSend}
                         onChange={handleInputChange}
                         onLargePaste={handleLargePaste}
@@ -695,7 +706,7 @@ function ChatInputInner({
                 >
                   <HStack
                     px={3}
-                    pb={2}
+                    pb={container === 'sidebar' ? 1.5 : 2}
                     pt={1}
                     justify="space-between"
                     gap={1}
@@ -712,7 +723,8 @@ function ChatInputInner({
                       selectedContextPath={selectedContextPath || null}
                       selectedVersion={selectedVersion}
                       onContextChange={onContextChange || (() => {})}
-                      onOpenChange={setChatSettingsOpen}
+                      onOpenChange={handleChatSettingsOpenChange}
+                      compactSummary={container === 'sidebar'}
                     />
 
                     <HStack

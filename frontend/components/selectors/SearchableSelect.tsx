@@ -25,6 +25,8 @@ export interface SearchableOption extends SelectorOption {
   badge?: string;
   /** Optional visual section label for grouped option lists. */
   group?: string;
+  /** Visible but unavailable option, for capabilities that are not selectable yet. */
+  disabled?: boolean;
 }
 
 interface SearchableSelectBaseProps {
@@ -87,6 +89,7 @@ function SearchablePicker({
   const selected = new Set(selectedValues);
 
   const pick = (value: string) => {
+    if (options.find(option => option.value === value)?.disabled) return;
     onPick(value);
     if (closeOnPick) setOpen(false);
   };
@@ -226,14 +229,18 @@ function SearchablePicker({
                     <Box
                       role="option"
                       aria-selected={isSelected}
+                      aria-disabled={option.disabled || undefined}
                       aria-label={option.label}
-                      cursor="pointer"
+                      cursor={option.disabled ? 'not-allowed' : 'pointer'}
                       borderRadius="sm"
                       px={2}
                       py={1.5}
-                      bg={index === highlight ? 'bg.muted' : 'transparent'}
+                      bg={index === highlight && !option.disabled ? 'bg.muted' : 'transparent'}
+                      opacity={option.disabled ? 0.6 : 1}
                       onMouseEnter={() => setHighlight(index)}
-                      onClick={() => pick(option.value)}
+                      onClick={() => {
+                        if (!option.disabled) pick(option.value);
+                      }}
                     >
                       <HStack gap={s.gap} justify="space-between">
                         <HStack gap={s.gap} minW={0} flex={1}>
@@ -257,11 +264,15 @@ function SearchablePicker({
                         </HStack>
                         <HStack gap={1.5} flexShrink={0}>
                           {option.badge && (
-                            <Badge size="xs" colorPalette="teal" aria-label={`${option.label} ${option.badge}`}>
+                            <Badge
+                              size="xs"
+                              colorPalette={option.disabled ? 'gray' : 'teal'}
+                              aria-label={`${option.label} ${option.badge}`}
+                            >
                               {option.badge}
                             </Badge>
                           )}
-                          {isSelected && (
+                          {isSelected && !option.disabled && (
                             <Icon as={LuCheck} boxSize={3.5} color="accent.teal" flexShrink={0} strokeWidth={2.5} />
                           )}
                         </HStack>
