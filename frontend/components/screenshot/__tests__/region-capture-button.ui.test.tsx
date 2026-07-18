@@ -11,7 +11,8 @@ import { makeStore } from '@/store/store';
 import * as storeModule from '@/store/store';
 import { removePendingUpload } from '@/store/uiSlice';
 
-vi.mock('@/lib/screenshot/capture', () => ({
+vi.mock('@/lib/screenshot/capture', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/screenshot/capture')>()),
   captureRegionBlob: vi.fn(async () => new Blob(['x'], { type: 'image/jpeg' })),
 }));
 vi.mock('@/lib/object-store/client', () => ({
@@ -20,6 +21,7 @@ vi.mock('@/lib/object-store/client', () => ({
 vi.mock('@/components/ui/toaster', () => ({ toaster: { create: vi.fn(() => 'toast-1'), update: vi.fn(), dismiss: vi.fn() } }));
 
 import { captureRegionBlob } from '@/lib/screenshot/capture';
+import { DISPLAY_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
 import RegionCaptureButton from '../RegionCaptureButton';
 
 // ---- jsdom stubs so the real ImageAnnotatorDialog can load + export an image ----
@@ -89,8 +91,42 @@ describe('RegionCaptureButton', () => {
       { x: 20, y: 20, width: 200, height: 150 },
       // targetBox is snapshotted synchronously at selection time and passed through so the crop
       // frame matches the selection frame (the dev-vs-prod offset fix) — must not be dropped.
-      expect.objectContaining({ filter: expect.any(Function), targetBox: expect.objectContaining({ left: expect.any(Number), top: expect.any(Number) }) }),
+      // maxOutputPx is the DISPLAY cap, not the agent cap: the crop is captured crisp for the
+      // annotator and only downscaled to the agent size when the annotated blob is exported.
+      expect.objectContaining({
+        filter: expect.any(Function),
+        targetBox: expect.objectContaining({ left: expect.any(Number), top: expect.any(Number) }),
+        maxOutputPx: DISPLAY_IMAGE_MAX_PX,
+      }),
     );
+  });
+
+  it('routes a note typed in the annotator to onNote alongside the attachment', async () => {
+    const onNote = vi.fn();
+    const store = makeStore();
+    vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
+    renderWithProviders(<RegionCaptureButton onNote={onNote} />, { store });
+
+    await drag();
+    const note = await screen.findByLabelText('annotator-note');
+    fireEvent.change(note, { target: { value: 'zoom in on the dip' } });
+    await confirmAnnotator();
+
+    await waitFor(() => expect(store.getState().ui.chatAttachments).toHaveLength(1));
+    expect(onNote).toHaveBeenCalledWith('zoom in on the dip');
+  });
+
+  it('does not call onNote when no note was typed', async () => {
+    const onNote = vi.fn();
+    const store = makeStore();
+    vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
+    renderWithProviders(<RegionCaptureButton onNote={onNote} />, { store });
+
+    await drag();
+    await confirmAnnotator();
+
+    await waitFor(() => expect(store.getState().ui.chatAttachments).toHaveLength(1));
+    expect(onNote).not.toHaveBeenCalled();
   });
 
   it('shows a pending upload immediately (before the capture finishes)', async () => {

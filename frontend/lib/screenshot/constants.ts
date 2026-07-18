@@ -15,6 +15,15 @@
 export const AGENT_IMAGE_MAX_PX = 512;
 
 /**
+ * Longest-side cap (px) for an image shown to the USER before it becomes an agent image — today the
+ * region-capture crop the annotator displays and lets the user draw on. Larger than
+ * AGENT_IMAGE_MAX_PX so the annotator canvas is crisp on a retina screen (a 512px bitmap stretched
+ * across the ~720px dialog looks blurry). The annotated result is downscaled to AGENT_IMAGE_MAX_PX
+ * only at attach time, so the LLM payload is unchanged — display and send resolutions are decoupled.
+ */
+export const DISPLAY_IMAGE_MAX_PX = 1536;
+
+/**
  * Supersampling factor for agent images. Charts render off-screen at this ratio then downscale to
  * AGENT_IMAGE_MAX_PX for crisp text; region capture caps the device pixel ratio at this so a retina
  * screen doesn't rasterize the whole view at full DPR.
