@@ -57,6 +57,11 @@ describe('viz-first prompts — envelope is the default authoring format', () =>
     expect(questions).toMatch(/Legacy VizSettings[\s\S]*do NOT author it for new charts/);
   });
 
+  it('the questions skill teaches the grammar ladder — vega-lite/recipes first, native vega only as the escape hatch', () => {
+    expect(questions).toMatch(/native `vega` ONLY when Vega-Lite cannot express/i);
+    expect(questions).toMatch(/DetachViz/);
+  });
+
   it('spreadsheet questions are charted via <viz>, not vizSettings', () => {
     expect(questions).toMatch(/spreadsheet data — author `<viz>`/);
   });

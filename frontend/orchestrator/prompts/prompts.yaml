@@ -239,95 +239,93 @@ templates:
       {schema_question}
       ```
       - A question's saved parameter default values live in `<parameterValues>` (a compact JSON object), not on the `<parameters>` items.
-      - **Viz (`<viz>` — the DEFAULT chart format)**: author EVERY new chart as a `<viz>` envelope — a full Vega-Lite v6 spec, a shipped recipe, or a table/pivot source (all documented below). When present it is AUTHORITATIVE and `vizSettings` is ignored. This also applies to chart edits on legacy files that only have `<vizSettings>`: add a `<viz>` envelope rather than editing `<vizSettings>`. Markup form:
-        ```
-        <viz>
-          <version>2</version>
-          <source>
-            <kind>vega-lite</kind>
-            <grammar>vega-lite@6</grammar>
-            <spec>{{
-              "mark": "bar",
-              "encoding": {
-                "x": {"field": "month", "type": "temporal"},
-                "y": {"field": "revenue", "type": "quantitative"},
-                "color": {"field": "region", "type": "nominal"}
-              }
-            }}</spec>
-          </source>
-        </viz>
-        ```
-        - The `<spec>` body is the Vega-Lite JSON object wrapped in ONE extra pair of expression braces (`{{…}}`): outer brace = markup expression, inner = the JSON object. Write plain multi-line JSON — no escaping, no string-encoding.
-        - OMIT `data` — the query result is injected automatically as the named dataset `"main"`. External URLs and inline `values` are rejected.
-        - Field names must match the query's result columns EXACTLY (aliases included). The full VL grammar is available: `layer`, `facet`, `transform` (fold/window/calculate), dual axis via layers + `resolve: {"scale": {"y": "independent"}}`.
-        - MinusX theming is applied automatically beneath your spec: JetBrains Mono, the MinusX palette, light/dark, legend on top, and SI number labels (`.3~s` → 20k, 1.5M) on quantitative axes. Do not hardcode fonts or colors unless the user asks for specific ones. Do not set `width`/`height` (the container sizes the chart).
-        - X tick label angle is ADAPTIVE by default on category (nominal/ordinal) axes: horizontal when the labels fit, slanted -45 when crowded, vertical only for ultra-dense axes. An explicit `"axis": {"labelAngle": <deg>}` on the x encoding ALWAYS wins — set it when the user asks for a specific angle; omit it to keep the adaptive default.
-        - Label formats are d3 format strings, overridable per encoding: numbers via `"axis": {"format": ",.0f"}` (full digits) or `".2~s"` (SI); dates via `"axis": {"format": "%b %Y"}` (`Jan 2025`) / `"%b '%y"` (`Jan '25`). Temporal axes default to vega's multi-scale labels (years at boundaries, months between) — set an explicit format when the user wants uniform labels.
-        - **Heatmap**: `"mark": {"type": "rect"}` + two discrete axes (`x`/`y` nominal or ordinal — use ordinal for time buckets, never a continuous temporal axis on rect) + the measure on `color` with `"aggregate": "sum"`. For the GitHub-contribution-graph look add `"scale": {"scheme": "greens"}` on the color encoding (this replaces the pivot's deprecated `compact` mode).
-        - **Pie/donut**: `"mark": {"type": "arc"}` + `theta` with `"aggregate": "sum"` (REQUIRED — un-aggregated rows draw one sliver per row) + `color` for the slices. The house donut styling (responsive hole, rounded separated sectors) comes from the theme automatically — do NOT set `innerRadius`/`cornerRadius`/`padAngle` or a legend orient unless the user asks (`"innerRadius": 0` = solid pie). Do not add `tooltip`/`detail` encodings with extra fields — they join the aggregation groupby and re-shard the slices.
-        - Tooltips are AUTOMATIC (every mark shows its encoded fields on hover, with titles/formats). Only add a `tooltip` encoding for a CUSTOM field list; `"mark": {"tooltip": null}` disables.
-        - Interactive legend (click to highlight/toggle a series) — add a point selection bound to the legend plus a conditional opacity:
-          `"params": [{"name": "sel", "select": {"type": "point", "fields": ["<colorField>"]}, "bind": "legend"}]` and
-          `"opacity": {"condition": {"param": "sel", "value": 1}, "value": 0.2}` in the encoding.
-        - **Shipped recipes** — specialized charts are generated from a recipe REFERENCE; never author their specs by hand:
-          ```
-          <viz>
-            <version>2</version>
-            <source>
-              <kind>recipe</kind>
-              <recipe>minusx/funnel@1</recipe>
-              <bindings>{{"stage": "stage_column", "value": "value_column"}}</bindings>
-            </source>
-          </viz>
-          ```
-          Available: `minusx/funnel@1` (bindings: stage, value — rows render in QUERY ORDER, so ORDER BY the funnel sequence; draws per-stage zebra bands, last stage tapering to a tip; params: `orientation` 'vertical' [default, stages top→bottom] or 'horizontal' [stages left→right]), `minusx/waterfall@1` (bindings: category, value — QUERY ORDER; negative values render as decreases; a Total bar is added automatically), `minusx/radar@1` (bindings: metric, value, series [optional] — long-format rows, one per metric×series; `value` may also be an ARRAY of columns for wide data, one series per column [series binding is then ignored]; values share one radial scale, so pre-normalize in SQL when metrics use different units), `minusx/trend@1` (bindings: date, value — `value` may be an ARRAY, one KPI card per measure; rows in QUERY ORDER, so ORDER BY the date ascending; params: `compareMode` 'last' [default] or 'previous' [skips the partial current period], `sparkline` boolean [default true], `valueFontSize`/`deltaFontSize`/`labelFontSize`/`dateFontSize` numbers; the delta % and period labels are computed in-spec), `minusx/single-value@1` (binding: value — displays the FIRST query row as one cardless KPI; params: `showLabel` boolean, `label`, `caption`, `align` left/center/right, `valueFontSize`/`labelFontSize`/`captionFontSize` numbers, and `valueColor`), `minusx/combo@1` (bindings: x, bar, line, series [optional] — materializes quiet bars on the left scale plus an emphasized line on an independent right scale; the optional categorical series field colors/groups both layers; x is ordered categorically; params: `linePoints` boolean [default true], `lineWidth` 1–8, `barOpacity` 0.1–1), and `minusx/choropleth@1` (bindings: region, value — a region-keyed thematic map: one filled polygon per region, the value joined to the boundary by region NAME. The `region` column's values must match the map's region names (e.g. "California", not "CA"; "Tanzania"). params: `mapName` 'us-states' [default, full US state names] / 'world' [country names] / 'india-states', `colorScale` 'green' [default] / 'blue' / 'teal' / 'orange' / 'purple' / 'red-yellow-green' / 'blue-orange'), and `minusx/point-map@1` (the `point_map` type; bindings: lat, lng [required numeric coordinates] + lat2, lng2 [optional — bind BOTH to draw origin→destination FLOW LINES instead of points] + size [optional, quantitative → bubble size / flow width] + color [optional; a category palette by default, a sequential ramp when `colorScale` is set] — plots coordinate rows over a vector basemap backdrop. params: `mapName` [same options; picks the basemap + projection], `markColor` [a SOLID CSS color — hex or name, e.g. 'red' / '#e74c3c' — for ALL markers/flows; use this to just recolor the points, do NOT bind a fake color column], `color` [bind a REAL result column to color points BY its values], `colorScale` [only meaningful WITH a `color` column bound — makes it a quantitative ramp; a bound `color` overrides `markColor`], `center` [[lat, lng] — recenters the map on that point (mercator); works on ANY basemap incl us-counties], `zoom` [number, default 1; >1 zooms in], `basemap` ['vector' [default, boundary outline] or 'tiles' [OSM/Carto street tiles — use for LOCAL/CITY views where a vector outline is too bare; browser-only, exports fall back to the outline], `tileUrl` [optional {z}/{x}/{y} template to override the default Carto-light tiles]. With no `center` the map auto-frames the DATA extent (where the points are). To focus a map on an area, set `center`/`zoom` — do NOT filter the SQL: the query should still return all the points; the projection frames the view). Binding values must be result column names.
-          Recipes also accept an optional `<columnFormats>{{"col": {"alias": "...", "format": "$,.0f"}}}</columnFormats>` keyed by result column names: `alias` renames column-name-derived displays (including the single-value label), and `format` is a d3 format string reshaping the displayed values — same d3 vocabulary as native spec `axis.format`.
-        - **Recipe params first; detach only as the escape hatch.** Decide in this order:
-          1. **Does a recipe PARAM express the ask? → set the param.** (`colorScale`, `markColor`, `mapName`, `center`/`zoom`, `basemap`, `barOpacity`, `lineWidth`, …). "make the points red" → `markColor: 'red'`; "blue scale" → `colorScale: 'blue'`; "zoom into SF" → `center`/`zoom`; "street map" → `basemap: 'tiles'`. Do NOT detach for these.
-          2. **Does a BINDING express it? → rebind** (add a `size` column for bubbles, add destination coords for flows). Don't detach.
-          3. **Only if NO param or binding can express it → detach** and edit the spec. Structural/visual asks with no knob: dashed borders, a text label over each point, an extra layer, a per-category custom palette the scales don't offer, moving the legend inside the plot.
-          Why the order matters: **detaching turns the chart into a `custom` viz — it loses the friendly param controls AND future recipe upgrades** (until re-attached). It IS reversible — the detached source keeps the original recipe in `detachedFrom`, and "Reset to recipe" re-attaches (discarding the custom spec edits). Still, reach for a param whenever one fits; detach is for the genuine long tail only.
-        - **How detach works.** Call the **`DetachViz`** tool with the question's `fileId` — it converts the recipe into its full spec IN PLACE and returns the file's current markup with the spec inlined; then EditFile `source.spec` (build your `oldMatch` from that returned `currentMarkup`, since app-state markup is now stale). VL-engine recipes (funnel/waterfall/combo) detach to `kind: vega-lite`; native-engine recipes (radar/trend/single-value/choropleth/point-map — the maps especially) to `kind: vega`, a full native-Vega spec (`{{"kind": "vega", "grammar": "vega@6", "spec": {{…projections, signals, marks…}}, "assets": {{…}}}}`). Do NOT hand-author a native recipe's spec from scratch — always DetachViz first, then edit the materialized spec. For a chart Vega-LITE can express, you may instead author a `kind: vega-lite` spec directly (above) without any recipe. The user can also detach via the **"Customize freely"** button in the Viz → Spec panel.
-        - **Table** — a `table` source renders the interactive data grid. Sorting, filtering, column stats, and CSV export are built in — never author those. All fields besides `kind` are optional; a bare `<kind>table</kind>` is a complete table.
-          ```
-          <viz>
-            <version>2</version>
-            <source>
-              <kind>table</kind>
-              <columnFormats>{{"revenue": {"alias": "Revenue ($)", "decimalPoints": 2}}}</columnFormats>
-              <css>{`.mx-th { background: #223; } .mx-toolbar { display: none; }`}</css>
-            </source>
-          </viz>
-          ```
-          - `columnFormats`: per-column `alias`/`decimalPoints`/`dateFormat`/`prefix`/`suffix`, keyed by EXACT result column names.
-          - `css`: styles the table's LOOKS (a backtick template string). Stable class contract: `.mx-table`, `.mx-header-row`, `.mx-th`, `.mx-row`, `.mx-cell`, `.mx-col-<columnName>` (per column), `.mx-toolbar` (the stats/filters/CSV bar — `display: none` hides the chrome, e.g. for story embeds), `.mx-row-odd`/`.mx-row-even` (zebra parity — the default stripe is a CSS rule on `.mx-row-odd`; restyle or `background: transparent` it here). Rules are scoped to this table automatically. No `@import`, no `url()`. Omit for the default theme.
-          - `conditionalFormats`: background rules (JSON expression like columnFormats). Two forms, mixable in one array: condition rules `{id, column, operator, value, target: "cell"|"row"|"column", bgColor}` paint when a predicate holds; colour-scale rules `{id, column, scale: "red-yellow-green"|"green"|"blue"}` paint a numeric column's cells min→max along a ramp (heatmap cells).
-        - **Pivot** — a `pivot` source renders the pivot grid (nested headers, subtotals, collapsible groups, heatmap, totals — all built in). The structure is typed config; looks are css:
-          ```
-          <viz>
-            <version>2</version>
-            <source>
-              <kind>pivot</kind>
-              <config>{{"rows": ["region"], "columns": ["month"], "values": [{"column": "revenue", "aggFunction": "SUM"}]}}</config>
-            </source>
-          </viz>
-          ```
-          - `config` (REQUIRED): `rows`/`columns` are dimension column lists, `values` are measures with `aggFunction` (SUM/AVG/COUNT/MIN/MAX) — all EXACT result column names. Optional keys: `showRowTotals`, `showColumnTotals`, `showHeatmap`, `compact` (GitHub-graph style), `heatmapScale` ('red-yellow-green'|'green'|'blue'), `rowFormulas`/`columnFormulas` (`[{name, operandA, operandB, operator}]` over top-level dimension values).
-          - `columnFormats` (optional): same shape as table — `alias` renames dimension/value headers, `format` (d3) formats cells and date headers.
-          - `conditionalFormats` (optional): same vocabulary as table, applied to VALUE columns — condition rules `{id, column, operator, value, target, bgColor}` and colour-scale rules `{id, column, scale}` both work on pivot cells.
-          - `css` (optional, backtick template string like table): scoped overrides. The pivot shares the table's class contract (`.mx-table`, `.mx-header-row`, `.mx-th`, `.mx-row` + zebra, `.mx-cell`, `.mx-col-<column>`, `.mx-toolbar`) plus the `.mx-pivot` root for element selectors — `.mx-pivot th { … }`. No `@import` / `url()`.
-        - **Validation is automatic**: every EditFile/CreateFile that changes `<viz>` is validated (official Vega-Lite schema, field names vs the query result, recipe bindings, css policy). Errors REJECT the write — nothing is saved — and the tool result lists each issue with its path and the available fields; fix and retry. When you change the query and viz together, field checks run after the query executes and any issues come back as `vizValidation` in the result.
-        - **Legacy VizSettings** (`table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`, `combo`, `waterfall`, `trend`, `single_value`): the classic chart schema from before Viz V2 — do NOT author it for new charts; author `<viz>` instead. Many files still carry a populated `<vizSettings>`: when a `<viz>` envelope is present it wins and `vizSettings` is dead weight — IGNORE it, but NEVER modify or delete it (it is the rollback path if the workspace switches back to the classic format). When you edit such a question's chart, edit `<viz>` only and leave `<vizSettings>` exactly as it is.
-      - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
+      - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, dashboard merging, and complex scenarios.
+
+      ### Viz (`<viz>` — the DEFAULT chart format)
+      Author EVERY new chart as a `<viz>` envelope — a Vega-Lite v6 spec, a shipped recipe, or a table/pivot source. When present it is AUTHORITATIVE and `vizSettings` is ignored. This also applies to chart edits on legacy files that only have `<vizSettings>`: add a `<viz>` envelope rather than editing `<vizSettings>`.
+      **Pick the source kind in this order:**
+      1. Special ask → `table` / `pivot`. Specialized chart with a shipped recipe (funnel, waterfall, radar, trend, single-value, combo, choropleth, point-map) → `recipe`.
+      2. Everything else → `vega-lite` (the default grammar — bars/lines/areas/scatter/pie/heatmap, layers, facets, transforms, dual axis all fit here).
+      3. Native `vega` ONLY when Vega-Lite cannot express the ask (marks/signals-level control, custom projections): `<kind>vega</kind>` + `<grammar>vega@6</grammar>` + the full native spec — same data policy (query result = dataset `"main"`), validated and themed like VL, but field refs are NOT statically checked, so double-check column names. 
+      Note: For a recipe chart, never hand-write native vega. If customization is not possible, use DetachViz. It materializes the recipe's spec for you (see Detach below).
+      ```
+      <viz>
+        <version>2</version>
+        <source>
+          <kind>vega-lite</kind>
+          <grammar>vega-lite@6</grammar>
+          <spec>{{
+            "mark": "bar",
+            "encoding": {
+              "x": {"field": "month", "type": "temporal"},
+              "y": {"field": "revenue", "type": "quantitative"},
+              "color": {"field": "region", "type": "nominal"}
+            }
+          }}</spec>
+        </source>
+      </viz>
+      ```
+      - `<spec>` is the Vega-Lite JSON wrapped in ONE extra brace pair (`{{…}}`: outer = markup expression, inner = the JSON object). Plain multi-line JSON — no escaping, no string-encoding.
+      - OMIT `data` — the query result is injected as the named dataset `"main"`; external URLs and inline `values` are rejected. Field names must match the query's result columns EXACTLY (aliases included).
+      - The full VL grammar is available: `layer`, `facet`, `transform` (fold/window/calculate), dual axis via layers + `resolve: {"scale": {"y": "independent"}}`.
+      - MinusX theming (fonts, palette, light/dark, legend on top, SI number labels `.3~s` → 20k/1.5M) is applied automatically beneath your spec — do not hardcode fonts/colors or set `width`/`height` unless the user asks.
+      - X tick angle on category axes is ADAPTIVE (horizontal → slanted -45 → vertical as labels get denser); an explicit `"axis": {"labelAngle": <deg>}` on the x encoding always wins — set it only when the user asks for a specific angle.
+      - Label formats are d3 strings per encoding: numbers `"axis": {"format": ",.0f"}` (full digits) or `".2~s"` (SI); dates `"%b %Y"` / `"%b '%y"`. Temporal axes default to vega's multi-scale labels — set an explicit format when the user wants uniform ones.
+      - Tooltips are AUTOMATIC (every mark shows its encoded fields on hover). Add a `tooltip` encoding only for a CUSTOM field list; `"mark": {"tooltip": null}` disables.
+      - **Heatmap**: `"mark": {"type": "rect"}` + two DISCRETE axes (nominal/ordinal — ordinal for time buckets, never a continuous temporal axis on rect) + the measure on `color` with `"aggregate": "sum"`; add `"scale": {"scheme": "greens"}` on color for the GitHub-contribution look (replaces the pivot's deprecated `compact` mode).
+      - **Pie/donut**: `"mark": {"type": "arc"}` + `theta` with `"aggregate": "sum"` (REQUIRED — un-aggregated rows draw one sliver per row) + `color` for the slices. House donut styling is automatic — do NOT set `innerRadius`/`cornerRadius`/`padAngle` or a legend orient unless asked (`"innerRadius": 0` = solid pie). Do not add `tooltip`/`detail` encodings with extra fields — they join the aggregation groupby and re-shard the slices.
+      - Interactive legend (click to highlight/toggle a series): `"params": [{"name": "sel", "select": {"type": "point", "fields": ["<colorField>"]}, "bind": "legend"}]` + `"opacity": {"condition": {"param": "sel", "value": 1}, "value": 0.2}` in the encoding.
+
+      #### Shipped recipes (specialized charts — never author their specs by hand)
+      Same envelope, with a recipe source:
+      ```
+      <source>
+        <kind>recipe</kind>
+        <recipe>minusx/funnel@1</recipe>
+        <bindings>{{"stage": "stage_column", "value": "value_column"}}</bindings>
+      </source>
+      ```
+      Bindings map recipe slots → EXACT result column names; multi-capable slots accept an ARRAY of columns. Optional `<params>{{…}}</params>` (element like `<bindings>`) and `<columnFormats>{{"col": {"alias": "…", "format": "$,.0f"}}}</columnFormats>` — `alias` renames column-name-derived displays (incl. the single-value label), `format` is a d3 string (same vocabulary as `axis.format`).
+      - `minusx/funnel@1` — stage, value. Rows render in QUERY ORDER (ORDER BY the funnel sequence). Params: `orientation` 'vertical' (default, top→bottom) | 'horizontal'.
+      - `minusx/waterfall@1` — category, value. QUERY ORDER; negative values render as decreases; a Total bar is added automatically.
+      - `minusx/radar@1` — metric, value, series (optional). Long-format rows (one per metric×series); `value` may be an ARRAY of columns for wide data (series then ignored). One shared radial scale — pre-normalize in SQL when metrics use different units.
+      - `minusx/trend@1` — date, value (ARRAY → one KPI card per measure). ORDER BY date ascending. Params: `compareMode` 'last' (default) | 'previous' (skips the partial current period), `sparkline` bool (default true), `valueFontSize`/`deltaFontSize`/`labelFontSize`/`dateFontSize`.
+      - `minusx/single-value@1` — value. Displays the FIRST query row as one cardless KPI. Params: `showLabel`, `label`, `caption`, `align` left|center|right, `valueFontSize`/`labelFontSize`/`captionFontSize`, `valueColor`.
+      - `minusx/combo@1` — x, bar, line, series (optional — colors/groups both layers). Quiet bars on the left scale, emphasized line on an independent right scale; x is ordered categorically. Params: `linePoints` bool (default true), `lineWidth` 1–8, `barOpacity` 0.1–1.
+      - `minusx/choropleth@1` — region, value. Thematic map: one filled polygon per region, joined by region NAME ("California", not "CA"; "Tanzania"). Params: `mapName` 'us-states' (default) | 'world' | 'india-states'; `colorScale` 'green' (default) | 'blue' | 'teal' | 'orange' | 'purple' | 'red-yellow-green' | 'blue-orange'.
+      - `minusx/point-map@1` — lat, lng (required numeric coords); lat2, lng2 (bind BOTH → origin→destination FLOW LINES instead of points); size (quantitative → bubble size / flow width); color (category palette, or sequential ramp when `colorScale` is set). Plots coordinate rows over a basemap. Params: `mapName` (as choropleth — picks basemap + projection); `markColor` (one SOLID CSS color for ALL marks — use it to just recolor, do NOT bind a fake color column; a bound `color` column overrides it); `colorScale` (only meaningful WITH a bound color column); `center` ([lat, lng] recenter, works on any basemap); `zoom` (default 1, >1 zooms in); `basemap` 'vector' (default, boundary outline) | 'tiles' (street tiles for LOCAL/CITY views; browser-only, exports fall back to the outline); `tileUrl` (optional {z}/{x}/{y} template override). With no `center` the map auto-frames the DATA extent. To focus an area set `center`/`zoom` — do NOT filter the SQL; the query should still return all the points.
+      - **Recipe params first; detach only as the escape hatch.** In order: (1) a recipe PARAM expresses the ask → set it ("make the points red" → `markColor: 'red'`; "blue scale" → `colorScale: 'blue'`; "zoom into SF" → `center`/`zoom`; "street map" → `basemap: 'tiles'`); (2) a BINDING expresses it → rebind (a `size` column for bubbles, destination coords for flows); (3) only when NO param or binding fits → detach and edit the spec (dashed borders, text labels over points, extra layers, a custom palette the scales don't offer, legend inside the plot). Detaching turns the chart into a `custom` viz — it loses the friendly param controls AND future recipe upgrades until re-attached ("Reset to recipe" re-attaches, discarding spec edits; the original recipe is kept in `detachedFrom`).
+      - **Detach**: call `DetachViz` with the question's `fileId` — it materializes the recipe's full spec IN PLACE and returns the file's current markup; build your EditFile `oldMatch` from THAT (app-state markup is now stale). VL-engine recipes (funnel/waterfall/combo) detach to `kind: vega-lite`; native-engine ones (radar/trend/single-value/choropleth/point-map) to `kind: vega` — a full native-Vega spec (projections/signals/marks) + `assets`. NEVER hand-author a native recipe's spec from scratch — DetachViz first, then edit the materialized spec. (A chart Vega-Lite can express may be authored directly as `kind: vega-lite`, no recipe. Users can also detach via "Customize freely" in Viz → Spec.)
+
+      #### Table & pivot sources
+      `table` renders the interactive data grid — sorting, filtering, column stats, CSV export are built in (never author those). Everything but `kind` is optional; a bare `<kind>table</kind>` is a complete table:
+      ```
+      <source>
+        <kind>table</kind>
+        <columnFormats>{{"revenue": {"alias": "Revenue ($)", "decimalPoints": 2}}}</columnFormats>
+        <css>{`.mx-th { background: #223; } .mx-toolbar { display: none; }`}</css>
+      </source>
+      ```
+      `pivot` renders the pivot grid (nested headers, subtotals, collapsible groups, heatmap, totals — all built in) and REQUIRES `<config>`:
+      ```
+      <source>
+        <kind>pivot</kind>
+        <config>{{"rows": ["region"], "columns": ["month"], "values": [{"column": "revenue", "aggFunction": "SUM"}]}}</config>
+      </source>
+      ```
+      - Pivot `config`: `rows`/`columns` are dimension column lists, `values` are measures with `aggFunction` (SUM/AVG/COUNT/MIN/MAX) — all EXACT result column names. Optional keys: `showRowTotals`, `showColumnTotals`, `showHeatmap`, `heatmapScale` ('red-yellow-green'|'green'|'blue'), `rowFormulas`/`columnFormulas` (`[{name, operandA, operandB, operator}]` over top-level dimension values).
+      - Both kinds take optional `columnFormats` keyed by EXACT result column names — `alias` renames headers (pivot: dimension/value headers), `format` (d3) formats cells and date headers; table also honors legacy `decimalPoints`/`dateFormat`/`prefix`/`suffix` — and `conditionalFormats` (one mixable array: condition rules `{id, column, operator, value, target: "cell"|"row"|"column", bgColor}` paint when a predicate holds; colour-scale rules `{id, column, scale: "red-yellow-green"|"green"|"blue"}` paint a numeric column's cells min→max).
+      - Both take optional `css` (a backtick template string) styling LOOKS only, auto-scoped to this table/pivot. Class contract: `.mx-table`, `.mx-header-row`, `.mx-th`, `.mx-row` (+ `.mx-row-odd`/`.mx-row-even` zebra — the default stripe is a rule on `.mx-row-odd`; restyle or unset it here), `.mx-cell`, `.mx-col-<columnName>`, `.mx-toolbar` (the stats/filters/CSV bar — `display: none` hides the chrome, e.g. for story embeds); pivot adds the `.mx-pivot` root for element selectors (`.mx-pivot th { … }`). No `@import`, no `url()`.
+
+      #### Validation & legacy
+      - **Validation is automatic**: every EditFile/CreateFile that changes `<viz>` is validated (official Vega-Lite schema, field names vs the query result, recipe bindings, css policy). Errors REJECT the write — nothing is saved — and the tool result lists each issue with its path and the available fields; fix and retry. When query and viz change together, field checks run after the query executes and issues come back as `vizValidation`.
+      - **Legacy VizSettings** (`table`, `line`, `bar`, `pie`, `pivot`, `combo`, …): the classic pre-V2 chart schema — do NOT author it for new charts; author `<viz>` instead. Many files still carry a populated `<vizSettings>`: when a `<viz>` envelope is present it wins and vizSettings is dead weight — IGNORE it, but NEVER modify or delete it (the rollback path if the workspace switches back to the classic format). When editing such a question's chart, edit `<viz>` only.
 
       ### Data Source — query vs spreadsheet (mutually exclusive)
-      **Which to use:** if answering needs a database, use a **query**. If the data comes from the USER (they pasted/typed it, gave you numbers to chart, or want dummy/sample/example data) and no connection is involved, use a **spreadsheet** — do NOT stand up a query or invent SQL for user-supplied or made-up data.
-      A question is backed by EXACTLY ONE source. Never populate both:
-      - **Query source** (default) — SQL against a connection. Set `<query>` + `<connection_name>`; do NOT emit a `<spreadsheet>` element. Use for anything that reads from the database.
-      - **Spreadsheet source** — data the user hands you directly (pastes, dictates, or asks you to "just add", "type in", "enter", "make a table of…") with NO database behind it. Emit `<spreadsheet>` and set `<query></query>` and `<connection_name></connection_name>` to empty. NEVER fabricate SQL to invent rows — if there is no data source, use a spreadsheet.
-      - Switching sources: to convert a question from query→spreadsheet, add `<spreadsheet>` and blank out `<query>`/`<connection_name>` in the same edit; for spreadsheet→query, remove the `<spreadsheet>` element and set `<query>`/`<connection_name>`.
-
-      #### Spreadsheet markup
+      A question is backed by EXACTLY ONE source — never populate both:
+      - **Query** (default) — SQL against a connection: set `<query>` + `<connection_name>`; no `<spreadsheet>` element. Use for anything that reads from the database.
+      - **Spreadsheet** — data the USER hands you directly (pastes, dictates, "just add/type in/enter/make a table of…", or dummy/sample data) with NO database behind it: emit `<spreadsheet>` and set `<query></query>` + `<connection_name></connection_name>` empty. NEVER fabricate SQL to invent rows.
+      - Switching: query→spreadsheet = add `<spreadsheet>` and blank out `<query>`/`<connection_name>` in the same edit; spreadsheet→query = remove `<spreadsheet>` and set them.
       ```xml
       <spreadsheet>
         <version>1</version>
@@ -341,16 +339,14 @@ templates:
         </rows>
       </spreadsheet>
       ```
-      - `version` is always `1`. `columns` is `{ name, type }` where `type` is `auto` (infer — safe default), `text`, `number`, `boolean`, or `date`.
-      - `rows` is a list of rows; each row is a list of cells. **Cell order is positional — the Nth cell aligns to the Nth column.** Every row must have exactly as many cells as there are columns.
-      - All cell values are written as strings (e.g. `<item>12.5</item>`, not typed); `type` on the column governs interpretation. Use `<item>{null}</item>` for a blank/missing cell — do NOT drop the `<item>` (that would misalign the row).
-      - To ADD rows, insert new `<item>` rows into `<rows>` (EditFile, matching the existing `<rows>`…`</rows>` or a neighboring row). To ADD a column, append an `<item>` to `<columns>` AND add a matching cell to EVERY row. To edit one cell, oldMatch/newMatch just that `<item>` value.
+      - `version` is always `1`; column `type` is `auto` (infer — safe default) | `text` | `number` | `boolean` | `date`. All cell values are written as strings; the column `type` governs interpretation.
+      - Rows are positional — the Nth cell aligns to the Nth column; every row must have exactly one cell per column. Blank/missing cell = `<item>{null}</item>` — never drop the `<item>` (that misaligns the row).
+      - Add rows: insert `<item>` rows into `<rows>`. Add a column: append to `<columns>` AND add a matching cell to EVERY row. Edit one cell: oldMatch/newMatch just that `<item>` value.
       - Viz applies on top of spreadsheet data — author `<viz>` exactly as for a query question (spec field / recipe binding names = the spreadsheet column names; a bare `<kind>table</kind>` source is the default table).
 
       ### Question Page Behavior
-      - Users typically expect direct edits to the question in the current page. Use EditFile for query changes, viz updates, parameter edits, and metadata changes.
-      - Even if the question is empty or the user is asking a new question, prefer EditFile to update the existing question rather than navigating to a new one.
-      - If there is already a question that answers the user's question, Clarify if they want to go to that question or if they want you to adapt it in the current page.
+      - Users expect direct edits to the question on the current page — use EditFile for query, viz, parameter, and metadata changes, even when the question is empty or the ask is new (prefer editing over navigating to a new question).
+      - If an existing question already answers the ask, Clarify: go to it, or adapt it in the current page?
   skill_dashboards:
     description: Dashboard file structure (assets, 12-column grid layout, inline elements), dashboard page behavior guidelines
     content: |
