@@ -54,18 +54,32 @@ export const atlasSchema: Record<string, unknown> = topLevel({
   AtlasNotebookFile: toJson(AtlasNotebookFile),
 });
 
-// ── vizSettings stripping (used for per-file-type SKILL prompt schemas) ──────
+// ── viz stripping (used for per-file-type SKILL prompt schemas) ──────────────
 const VIZ_NOTE = {
   type: 'object',
   description: 'LEGACY vizSettings — IGNORE; never modify or delete it (rollback path). Author charts in `viz` (the Vega-Lite envelope) instead.',
 };
 
+const VIZ_ENVELOPE_NOTE = {
+  type: 'object',
+  description:
+    'Viz V2 envelope — AUTHORITATIVE chart definition when present (legacy vizSettings should be ignored). ' +
+    'Shape: {version: 2, source: {kind: ...}} where kind is "vega-lite" (a standard Vega-Lite v6 spec — the ' +
+    'FULL public grammar is allowed; omit `data`, the query result is injected as the named dataset "main"), ' +
+    '"recipe" (a shipped recipe id + column bindings), "table", "pivot", or "vega" (native Vega — detached ' +
+    'recipes only, never hand-authored). The envelope markup, recipes, and table/pivot config are fully ' +
+    'documented in the questions skill; the schema is deliberately not inlined here.',
+};
+
 /**
- * Recursively replace every `vizSettings` schema with the prose stub and drop
- * every `cellResults` schema. Walks the whole tree because notebooks embed a
- * full `vizSettings` inside *each* SQL cell (`content.cells[].vizSettings`),
- * not just at `content.vizSettings` like questions — a top-level-only strip
- * would leave the full viz schema (e.g. `ChoroplethConfig`) in notebook cells.
+ * Recursively collapse every `vizSettings` and `viz` schema to a prose stub and
+ * drop every `cellResults` schema. `vizSettings` is legacy (deliberately
+ * undocumented); `viz` is the V2 envelope, whose grammar (standard Vega-Lite v6
+ * + shipped recipes + table/pivot config) is taught in prose by the questions
+ * skill — inlining it would burn ~14k tokens per skill for zero information.
+ * Walks the whole tree because notebooks embed both inside *each* SQL cell
+ * (`content.cells[].viz`), not just at `content.viz` like questions — a
+ * top-level-only strip would leave the full schemas in notebook cells.
  */
 function stripVizDeep(node: unknown): void {
   if (Array.isArray(node)) {
@@ -77,6 +91,7 @@ function stripVizDeep(node: unknown): void {
   const props = obj.properties as Record<string, unknown> | undefined;
   if (props) {
     if ('vizSettings' in props) props.vizSettings = { ...VIZ_NOTE };
+    if ('viz' in props) props.viz = { ...VIZ_ENVELOPE_NOTE };
     // cellResults are system-managed cached results — never authored by the
     // agent, so drop them from the EditFile/CreateFile schema description.
     if ('cellResults' in props) delete props.cellResults;

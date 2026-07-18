@@ -439,7 +439,7 @@ export const QuestionContent = Type.Object({
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
   connection_name: Type.String({ description: 'connection name (empty string if none)' }),
   cachePolicy: Nullable(CachePolicy),
-  semanticQuery: NullableD(SemanticQuerySpec, 'Semantic-tier state; query holds the compiled SQL'),
+  semanticQuery: NullableD(SemanticQuerySpec, 'Semantic-tier state; query holds the compiled SQL; to be ignored for now.'),
   spreadsheet: Type.Optional(NullableD(SpreadsheetSource,
     'Direct data entered in the spreadsheet editor. Mutually exclusive with query-backed sources.')),
   viz: NullableD(VizEnvelope,

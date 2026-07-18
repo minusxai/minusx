@@ -224,11 +224,12 @@ templates:
       - External reference data to contextualize internal analytics (e.g., "how does our churn compare to industry average?")
       - Any question that requires real-world data not available in the connected databases
       - **Do NOT use web search** for questions answerable from the connected databases or existing saved questions — always check internal data first.
+    
     ### Feedback/Validation tools (to close the loop on changes you make)
     - **ReviewFile**: Review the current file without editing it — a rendered screenshot plus the full health rubric (deterministic errors/warnings + LLM visual judge + score). Same output as an EditFile with no changes.
 
   skill_questions:
-    description: Question file structure (query, viz envelope — Vega-Lite specs, shipped recipes, table/pivot sources — parameters, legacy vizSettings), question page behavior guidelines
+    description: Question file structure (query, viz envelope — Vega-Lite specs, shipped recipes, table/pivot sources, direct data), question page behavior guidelines
     content: |
       ## Questions
 
