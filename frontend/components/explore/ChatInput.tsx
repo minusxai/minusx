@@ -12,9 +12,7 @@ import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, rem
 import RegionCaptureButton from '@/components/screenshot/RegionCaptureButton';
 import ImageAnnotatorDialog from '@/components/screenshot/ImageAnnotatorDialog';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
-import DatabaseSelector from '@/components/selectors/DatabaseSelector';
-import { ContextSelector } from './ContextSelector';
-import { ModelSelector } from './ModelSelector';
+import ChatSettingsPopover from './ChatSettingsPopover';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
 import type { DatabaseWithSchema, Attachment, SkillMention, SlashCommand } from '@/lib/types';
@@ -24,6 +22,13 @@ import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
+
+const CHAT_PRO_TIPS = [
+  { shortcut: '@', detail: 'to mention tables & columns' },
+  { shortcut: '@@', detail: 'to mention questions & dashboards' },
+  { shortcut: '#', detail: 'to invoke skills' },
+  { shortcut: '/', detail: 'to run commands' },
+] as const;
 
 interface ChatInputProps {
   onSend: (message: string, attachments: Attachment[]) => void;
@@ -92,6 +97,9 @@ function ChatInputInner({
   // Use Redux for draft text (persists across unmount)
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
+  const [chatSettingsOpen, setChatSettingsOpen] = useState(false);
+  const [escapeCollapsed, setEscapeCollapsed] = useState(false);
+  const [proTip, setProTip] = useState<(typeof CHAT_PRO_TIPS)[number]>(CHAT_PRO_TIPS[0]);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const [annotatingIdx, setAnnotatingIdx] = useState<number | null>(null);
@@ -110,7 +118,9 @@ function ChatInputInner({
 
   const isFloating = container === 'floating';
   const hasContent = input.trim().length > 0 || attachments.length > 0;
-  const isCollapsed = isFloating && !isFocused && !hasContent;
+  const isCollapsed = isFloating
+    && !chatSettingsOpen
+    && (escapeCollapsed || (!isFocused && !hasContent));
 
   // Detect platform for keyboard shortcut display. Resolved in an effect, NOT during render:
   // a `typeof window` branch renders 'Ctrl+k' on the server and '⌘+k' on a Mac client, and that
@@ -120,6 +130,12 @@ function ChatInputInner({
     setIsMac(navigator.platform.toUpperCase().indexOf('MAC') >= 0);
   }, []);
   const shortcutKey = isMac ? '⌘+k' : 'Ctrl+k';
+
+  // Keep the hint stable while this composer is mounted. Starting with the first
+  // entry avoids server/client hydration differences; the client then picks one.
+  useEffect(() => {
+    setProTip(CHAT_PRO_TIPS[Math.floor(Math.random() * CHAT_PRO_TIPS.length)]);
+  }, []);
 
   // Global Cmd+K shortcut for floating mode
   useEffect(() => {
@@ -133,6 +149,19 @@ function ChatInputInner({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFloating]);
+
+  useEffect(() => {
+    if (!isFloating || isCollapsed) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || chatSettingsOpen) return;
+      event.preventDefault();
+      setEscapeCollapsed(true);
+      setIsFocused(false);
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [chatSettingsOpen, isCollapsed, isFloating]);
 
   // Clear input only after preparation completes (isPreparing: true → false)
   // so the text stays visible (greyed) while chart images are being uploaded.
@@ -216,6 +245,18 @@ function ChatInputInner({
     }
     historyCursorRef.current = null;
     draftBeforeHistoryRef.current = value;
+  });
+
+  const handleChatSettingsOpenChange = useStableCallback((nextOpen: boolean) => {
+    setChatSettingsOpen(nextOpen);
+    if (nextOpen || !isFloating || hasContent) return;
+
+    // Popover focus is portaled outside this shell, and focus restoration can leave
+    // the editor's old `isFocused` flag behind. Closing settings is an explicit signal
+    // that an empty floating composer should return to its pill state.
+    setEscapeCollapsed(true);
+    setIsFocused(false);
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
 
   // Large pastes (1000s of lines) bog down the Lexical editor — stage them as a
@@ -358,6 +399,8 @@ function ChatInputInner({
             >
             <Box
             ref={containerRef}
+            data-collapsed={isCollapsed}
+            position="relative"
             border="1px solid"
             borderColor={isDraggingOver ? 'accent.teal' : isFloating ? 'fg.default/30' : 'border.default'}
             boxShadow={isDraggingOver ? '0 0 0 1px var(--chakra-colors-accent-teal)' : isFloating ? 'lg' : undefined}
@@ -381,10 +424,88 @@ function ChatInputInner({
               }
             }}
             >
+            {!isCollapsed && (
+              <HStack
+                px={container === 'sidebar' ? 2.5 : 3}
+                py={container === 'sidebar' ? 1.5 : 2}
+                gap={3}
+                justify="space-between"
+                align="center"
+                display="flex"
+                bg="bg.muted"
+                borderTopLeftRadius="xl"
+                borderTopRightRadius="xl"
+                borderBottom="1px solid"
+                borderColor="border.muted"
+                data-testid="chat-pro-tip-bar"
+              >
+                {!disabled && !chatLocked && !isPreparing ? (
+                  <Text
+                    minW={0}
+                    overflow="hidden"
+                    color="fg.muted"
+                    fontFamily="mono"
+                    fontSize="2xs"
+                    lineHeight="short"
+                    textOverflow="ellipsis"
+                    whiteSpace="nowrap"
+                  >
+                    <Box as="span" fontWeight="700">ProTip</Box>
+                    {' · '}
+                    Use
+                    <Box
+                      as="code"
+                      px={1}
+                      py={0.5}
+                      borderRadius="sm"
+                      color="accent.teal"
+                      fontFamily="mono"
+                      fontSize="inherit"
+                      fontWeight="700"
+                      lineHeight="1"
+                    >
+                      {proTip.shortcut}
+                    </Box>
+                    {proTip.detail}
+                  </Text>
+                ) : <Box />}
+                {isFloating && (
+                  <HStack
+                    gap={1.5}
+                    color="fg.subtle"
+                    flexShrink={0}
+                    aria-label="Press Escape to collapse chat"
+                  >
+                    <Box
+                      as="kbd"
+                      px={1}
+                      py={0.5}
+                      border="1px solid"
+                      borderColor="border.default"
+                      borderRadius="sm"
+                      fontFamily="mono"
+                      fontSize="2xs"
+                      lineHeight="1"
+                      bg="bg.surface"
+                    >
+                      Esc
+                    </Box>
+                    <Text fontSize="2xs" fontFamily="mono" whiteSpace="nowrap">
+                      collapse
+                    </Text>
+                  </HStack>
+                )}
+              </HStack>
+            )}
             <VStack gap={0} align="stretch">
                 {/* Editor row with inline send button (collapsed only) */}
                 <HStack gap={0} align="center" pr={isCollapsed ? 3 : 0}>
-                  <Box flex="1" px={1} py={isCollapsed ? 0 : 2} transition="padding 0.25s ease">
+                  <Box
+                    flex="1"
+                    px={1}
+                    py={isCollapsed ? 0 : 2}
+                    transition="padding 0.25s ease"
+                  >
                     <Box
                       maxHeight={isCollapsed ? '40px' : '200px'}
                       overflow={isCollapsed ? 'hidden' : 'auto'}
@@ -396,11 +517,15 @@ function ChatInputInner({
                         databaseName={databaseName}
                         disabled={disabled || isPreparing || chatLocked}
                         singleLine={isCollapsed}
+                        compact={container === 'sidebar'}
                         onSubmit={handleSend}
                         onChange={handleInputChange}
                         onLargePaste={handleLargePaste}
                         onArrowKey={handleHistoryArrow}
-                        onFocus={() => setIsFocused(true)}
+                        onFocus={() => {
+                          setEscapeCollapsed(false);
+                          setIsFocused(true);
+                        }}
                         onBlur={() => {
                           // Delay check so activeElement updates after blur
                           requestAnimationFrame(() => {
@@ -423,6 +548,7 @@ function ChatInputInner({
                       <IconButton
                         aria-label="Attach file or image"
                         onClick={() => {
+                          setEscapeCollapsed(false);
                           setIsFocused(true);
                           setTimeout(() => fileInputRef.current?.click(), 300);
                         }}
@@ -579,74 +705,73 @@ function ChatInputInner({
                   transition={isFloating ? 'max-height 0.2s ease 0.05s, opacity 0.2s ease 0.05s' : undefined}
                 >
                   <HStack
-                  px={3}
-                  pb={2}
-                  pt={1}
-                  justify="space-between"
-                  gap={2}
+                    px={3}
+                    pb={container === 'sidebar' ? 1.5 : 2}
+                    pt={1}
+                    justify="space-between"
+                    gap={1}
+                    minW={0}
+                    data-testid="chat-control-bar"
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
                   >
-                  {/* Left controls - Context + Database status indicators */}
-                  <HStack gap={1.5} align="center">
-                    <ContextSelector
+                    <ChatSettingsPopover
+                      databaseName={databaseName}
+                      onDatabaseChange={onDatabaseChange}
+                      selectedModel={selectedModel}
+                      onModelChange={onModelChange || (() => {})}
+                      modelDisabled={isAgentRunning || remoteSessionActive}
                       selectedContextPath={selectedContextPath || null}
                       selectedVersion={selectedVersion}
-                      onSelectContext={onContextChange || (() => {})}
-                      compact
+                      onContextChange={onContextChange || (() => {})}
+                      onOpenChange={handleChatSettingsOpenChange}
+                      compactSummary={container === 'sidebar'}
                     />
-                    <DatabaseSelector
-                      value={databaseName}
-                      onChange={({ connection_name }) => onDatabaseChange(connection_name)}
-                      size="sm"
-                      compact
-                    />
-                    <ModelSelector
-                      value={selectedModel}
-                      onChange={onModelChange || (() => {})}
-                      disabled={isAgentRunning || remoteSessionActive}
-                    />
-                  </HStack>
 
-                  <HStack gap={1}>
-                    <Tooltip content="Attach file or image (PDF, DOCX, TXT, PNG, JPG…)" positioning={{ placement: 'top' }}>
-                      <IconButton
-                        aria-label="Attach file or image"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isAgentRunning}
-                        variant="ghost"
-                        size="xs"
-                        color="fg.muted"
-                        _hover={{ color: 'accent.teal' }}
-                        _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-                        borderRadius="md"
-                        flexShrink={0}
-                      >
-                        <Icon as={LuPaperclip} boxSize={3.5} />
-                      </IconButton>
-                    </Tooltip>
+                    <HStack
+                      gap={1}
+                      data-testid="chat-input-actions"
+                      style={{ flexShrink: 0 }}
+                    >
+                      <Tooltip content="Attach file or image (PDF, DOCX, TXT, PNG, JPG…)" positioning={{ placement: 'top' }}>
+                        <IconButton
+                          aria-label="Attach file or image"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isAgentRunning}
+                          variant="ghost"
+                          size="xs"
+                          color="fg.muted"
+                          _hover={{ color: 'accent.teal' }}
+                          _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
+                          borderRadius="md"
+                          flexShrink={0}
+                        >
+                          <Icon as={LuPaperclip} boxSize={3.5} />
+                        </IconButton>
+                      </Tooltip>
 
-                    <Tooltip content="Select a screen region to add as context" positioning={{ placement: 'top' }}>
-                      <span><RegionCaptureButton /></span>
-                    </Tooltip>
+                      <Tooltip content="Select a screen region to add as context" positioning={{ placement: 'top' }}>
+                        <span><RegionCaptureButton /></span>
+                      </Tooltip>
 
-                    {isPreparing ? (
-                      <Spinner size="sm" color="accent.teal" flexShrink={0} />
-                    ) : (
-                      <IconButton
-                        aria-label="Send message"
-                        onClick={handleSend}
-                        disabled={disabled || !input.trim() || connectionsLoading || contextsLoading || chatLocked || hasPendingUploads}
-                        bg="accent.teal"
-                        color="white"
-                        _hover={{ bg: 'accent.teal', opacity: 0.9 }}
-                        _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-                        size="xs"
-                        borderRadius="md"
-                        flexShrink={0}
-                      >
-                        <Icon as={LuSendHorizontal} boxSize={3.5} />
-                      </IconButton>
-                    )}
-                  </HStack>
+                      {isPreparing ? (
+                        <Spinner size="sm" color="accent.teal" flexShrink={0} />
+                      ) : (
+                        <IconButton
+                          aria-label="Send message"
+                          onClick={handleSend}
+                          disabled={disabled || !input.trim() || connectionsLoading || contextsLoading || chatLocked || hasPendingUploads}
+                          bg="accent.teal"
+                          color="white"
+                          _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+                          _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
+                          size="xs"
+                          borderRadius="md"
+                          flexShrink={0}
+                        >
+                          <Icon as={LuSendHorizontal} boxSize={3.5} />
+                        </IconButton>
+                      )}
+                    </HStack>
                   </HStack>
                 </Box>
             </VStack>

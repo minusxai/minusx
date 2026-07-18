@@ -444,7 +444,7 @@ function makeConnectionFile(id: number, name: string, withSchema = true): DbFile
   };
 }
 
-describe('Explore page: database selector defaults to first connection', () => {
+describe('Explore page: chat settings default to first connection', () => {
   let testStore: ReturnType<typeof storeModule.makeStore>;
   let getStoreSpy: MockInstance;
 
@@ -494,7 +494,7 @@ describe('Explore page: database selector defaults to first connection', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Database selector')).toHaveTextContent('sales_db');
+      expect(screen.getByLabelText('Chat settings')).toHaveTextContent('sales_db');
     });
   });
 
@@ -519,9 +519,9 @@ describe('Explore page: database selector defaults to first connection', () => {
     );
 
     await waitFor(() => {
-      const selector = screen.getByLabelText('Database selector');
-      expect(selector).toHaveTextContent('has_schema_db_1');
-      expect(selector).not.toHaveTextContent('No connection');
+      const settings = screen.getByLabelText('Chat settings');
+      expect(settings).toHaveTextContent('has_schema_db_1');
+      expect(settings).not.toHaveTextContent('No database');
     });
   });
 
@@ -545,7 +545,7 @@ describe('Explore page: database selector defaults to first connection', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Database selector')).toHaveTextContent('sales_db');
+      expect(screen.getByLabelText('Chat settings')).toHaveTextContent('sales_db');
     });
   });
 });
