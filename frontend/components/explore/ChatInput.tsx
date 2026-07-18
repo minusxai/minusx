@@ -3,6 +3,7 @@
 import { memo, useState, useRef, useEffect } from 'react';
 import isEqual from 'lodash/isEqual';
 import { shallowEqualExcept, useStableCallback } from '@/lib/hooks/use-stable-callback';
+import { isComposerFocusPassthrough } from '@/components/explore/composer-focus';
 import { Box, HStack, VStack, IconButton, Icon, Grid, GridItem, Text, Spinner } from '@chakra-ui/react';
 import { LuSendHorizontal, LuPaperclip, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -247,6 +248,17 @@ function ChatInputInner({
     draftBeforeHistoryRef.current = value;
   });
 
+  // Append text (e.g. a note typed in the screen-region annotator) to the composer without
+  // clobbering what the user has already typed. Keeps the Lexical editor and local state in sync.
+  const appendComposerText = useStableCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const next = input.trim() ? `${input.trimEnd()} ${trimmed}` : trimmed;
+    setInput(next);
+    editorRef.current?.setText(next);
+    editorRef.current?.focus();
+  });
+
   const handleChatSettingsOpenChange = useStableCallback((nextOpen: boolean) => {
     setChatSettingsOpen(nextOpen);
     if (nextOpen || !isFloating || hasContent) return;
@@ -365,13 +377,14 @@ function ChatInputInner({
   };
 
   // Attachment annotator: index of the image attachment being annotated, or null.
-  const annotateConfirm = async (blob: Blob) => {
+  const annotateConfirm = async (blob: Blob, note: string) => {
     if (annotatingIdx === null) return;
     const att = attachments[annotatingIdx];
     if (!att) return;
     try {
       const url = await uploadBlobOrEmbed(blob, att.name || 'annotated.jpg', 'image/jpeg');
       dispatch(updateChatAttachment({ index: annotatingIdx, attachment: { ...att, content: url } }));
+      appendComposerText(note);
     } catch (err) {
       toaster.create({ title: err instanceof Error ? err.message : 'Could not save the annotated image', type: 'error' });
     }
@@ -416,9 +429,11 @@ function ChatInputInner({
             onDrop={handleDrop}
             cursor="text"
             onMouseDown={(e) => {
-              // Focus editor when clicking empty space — skip if clicking a button/input/select
-              const target = e.target as HTMLElement;
-              if (!target.closest('button, input, select, [role="listbox"], [role="option"], [data-lexical-editor]')) {
+              // Focus editor when clicking empty space — but leave interactive controls AND anything
+              // inside a portaled dialog alone. The annotator Dialog is a React child of ChatInput
+              // (DOM-portaled to <body>), so its clicks bubble here through the React tree; hijacking
+              // them made the annotator's note textarea un-focusable via left-click.
+              if (!isComposerFocusPassthrough(e.target as HTMLElement)) {
                 e.preventDefault(); // Prevent blur from firing
                 editorRef.current?.focus();
               }
@@ -750,7 +765,7 @@ function ChatInputInner({
                       </Tooltip>
 
                       <Tooltip content="Select a screen region to add as context" positioning={{ placement: 'top' }}>
-                        <span><RegionCaptureButton /></span>
+                        <span><RegionCaptureButton onNote={appendComposerText} /></span>
                       </Tooltip>
 
                       {isPreparing ? (

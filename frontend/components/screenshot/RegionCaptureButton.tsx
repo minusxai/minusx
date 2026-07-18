@@ -17,11 +17,17 @@ import { addChatAttachment, addPendingUpload, removePendingUpload, selectPending
 import { getStore } from '@/store/store';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { captureRegionBlob } from '@/lib/screenshot/capture';
+import { DISPLAY_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
 import { toaster } from '@/components/ui/toaster';
 import RegionSelectOverlay, { type SelectionRect } from '@/components/screenshot/RegionSelectOverlay';
 import ImageAnnotatorDialog from '@/components/screenshot/ImageAnnotatorDialog';
 
-export default function RegionCaptureButton() {
+interface RegionCaptureButtonProps {
+  /** A note the user typed in the annotator; the owning composer appends it to the chat input. */
+  onNote?: (text: string) => void;
+}
+
+export default function RegionCaptureButton({ onNote }: RegionCaptureButtonProps = {}) {
   const dispatch = useAppDispatch();
   const colorMode = useAppSelector(s => s.ui.colorMode);
   const [selecting, setSelecting] = useState(false);
@@ -53,6 +59,9 @@ export default function RegionCaptureButton() {
         colorMode,
         target,
         targetBox,
+        // Capture at DISPLAY resolution so the annotator canvas is crisp; the annotated result is
+        // downscaled to the agent cap at export time (ImageAnnotatorDialog.confirm).
+        maxOutputPx: DISPLAY_IMAGE_MAX_PX,
         // Exclude the selection overlay from its own screenshot.
         filter: (node) => !(node instanceof HTMLElement && node.hasAttribute('data-region-select-overlay')),
       });
@@ -64,7 +73,7 @@ export default function RegionCaptureButton() {
     }
   }, [colorMode, dispatch]);
 
-  const annotateConfirm = useCallback(async (blob: Blob) => {
+  const annotateConfirm = useCallback(async (blob: Blob, note: string) => {
     if (!pendingCrop) return;
     try {
       const url = await uploadBlobOrEmbed(blob, 'selection.jpg', 'image/jpeg');
@@ -73,12 +82,13 @@ export default function RegionCaptureButton() {
       dispatch(removePendingUpload(pendingCrop.uploadId));
       if (!cancelled) {
         dispatch(addChatAttachment({ type: 'image', name: 'Screen selection', content: url, metadata: {} }));
+        if (note) onNote?.(note);
       }
     } catch (err) {
       dispatch(removePendingUpload(pendingCrop.uploadId));
       toaster.create({ title: err instanceof Error ? err.message : 'Could not upload the selection', type: 'error' });
     }
-  }, [dispatch, pendingCrop]);
+  }, [dispatch, pendingCrop, onNote]);
 
   const annotateClose = useCallback(() => {
     if (pendingCrop) {
