@@ -56,6 +56,23 @@ describe('contentSchemaText — live per-file-type content schema for skills', (
     expect(q).not.toContain('ChoroplethConfig'); // a viz-only def — must NOT be inlined here
   });
 
+  it('collapses the viz envelope to a pointer — source-kind schemas are never inlined', () => {
+    const q = contentSchemaText('question');
+    expect(q).toContain('"viz"');       // the property is still documented...
+    expect(q).toContain('Vega-Lite');   // ...and the stub names the grammar
+    expect(q).not.toContain('detachedFrom'); // VizSourceVegaLite/Vega marker — must NOT be inlined
+    expect(q).not.toContain('RESERVED:');    // envelope reserved-namespace fields
+    // notebooks embed viz per SQL cell — the deep walk must collapse those too
+    const n = contentSchemaText('notebook');
+    expect(n).not.toContain('detachedFrom');
+    expect(n).not.toContain('RESERVED:');
+  });
+
+  it('stays compact — the viz collapse holds the skill-schema token line', () => {
+    expect(contentSchemaText('question').length).toBeLessThan(20_000);
+    expect(contentSchemaText('notebook').length).toBeLessThan(30_000);
+  });
+
   it('contains NO nested {a.b} refs (those would THROW in the {ref} template engine)', () => {
     // Bare {N}/{142} from embed-syntax docs are fine — resolveTemplates leaves an unknown {word}
     // untouched. Only dotted {a.b} refs throw "Template not found", so those must be absent.
