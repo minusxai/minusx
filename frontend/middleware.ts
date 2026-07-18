@@ -6,9 +6,9 @@ export default createMiddleware();
 // runtime: 'nodejs' is required; without it Next.js defaults to Edge which lacks Node.js APIs.
 export const config = {
   // wasm/ttf: static engine + font assets (public/takumi, public/fonts) must load
-  // for UNAUTHENTICATED guests (public share pages render stories on canvas) — the
-  // auth middleware would otherwise answer them with an HTML login redirect, which
-  // fails WebAssembly.instantiate with 'expected magic word … found 3c 21 44 4f' (<!DO).
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|(?!api/).*\\.(?:svg|png|jpg|jpeg|gif|webp|wasm|ttf|woff2?)$).*)'],
+  // for UNAUTHENTICATED guests (public share pages render stories on canvas). The
+  // manifest + generated PWA icons must also remain public so browsers can evaluate
+  // installability. Auth would otherwise answer these requests with login-page HTML.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|pwa-icon/|(?!api/).*\\.(?:svg|png|jpg|jpeg|gif|webp|wasm|ttf|woff2?)$).*)'],
   runtime: 'nodejs',
 };
