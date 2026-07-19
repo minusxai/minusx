@@ -36,6 +36,7 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const headerEditMode = useAppSelector(state => (numericId !== undefined ? selectFileEditMode(state, numericId) : false));
   const colorMode = useAppSelector(state => state.ui.colorMode);
+  const devMode = useAppSelector(state => state.ui.devMode);
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   // Persisted compiledCss for clean saved stories; preview-compiled for drafts/staged edits.
   const compiledCss = useStoryPreviewCss(mergedContent, isDirty);
@@ -70,6 +71,7 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
         colorMode={effectiveColorMode}
         compiledCss={compiledCss}
         storyRenderer={resolveStoryRenderer(config)}
+        showDevMarkers={devMode}
       />
       {canShare && numericId !== undefined && (
         <ShareModal fileId={numericId} fileName={file.name} isOpen={shareOpen} onClose={() => setShareOpen(false)} />

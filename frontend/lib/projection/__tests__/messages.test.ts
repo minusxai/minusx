@@ -73,6 +73,29 @@ describe('projectMessages — app state', () => {
     expect((out as WithAppState)._currentTime).toBeUndefined();
   });
 
+  it('renders a <Viewport> pointer in the tail, after CurrentTime and before the user text', () => {
+    const um = userMsg('q', fileAppState('<question id="1"/>')) as Message & WithAppState;
+    um._currentTime = '2026-06-26 14:00 UTC';
+    um._viewport = 'The user is viewing section 2 of 5.';
+    const [out] = projectMessages([um]);
+    const texts = (out.content as TextContent[]).filter((c) => c.type === 'text').map((c) => c.text);
+    const timeIdx = texts.findIndex((t) => t.startsWith('<CurrentTime>'));
+    // Viewport rides AFTER CurrentTime — it changes every scroll, so it sits latest in the stable
+    // prefix (image + AppState + CurrentTime all precede it and stay cached while the user scrolls).
+    expect(texts[timeIdx + 1]).toBe('<Viewport>The user is viewing section 2 of 5.</Viewport>');
+    expect(texts[texts.length - 1]).toBe('q'); // user text last
+    expect((out as WithAppState)._viewport).toBeUndefined(); // marker stripped
+  });
+
+  it('renders <Viewport> even when the turn carries no _appState or _currentTime', () => {
+    const um: Message & WithAppState = {
+      role: 'user', content: 'q', timestamp: 0, _viewport: 'The user is viewing section 1 of 3.',
+    };
+    const [out] = projectMessages([um]);
+    const texts = (out.content as TextContent[]).filter((c) => c.type === 'text').map((c) => c.text);
+    expect(texts).toContain('<Viewport>The user is viewing section 1 of 3.</Viewport>');
+  });
+
   it('renders folder/explore app state as inline JSON (no facet projection)', () => {
     const explore: AppState = { type: 'explore', state: null };
     const [out] = projectMessages([userMsg('q', explore)]);

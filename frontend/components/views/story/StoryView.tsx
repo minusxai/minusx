@@ -12,6 +12,7 @@ import type { StoryRenderer } from '@/lib/branding/whitelabel';
 import { applyStoryHtmlEdit } from '@/lib/file-state/file-state';
 import { STORY_W } from './ScaledStoryFrame';
 import CanvasStoryView from './CanvasStoryView';
+import { PageMarkerDevOverlay } from './PageMarkerDevOverlay';
 
 // Max on-screen width of the reading column. Stories render FLUID (no transform
 // scale): full-bleed on mobile, capped + centered here on desktop. Authored
@@ -49,6 +50,9 @@ interface StoryViewProps {
   /** Which engine renders the story (Settings → "Story Renderer"), sourced by the container from
    *  configs. 'canvas' and 'svg' fall back to the DOM path per story on failure. */
   storyRenderer?: StoryRenderer;
+  /** DEV-ONLY: overlay the app-state screenshot's position markers on the live view (sourced from
+   *  devMode by the container). Never shown to end users; mounts OUTSIDE the captured subtree. */
+  showDevMarkers?: boolean;
 }
 
 /**
@@ -59,7 +63,7 @@ interface StoryViewProps {
  * `onChange` (so the header's Save persists them and Cancel reverts them); the html is frozen during
  * the session so the iframe doesn't rebuild mid-edit.
  */
-export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss, storyRenderer = 'dom' }: StoryViewProps) {
+export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss, storyRenderer = 'dom', showDevMarkers = false }: StoryViewProps) {
   const numericId = typeof fileId === 'number' ? fileId : undefined;
   const canEdit = !readOnly && numericId !== undefined;
   const editing = canEdit && headerEditMode;
@@ -117,9 +121,13 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
   return (
     <Box aria-label="Story page" w="100%" minH="420px">
       <Box display="flex" justifyContent="center">
+        {/* Relative wrapper anchors the DEV marker overlay OVER the captured box without being INSIDE
+            it — so snapdom/canvas/svg capture the story alone, and the app-state screenshot's baked
+            gutter is the only numbering in the image (no double markers). */}
+        <Box position="relative" w="100%" maxW={STORY_MAX_W}>
         {/* data-story-capture → OG share-card preview; data-file-id → the standard FileView capture
             (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
-        <Box w="100%" maxW={STORY_MAX_W} {...(numericId !== undefined ? { 'data-story-capture': numericId, 'data-file-id': numericId } : {})}>
+        <Box w="100%" {...(numericId !== undefined ? { 'data-story-capture': numericId, 'data-file-id': numericId } : {})}>
           {storyRenderer === 'canvas' ? (
             <CanvasStoryView
               // While editing, render the LIVE story (each block commit re-rasters from
@@ -176,6 +184,8 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             selectionSource={selectionSource}
           />
           )}
+        </Box>
+          <PageMarkerDevOverlay enabled={showDevMarkers} colorMode={colorMode} />
         </Box>
       </Box>
       <NumberQueryEditor request={numberEdit} filePath={storyPath} onClose={() => setNumberEdit(null)} />

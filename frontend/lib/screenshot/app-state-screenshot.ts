@@ -37,7 +37,7 @@ let lastShot: Shot | null = null;
  */
 export const _internal = {
   capture: (id: number, colorMode: ColorMode): Promise<Blob> =>
-    captureFileViewBlob(id, { colorMode, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg' }),
+    captureFileViewBlob(id, { colorMode, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg', markers: true }),
   upload: (blob: Blob): Promise<string> => uploadBlobOrEmbed(blob, 'file.jpg', 'image/jpeg'),
   reset(): void {
     lastShot = null;

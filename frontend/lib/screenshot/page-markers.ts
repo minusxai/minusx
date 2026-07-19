@@ -68,6 +68,21 @@ export function visibleMarkers(
 }
 
 /**
+ * Marker label + its y in OUTPUT-image pixels, given the capture's content scale (output px per
+ * document px). The capture layer draws the badge text at each `y`; because the badge glyphs
+ * themselves are sized in fixed output px (not scaled), they stay legible however hard the content
+ * shrank — only their POSITION tracks the content. Pure so the alignment is unit-tested without a
+ * canvas.
+ */
+export function markerDrawPositions(
+  docHeightPx: number,
+  contentScale: number,
+  cadencePx: number = MARKER_CADENCE_PX,
+): Array<{ label: number; y: number }> {
+  return pageMarkers(docHeightPx, cadencePx).map((m) => ({ label: m.label, y: m.y * contentScale }));
+}
+
+/**
  * Human/agent-facing pointer text for the `<Viewport>` block. Single band → "section N of T";
  * a range → "sections F–L of T", always naming the centered band the user is focused on.
  */

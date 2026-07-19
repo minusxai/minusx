@@ -402,6 +402,9 @@ export async function setupOrchestration(
     ? (agentArgs as { city: string }).city
     : undefined;
   const clientAppState = (agentArgs as { app_state?: unknown }).app_state;
+  // Scroll pointer computed client-side at send (needs the DOM's scroll position + view height) —
+  // threaded onto the agent context like app_state, rendered as <Viewport> by the projection pass.
+  const clientViewport = (agentArgs as { viewport?: string }).viewport;
   const pageType = getPageType(clientAppState);
   // Attachments: v2 sends images inline as base64 data: URLs (no upload), so we
   // just parse them; text passes through. Remote URLs are ignored (no fetch).
@@ -548,6 +551,7 @@ export async function setupOrchestration(
       role: user.role,
       agentName: clientAgentName,
       appState: clientAppState,
+      viewport: clientViewport,
       pageType,
       selectedSkills,
       userSkillCatalog,

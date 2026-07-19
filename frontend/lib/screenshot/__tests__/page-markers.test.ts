@@ -4,6 +4,7 @@ import {
   markerCount,
   markerY,
   pageMarkers,
+  markerDrawPositions,
   visibleMarkers,
   formatViewportPointer,
 } from '@/lib/screenshot/page-markers';
@@ -42,6 +43,19 @@ describe('pageMarkers', () => {
   });
   it('defaults to MARKER_CADENCE_PX', () => {
     expect(pageMarkers(MARKER_CADENCE_PX * 2)).toHaveLength(2);
+  });
+});
+
+describe('markerDrawPositions', () => {
+  it('scales each band-top y into output-image pixels', () => {
+    // 3000px page (5 bands) captured at 0.4× → bands at doc-y 0,600,…,2400 land at 0,240,…,960
+    expect(markerDrawPositions(3000, 0.4, C)).toEqual([
+      { label: 1, y: 0 },
+      { label: 2, y: 240 },
+      { label: 3, y: 480 },
+      { label: 4, y: 720 },
+      { label: 5, y: 960 },
+    ]);
   });
 });
 
