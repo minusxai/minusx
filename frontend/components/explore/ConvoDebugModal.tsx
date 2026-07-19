@@ -45,23 +45,32 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Toggle({ label, options, value, onChange }: {
-  label: string;
+/** Segmented two-option control: the selected option is visibly filled and
+ *  exposed via aria-pressed. */
+function Toggle({ group, options, value, onChange }: {
+  group: string;
   options: [string, string];
   value: string;
   onChange: (next: string) => void;
 }) {
-  const isSecond = value === options[1];
   return (
-    <HStack gap={2}>
-      <Text fontSize="xs" color="fg.muted" textTransform="capitalize">{options[0]}</Text>
-      <input
-        type="checkbox"
-        aria-label={label}
-        checked={isSecond}
-        onChange={() => onChange(isSecond ? options[0] : options[1])}
-      />
-      <Text fontSize="xs" color="fg.muted" textTransform="capitalize">{options[1]}</Text>
+    <HStack gap={0} borderWidth="1px" borderColor="border.default" borderRadius="md" overflow="hidden">
+      {options.map((opt) => (
+        <Button
+          key={opt}
+          size="xs"
+          borderRadius={0}
+          variant={value === opt ? 'solid' : 'ghost'}
+          colorPalette={value === opt ? 'teal' : 'gray'}
+          aria-label={`${group}: ${opt}`}
+          aria-pressed={value === opt}
+          onClick={() => onChange(opt)}
+          textTransform="capitalize"
+          fontFamily="mono"
+        >
+          {opt}
+        </Button>
+      ))}
     </HStack>
   );
 }
@@ -99,13 +108,13 @@ export default function ConvoDebugModal({
                 </HStack>
                 <HStack gap={6}>
                   <Toggle
-                    label="logs source toggle"
+                    group="logs source"
                     options={['projected', 'raw']}
                     value={logSource}
                     onChange={(v) => onLogSourceChange(v as LogSource)}
                   />
                   <Toggle
-                    label="cost mode toggle"
+                    group="cost mode"
                     options={['expected', 'actual']}
                     value={costMode}
                     onChange={(v) => onCostModeChange(v as CostMode)}

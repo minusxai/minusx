@@ -62,17 +62,21 @@ describe('ConvoDebugModal', () => {
     expect(screen.getByLabelText('image tokens')).toBeTruthy();
   });
 
-  it('fires the logs-source toggle callback', () => {
+  it('switches log source via a segmented control that marks the selected option', () => {
     const onLogSourceChange = vi.fn();
     renderReady({ onLogSourceChange });
-    fireEvent.click(screen.getByLabelText('logs source toggle'));
+    // Selected option is exposed via aria-pressed.
+    expect(screen.getByLabelText('logs source: projected').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByLabelText('logs source: raw').getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(screen.getByLabelText('logs source: raw'));
     expect(onLogSourceChange).toHaveBeenCalledWith('raw');
   });
 
-  it('fires the cost-mode toggle callback', () => {
+  it('switches cost mode via a segmented control', () => {
     const onCostModeChange = vi.fn();
     renderReady({ onCostModeChange });
-    fireEvent.click(screen.getByLabelText('cost mode toggle'));
+    expect(screen.getByLabelText('cost mode: expected').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByLabelText('cost mode: actual'));
     expect(onCostModeChange).toHaveBeenCalledWith('actual');
   });
 
