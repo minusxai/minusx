@@ -14,6 +14,7 @@ import type { FileState } from '@/store/filesSlice';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { QuestionBrowserPanel } from '../question/QuestionBrowserPanel';
 import { useDashboardPublishHighlights, type PublishHighlight } from '@/lib/context/dashboard-publish-highlights';
+import { computeEffectiveSubmittedValues } from '@/lib/dashboard/effective-params';
 
 // Must match the grid's rowHeight / margin props below. Used to translate a text
 // block's expanded pixel height into grid rows for "Read more".
@@ -264,20 +265,10 @@ export default function DashboardView({
   // (used on initial load and after publish clears ephemeral state).
   // Falls back to the first non-empty value from the underlying questions' saved parameterValues,
   // but ONLY when the key is absent — explicit null (None) is never overridden by question defaults.
-  const effectiveSubmittedValues = useMemo(() => {
-    const values: Record<string, any> = {};
-    for (const p of mergedParameters) {
-      // Use 'in' check so null (skipped) is preserved — ?? treats null as nullish
-      if (p.name in lastExecutedParams) {
-        values[p.name] = lastExecutedParams[p.name];
-      } else if (paramValues && p.name in paramValues) {
-        values[p.name] = paramValues[p.name];
-      } else {
-        values[p.name] = questionParamDefaults.get(p.name) ?? '';
-      }
-    }
-    return values;
-  }, [mergedParameters, lastExecutedParams, paramValues, questionParamDefaults]);
+  const effectiveSubmittedValues = useMemo(
+    () => computeEffectiveSubmittedValues(mergedParameters, lastExecutedParams, paramValues, questionParamDefaults),
+    [mergedParameters, lastExecutedParams, paramValues, questionParamDefaults],
+  );
 
 
   // Handler for removing any asset (question or text block) from the dashboard
