@@ -250,6 +250,11 @@ html.dark .login-card {
    the borderless "floating card" look — soft shadow + hairline ring, no 1px border. */
 #vg-tooltip-element,
 #mx-shared-tooltip {
+  /* Above every overlay (Chakra dialogs use zIndex 100000 — e.g. the /debug
+     modal, which hosts a Vega chart): a hover tooltip is always topmost.
+     !important because vega-tooltip injects its own #vg-tooltip-element rule
+     (z-index 1000) at Handler construction, AFTER this sheet in source order. */
+  z-index: 100002 !important;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
   font-size: 11px;
   line-height: 1.6;

@@ -24,7 +24,11 @@ describe('buildDebugVegaSpec', () => {
     const encoding = spec.encoding as Record<string, Record<string, unknown>>;
     expect(encoding.x.field).toBe('bar');
     expect(encoding.y.field).toBe('tokens');
-    expect((encoding.y as { aggregate?: string }).aggregate).toBe('sum');
+    // NO aggregation: each row must stay its own stacked segment (separate
+    // tool-call/result sizes) and keep barIndex/componentIndex on the datum
+    // for click-to-inspect. A `detail` channel provides the per-row stacking.
+    expect((encoding.y as { aggregate?: string }).aggregate).toBeUndefined();
+    expect((encoding.detail as { field?: string }).field).toBe('componentIndex');
     expect(encoding.color.field).toBe('component');
     const mark = typeof spec.mark === 'string' ? spec.mark : (spec.mark as { type?: string })?.type;
     expect(mark).toBe('bar');

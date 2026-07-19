@@ -85,7 +85,11 @@ export function buildDebugVegaSpec(
         sort: { field: 'barIndex', op: 'min' },
         axis: { title: null, labelAngle: -30 },
       },
-      y: { field: 'tokens', type: 'quantitative', aggregate: 'sum', axis: { title: 'approx tokens' } },
+      // No aggregation: each row is its own stacked segment (keeps separate
+      // tool-call/result sizes visible AND keeps barIndex/componentIndex on
+      // the mark datum for click-to-inspect — aggregation would drop them).
+      y: { field: 'tokens', type: 'quantitative', stack: 'zero', axis: { title: 'approx tokens' } },
+      detail: { field: 'componentIndex', type: 'quantitative' },
       color: {
         field: 'component',
         type: 'nominal',
@@ -96,7 +100,7 @@ export function buildDebugVegaSpec(
         { field: 'bar', type: 'nominal' },
         { field: 'component', type: 'nominal' },
         { field: 'toolName', type: 'nominal', title: 'tool' },
-        { field: 'tokens', type: 'quantitative', aggregate: 'sum', title: 'approx tokens' },
+        { field: 'tokens', type: 'quantitative', title: 'approx tokens' },
         { field: 'cost', type: 'nominal', title: `bar cost (${costMode})` },
       ],
     },
