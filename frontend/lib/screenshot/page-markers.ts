@@ -18,8 +18,11 @@
  * agent are thin glue over this.
  */
 
-/** Document pixels between markers. One marker roughly every ~⅔ of a laptop viewport. */
-export const MARKER_CADENCE_PX = 600;
+/** Document pixels between markers — ~half a laptop viewport, so the "centered on" band localizes
+ *  the user's focus to roughly half of what's on screen. Going much denser stops helping: the
+ *  viewport then spans many sections (more numbers, not more precision) and the badges/dividers
+ *  shrink toward illegible once the tall capture is downscaled past ~1568px. */
+export const MARKER_CADENCE_PX = 400;
 
 /** Number of marker bands for a document of `docHeightPx` (at least 1). */
 export function markerCount(docHeightPx: number, cadencePx: number = MARKER_CADENCE_PX): number {
