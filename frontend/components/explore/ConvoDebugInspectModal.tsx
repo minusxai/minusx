@@ -1,32 +1,35 @@
 'use client';
 
 /**
- * Read-only inspector for one /debug bar component: renders the component's
- * actual content (text, images, JSON) via the shared InspectContent part
- * renderer. No editing — plain display only.
+ * Read-only BAR-level inspector for the /debug viz: lists EVERY component of
+ * the clicked bar with its token count (so segments too small to see — a
+ * 12-token user message stacked after a 15k system prompt — stay reachable),
+ * rendering each component's actual content via the shared InspectContent
+ * part renderer. The clicked segment's section is highlighted. No editing.
  */
-import { Dialog, Portal, Button, HStack, Text, Badge, Box } from '@chakra-ui/react';
+import { Dialog, Portal, Button, HStack, Text, Badge, Box, VStack } from '@chakra-ui/react';
 import type { BarComponent, TurnBar } from '@/lib/convo-debug/types';
+import { segmentLabel } from '@/lib/convo-debug';
 import type { InspectPart } from './inspect-content';
 import InspectContent from './InspectContent';
 
 interface ConvoDebugInspectModalProps {
   bar: TurnBar;
-  component: BarComponent;
+  /** Component index of the clicked segment (highlighted in the list). */
+  selectedIndex: number;
   onClose: () => void;
 }
 
 function toInspectParts(component: BarComponent): InspectPart[] {
-  return component.content.map((c, i) => {
-    const label = component.toolName ? `${component.type} · ${component.toolName}` : `${component.type} #${i + 1}`;
+  const label = segmentLabel(component);
+  return component.content.map((c) => {
     if (c.kind === 'text') return { kind: 'text', label, text: c.text };
     if (c.kind === 'image') return { kind: 'image', label, url: c.src };
     return { kind: 'json', label, value: c.value };
   });
 }
 
-export default function ConvoDebugInspectModal({ bar, component, onClose }: ConvoDebugInspectModalProps) {
-  const parts = toInspectParts(component);
+export default function ConvoDebugInspectModal({ bar, selectedIndex, onClose }: ConvoDebugInspectModalProps) {
   return (
     <Dialog.Root open onOpenChange={(e) => !e.open && onClose()} size="xl">
       <Portal>
@@ -36,16 +39,35 @@ export default function ConvoDebugInspectModal({ bar, component, onClose }: Conv
             <Dialog.Header px={5} py={4} borderBottom="1px solid" borderColor="border.default">
               <HStack gap={3}>
                 <Text fontWeight="bold" fontSize="md">{bar.label}</Text>
-                <Badge colorPalette="gray" size="sm">{component.type}{component.toolName ? ` · ${component.toolName}` : ''}</Badge>
-                <Badge colorPalette="blue" size="sm" aria-label="component approx tokens">
-                  ~{component.tokens.toLocaleString()} tokens
+                <Badge colorPalette="gray" size="sm">{bar.components.length} components</Badge>
+                <Badge colorPalette="blue" size="sm" aria-label="bar approx tokens">
+                  ~{bar.tokens.toLocaleString()} tokens
                 </Badge>
               </HStack>
             </Dialog.Header>
             <Dialog.Body p={5} maxH="70vh" overflowY="auto">
-              <Box>
-                <InspectContent parts={parts} />
-              </Box>
+              <VStack align="stretch" gap={4}>
+                {bar.components.map((component, i) => (
+                  <Box
+                    key={i}
+                    aria-label={`inspect component ${i}`}
+                    p={3}
+                    borderRadius="md"
+                    borderWidth="1px"
+                    borderColor={i === selectedIndex ? 'accent.primary' : 'border.default'}
+                    bg={i === selectedIndex ? 'bg.subtle' : undefined}
+                  >
+                    <HStack gap={2} mb={2}>
+                      <Text fontSize="sm" fontWeight="bold" fontFamily="mono">{segmentLabel(component)}</Text>
+                      <Badge colorPalette="blue" size="sm">~{component.tokens.toLocaleString()} tokens</Badge>
+                      {component.imageCount > 0 && (
+                        <Badge colorPalette="cyan" size="sm">{component.imageCount} image{component.imageCount > 1 ? 's' : ''}</Badge>
+                      )}
+                    </HStack>
+                    <InspectContent parts={toInspectParts(component)} />
+                  </Box>
+                ))}
+              </VStack>
             </Dialog.Body>
             <Dialog.Footer px={5} py={4} borderTop="1px solid" borderColor="border.default">
               <Button variant="ghost" size="sm" onClick={onClose} aria-label="close inspector">Close</Button>

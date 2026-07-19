@@ -67,8 +67,19 @@ export function extractActualCalls(log: ConversationLog): ActualCallRecord[] {
   return calls;
 }
 
-/** Parse a recorded pi-format request blob into the normalized debug input. */
-export function requestJsonToInput(requestJson: string, log: ConversationLog, rates: ModelRates): ConvoDebugInput {
+/**
+ * Parse a recorded pi-format request blob into the normalized debug input.
+ * A request contains only what was SENT to the provider — never its own
+ * response — so when `responseCallId` is given, the log's assistant entry
+ * stamped with that call id (the response to this exact request) is appended,
+ * making the Raw view show the final assistant turn too.
+ */
+export function requestJsonToInput(
+  requestJson: string,
+  log: ConversationLog,
+  rates: ModelRates,
+  responseCallId?: string | null,
+): ConvoDebugInput {
   const parsed = JSON.parse(requestJson) as {
     systemPrompt?: string;
     messages?: Message[];
@@ -77,11 +88,22 @@ export function requestJsonToInput(requestJson: string, log: ConversationLog, ra
   if (!parsed || typeof parsed !== 'object' || (parsed.messages !== undefined && !Array.isArray(parsed.messages))) {
     throw new Error('Malformed LLM request json');
   }
+  const messages = [...(parsed.messages ?? [])];
+  if (responseCallId) {
+    const response = log.find(
+      (e): e is AssistantMessage & { parent_id: string | null } =>
+        isAssistantEntry(e) && callIdOf(e) === responseCallId,
+    );
+    if (response) {
+      const { parent_id: _omit, ...msg } = response;
+      messages.push(msg as Message);
+    }
+  }
   const tools = parsed.tools ?? [];
   return {
     systemPrompt: parsed.systemPrompt ?? '',
     toolDefsChars: tools.length > 0 ? JSON.stringify(tools).length : 0,
-    messages: parsed.messages ?? [],
+    messages,
     log,
     rates,
   };

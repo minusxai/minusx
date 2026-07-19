@@ -9,7 +9,7 @@ export { estimateTextTokens, estimateImageTokens } from './approx';
 export { extractActualCalls, requestJsonToInput } from './actual';
 export { deriveRatesFromUsage, resolveRates, applyCosts } from './costs';
 export { buildTurnBars, type BareTurnBar } from './turns';
-export { buildDebugVegaSpec, barCostLabel, type CostMode, type DebugVegaRow } from './vega-spec';
+export { buildDebugVegaSpec, barCostLabel, segmentLabel, type CostMode, type DebugVegaRow } from './vega-spec';
 
 export function buildConvoDebugModel(input: ConvoDebugInput): ConvoDebugModel {
   const rates = resolveRates(input);

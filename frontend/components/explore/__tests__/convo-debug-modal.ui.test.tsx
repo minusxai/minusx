@@ -80,10 +80,14 @@ describe('ConvoDebugModal', () => {
     expect(onCostModeChange).toHaveBeenCalledWith('actual');
   });
 
-  it('opens the read-only component inspector when a segment is clicked', () => {
+  it('opens a BAR-level inspector listing every component (sub-pixel segments stay reachable)', () => {
     renderReady();
     fireEvent.click(screen.getByLabelText('mock chart segment'));
     expect(screen.getByLabelText('debug component inspector')).toBeTruthy();
+    // Bar 0 = System + User #1: SystemPrompt AND UserText must both be listed,
+    // even though a tiny UserText segment may be invisible in the chart.
+    expect(screen.getByLabelText('inspect component 0')).toBeTruthy();
+    expect(screen.getByLabelText('inspect component 1')).toBeTruthy();
   });
 
   it('renders loading and error states', () => {

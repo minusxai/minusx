@@ -163,10 +163,10 @@ export default function ConvoDebugModal({
               </Box>
             )}
 
-            {inspected && (
+            {inspected && inspect && (
               <ConvoDebugInspectModal
                 bar={inspected.bar}
-                component={inspected.component}
+                selectedIndex={inspect.componentIndex}
                 onClose={() => setInspect(null)}
               />
             )}

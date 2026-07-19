@@ -83,6 +83,22 @@ describe('requestJsonToInput', () => {
     expect(input.toolDefsChars).toBe(0);
     expect(input.messages).toEqual([]);
   });
+
+  it('appends the recorded RESPONSE of the request`s call when responseCallId is given', () => {
+    // A raw request contains everything SENT — never its own response. The
+    // /debug Raw view appends the response so the last assistant turn shows.
+    const responded = Object.assign(assistant([{ type: 'text', text: 'the answer' }]), { _lllmCallId: 'call-9' });
+    const log = [rootInvocation('r1'), logEntry(responded, 'r1')];
+    const request = { systemPrompt: 's', messages: [user('q')] };
+    const input = requestJsonToInput(JSON.stringify(request), log, RATES, 'call-9');
+    expect(input.messages).toHaveLength(2);
+    const last = input.messages[1];
+    expect(last.role).toBe('assistant');
+
+    // Unknown call id → nothing appended.
+    const untouched = requestJsonToInput(JSON.stringify(request), log, RATES, 'nope');
+    expect(untouched.messages).toHaveLength(1);
+  });
 });
 
 describe('makeInput fixture sanity', () => {

@@ -6,7 +6,7 @@
  * either the projected next-turn context (server preview) or the last
  * recorded raw request; builds the ConvoDebugModel and renders the view.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { loadConversationDetail } from '@/store/conversation-log-cache';
 import { getConversationLlmCalls, getDebugContext } from '@/lib/chat/llm-calls';
@@ -27,8 +27,17 @@ export default function ConvoDebugContainer({ conversationID, buildProbeBody, on
   const [logSource, setLogSource] = useState<LogSource>('projected');
   const [costMode, setCostMode] = useState<CostMode>('expected');
   const [state, setState] = useState<ConvoDebugViewState>({ status: 'loading' });
+  // Built models per logs-source, so toggling Projected↔Raw is instant after
+  // the first load of each side (the projected side re-runs the server-side
+  // orchestration preview — the expensive call).
+  const modelCache = useRef(new Map<LogSource, ConvoDebugViewState>());
 
   const load = useCallback(async (source: LogSource, signal: { cancelled: boolean }) => {
+    const cached = modelCache.current.get(source);
+    if (cached) {
+      setState(cached);
+      return;
+    }
     setState({ status: 'loading' });
     try {
       const [{ piLog }, { calls, rates }] = await Promise.all([
@@ -41,7 +50,9 @@ export default function ConvoDebugContainer({ conversationID, buildProbeBody, on
         if (!lastWithRequest?.requestJson) {
           throw new Error('No recorded LLM requests for this conversation yet — try the projected view.');
         }
-        input = requestJsonToInput(lastWithRequest.requestJson, piLog, rates);
+        // Append the request's recorded RESPONSE so the final assistant turn
+        // shows (a request never contains its own response).
+        input = requestJsonToInput(lastWithRequest.requestJson, piLog, rates, lastWithRequest.callId);
       } else {
         const context = await getDebugContext(await buildProbeBody());
         input = {
@@ -53,7 +64,9 @@ export default function ConvoDebugContainer({ conversationID, buildProbeBody, on
         };
       }
       if (signal.cancelled) return;
-      setState({ status: 'ready', model: buildConvoDebugModel(input) });
+      const ready: ConvoDebugViewState = { status: 'ready', model: buildConvoDebugModel(input) };
+      modelCache.current.set(source, ready);
+      setState(ready);
     } catch (err) {
       if (signal.cancelled) return;
       setState({ status: 'error', error: err instanceof Error ? err.message : 'Failed to build debug model' });
