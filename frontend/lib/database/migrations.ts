@@ -14,10 +14,38 @@ import type { QuestionContent, NotebookContent } from '@/lib/types';
 type DataMigration = (data: InitData) => InitData;
 type SchemaMigration = null;  // Null means "recreate DB with new schema"
 
+/** A single files-table row as seen by a row migration. */
+export interface RowMigrationRow {
+  id: number;
+  type: string;
+  content: unknown;
+}
+
+/**
+ * Streaming per-row form of a migration, for migrations that only rewrite the
+ * `content` of specific file types. The runner scans just those types in batches
+ * and UPDATEs changed rows in place — it never exports the whole DB into memory
+ * (the whole-DB `dataMigration` path OOMs on production-sized files tables).
+ * Must be idempotent: re-running on already-migrated rows returns null.
+ */
+export interface RowMigration {
+  /** File types this migration touches; rows of other types are never read. */
+  types: readonly string[];
+  /** Return the new content for the row, or null when the row is unchanged. */
+  migrateContent(row: RowMigrationRow): unknown | null;
+}
+
 export interface MigrationEntry {
   dataVersion?: number;      // Target data version (if data format changes)
   schemaVersion?: number;    // Target schema version (if schema changes)
   dataMigration?: DataMigration;
+  /**
+   * Optional streaming equivalent of dataMigration. When every pending migration
+   * provides one, startup migrates row-by-row instead of export→import. Both forms
+   * must produce identical content — dataMigration remains the path for imports of
+   * old exports (applyMigrations).
+   */
+  rowMigration?: RowMigration;
   schemaMigration?: SchemaMigration;  // null = recreate DB
   description: string;
 }
@@ -111,33 +139,41 @@ function v36ShiftUserFileIds(data: InitData): InitData {
  * `viz` is never overwritten (hand-authored envelopes win). The Data Management
  * "Backfill Viz V2 Envelopes" action is the re-runnable overwrite variant.
  */
+function v37QuestionContent(content: QuestionContent): QuestionContent | null {
+  if (content?.vizSettings == null || content.viz != null) return null;
+  try {
+    return { ...content, viz: vizSettingsToEnvelopeStatic(content.vizSettings, content.query) };
+  } catch {
+    return null; // an unconvertible vizSettings keeps rendering via the runtime bridge
+  }
+}
+
+function v37NotebookContent(content: NotebookContent): NotebookContent | null {
+  if (!Array.isArray(content?.cells)) return null;
+  let changed = false;
+  const cells = content.cells.map(cell => {
+    if (cell.type !== 'sql' || cell.vizSettings == null || cell.viz != null) return cell;
+    try {
+      const viz = vizSettingsToEnvelopeStatic(cell.vizSettings, cell.query);
+      changed = true;
+      return { ...cell, viz };
+    } catch {
+      return cell;
+    }
+  });
+  return changed ? { ...content, cells } : null;
+}
+
+function v37MigrateRowContent(row: RowMigrationRow): unknown | null {
+  if (row.type === 'question') return v37QuestionContent(row.content as QuestionContent);
+  if (row.type === 'notebook') return v37NotebookContent(row.content as NotebookContent);
+  return null;
+}
+
 function v37AddVizEnvelopes(data: InitData): InitData {
   const documents = (data.documents ?? []).map(doc => {
-    if (doc.type === 'question') {
-      const content = doc.content as QuestionContent;
-      if (content?.vizSettings == null || content.viz != null) return doc;
-      try {
-        return { ...doc, content: { ...content, viz: vizSettingsToEnvelopeStatic(content.vizSettings, content.query) } };
-      } catch {
-        return doc; // an unconvertible vizSettings keeps rendering via the runtime bridge
-      }
-    }
-    if (doc.type === 'notebook') {
-      const content = doc.content as NotebookContent;
-      if (!Array.isArray(content?.cells)) return doc;
-      let changed = false;
-      const cells = content.cells.map(cell => {
-        if (cell.type !== 'sql' || cell.vizSettings == null || cell.viz != null) return cell;
-        try {
-          changed = true;
-          return { ...cell, viz: vizSettingsToEnvelopeStatic(cell.vizSettings, cell.query) };
-        } catch {
-          return cell;
-        }
-      });
-      return changed ? { ...doc, content: { ...content, cells } } : doc;
-    }
-    return doc;
+    const next = v37MigrateRowContent(doc);
+    return next != null ? { ...doc, content: next as typeof doc.content } : doc;
   });
   return { ...data, documents };
 }
@@ -152,6 +188,7 @@ export const MIGRATIONS: MigrationEntry[] = [
     dataVersion: 37,
     description: 'Viz Arch V2: add file-level `viz` envelopes to questions and notebook SQL cells (vizSettings untouched; existing viz preserved)',
     dataMigration: v37AddVizEnvelopes,
+    rowMigration: { types: ['question', 'notebook'], migrateContent: v37MigrateRowContent },
   },
 ];
 
