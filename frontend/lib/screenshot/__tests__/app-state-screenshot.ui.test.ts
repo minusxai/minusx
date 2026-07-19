@@ -16,9 +16,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   appStateWithFileScreenshot,
   appStateShotKey,
+  isStoryAppState,
   _internal,
 } from '@/lib/screenshot/app-state-screenshot';
 import type { AppState } from '@/lib/appState';
+
+const storyAppState = (id: number, markup = 'm'): AppState =>
+  ({ type: 'file', state: { fileState: { id, type: 'story', markup }, queryResults: {} } } as unknown as AppState);
 
 // A minimal file app state; `markup` + `queryResults` drive the cache key.
 function fileAppState(id: number, markup: string, qr: unknown = {}): AppState {
@@ -102,6 +106,23 @@ describe('appStateWithFileScreenshot (the ONLY capture path — lazy, on send)',
     const out = await appStateWithFileScreenshot(fileAppState(3, 'q'), 'light', false);
     expect(imageOf(out)).toBeUndefined();
     expect(out).toBeTruthy();
+  });
+});
+
+describe('position markers are STORY-ONLY', () => {
+  it('isStoryAppState is true only for a story file view', () => {
+    expect(isStoryAppState(storyAppState(1))).toBe(true);
+    expect(isStoryAppState(fileAppState(1, 'm'))).toBe(false); // no type → not a story
+    expect(isStoryAppState({ type: 'file', state: { fileState: { id: 1, type: 'dashboard' } } } as unknown as AppState)).toBe(false);
+    expect(isStoryAppState({ type: 'explore', state: null } as AppState)).toBe(false);
+  });
+
+  it('requests the marker gutter for a story capture but not for other file views', async () => {
+    await appStateWithFileScreenshot(storyAppState(1), 'light', false);
+    expect((_internal.capture as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[2]).toBe(true);
+    _internal.reset();
+    await appStateWithFileScreenshot(fileAppState(2, 'm'), 'light', false);
+    expect((_internal.capture as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[2]).toBe(false);
   });
 });
 

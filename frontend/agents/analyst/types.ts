@@ -14,6 +14,10 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   mode: 'org' | 'tutorial';
   connectionId?: string;
   appState?: unknown;
+  /** Scroll pointer computed client-side at send ("The user is viewing sections 2–4 of 5") — rendered
+   *  as the tail `<Viewport>` block. Names which numbered sections of the app-state screenshot the
+   *  user is looking at; see lib/screenshot/page-markers.ts. */
+  viewport?: string;
   effectiveUser?: EffectiveUser;
   /** Viz types the agent may use (client-resolved from config). Empty/undefined → "all". */
   allowedVizTypes?: string[];

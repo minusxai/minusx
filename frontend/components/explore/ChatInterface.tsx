@@ -23,7 +23,8 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { toaster } from '@/components/ui/toaster';
 import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setChatModelSelection, setSidebarPendingSlashCommand } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
-import { appStateWithFileScreenshot } from '@/lib/screenshot/app-state-screenshot';
+import { appStateWithFileScreenshot, isStoryAppState } from '@/lib/screenshot/app-state-screenshot';
+import { readViewportPointer } from '@/lib/screenshot/read-viewport';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../file-browser/FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
@@ -833,6 +834,15 @@ export default function ChatInterface({
     // app state (image facet) so the projection pass can render + dedup it.
     const agentArgs = buildAgentArgsForMessage(userInput, allAttachments);
     agentArgs.app_state = appStateForSend;
+    // Scroll pointer (client-only): which numbered sections of the app-state screenshot the user is
+    // looking at right now. Rendered as <Viewport> in the tail so scrolling never busts the image
+    // cache. STORY-ONLY (isStoryAppState) — matches where the marker gutter is baked; other file
+    // views can have internal scroll that would peg the pointer at section 1.
+    const viewFileId = isStoryAppState(appStateForSend)
+      ? (appStateForSend as { state?: { fileState?: { id?: number } } }).state?.fileState?.id
+      : undefined;
+    const viewportPointer = typeof viewFileId === 'number' ? readViewportPointer(viewFileId) : null;
+    if (viewportPointer) (agentArgs as { viewport?: string }).viewport = viewportPointer;
     dispatch(updateAgentArgs({ conversationID: convId, agent_args: agentArgs }));
 
     // Send message

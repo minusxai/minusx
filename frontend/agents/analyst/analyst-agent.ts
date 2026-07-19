@@ -167,11 +167,12 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     const idx = this.threadHistory.length; // the current user message
     const cur = msgs[idx];
     if (cur?.role === 'user') {
-      const ctx = this.context as { currentTime?: string };
+      const ctx = this.context as { currentTime?: string; viewport?: string };
       msgs[idx] = {
         ...cur,
         ...(this.context.appState !== undefined ? { _appState: this.context.appState as AppState } : {}),
         ...(ctx.currentTime !== undefined ? { _currentTime: ctx.currentTime } : {}),
+        ...(ctx.viewport !== undefined ? { _viewport: ctx.viewport } : {}),
       } as Message & WithAppState;
     }
     return projectMessages(msgs);

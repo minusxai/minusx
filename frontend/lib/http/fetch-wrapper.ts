@@ -93,10 +93,17 @@ export async function fetchWithCache<TOutput = any>(
   // Perform fetch
   const promise = performFetch<TOutput>(url, options, cacheKey);
 
-  // Store in-flight promise for deduplication
+  // Store in-flight promise for deduplication.
   if (cacheStrategy?.deduplicate) {
     inFlightRequests.set(cacheKey, promise);
-    promise.finally(() => inFlightRequests.delete(cacheKey));
+    // Clean up the registry when it settles — but do NOT do `promise.finally(cleanup)`: that returns
+    // a NEW promise that inherits `promise`'s rejection, and since nobody awaits it, a rejected
+    // request surfaces as an "Unhandled promise rejection" even though every real caller catches it.
+    // Attaching both handlers to the original promise cleans up without branching a new chain.
+    promise.then(
+      () => inFlightRequests.delete(cacheKey),
+      () => inFlightRequests.delete(cacheKey),
+    );
   }
 
   return promise;

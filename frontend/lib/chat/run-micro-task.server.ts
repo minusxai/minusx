@@ -48,9 +48,16 @@ export async function runMicroTask(
   const agent = new MicroAgent(orch, { userMessage: `Run micro-task: ${taskKey}` }, ctx);
 
   const stream = orch.run(agent);
+  // Keep the FIRST error event's message: it carries the actual cause (a missing API key, an
+  // unconfigured use-case model, a provider/rate-limit error). Without it the throw below could
+  // only say "produced no result", so a 500 reached the browser with the reason stranded in the
+  // server console — undiagnosable from the client. The cause travels with the error now.
+  let causeMessage: string | undefined;
   for await (const ev of stream) {
     if ((ev as { type?: string }).type === 'error') {
-      console.error('[v2/micro-task] orchestrator error event:', (ev as { error?: { errorMessage?: string } }).error?.errorMessage);
+      const msg = (ev as { error?: { errorMessage?: string } }).error?.errorMessage;
+      causeMessage ??= msg;
+      console.error('[v2/micro-task] orchestrator error event:', msg);
     }
   }
   // On an LLM failure the run emits an error event and `result()` resolves to
@@ -67,7 +74,13 @@ export async function runMicroTask(
     .trim();
 
   if (!text) {
-    throw new Error(`Micro-task '${taskKey}' produced no result`);
+    // An empty reply with NO error event is a genuinely empty completion; anything else is the
+    // underlying failure and must be reported as such.
+    throw new Error(
+      causeMessage
+        ? `Micro-task '${taskKey}' failed: ${causeMessage}`
+        : `Micro-task '${taskKey}' produced no result (the model returned an empty reply)`,
+    );
   }
   return text;
 }

@@ -112,12 +112,44 @@ describe('resolveLlmPlan', () => {
     expect((plan.callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('micro');
   });
 
-  it('a use case without an assignment and no minusx provider returns null (test env)', async () => {
+  // A workspace that configured only chat (analyst) has no `micro` model. Rather than 500 on the
+  // unconfigured MinusX gateway, `micro` reuses the analyst model so the low-stakes helpers (feed
+  // summary, auto-title, description) keep working with a single configured provider.
+  it('micro falls back to the analyst model when it has no assignment and no minusx provider', async () => {
     await setLlmConfig({
       providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
       assignments: { analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] } },
     });
-    expect(await resolveLlmPlan('micro')).toBeNull();
+    const plan = (await resolveLlmPlan('micro'))!;
+    expect(plan).not.toBeNull();
+    expect((plan.model as { id: string }).id).toBe('claude-sonnet-4-6');
+    expect(plan.callOptions?.apiKey).toBe('k');
+    // Still tagged as a micro call for usage attribution.
+    expect((plan.callOptions?.headers as Record<string, string> | undefined)?.[MX_USE_CASE_HEADER] ?? 'micro').toBe('micro');
+  });
+
+  it('a use case (non-micro) without an assignment and no minusx provider returns null (test env)', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      assignments: { micro: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] } },
+    });
+    expect(await resolveLlmPlan('analyst')).toBeNull();
+  });
+
+  it('micro keeps its OWN assignment when present (no fallback)', async () => {
+    await setLlmConfig({
+      providers: [
+        { name: 'a', provider: 'anthropic', apiKey: 'k1' },
+        { name: 'o', provider: 'openai', apiKey: 'k2' },
+      ],
+      assignments: {
+        analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] },
+        micro: { chain: [{ providerName: 'o', model: 'gpt-5' }] },
+      },
+    });
+    const plan = (await resolveLlmPlan('micro'))!;
+    expect((plan.model as { id: string }).id).toBe('gpt-5');
+    expect(plan.callOptions?.apiKey).toBe('k2');
   });
 
   it('throws a clear error for an assignment referencing an unknown provider', async () => {

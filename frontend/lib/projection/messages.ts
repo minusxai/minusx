@@ -27,6 +27,11 @@ export interface WithAppState {
   /** The turn's wall-clock hour, frozen at creation (orchestrator.run) — rendered as <CurrentTime>
    *  after the app state. Identical when the turn is current vs prior, so the cache prefix holds. */
   _currentTime?: string;
+  /** Where the user is scrolled in the file view at send time (e.g. "The user is viewing sections
+   *  2–4 of 5"), rendered as <Viewport> in the tail AFTER CurrentTime. It changes on every scroll, so
+   *  it sits latest in the prefix — the image + AppState + CurrentTime before it stay cached while the
+   *  user scrolls. The numbers reference the position markers baked into the app-state screenshot. */
+  _viewport?: string;
 }
 
 /**
@@ -74,16 +79,21 @@ export function projectMessages(messages: Message[]): Message[] {
   return messages.map((m): Message => {
     if (m.role === 'user') {
       const wm = m as Message & WithAppState;
-      if (wm._appState === undefined && wm._currentTime === undefined) return m;
+      if (wm._appState === undefined && wm._currentTime === undefined && wm._viewport === undefined) return m;
       const appStateBlocks = wm._appState !== undefined ? renderAppState(memo, wm._appState) : [];
       // <CurrentTime> rides right after the app state — frozen per turn, so prior turns are stable.
       const timeBlocks: TextContent[] = wm._currentTime
         ? [{ type: 'text', text: `<CurrentTime>${wm._currentTime}</CurrentTime>` }]
         : [];
+      // <Viewport> is the scroll pointer — LAST in the app-context prefix (after CurrentTime) because
+      // it changes on every scroll, keeping the image + AppState + time before it byte-stable/cached.
+      const viewportBlocks: TextContent[] = wm._viewport
+        ? [{ type: 'text', text: `<Viewport>${wm._viewport}</Viewport>` }]
+        : [];
       const rest: (TextContent | ImageContent)[] =
         typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content;
-      const { _appState: _a, _currentTime: _t, ...clean } = wm;
-      return { ...clean, content: [...appStateBlocks, ...timeBlocks, ...rest] } as Message;
+      const { _appState: _a, _currentTime: _t, _viewport: _v, ...clean } = wm;
+      return { ...clean, content: [...appStateBlocks, ...timeBlocks, ...viewportBlocks, ...rest] } as Message;
     }
     if (m.role === 'toolResult' && hasAugmented(m.details)) {
       const { __augmented, __jsonTag, __status } = m.details;

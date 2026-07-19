@@ -511,17 +511,29 @@ function SettingsContent() {
       title: 'Story Renderer',
       description: 'Which engine renders stories. DOM is the classic iframe. SVG renders the same DOM inside an SVG so captures serialize the live surface (no snapdom). Canvas renders one bitmap surface (Takumi).',
       control: (
-        <Flex gap={2}>
-          {STORY_RENDERERS.map((r) => (
-            <Button
-              key={r}
-              size="sm"
-              variant={activeStoryRenderer === r ? 'solid' : 'outline'}
-              onClick={() => handleStoryRendererChange(r)}
-            >
-              {STORY_RENDERER_LABELS[r]}
-            </Button>
-          ))}
+        // storyRenderer is workspace-level: the resolver always reads the ORG config
+        // (lib/data/configs.server.ts), so a write from a non-org mode lands on a doc the resolver
+        // ignores — a live no-op. Gate to org mode, mirroring the LLM Models section.
+        <Flex direction="column" align="flex-start" gap={2}>
+          <Flex gap={2}>
+            {STORY_RENDERERS.map((r) => (
+              <Button
+                key={r}
+                size="sm"
+                variant={activeStoryRenderer === r ? 'solid' : 'outline'}
+                disabled={mode !== 'org'}
+                aria-label={`Story renderer: ${STORY_RENDERER_LABELS[r]}`}
+                onClick={() => handleStoryRendererChange(r)}
+              >
+                {STORY_RENDERER_LABELS[r]}
+              </Button>
+            ))}
+          </Flex>
+          {mode !== 'org' && (
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono" aria-label="Story renderer workspace-level notice">
+              Workspace-level setting — switch to org mode to change it.
+            </Text>
+          )}
         </Flex>
       ),
     },

@@ -36,13 +36,26 @@ let lastShot: Shot | null = null;
  * swap the browser-only capture+upload for fakes.
  */
 export const _internal = {
-  capture: (id: number, colorMode: ColorMode): Promise<Blob> =>
-    captureFileViewBlob(id, { colorMode, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg' }),
+  capture: (id: number, colorMode: ColorMode, markers: boolean): Promise<Blob> =>
+    captureFileViewBlob(id, { colorMode, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg', markers }),
   upload: (blob: Blob): Promise<string> => uploadBlobOrEmbed(blob, 'file.jpg', 'image/jpeg'),
   reset(): void {
     lastShot = null;
   },
 };
+
+/**
+ * Whether the app-state file view gets position markers + a `<Viewport>` pointer. STORY-ONLY for now:
+ * a story renders at its full height in the page, so `offsetHeight` is the whole document and the
+ * scroll pointer is meaningful. Questions/dashboards/notebooks can have internal scroll or a fixed
+ * height (offsetHeight = visible slice), which would peg the pointer at "section 1" and number only
+ * the visible part — so they're excluded until their scroll model is handled. Shared by the capture
+ * (markers) and the send path (pointer) so both gate identically.
+ */
+export function isStoryAppState(appState: AppState | null | undefined): boolean {
+  return appState?.type === 'file'
+    && (appState.state as { fileState?: { type?: string } } | undefined)?.fileState?.type === 'story';
+}
 
 /**
  * Cache key for the current file view: file id + a content hash of what's rendered (markup, query
@@ -84,7 +97,7 @@ async function captureNow(appState: AppState, colorMode: ColorMode): Promise<str
   const info = appStateShotKey(appState, colorMode);
   if (!info) return null;
   if (lastShot?.key === info.key) return lastShot.url;
-  const blob = await _internal.capture(info.id, colorMode);
+  const blob = await _internal.capture(info.id, colorMode, isStoryAppState(appState));
   const url = await _internal.upload(blob);
   lastShot = { key: info.key, url };
   return url;

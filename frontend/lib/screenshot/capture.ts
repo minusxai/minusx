@@ -18,6 +18,7 @@ import { snapdom } from '@zumer/snapdom';
 import { getCanvasStoryCapture } from '@/lib/canvas-story/capture-registry';
 import { findStorySvg, serializeStorySvg, svgToImage } from '@/lib/story-surface/serialize';
 import { AGENT_IMAGE_MAX_PX, AGENT_IMAGE_PIXEL_RATIO, AGENT_IMAGE_JPEG_QUALITY } from './constants';
+import { drawMarkerGutter } from './draw-markers';
 import type { ScreenshotOptions } from './types';
 
 export type CaptureOptions = ScreenshotOptions & { colorMode: 'light' | 'dark' };
@@ -49,7 +50,8 @@ async function captureFromSvgStory(element: HTMLElement, opts: CaptureOptions): 
   ctx.fillStyle = opts.backgroundColor ?? bgFor(opts.colorMode);
   ctx.fillRect(0, 0, out.width, out.height);
   ctx.drawImage(img, 0, 0, out.width, out.height);
-  return canvasToBlob(out, blobType(opts.format) === 'png' ? 'image/png' : 'image/jpeg', opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
+  const final = opts.markers ? drawMarkerGutter(out, { docHeightCssPx: cssHeight, colorMode: opts.colorMode }) : out;
+  return canvasToBlob(final, blobType(opts.format) === 'png' ? 'image/png' : 'image/jpeg', opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
 }
 
 /**
@@ -109,15 +111,22 @@ export async function captureElementBlob(element: HTMLElement, opts: CaptureOpti
   // the captured bitmap with no reflow. maxWidth → scale to hit that width; else use pixelRatio
   // (default 0.75). dpr:1 keeps `scale` the literal multiplier (snapdom would otherwise ×devicePR).
   const scale = opts.maxWidth != null ? opts.maxWidth / element.offsetWidth : (opts.pixelRatio ?? 0.75);
-  return snapdom.toBlob(element, {
-    type: blobType(opts.format),
+  const snapOpts = {
     quality: opts.quality ?? AGENT_IMAGE_JPEG_QUALITY,
     backgroundColor: opts.backgroundColor ?? bgFor(opts.colorMode),
     dpr: 1,
     scale,
     filter: opts.filter,
     embedFonts: true,
-  });
+  };
+  // Markers: render to a canvas so we can draw the numbered gutter, then encode. Without markers,
+  // keep the direct toBlob path (no extra canvas round-trip) — this is the OG/download/tool path too.
+  if (opts.markers) {
+    const canvas = await snapdom.toCanvas(element, snapOpts);
+    const final = drawMarkerGutter(canvas, { docHeightCssPx: element.offsetHeight, colorMode: opts.colorMode });
+    return canvasToBlob(final, blobType(opts.format) === 'png' ? 'image/png' : 'image/jpeg', opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
+  }
+  return snapdom.toBlob(element, { ...snapOpts, type: blobType(opts.format) });
 }
 
 /**
@@ -266,7 +275,9 @@ function captureFromCanvasStory(element: HTMLElement, opts: CaptureOptions): Pro
   if (!surface || !element.contains(surface)) return null;
   const size = provider.size();
   if (!size) return null;
-  const cssWidth = surface.getBoundingClientRect().width || size.width;
+  const box = surface.getBoundingClientRect();
+  const cssWidth = box.width || size.width;
+  const cssHeight = box.height || size.height * (cssWidth / size.width);
   const scale = opts.maxWidth != null ? opts.maxWidth / cssWidth : (opts.pixelRatio ?? 0.75);
   const w = Math.max(1, Math.round(cssWidth * scale));
   const h = Math.max(1, Math.round(size.height * (w / size.width)));
@@ -278,7 +289,8 @@ function captureFromCanvasStory(element: HTMLElement, opts: CaptureOptions): Pro
     const ctx = out.getContext('2d');
     if (!ctx) throw new Error('2d context unavailable');
     if (!provider.drawRegion(ctx, 0, 0, size.width, size.height, 0, 0, w, h)) throw new Error('drawRegion failed');
-    return canvasToBlob(out, blobType(opts.format), opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
+    const final = opts.markers ? drawMarkerGutter(out, { docHeightCssPx: cssHeight, colorMode: opts.colorMode }) : out;
+    return canvasToBlob(final, blobType(opts.format), opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
   })();
 }
 
