@@ -223,6 +223,39 @@ export async function getLlmCallStats(callId: string): Promise<Record<string, un
   return res.rows[0] ?? null;
 }
 
+export interface ConversationLlmCall {
+  callId: string;
+  stats: Record<string, unknown>;
+  requestJson: string | null;
+}
+
+/**
+ * Every recorded LLM call of one conversation, in creation order: per-call
+ * stats (`llm_call_events`) joined with the raw pi-format request blob
+ * (`llm_logs`). Batch data source for the /debug visualization.
+ */
+export async function getLlmCallsForConversation(conversationId: number): Promise<ConversationLlmCall[]> {
+  const res = await getModules().db.exec<Record<string, unknown>>(
+    `SELECT e.llm_call_id, e.provider, e.model, e.mode, e.total_tokens, e.prompt_tokens,
+            e.completion_tokens, e.cached_tokens, e.cache_creation_tokens, e.reasoning_tokens,
+            e.cost, e.duration_s, e.stream, e.finish_reason, e.trigger, e.created_at,
+            l.request_json
+       FROM llm_call_events e
+       LEFT JOIN llm_logs l ON l.call_id = e.llm_call_id
+      WHERE e.conversation_id = $1
+      ORDER BY e.created_at ASC, e.id ASC`,
+    [conversationId]
+  );
+  return res.rows.map((row) => {
+    const { request_json, ...stats } = row;
+    return {
+      callId: String(row.llm_call_id ?? ''),
+      stats,
+      requestJson: (request_json as string | null) ?? null,
+    };
+  });
+}
+
 /** Delete LLM log blobs created strictly before `before`. Returns rows removed. */
 export async function clearLlmLogsBefore(before: Date): Promise<number> {
   const res = await getModules().db.exec<{ call_id: string }>(

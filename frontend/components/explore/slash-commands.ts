@@ -6,8 +6,10 @@ import { publishFile } from '@/lib/file-state/file-state';
 import { toaster } from '@/components/ui/toaster';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { interruptChat, setActiveConversation, selectActiveConversation, selectOptionalConversation } from '@/store/chatSlice';
-import { clearChatAttachments } from '@/store/uiSlice';
+import { clearChatAttachments, selectDevMode } from '@/store/uiSlice';
 import { selectFile, selectIsDirty } from '@/store/filesSlice';
+import { selectEffectiveUser } from '@/store/authSlice';
+import { isAdmin } from '@/lib/auth/role-helpers';
 
 /**
  * Hook that clears the current chat: stops the agent, deactivates the conversation,
@@ -40,15 +42,20 @@ export function useSlashCommands({
   appState,
   container,
   onContextSize,
+  onDebugViz,
 }: {
   appState?: AppState | null;
   container?: 'page' | 'sidebar';
   onContextSize?: () => void;
+  onDebugViz?: () => void;
 }) {
   const clearChat = useClearChat(container);
   const fileId = appState?.type === 'file' ? appState.state?.fileState?.id : null;
   const isDirty = useAppSelector(state => fileId != null ? selectIsDirty(state, fileId) : false);
   const isDraft = useAppSelector(state => fileId != null ? selectFile(state, fileId)?.draft === true : false);
+  const effectiveUser = useAppSelector(selectEffectiveUser);
+  const devMode = useAppSelector(selectDevMode);
+  const showDebug = !!effectiveUser?.role && isAdmin(effectiveUser.role) && devMode;
 
   const availableCommands = useMemo((): SlashCommand[] => [
     { type: 'command', name: 'clear', label: '/clear', description: 'Start a new chat' },
@@ -58,8 +65,11 @@ export function useSlashCommands({
       ...(fileId == null ? { disabled: true, disabledReason: 'No file to save' } :
           isDraft ? { disabled: true, disabledReason: 'Use the save button to name this file first' } :
           !isDirty ? { disabled: true, disabledReason: 'No unsaved changes' } : {}),
-    }
-  ], [fileId, isDirty, isDraft]);
+    },
+    ...(showDebug ? [{
+      type: 'command', name: 'debug', label: '/debug', description: 'Visualize conversation tokens & cost',
+    } satisfies SlashCommand] : []),
+  ], [fileId, isDirty, isDraft, showDebug]);
 
   const handleCommandExecute = useCallback((command: SlashCommand) => {
     switch (command.name) {
@@ -80,8 +90,11 @@ export function useSlashCommands({
       case 'context-size':
         onContextSize?.();
         break;
+      case 'debug':
+        onDebugViz?.();
+        break;
     }
-  }, [clearChat, fileId, onContextSize]);
+  }, [clearChat, fileId, onContextSize, onDebugViz]);
 
   return { availableCommands, handleCommandExecute };
 }

@@ -8,6 +8,7 @@ import type { LoadError } from '@/lib/types/errors';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem, Attachment, SkillMention } from '@/lib/types';
 import type { ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
 import { ContextSizePanel, type ContextSizePanelState } from './ContextSizePanel';
+import ConvoDebugContainer from './ConvoDebugContainer';
 import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-commands';
 import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
@@ -414,6 +415,7 @@ export default function ChatInterface({
   // offer a clean replay. `errorRetryability` is only set for conversation runtime errors.
   const isTerminalError = conversation?.error != null && conversation.errorRetryability === 'terminal';
   const [contextSizePanel, setContextSizePanel] = useState<ContextSizePanelState | null>(null);
+  const [debugVizOpen, setDebugVizOpen] = useState(false);
   const contextSizeAbortRef = useRef<AbortController | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -629,6 +631,27 @@ export default function ChatInterface({
     uniqueSkills,
   ]);
 
+  // Shared probe body for the context-preview endpoints (/api/chat/context-size and
+  // /api/chat/debug-context). Mirrors the SEND path: attach the file screenshot to the
+  // app-state image facet so the preview context carries the same image the real request
+  // would. The projection pass dedups it across turns (unchanged view → not re-sent →
+  // 0 image tokens), so the count is faithful — including respecting the "disable
+  // app-state images" opt-out.
+  const buildContextProbeBody = useCallback(async () => {
+    const probeState = store.getState();
+    const colorMode = probeState.ui.colorMode as 'light' | 'dark';
+    const disableAppStateImages = selectDisableAppStateImages(probeState);
+    const agentArgs = buildAgentArgsForMessage(' ', chatAttachments);
+    agentArgs.app_state = await appStateWithFileScreenshot(appState, colorMode, disableAppStateImages);
+    return {
+      conversationID,
+      user_message: ' ',
+      source: (container === 'sidebar' ? 'side_chat' : 'explore') as 'side_chat' | 'explore',
+      agent: 'AnalystAgent',
+      agent_args: agentArgs,
+    };
+  }, [buildAgentArgsForMessage, chatAttachments, appState, store, container, conversationID]);
+
   const handleContextSize = useCallback(async () => {
     if (connectionsLoading || contextsLoading) {
       setContextSizePanel({ status: 'error', error: 'Still loading connections and context' });
@@ -645,27 +668,11 @@ export default function ChatInterface({
     setContextSizePanel({ status: 'loading' });
 
     try {
-      // Mirror the SEND path: attach the file screenshot to the app-state image facet so the
-      // estimate's preview context carries the same image the real request would. The projection
-      // pass dedups it across turns (unchanged view → not re-sent → 0 image tokens), so the count
-      // is faithful — including respecting the "disable app-state images" opt-out.
-      const sizeState = store.getState();
-      const colorMode = sizeState.ui.colorMode as 'light' | 'dark';
-      const disableAppStateImages = selectDisableAppStateImages(sizeState);
-      const agentArgs = buildAgentArgsForMessage(' ', chatAttachments);
-      agentArgs.app_state = await appStateWithFileScreenshot(appState, colorMode, disableAppStateImages);
-
       const res = await fetch('/api/chat/context-size', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({
-          conversationID,
-          user_message: ' ',
-          source: container === 'sidebar' ? 'side_chat' : 'explore',
-          agent: 'AnalystAgent',
-          agent_args: agentArgs,
-        }),
+        body: JSON.stringify(await buildContextProbeBody()),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -689,9 +696,17 @@ export default function ChatInterface({
         contextSizeAbortRef.current = null;
       }
     }
-  }, [buildAgentArgsForMessage, chatAttachments, connectionsLoading, contextsLoading, conversationID, container, conversation, appState, store]);
+  }, [buildContextProbeBody, connectionsLoading, contextsLoading, conversationID, conversation]);
 
-  const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container, onContextSize: handleContextSize });
+  const handleDebugViz = useCallback(() => {
+    if (!conversationID) {
+      toaster.create({ title: 'Preparing chat. Try again in a moment.', type: 'info' });
+      return;
+    }
+    setDebugVizOpen(true);
+  }, [conversationID]);
+
+  const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container, onContextSize: handleContextSize, onDebugViz: handleDebugViz });
 
   useEffect(() => {
     if (container !== 'sidebar') return;
@@ -1145,6 +1160,14 @@ export default function ChatInterface({
               onClose={closeContextSizePanel}
               colSpan={colSpan}
               colStart={colStart}
+            />
+          )}
+
+          {debugVizOpen && conversationID && (
+            <ConvoDebugContainer
+              conversationID={conversationID}
+              buildProbeBody={buildContextProbeBody}
+              onClose={() => setDebugVizOpen(false)}
             />
           )}
 

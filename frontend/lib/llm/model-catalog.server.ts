@@ -80,6 +80,36 @@ export function mergedListModels(slug: string, catalog: ModelCatalog | null): Re
   return [...merged.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
+/**
+ * $/token rates for the given model ids, searched across all catalog
+ * providers (per-Mtok catalog pricing ÷ 1e6). Ids without published pricing —
+ * or every id when the catalog is unavailable (test envs, fetch failure) —
+ * map to null; callers fall back to usage-derived rates.
+ */
+export function getModelRatesFromCatalog(
+  modelIds: string[],
+  catalog: ModelCatalog | null,
+): Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number } | null> {
+  const rates: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number } | null> = {};
+  for (const id of modelIds) {
+    rates[id] = null;
+    if (!catalog) continue;
+    for (const models of catalog.values()) {
+      const cost = models.get(id)?.cost;
+      if (cost) {
+        rates[id] = {
+          input: cost.input / 1e6,
+          output: cost.output / 1e6,
+          cacheRead: cost.cacheRead / 1e6,
+          cacheWrite: cost.cacheWrite / 1e6,
+        };
+        break;
+      }
+    }
+  }
+  return rates;
+}
+
 function isTestEnv(): boolean {
   // eslint-disable-next-line no-restricted-syntax -- deterministic tests: no live network fetch under vitest
   return process.env.NODE_ENV === 'test' || !!process.env.VITEST;

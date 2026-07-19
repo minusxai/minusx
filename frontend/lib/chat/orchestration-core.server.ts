@@ -71,7 +71,7 @@ import { recordLlmRequest, recordLlmResponse, recordLlmCallEvent } from '@/lib/a
 import { UNKNOWN_TRIGGER } from '@/lib/analytics/credits.types';
 import { buildLlmCallDetail } from '@/lib/chat/headless-llm-tracking.server';
 import { setLlmCallRecorder } from '@/orchestrator/llm';
-import type { AssistantMessage } from '@/orchestrator/llm';
+import type { AssistantMessage, Context } from '@/orchestrator/llm';
 import type { LLMCallDetail } from '@/lib/chat/chat-types';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type {
@@ -580,11 +580,17 @@ export async function setupOrchestration(
   };
 }
 
-export async function estimateNextChatContext(
+/**
+ * The exact Context (system prompt + projected messages + tools) the NEXT
+ * chat turn would send to the LLM, built through the same preview path a real
+ * turn uses (projection/FacetMemo applied). Powers /api/chat/context-size
+ * (size estimate) and /api/chat/debug-context (the /debug visualization).
+ */
+export async function previewNextChatContext(
   body: ChatRequest,
   user: EffectiveUser,
   conversationId: number,
-): Promise<ContextSizeEstimate> {
+): Promise<Context> {
   const bodyWithProbe: ChatRequest = {
     ...body,
     user_message: body.user_message?.length ? body.user_message : ' ',
@@ -606,8 +612,15 @@ export async function estimateNextChatContext(
   if (!setup.rootAgent) {
     throw new Error('Unable to build next chat context');
   }
-  const context = setup.orchestrator.previewRootContext(setup.rootAgent);
-  return estimateContextSize(context);
+  return setup.orchestrator.previewRootContext(setup.rootAgent);
+}
+
+export async function estimateNextChatContext(
+  body: ChatRequest,
+  user: EffectiveUser,
+  conversationId: number,
+): Promise<ContextSizeEstimate> {
+  return estimateContextSize(await previewNextChatContext(body, user, conversationId));
 }
 
 /**
