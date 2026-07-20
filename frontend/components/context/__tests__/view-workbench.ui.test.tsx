@@ -68,6 +68,30 @@ describe('ViewWorkbench', () => {
     });
   });
 
+  it('waits for Run before executing SQL in a new data model', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, body: null });
+    vi.stubGlobal('fetch', fetchMock);
+    const { testStore } = setup();
+
+    fireEvent.change(await screen.findByLabelText('SQL editor'), {
+      target: { value: 'SELECT 1 AS value' },
+    });
+
+    await waitFor(() => {
+      const virtual = Object.values(testStore.getState().files.files)
+        .find((f: any) => f.id < 0) as any;
+      expect(virtual?.draft).toBe(true);
+      expect(virtual?.persistableChanges?.query).toBe('SELECT 1 AS value');
+    });
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/query')).toHaveLength(0);
+
+    fireEvent.click(screen.getByLabelText('Run query'));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/query')).toBe(true);
+    });
+    vi.unstubAllGlobals();
+  });
+
   it('saving sends the EDITED sql (from the question file) to /api/views/prepare', async () => {
     // The embedded question component also talks to /api/query — route by URL so
     // this asserts on the prepare call, not whatever the editor happened to fire.

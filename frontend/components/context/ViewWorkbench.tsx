@@ -79,6 +79,9 @@ export default function ViewWorkbench({
       updated_at: new Date().toISOString(),
       version: 1,
       last_edit_id: null,
+      // New models must behave like new questions: keep the live SQL inert until
+      // the user explicitly clicks Run. Existing definitions still auto-preview.
+      draft: !view,
     } as unknown as DbFile;
 
     dispatch(setFile({ file, references: [] }));
