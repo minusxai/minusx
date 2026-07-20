@@ -12,6 +12,8 @@ import { setFileEditMode, selectFileEditMode, selectQuestionCollapsedPanel, setQ
 import { selectView } from '@/store/authSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
 import { QuestionContent, type DbFile } from '@/lib/types';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import { applyVizOverride } from '@/lib/data/story/story-question';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 import { useSpreadsheetResult } from '@/lib/hooks/use-spreadsheet-result';
 import { cacheSpreadsheetSource } from '@/lib/spreadsheet/result-cache';
@@ -33,6 +35,21 @@ interface CreateQuestionModalContainerProps {
    */
   isNewQuestion?: boolean;
   dashboardParamValues?: Record<string, any>;
+  /**
+   * Story-embed editing modes (see StoryQuestionEditor):
+   * - 'saved-override': the story restyles a saved question WITHOUT touching the file — viz edits
+   *   are captured locally and handed back via onApplyVizOverride on Update; everything else
+   *   (query, params, name) stages on the file exactly like the dashboard flow.
+   * - 'ephemeral': the file is a THROWAWAY draft mirroring an inline story embed — Update hands the
+   *   edited content back via onEphemeralApply and deletes the draft; Cancel just deletes it.
+   */
+  storyEmbedMode?: 'saved-override' | 'ephemeral';
+  /** Initial story-level viz override (saved-override mode). */
+  vizOverride?: VizEnvelope | null;
+  onApplyVizOverride?: (viz: VizEnvelope) => void;
+  onEphemeralApply?: (content: QuestionContent) => void;
+  /** Header chip marking what this modal edits: a saved question file vs a story-local ephemeral one. */
+  sourceBadge?: 'saved' | 'ephemeral';
 }
 
 /**
@@ -49,9 +66,18 @@ export default function CreateQuestionModalContainer({
   onAttemptCloseRef,
   isNewQuestion,
   dashboardParamValues,
+  storyEmbedMode,
+  vizOverride,
+  onApplyVizOverride,
+  onEphemeralApply,
+  sourceBadge,
 }: CreateQuestionModalContainerProps) {
   const dispatch = useAppDispatch();
   const [virtualId, setVirtualId] = useState<number | undefined>(undefined);
+  const isEphemeral = storyEmbedMode === 'ephemeral';
+  const isOverrideMode = storyEmbedMode === 'saved-override';
+  // saved-override mode: viz edits accumulate here (NOT on the file) until Update hands them back.
+  const [localOverride, setLocalOverride] = useState<VizEnvelope | null>(null);
 
   // Self-create a virtual file only when questionId is not provided by the caller.
   // The primary path (QuestionBrowserPanel → viewStack) always pre-creates and passes questionId.
@@ -168,10 +194,18 @@ export default function CreateQuestionModalContainer({
     }));
   }, [file, mergedContent, effectiveId, dispatch, dashboardParamValues]);
 
-  // Handle content changes
+  // Handle content changes. In saved-override mode, viz edits are the STORY's (captured locally,
+  // handed back on Update) — everything else still stages on the saved file.
   const handleChange = useCallback((updates: Partial<QuestionContent>) => {
+    if (isOverrideMode && 'viz' in updates) {
+      const { viz, ...rest } = updates;
+      if (viz) setLocalOverride(viz);
+      if (Object.keys(rest).length === 0) return;
+      editFile({ fileId: typeof effectiveId === 'number' ? effectiveId : -1, changes: { content: rest } });
+      return;
+    }
     editFile({ fileId: typeof effectiveId === 'number' ? effectiveId : -1, changes: { content: updates } });
-  }, [effectiveId]);
+  }, [effectiveId, isOverrideMode]);
 
   // Handle metadata changes (Phase 5)
   const handleMetadataChange = useCallback((changes: { name?: string }) => {
@@ -234,18 +268,28 @@ export default function CreateQuestionModalContainer({
 
   // Edit mode: "Update" — changes are already staged in Redux via editFile() calls.
   // No API call — the question will be published later via "Publish All".
+  // saved-override mode additionally hands captured viz edits back to the story.
   const handleUpdate = useCallback(() => {
+    if (isOverrideMode && localOverride) onApplyVizOverride?.(localOverride);
     onClose();
-  }, [onClose]);
+  }, [isOverrideMode, localOverride, onApplyVizOverride, onClose]);
 
-  const primaryActionLabel = isCreateMode ? 'Add' : 'Update';
-  const handlePrimaryAction = isCreateMode ? handleAdd : handleUpdate;
+  // Ephemeral mode: "Update" — hand the edited content back to the story body, then discard
+  // the throwaway draft (its only purpose was powering this editor session).
+  const handleEphemeralUpdate = useCallback(() => {
+    if (mergedContent) onEphemeralApply?.(mergedContent);
+    if (typeof effectiveId === 'number') deleteFile({ fileId: effectiveId }).catch(() => {});
+    onClose();
+  }, [mergedContent, onEphemeralApply, effectiveId, onClose]);
+
+  const primaryActionLabel = isEphemeral ? 'Update' : isCreateMode ? 'Add' : 'Update';
+  const handlePrimaryAction = isEphemeral ? handleEphemeralUpdate : isCreateMode ? handleAdd : handleUpdate;
 
   // Handle cancel
   const handleCancel = useCallback(() => {
     if (typeof effectiveId === 'number') {
-      if (isCreateMode) {
-        // Cancel during creation: delete the orphaned draft from the server.
+      if (isCreateMode || isEphemeral) {
+        // Cancel during creation (or an ephemeral session): delete the orphaned draft from the server.
         deleteFile({ fileId: effectiveId }).catch(() => {});
       } else {
         // Cancel while editing a published file: revert to DB state.
@@ -253,7 +297,7 @@ export default function CreateQuestionModalContainer({
       }
     }
     onClose();
-  }, [effectiveId, isCreateMode, dispatch, onClose]);
+  }, [effectiveId, isCreateMode, isEphemeral, dispatch, onClose]);
 
   // Register handleCancel with parent so ESC/click-outside go through dirty check
   useEffect(() => {
@@ -294,21 +338,43 @@ export default function CreateQuestionModalContainer({
           gap={2}
           flexShrink={0}
         >
+          {sourceBadge && (
+            <Text
+              aria-label="Story embed type"
+              fontSize="xs"
+              fontWeight="600"
+              px={2}
+              py={0.5}
+              borderRadius="sm"
+              bg={sourceBadge === 'saved' ? 'accent.primary/10' : 'accent.secondary/10'}
+              color={sourceBadge === 'saved' ? 'accent.primary' : 'accent.secondary'}
+              flexShrink={0}
+            >
+              {sourceBadge === 'saved' ? 'Saved question' : 'Ephemeral'}
+            </Text>
+          )}
           <Box flex={1}>
-            <Input
-              value={effectiveName}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMetadataChange({ name: e.target.value })}
-              placeholder="Question name..."
-              size="sm"
-              variant="flushed"
-              fontWeight="semibold"
-              aria-label="Question name"
-            />
+            {isEphemeral ? (
+              // Ephemeral questions live in the story body only — they have no name to edit.
+              <Text fontSize="sm" fontWeight="semibold" color="fg.muted">
+                Lives in this story only
+              </Text>
+            ) : (
+              <Input
+                value={effectiveName}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMetadataChange({ name: e.target.value })}
+                placeholder="Question name..."
+                size="sm"
+                variant="flushed"
+                fontWeight="semibold"
+                aria-label="Question name"
+              />
+            )}
           </Box>
           {saveError && (
             <Text fontSize="xs" color="accent.danger" flexShrink={0}>{saveError}</Text>
           )}
-          <Button size="sm" variant="ghost" onClick={handleCancel} flexShrink={0}>
+          <Button size="sm" variant="ghost" onClick={handleCancel} flexShrink={0} aria-label="Cancel question edit">
             Cancel
           </Button>
           <Button
@@ -326,7 +392,9 @@ export default function CreateQuestionModalContainer({
         <QuestionViewV2
           viewMode="page"
           vizV2Enabled={vizV2Enabled}
-          content={mergedContent}
+          // saved-override mode: preview the story's override (latest local edit wins) on top of
+          // the file content — the file's own viz is what Publish would keep.
+          content={isOverrideMode ? applyVizOverride(mergedContent, localOverride ?? vizOverride) : mergedContent}
           // Resolve the schema context at the draft's real path (tutorial mode,
           // per-folder contexts) — without this the view falls back to '/org'
           // and the GUI tab silently disappears for new questions.

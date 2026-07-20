@@ -22,7 +22,10 @@ import type { JsxNode } from '@/lib/jsx';
 import type { StoryContent } from '@/lib/types';
 import { escAttr } from './html-attr';
 import { paramFromJsxAttrs, paramToPlaceholder, placeholdersToParamJsx } from './story-params';
-import { inlineQuestionFromJsxAttrs, inlineQuestionToPlaceholder, placeholdersToInlineQuestionJsx } from './story-question';
+import {
+  inlineQuestionFromJsxAttrs, inlineQuestionToPlaceholder, placeholdersToInlineQuestionJsx,
+  savedQuestionToPlaceholder, placeholdersToSavedQuestionJsx, vizEnvelopeFromAttr,
+} from './story-question';
 import { numberFromJsxAttrs, numberToPlaceholder, placeholdersToNumberJsx } from './story-number';
 import { emitStoryComponent, reverseStoryComponents, STORY_COMPONENTS } from './story-components';
 import { immutableSet } from '@/lib/utils/immutable-collections';
@@ -76,16 +79,18 @@ function nodeToHtml(node: JsxNode, assets: number[], rawStrings = false): string
   if (node.tag === 'Question') {
     const attrsMap: Record<string, unknown> = {};
     for (const a of node.attributes) if (a.value.static) attrsMap[a.name] = a.value.json;
-    // Saved question by id (the agent's preferred path — reuse an existing file).
+    // Saved question by id (the agent's preferred path — reuse an existing file). An optional
+    // viz={V2 envelope} FULLY overrides the saved question's viz for this story (legacy-shaped
+    // viz attrs are ignored here — overrides are envelope-only).
     if (typeof attrsMap.id === 'number') {
       const id = attrsMap.id;
       assets.push(id);
       const h = typeof attrsMap.height === 'string' || typeof attrsMap.height === 'number'
-        ? String(attrsMap.height).replace(/["']/g, '')
-        : '430px';
-      return `<div data-question-id="${id}" style="width:100%;height:${h}"></div>`;
+        ? String(attrsMap.height)
+        : undefined;
+      return savedQuestionToPlaceholder(id, h, vizEnvelopeFromAttr(attrsMap.viz));
     }
-    // Inline story-local question (query/connection/viz/params live in the body).
+    // Inline story-local question (query|spreadsheet/connection/viz/params live in the body).
     const inline = inlineQuestionFromJsxAttrs(attrsMap);
     return inline ? inlineQuestionToPlaceholder(inline) : '';
   }
@@ -181,8 +186,8 @@ export function buildStoryJsx(content: StoryContent): string {
   let html = escapeBracesInText(content.story ?? '');
   // <style>…</style> → <style>{`…`}</style> so CSS `{ }` don't break jsx
   html = html.replace(/<style>([\s\S]*?)<\/style>/g, (_m, css: string) => `<style>{\`${css.replace(/\\/g, '\\\\').replace(/`/g, '\\`')}\`}</style>`);
-  // <div data-question-id="N" …></div> → <Question id={N} />
-  html = html.replace(/<div\s+data-question-id=["'](\d+)["'][^>]*>\s*<\/div>/g, (_m, id: string) => `<Question id={${id}} />`);
+  // <div data-question-id="N" …></div> → <Question id={N} viz=… height=… /> (override + height kept)
+  html = placeholdersToSavedQuestionJsx(html);
   // <div data-question-inline="…" …></div> → <Question query={`…`} connection=… viz=… params=… />
   html = placeholdersToInlineQuestionJsx(html);
   // <span data-number-inline="…"></span> → <Number id={N}|query={`…`} … />

@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react';
 import type { ChartTarget, InlineChartTarget, NumberTarget, ParamTarget } from '@/components/views/shared/StoryEmbeds';
 import type { StoryEmbedBox, StoryRasterResult } from '@/lib/canvas-story/types';
-import { inlineQuestionFromEl, inlineEmbedToQuestionContent } from '@/lib/data/story/story-question';
+import { inlineQuestionFromEl, inlineEmbedToQuestionContent, savedQuestionVizFromEl } from '@/lib/data/story/story-question';
+import { envelopeVizType } from '@/lib/viz/viz-templates';
 import { numberFromEl } from '@/lib/data/story/story-number';
 import { paramFromPlaceholderEl } from '@/lib/data/story/story-params';
 
@@ -58,10 +59,10 @@ export function useEmbedIslands(result: StoryRasterResult | null): EmbedIslands 
       if (!el) continue;
       if (e.kind === 'question') {
         const questionId = parseInt(e.ref, 10);
-        if (!Number.isNaN(questionId)) charts.push({ el, questionId });
+        if (!Number.isNaN(questionId)) charts.push({ el, questionId, vizOverride: savedQuestionVizFromEl(attrShim(e)) });
       } else if (e.kind === 'question-inline') {
         const embed = inlineQuestionFromEl(attrShim(e));
-        if (embed) inline.push({ el, content: inlineEmbedToQuestionContent(embed), bare: embed.vizSettings?.type === 'single_value' });
+        if (embed) inline.push({ el, content: inlineEmbedToQuestionContent(embed), bare: envelopeVizType(embed.viz) === 'single_value', embed });
       } else if (e.kind === 'number-inline') {
         const embed = numberFromEl(attrShim(e));
         if (embed) numbers.push({ el, embed });

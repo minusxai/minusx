@@ -49,7 +49,7 @@ describe('Agent sees query OUTPUT — inline (param-bound) + inline question + r
     const body =
       `<div class="story">` +
       `<p>MRR ${numberToPlaceholder({ query: numQuery, connection: 'duck', col: 'm' })}</p>` +
-      inlineQuestionToPlaceholder({ query: inlineQQuery, connection: 'duck', vizSettings: { type: 'table', yCols: ['c'] } }) +
+      inlineQuestionToPlaceholder({ query: inlineQQuery, connection: 'duck' }) +
       `<div data-question-id="${saved.data.id}"></div>` +
       `</div>`;
     const story = await FilesAPI.createFile(

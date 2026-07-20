@@ -128,7 +128,7 @@ describe('guests + views (public share resolution)', () => {
     // A story that embeds exactly the view query, nothing else.
     await mk('story', '/org/reports/story', 'story', {
       description: 'x',
-      story: `<div class="story">${inlineQuestionToPlaceholder({ query: VIEW_QUERY, connection: 'warehouse', vizSettings: { type: 'table', yCols: [] } })}</div>`,
+      story: `<div class="story">${inlineQuestionToPlaceholder({ query: VIEW_QUERY, connection: 'warehouse' })}</div>`,
       parameterValues: {},
     });
 

@@ -201,6 +201,7 @@ describe('buildStoryJsx ordering', () => {
     const stored =
       '<div data-c="Card" class="x"><div data-question-id="7" style="width:100%;height:300px"></div></div>';
     const jsx = buildStoryJsx({ story: stored } as StoryContent);
-    expect(jsx).toBe('<Card><Question id={7} /></Card>');
+    // non-default height is preserved through the reverse pass (was dropped before)
+    expect(jsx).toBe('<Card><Question id={7} height="300px" /></Card>');
   });
 });

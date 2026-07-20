@@ -20,6 +20,7 @@ import { buildVizTypeCtx } from '@/lib/rubric/refs';
 import { toAgentRubric } from '@/lib/rubric/scoring';
 import type { AgentRubric, DeterministicContext } from '@/lib/rubric/types';
 import { inlineQuestionFromEl } from '@/lib/data/story/story-question';
+import { envelopeVizType } from '@/lib/viz/viz-templates';
 import type { QuestionContent } from '@/lib/types';
 
 export interface FileReview {
@@ -69,9 +70,12 @@ export function measureStoryEmbeds(fileId: number): DeterministicContext['measur
       const widthPx = el.getBoundingClientRect().width;
       if (widthPx <= 0) return;
       const savedId = parseInt(el.getAttribute('data-question-id') ?? '', 10);
+      const savedContent = Number.isFinite(savedId)
+        ? (selectFile(state, savedId)?.content as QuestionContent | undefined)
+        : undefined;
       const vizType = Number.isFinite(savedId)
-        ? (selectFile(state, savedId)?.content as QuestionContent | undefined)?.vizSettings?.type
-        : inlineQuestionFromEl(el)?.vizSettings?.type;
+        ? (envelopeVizType(savedContent?.viz) ?? savedContent?.vizSettings?.type)
+        : envelopeVizType(inlineQuestionFromEl(el)?.viz);
       out.push({ ...(vizType ? { vizType } : {}), widthPx, columnPx });
     });
     return out.length ? out : undefined;

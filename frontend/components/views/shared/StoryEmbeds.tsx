@@ -26,15 +26,35 @@ import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbedde
 import EmbeddedQuestionContainer from '@/components/containers/EmbeddedQuestionContainer';
 import StoryParamControl from '@/components/views/story/StoryParamControl';
 import InlineNumber from '@/components/views/story/InlineNumber';
+import { HStack, Icon, IconButton, Menu, Portal } from '@chakra-ui/react';
+import { LuEllipsis, LuExternalLink } from 'react-icons/lu';
 import { storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story/story-params';
 import type { InlineNumberEmbed } from '@/lib/data/story/story-number';
+import type { InlineQuestionEmbed } from '@/lib/data/story/story-question';
 import type { QuestionContent } from '@/lib/types';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
 
-export interface ChartTarget { el: HTMLElement; questionId: number; }
+export interface ChartTarget {
+  el: HTMLElement;
+  questionId: number;
+  /** Story-level FULL viz replace for this embed (data-question-viz) — the saved file is untouched. */
+  vizOverride?: VizEnvelope | null;
+}
 export interface NumberTarget { el: HTMLElement; embed: InlineNumberEmbed; }
-export interface InlineChartTarget { el: HTMLElement; content: QuestionContent; bare?: boolean; }
+export interface InlineChartTarget {
+  el: HTMLElement;
+  content: QuestionContent;
+  bare?: boolean;
+  /** The raw inline embed (for the edit modal's round-trip back into the story body). */
+  embed?: InlineQuestionEmbed;
+}
 export interface ParamTarget { el: HTMLElement; param: StoryParam; }
+
+/** A request to edit a question embed in the story-level modal (see StoryQuestionEditor). */
+export type StoryQuestionEditRequest =
+  | { kind: 'saved'; questionId: number; occurrence: number; vizOverride: VizEnvelope | null }
+  | { kind: 'inline'; index: number; embed: InlineQuestionEmbed };
 
 export interface StoryEmbedsProps {
   /** The iframe's document — portal targets live here; ark-ui floats against it. */
@@ -49,6 +69,8 @@ export interface StoryEmbedsProps {
   paramValues?: Record<string, unknown>;
   onParamValuesChange?: (values: Record<string, unknown>) => void;
   onEditNumber?: (req: NumberQueryEditRequest) => void;
+  /** Story edit mode: opens the question-embed modal (saved / override / ephemeral). */
+  onEditQuestion?: (req: StoryQuestionEditRequest) => void;
   /** Path of the hosting story — forwarded to embeds' /api/query so guests pass the embed allowlist. */
   storyPath?: string;
   /**
@@ -60,7 +82,7 @@ export interface StoryEmbedsProps {
 }
 
 export default function StoryEmbeds({
-  doc, targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, storyPath, colorMode,
+  doc, targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, storyPath, colorMode,
 }: StoryEmbedsProps) {
   // Shared param context (reader's current values), seeded once from the story defaults. StoryEmbeds
   // remounts (with the iframe) when the story content changes, re-seeding.
@@ -98,6 +120,7 @@ export default function StoryEmbeds({
             <Box className="mx-chart-fill" bg="bg.subtle" borderWidth="1px" borderColor="border.default" borderRadius="md" overflow="hidden" display="flex" flexDirection="column">
               <SmartEmbeddedQuestionContainer
                 questionId={t.questionId}
+                vizOverride={t.vizOverride}
                 showTitle={true}
                 index={i}
                 readOnly={readOnly}
@@ -105,6 +128,14 @@ export default function StoryEmbeds({
                 enableDrilldown={false}
                 externalParameters={extParams}
                 externalParamValues={extValues}
+                onEdit={onEditQuestion ? () => onEditQuestion({
+                  kind: 'saved',
+                  questionId: t.questionId,
+                  // nth placeholder with this id in document order — the write-back transform
+                  // (updateSavedQuestionVizInHtml) targets the same occurrence.
+                  occurrence: targets.slice(0, i).filter(x => x.questionId === t.questionId).length,
+                  vizOverride: t.vizOverride ?? null,
+                }) : undefined}
               />
             </Box>,
             t.el,
@@ -113,6 +144,7 @@ export default function StoryEmbeds({
           {inlineTargets.map((t, i) => createPortal(
             <Box
               className="mx-chart-fill"
+              position="relative"
               {...(t.bare ? {} : { bg: 'bg.subtle', borderWidth: '1px', borderColor: 'border.default', borderRadius: 'md' })}
               overflow="hidden"
               display="flex"
@@ -126,6 +158,53 @@ export default function StoryEmbeds({
                 enableDrilldown={false}
                 filePath={storyPath}
               />
+              {/* Same "Card actions" menu the saved cards get (SmartEmbeddedQuestionContainer) —
+                  inline cards have no title bar, so it floats top-right. */}
+              {editable && onEditQuestion && t.embed && (
+                <Box position="absolute" top={2} right={2} zIndex={2}>
+                  <Menu.Root>
+                    <Menu.Trigger asChild>
+                      <IconButton
+                        variant="ghost"
+                        size="xs"
+                        aria-label="Card actions"
+                        color="fg.muted"
+                        _hover={{ color: 'fg.default' }}
+                        _focusVisible={{ outline: 'none', boxShadow: 'none' }}
+                      >
+                        <LuEllipsis />
+                      </IconButton>
+                    </Menu.Trigger>
+                    <Portal>
+                      <Menu.Positioner>
+                        <Menu.Content
+                          minW="180px"
+                          bg="bg.surface"
+                          borderColor="border.default"
+                          shadow="lg"
+                          p={1}
+                        >
+                          <Menu.Item
+                            value="edit"
+                            cursor="pointer"
+                            borderRadius="sm"
+                            px={3}
+                            py={2}
+                            _hover={{ bg: 'bg.muted' }}
+                            onClick={() => onEditQuestion({ kind: 'inline', index: i, embed: t.embed! })}
+                            aria-label="Edit question"
+                          >
+                            <HStack gap={2}>
+                              <Icon as={LuExternalLink} boxSize={4} />
+                              <span>Edit question</span>
+                            </HStack>
+                          </Menu.Item>
+                        </Menu.Content>
+                      </Menu.Positioner>
+                    </Portal>
+                  </Menu.Root>
+                </Box>
+              )}
             </Box>,
             t.el,
             `inline-${i}`,

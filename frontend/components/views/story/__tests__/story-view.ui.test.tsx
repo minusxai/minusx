@@ -27,11 +27,16 @@ vi.mock('@/components/containers/SmartEmbeddedQuestionContainer', () => ({
     React.createElement('div', { 'aria-label': `Embedded question ${questionId}` }),
 }));
 
-vi.mock('@/components/containers/EmbeddedQuestionContainer', () => ({
-  __esModule: true,
-  default: ({ question }: { question: { query: string; connection_name: string; vizSettings: { type: string } } }) =>
-    React.createElement('div', { 'aria-label': `Inline question ${question.vizSettings.type}` }, question.query),
-}));
+// The label derives the classic viz type from the V2 envelope — inline embeds are envelope-only
+// (stored legacy vizSettings payloads, like the fixtures below, are auto-upgraded on read).
+vi.mock('@/components/containers/EmbeddedQuestionContainer', async () => {
+  const { envelopeVizType } = await import('@/lib/viz/viz-templates');
+  return {
+    __esModule: true,
+    default: ({ question }: { question: { query: string; viz?: { source: { kind: string } } } }) =>
+      React.createElement('div', { 'aria-label': `Inline question ${envelopeVizType(question.viz) ?? 'none'}` }, question.query),
+  };
+});
 
 vi.mock('@/components/views/story/InlineNumber', () => ({
   __esModule: true,

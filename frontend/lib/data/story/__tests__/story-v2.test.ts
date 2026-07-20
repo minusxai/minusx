@@ -58,6 +58,76 @@ describe('parseStoryJsx — inline <Question>', () => {
   });
 });
 
+describe('parseStoryJsx — saved <Question> with a viz override', () => {
+  const envJson = '{version:2,source:{kind:"table",columnFormats:null,conditionalFormats:null,css:".mx-th{background:#111}"}}';
+
+  it('maps <Question id=… viz={envelope}/> to a placeholder carrying data-question-viz (still an asset)', () => {
+    const r = parseStoryJsx(`<div class="story"><Question id={42} viz={${envJson}} height="300px" /></div>`);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.assets).toEqual([42]);
+      expect(r.value.html).toContain('data-question-id="42"');
+      expect(r.value.html).toContain('data-question-viz=');
+      expect(r.value.html).toContain('height:300px');
+    }
+  });
+
+  it('a legacy-shaped viz attr on a SAVED embed is ignored (override is V2-envelope only)', () => {
+    const r = parseStoryJsx('<div><Question id={42} viz={{type:"bar"}} /></div>');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.html).not.toContain('data-question-viz');
+  });
+
+  it('round-trips jsx → html → jsx → same html (override preserved)', () => {
+    const jsx = `<div class="story"><Question id={42} viz={${envJson}} /></div>`;
+    const r1 = parseStoryJsx(jsx);
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    const jsx2 = buildStoryJsx({ story: r1.value.html } as never);
+    expect(jsx2).toContain('viz={');
+    expect(jsx2).toContain('"version":2');
+    const r2 = parseStoryJsx(jsx2);
+    expect(r2.ok).toBe(true);
+    if (r2.ok) expect(r2.value.html).toBe(r1.value.html);
+  });
+
+  it('preserves a custom height through the save round-trip (default 430px stays implicit)', () => {
+    const r = parseStoryJsx('<div><Question id={5} height="300px" /></div>');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const jsx2 = buildStoryJsx({ story: r.value.html } as never);
+    expect(jsx2).toContain('height="300px"');
+    const r2 = parseStoryJsx(jsx2);
+    if (r2.ok) expect(r2.value.html).toBe(r.value.html);
+  });
+
+  it('an id-only embed round-trips WITHOUT growing a viz attr', () => {
+    const r = parseStoryJsx('<div><Question id={7} /></div>');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const jsx2 = buildStoryJsx({ story: r.value.html } as never);
+    expect(jsx2).toContain('<Question id={7} />');
+    expect(jsx2).not.toContain('viz=');
+  });
+});
+
+describe('parseStoryJsx — spreadsheet <Question>', () => {
+  it('maps <Question spreadsheet=… viz=…/> (no query) to a data-question-inline embed and round-trips', () => {
+    const jsx = '<div class="story"><Question spreadsheet={{version:1,columns:[{name:"month",type:"text"},{name:"mrr",type:"number"}],rows:[["Jan","120"],["Feb","140"]]}} viz={{version:2,source:{kind:"table",columnFormats:null,conditionalFormats:null,css:null}}} height="300px" /></div>';
+    const r1 = parseStoryJsx(jsx);
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    expect(r1.value.assets).toEqual([]);
+    expect(r1.value.html).toContain('data-question-inline');
+    expect(r1.value.html).toContain('height:300px');
+    const jsx2 = buildStoryJsx({ story: r1.value.html } as never);
+    expect(jsx2).toContain('spreadsheet={');
+    const r2 = parseStoryJsx(jsx2);
+    expect(r2.ok).toBe(true);
+    if (r2.ok) expect(r2.value.html).toBe(r1.value.html);
+  });
+});
+
 describe('parseStoryJsx — inline <Number>', () => {
   it('maps <Number id> and <Number query> to inline span placeholders (not chart cards)', () => {
     const jsx = '<div class="story"><p>MRR is <Number id={1026} prefix="$" style={{color:"#0a0"}} /> and growth <Number query={`SELECT g FROM t`} connection="duckdb" suffix="%" /></p></div>';

@@ -43,7 +43,7 @@ beforeAll(async () => {
 
   // Story: an INLINE question embed + a SAVED question reference.
   const storyBody = `<div class="story">` +
-    inlineQuestionToPlaceholder({ query: INLINE_Q, connection: 'duck', vizSettings: { type: 'table', yCols: ['c'] } }) +
+    inlineQuestionToPlaceholder({ query: INLINE_Q, connection: 'duck' }) +
     `<div data-question-id="${saved.data.id}"></div></div>`;
   await FilesAPI.createFile({
     name: 'story', path: `${FOLDER}/story`, type: 'story',

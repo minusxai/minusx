@@ -1466,6 +1466,20 @@ export function getTemplate(recipeId: string): VizTemplate | null {
   return VIZ_TEMPLATES[recipeId] ?? null;
 }
 
+/**
+ * Reverse-map a V2 envelope to the classic viz-type vocabulary: DOM-tier kinds pass through,
+ * recipes resolve via the registry's `vizType`, raw vega/vega-lite specs have no classic type
+ * (undefined). Consumers: story-embed "bare" detection (single_value), review-context embed
+ * measurements.
+ */
+export function envelopeVizType(env: { source?: { kind?: string; recipe?: string } } | null | undefined): string | undefined {
+  const s = env?.source;
+  if (!s?.kind) return undefined;
+  if (s.kind === 'table' || s.kind === 'pivot') return s.kind;
+  if (s.kind === 'recipe' && typeof s.recipe === 'string') return getTemplate(s.recipe)?.vizType;
+  return undefined;
+}
+
 export type MaterializeResult =
   | { ok: true; spec: Record<string, unknown>; engine: VizTemplateEngine; assets?: Record<string, string> }
   | { ok: false; error: string };

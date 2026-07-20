@@ -826,7 +826,7 @@ templates:
           <span class="stamp inline-block px-3 py-2 text-[#ffc83d] uppercase tracking-[0.12em] text-sm">LOG 00 · THE FINDING</span>
           <h1 class="display text-5xl @2xl:text-8xl leading-[0.9] mt-6">Churn doubled the quarter we raised prices.</h1>
           <Question query={`SELECT ... AS rate`} connection="duckdb"
-            viz={{ type:"single_value", yCols:["rate"], singleValueConfig:{ suffix:"%", valueColor:"#ffc83d", valueSize:"clamp(3rem,14cqi,7rem)" } }} height="240px" />
+            viz={{ version:2, source:{ kind:"recipe", recipe:"minusx/single-value@1", bindings:{ value:"rate" }, params:{ showLabel:false, valueColor:"#ffc83d" }, columnFormats:{ rate:{ suffix:"%" } } } }} height="240px" />
         </Section>
         <div class="mx-marquee"><div class="mx-marquee-track">312 → 39,882 ··· 135x ··· 6:1 ··· </div></div>
         <Section>  <!-- one beat = one idea = one visual -->
@@ -935,25 +935,49 @@ templates:
 
       Charts AND data numbers are NEVER drawn or typed by hand: no inline SVG / D3 / canvas, and **never a metric written as literal text in the prose**. The platform renders everything via `<Question>` and `<Number>`:
 
+      `<Question>` is polymorphic. Its points of leverage: the **data source** (`id` | `query`+`connection` | `spreadsheet`), the **viz** (restyle/replace the chart), `params`, and `height`. The variants:
+
       **(A) Saved question, PREFER THIS.** Reference an existing question by id:
       ```
       <Question id={142} height="430px" />
       ```
-      Governed, reusable, and it shows up in search and dependencies. Use only ids that actually exist (from the conversation, connected data tools, or the user). Never invent an id.
+      Governed, reusable, and it shows up in search and dependencies. Use only ids that actually exist (from the conversation, or the user mention or search). Never invent an id.
 
-      **(B) Inline question, for story-local one-offs.** A number or small chart that does not deserve its own saved file:
+      **(B) Saved question with a story-level viz override.** Add `viz` next to `id` to restyle the chart FOR THIS STORY ONLY — the saved file is untouched, so every other dashboard/story keeps the question's own look:
+      ```
+      <Question id={142} height="430px"
+        viz={{ version: 2, source: { kind: "table", columnFormats: null, conditionalFormats: null,
+               css: ".mx-th{background:#0f766e;color:#fff} .mx-row-odd{background:transparent}" } }} />
+      ```
+      The override MUST be a complete envelope (`{version: 2, source: {…}}`, source kinds `vega-lite` | `recipe` | `table` | `pivot` | `vega`, exactly as taught in the questions skill) and it replaces the question's viz WHOLESALE — nothing is merged, so carry over anything you want to keep. This is also how a story restyles a table/pivot to match its design language: the envelope's `css` field targets the stable `.mx-table` / `.mx-header-row` / `.mx-th` / `.mx-row` / `.mx-cell` / `.mx-col-<columnName>` class contract. Reach for an override when the saved chart's look fights the story (wrong colors for the palette, a table needing the story's header treatment); leave it off when the saved look already works. Read that file id first to see its viz config.
+
+      **(C) Inline question, for story-local one-offs.** A number or small chart that does not deserve its own saved file:
       ```
       <Question
         query={`SELECT SUM(mrr) AS mrr
                 FROM monthly_saas_metrics
                 WHERE month = :month`}
         connection="duckdb"
-        viz={{ type: "single_value", yCols: ["mrr"], singleValueConfig: { prefix: "$", suffix: " MRR" } }}
+        viz={{ version: 2, source: { kind: "recipe", recipe: "minusx/single-value@1",
+               bindings: { value: "mrr" }, params: { label: "MRR" },
+               columnFormats: { mrr: { prefix: "$", format: ",.0f" } } } }}
         params={[{ name: "month", type: "date", label: null, source: null }]}
         height="200px"
       />
       ```
-      Prefer a saved question when one already shows the beat's evidence; reach for inline only for genuine one-offs.
+      Prefer a saved question when one already shows the beat's evidence; reach for inline only for genuine one-offs. An inline `viz` is ALWAYS a full Viz V2 envelope — the same grammar as a saved question's viz (`vega-lite` | `recipe` | `table` | `pivot`, taught in the questions skill). Never write the legacy classic settings (`{type: "bar", xCols: …}`); omit `viz` entirely for a plain table.
+
+      **(D) Spreadsheet question — literal data, no SQL.** When the figures come from the user or an external source (pasted numbers, offline benchmarks) rather than a connection, embed the data directly:
+      ```
+      <Question
+        spreadsheet={{ version: 1,
+          columns: [{ name: "month", type: "text" }, { name: "mrr", type: "number" }],
+          rows: [["Jan", "120"], ["Feb", "140"]] }}
+        viz={{ version: 2, source: { kind: "table", columnFormats: null, conditionalFormats: null, css: null } }}
+        height="300px"
+      />
+      ```
+      `rows` are arrays of STRINGS (parsed per `columns[].type`: `auto` | `text` | `number` | `boolean` | `date`); no `connection`. NEVER use a spreadsheet to freeze numbers that exist in the warehouse — those must stay live ((A)–(C)); a spreadsheet embed is only for data the platform cannot query.
 
       **(C) Inline number, a live figure IN THE PROSE.** When a number belongs inside a sentence or a tight callout, use `<Number>`: it renders the live digits in a `<span>` that flows with the text, no card, no title bar.
       ```
@@ -965,14 +989,14 @@ templates:
 
       ### Live numbers
 
-      Every figure that conveys data (hero number, pull-quote stat, KPI card, table cell, ratio) is a `single_value` question (saved or inline), NOT typed into the prose. Style it via `singleValueConfig`: `prefix`/`suffix` (`"$"`, `"%"`, `" MRR"`), `label` (empty string to hide), `valueSize` (a CSS font-size like `"clamp(2.5rem, 12cqi, 6rem)"` so it scales with story width), `valueColor`, `valueWeight`, `align`. A `$`-prefixed 6rem accent figure is a STYLED single_value embed, not hand-typed text.
+      Every figure that conveys data (hero number, pull-quote stat, KPI card, table cell, ratio) is a single-value question (saved or inline), NOT typed into the prose — the `minusx/single-value@1` recipe (bindings: `value` → the measure column). Style it via the recipe `params` (`label` / `showLabel:false` to hide, `caption`, `align` left|center|right, `valueColor`, `valueFontSize`/`labelFontSize`/`captionFontSize` — typography auto-scales to the container when omitted) and per-column `columnFormats` (`prefix`/`suffix` like `"$"` / `"%"`, d3 `format` like `",.0f"`). A `$`-prefixed accent figure is a STYLED single-value embed, not hand-typed text.
 
       **The ONLY hand-built numeric is pure ornament**: a ghost numeral or outlined ratio carrying no data meaning (A only). A single-fact proportion drawn as a styled bar (width computed from real numbers) is a legitimate device. Everything that states a fact is a live embed.
 
       Rules for every embed:
-      - Explicit px `height` (`height="430px"`) so layout holds through hydration. Missing height defaults to 430px, percentages do not resolve, and anything below 340px is clamped UP. Width is 100%. Vary height with the beat: compact single_value cards ~180 to 260px, tall main-evidence charts 400 to 460px.
+      - Explicit px `height` (`height="430px"`) so layout holds through hydration. Missing height defaults to 430px, percentages do not resolve, and anything below 340px is clamped UP. Width is 100%. Vary height with the beat: compact single-value cards ~180 to 260px, tall main-evidence charts 400 to 460px.
       - All bar/line/scatter/area plots need to be at least 50% of the width, or they look awful.
-      - Style the *container* around the embed (framing, borders, shadows, full-bleed), never a chart's internals; for a single_value, `singleValueConfig` IS the styling.
+      - Style the *container* around the embed (framing, borders, shadows, full-bleed), never a chart's internals; for a single-value embed, the recipe `params` + `columnFormats` ARE the styling.
       - A saved embed hydrates with a slim title bar carrying the question name (~40px, do not repeat it in your caption). An inline embed has no title bar, so caption it yourself if needed.
 
       ### Reader filters (`<Param>`), optional
@@ -1024,7 +1048,7 @@ templates:
 
       1. **Gather evidence.** Inventory everything the story can draw on before storyboarding: user-referenced question ids (confirm what each actually shows), analysis and numbers already in the conversation, and gaps (a beat the goal needs but nothing supports: surface it now). Prefer reusing saved questions; run new SQL only for beats you will actually embed.
       2. **Find the lead.** Interrogate the data until you can state the single most important finding in one plain sentence with a number in it ("Churn doubled in the quarter we raised prices"). If you cannot, the analysis is not done: go back to the data.
-      3. **Storyboard the beats.** 3 to 7 beats, each advancing the argument: hook, context, the turn or finding, evidence and nuance, so-what. One beat is one section is one idea is (usually) one visual. Two ideas in a section: split it. A chart that does not advance a beat: cut it. Per beat, note the question it references (a saved id, or an inline single_value) and what its headline and callout will claim.
+      3. **Storyboard the beats.** 3 to 7 beats, each advancing the argument: hook, context, the turn or finding, evidence and nuance, so-what. One beat is one section is one idea is (usually) one visual. Two ideas in a section: split it. A chart that does not advance a beat: cut it. Per beat, note the question it references (a saved id, or an inline single-value embed) and what its headline and callout will claim.
       4. **Headlines state findings, not topics.** Every section header and chart title is a claim: "Rural counties drove the entire decline," never "Decline by county type." Reading only the headlines should give the whole story.
       5. **Decide the takeaway ending.** The final section restates the lead with its full earned weight and answers "so what should the reader think or do?" (In A, close with quantified bets and a colophon; in B, a HIGHLIGHTS box.)
       6. **Lock the design language tokens.** The language (A or B) was settled in the Clarify step; now fix its palette, fonts, and grammar. Critique the plan: if it resembles what you would produce for any other dataset, revise before coding.
