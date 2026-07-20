@@ -9,10 +9,17 @@ vi.mock('@/lib/analytics/file-analytics.db', () => ({
   recordLlmResponse: vi.fn(async () => {}),
   recordLlmCallEvent: vi.fn(async () => {}),
 }));
+// The DB-backed plan resolver reads the org config; stub the factory so the
+// tests below can substitute their own plan (default: no plan → static faux).
+vi.mock('@/lib/llm/llm-plan.server', () => ({
+  buildLlmPlanResolver: vi.fn(() => async () => null),
+}));
 
-import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
+import { fauxAssistantMessage, registerFauxProvider } from '@/orchestrator/llm/testing';
 import { fauxRegistration as microFaux } from '@/agents/micro/micro-agent';
 import { runMicroTask } from '@/lib/chat/run-micro-task.server';
+import { buildLlmPlanResolver } from '@/lib/llm/llm-plan.server';
+import type { LlmPlanStep, LlmUseCase } from '@/orchestrator/types';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { Context } from '@/orchestrator/llm';
@@ -20,6 +27,14 @@ import type { Context } from '@/orchestrator/llm';
 const USER: EffectiveUser = {
   userId: 1, email: 'u@example.com', name: 'U', role: 'admin', home_folder: '/org', mode: 'org',
 };
+
+// Stands in for the workspace's Settings → Models choice: a model the plan
+// resolver returns, distinct from MicroAgent's static fallback model.
+const planFaux = registerFauxProvider({
+  api: 'faux-plan-api',
+  provider: 'faux-plan',
+  models: [{ id: 'stub-plan' }],
+});
 
 function userText(context: Context): string {
   const m = context.messages.find((x) => x.role === 'user');
@@ -29,7 +44,10 @@ function userText(context: Context): string {
   return '';
 }
 
-beforeEach(() => microFaux.setResponses([]));
+beforeEach(() => {
+  microFaux.setResponses([]);
+  planFaux.setResponses([]);
+});
 afterEach(() => vi.restoreAllMocks());
 
 describe('runMicroTask', () => {
@@ -111,5 +129,23 @@ describe('runMicroTask', () => {
 
     const call = publish.mock.calls.find(([evt]) => evt === AppEvents.LLM_CALL);
     expect((call?.[1] as { task?: string }).task).toBe('feed_summary');
+  });
+
+  // Regression (providers v2): runMicroTask never wired `orch.resolveLlmPlan`, so
+  // micro-tasks ignored the workspace's Settings → Models config and fell back to
+  // MicroAgent's static MinusX-gateway model — which has no API key, failing every
+  // micro-task with "No API key for provider: minusx" on configured workspaces.
+  it('runs on the DB-configured model plan, not the static fallback model', async () => {
+    const resolver = vi.fn(async (useCase: LlmUseCase): Promise<LlmPlanStep | null> =>
+      useCase === 'micro' ? { model: planFaux.getModel() } : null,
+    );
+    vi.mocked(buildLlmPlanResolver).mockReturnValue(resolver);
+    planFaux.setResponses([fauxAssistantMessage('from the configured model', { stopReason: 'stop' })]);
+    microFaux.setResponses([fauxAssistantMessage('from the static fallback model', { stopReason: 'stop' })]);
+
+    const out = await runMicroTask('title', { input: 'x', subject: 'a question', instructions: '' }, USER);
+
+    expect(resolver).toHaveBeenCalledWith('micro');
+    expect(out).toBe('from the configured model');
   });
 });
