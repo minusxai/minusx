@@ -13,6 +13,7 @@ import type { RegistrableClass } from '@/orchestrator/types';
 import { HEADLESS_REGISTRABLES } from '@/lib/chat/orchestration-core.server';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { ReportAgent, type ReportAgentContext } from '@/agents/report/report-agent';
+import { buildLlmPlanResolver } from '@/lib/llm/llm-plan.server';
 import type { ReportRunContent } from '@/lib/types';
 
 /**
@@ -37,6 +38,10 @@ const REPORT_REGISTRABLES: RegistrableClass[] = [
  */
 export async function runReportV2(ctx: ReportAgentContext): Promise<ReportRunContent> {
   const orch = new Orchestrator(REPORT_REGISTRABLES, []);
+  // DB-backed model config (Settings → Models): resolve the per-use-case plan on
+  // every call — same wiring as chat turns (see orchestration-core). Without it,
+  // report runs use the agents' static MinusX-gateway model, which has no key.
+  orch.resolveLlmPlan = buildLlmPlanResolver();
   const agent = new ReportAgent(orch, { userMessage: `Execute report: ${ctx.reportName}` }, ctx);
 
   const stream = orch.run(agent);

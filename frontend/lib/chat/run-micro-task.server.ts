@@ -15,6 +15,7 @@ import { MicroAgent } from '@/agents/micro/micro-agent';
 import { getMicroTask } from '@/agents/micro/micro-tasks';
 import type { MicroAgentContext } from '@/agents/micro/types';
 import { recordHeadlessLlmCalls } from '@/lib/chat/headless-llm-tracking.server';
+import { buildLlmPlanResolver } from '@/lib/llm/llm-plan.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 /**
@@ -37,6 +38,10 @@ export async function runMicroTask(
   // Enforce per-user credit limits here too (no-op unless enforced): an over-limit
   // user spends ZERO credits anywhere — micro-tasks included, no exempt path.
   orch.beforeLlmCall = creditEnforcer(user);
+  // DB-backed model config (Settings → Models): resolve the per-use-case plan on
+  // every call — same wiring as chat turns (see orchestration-core). Without it,
+  // micro-tasks run on MicroAgent's static MinusX-gateway model, which has no key.
+  orch.resolveLlmPlan = buildLlmPlanResolver();
   const ctx: MicroAgentContext = {
     userId: String(user.userId ?? user.email),
     mode: user.mode === 'tutorial' ? 'tutorial' : 'org',
