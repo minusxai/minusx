@@ -223,10 +223,10 @@ An item is checked only when its tests exist, went red before implementation, an
 - [ ] E2E via faux LLM: design Clarify → card pick → `<theme>` written → themed render in next screenshot.
 
 ### Phase 5 — headless capture
-- [ ] `renderStoryToImage(story) → bitmap` module with a backend interface.
-- [ ] Playwright backend: story route loaded headlessly, captured through the same serialize path; lazy singleton, ~60s idle shutdown, semaphore (1–2), env-gated with graceful degradation.
-- [ ] Slack (`run-turn.server.ts`) + benchmark runs attach story screenshots when available.
-- [ ] Fidelity test: headless vs client capture of the same fixture; pixel-diff under an explicit threshold recorded in the test file.
+- [x] `renderStoryToImage(story) → bitmap` module with a backend interface. (`lib/headless-capture/`: `index.server.ts` seam, `StoryCaptureBackend` in `types.ts`, lifecycle in `manager.ts` — unit-tested through a fake backend.)
+- [x] Playwright backend: story route loaded headlessly, captured through the same serialize path; lazy singleton, ~60s idle shutdown, semaphore (1–2), env-gated with graceful degradation. (`playwright-backend.server.ts` loads `/f/[id]` with a minted NextAuth session cookie — `/f/[id]` is behind login, so the backend authenticates via `session-cookie.server.ts` — waits for `svg[data-mx-story-svg]` + fonts, and element-screenshots the story; serialize-path parity is enforced by the fidelity check below. Env gate: `HEADLESS_CAPTURE=1`, default off; unlaunchable Chromium ⇒ `{ok:false, reason:'unavailable'}`.)
+- [x] Slack (`run-turn.server.ts`) + benchmark runs attach story screenshots when available. (Headless turns have no app-state screenshot point — Slack app_state is `{type:'slack'}` — so the wiring is the server `ReadFiles` tool used by ALL headless runs via `HEADLESS_TOOL_SWAPS`: story files read in a clientless turn get the capture attached as inline image blocks, `renderStoryImageBlocks` in `lib/headless-capture/story-image-blocks.server.ts`. Capability unavailable ⇒ exactly the previous behavior.)
+- [x] Fidelity test: headless vs client capture of the same fixture; pixel-diff under an explicit threshold recorded in the test file. (`npm run capture-fidelity` → `scripts/headless-capture-fidelity.ts`, hermetic per the capture-matrix pattern: the REAL `renderStoryToImage` seam vs the REAL `serializeStorySvg`+`svgToImage` client path over one fixture story page; thresholds recorded in-file — ±24/channel tolerance, ≤1% differing pixels; measured 0.006%.)
 
 ---
 
