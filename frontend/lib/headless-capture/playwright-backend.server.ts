@@ -17,11 +17,16 @@
  */
 import 'server-only';
 import { chromium, type Browser } from 'playwright-core';
-import { STORY_SVG_ATTR } from '@/lib/story-surface';
+import { STORY_SVG_ATTR, STORY_CANVAS_WIDTH } from '@/lib/story-surface';
 import { mintSessionCookie } from './session-cookie.server';
 import type { StoryCaptureBackend, StoryCaptureInput } from './types';
 
-export const DEFAULT_CAPTURE_WIDTH = 800;
+/**
+ * Render at the READER's canvas width, not a smaller "thumbnail" viewport: since the svg surface
+ * tracks its container, the viewport is a LAYOUT input, and a narrower one collapses the story's
+ * container-query bands so the agent would review a layout no reader sees.
+ */
+export const DEFAULT_CAPTURE_WIDTH = STORY_CANVAS_WIDTH;
 const VIEWPORT_HEIGHT = 900;
 const NAVIGATION_TIMEOUT_MS = 30_000;
 const STORY_READY_TIMEOUT_MS = 30_000;

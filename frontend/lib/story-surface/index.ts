@@ -30,6 +30,14 @@ export type StorySurfaceKind = 'dom' | 'svg';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XHTML_NS = 'http://www.w3.org/1999/xhtml';
 
+/**
+ * The LOGICAL canvas width a story is authored against (StoryView's reading column caps here, and
+ * the story prompt's container-query breakpoints are written for it). Lives in the surface module
+ * because it is a story-domain sizing fact, not a component detail: server-side capture needs it to
+ * render the layout a READER sees, and importing a component just for a number would be worse.
+ */
+export const STORY_CANVAS_WIDTH = 1280;
+
 /** Marks the <svg> that hosts a story surface, so the capture path can find it. */
 export const STORY_SVG_ATTR = 'data-mx-story-svg';
 /** Marks the story root element inside the surface (the element the body HTML is written into). */
@@ -178,6 +186,13 @@ export interface AutoSizeStorySurfaceOptions {
  * for a vertical one. (Reading scrollHeight flushes layout, so the reflow between the two is
  * synchronous.)
  */
+/** Left+right padding of an element in CSS px (0 when it can't be computed, e.g. detached). */
+function horizontalPadding(el: HTMLElement): number {
+  const cs = el.ownerDocument.defaultView?.getComputedStyle(el);
+  if (!cs) return 0;
+  return (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+}
+
 export function autoSizeStorySurface(
   { surface, iframe, doc, fluid, fixedHeight }: AutoSizeStorySurfaceOptions,
 ): () => void {
@@ -187,7 +202,12 @@ export function autoSizeStorySurface(
       // fallback for when the inner document hasn't laid out yet. Never apply a 0 — a detached or
       // display:none container measures 0, and a 0-wide surface collapses to min-content (which then
       // blows up the height measure) instead of holding the authored canvas.
-      const measured = doc.body.clientWidth || iframe.clientWidth;
+      //
+      // clientWidth is the PADDING box, so authored `body{padding}` (legacy stories inject their own
+      // CSS verbatim) must come off it: the surface's containing block is the body's CONTENT box, and
+      // applying the wider padding box overhangs it — which `overflow-x:hidden` then clips silently,
+      // the same failure this whole contract exists to prevent, just narrower.
+      const measured = (doc.body.clientWidth || iframe.clientWidth) - horizontalPadding(doc.body);
       if (measured > 0) surface.applyWidth(measured);
     }
     if (fixedHeight !== undefined) return; // fixed canvas: the height prop is the only knob
@@ -198,7 +218,9 @@ export function autoSizeStorySurface(
   sync();
 
   let ro: ResizeObserver | undefined;
-  if (fixedHeight === undefined && typeof ResizeObserver !== 'undefined') {
+  // Gated on EITHER axis needing resync, never on height alone: a fluid caller must keep tracking
+  // the container even when its height is fixed, or it stays pinned to its mount width forever.
+  if ((fluid || fixedHeight === undefined) && typeof ResizeObserver !== 'undefined') {
     ro = new ResizeObserver(sync);
     ro.observe(surface.root);
     // The body lives in another document, where ResizeObserver delivery is not guaranteed. Observing

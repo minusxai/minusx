@@ -133,3 +133,38 @@ describe('non-fluid: the surface stays pinned to the width prop (fixed logical c
     expect(surfaceCalls.filter(c => c.startsWith('applyWidth'))).toEqual([]);
   });
 });
+
+// ── Post-fix review findings (Story_Design_V2 §4 width contract) ────────────────────────────────
+describe('width tracking is independent of the HEIGHT mode', () => {
+  it('keeps re-applying width on resize for a FLUID + fixed-height caller', async () => {
+    // The ResizeObserver used to be gated on `fixedHeight === undefined`, conflating "height is
+    // fixed" with "nothing needs re-measuring". A fluid fixed-canvas caller then stayed pinned to
+    // its mount width forever — the clipping bug, reintroduced in the one branch nobody exercises.
+    measured = 1200;
+    render(<AgentHtml html={STORY} width={1280} height={720} fluid colorMode="light" />);
+    await waitFor(() => expect(surfaceCalls).toContain('applyWidth:1200'));
+    measured = 760;
+    fireResize();
+    await waitFor(() => expect(surfaceCalls).toContain('applyWidth:760'));
+    // A fixed height stays the caller's knob — never pushed from measured content.
+    expect(surfaceCalls.some(c => c.startsWith('applyHeight:'))).toBe(false);
+  });
+});
+
+describe('the measured width is the CONTENT box, not the padding box', () => {
+  it('subtracts authored body padding (legacy stories may style body{padding})', async () => {
+    // clientWidth includes padding. A legacy story whose own <style> sets body{padding:48px} gives
+    // the surface a containing block 96px narrower; applying the padding box overhangs it and
+    // body{overflow-x:hidden} eats the right edge with no scrollbar.
+    measured = 1000;
+    render(<AgentHtml html={STORY} width={1280} fluid colorMode="light" />);
+    await waitFor(() => expect(surfaceCalls).toContain('applyWidth:1000'));
+    const body = iframeEl().contentDocument!.body;
+    body.style.paddingLeft = '48px';
+    body.style.paddingRight = '48px';
+    surfaceCalls.length = 0;
+    fireResize();
+    await waitFor(() => expect(surfaceCalls).toContain('applyWidth:904'));
+    expect(surfaceCalls).not.toContain('applyWidth:1000');
+  });
+});
