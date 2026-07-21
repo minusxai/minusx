@@ -15,6 +15,7 @@ import { ClarifyFrontend } from '@/agents/web-analyst/web-tools';
 import { clarifyFrontendHandler } from '@/lib/tools/handlers/clarify';
 import { UserInputException, type UserInputProps } from '@/lib/tools/user-input-exception';
 import { getDesignThemeOptions } from '@/lib/branding/story-theme-options';
+import { STORY_THEMES } from '@/lib/data/story/story-themes';
 import { reconstructClarifyProps } from '@/lib/chat/clarify-answer-stash';
 
 /** Run the handler expecting the pause — returns the thrown UserInputException props. */
@@ -135,5 +136,23 @@ describe('reconstructClarifyProps — reopen path carries new fields', () => {
     const props = reconstructClarifyProps({ question: 'Pick', options: [], type: 'design' });
     expect(props.options).toHaveLength(6);
     expect(props.options![2]).toMatchObject({ value: 'nocturne', imageUrl: '/story-themes/nocturne.png' });
+  });
+});
+
+// Phase 3: the TEMPORARY hardcoded list is replaced by a projection of the STORY_THEMES
+// registry — the options are DERIVED (label/description/value from the registry entries;
+// imageUrl from the preview-image convention), so the two sources can never drift.
+describe('getDesignThemeOptions — projected from the STORY_THEMES registry', () => {
+  it('derives every option from its registry entry', () => {
+    const opts = getDesignThemeOptions();
+    expect(opts).toHaveLength(STORY_THEMES.length);
+    for (const [i, t] of STORY_THEMES.entries()) {
+      expect(opts[i]).toEqual({
+        value: t.name,
+        label: t.label,
+        description: t.description,
+        imageUrl: `/story-themes/${t.name}.png`,
+      });
+    }
   });
 });

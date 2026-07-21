@@ -42,6 +42,12 @@ interface AgentHtmlProps {
   /** Color mode for the iframe document's dark/light class (sourced by the caller, M4.2). */
   colorMode: 'light' | 'dark';
   /**
+   * Design theme (Story_Design_V2 §5) — the story's `content.theme`. Jsx stories only: stamped
+   * as `data-theme` on the story root so the compiledCss's `[data-theme]` token blocks (and the
+   * matching platform font set) activate. Switching is an attribute change — no doc rebuild.
+   */
+  theme?: string | null;
+  /**
    * Fluid mode (mobile): render at 100% of the container width and let the
    * authored flow layout reflow, instead of pinning to `width`px.
    */
@@ -113,7 +119,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, format, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'svg', paramValues, onParamValuesChange, onEditNumber, onEditQuestion, selectionSource, onChange, filePath, colorMode, compiledCss },
+  { html, format, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'svg', paramValues, onParamValuesChange, onEditNumber, onEditQuestion, selectionSource, onChange, filePath, colorMode, theme, compiledCss },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -200,10 +206,14 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       // Vendored Tooltip/Popover render un-portaled, and Radix's popper wrapper must be forced to
       // absolute positioning (fixed is broken inside <svg><foreignObject>).
       makeStyle('data-mx-floating', STORY_FLOATING_CSS);
-      // Platform-provided fonts (neutral default; theme registry — lib/data/story/story-fonts.ts).
+      // Platform-provided fonts (theme registry — lib/data/story/story-fonts.ts; neutral default).
       // Live form is URL-loaded static assets; capture splices data-URIs into the parsed copy only.
-      const fontCss = getStoryFontCss();
+      const fontCss = getStoryFontCss(theme ?? undefined);
       if (fontCss) makeStyle(STORY_FONTS_ATTR, fontCss);
+      // Design theme (§5): data-theme on the story root activates the compiledCss's
+      // [data-theme] token blocks. Changes are synced by the theme effect below (attribute
+      // only, no rebuild); this stamp covers fresh documents (theme unchanged across rebuilds).
+      if (theme) surface.root.setAttribute('data-theme', theme);
     }
     surface.root.prepend(...injectedStyles);
     mirrorAppStyles(doc);
@@ -364,7 +374,19 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       tearingDown = true;
       if (root) setTimeout(() => { try { root.unmount(); } catch { /* detached doc nodes */ } }, 0);
     };
-  }, [bodySource, isJsx, sanitized, fluid, height, compiledCss, surfaceKind, width]); // colorMode handled separately so it doesn't rebuild the doc
+  }, [bodySource, isJsx, sanitized, fluid, height, compiledCss, surfaceKind, width]); // colorMode + theme handled separately so they don't rebuild the doc
+
+  // Keep the story root's design theme in sync without rebuilding the document — a theme switch
+  // is an attribute change only (all [data-theme] token blocks already ship in compiledCss).
+  // The platform font set follows the theme (same node the build effect injected).
+  useEffect(() => {
+    const root = surfaceRef.current?.root;
+    if (!root || !isJsx) return;
+    if (theme) root.setAttribute('data-theme', theme);
+    else root.removeAttribute('data-theme');
+    const fontsEl = root.querySelector(`style[${STORY_FONTS_ATTR}]`);
+    if (fontsEl) fontsEl.textContent = getStoryFontCss(theme ?? undefined);
+  }, [theme, isJsx]);
 
   // Render (and re-render) the nested embeds root with the latest targets/props.
   // Jsx path: the same nested root instead renders the WHOLE story body (interpreter output),

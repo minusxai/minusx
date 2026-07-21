@@ -164,6 +164,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             editable={editing}
             readOnly={readOnly}
             colorMode={colorMode}
+            theme={content.theme ?? null}
             compiledCss={compiledCss}
             filePath={storyPath}
             paramValues={content.parameterValues ?? undefined}

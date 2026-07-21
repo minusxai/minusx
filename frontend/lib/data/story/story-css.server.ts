@@ -9,6 +9,7 @@
 import 'server-only';
 import { compile } from '@tailwindcss/node';
 import { STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
+import { storyThemeCss } from './story-themes';
 import { partitionBannedCandidates } from './banned-css';
 import { hasDesignSystemMarker, extractClassCandidates, type CompiledCssStoryContent } from './story-css';
 
@@ -209,7 +210,12 @@ export async function compileStoryCss(story: string | null | undefined, opts?: {
   if (dropped.length > 0) {
     console.warn(`[story-css] dropped ${dropped.length} uncompilable class candidate(s):`, dropped.join(' '));
   }
-  return flattenCssLayers(css);
+  // Theme token blocks (Story_Design_V2 §5): ALL themes' `[data-theme]` variable blocks ship in
+  // every jsx story's compiledCss, so switching theme is an attribute change only (no recompile).
+  // Appended AFTER the compiled sheet: the attribute-scoped blocks beat the `:root`/`.dark`
+  // neutral defaults on document order, while authored <style> blocks still come later in the
+  // iframe and win over everything here.
+  return flattenCssLayers(css) + (jsx ? `\n${storyThemeCss()}` : '');
 }
 
 /**

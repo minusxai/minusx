@@ -23,6 +23,14 @@ const Nullable = <T extends TSchema>(schema: T) => Type.Optional(Type.Union([sch
 const NullableD = <T extends TSchema>(schema: T, description: string) =>
   Type.Optional(Type.Union([schema, Type.Null()], { description }));
 
+/**
+ * The six story design themes (Story_Design_V2 §5). The enum lives HERE (this module imports
+ * nothing but typebox); the theme registry (`lib/data/story/story-themes.ts`) types its entries
+ * against it and a registry test asserts one entry per name.
+ */
+export const STORY_THEME_NAMES = ['modernist', 'classical', 'nocturne', 'organic', 'broadsheet', 'industry'] as const;
+export type StoryThemeName = (typeof STORY_THEME_NAMES)[number];
+
 // ============================================================================
 // Visualization Settings
 // ============================================================================
@@ -560,6 +568,11 @@ export const StoryContent = Type.Object({
     'Up to ~3 short follow-up questions a reader might ask about THIS story, shown as "try these questions" ' +
     'prompts in the chat panel. Make them specific to the story\'s data and narrative (e.g. "Which region drove ' +
     'the drop in Q3?"), not generic. Omit or leave null to fall back to the default generic prompts.' }))),
+  theme: Type.Optional(Nullable(StringEnum(STORY_THEME_NAMES,
+    "Design theme for the story (format:'jsx' only) — picks the named design-token set (colors, corner " +
+    'radius, fonts, chart palette) the story renders with. One of the six built-in themes; omit/null for ' +
+    'the neutral default. Set it from the design the user picked (the Clarify design dialog returns the ' +
+    'theme name); components and utility classes are identical across themes, only the tokens change.'))),
   colorMode: Type.Optional(Nullable(StringEnum(['light', 'dark'],
     'Pins the STORY SURFACE (embedded chart theming, design-system `dark:` variants, tile chrome) to the ' +
     'mode the design was authored for — everywhere it renders, including inside an app set to the other ' +

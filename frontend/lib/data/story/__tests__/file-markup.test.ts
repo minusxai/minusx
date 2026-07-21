@@ -457,3 +457,22 @@ describe('markupToContent — banned CSS stripped for jsx stories, legacy left a
     }
   });
 });
+
+// StoryContent.theme (Story_Design_V2 §5): `<theme>nocturne</theme>` is a plain schema field —
+// the generic codec round-trips it like colorMode, no special-casing.
+describe('story <theme> field round-trip', () => {
+  it('markupToContent parses <theme> into content.theme (jsx pipeline)', () => {
+    const markup = '<theme>nocturne</theme>\n<story><div className="p-2"><h1>Hi</h1></div></story>';
+    const back = markupToContent('story', markup);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      expect(back.content.theme).toBe('nocturne');
+      expect(back.content.format).toBe('jsx');
+    }
+  });
+
+  it('fileToMarkup emits <theme> for a jsx story content', () => {
+    const markup = fileToMarkup('story', { format: 'jsx', theme: 'organic', story: '<div><h1>Hi</h1></div>' });
+    expect(markup).toContain('<theme>organic</theme>');
+  });
+});

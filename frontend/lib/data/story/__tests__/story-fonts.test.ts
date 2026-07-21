@@ -6,7 +6,10 @@
  * parsed copy (lib/story-surface/serialize inlines url() → data: at serialization).
  */
 import { describe, it, expect } from 'vitest';
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
 import { getStoryFontCss, STORY_FONT_THEMES, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
+import { STORY_THEMES } from '@/lib/data/story/story-themes';
 
 describe('getStoryFontCss — theme registry → @font-face CSS', () => {
   it('returns one @font-face rule per registered asset of the neutral default theme', () => {
@@ -38,5 +41,41 @@ describe('getStoryFontCss — theme registry → @font-face CSS', () => {
 
   it('exports the in-root style node marker attribute for render + save-strip paths', () => {
     expect(STORY_FONTS_ATTR).toBe('data-mx-fonts');
+  });
+});
+
+// Phase 3: per-theme font assets — every registry theme maps its display/body (and mono)
+// families to bundled public/fonts assets; getStoryFontCss(theme) returns that theme's set.
+describe('per-theme font assets (Story_Design_V2 §5)', () => {
+  it('every STORY_THEMES entry has a font-asset set covering its families', () => {
+    for (const t of STORY_THEMES) {
+      const assets = STORY_FONT_THEMES[t.name];
+      expect(assets, t.name).toBeTruthy();
+      const families = new Set(assets.map(a => a.family));
+      expect(families.has(t.fonts.display), `${t.name} display ${t.fonts.display}`).toBe(true);
+      expect(families.has(t.fonts.body), `${t.name} body ${t.fonts.body}`).toBe(true);
+      if (t.fonts.mono) expect(families.has(t.fonts.mono), `${t.name} mono`).toBe(true);
+    }
+  });
+
+  it('getStoryFontCss(theme) returns @font-face rules for that theme\'s families', () => {
+    const css = getStoryFontCss('classical');
+    expect(css).toContain('@font-face');
+    expect(css).toContain('"Noto Serif"');
+    // Classical is serif-only — a neutral-fallback answer (which carries Inter) would be wrong.
+    expect(css).not.toContain('"Inter"');
+    // URL form only — data-URIs are capture-time-spliced, never in the live form.
+    expect(css).not.toContain('data:');
+    expect(css).toMatch(/url\("\/fonts\//);
+  });
+
+  it('every registered asset points at a real bundled file under public/fonts', () => {
+    const files = new Set(readdirSync(path.join(process.cwd(), 'public', 'fonts')));
+    for (const assets of Object.values(STORY_FONT_THEMES)) {
+      for (const a of assets) {
+        expect(a.url.startsWith('/fonts/'), a.url).toBe(true);
+        expect(files.has(a.url.slice('/fonts/'.length)), a.url).toBe(true);
+      }
+    }
   });
 });

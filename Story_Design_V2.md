@@ -208,12 +208,12 @@ An item is checked only when its tests exist, went red before implementation, an
 - [x] Final commit: `@zumer/snapdom` uninstalled.
 
 ### Phase 3 — themes
-- [ ] `story-themes.ts`: six themes per §5, each `{ name, label, fonts, cssVars: { light, dark } }`.
-- [ ] `StoryContent.theme` in `atlas-schemas.ts`; `<theme>` authored; `data-theme` stamped on the root.
-- [ ] All six `[data-theme]` blocks in the compiled output; agent CSS wins on conflict; theme switch needs no recompile.
-- [ ] Settings picker rendered from the registry (aria-labels per repo test rules).
-- [ ] Vega consumes `--chart-1..5`; visual check: same story, six themes, charts recolor.
-- [ ] Per-theme font assets (extending Phase 2's mechanism); preview-generation script (`frontend/scripts/`, Playwright over a canonical fragment); six PNGs committed to `public/story-themes/<name>.png`.
+- [x] `story-themes.ts`: six themes per §5, each `{ name, label, fonts, cssVars: { light, dark } }`. (`lib/data/story/story-themes.ts` — full shadcn token contract per mode, oklch values; names enum lives in `atlas-schemas.ts` (`STORY_THEME_NAMES`), registry typed against it.)
+- [x] `StoryContent.theme` in `atlas-schemas.ts`; `<theme>` authored; `data-theme` stamped on the root. (`theme: Optional(Nullable(StringEnum(...)))` sibling of `colorMode`; the generic markup codec round-trips `<theme>` with no special-casing; AgentHtml stamps/syncs `data-theme` on the surface root — attribute change only, no doc rebuild.)
+- [x] All six `[data-theme]` blocks in the compiled output; agent CSS wins on conflict; theme switch needs no recompile. (`storyThemeCss()` appended to every jsx compile in `story-css.server.ts` — after the `:root` neutral defaults so the blocks win on document order; authored `<style>` blocks still come later in the iframe and win.)
+- [x] Settings picker rendered from the registry (aria-labels per repo test rules). (`StoryThemePicker` view + a `Story theme` toolbar action in `StoryContainerV2` — stages `content.theme` via `editFile`, instant preview; `story-theme-options.ts` now projects the registry, TEMPORARY list gone.)
+- [x] Vega consumes `--chart-1..5`; visual check: same story, six themes, charts recolor. (`lib/viz/chart-tokens.ts` resolves computed tokens at the chart container; `compileVegaLite`/`toVegaSpec` take `categoryRange` on both engines; VegaChart rebuilds on `data-theme` attribute flips via a document-scoped MutationObserver.)
+- [x] Per-theme font assets (extending Phase 2's mechanism); preview-generation script (`frontend/scripts/`, Playwright over a canonical fragment); six PNGs committed to `public/story-themes/<name>.png`. (`STORY_FONT_THEMES` derives per-theme sets from the registry; §5 families not bundled are substituted to the closest bundled asset — Archivo/Barlow→Inter, Cormorant/Lora/Fraunces/Source Serif 4→Noto Serif — documented in `story-themes.ts`; `npm run generate-theme-previews` renders through the real `compileStoryCss({force})` path.)
 
 ### Phase 4 — Clarify + theme picker
 - [x] Option schema gains `imageUrl` + real `value`; threaded through `user-input-exception.ts`, `clarify.ts`, `ClarifyDisplay.tsx`, `clarify-answer-stash.ts`.

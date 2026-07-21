@@ -15,10 +15,8 @@
  *
  * Save paths must never persist the injected node: serializeEditedStory strips `[data-mx-fonts]`
  * (see INJECTED_STYLE_SELECTOR in lib/html/serialize-story.ts).
- *
- * Phase 3 extends the registry per theme; the neutral default ships the app's bundled families
- * (system font stack remains the implicit fallback for anything unlisted).
  */
+import { STORY_THEMES } from './story-themes';
 
 /** Marker attribute of the in-root font style node (render injects it; save paths strip it). */
 export const STORY_FONTS_ATTR = 'data-mx-fonts';
@@ -35,8 +33,37 @@ export interface StoryFontAsset {
 }
 
 /**
- * Theme registry: theme name → font assets. Phase 3 adds per-theme entries; unknown themes fall
- * back to `neutral`.
+ * The bundled font-asset catalog: family → @font-face source files under public/fonts.
+ * Only these three families ship as static assets; theme families outside this catalog are
+ * substituted at the registry level (see story-themes.ts per-theme notes).
+ */
+const FAMILY_ASSETS: Record<string, readonly StoryFontAsset[]> = {
+  'Inter': [
+    { family: 'Inter', url: '/fonts/Inter-Variable.ttf', weight: '100 900' },
+  ],
+  'JetBrains Mono': [
+    { family: 'JetBrains Mono', url: '/fonts/JetBrainsMono-Regular.ttf', weight: '400' },
+    { family: 'JetBrains Mono', url: '/fonts/JetBrainsMono-Bold.ttf', weight: '700' },
+  ],
+  'Noto Serif': [
+    { family: 'Noto Serif', url: '/fonts/NotoSerif-Regular.ttf', weight: '400' },
+    { family: 'Noto Serif', url: '/fonts/NotoSerif-Italic.ttf', weight: '400', style: 'italic' },
+  ],
+};
+
+/** The distinct asset sets for a theme's display/body/mono families, in catalog order. */
+function assetsForFamilies(families: Array<string | undefined>): readonly StoryFontAsset[] {
+  const wanted = new Set(families.filter((f): f is string => !!f));
+  return Object.entries(FAMILY_ASSETS)
+    .filter(([family]) => wanted.has(family))
+    .flatMap(([, assets]) => assets);
+}
+
+/**
+ * Theme registry: theme name → font assets. Per-theme entries are DERIVED from the design-theme
+ * registry (story-themes.ts — one registry, four consumers): each theme carries exactly the
+ * assets for its display/body/mono families. Unknown themes fall back to `neutral` (the app's
+ * bundled families; system stack remains the implicit fallback for anything unlisted).
  */
 export const STORY_FONT_THEMES: Record<string, readonly StoryFontAsset[]> = {
   neutral: [
@@ -46,6 +73,10 @@ export const STORY_FONT_THEMES: Record<string, readonly StoryFontAsset[]> = {
     { family: 'Noto Serif', url: '/fonts/NotoSerif-Regular.ttf', weight: '400' },
     { family: 'Noto Serif', url: '/fonts/NotoSerif-Italic.ttf', weight: '400', style: 'italic' },
   ],
+  ...Object.fromEntries(STORY_THEMES.map(t => [
+    t.name,
+    assetsForFamilies([t.fonts.display, t.fonts.body, t.fonts.mono]),
+  ])),
 };
 
 const fontFaceRule = (a: StoryFontAsset): string =>

@@ -9,6 +9,7 @@
 import { hasDesignSystemMarker, extractClassCandidates } from '../story-css';
 import { compileStoryCss, withCompiledStoryCss } from '../story-css.server';
 import { fileToMarkup, markupToContent } from '../file-markup';
+import { STORY_THEMES } from '../story-themes';
 
 const TW_STORY =
   '<div class="mx-story" data-design="tw">' +
@@ -301,5 +302,31 @@ describe('compileStoryCss — banned candidate filter (format:jsx)', () => {
   it('legacy marked stories are NOT candidate-filtered (frozen pipeline keeps its CSS live)', async () => {
     const css = (await compileStoryCss('<div data-design="tw" class="fixed p-2">x</div>'))!;
     expect(css).toMatch(/position:\s*fixed/);
+  });
+});
+
+// Theme token blocks (Story_Design_V2 §5): every jsx story's compiledCss ships ALL SIX
+// `[data-theme="<name>"]` variable blocks, so switching a story's theme is an attribute
+// change only — instant preview, no recompile. Appended AFTER the compiled sheet so the
+// attribute-scoped blocks beat the `:root`/`.dark` neutral defaults on document order.
+describe('compileStoryCss — theme token blocks (format:jsx)', () => {
+  it('ships all six [data-theme] blocks, each with its own --primary', async () => {
+    const css = (await compileStoryCss('<p className="p-2">x</p>', { force: true }))!;
+    for (const t of STORY_THEMES) {
+      expect(css).toContain(`[data-theme="${t.name}"]`);
+    }
+    const nocturne = STORY_THEMES.find(t => t.name === 'nocturne')!;
+    expect(css).toContain(`--primary: ${nocturne.cssVars.light['--primary']}`);
+    expect(css).toContain(`.dark [data-theme="nocturne"]`);
+  });
+
+  it('theme blocks come AFTER the neutral :root defaults (document order beats equal specificity)', async () => {
+    const css = (await compileStoryCss('<p className="p-2">x</p>', { force: true }))!;
+    expect(css.indexOf('[data-theme="modernist"]')).toBeGreaterThan(css.indexOf(':root'));
+  });
+
+  it('legacy (non-jsx) compiles carry NO theme blocks (byte-stable legacy pipeline)', async () => {
+    const css = (await compileStoryCss('<div data-design="tw" class="p-2">x</div>'))!;
+    expect(css).not.toContain('[data-theme=');
   });
 });
