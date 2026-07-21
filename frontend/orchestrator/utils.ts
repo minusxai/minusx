@@ -1,7 +1,7 @@
 
 import { randomBytes } from 'crypto';
 import type { Static, TSchema } from 'typebox';
-import type { Api, AssistantMessage, Usage } from '@/orchestrator/llm';
+import type { Api, AssistantMessage, ImageContent, TextContent, Usage } from '@/orchestrator/llm';
 import { Convert, Default, Errors, Check } from 'typebox/value';
 
 export function gen_id(): string {
@@ -101,4 +101,57 @@ export function synthErrorAssistantMessage(
     timestamp: Date.now(),
     ...extra,
   };
+}
+
+/**
+ * A user-message attachment as stored on an invocation's context — the structural
+ * shape of the agents' `AgentAttachment` (the orchestrator stays decoupled from
+ * agent modules, so the shape is declared here and agents' type must conform).
+ */
+export interface UserTurnAttachment {
+  type: 'image' | 'text';
+  data?: string;
+  mimeType?: string;
+  url?: string;
+  name?: string;
+  content?: string;
+  pages?: number;
+}
+
+/**
+ * Build a user turn's content blocks from its message + attachments: text
+ * attachments as `<Attachment …>` blocks first, then message images, attachment
+ * images, and finally the goal text. The SINGLE builder for both the current
+ * turn (agents' `buildUserContent`) and prior turns rebuilt from the log
+ * (`projectRootThreadHistory`) — prior turns must render user attachments too,
+ * or the model loses access to an image the user sent one turn earlier.
+ */
+export function buildUserTurnContent(
+  userMessage: string | (TextContent | ImageContent)[],
+  attachments: UserTurnAttachment[] = [],
+): (TextContent | ImageContent)[] {
+  const items: (TextContent | ImageContent)[] =
+    typeof userMessage === 'string' ? [{ type: 'text', text: userMessage }] : userMessage;
+
+  const msgImages = items.filter((c): c is ImageContent => c.type === 'image');
+  const goal = items
+    .filter((c): c is TextContent => c.type === 'text')
+    .map((c) => c.text)
+    .join('\n');
+
+  const attachmentImages: ImageContent[] = attachments
+    .filter((a): a is UserTurnAttachment & { type: 'image' } => a.type === 'image')
+    .map((a) => (a.url ? { type: 'image', url: a.url } : { type: 'image', data: a.data ?? '', mimeType: a.mimeType ?? 'image/png' }));
+  const textAttachments = attachments
+    .filter((a): a is UserTurnAttachment & { type: 'text' } => a.type === 'text')
+    .map((a) => {
+      const header = `[${a.name ?? 'attachment'}]` + (a.pages ? ` (${a.pages} pages)` : '');
+      return `<Attachment ${header}>\n${a.content ?? ''}\n</Attachment>`;
+    })
+    .join('\n');
+
+  const blocks: (TextContent | ImageContent)[] = [];
+  if (textAttachments) blocks.push({ type: 'text', text: textAttachments });
+  blocks.push(...msgImages, ...attachmentImages, { type: 'text', text: goal });
+  return blocks;
 }

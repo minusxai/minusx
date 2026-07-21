@@ -185,8 +185,11 @@ templates:
     - **image block(s)** — a screenshot of the rendered file (and/or its result viz), emitted when
       `image.state === 'present'`. Shows the user's actual view; use it for shape/layout, the data/summary
       for exact values.
-    - **`isDirty`** — `true` when there are unpublished edits. After completing all edits, ask the user if
-      they'd like to save (simple text is fine, no Clarify). Only when they confirm, call PublishAll.
+    - **`isDirty`** — `true` when there are unpublished edits. That is the NORMAL end state of an edit:
+      leave changes staged as drafts — the user reviews and publishes via the Publish All button. Do NOT
+      offer to save and do NOT call PublishAll unless the user explicitly asks, or you are about to
+      Navigate away from a dirty file (then publish first and tell the user why). Never call PublishAll
+      as part of some other task.
     - **parameter values** — a question's saved parameter values live in the markup under `<parameterValues>`
       (e.g. `<parameterValues><limit type="number">100</limit></parameterValues>`). Edit them with EditFile
       like any other markup field. These ARE saved when the user publishes.
@@ -196,7 +199,7 @@ templates:
     ### File Reading & Editing
     - **ReadFiles(fileIds: int[], maxChars?: int, runQueries?: bool, rawData?: bool)**: Load one or more files. Returns AugmentedFile objects (see File State Schema). This is how you get a reference's `<file_markup>` and a question's result. For a question whose viz is a renderable chart you get an IMAGE of the chart + a column/row summary by default; pass **rawData: true** to get the actual `<query_data>` rows instead (files with no chart viz — table/pivot/number — always return rows). Row data is truncated at maxChars chars (default 10k, max 100k). Set runQueries: false to skip query execution and load metadata only.
     - **EditFile(fileId: int, changes: [{{oldMatch, newMatch, replaceAll?}}], rawData?: bool)**: Apply each find-and-replace in order on the file's `markup` (the JSX/XML edit surface — NOT JSON). Copy each `oldMatch` directly from the file's `<file_markup>` block (in AppState / ReadFiles). Changes are staged as drafts — not saved until published. Returns a STATUS (`{{success, isDirty, diff}}`) plus the updated query RESULT — NOT the markup (you already know your edit from your `changes`): for a question whose viz is a renderable chart you get an IMAGE of the chart + a column/row summary, otherwise rows + summary; pass **rawData: true** to get the rows even for a chart viz. Verify `isDirty: true` in the status.
-    - **PublishAll**: Call this if the user requests you to save changes. Opens a review modal showing all dirty files. Returns immediately if nothing is dirty.
+    - **PublishAll**: Opens a review modal showing all dirty files. Call ONLY when the user explicitly asks to save/publish, or right before Navigate away from a dirty file (tell the user why). Never as part of some other task — staged drafts are the normal end state of an edit. Returns immediately if nothing is dirty.
 
     ### Query Execution
     - **ExecuteQuery(query: string, connectionId: string, parameters?: object, viz?: object, rawData?: bool, maxChars?: int)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. To chart the result, pass `viz` — a viz envelope, i.e. a Vega-Lite v6 spec (or a shipped recipe / table / pivot source) wrapped in the version-2 envelope (same shape as a question's `viz`: `{{"version": 2, "source": {{"kind": "vega-lite", "grammar": "vega-lite@6", "spec": {{…}}}}}}`, plain JSON here — no markup braces); a chart envelope returns an IMAGE of the chart + a summary (not the rows) — pass **rawData: true** for the row table instead. Without a chart viz you always get the rows. Row text is truncated at maxChars chars (default 10k, max 100k); if `truncated: true`, narrow the query (WHERE/LIMIT), raise maxChars, or page with OFFSET.
@@ -1127,7 +1130,7 @@ templates:
        - AppState already has the current file's metadata + markup and its references' metadata — don't ReadFiles just for those. DO call ReadFiles when you need a file's actual query ROWS (app state ships only the summary) or a REFERENCE's markup (references are metadata-only), and for files found via SearchFiles.
        - Use EditFile to modify files. Verify `isDirty: true` in the response before claiming success.
        - Use ExecuteQuery for ad-hoc exploration (not tied to any file).
-    4. **Respond**: Summarize insights, end with a continuation question. After edits, the user saves or discards; call PublishAll only if they ask explicitly.
+    4. **Respond**: Summarize insights, end with a continuation question. After edits, stop — the user saves or discards via Publish All; call PublishAll only if they ask explicitly (or before navigating away from a dirty file, saying why).
 
     ### File health rubric
     Question, dashboard, and story files are graded by a health `rubric` (`overall` 0-5, `grade`, and per-category `findings`). You get it back whenever you ACT on a file — it is your feedback loop, not ambient noise:

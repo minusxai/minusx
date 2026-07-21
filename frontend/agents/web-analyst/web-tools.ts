@@ -279,7 +279,7 @@ const PublishAllParams = Type.Object({});
 export class PublishAll extends MXTool<typeof PublishAllParams, RemoteAnalystContext> {
   static readonly schema: Tool<typeof PublishAllParams> = {
     name: 'PublishAll',
-    description: 'Open the Publish modal for the user to review and commit all unsaved file changes. Use after EditFile/CreateFile to persist agent edits.',
+    description: 'Open the Publish modal for the user to review and commit all unsaved file changes. Call ONLY when (a) the user explicitly asks to save/publish, or (b) you are about to Navigate away from a file with unsaved edits — then tell the user why you are publishing first. NEVER call it as any other task\'s follow-up: edits stay staged as drafts for the user to review and publish themselves.',
     parameters: PublishAllParams,
   };
 
