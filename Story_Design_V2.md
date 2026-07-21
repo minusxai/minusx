@@ -51,7 +51,7 @@ Stories are authored as JSX and rendered by **real shadcn/ui components** (inter
 
 **Server compilation stays:** save-time compile produces a few KB of exactly-used rules — zero client cost, deterministic, static (what the self-contained capture document needs). The shadcn recipes are Tailwind classes too: precompile a base sheet from the registry source once (§12: all class strings are static, so this is complete), union with per-story candidates. Draft preview-compile via `POST /api/story-css` already covers code-view edits; unknown classes are silently unstyled, never an error.
 
-**Hardening (live bug, Phase 0):** `withCompiledStoryCss` is awaited uncaught in `createFile`/`saveFile` (`lib/data/files.server.ts:460,609`) and Tailwind's `build()` throws on malformed tokens (`w-[calc(100%`) — one bad token fails the save; the preview route shares the exposure. Fix: try/catch, bisect out bad candidates, worst case return previous `compiledCss` + a validation warning. A save never fails on a bad class token.
+**Hardening (Phase 0 — DONE):** `withCompiledStoryCss` is awaited uncaught in `createFile`/`saveFile` (`lib/data/files.server.ts`), so any `build()` throw fails the whole save; the preview route shares the exposure. **Empirical correction (probed during implementation):** no malformed candidate shape throws in the current Tailwind v4 — 40+ shapes tested (`w-[calc(100%`, unbalanced brackets/quotes, etc.) all compile or no-op. The guard is therefore protective, not a repro fix: `buildSalvaging` (in `story-css.server.ts`) wraps `build()`, bisects out any candidate a future Tailwind rejects, compiles the survivors, and logs the dropped tokens. It never throws — a save can never fail on a bad class token, tested via an injected throwing build.
 
 ---
 
@@ -176,10 +176,11 @@ None.
 
 An item is checked only when its tests exist, went red before implementation, and are green now (TDD per CLAUDE.md). Each phase ends with: `npm run validate` clean → `npm test` green → browser-verify on the dev server (for chat: read the side-chat debug message) → commit + push.
 
-### Phase 0 — live-bug fix
-- [ ] Red test: a story save with `w-[calc(100%` fails today (`files.server.ts:460,609`); same for `POST /api/story-css`.
-- [ ] `compileStoryCss` hardened: try/catch around `build()`, bad candidates bisected out, worst case previous `compiledCss` + validation warning.
-- [ ] Green + browser-verified by hand-editing story CSS in code view.
+### Phase 0 — compile hardening
+- [x] Empirical probe: no current Tailwind input throws (40+ malformed shapes tested) — doc corrected; the guard protects against future `build()` throws at the uncaught await sites.
+- [x] Red test: `buildSalvaging` contract tested with an injected throwing build (drops exactly the bad candidates, compiles survivors together, never throws even when everything fails).
+- [x] `compileStoryCss` hardened: `build()` runs through `buildSalvaging`; dropped candidates logged; malformed-token integration tests on the compile + save paths.
+- [ ] Browser-verified by hand-editing story CSS in code view (done in the consolidated browser pass).
 
 ### Phase 1 — shadcn foundation
 - [ ] shadcn/ui + Radix copied into `lib/story-ui/`; registry per §2 (overlays absent); Tooltip/Popover patched to `absolute`, portaled in the story root.

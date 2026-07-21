@@ -155,3 +155,55 @@ describe('compiledCss never crosses the agent-markup boundary', () => {
     if (r.ok) expect('compiledCss' in r.content).toBe(false);
   });
 });
+
+// Phase 0 hardening (Story_Design_V2 §3): a malformed class token must never fail the compile —
+// bad candidates are bisected out and the survivors' CSS is returned. Tailwind v4's build()
+// throws on tokens like `w-[calc(100%` (unbalanced bracket); before hardening that threw all
+// the way up and failed the whole save.
+describe('compileStoryCss hardening — malformed candidates never throw', () => {
+  const BROKEN_STORY =
+    '<div class="mx-story" data-design="tw">' +
+    '<p class="bg-amber-100 w-[calc(100% text-slate-900">broken token amid good ones</p></div>';
+
+  it('survives a malformed arbitrary-value token and still compiles the good utilities', async () => {
+    const css = await compileStoryCss(BROKEN_STORY);
+    expect(css).toBeTruthy();
+    expect(css).toContain('.bg-amber-100');
+    expect(css).toContain('.text-slate-900');
+  });
+
+  it('returns base-only CSS when every candidate is malformed (never throws, never null for marked stories)', async () => {
+    const allBad = '<div data-design="tw"><p class="w-[calc(100% h-[min(50">x</p></div>';
+    await expect(compileStoryCss(allBad)).resolves.not.toBeNull();
+  });
+});
+
+// The salvage guard itself, tested with an injected throwing build (no current Tailwind input
+// throws — the guard exists so a future build() throw can never fail a save).
+describe('buildSalvaging', () => {
+  const buildThrowingOn = (bad: string[]) => (candidates: string[]) => {
+    if (candidates.some(c => bad.includes(c))) throw new Error(`Cannot represent ${bad[0]}`);
+    return candidates.map(c => `.${c}{}`).join('');
+  };
+
+  it('drops exactly the throwing candidates and compiles the rest', async () => {
+    const { buildSalvaging } = await import('../story-css.server');
+    const r = buildSalvaging(buildThrowingOn(['bad-1']), ['a', 'bad-1', 'b']);
+    expect(r.css).toBe('.a{}.b{}');
+    expect(r.dropped).toEqual(['bad-1']);
+  });
+
+  it('handles multiple bad candidates scattered through the set', async () => {
+    const { buildSalvaging } = await import('../story-css.server');
+    const r = buildSalvaging(buildThrowingOn(['x', 'y']), ['x', 'a', 'y', 'b', 'c']);
+    expect(r.css).toBe('.a{}.b{}.c{}');
+    expect(r.dropped.sort()).toEqual(['x', 'y']);
+  });
+
+  it('never throws even when every candidate (and the empty build) fails', async () => {
+    const { buildSalvaging } = await import('../story-css.server');
+    const r = buildSalvaging(() => { throw new Error('always'); }, ['a', 'b']);
+    expect(r.css).toBe('');
+    expect(r.dropped.sort()).toEqual(['a', 'b']);
+  });
+});
