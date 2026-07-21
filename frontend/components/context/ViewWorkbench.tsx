@@ -22,6 +22,7 @@ import { LuSave, LuTriangleAlert, LuTrash2 } from 'react-icons/lu';
 import QuestionContainerV2 from '@/components/containers/QuestionContainerV2';
 import { setFile, selectMergedContent } from '@/store/filesSlice';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { createDefaultTableViz } from '@/lib/data/story/template-defaults';
 import type { DbFile, QuestionContent, ViewColumn, ViewDef } from '@/lib/types';
 
 interface ViewWorkbenchProps {
@@ -62,7 +63,7 @@ export default function ViewWorkbench({
     const content: QuestionContent = {
       description: null,
       query: view?.sql ?? '',
-      vizSettings: view?.vizSettings ?? { type: 'table' },
+      viz: view?.viz ?? createDefaultTableViz(),
       parameters: [],
       parameterValues: {},
       connection_name: connection,
@@ -85,7 +86,7 @@ export default function ViewWorkbench({
     } as unknown as DbFile;
 
     dispatch(setFile({ file, references: [] }));
-  }, [dispatch, fileId, contextPath, connection, view?.sql, view?.name, view?.vizSettings]);
+  }, [dispatch, fileId, contextPath, connection, view?.sql, view?.name, view?.viz]);
 
   // What the user has actually built in the editor (SQL + chart), live from Redux.
   const edited = useAppSelector((s) => selectMergedContent(s, fileId)) as QuestionContent | undefined;
@@ -115,7 +116,7 @@ export default function ViewWorkbench({
         connection,
         sql,
         columns,
-        ...(edited?.vizSettings ? { vizSettings: edited.vizSettings } : {}),
+        viz: edited?.viz ?? createDefaultTableViz(),
         ...(view?.whitelistedColumns ? { whitelistedColumns: view.whitelistedColumns } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
       });
@@ -187,7 +188,7 @@ export default function ViewWorkbench({
               size="xs" bg="accent.teal" color="white"
               onClick={save} disabled={!canSave} loading={saving}
             >
-              <LuSave size={12} /> <Text ml={1}>Save Data Model</Text>
+              <LuSave size={12} /> <Text ml={1}>Update</Text>
             </Button>
           </HStack>
         </HStack>

@@ -7,12 +7,14 @@
  * content back out of Redux and stores it as a ViewDef.
  */
 import React from 'react';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import ViewWorkbench from '@/components/context/ViewWorkbench';
 import * as storeModule from '@/store/store';
 import { setQueryResult } from '@/store/queryResultsSlice';
+import { setEdit } from '@/store/filesSlice';
 import type { ViewDef } from '@/lib/types';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 const ZONE_REVENUE: ViewDef = {
   name: 'zone_revenue',
@@ -56,6 +58,9 @@ describe('ViewWorkbench', () => {
     // panel), so their presence proves reuse.
     expect(await screen.findByLabelText('SQL')).toBeTruthy();
     expect(await screen.findByLabelText('Viz panel')).toBeTruthy();
+    // A data model is born with an authoritative V2 table envelope, so the
+    // panel is VegaVizPanel's DOM-table UI — never the classic V1 panel.
+    expect(await screen.findByLabelText('Table fields hint')).toBeTruthy();
   });
 
   it('seeds the editor with the view\'s SQL and connection', async () => {
@@ -65,6 +70,11 @@ describe('ViewWorkbench', () => {
       const virtual = Object.values(files).find((f: any) => f.id < 0) as any;
       expect(virtual?.content?.query).toBe(ZONE_REVENUE.sql);
       expect(virtual?.content?.connection_name).toBe('warehouse');
+      expect(virtual?.content?.viz).toEqual({
+        version: 2,
+        source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null },
+      });
+      expect(virtual?.content).not.toHaveProperty('vizSettings');
     });
   });
 
@@ -113,6 +123,46 @@ describe('ViewWorkbench', () => {
     expect(body).toMatchObject({ name: 'zone_revenue', connection: 'warehouse', sql: ZONE_REVENUE.sql });
     // the snapshot comes back from the server, not from the client
     expect(onSave.mock.calls[0][0]).toMatchObject({ columns: [{ name: 'x', type: 'BIGINT' }] });
+    vi.unstubAllGlobals();
+  });
+
+  it('saves only the edited V2 viz envelope on the data model', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (String(url).includes('/api/views/prepare')) {
+        return { ok: true, json: async () => ({ success: true, data: { columns: [{ name: 'x', type: 'BIGINT' }] } }) };
+      }
+      return { ok: true, text: async () => '', json: async () => ({}) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { onSave, testStore } = setup({ view: ZONE_REVENUE });
+
+    let virtualId: number | undefined;
+    await waitFor(() => {
+      virtualId = Object.values(testStore.getState().files.files)
+        .find((f: any) => f.id < 0)?.id as number | undefined;
+      expect(virtualId).toBeDefined();
+    });
+
+    const viz: VizEnvelope = {
+      version: 2,
+      source: {
+        kind: 'vega-lite', grammar: 'vega-lite@6',
+        spec: { mark: 'bar', encoding: { x: { field: 'x', type: 'nominal' } } },
+      },
+    };
+    act(() => {
+      testStore.dispatch(setEdit({ fileId: virtualId!, edits: { viz } }));
+    });
+    await waitFor(() => {
+      const virtual = testStore.getState().files.files[virtualId!];
+      expect(virtual?.persistableChanges?.viz).toEqual(viz);
+    });
+    fireEvent.click(screen.getByLabelText('Save view'));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    const saved = onSave.mock.calls[0][0];
+    expect(saved.viz).toEqual(viz);
+    expect(saved).not.toHaveProperty('vizSettings');
     vi.unstubAllGlobals();
   });
 
