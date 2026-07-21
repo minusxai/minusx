@@ -1,11 +1,29 @@
 // ============================================================================
-// Semantic layer types — curated models defined in a context (versioned,
-// inheritable, like MetricDef/TableAnnotation) and consumed by the Semantic
-// query tier. The vocabulary intentionally mirrors the open semantic layer
-// specs (MetricFlow / Cube / OSI): source table, explicit relationships
-// (joins), dimensions, measures, and ratio metrics — so an interchange
-// import/export stays a trivial mapping.
+// Semantic layer types. Two generations coexist during the V2 migration
+// (Semantic_Model_v2.md):
+//
+//  - V2 (authored): TypeBox single-source in lib/validation/atlas-schemas.ts;
+//    the Static types are RE-EXPORTED below — do not hand-write duplicates.
+//  - V1 (derived): the legacy interfaces below, still consumed by
+//    derive/detect/compile until the M2 conversion; deleted in M6.
+//
+// The vocabulary intentionally mirrors the open semantic layer specs
+// (MetricFlow / Cube / OSI): source, explicit relationships, dimensions,
+// measures, metrics — so an interchange import/export stays a trivial mapping.
 // ============================================================================
+
+export type {
+  SemanticSource,
+  SemanticReference,
+  SemanticReferenceToOne,
+  SemanticReferenceM2M,
+  SemanticDimensionV2,
+  SemanticMeasureV2,
+  SemanticRatioMetricV2,
+  SemanticSqlMetric,
+  SemanticMetricV2,
+  SemanticModelV2,
+} from '@/lib/validation/atlas-schemas';
 
 export type SemanticAggregate = 'COUNT' | 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT_DISTINCT';
 
@@ -91,9 +109,11 @@ export interface SemanticRatioMetric {
 }
 
 /**
- * A semantic model: one base table exposed through business-named dimensions,
- * measures and metrics. Stored on a context version (`semanticModels`),
- * inherited like metrics/annotations.
+ * LEGACY derived semantic model: one base table exposed through business-named
+ * dimensions, measures and metrics. NOT stored — derived per-request
+ * (lib/semantic/derive.ts). The stored, authored generation is
+ * `SemanticModelV2` (ContextVersion.semanticModels); this shape is deleted
+ * in the V2 cleanup (M6).
  */
 export interface SemanticModel {
   /** Unique (per context) business name, e.g. "Orders". */

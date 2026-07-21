@@ -94,8 +94,11 @@ export function foldContextAgentView(existing: unknown, edited: unknown): Record
 }
 
 // Server-computed fields: re-derived on load, stripped on save — ignore them when bounding edits.
+// `fullSemanticModels` is computed like fullViews. NOTE: `semanticModels` is deliberately NOT in
+// EDITABLE_VERSION_FIELDS yet — agent write access lands in M5a together with
+// skill_semantic_models and the tier-2/3 save gates (Semantic_Model_v2.md).
 const COMPUTED_CONTEXT_FIELDS = immutableSet([
-  'fullSchema', 'parentSchema', 'fullDocs', 'fullMetrics', 'fullAnnotations', 'fullRelationships', 'fullViews', 'fullSkills',
+  'fullSchema', 'parentSchema', 'fullDocs', 'fullMetrics', 'fullAnnotations', 'fullRelationships', 'fullViews', 'fullSemanticModels', 'fullSkills',
 ]);
 // Version fields the agent authors (folded into the live version) — ignore when bounding edits.
 // `whitelist` is NOT here: it's not in the agent's view, so the guard treats any whitelist change as

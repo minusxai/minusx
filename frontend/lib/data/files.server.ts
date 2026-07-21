@@ -30,6 +30,7 @@ import { getTemplateDefaults } from '@/lib/data/story/template-defaults';
 import { withCompiledStoryCss } from '@/lib/data/story/story-css.server';
 import { validateFileStateServer } from '@/lib/validation/content-validators.server';
 import { stampAndValidateViews, ViewSaveError } from '@/lib/views/save-gate.server';
+import { validateSemanticModelsGate, SemanticModelSaveError } from '@/lib/semantic/save-gate.server';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
 import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType, canCreateFileByRole } from '@/lib/auth/access-rules';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
@@ -624,8 +625,11 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (existingFile.type === 'context') {
       try {
         contentToSave = await stampAndValidateViews(contentToSave as ContextContent, path, user) as BaseFileContent;
+        // The semantic-model gate (tier 1 — Semantic_Model_v2.md §2.5): an
+        // invalid authored model blocks the version save, same seam as views.
+        await validateSemanticModelsGate(contentToSave as ContextContent, path, user);
       } catch (err) {
-        if (err instanceof ViewSaveError) throw new UserFacingError(err.message);
+        if (err instanceof ViewSaveError || err instanceof SemanticModelSaveError) throw new UserFacingError(err.message);
         throw err;
       }
     }

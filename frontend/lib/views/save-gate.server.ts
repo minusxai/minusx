@@ -21,6 +21,7 @@ import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { connectionTypeToDialect } from '@/lib/types';
 import { computeViewReads, checkViewAvailability, findViewCycle } from '@/lib/views/integrity';
 import { validateViews } from '@/lib/views/resolve';
+import { semanticModelNames } from '@/lib/semantic/save-gate.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ContextContent, DatabaseWithSchema, ViewDef } from '@/lib/types';
 
@@ -85,6 +86,15 @@ export async function stampAndValidateViews(
     // Structural checks first (names, exactly-one-source, duplicates).
     const structural = validateViews(views, inherited);
     problems.push(...structural);
+
+    // Views and semantic models share ONE name namespace (references address
+    // views by bare name) — the reverse direction of the semantic gate's check.
+    const modelNames = semanticModelNames(content);
+    for (const v of views) {
+      if (modelNames.has(v.name.toLowerCase())) {
+        problems.push(`View "${v.name}": name is already used by a semantic model — views and semantic models share one namespace`);
+      }
+    }
 
     const stamped: ViewDef[] = await Promise.all(views.map(async (v) => {
       if (!v.sql?.trim()) return v;
