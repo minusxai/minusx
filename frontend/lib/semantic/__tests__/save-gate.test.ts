@@ -20,7 +20,12 @@ const SCHEMA = {
   ]}],
 };
 vi.mock('@/lib/connections', () => ({
-  getNodeConnector: () => ({ query: vi.fn(), getSchema: async () => SCHEMA.schemas }),
+  getNodeConnector: () => ({
+    // Tier-3 probes flow through this connector; resolve them (tier-3's own
+    // behaviors are covered in tier3.test.ts — this file tests tiers 1–2).
+    query: vi.fn().mockResolvedValue({ columns: ['_probe_dim', 'm'], types: ['VARCHAR', 'DOUBLE'], rows: [] }),
+    getSchema: async () => SCHEMA.schemas,
+  }),
 }));
 vi.mock('@/lib/connections/statistics-engine', () => ({
   profileDatabase: vi.fn(async (_t: string, s: unknown) => ({ schema: s, queryCount: 0 })),

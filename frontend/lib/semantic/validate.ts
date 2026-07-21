@@ -78,6 +78,15 @@ function resolveSource(
 const isM2M = (r: SemanticReference): r is SemanticReferenceM2M => r.relationship === 'many_to_many';
 
 /**
+ * Exposed column names of the model's PRIMARY source, in schema order.
+ * Used by the tier-3 probe for the zero-dimension GROUP BY (§2.5 probe shape).
+ */
+export function primaryFieldNames(model: SemanticModelV2, ctx: SemanticModelCtx): string[] {
+  const res = resolveSource(model.primary, model, ctx, 'primary');
+  return res.fields ? [...res.fields.keys()] : [];
+}
+
+/**
  * Tier-1 validation. Returns human-readable issues (empty = valid), matching
  * the `SemanticCompileError.issues` style used by the semantic compiler.
  */
