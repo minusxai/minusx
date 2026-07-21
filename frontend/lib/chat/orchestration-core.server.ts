@@ -1,6 +1,6 @@
 // Shared chat orchestration core — builds the orchestrator from a saved pi log
-// (`setupOrchestration`), records LLM calls (`recordLlmCalls`), estimates next-turn
-// context size (`estimateNextChatContext`), and exposes the tool/agent registries
+// (`setupOrchestration`), records LLM calls (`recordLlmCalls`), previews the next
+// turn's context (`previewNextChatContext`), and exposes the tool/agent registries
 // (`REGISTRABLES` / `HEADLESS_REGISTRABLES`). Consumed by the v3 turn runner
 // (`lib/chat/conversation-turn.server.ts`) for ALL chat — browser (Explore/side-chat/
 // onboarding) AND headless callers with no client to bridge tool calls back to
@@ -78,7 +78,6 @@ import type {
   ChatRequest,
   CompletedToolCallResult,
 } from '@/lib/chat/chat-types';
-import { estimateContextSize, type ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
 import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
 
 
@@ -583,8 +582,8 @@ export async function setupOrchestration(
 /**
  * The exact Context (system prompt + projected messages + tools) the NEXT
  * chat turn would send to the LLM, built through the same preview path a real
- * turn uses (projection/FacetMemo applied). Powers /api/chat/context-size
- * (size estimate) and /api/chat/debug-context (the /debug visualization).
+ * turn uses (projection/FacetMemo applied). Powers /api/chat/debug-context
+ * (the /debug visualization's Projected source).
  */
 export async function previewNextChatContext(
   body: ChatRequest,
@@ -613,14 +612,6 @@ export async function previewNextChatContext(
     throw new Error('Unable to build next chat context');
   }
   return setup.orchestrator.previewRootContext(setup.rootAgent);
-}
-
-export async function estimateNextChatContext(
-  body: ChatRequest,
-  user: EffectiveUser,
-  conversationId: number,
-): Promise<ContextSizeEstimate> {
-  return estimateContextSize(await previewNextChatContext(body, user, conversationId));
 }
 
 /**

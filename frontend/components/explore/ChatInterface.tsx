@@ -6,8 +6,6 @@ import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from
 import { LuPlus, LuChevronDown } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem, Attachment, SkillMention } from '@/lib/types';
-import type { ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
-import { ContextSizePanel, type ContextSizePanelState } from './ContextSizePanel';
 import ConvoDebugContainer from './ConvoDebugContainer';
 import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-commands';
 import { AppState } from '@/lib/appState';
@@ -15,7 +13,7 @@ import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import RemoteSessionBanner from './RemoteSessionBanner';
 import { useAppDispatch, useAppSelector, useAppStore } from '@/store/hooks';
-import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setConversationTitle, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
+import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setConversationTitle, selectActiveConversation, selectForkChainTail } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { API_BASE_URL, patchApiUrl } from '@/store/api-url';
 import { ConversationsAPI } from '@/lib/data/conversations';
@@ -385,26 +383,22 @@ export default function ChatInterface({
     );
   }, [conversation?.pending_tool_calls]);
 
-  // Warn near the model's context window. The whole conversation (system + skills + the full
-  // append-only log + app state) is re-sent on every LLM call, so `total_tokens` is the size of the
-  // entire conversation at that point. The chat models in use are ~200k–400k window
-  // (claude-sonnet-4-6 / gpt-5.4), so the threshold must sit BELOW that — 150k gives headroom to warn
-  // before the hard "exceeds the context window" API error. (It must NOT be raised above the window,
-  // or the warning never fires and users just hit the hard error.) The real fix for a single story/
-  // dashboard tripping this is reducing per-turn context bloat — see the background-CreateFile image
-  // suppression in tool-handlers — not moving this gate.
+  // Warn near the model's context window. The whole conversation is re-sent on every LLM call, so
+  // the last call's `usage.totalTokens` IS the size of the entire conversation — stamped onto
+  // conversation meta server-side at turn end (`lastContextTokens`) and carried on the conversation
+  // row, so this works on reload for every role (the display wire strips per-message usage). The
+  // chat models in use are ~200k–400k window, so the threshold must sit BELOW that — 150k gives
+  // headroom to warn before the hard "exceeds the context window" API error. (It must NOT be raised
+  // above the window, or the warning never fires and users just hit the hard error.)
   const TOKEN_LIMIT = 150_000;
   const tokenLimitExceeded = useMemo(() => {
-    if (!conversation?.messages) return false;
+    if (!conversation?.lastContextTokens || conversation.lastContextTokens <= TOKEN_LIMIT) return false;
     // Gate only makes sense once there's accumulated history to shed by starting
     // over. On a single-query conversation a fresh chat would re-run the same
     // query and hit the same size, so don't lock the user out.
-    const userMessageCount = conversation.messages.filter(m => m.role === 'user').length;
-    if (userMessageCount < 2) return false;
-    const lastDebug = [...conversation.messages].reverse().find(m => m.role === 'debug') as DebugMessage | undefined;
-    if (!lastDebug?.llmDebug?.length) return false;
-    return lastDebug.llmDebug.some((llm: { total_tokens: number }) => llm.total_tokens > TOKEN_LIMIT);
-  }, [conversation?.messages]);
+    const userMessageCount = (conversation.messages ?? []).filter(m => m.role === 'user').length;
+    return userMessageCount >= 2;
+  }, [conversation?.lastContextTokens, conversation?.messages]);
 
   // Get error from conversation or use local state for client-side errors
   const [localError, setLocalError] = useState<LoadError | null>(null);
@@ -414,9 +408,7 @@ export default function ChatInterface({
   // retry, so we hide "Try again" and steer to a fresh chat. Transient (and any local/load error) →
   // offer a clean replay. `errorRetryability` is only set for conversation runtime errors.
   const isTerminalError = conversation?.error != null && conversation.errorRetryability === 'terminal';
-  const [contextSizePanel, setContextSizePanel] = useState<ContextSizePanelState | null>(null);
   const [debugVizOpen, setDebugVizOpen] = useState(false);
-  const contextSizeAbortRef = useRef<AbortController | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -553,12 +545,6 @@ export default function ChatInterface({
     }
   };
 
-  const closeContextSizePanel = useCallback(() => {
-    contextSizeAbortRef.current?.abort();
-    contextSizeAbortRef.current = null;
-    setContextSizePanel(null);
-  }, []);
-
   const buildAgentArgsForMessage = useCallback((userInput: string, allAttachments: Attachment[] = []) => {
     const selectedSkillMentions = getSkillsFromMessage(userInput);
     const uniqueSelectedSkills = uniqueSkills(selectedSkillMentions);
@@ -631,8 +617,8 @@ export default function ChatInterface({
     uniqueSkills,
   ]);
 
-  // Shared probe body for the context-preview endpoints (/api/chat/context-size and
-  // /api/chat/debug-context). Mirrors the SEND path: attach the file screenshot to the
+  // Probe body for /api/chat/debug-context (the /debug visualization's Projected
+  // source). Mirrors the SEND path: attach the file screenshot to the
   // app-state image facet so the preview context carries the same image the real request
   // would. The projection pass dedups it across turns (unchanged view → not re-sent →
   // 0 image tokens), so the count is faithful — including respecting the "disable
@@ -652,52 +638,6 @@ export default function ChatInterface({
     };
   }, [buildAgentArgsForMessage, chatAttachments, appState, store, container, conversationID]);
 
-  const handleContextSize = useCallback(async () => {
-    if (connectionsLoading || contextsLoading) {
-      setContextSizePanel({ status: 'error', error: 'Still loading connections and context' });
-      return;
-    }
-    if (!conversationID) {
-      setContextSizePanel({ status: 'error', error: 'Preparing chat. Try again in a moment.' });
-      return;
-    }
-
-    contextSizeAbortRef.current?.abort();
-    const controller = new AbortController();
-    contextSizeAbortRef.current = controller;
-    setContextSizePanel({ status: 'loading' });
-
-    try {
-      const res = await fetch('/api/chat/context-size', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify(await buildContextProbeBody()),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) {
-        throw new Error(data.error?.message || data.error || 'Failed to estimate context size');
-      }
-      // Cached tokens from the LAST turn (usage.cacheRead) — surfaced so the panel can show how
-      // much of the prefix the provider actually served from cache. Read off the most recent debug
-      // message's last LLM call.
-      const lastDebug = [...(conversation?.messages ?? [])].reverse().find(m => m.role === 'debug') as DebugMessage | undefined;
-      const lastCall = lastDebug?.llmDebug?.[lastDebug.llmDebug.length - 1];
-      const cachedTokens = lastCall?.cache_read_tokens ?? 0;
-      setContextSizePanel({ status: 'ready', estimate: data as ContextSizeEstimate, cachedTokens });
-    } catch (err) {
-      if (controller.signal.aborted) return;
-      setContextSizePanel({
-        status: 'error',
-        error: err instanceof Error ? err.message : 'Failed to estimate context size',
-      });
-    } finally {
-      if (contextSizeAbortRef.current === controller) {
-        contextSizeAbortRef.current = null;
-      }
-    }
-  }, [buildContextProbeBody, connectionsLoading, contextsLoading, conversationID, conversation]);
-
   const handleDebugViz = useCallback(() => {
     if (!conversationID) {
       toaster.create({ title: 'Preparing chat. Try again in a moment.', type: 'info' });
@@ -706,12 +646,11 @@ export default function ChatInterface({
     setDebugVizOpen(true);
   }, [conversationID]);
 
-  const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container, onContextSize: handleContextSize, onDebugViz: handleDebugViz });
+  const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container, onDebugViz: handleDebugViz });
 
   useEffect(() => {
     if (container !== 'sidebar') return;
     if (!sidebarPendingSlashCommand) return;
-    if (sidebarPendingSlashCommand === 'view-context-size' && (!conversationID || connectionsLoading || contextsLoading)) return;
 
     const command = availableCommands.find(cmd => cmd.name === sidebarPendingSlashCommand);
     dispatch(setSidebarPendingSlashCommand(null));
@@ -1152,15 +1091,6 @@ export default function ChatInterface({
                 <ThinkingIndicator waitingForInput={isWaitingForUserInput} onStop={handleStopAgent} queuedMessages={conversation?.queuedMessages || []} />
               </GridItem>
             </Grid>
-          )}
-
-          {contextSizePanel && (
-            <ContextSizePanel
-              state={contextSizePanel}
-              onClose={closeContextSizePanel}
-              colSpan={colSpan}
-              colStart={colStart}
-            />
           )}
 
           {debugVizOpen && conversationID && (

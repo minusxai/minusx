@@ -1,12 +1,18 @@
 // Gate contract for the "Conversation too long" lock-out.
 //
 // Background: ChatInterface replaces the chat input with a hard "Conversation
-// too long — start a new chat" banner once a turn's LLM call exceeds the token
-// limit. `total_tokens` is the whole-conversation context (the full prompt is
-// re-sent every call), so a single large query could trip it on turn one — but
-// starting a fresh chat there is useless (it re-runs the same query and hits
-// the same size). The gate must therefore only fire once there is more than one
-// user turn of history to actually shed by starting over.
+// too long — start a new chat" banner once the conversation's context exceeds
+// the token limit. The signal is `lastContextTokens` — the last LLM call's
+// `usage.totalTokens`, stamped onto conversation meta server-side at turn end
+// (the full prompt is re-sent every call, so it IS the whole-conversation
+// context). It rides the conversation row, so the gate works on reload for
+// every role — unlike the old llmDebug-based gate, which read `usage` data the
+// display wire strips (dead since the Conversations V2 slim wire).
+//
+// A single large query could trip it on turn one — but starting a fresh chat
+// there is useless (it re-runs the same query and hits the same size). The
+// gate must therefore only fire once there is more than one user turn of
+// history to actually shed by starting over.
 //
 // This pins the contract: over-limit + 1 user message → input stays usable
 // (no banner); over-limit + 2 user messages → banner replaces the input.
@@ -36,7 +42,7 @@ vi.mock('@/components/explore/ChatInput', () => ({
   default: () => React.createElement('div', { 'aria-label': 'chat input' }),
 }));
 
-import { loadConversation, type Conversation, type DebugMessage, type UserMessage } from '@/store/chatSlice';
+import { loadConversation, type Conversation, type UserMessage } from '@/store/chatSlice';
 import * as storeModule from '@/store/store';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import ChatInterface from '@/components/explore/ChatInterface';
@@ -47,26 +53,13 @@ function userMsg(content: string): UserMessage {
   return { role: 'user', content, created_at: TS };
 }
 
-function debugWithTokens(total_tokens: number): DebugMessage {
-  return {
-    role: 'debug',
-    task_unique_id: 'task-1',
-    duration: 1,
-    created_at: TS,
-    llmDebug: [{
-      model: 'claude', duration: 1, total_tokens,
-      prompt_tokens: total_tokens - 1_000, completion_tokens: 1_000, cost: 0,
-    }],
-  };
-}
-
 function makeConversation(userMessages: number, tokens = 300_000): Conversation {
   const messages: Conversation['messages'] = [];
   for (let i = 0; i < userMessages; i++) {
     messages.push(userMsg(`question ${i + 1}`));
   }
-  messages.push(debugWithTokens(tokens));
   return {
+    lastContextTokens: tokens,
     _id: `conv-${userMessages}`,
     conversationID: 1,
     log_index: messages.length,

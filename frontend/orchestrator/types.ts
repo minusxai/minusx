@@ -13,6 +13,11 @@ import { gen_id } from './utils';
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface AgentContext {}
 
+/** Truncated responses at or below this many output tokens are classified as
+ *  context-window exhaustion (the provider clamped the output budget to nearly
+ *  nothing) rather than a genuinely long response hitting the output cap. */
+const TRUNCATION_CONTEXT_CLAMP_MAX_OUTPUT = 64;
+
 export interface ToolResponse<TDetails = Record<string, unknown>> {
   content: (TextContent | ImageContent)[];
   details?: TDetails;
@@ -230,7 +235,23 @@ export class MXAgent<
 
   protected async llm(): Promise<AssistantMessage> {
     const ctor = this.constructor as typeof MXAgent;
-    return this.orchestrator.callLLM(ctor.model, this.buildLLMContext(), this.id, this.resolveCallOptions(), ctor.modelUseCase);
+    const msg = await this.orchestrator.callLLM(ctor.model, this.buildLLMContext(), this.id, this.resolveCallOptions(), ctor.modelUseCase);
+    // A 'length' stop is a truncated response. Re-calling with the same context fails
+    // identically while paying the full input cost each time (a production conversation
+    // once burned $20 looping on 16-token stubs), so fail the run on the first one.
+    // Guarded here — the one choke point every agent loop calls — not in run(), so
+    // custom loops (e.g. the eval agent's) are covered too.
+    if (msg.stopReason === 'length') {
+      const output = msg.usage?.output ?? 0;
+      // A response squeezed to almost nothing means the CONTEXT consumed the window
+      // (output budget clamped); a large truncated output means the response itself
+      // hit the output-token cap.
+      const detail = output <= TRUNCATION_CONTEXT_CLAMP_MAX_OUTPUT
+        ? `the conversation has filled the model's context window (${msg.usage?.totalTokens ?? 'unknown'} tokens), leaving no room to respond. Start a new conversation.`
+        : 'the response hit the maximum output length. Ask for a shorter or more focused result.';
+      throw new Error(`LLM response truncated (stop reason 'length'): ${detail}`);
+    }
+    return msg;
   }
 
   async run(): Promise<AssistantMessage> {

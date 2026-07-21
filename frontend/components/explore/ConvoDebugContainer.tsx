@@ -17,7 +17,7 @@ import ConvoDebugModal, { type ConvoDebugViewState, type LogSource } from './Con
 
 interface ConvoDebugContainerProps {
   conversationID: number;
-  /** Builds the same probe body /view-context-size sends (screenshot included). */
+  /** Builds the probe body for the projected-context preview (screenshot included). */
   buildProbeBody: () => Promise<ChatRequest>;
   onClose: () => void;
 }

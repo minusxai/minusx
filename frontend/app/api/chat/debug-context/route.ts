@@ -8,9 +8,8 @@ import { handleApiError, ApiErrors } from '@/lib/http/api-responses';
 
 /**
  * /debug visualization "Projected" data source: the exact Context the next
- * chat turn would send to the LLM ({@link previewNextChatContext} — same
- * preview path as /api/chat/context-size, but returning the content rather
- * than a size estimate). Admin only — the response carries the raw system
+ * chat turn would send to the LLM ({@link previewNextChatContext}).
+ * Admin only — the response carries the raw system
  * prompt and full projected conversation.
  */
 export async function POST(request: NextRequest) {

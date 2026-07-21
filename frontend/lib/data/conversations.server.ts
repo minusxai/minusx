@@ -13,6 +13,8 @@
  * Direct DB access is confined here (the data layer). Routes/orchestrator go through these fns.
  */
 import { getModules } from '@/lib/modules/registry';
+import { isAdmin } from '@/lib/auth/role-helpers';
+import type { UserRole } from '@/lib/types';
 import type { ConversationLog, ConversationLogEntry } from '@/orchestrator/types';
 import { entriesToInserts, rowsToLog } from './conversation-log';
 import type {
@@ -25,6 +27,24 @@ import type {
 } from './conversations.types';
 
 const db = () => getModules().db;
+
+/** Owner check for conversation MUTATIONS (turns, interrupt, delete, rename, fork):
+ *  strictly the owning user, in the same mode — no admin bypass. */
+export function ownsConversation(
+  conv: { ownerUserId: number; mode: string },
+  user: { userId: number; mode: string },
+): boolean {
+  return conv.ownerUserId === user.userId && conv.mode === user.mode;
+}
+
+/** READ access (GET conversation + stream): the owner, or any admin by direct id —
+ *  admins may view every conversation (across modes) but never act in it. */
+export function canReadConversation(
+  conv: { ownerUserId: number; mode: string },
+  user: { userId: number; mode: string; role: UserRole },
+): boolean {
+  return ownsConversation(conv, user) || isAdmin(user.role);
+}
 
 /** Concurrent-append collision (another writer took this seq) → the caller forks. */
 export class ConcurrentAppendError extends Error {
@@ -219,6 +239,21 @@ export async function setGeneratedConversationTitle(id: number, title: string): 
        meta = jsonb_set(COALESCE(meta, '{}'::jsonb), '{titleGenerated}', 'true'::jsonb)
      WHERE id = $1`,
     [id, title],
+  );
+}
+
+/**
+ * Stamp the turn's final context size (`usage.totalTokens` of its last LLM call) onto meta.
+ * The conversation row rides every GET /api/conversations/:id response, so the client's
+ * "conversation too long" gate works on reload without usage rows on the display wire.
+ */
+export async function setLastContextTokens(id: number, tokens: number): Promise<void> {
+  if (!Number.isFinite(tokens) || tokens <= 0) return;
+  await db().exec(
+    `UPDATE conversations
+     SET meta = jsonb_set(COALESCE(meta, '{}'::jsonb), '{lastContextTokens}', $2::text::jsonb)
+     WHERE id = $1`,
+    [id, String(Math.round(tokens))],
   );
 }
 

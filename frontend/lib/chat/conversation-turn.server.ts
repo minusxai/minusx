@@ -18,7 +18,7 @@ import type { ConversationLog, PendingToolCall } from '@/orchestrator/types';
 import {
   loadLog, loadMessages, appendMessages, updateConversationTitle, setGeneratedConversationTitle, appendError, ConcurrentAppendError,
   acquireRunLease, heartbeatRunLease, releaseRunLease, getConversation,
-  bumpAutoRetries, resetAutoRetries, truncateMessagesFrom, MAX_AUTO_RETRIES, AUTO_RETRY_EXHAUSTED_MESSAGE,
+  bumpAutoRetries, resetAutoRetries, truncateMessagesFrom, setLastContextTokens, MAX_AUTO_RETRIES, AUTO_RETRY_EXHAUSTED_MESSAGE,
 } from '@/lib/data/conversations.server';
 import type { Conversation } from '@/lib/data/conversations.types';
 import { notifyMessage, notifyDelta, notifyStatus, subscribe } from './conversation-stream.server';
@@ -270,6 +270,15 @@ export async function runConversationTurn(
   // `setup.pageType` (explore/question/dashboard/…) is recorded as the LLM-call `trigger`
   // so usage can be split by surface.
   await recordLlmCalls(piDiff, conversationId, user, setup.pageType);
+  // Stamp the turn's final context size (last call's totalTokens) for the client's
+  // "conversation too long" gate. Best-effort — never fails the turn.
+  const lastUsage = [...piDiff].reverse().find(
+    (e): e is typeof e & { usage: { totalTokens?: number } } =>
+      'role' in e && e.role === 'assistant' && 'usage' in e && e.usage != null,
+  )?.usage;
+  if (lastUsage?.totalTokens) {
+    await setLastContextTokens(conversationId, lastUsage.totalTokens).catch(() => {});
+  }
 
   const pendingToolCalls = setup.orchestrator.getPendingToolCalls();
   const runStatus: TurnResult['runStatus'] = runError ? 'error' : pendingToolCalls.length > 0 ? 'paused' : 'idle';

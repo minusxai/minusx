@@ -124,6 +124,11 @@ export interface Conversation {
   // Set when loaded from DB; undefined for in-session-created chats (treated as v2).
   version?: number;
 
+  // The conversation's current context size: `usage.totalTokens` of the last LLM call,
+  // stamped onto conversation meta server-side at turn end (see setLastContextTokens).
+  // Drives the "conversation too long" gate; undefined until the first stamped turn.
+  lastContextTokens?: number;
+
   // Remote Agent Session ("Copy to Agent"): while active, an EXTERNAL agent drives this
   // conversation over HTTP — the chat input is HARD-frozen (no queueing) and the observer
   // stream renders the remote activity. Cleared on Stop / expiry / agent end.
