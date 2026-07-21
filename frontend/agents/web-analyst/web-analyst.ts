@@ -2,7 +2,7 @@ import type { TSchema } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
-import { SearchDBSchema, ExecuteQuery, FuzzyMatch } from '@/agents/benchmark-analyst/db-tools.server';
+import { SearchDBSchema, ExecuteQuery, RunSemanticQuery, FuzzyMatch } from '@/agents/benchmark-analyst/db-tools.server';
 import { SearchFiles } from '@/agents/analyst/file-tools';
 import { CheckFileHealth } from '@/agents/analyst/health-tools';
 import { getAgentModelOrTestFallback, getAnalystModelOptions } from '@/agents/analyst/model-config';
@@ -55,6 +55,7 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
   static readonly tools: Tool<TSchema>[] = [
     SearchDBSchema.schema,
     ExecuteQuery.schema,
+    RunSemanticQuery.schema,
     FuzzyMatch.schema,
     ReadFiles.schema,
     SearchFiles.schema,

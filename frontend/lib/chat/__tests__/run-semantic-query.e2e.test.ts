@@ -98,11 +98,22 @@ async function runTurnWith(args: Record<string, unknown>): Promise<{ text: strin
 }
 
 describe('RunSemanticQuery e2e (real chat routes, faux LLM)', () => {
-  it('is ADVERTISED in the production analyst toolset (registration alone is not enough)', async () => {
-    // Browser-verification caught this: REGISTRABLES makes the tool resolvable,
-    // but the LLM only sees tools an agent declares. Guard the declaration.
+  it('is ADVERTISED by EVERY production chat agent (registration alone is not enough)', async () => {
+    // Two bugs of this exact class already shipped-then-broke here: REGISTRABLES
+    // makes the tool RESOLVABLE, but the LLM only sees what an agent declares in
+    // `static tools` — and agents that override that list (WebAnalystAgent, which
+    // serves Explore and the side chats) silently drop inherited tools.
     const { RemoteAnalystAgent } = await import('@/agents/analyst/analyst-agent');
-    expect(RemoteAnalystAgent.tools.map((t) => t.name)).toContain('RunSemanticQuery');
+    const { WebAnalystAgent } = await import('@/agents/web-analyst/web-analyst');
+    const { SlackAgent } = await import('@/agents/slack/slack-agent');
+    for (const [name, agent] of [
+      ['RemoteAnalystAgent', RemoteAnalystAgent],
+      ['WebAnalystAgent', WebAnalystAgent],
+      ['SlackAgent', SlackAgent],
+    ] as const) {
+      expect(agent.tools.map((t) => t.name), `${name} must advertise RunSemanticQuery`)
+        .toContain('RunSemanticQuery');
+    }
   });
 
   setupTestDb(TEST_DB_PATH);

@@ -1,6 +1,6 @@
 // WebAnalystAgent must advertise exactly this analyst tool set:
-//   [ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate, Clarify,
-//    SearchDBSchema, SearchFiles, CreateFile, LoadSkill, FuzzyMatch]
+//   [ReadFiles, EditFile, ExecuteQuery, RunSemanticQuery, PublishAll, Navigate,
+//    Clarify, SearchDBSchema, SearchFiles, CreateFile, LoadSkill, FuzzyMatch]
 // Naming exception: it uses ClarifyFrontend for Clarify. It must NOT advertise
 // extras like ListDBConnections.
 
@@ -14,6 +14,7 @@ const EXPECTED_TOOLS = [
   'ReadFiles',
   'EditFile',
   'ExecuteQuery',
+  'RunSemanticQuery', // semantic-layer sibling of ExecuteQuery (Semantic_Model_v2.md §2.4)
   'PublishAll',
   'Navigate',
   'ClarifyFrontend',
