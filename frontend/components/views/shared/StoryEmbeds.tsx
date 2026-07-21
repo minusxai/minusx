@@ -15,7 +15,7 @@
  * portal (React context crosses portals), so popovers/menus position against the iframe document.
  */
 import { createPortal } from 'react-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Provider as ReduxStoreProvider } from 'react-redux';
 import { Box, ChakraProvider, EnvironmentProvider } from '@chakra-ui/react';
 
@@ -81,6 +81,32 @@ export interface StoryEmbedsProps {
   colorMode?: 'light' | 'dark';
 }
 
+/**
+ * The provider stack every nested-in-iframe story root needs — Redux store re-provider
+ * (color-mode pinned to the story's declared mode), Chakra system, and ark-ui environment
+ * pinned to the IFRAME document so floating content positions against it. Shared by the
+ * legacy placeholder path (StoryEmbeds below) and the JSX interpreter path (StoryJsxBody).
+ */
+export function StoryEmbedProviders({ doc, colorMode, children }: {
+  doc: Document;
+  colorMode?: 'light' | 'dark';
+  children: ReactNode;
+}) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- getOrCreateStore is a stable singleton
+  const store = useMemo(() => withColorModeOverride(getOrCreateStore(), colorMode), [colorMode]);
+  return (
+    <ReduxStoreProvider store={store}>
+      <ChakraProvider value={system}>
+        {/* Float ark-ui popovers/menus against the iframe document (not the top document). Context
+            flows through every createPortal in the children. */}
+        <EnvironmentProvider value={() => doc}>
+          {children}
+        </EnvironmentProvider>
+      </ChakraProvider>
+    </ReduxStoreProvider>
+  );
+}
+
 export default function StoryEmbeds({
   doc, targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, storyPath, colorMode,
 }: StoryEmbedsProps) {
@@ -96,9 +122,6 @@ export default function StoryEmbeds({
   const extParams = externalParameters.length ? externalParameters : undefined;
   const extValues = externalParameters.length ? values : undefined;
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- getOrCreateStore is a stable singleton
-  const store = useMemo(() => withColorModeOverride(getOrCreateStore(), colorMode), [colorMode]);
-
   // Clear the discovery busy stamps (AgentHtml marks every emptied placeholder `data-mx-busy` so
   // the screenshot readiness wait doesn't capture the pre-hydration blank boxes). This effect runs
   // AFTER the portals below commit, so each placeholder already holds its embed's real DOM — and a
@@ -111,11 +134,7 @@ export default function StoryEmbeds({
   }, [targets, inlineTargets, numberTargets, paramTargets]);
 
   return (
-    <ReduxStoreProvider store={store}>
-      <ChakraProvider value={system}>
-        {/* Float ark-ui popovers/menus against the iframe document (not the top document). Context
-            flows through every createPortal below. */}
-        <EnvironmentProvider value={() => doc}>
+    <StoryEmbedProviders doc={doc} colorMode={colorMode}>
           {targets.map((t, i) => createPortal(
             <Box className="mx-chart-fill" bg="bg.subtle" borderWidth="1px" borderColor="border.default" borderRadius="md" overflow="hidden" display="flex" flexDirection="column">
               <SmartEmbeddedQuestionContainer
@@ -232,8 +251,6 @@ export default function StoryEmbeds({
             t.el,
             `param-${i}-${t.param.name}`,
           ))}
-        </EnvironmentProvider>
-      </ChakraProvider>
-    </ReduxStoreProvider>
+    </StoryEmbedProviders>
   );
 }

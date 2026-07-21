@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 
 import { sanitizeAgentHtml } from '@/lib/html/sanitize-agent-html';
 import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
@@ -12,6 +13,8 @@ import { mountStorySurface, type StorySurface, type StorySurfaceKind } from '@/l
 import StoryEmbeds, {
   type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget, type StoryQuestionEditRequest,
 } from '@/components/views/shared/StoryEmbeds';
+import StoryJsxBody from '@/components/views/shared/StoryJsxBody';
+import { STORY_FLOATING_CSS } from '@/lib/story-ui';
 import StorySelectionPopover from '@/components/views/story/StorySelectionPopover';
 import { paramFromPlaceholderEl, type StoryParam } from '@/lib/data/story/story-params';
 import { inlineQuestionFromEl, inlineEmbedToQuestionContent, savedQuestionVizFromEl } from '@/lib/data/story/story-question';
@@ -21,6 +24,13 @@ import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 
 interface AgentHtmlProps {
   html: string;
+  /**
+   * Story body format. Undefined (default) = legacy sanitized-HTML path (placeholder embeds).
+   * 'jsx' = new-format story (Story_Design_V2 §2): `html` carries STATIC JSX source, parsed and
+   * rendered through the lib/story-ui interpreter into the same nested-in-iframe React root the
+   * legacy path uses for embeds (see StoryJsxBody). WYSIWYG editing is disabled for jsx bodies.
+   */
+  format?: 'jsx';
   /** Fixed logical canvas width in px (the agent authors against it). */
   width: number;
   /** Fixed canvas height in px; omit for content-driven height (story pages). */
@@ -100,7 +110,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'dom', paramValues, onParamValuesChange, onEditNumber, onEditQuestion, selectionSource, onChange, filePath, colorMode, compiledCss },
+  { html, format, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'dom', paramValues, onParamValuesChange, onEditNumber, onEditQuestion, selectionSource, onChange, filePath, colorMode, compiledCss },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -112,7 +122,11 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   const [numberTargets, setNumberTargets] = useState<NumberTarget[]>([]);
   const [paramTargets, setParamTargets] = useState<ParamTarget[]>([]);
 
-  const sanitized = useMemo(() => sanitizeAgentHtml(html || ''), [html]);
+  const isJsx = format === 'jsx';
+  // Legacy path: sanitize + innerHTML-inject. Jsx path: the raw source IS the body input — it is
+  // parsed to an AST and interpreted (never injected as HTML), so sanitizeAgentHtml never runs.
+  const sanitized = useMemo(() => (isJsx ? '' : sanitizeAgentHtml(html || '')), [html, isJsx]);
+  const bodySource = isJsx ? (html || '') : sanitized;
 
   // ── Build the iframe document + discover embed placeholders ──────────────────────────────────
   useLayoutEffect(() => {
@@ -160,13 +174,23 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       tw.textContent = compiledCss;
       doc.head.appendChild(tw);
     }
+    // Jsx stories: the vendored Tooltip/Popover render un-portaled, and Radix's popper wrapper
+    // must be forced to absolute positioning (fixed is broken inside <svg><foreignObject>).
+    if (isJsx) {
+      const fl = doc.createElement('style');
+      fl.setAttribute('data-mx-floating', '');
+      fl.textContent = STORY_FLOATING_CSS;
+      doc.head.appendChild(fl);
+    }
     // Where the story body lives: document.body ('dom') or an <svg><foreignObject> in it ('svg').
     // Everything downstream (embeds, editing, serialization, height) targets `surface.root`, so the
     // renderer difference is confined to lib/story-surface.
     const surface = mountStorySurface(doc, surfaceKind, width);
     surfaceRef.current = surface;
+    // Legacy path only: the sanitized story HTML IS the body. A jsx body renders through the
+    // interpreter into the nested React root below (portaled into surface.root) — never innerHTML.
     // @import web-fonts load natively inside an iframe (unlike a shadow root) — no hoisting needed.
-    surface.root.innerHTML = sanitized;
+    if (!isJsx) surface.root.innerHTML = sanitized;
     mirrorAppStyles(doc);
 
     // A hidden host for the nested React root that portals the live embeds into the placeholders below.
@@ -214,14 +238,20 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       el.style.height = `${Number.isFinite(h) ? Math.max(h, minH) : defaultH}px`;
     };
 
+    // Embed placeholder discovery is a LEGACY-path concern: a jsx body has no data-* placeholder
+    // divs — its embeds mount as interpreter adapter components (StoryJsxBody). The state setters
+    // still run below (with empty arrays) so the render effect re-fires against the fresh root.
     const found: ChartTarget[] = [];
+    const inlineFound: InlineChartTarget[] = [];
+    const numbersFound: NumberTarget[] = [];
+    const paramsFound: ParamTarget[] = [];
+    if (!isJsx) {
     doc.querySelectorAll<HTMLElement>('[data-question-id]').forEach(el => {
       const questionId = parseInt(el.getAttribute('data-question-id') || '', 10);
       if (Number.isNaN(questionId)) return;
       sizeEmbedEl(el);
       found.push({ el, questionId, vizOverride: savedQuestionVizFromEl(el) });
     });
-    const inlineFound: InlineChartTarget[] = [];
     doc.querySelectorAll<HTMLElement>('[data-question-inline]').forEach(el => {
       const embed = inlineQuestionFromEl(el);
       if (!embed) return;
@@ -229,7 +259,6 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       sizeEmbedEl(el, isSingleValue ? SINGLE_VALUE_MIN_H : MIN_CHART_H, isSingleValue ? SINGLE_VALUE_DEFAULT_H : DEFAULT_CHART_H);
       inlineFound.push({ el, content: inlineEmbedToQuestionContent(embed), bare: isSingleValue, embed });
     });
-    const numbersFound: NumberTarget[] = [];
     doc.querySelectorAll<HTMLElement>('[data-number-inline]').forEach(el => {
       const embed = numberFromEl(el);
       if (!embed) return;
@@ -237,7 +266,6 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       el.setAttribute('data-mx-busy', 'true'); // cleared by StoryEmbeds on mount (see sizeEmbedEl)
       numbersFound.push({ el, embed });
     });
-    const paramsFound: ParamTarget[] = [];
     doc.querySelectorAll<HTMLElement>('[data-param-name]').forEach(el => {
       const param: StoryParam | null = paramFromPlaceholderEl(el);
       if (!param) return;
@@ -245,6 +273,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       el.setAttribute('data-mx-busy', 'true'); // cleared by StoryEmbeds on mount (see sizeEmbedEl)
       paramsFound.push({ el, param });
     });
+    }
 
     // Mount the nested React root for this fresh document. The deferred teardown (cleanup below)
     // can run after the iframe document was already rewritten; React then throws NOT_FOUND
@@ -320,12 +349,34 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       tearingDown = true;
       if (root) setTimeout(() => { try { root.unmount(); } catch { /* detached doc nodes */ } }, 0);
     };
-  }, [sanitized, fluid, height, compiledCss, surfaceKind, width]); // colorMode handled separately so it doesn't rebuild the doc
+  }, [bodySource, isJsx, sanitized, fluid, height, compiledCss, surfaceKind, width]); // colorMode handled separately so it doesn't rebuild the doc
 
   // Render (and re-render) the nested embeds root with the latest targets/props.
+  // Jsx path: the same nested root instead renders the WHOLE story body (interpreter output),
+  // portaled into the story surface root — the StoryEmbeds architecture generalized from
+  // "portal each embed into its placeholder" to "portal the interpreted body into the surface".
   useEffect(() => {
     const doc = docRef.current;
     if (!doc || !reactRootRef.current) return;
+    if (isJsx) {
+      const surfaceRoot = surfaceRef.current?.root;
+      if (!surfaceRoot) return;
+      reactRootRef.current.render(
+        createPortal(
+          <StoryJsxBody
+            doc={doc}
+            jsx={html || ''}
+            readOnly={readOnly}
+            paramValues={paramValues}
+            onParamValuesChange={onParamValuesChange}
+            filePath={filePath}
+            colorMode={colorMode}
+          />,
+          surfaceRoot,
+        ),
+      );
+      return;
+    }
     reactRootRef.current.render(
       <StoryEmbeds
         doc={doc}
@@ -343,7 +394,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         colorMode={colorMode}
       />,
     );
-  }, [targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, filePath, colorMode]);
+  }, [targets, inlineTargets, numberTargets, paramTargets, isJsx, html, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, filePath, colorMode]);
 
   // Keep the iframe's color-mode class in sync without rebuilding the whole document.
   useEffect(() => {
@@ -375,13 +426,15 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       }).catch(() => {});
     }
     return () => { cancelled = true; tag?.remove(); };
-  }, [sanitized]);
+  }, [bodySource]);
 
   // Inline edit mode: make the story's top-level text containers contenteditable while keeping chart
   // embeds locked as atomic, non-editable islands. Runs after the doc + targets exist.
   useEffect(() => {
     const root = surfaceRef.current?.root;
-    if (!root) return;
+    // Jsx stories: WYSIWYG is disabled (AST write-back is a follow-up) — React owns the DOM, so
+    // contenteditable must never be turned on under it.
+    if (!root || isJsx) return;
     Array.from(root.children).forEach(el => {
       if (el.tagName === 'STYLE' || el.hasAttribute('data-mx-embed-root')) return;
       (el as HTMLElement).contentEditable = editable ? 'true' : 'inherit';
@@ -389,7 +442,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     root.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline],[data-number-inline]').forEach(el => {
       el.contentEditable = 'false';
     });
-  }, [editable, targets, inlineTargets, numberTargets, sanitized]);
+  }, [editable, targets, inlineTargets, numberTargets, sanitized, isJsx]);
 
   // While editing, sync inline edits out (debounced + flush on focus loss) so the caller can mark the
   // file dirty and the shared header's Save persists them — the iframe DOM is the source of truth.
@@ -402,7 +455,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   useEffect(() => {
     const doc = docRef.current;
     const root = surfaceRef.current?.root;
-    if (!doc || !root || !editable || !onChange) return;
+    if (!doc || !root || !editable || !onChange || isJsx) return;
     let t = 0;
     let userEdited = false;
     // Serialize the SURFACE ROOT, never document.body: on the SVG surface the body also holds the
@@ -421,15 +474,18 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       doc.removeEventListener('focusout', flush);
       if (t) window.clearTimeout(t);
     };
-  }, [editable, onChange, targets]);
+  }, [editable, onChange, targets, isJsx]);
 
   // Read the edited story back out as a clean content.story string.
   useImperativeHandle(ref, () => ({
     serialize: () => {
+      // Jsx stories serialize via AST write-back (follow-up) — the DOM is render output, never
+      // the source of truth, so DOM serialization would corrupt the file. Report "no edit".
+      if (isJsx) return null;
       const root = surfaceRef.current?.root;
       return root ? serializeEditedStory(root, []) : null;
     },
-  }), []);
+  }), [isJsx]);
 
   return (
     <>

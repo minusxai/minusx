@@ -64,13 +64,31 @@ describe('rendering basics', () => {
 });
 
 describe('controlled → uncontrolled prop mapping (components only)', () => {
-  it('maps value/open/checked to their default* forms on components', () => {
-    mount('<Card value="q1" open={true} checked={false} />');
-    expect(propsProbe[0].defaultValue).toBe('q1');
+  it('maps open/checked to their default* forms on components', () => {
+    mount('<Card open={true} checked={false} />');
     expect(propsProbe[0].defaultOpen).toBe(true);
     expect(propsProbe[0].defaultChecked).toBe(false);
-    expect(propsProbe[0].value).toBeUndefined();
     expect(propsProbe[0].open).toBeUndefined();
+  });
+
+  it('maps value only on the stateful roots (Tabs/Accordion), never on identity/data value props', () => {
+    const Stub = REGISTRY.Card;
+    REGISTRY.Tabs = Stub;
+    REGISTRY.TabsTrigger = Stub;
+    try {
+      // Tabs value selects a pane → controlled → remapped.
+      mount('<Tabs value="a" />');
+      expect(propsProbe[0].defaultValue).toBe('a');
+      expect(propsProbe[0].value).toBeUndefined();
+      // TabsTrigger value NAMES a pane (identity, like Progress value={60} is data) → kept.
+      propsProbe.length = 0;
+      mount('<TabsTrigger value="a" />');
+      expect(propsProbe[0].value).toBe('a');
+      expect(propsProbe[0].defaultValue).toBeUndefined();
+    } finally {
+      delete REGISTRY.Tabs;
+      delete REGISTRY.TabsTrigger;
+    }
   });
 });
 

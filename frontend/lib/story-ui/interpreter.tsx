@@ -28,6 +28,13 @@ const HTML_ATTR_TO_REACT: Record<string, string> = { class: 'className', for: 'h
 const CONTROLLED_TO_DEFAULT: Record<string, string> = {
   value: 'defaultValue', open: 'defaultOpen', checked: 'defaultChecked',
 };
+/**
+ * `value` is only a CONTROLLED prop on the stateful roots (Tabs/Accordion select a value).
+ * Everywhere else it's identity or data — TabsTrigger/TabsContent/AccordionItem use `value`
+ * to NAME a pane, Progress uses it as the displayed number — and rewriting those to
+ * `defaultValue` breaks the component. Restrict the mapping to the roots.
+ */
+const VALUE_CONTROLLED_TAGS = immutableSet(['Tabs', 'Accordion']);
 
 /** Name-denied props, lowercase (mirrors lib/jsx/validate.ts DENIED_ATTRS + React internals). */
 const DENIED_PROPS = immutableSet(['dangerouslysetinnerhtml', 'ref', 'key', 'srcdoc', 'is']);
@@ -54,7 +61,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   const Component = isComponent ? options.components[node.tag] : null;
   if (isComponent && !Component) return null; // validator rejects these; render stays safe regardless
 
-  const props = buildProps(node.attributes, isComponent, path);
+  const props = buildProps(node.attributes, isComponent, node.tag, path);
   const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
   const type = (Component ?? node.tag.toLowerCase()) as React.ElementType;
   // Void HTML elements must not receive children (React throws).
@@ -65,6 +72,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
 function buildProps(
   attributes: { name: string; value: { static: boolean; json?: unknown } }[],
   isComponent: boolean,
+  tag: string,
   path: string,
 ): Record<string, unknown> {
   const props: Record<string, unknown> = { [AST_PATH_ATTR]: path };
@@ -96,7 +104,10 @@ function buildProps(
     if (typeof value === 'object' && value !== null && !isComponent) continue;
 
     // Controlled → uncontrolled on components (no handlers exist to service controlled props).
-    if (isComponent && CONTROLLED_TO_DEFAULT[name]) name = CONTROLLED_TO_DEFAULT[name];
+    // `value` only on the stateful roots — see VALUE_CONTROLLED_TAGS.
+    if (isComponent && CONTROLLED_TO_DEFAULT[name] && (name !== 'value' || VALUE_CONTROLLED_TAGS.has(tag))) {
+      name = CONTROLLED_TO_DEFAULT[name];
+    }
 
     props[name] = value;
   }

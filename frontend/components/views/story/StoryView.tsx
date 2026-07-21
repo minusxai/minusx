@@ -72,9 +72,8 @@ interface StoryViewProps {
 export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss, storyRenderer = 'dom', showDevMarkers = false }: StoryViewProps) {
   const numericId = typeof fileId === 'number' ? fileId : undefined;
   // New-format story (Story_Design_V2 §2): content.story holds JSX source, rendered through the
-  // lib/story-ui interpreter (AgentHtml format="jsx"). The cast tolerates the field landing in
-  // StoryContent alongside this render path; anything but 'jsx' means the legacy HTML path.
-  const storyFormat = (content as StoryContent & { format?: string }).format === 'jsx' ? ('jsx' as const) : undefined;
+  // lib/story-ui interpreter (AgentHtml format="jsx"); anything else is the legacy HTML path.
+  const storyFormat = content.format === 'jsx' ? ('jsx' as const) : undefined;
   const canEdit = !readOnly && numericId !== undefined;
   // WYSIWYG (contenteditable) editing is HTML-path only for now; jsx stories render read-only
   // (AST write-back is a follow-up) — the agent/JSON tab remain the edit paths.
