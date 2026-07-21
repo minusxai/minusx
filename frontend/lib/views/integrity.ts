@@ -46,7 +46,12 @@ export async function computeViewReads(sql: string, dialect: string): Promise<Vi
   const views = new Set<string>();
 
   const walk = async (statement: string): Promise<void> => {
-    const ir: AnyQueryIR = await parseSqlToIrLocal(statement, dialect);
+    // We only consume FROM/JOIN/CTE references here; the SQL is stored and
+    // executed verbatim, never regenerated from this IR. Valid SQL features
+    // that the visual editor cannot represent must not block a context save.
+    const ir: AnyQueryIR = await parseSqlToIrLocal(statement, dialect, {
+      enforceGuiCompatibility: false,
+    });
     const queries = isCompoundQueryIR(ir) ? ir.queries : [ir];
     for (const q of queries) {
       const cteNames = new Set((q.ctes ?? []).map((c) => c.name.toLowerCase()));

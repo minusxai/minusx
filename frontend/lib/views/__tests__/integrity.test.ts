@@ -51,6 +51,15 @@ describe('computeViewReads', () => {
     expect(reads.tables).toEqual([]);
   });
 
+  it('allows valid filters that are unsupported by the GUI', async () => {
+    const reads = await computeViewReads(
+      "SELECT * FROM mxfood.orders WHERE company NOT IN ('internal', 'test')",
+      'duckdb',
+    );
+    expect(reads.tables).toEqual([{ schema: 'mxfood', table: 'orders' }]);
+    expect(reads.views).toEqual([]);
+  });
+
   it('sees through the author\'s own CTEs (no hiding a table in a WITH)', async () => {
     const reads = await computeViewReads(
       'WITH x AS (SELECT * FROM mxfood.payroll) SELECT * FROM x',
