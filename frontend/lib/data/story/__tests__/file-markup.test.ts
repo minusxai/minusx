@@ -409,3 +409,51 @@ describe('markupToContent / fileToMarkup — jsx-format stories', () => {
     }
   });
 });
+
+// Banned-CSS sanitizer at the save boundary (Story_Design_V2 §4): where markup becomes content,
+// a format:'jsx' story's <style> blocks and inline styles are stripped of position:fixed/sticky
+// and every external-fetch construct (url()/src()/@import; only data: URIs pass). Legacy stories
+// are FROZEN — their @import fonts stay live, so the legacy path is never sanitized.
+describe('markupToContent — banned CSS stripped for jsx stories, legacy left alone', () => {
+  it('strips @import, external url(), and fixed/sticky from a new story body', () => {
+    const markup = [
+      '<style>{`',
+      "@import url('https://fonts.example/css2?family=X');",
+      '.hero { position: sticky; top: 0; color: red; background: url(https://evil.example/x.png); }',
+      '`}</style>',
+      '<div class="s"><h1 style="position:fixed;color:blue">Hi</h1></div>',
+    ].join('\n');
+    const back = markupToContent('story', markup);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      const story = back.content.story as string;
+      expect(story).not.toContain('@import');
+      expect(story).not.toContain('evil.example');
+      expect(story).not.toMatch(/position:\s*(fixed|sticky)/);
+      expect(story).toContain('color: red');
+      expect(story).toContain('color:blue');
+      expect(story).toContain('<h1');
+    }
+  });
+
+  it('keeps data: URIs in a new story body', () => {
+    const markup = '<style>{`.a{background-image:url("data:image/png;base64,AAAA")}`}</style>\n<div class="s">x</div>';
+    const back = markupToContent('story', markup);
+    expect(back.ok).toBe(true);
+    if (back.ok) expect(back.content.story as string).toContain('data:image/png;base64,AAAA');
+  });
+
+  it('legacy stories keep their @import fonts LIVE (frozen pipeline, no sanitization)', () => {
+    const legacyContent = {
+      story: '<div class="story" data-c="Section"><style>@import url(\'https://fonts.googleapis.com/css2?family=Lora\');</style><h1>Old</h1></div>',
+    };
+    const markup = fileToMarkup('story', legacyContent);
+    const back = markupToContent('story', markup, legacyContent);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      expect(back.content.format).toBeUndefined();
+      expect(back.content.story as string).toContain('@import');
+      expect(back.content.story as string).toContain('fonts.googleapis.com');
+    }
+  });
+});

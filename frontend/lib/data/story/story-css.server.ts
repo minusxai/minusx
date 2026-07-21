@@ -9,6 +9,7 @@
 import 'server-only';
 import { compile } from '@tailwindcss/node';
 import { STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
+import { partitionBannedCandidates } from './banned-css';
 import { hasDesignSystemMarker, extractClassCandidates, type CompiledCssStoryContent } from './story-css';
 
 // The stylesheet each story is compiled against. `dark:` keys off the `.dark` class AgentHtml
@@ -191,9 +192,19 @@ export async function compileStoryCss(story: string | null | undefined, opts?: {
   // recipe classes unioned in — component chrome classes never appear in story markup.
   const jsx = !!opts?.force;
   const compiler = await compile(jsx ? TW_INPUT_JSX : TW_INPUT, { base: process.cwd(), onDependency: () => {} });
-  const candidates = jsx
+  let candidates = jsx
     ? [...new Set([...extractClassCandidates(story), ...STORY_UI_RECIPE_CLASSES])].sort()
     : extractClassCandidates(story);
+  if (jsx) {
+    // Banned-CSS guard (Story_Design_V2 §4) — a SEPARATE, explicit step BEFORE compile, never
+    // folded into buildSalvaging's error-bisect: a guard reject must be a deliberate drop, not a
+    // silently-absorbed "bad token". Legacy marked stories are frozen and skip this.
+    const { kept, banned } = partitionBannedCandidates(candidates);
+    if (banned.length > 0) {
+      console.warn(`[story-css] dropped ${banned.length} banned class candidate(s) (fixed/sticky/external-url):`, banned.join(' '));
+    }
+    candidates = kept;
+  }
   const { css, dropped } = buildSalvaging(c => compiler.build(c), candidates);
   if (dropped.length > 0) {
     console.warn(`[story-css] dropped ${dropped.length} uncompilable class candidate(s):`, dropped.join(' '));

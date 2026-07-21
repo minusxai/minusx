@@ -98,7 +98,7 @@ export interface OrgConfig {
   remoteAgentsEnabled?: boolean;
   /** Which engine renders story files (Settings → General). One setting, not a flag per engine:
    *  exactly one renderer is active, so a union has no invalid states (canvas+svg can't both be on).
-   *   - 'dom'    — AgentHtml in a same-origin iframe (default). Captured via snapdom.
+   *   - 'dom'    — AgentHtml in a same-origin iframe (default). Captured via generic element serialization.
    *   - 'canvas' — Takumi raster + embed islands. Captures straight from its bitmaps.
    *   - 'svg'    — AgentHtml in an iframe, story body inside <svg><foreignObject>. Captures by
    *                serializing that live SVG (browser-rendered, snapdom-free).

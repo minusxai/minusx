@@ -18,6 +18,7 @@ import type { FileType, StoryContent } from '@/lib/types';
 import { buildStoryJsx, parseStoryJsx } from './story-v2';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
+import { sanitizeStoryMarkupCss } from './banned-css';
 
 const DEFS: Record<string, JsonSchema> = (atlasSchema as { $defs?: Record<string, JsonSchema> }).$defs ?? {};
 
@@ -33,13 +34,15 @@ const CTX: SchemaCtx = {
 };
 
 // New-format (`format:'jsx'`) stories: the body IS the agent's shadcn JSX source — stored
-// verbatim, never compiled to placeholder HTML. Validation runs against the shadcn registry
-// names plus the explicit HTML-tag allowlist (Story_Design_V2 §2).
+// verbatim except for the banned-CSS strip (§4: position fixed/sticky + external-fetch
+// constructs are removed from <style> blocks and inline styles at the save boundary; legacy
+// stories go through CTX above and keep e.g. their @import fonts live). Validation runs
+// against the shadcn registry names plus the explicit HTML-tag allowlist (Story_Design_V2 §2).
 const JSX_STORY_CTX: SchemaCtx = {
   defs: DEFS,
   jsxField: {
     toJsx: (value) => value,
-    fromJsx: (inner) => inner,
+    fromJsx: (inner) => sanitizeStoryMarkupCss(inner),
     components: JSX_STORY_COMPONENT_NAMES,
     allowedHtmlTags: STORY_HTML_TAGS,
   },

@@ -273,3 +273,33 @@ describe('shadcn token preamble + recipe base sheet (format:jsx)', () => {
     expect(css).not.toContain('.rounded-xl');
   });
 });
+
+// Banned-CSS candidate filter (Story_Design_V2 §4): banned Tailwind candidates are dropped
+// BEFORE compile as a SEPARATE guard step — never absorbed by buildSalvaging's error-bisect.
+// Proof of separation: `fixed`/`sticky` compile perfectly fine in Tailwind, so their absence
+// from the output can only come from the guard, not from a compile failure.
+describe('compileStoryCss — banned candidate filter (format:jsx)', () => {
+  it('drops fixed/sticky candidates (including variants) from jsx-story compiles', async () => {
+    const css = (await compileStoryCss(
+      '<div className="fixed md:sticky p-4">x</div>', { force: true },
+    ))!;
+    expect(css).not.toMatch(/position:\s*fixed/);
+    expect(css).not.toMatch(/position:\s*sticky/);
+    expect(css).toContain('.p-4'); // siblings survive
+  });
+
+  it('drops external-url arbitrary-value candidates; data: URIs pass', async () => {
+    const css = (await compileStoryCss(
+      `<div className="bg-[url(https://evil.example/x.png)] bg-[url(data:image/svg+xml;base64,PHN2Zy8+)] p-2">x</div>`,
+      { force: true },
+    ))!;
+    expect(css).not.toContain('evil.example');
+    expect(css).toContain('data:image/svg+xml');
+    expect(css).toContain('.p-2');
+  });
+
+  it('legacy marked stories are NOT candidate-filtered (frozen pipeline keeps its CSS live)', async () => {
+    const css = (await compileStoryCss('<div data-design="tw" class="fixed p-2">x</div>'))!;
+    expect(css).toMatch(/position:\s*fixed/);
+  });
+});

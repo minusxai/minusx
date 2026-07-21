@@ -4,7 +4,7 @@ A lightweight client-side screenshot system for capturing FileView components (q
 
 ## Features
 
-- **Client-side capture** using [`@zumer/snapdom`](https://github.com/zumerlab/snapdom) (fast, secure, no backend required)
+- **Client-side capture** via SVG serialization (`serialize-element.ts` — clone into `<svg><foreignObject>` with document CSS inlined, rasterize through a percent-encoded `data:` URL; no backend required)
 - **Shadow DOM + style aware** - deep-clones with styles, so shadow-scoped content (e.g. story charts) rasterizes correctly
 - **Native canvas support** - ECharts work out-of-the-box
 - **Built-in font embedding + resource cache** - no separate font-embed step
@@ -99,7 +99,7 @@ Screenshots are captured by file ID using `data-file-id` attributes:
 
 2. **Hook** uses `document.querySelector('[data-file-id="123"]')` to find the element
 
-3. **Capture** converts the element to an image using `@zumer/snapdom`
+3. **Capture** converts the element to an image via serialization capture (`serialize-element.ts` / `lib/story-surface/serialize.ts`)
 
 ### UI Integration
 
@@ -111,7 +111,7 @@ The "Export PNG" button is integrated into `DocumentHeader.tsx`:
 
 ### Dependencies
 
-- **@zumer/snapdom** - ultra-fast DOM→image, Shadow DOM + style support, built-in font/resource cache
+- **serialization capture** - DOM→SVG→image with same-origin stylesheet inlining and data:-URI fonts/images (Story_Design_V2 §4; snapdom removed)
 
 ## Performance
 

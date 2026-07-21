@@ -11,8 +11,7 @@
  *  - 'svg'  — the body is mounted inside `<svg><foreignObject>` in the same iframe (isolation is the
  *             iframe's job either way). It renders identically — foreignObject content is real, live,
  *             interactive DOM (contentEditable/focus/hit-testing all verified) — but the surface can
- *             then be RASTERIZED by serializing that live <svg>, instead of re-deriving the pixels
- *             with snapdom. Because an <svg> does NOT auto-size to its foreignObject content (it
+ *             then be RASTERIZED by serializing that live <svg> — no pixel re-derivation. Because an <svg> does NOT auto-size to its foreignObject content (it
  *             defaults to 150px), the svg + foreignObject height must be set explicitly from the
  *             measured content on every sync — that's the one real cost of this surface.
  */

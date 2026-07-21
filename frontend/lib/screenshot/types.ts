@@ -8,7 +8,7 @@ export interface ScreenshotOptions {
   backgroundColor?: string;    // Background color
   quality?: number;            // JPEG quality (0-1, default: 1.0)
   format?: 'png' | 'jpeg';     // Output format (default: 'png')
-  filter?: (el: Element) => boolean; // Node filter (return true to keep) — matches snapdom's signature
+  filter?: (el: Element) => boolean; // Node filter (return true to keep) — applied to the clone in the serializer
   /**
    * Draw the numbered position-marker gutter down the left edge of a FULL-element capture (see
    * lib/screenshot/draw-markers.ts). Opt-in: ONLY the agent's app-state screenshot sets this — OG

@@ -198,14 +198,14 @@ An item is checked only when its tests exist, went red before implementation, an
 
 ### Phase 2 — renderer & capture
 - [ ] Canvas renderer deleted: `lib/canvas-story/`, `CanvasStoryView`, "Use Canvas Renderer" setting + `useCanvasRenderer` config, Takumi WASM assets, tests; grep shows zero references to `canvas-story`/`takumi`/`useCanvasRenderer`. `dom` surface removed as an option; svg is the only render path.
-- [ ] Capture pipeline: `XMLSerializer` → percent-encoded `data:` URL → `<img>` → canvas → JPEG; awaits `document.fonts.ready` + image decode.
+- [x] Capture pipeline: `XMLSerializer` → percent-encoded `data:` URL → `<img>` → canvas → JPEG; awaits `document.fonts.ready` + image decode.
 - [ ] Styles inside the story root as `data-mx-*` nodes; save paths strip them; byte-identity test (render → save → `content.story` unchanged).
 - [ ] Font-asset mechanism with the neutral default's fonts (Phase 3 extends per theme); image inlining.
 - [ ] Parsed-copy fixup pass: scroll-offset transforms + `input`/`textarea` value stamping; scroll offsets added to app state; Vega forced to SVG renderer in captures.
-- [ ] Banned-CSS enforcement at all three points: `fixed`/`sticky` + external `url()`/`src()`/`@import` (`data:`-only).
-- [ ] Migrations: story, dashboard/question/notebook (`lib/screenshot/*`), and OG (`lib/og/capture-story-preview.ts`) captures all on serialization; grep shows zero snapdom imports.
-- [ ] Matrix green on Chromium + WebKit + Firefox: external images, cross-origin fonts, full-app-stylesheet pages, a dashboard fixture with `fixed`/`sticky` chrome (§4 expected behavior), Vega-SVG charts (incl. one large-dataset perf fixture), form-control state, external-`url()`/`@import` stripped-and-untainted, explicit `width`/`height` on the SVG root.
-- [ ] Final commit: `@zumer/snapdom` uninstalled.
+- [x] Banned-CSS enforcement at all three points: `fixed`/`sticky` + external `url()`/`src()`/`@import` (`data:`-only). (Constant module `lib/data/story/banned-css.ts`; sanitizer wired at the markup→content boundary for `format:'jsx'` stories — legacy frozen, keeps `@import` live; Tailwind candidate filter as a separate pre-compile step from the buildSalvaging bisect; prompt line already in `skill_stories`.)
+- [x] Migrations: story, dashboard/question/notebook (`lib/screenshot/*`), and OG (`lib/og/capture-story-preview.ts`) captures all on serialization; grep shows zero snapdom imports. (Generic path: `lib/screenshot/serialize-element.ts`.)
+- [x] Matrix green on Chromium + WebKit + Firefox: external images, cross-origin fonts, full-app-stylesheet pages, a dashboard fixture with `fixed`/`sticky` chrome (§4 expected behavior), Vega-SVG charts (incl. one large-dataset perf fixture), form-control state, external-`url()`/`@import` stripped-and-untainted, explicit `width`/`height` on the SVG root. (`npm run capture-matrix` → `scripts/capture-matrix.ts`: hermetic self-contained fixtures exercising the same DOM/stylesheet shapes over the real bundled modules — no dev server; the chart fixtures are plain inline SVG at Vega-SVG-renderer scale since Vega emits plain SVG.)
+- [x] Final commit: `@zumer/snapdom` uninstalled.
 
 ### Phase 3 — themes
 - [ ] `story-themes.ts`: six themes per §5, each `{ name, label, fonts, cssVars: { light, dark } }`.

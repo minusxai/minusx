@@ -11,7 +11,7 @@
  *     they're inlined as data: URLs. Without this, text falls back to a system serif and rewraps.
  *  3. SCROLL — scroll position is DOM *state*, not markup: XMLSerializer drops `scrollLeft`, so a
  *     horizontally-scrolled table would capture reset to column 1. Offsets are translated into a
- *     transform on the clone. (snapdom has this same bug today.)
+ *     transform on the clone.
  */
 import { STORY_SVG_ATTR } from '@/lib/story-surface';
 import { collectStoryFontImports, resolveImportFontCss } from '@/lib/html/resolve-story-fonts';
@@ -104,6 +104,32 @@ export function applyScrollOffsets(liveRoot: Element, cloneRoot: Element): void 
   }
 }
 
+/**
+ * Stamp live form state into the CLONE as serializable markup. `input.value`, `checked`, and select
+ * selection are DOM *properties* — XMLSerializer only emits attributes, so a typed value would
+ * capture as the original (usually empty) markup. Walks live and cloned trees in lockstep.
+ */
+export function stampFormValues(liveRoot: Element, cloneRoot: Element): void {
+  const live = [liveRoot, ...Array.from(liveRoot.querySelectorAll('*'))];
+  const clone = [cloneRoot, ...Array.from(cloneRoot.querySelectorAll('*'))];
+  for (let i = 0; i < live.length && i < clone.length; i++) {
+    const el = live[i];
+    const target = clone[i];
+    const tag = el.tagName;
+    if (tag === 'INPUT') {
+      const input = el as HTMLInputElement;
+      target.setAttribute('value', input.value);
+      if (input.checked) target.setAttribute('checked', '');
+      else target.removeAttribute('checked');
+    } else if (tag === 'TEXTAREA') {
+      target.textContent = (el as HTMLTextAreaElement).value;
+    } else if (tag === 'OPTION') {
+      if ((el as HTMLOptionElement).selected) target.setAttribute('selected', '');
+      else target.removeAttribute('selected');
+    }
+  }
+}
+
 /** The live story `<svg>` hosted inside `element` (an iframe host), or null if it isn't an SVG story. */
 export function findStorySvg(element: HTMLElement): SVGSVGElement | null {
   const iframe = element.tagName === 'IFRAME'
@@ -122,7 +148,20 @@ export async function serializeStorySvg(svg: SVGSVGElement): Promise<string> {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   const liveRoot = svg.querySelector('foreignObject > *');
   const cloneRoot = clone.querySelector('foreignObject > *');
-  if (liveRoot && cloneRoot) applyScrollOffsets(liveRoot, cloneRoot);
+  if (liveRoot && cloneRoot) {
+    applyScrollOffsets(liveRoot, cloneRoot);
+    stampFormValues(liveRoot, cloneRoot);
+  }
+
+  // Explicit intrinsic size on the root: an <img>-rendered SVG without width/height attributes has
+  // no reliable intrinsic size (engines disagree), which skews the rasterized canvas dimensions.
+  if (!clone.getAttribute('width') || !clone.getAttribute('height')) {
+    const box = svg.getBoundingClientRect();
+    const w = box.width || svg.width?.baseVal?.value || 0;
+    const h = box.height || svg.height?.baseVal?.value || 0;
+    if (w) clone.setAttribute('width', String(w));
+    if (h) clone.setAttribute('height', String(h));
+  }
 
   const css = await collectSurfaceCss(doc);
   if (css.trim()) {
@@ -134,12 +173,30 @@ export async function serializeStorySvg(svg: SVGSVGElement): Promise<string> {
   return new XMLSerializer().serializeToString(clone);
 }
 
-/** Rasterize a serialized SVG string into an <img> the caller can draw. */
-export function svgToImage(svgString: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
+/**
+ * Rasterize a serialized SVG string into an <img> the caller can draw.
+ *
+ * URL scheme is load-bearing: a percent-encoded `data:` URL, NEVER a Blob URL — Blob-URL SVG
+ * rasterization taints the canvas in Chromium and WebKit (Story_Design_V2 §12).
+ *
+ * Awaits `document.fonts.ready` and full image decode before resolving — racing resource decode is
+ * the dominant cause of blank captures (especially Safari), where drawImage lands before the SVG's
+ * text/fonts have finished decoding.
+ */
+export async function svgToImage(svgString: string): Promise<HTMLImageElement> {
+  const img = new Image();
+  const loaded = new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
     img.onerror = () => reject(new Error('SVG rasterize failed'));
-    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
   });
+  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
+  try {
+    await document.fonts?.ready;
+  } catch { /* fonts that fail to load must not fail the capture */ }
+  if (typeof img.decode === 'function') {
+    await img.decode();
+  } else {
+    await loaded;
+  }
+  return img;
 }
