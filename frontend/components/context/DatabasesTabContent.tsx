@@ -340,9 +340,6 @@ export function DatabasesTabContent({
                               metrics={content.metrics || []}
                               onMetricsChange={editMode ? (next) => onChange({ metrics: next }) : undefined}
                               inheritedMetrics={content.fullMetrics}
-                              relationships={content.relationships || []}
-                              onRelationshipsChange={editMode ? (next) => onChange({ relationships: next }) : undefined}
-                              inheritedRelationships={content.fullRelationships}
                             />
                           </Box>
                         </Collapsible.Content>

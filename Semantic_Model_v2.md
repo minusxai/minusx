@@ -528,7 +528,7 @@ generator, `lib/sql/ir-to-sql.ts`):
 - **m2m dimensions** (GROUP BY a many-side field — fan-out across groups is
   semantically intended: a 2-tag order appears in both tag groups, but each
   measure counts it once per group) → compile a deduplicated bridge CTE
-  `_m2m_<alias> AS (SELECT DISTINCT <bridgeCol> AS pk, <far dim cols> …)`,
+  `_m2m_<alias> AS (SELECT DISTINCT <bridgeCol> AS pk, <GROUPED dim cols only> …)`,
   join the primary to it on the model's `primaryKey`, aggregate measures in
   the outer query grouped by the m2m dim. One row per (pk, dim value) by
   construction — no within-group double counting, all aggregate types
@@ -543,6 +543,15 @@ generator, `lib/sql/ir-to-sql.ts`):
   positive membership only ("tagged vip"); "NOT tagged vip" (a `NOT EXISTS`
   compilation with NULL hazards) is rejected by the validator with a pointing
   error and deferred.
+  **Filters on a GROUPED alias live INSIDE its CTE** (found by review, proven
+  on DuckDB): as an outer condition, the filter's column is dragged into the
+  DISTINCT projection and widens the grain from `(pk, groupedCol)` to
+  `(pk, groupedCol, filterCol)` — two far rows sharing the grouped value then
+  double-count one primary row *inside* its group (revenue 200 for a 100 order).
+  Filtering inside the CTE keeps the projection, and therefore the grain,
+  independent of what is filtered. A filtered alias joins **INNER** (the filter
+  restricts the primary set, matching filter-only semi-join semantics); an
+  unfiltered one joins LEFT and keeps the NULL group.
 
 **Constraint (validated rule, enforced at query time):** a semantic query may
 GROUP BY dimensions from at most **one** m2m reference (filters from any

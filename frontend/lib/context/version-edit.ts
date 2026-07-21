@@ -8,7 +8,7 @@ import type { ContextContent, ContextVersion } from '@/lib/types';
 
 /** Content fields that live ON THE VERSION (not at the content root). */
 const VERSION_SCOPED_FIELDS = [
-  'docs', 'metrics', 'annotations', 'relationships', 'views', 'semanticModels',
+  'docs', 'metrics', 'annotations', 'views', 'semanticModels',
 ] as const;
 type VersionScopedField = (typeof VERSION_SCOPED_FIELDS)[number];
 

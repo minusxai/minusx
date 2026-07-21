@@ -1,7 +1,7 @@
 /**
  * applyContextContentChange — the working-field → version fold used by the
  * context container. Version-scoped fields (docs/metrics/annotations/
- * relationships/views/semanticModels) must land INSIDE the selected version —
+ * views/semanticModels) must land INSIDE the selected version —
  * a top-level write would bypass the save gates (the bug browser-verification
  * caught for semanticModels) and be invisible to the loader/inheritance.
  */

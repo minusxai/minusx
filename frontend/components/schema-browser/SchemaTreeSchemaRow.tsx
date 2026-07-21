@@ -7,8 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import SchemaColumnRow from './SchemaColumnRow';
 import ChildPathSelector from '../selectors/ChildPathSelector';
 import TableMetricsEditor from '../context/TableMetricsEditor';
-import TableRelationshipsEditor from '../context/TableRelationshipsEditor';
-import type { TableAnnotation, MetricDef, TableRelationship } from '@/lib/types';
+import type { TableAnnotation, MetricDef } from '@/lib/types';
 import type { SchemaTreeItem, WhitelistItem } from './SchemaTreeView';
 
 const TABLES_PER_PAGE = 25;
@@ -61,11 +60,7 @@ interface SchemaTreeSchemaRowProps {
   onMetricsChange?: (next: MetricDef[]) => void;
   inheritedMetrics: MetricDef[];
 
-  relationships: TableRelationship[];
-  onRelationshipsChange?: (next: TableRelationship[]) => void;
-  inheritedRelationships: TableRelationship[];
   /** All tables in this connection (join target candidates). */
-  allTables: Array<{ schema: string; table: string; columns: Array<{ name: string; type: string }> }>;
 
   expandedSchemas: Set<string>;
   expandedTables: Set<string>;
@@ -114,10 +109,6 @@ export default function SchemaTreeSchemaRow({
   metrics,
   onMetricsChange,
   inheritedMetrics,
-  relationships,
-  onRelationshipsChange,
-  inheritedRelationships,
-  allTables,
   expandedSchemas,
   expandedTables,
   isSchemaWhitelisted,
@@ -439,21 +430,6 @@ export default function SchemaTreeSchemaRow({
                                 metrics={metrics}
                                 onMetricsChange={onMetricsChange}
                                 inheritedMetrics={inheritedMetrics}
-                              />
-                            </Box>
-                          )}
-                          {/* Per-table FK relationships (edited inline) — feed the derived semantic layer */}
-                          {(onRelationshipsChange || relationships.length > 0 || inheritedRelationships.length > 0) && (
-                            <Box borderBottom="1px solid" borderColor="border.muted">
-                              <TableRelationshipsEditor
-                                connection={connectionName}
-                                schema={schemaItem.schema}
-                                table={table.table}
-                                columns={table.columns}
-                                tables={allTables}
-                                relationships={relationships}
-                                onRelationshipsChange={onRelationshipsChange}
-                                inheritedRelationships={inheritedRelationships}
                               />
                             </Box>
                           )}

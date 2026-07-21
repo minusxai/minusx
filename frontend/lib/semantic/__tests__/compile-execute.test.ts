@@ -7,9 +7,11 @@
  * sides) — the exact ambiguity class hit in production ("Ambiguous reference
  * to column name campaign_id").
  *
- * Vocabulary is DERIVED (deriveSemanticModels over the schema + declared
- * relationships), not hand-written — so this validates what the app actually
- * uses, end to end: derive → compile → execute → parse → detect.
+ * Base vocabulary is DERIVED (deriveSemanticModels over the profiled schema)
+ * and the join is AUTHORED on the model (a SemanticReferenceToOne + its
+ * alias-qualified dimensions), matching how authored models carry joins — so
+ * this validates the real pipeline end to end: model → compile → execute →
+ * parse → detect.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api';
@@ -18,7 +20,7 @@ import { compileSemanticQuery } from '../compile';
 import { semanticSpecFromIr } from '../detect';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
-import type { DatabaseWithSchema, SemanticModelV2, TableRelationship } from '@/lib/types';
+import type { DatabaseWithSchema, SemanticModelV2, SemanticReferenceToOne } from '@/lib/types';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 import type { AnyQueryIR } from '@/lib/sql/ir-types';
 
@@ -93,11 +95,21 @@ const SCHEMA: DatabaseWithSchema = {
   }],
 };
 
-const RELATIONSHIPS: TableRelationship[] = [{
-  connection: 'warehouse', schema: 'mxfood', table: 'ad_spend',
-  column: 'campaign_id', targetSchema: 'mxfood', targetTable: 'ad_campaigns', targetColumn: 'campaign_id',
+// Authored join: ad_spend.campaign_id → ad_campaigns.campaign_id (many-to-one
+// lookup), plus the alias-qualified dimensions the lookup exposes.
+const CAMPAIGNS_REF: SemanticReferenceToOne = {
+  source: { kind: 'table', table: 'ad_campaigns', schema: 'mxfood' },
+  alias: 'ad_campaigns',
   relationship: 'many_to_one',
-}];
+  joinType: 'LEFT',
+  on: [{ primaryColumn: 'campaign_id', referencedColumn: 'campaign_id' }],
+};
+const CAMPAIGNS_DIMS = [
+  { name: 'Ad Campaigns Campaign Name', column: 'campaign_name', source: 'ad_campaigns' },
+  { name: 'Ad Campaigns Channel', column: 'channel', source: 'ad_campaigns' },
+  { name: 'Ad Campaigns Created At', column: 'created_at', source: 'ad_campaigns', temporal: true },
+  { name: 'Ad Campaigns End Date', column: 'end_date', source: 'ad_campaigns', temporal: true },
+];
 
 // ---------------------------------------------------------------------------
 // The diverse spec matrix — every vocabulary shape, with and without the join
@@ -182,8 +194,14 @@ describe('derived models compile to SQL that actually EXECUTES (real DuckDB)', (
     const instance = await DuckDBInstance.create(':memory:');
     db = await instance.connect();
     await db.run(DDL);
-    models = deriveSemanticModels([SCHEMA], RELATIONSHIPS);
-    spendModel = models.find((m) => primaryTable(m) === 'ad_spend')!;
+    models = deriveSemanticModels([SCHEMA]);
+    const spendIdx = models.findIndex((m) => primaryTable(m) === 'ad_spend');
+    spendModel = {
+      ...models[spendIdx],
+      dimensions: [...models[spendIdx].dimensions, ...CAMPAIGNS_DIMS],
+      references: [CAMPAIGNS_REF],
+    };
+    models[spendIdx] = spendModel;
   });
 
   afterAll(() => {

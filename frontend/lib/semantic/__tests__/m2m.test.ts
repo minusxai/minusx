@@ -41,6 +41,7 @@ const MODEL: SemanticModelV2 = {
   dimensions: [
     { name: 'Region', source: 'primary', column: 'region' },
     { name: 'Tag', source: 'tag', column: 'name' },
+    { name: 'Tag Kind', source: 'tag', column: 'kind' },
     { name: 'Category', source: 'cat', column: 'name' },
   ],
   measures: [
@@ -62,10 +63,12 @@ const sqlFor = (s: SemanticQuerySpec, dialect = 'duckdb'): string =>
 const FIXTURES = [
   'CREATE TABLE orders (id INT, amount DOUBLE, region TEXT)',
   "INSERT INTO orders VALUES (1, 100, 'east'), (2, 50, 'west'), (3, 25, 'east')",
-  'CREATE TABLE tags (id INT, name TEXT)',
-  "INSERT INTO tags VALUES (10, 'vip'), (20, 'promo')",
+  'CREATE TABLE tags (id INT, name TEXT, kind TEXT)',
+  // tags 20 and 21 share the NAME 'promo' but differ in `kind` — the shape that
+  // exposes a widened dedup grain when a filter column joins the projection.
+  "INSERT INTO tags VALUES (10, 'vip', 'manual'), (20, 'promo', 'manual'), (21, 'promo', 'auto')",
   'CREATE TABLE order_tags (order_id INT, tag_id INT)',
-  'INSERT INTO order_tags VALUES (1, 10), (1, 20), (2, 10), (1, 10)', // + a DUPLICATE bridge row
+  'INSERT INTO order_tags VALUES (1, 10), (1, 20), (1, 21), (2, 10), (1, 10)', // + a DUPLICATE bridge row
   'CREATE TABLE categories (id INT, name TEXT)',
   "INSERT INTO categories VALUES (7, 'food')",
   'CREATE TABLE order_categories (order_id INT, category_id INT)',
@@ -117,7 +120,7 @@ describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
     expect(m.get('east|null') ?? m.get('east|NULL') ?? Number(rows.find((r) => r[0] === 'east' && r[1] === null)?.[2])).toBe(25);
   });
 
-  it('a filter on the GROUPED m2m alias becomes an outer condition on the CTE', async () => {
+  it('a filter on the GROUPED m2m alias is applied INSIDE the dedup CTE', async () => {
     const rows = await run(sqlFor(spec({
       measures: ['Revenue'], dimensions: ['Tag'],
       filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }],
@@ -125,6 +128,26 @@ describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0][0]).toBe('vip');
     expect(Number(rows[0][1])).toBe(150);
+  });
+
+  it('GRAIN: a filter on a DIFFERENT far column must not widen the dedup grain', async () => {
+    // Two DISTINCT tag rows share name 'promo' but differ in `kind`. Projecting
+    // the filter column into the CTE would keep both rows for one order and
+    // double-count it inside the 'promo' group.
+    const rows = await run(sqlFor(spec({
+      measures: ['Revenue'], dimensions: ['Tag'],
+      filters: [{ dimension: 'Tag Kind', operator: 'IN', value: ['manual', 'auto'] }],
+    })));
+    const promo = rows.find((r) => r[0] === 'promo');
+    expect(Number(promo![1])).toBe(100); // order 1 once, NOT 200
+  });
+
+  it('a filter on the grouped alias RESTRICTS the primary set (no NULL group when filtering)', async () => {
+    const rows = await run(sqlFor(spec({
+      measures: ['Revenue'], dimensions: ['Tag'],
+      filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }],
+    })));
+    expect(rows.every((r) => r[0] !== null)).toBe(true); // untagged order 3 excluded
   });
 
   it('golden: renders WITH dedup CTE + LEFT join on the primary key in all three dialects', () => {

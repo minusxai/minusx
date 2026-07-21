@@ -1,13 +1,12 @@
 /**
- * Derived semantic models — the semantic layer WITHOUT authored model config.
+ * Derived semantic models — the draft-suggestion engine.
  *
- * A SemanticModel is pure vocabulary: which columns group (dimensions), which
- * aggregate (measures), which column is the time axis, and which equi-joins are
- * safe lookups. All of that except joins is derivable from the whitelisted
- * schema + profiled column metadata (`ColumnMeta.category`), so models are
- * DERIVED on demand — one model per whitelisted table — and the only authored
- * input is the table's declared FK relationships (`TableRelationship`, edited
- * in the whitelist UI).
+ * A semantic model is pure vocabulary: which columns group (dimensions), which
+ * aggregate (measures), and which column is the time axis. All of that is
+ * derivable from the whitelisted schema + profiled column metadata
+ * (`ColumnMeta.category`), so draft models are DERIVED on demand — one model
+ * per table. Authored models (`ContextVersion.semanticModels`) are the source
+ * of truth; derivation only pre-fills drafts and powers the stub name list.
  *
  * Models are deliberately NOT stored on the context content: a large workspace
  * derives multi-MB of vocabulary (measured: 4.2 MB for one production
@@ -28,8 +27,6 @@ import type {
   SemanticDimensionV2,
   SemanticMeasureV2,
   SemanticModelV2,
-  SemanticReferenceToOne,
-  TableRelationship,
 } from '@/lib/types';
 
 export type ColumnKind = 'dimension' | 'time' | 'measure' | 'id';
@@ -90,61 +87,6 @@ function idBaseName(column: string): string {
 const tableKey = (connection: string, schema: string | undefined, table: string) =>
   `${connection}|${schema ?? ''}|${table}`;
 
-/**
- * Self-joins (same schema + table) are NOT supported: the derived join alias
- * is the target table's name, which would collide with the base table in the
- * generated SQL. Blocked at validation, filtered defensively at derivation,
- * and excluded from the target picker in the whitelist UI.
- */
-export const isSelfJoin = (r: TableRelationship): boolean =>
-  r.table === r.targetTable && (r.schema ?? '') === (r.targetSchema ?? '');
-
-// ---------------------------------------------------------------------------
-// Relationship views — bidirectional display + one-to-many sugar
-// ---------------------------------------------------------------------------
-
-/**
- * STORAGE is always normalized to the safe many→one direction (`table` is the
- * many side) so the semantic layer can never fan out. The UI, however, shows
- * each relationship from BOTH tables: from the many side as declared
- * (many-to-one), and from the one side as its mirror (one-to-many). A user may
- * also CREATE a relationship as one-to-many — sugar that normalizes on save.
- */
-export type RelationshipCardinality = 'many_to_one' | 'one_to_one' | 'one_to_many';
-
-export type RelationshipView = Omit<TableRelationship, 'relationship'> & {
-  relationship?: RelationshipCardinality;
-};
-
-/** The same stored relationship, seen from the TARGET (one) side. */
-export function mirrorRelationshipView(r: TableRelationship): RelationshipView {
-  return {
-    connection: r.connection,
-    schema: r.targetSchema,
-    table: r.targetTable,
-    column: r.targetColumn,
-    targetSchema: r.schema,
-    targetTable: r.table,
-    targetColumn: r.column,
-    relationship: (r.relationship ?? 'many_to_one') === 'one_to_one' ? 'one_to_one' : 'one_to_many',
-  };
-}
-
-/** Normalize a view back to storage: a one_to_many view swaps sides. */
-export function normalizeRelationshipView(v: RelationshipView): TableRelationship {
-  if (v.relationship !== 'one_to_many') return v as TableRelationship;
-  return {
-    connection: v.connection,
-    schema: v.targetSchema,
-    table: v.targetTable,
-    column: v.targetColumn,
-    targetSchema: v.schema,
-    targetTable: v.table,
-    targetColumn: v.column,
-    relationship: 'many_to_one',
-  };
-}
-
 /** The cheap, global "which models exist" projection — one stub per table. */
 export interface ModelStub {
   name: string;
@@ -187,28 +129,19 @@ export function deriveModelStubs(databases: DatabaseWithSchema[]): ModelStub[] {
 }
 
 /**
- * Derive one semantic model per table (with columns) in `databases`.
+ * Derive one draft semantic model per table (with columns) in `databases`,
+ * from the profiled schema alone.
  * `namingDatabases` (default: `databases`) supplies the GLOBAL table list used
  * for business-name disambiguation — pass the full whitelisted names-only
  * schema when deriving a scoped subset so names match `deriveModelStubs`.
  */
 export function deriveSemanticModels(
   databases: DatabaseWithSchema[],
-  relationships: TableRelationship[] = [],
   namingDatabases?: DatabaseWithSchema[],
 ): SemanticModelV2[] {
   const stubNames = new Map(
     deriveModelStubs(namingDatabases ?? databases).map((st) => [tableKey(st.connection, st.schema, st.table), st.name]),
   );
-  // Index every table (for relationship targets + inherited filtering).
-  const columnsByTable = new Map<string, SchemaColumnLike[]>();
-  for (const db of databases) {
-    for (const s of db.schemas ?? []) {
-      for (const t of s.tables ?? []) {
-        columnsByTable.set(tableKey(db.databaseName, s.schema, t.table), t.columns ?? []);
-      }
-    }
-  }
 
   const models: SemanticModelV2[] = [];
   for (const db of databases) {
@@ -246,38 +179,6 @@ export function deriveSemanticModels(
           ? { column: temporal[0].name, label: humanizeName(temporal[0].name) }
           : undefined;
 
-        // Declared relationships on this table → to-one references + referenced dimensions.
-        const references: SemanticReferenceToOne[] = relationships
-          .filter((r) =>
-            r.connection === db.databaseName &&
-            (r.schema ?? '') === (s.schema ?? '') &&
-            r.table === t.table &&
-            r.column && r.targetTable && r.targetColumn &&
-            !isSelfJoin(r),
-          )
-          .map((r) => ({
-            source: { kind: 'table' as const, table: r.targetTable, ...(r.targetSchema ? { schema: r.targetSchema } : {}) },
-            alias: r.targetTable,
-            relationship: r.relationship ?? ('many_to_one' as const),
-            joinType: 'LEFT' as const,
-            on: [{ primaryColumn: r.column, referencedColumn: r.targetColumn }],
-          }));
-        for (const ref of references) {
-          if (ref.source.kind !== 'table') continue;
-          const targetCols = columnsByTable.get(tableKey(db.databaseName, ref.source.schema ?? undefined, ref.source.table)) ?? [];
-          for (const c of targetCols) {
-            const kind = classifyColumn(c);
-            if (kind === 'dimension' || kind === 'time') {
-              dimensions.push({
-                name: `${humanizeName(ref.alias)} ${humanizeName(c.name)}`,
-                column: c.name,
-                source: ref.alias,
-                ...(kind === 'time' ? { temporal: true } : {}),
-              });
-            }
-          }
-        }
-
         models.push({
           name: stubNames.get(tableKey(db.databaseName, s.schema, t.table)) ?? humanizeName(t.table),
           connection: db.databaseName,
@@ -285,31 +186,10 @@ export function deriveSemanticModels(
           timeDimension,
           dimensions,
           measures,
-          ...(references.length > 0 ? { references } : {}),
         });
       }
     }
   }
 
   return models;
-}
-
-/** Config-gate validation for authored relationships (save-time, whitelist UI). */
-export function validateTableRelationships(relationships: TableRelationship[] | undefined): string[] {
-  const errors: string[] = [];
-  for (const [i, r] of (relationships ?? []).entries()) {
-    const at = `Relationship ${i + 1} (${r.table || '?'} → ${r.targetTable || '?'})`;
-    if (!r.connection) errors.push(`${at}: missing connection`);
-    if (!r.table) errors.push(`${at}: missing table`);
-    if (!r.column) errors.push(`${at}: missing foreign-key column`);
-    if (!r.targetTable) errors.push(`${at}: missing target table`);
-    if (!r.targetColumn) errors.push(`${at}: missing target column`);
-    if (r.relationship && r.relationship !== 'many_to_one' && r.relationship !== 'one_to_one') {
-      errors.push(`${at}: relationship must be many_to_one or one_to_one`);
-    }
-    if (isSelfJoin(r)) {
-      errors.push(`${at}: self-joins are not supported — the lookup must be a different table`);
-    }
-  }
-  return errors;
 }

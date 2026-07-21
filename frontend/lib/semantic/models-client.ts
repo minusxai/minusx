@@ -5,7 +5,7 @@
  * Models are derived per request, scoped to the tables in play — never stored
  * on the context content (multi-MB on large workspaces; see derive.ts).
  * Responses are cached per (path, connection, tables) for the session; the
- * vocabulary only changes when the schema or relationships change, and a
+ * vocabulary only changes when the schema changes, and a
  * page reload is acceptable staleness for that.
  */
 

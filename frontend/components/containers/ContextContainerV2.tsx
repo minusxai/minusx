@@ -27,7 +27,6 @@ import {
   resolveVersionWhitelist,
   convertDatabaseContextToWhitelist,
 } from '@/lib/context/context-utils';
-import { validateTableRelationships } from '@/lib/semantic/derive';
 import { applyContextContentChange } from '@/lib/context/version-edit';
 
 interface ContextContainerV2Props {
@@ -217,7 +216,6 @@ export default function ContextContainerV2({
       docs: sourceVersion.docs.map((doc: DocEntry) => ({ ...doc, childPaths: doc.childPaths ? [...doc.childPaths] : undefined })),
       metrics: sourceVersion.metrics ? JSON.parse(JSON.stringify(sourceVersion.metrics)) : undefined,
       annotations: sourceVersion.annotations ? JSON.parse(JSON.stringify(sourceVersion.annotations)) : undefined,
-      relationships: sourceVersion.relationships ? JSON.parse(JSON.stringify(sourceVersion.relationships)) : undefined,
       views: sourceVersion.views ? JSON.parse(JSON.stringify(sourceVersion.views)) : undefined,
       semanticModels: sourceVersion.semanticModels ? JSON.parse(JSON.stringify(sourceVersion.semanticModels)) : undefined,
       createdAt: new Date().toISOString(),
@@ -297,15 +295,6 @@ export default function ContextContainerV2({
     } catch (err) {
       console.error('Validation failed:', err);
       setSaveError(err instanceof Error ? err.message : 'Validation failed');
-      return;
-    }
-
-    // Declared relationships must be complete before they persist (the loader
-    // derives semantic joins from them and trusts what is saved).
-    const relationshipIssues = (currentContent.versions ?? [])
-      .flatMap(v => validateTableRelationships(v.relationships));
-    if (relationshipIssues.length > 0) {
-      setSaveError(relationshipIssues[0] + (relationshipIssues.length > 1 ? ` (+${relationshipIssues.length - 1} more)` : ''));
       return;
     }
 
@@ -409,7 +398,6 @@ export default function ContextContainerV2({
       docs: currentVersionContent.docs,
       metrics: currentVersionContent.metrics,
       annotations: currentVersionContent.annotations,
-      relationships: currentVersionContent.relationships,
       views: currentVersionContent.views,
       semanticModels: currentVersionContent.semanticModels,
       published: currentContent.published // Ensure published is always present

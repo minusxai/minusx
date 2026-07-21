@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { Box, VStack, Text } from '@chakra-ui/react';
-import type { TableAnnotation, MetricDef, TableRelationship } from '@/lib/types';
+import type { TableAnnotation, MetricDef } from '@/lib/types';
 import SchemaTreeSearchBar from './SchemaTreeSearchBar';
 import SchemaTreeSummaryBar from './SchemaTreeSummaryBar';
 import SchemaTreeSchemaRow from './SchemaTreeSchemaRow';
@@ -72,13 +72,6 @@ interface SchemaTreeViewProps {
   /** Inherited metrics (read-only). */
   inheritedMetrics?: MetricDef[];
 
-  // Relationships (per-table FK lookups, edited inline in the tree)
-  /** All context relationships. */
-  relationships?: TableRelationship[];
-  /** When provided, relationships become editable and edits are emitted here. */
-  onRelationshipsChange?: (next: TableRelationship[]) => void;
-  /** Inherited relationships (read-only). */
-  inheritedRelationships?: TableRelationship[];
 }
 
 const TABLES_PER_PAGE = 25;
@@ -105,9 +98,6 @@ export default function SchemaTreeView({
   metrics = [],
   onMetricsChange,
   inheritedMetrics = [],
-  relationships = [],
-  onRelationshipsChange,
-  inheritedRelationships = [],
 }: SchemaTreeViewProps) {
   const annotationsEditable = !!onAnnotationsChange;
 
@@ -535,10 +525,6 @@ export default function SchemaTreeView({
                 metrics={metrics}
                 onMetricsChange={onMetricsChange}
                 inheritedMetrics={inheritedMetrics}
-                relationships={relationships}
-                onRelationshipsChange={onRelationshipsChange}
-                inheritedRelationships={inheritedRelationships}
-                allTables={schemas.flatMap((s) => s.tables.map((t) => ({ schema: s.schema, table: t.table, columns: t.columns })))}
                 expandedSchemas={expandedSchemas}
                 expandedTables={expandedTables}
                 isSchemaWhitelisted={isSchemaWhitelisted}

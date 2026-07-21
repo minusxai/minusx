@@ -22,7 +22,8 @@ import React, { useState } from 'react';
 import { Box, VStack, HStack, Text, Button, Input, Textarea, Icon } from '@chakra-ui/react';
 import { LuPlus, LuTrash2, LuBoxes, LuTriangleAlert } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
-import { exposedColumns } from '@/lib/types/views';
+import { exposedColumns, VIEWS_SCHEMA } from '@/lib/types/views';
+import { deriveSemanticModels } from '@/lib/semantic/derive';
 import type {
   DatabaseWithSchema, ViewDef,
   SemanticModelV2, SemanticSource, SemanticReference, SemanticMetricV2,
@@ -237,6 +238,32 @@ export default function SemanticModelsEditor({
             <SourceSelect label={`semantic-model-${i}-primary-source`} options={options}
               value={encodeSource(m.primary)}
               onChange={(v) => patchModel(i, { primary: decodeSource(v) ?? { kind: 'table', table: '' } })} />
+            {primaryColumns.length > 0 && m.dimensions.length === 0 && m.measures.length === 0 && (
+              <Button aria-label={`semantic-model-${i}-prefill`} size="xs" variant="outline"
+                onClick={() => {
+                  // Draft-suggestion engine: derive dims/measures/time axis from
+                  // the primary's profiled columns as a starting point.
+                  const draft = deriveSemanticModels([{
+                    databaseName: m.connection,
+                    schemas: [{
+                      schema: m.primary.kind === 'table' ? (m.primary.schema ?? '') : VIEWS_SCHEMA,
+                      tables: [{
+                        table: m.primary.kind === 'table' ? m.primary.table : m.primary.view,
+                        columns: primaryColumns,
+                      }],
+                    }],
+                  }])[0];
+                  if (draft) {
+                    patchModel(i, {
+                      dimensions: draft.dimensions,
+                      measures: draft.measures,
+                      ...(draft.timeDimension ? { timeDimension: draft.timeDimension } : {}),
+                    });
+                  }
+                }}>
+                Prefill fields
+              </Button>
+            )}
             {hasM2M && (
               <HStack gap={1}>
                 <Text fontSize="xs" color="fg.muted" flexShrink={0}>Primary key (required for many-to-many):</Text>
@@ -262,7 +289,16 @@ export default function SemanticModelsEditor({
                       onChange={(v) => patchRef(j, { ...r, source: decodeSource(v) ?? { kind: 'table', table: '' } })} />
                     <Input aria-label={`semantic-model-${i}-reference-${j}-alias`} size="sm" fontFamily="mono" maxW="140px"
                       value={r.alias} placeholder="alias"
-                      onChange={(e) => patchRef(j, { ...r, alias: e.target.value })} />
+                      onChange={(e) => {
+                        // Cascade the rename: dimensions carry the alias in
+                        // `source`, so renaming without this leaves them
+                        // dangling and the save gate rejects the whole model.
+                        const next = e.target.value;
+                        patchModel(i, {
+                          references: refs.map((x, k) => (k === j ? { ...x, alias: next } : x)),
+                          dimensions: m.dimensions.map((d) => (d.source === r.alias ? { ...d, source: next } : d)),
+                        });
+                      }} />
                     <select aria-label={`semantic-model-${i}-reference-${j}-relationship`} style={selectStyle}
                       value={r.relationship}
                       onChange={(e) => {

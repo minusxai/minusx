@@ -214,4 +214,31 @@ describe('SemanticModelsEditor — view mode', () => {
     expect(screen.queryByLabelText('add-semantic-model')).toBeNull();
     expect(screen.queryByLabelText('semantic-model-0-name')).toBeNull();
   });
+
+  it('prefill: derives draft dimensions/measures from the primary table schema', async () => {
+    const { onChange } = renderEditor({ models: [{
+      name: 'Orders', connection: 'warehouse',
+      primary: { kind: 'table', schema: 'mxfood', table: 'orders' },
+      dimensions: [], measures: [], metrics: [],
+    }] });
+    const btn = await screen.findByLabelText('semantic-model-0-prefill');
+    fireEvent.click(btn);
+    expect(onChange).toHaveBeenCalled();
+    const next = onChange.mock.calls[0][0][0];
+    // Derived from the orders columns fixture: a dimension and SUM/AVG measures.
+    expect(next.dimensions.length).toBeGreaterThan(0);
+    expect(next.measures.some((ms: { agg: string }) => ms.agg === 'SUM')).toBe(true);
+  });
+
+
+  it('renaming a reference alias cascades to dimensions that use it', () => {
+    const { onChange } = renderEditor();
+    fireEvent.change(screen.getByLabelText('semantic-model-0-reference-0-alias'), { target: { value: 'buyer' } });
+    const next = onChange.mock.calls[0][0][0];
+    expect(next.references[0].alias).toBe('buyer');
+    // 'Customer Name' pointed at the old alias 'customer' — it must follow,
+    // or the save gate rejects the model with a dangling-source error.
+    expect(next.dimensions.find((d: { name: string }) => d.name === 'Customer Name').source).toBe('buyer');
+  });
+
 });

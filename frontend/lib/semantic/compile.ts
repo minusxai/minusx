@@ -312,14 +312,23 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
   // Filters → flat AND conditions. Filters on a FILTER-ONLY m2m alias become
   // semi-joins (`pk IN (bridge lookup)`) — grouped-m2m and ordinary filters
   // stay dimension-level conditions (grouped-m2m ones qualify by the CTE).
-  const semiJoinFilters = new Map<string, Array<{ column: string; operator: string; value?: unknown }>>();
+  type FarFilter = { column: string; operator: string; value?: unknown };
+  const semiJoinFilters = new Map<string, FarFilter[]>();
+  const groupedM2MFilters = new Map<string, FarFilter[]>();
   const conditions: FilterCondition[] = [];
   for (const f of spec.filters ?? []) {
     const dim = findDimension(model, f.dimension)!;
-    if (m2mByAlias.has(dim.source) && !groupedM2M.has(dim.source)) {
-      const list = semiJoinFilters.get(dim.source) ?? [];
+    if (m2mByAlias.has(dim.source)) {
+      // m2m filters NEVER become outer conditions: a filter-only alias compiles
+      // to a semi-join, and a GROUPED alias filters inside its dedup CTE. An
+      // outer condition would drag the filter column into the CTE's DISTINCT
+      // projection, widening the grain from (pk, groupedCol) to
+      // (pk, groupedCol, filterCol) — two far rows sharing the grouped value
+      // then double-count one primary row inside its group.
+      const target = groupedM2M.has(dim.source) ? groupedM2MFilters : semiJoinFilters;
+      const list = target.get(dim.source) ?? [];
       list.push({ column: dim.column, operator: f.operator, value: f.value });
-      semiJoinFilters.set(dim.source, list);
+      target.set(dim.source, list);
       continue;
     }
     const { column, table } = resolveDimension(f.dimension);
@@ -331,6 +340,17 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     });
   }
 
+  /** WHERE fragment over the FAR table of an m2m reference (shared by both forms). */
+  const farWhere = (farName: string, filters: FarFilter[]): string =>
+    filters.map((f) => {
+      const lhs = `${farName}.${f.column}`;
+      if (f.operator === 'IN') {
+        const values = Array.isArray(f.value) ? f.value : [f.value];
+        return `${lhs} IN (${values.map(formatSqlValue).join(', ')})`;
+      }
+      return `${lhs} ${f.operator} ${formatSqlValue(f.value)}`;
+    }).join(' AND ');
+
   // Semi-joins: one `primary.pk IN (SELECT bridge.pk … WHERE …)` per
   // filter-only m2m reference. Independent semi-joins compose (AND).
   for (const [alias, filters] of semiJoinFilters) {
@@ -339,18 +359,10 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     const farName = sourceTableName(ref.source);
     const pOn = ref.through.primaryOn[0];
     const rOn = ref.through.referencedOn[0];
-    const where = filters.map((f) => {
-      const lhs = `${farName}.${f.column}`;
-      if (f.operator === 'IN') {
-        const values = Array.isArray(f.value) ? f.value : [f.value];
-        return `${lhs} IN (${values.map(formatSqlValue).join(', ')})`;
-      }
-      return `${lhs} ${f.operator} ${formatSqlValue(f.value)}`;
-    }).join(' AND ');
     conditions.push({
       raw_column: `${baseName}.${pOn.primaryColumn}`,
       operator: 'IN',
-      raw_value: `(SELECT ${bridgeName}.${pOn.bridgeColumn} FROM ${sourceSqlName(ref.through.source)} JOIN ${sourceSqlName(ref.source)} ON ${bridgeName}.${rOn.bridgeColumn} = ${farName}.${rOn.referencedColumn} WHERE ${where})`,
+      raw_value: `(SELECT ${bridgeName}.${pOn.bridgeColumn} FROM ${sourceSqlName(ref.through.source)} JOIN ${sourceSqlName(ref.source)} ON ${bridgeName}.${rOn.bridgeColumn} = ${farName}.${rOn.referencedColumn} WHERE ${farWhere(farName, filters)})`,
     });
   }
 
@@ -369,10 +381,16 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
       })),
     }));
 
-  // Grouped m2m → dedup-bridge CTE + LEFT join at the primary's grain (§5,
-  // execution-verified): one row per (pk, dim value) by construction, so no
-  // within-group double counting; LEFT keeps unmatched primaries as a NULL
-  // group. DISTINCT also absorbs duplicate bridge rows.
+  // Grouped m2m → dedup-bridge CTE joined at the primary's grain (§5,
+  // execution-verified). The CTE projects ONLY the grouped dimension columns,
+  // so DISTINCT yields exactly one row per (pk, dim value) — no within-group
+  // double counting, and duplicate bridge rows are absorbed.
+  //
+  // Filters on the alias live INSIDE the CTE (never as outer conditions): that
+  // keeps the projection — and therefore the grain — independent of what is
+  // filtered. A filtered alias joins INNER (the filter restricts the primary
+  // set, matching semi-join semantics for filter-only m2m); an unfiltered one
+  // joins LEFT, keeping unmatched primaries as a NULL group.
   const ctes: CTE[] = [];
   for (const alias of groupedM2M) {
     const ref = m2mByAlias.get(alias)!;
@@ -381,18 +399,20 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     const pOn = ref.through.primaryOn[0];
     const rOn = ref.through.referencedOn[0];
     const cteName = `_m2m_${alias}`;
-    const usedColumns = [...new Set(
-      [...spec.dimensions, ...(spec.filters ?? []).map((f) => f.dimension)]
+    const groupedColumns = [...new Set(
+      spec.dimensions
         .map((n) => findDimension(model, n)!)
         .filter((d) => d.source === alias)
         .map((d) => d.column),
     )];
+    const aliasFilters = groupedM2MFilters.get(alias) ?? [];
+    const cteWhere = aliasFilters.length > 0 ? ` WHERE ${farWhere(farName, aliasFilters)}` : '';
     ctes.push({
       name: cteName,
-      raw_sql: `SELECT DISTINCT ${bridgeName}.${pOn.bridgeColumn} AS _pk, ${usedColumns.map((c) => `${farName}.${c} AS ${c}`).join(', ')} FROM ${sourceSqlName(ref.through.source)} JOIN ${sourceSqlName(ref.source)} ON ${bridgeName}.${rOn.bridgeColumn} = ${farName}.${rOn.referencedColumn}`,
+      raw_sql: `SELECT DISTINCT ${bridgeName}.${pOn.bridgeColumn} AS _pk, ${groupedColumns.map((c) => `${farName}.${c} AS ${c}`).join(', ')} FROM ${sourceSqlName(ref.through.source)} JOIN ${sourceSqlName(ref.source)} ON ${bridgeName}.${rOn.bridgeColumn} = ${farName}.${rOn.referencedColumn}${cteWhere}`,
     });
     joins.push({
-      type: 'LEFT',
+      type: aliasFilters.length > 0 ? 'INNER' : 'LEFT',
       table: { table: cteName },
       on: [{
         left_table: baseName,
