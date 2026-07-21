@@ -26,7 +26,12 @@ const nextConfig: NextConfig = {
   // checking. (Next 16 no longer runs eslint during build.) eslint-disable:
   // next.config reads process.env by design.
   // eslint-disable-next-line no-restricted-syntax
-  typescript: { ignoreBuildErrors: process.env.NEXT_SKIP_TYPECHECK === 'true' },
+  typescript: {
+    ignoreBuildErrors: process.env.NEXT_SKIP_TYPECHECK === 'true',
+    // Build-only tsconfig that excludes tests (validate covers them) —
+    // keeps the in-build type-check within default heap on small CI runners.
+    tsconfigPath: 'tsconfig.build.json',
+  },
   // Embed git commit SHA and build time at build time — available as process.env.* everywhere
   env: {
     GIT_COMMIT_SHA,

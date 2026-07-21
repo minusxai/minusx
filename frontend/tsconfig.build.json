@@ -1,0 +1,19 @@
+{
+  // Used only by `next build`'s type-check pass (next.config.ts →
+  // typescript.tsconfigPath). Excludes test files: they're fully type-checked
+  // by `npm run validate` (tsconfig.json), and dropping them cuts the build
+  // type-check's memory footprint by ~400MB — enough to matter on small CI
+  // runners where V8's default heap cap is ~2GB.
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    ".next",
+    "test",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/*.ui.test.tsx"
+  ]
+}
