@@ -12,8 +12,8 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import ViewWorkbench from '@/components/context/ViewWorkbench';
 import * as storeModule from '@/store/store';
 import { setQueryResult } from '@/store/queryResultsSlice';
-import { setEdit } from '@/store/filesSlice';
-import type { ViewDef } from '@/lib/types';
+import { selectDirtyFiles, setEdit } from '@/store/filesSlice';
+import type { QuestionContent, ViewDef } from '@/lib/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 const ZONE_REVENUE: ViewDef = {
@@ -112,7 +112,18 @@ describe('ViewWorkbench', () => {
       return { ok: true, text: async () => '', json: async () => ({}) };
     });
     vi.stubGlobal('fetch', fetchMock);
-    const { onSave } = setup({ view: ZONE_REVENUE });
+    const { onSave, testStore } = setup({ view: ZONE_REVENUE });
+
+    let virtualId: number | undefined;
+    await waitFor(() => {
+      virtualId = Object.values(testStore.getState().files.files)
+        .find(f => f.id < 0)?.id;
+      expect(virtualId).toBeDefined();
+    });
+    act(() => {
+      testStore.dispatch(setEdit({ fileId: virtualId!, edits: { query: 'SELECT 2 AS x' } }));
+    });
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(1);
 
     fireEvent.change(await screen.findByLabelText('View name'), { target: { value: 'zone_revenue' } });
     fireEvent.click(screen.getByLabelText('Save view'));
@@ -120,9 +131,11 @@ describe('ViewWorkbench', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     const prepareCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/views/prepare'))!;
     const body = JSON.parse(prepareCall[1].body as string);
-    expect(body).toMatchObject({ name: 'zone_revenue', connection: 'warehouse', sql: ZONE_REVENUE.sql });
+    expect(body).toMatchObject({ name: 'zone_revenue', connection: 'warehouse', sql: 'SELECT 2 AS x' });
     // the snapshot comes back from the server, not from the client
     expect(onSave.mock.calls[0][0]).toMatchObject({ columns: [{ name: 'x', type: 'BIGINT' }] });
+    expect(testStore.getState().files.files[virtualId!]).toBeUndefined();
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(0);
     vi.unstubAllGlobals();
   });
 
@@ -155,7 +168,7 @@ describe('ViewWorkbench', () => {
     });
     await waitFor(() => {
       const virtual = testStore.getState().files.files[virtualId!];
-      expect(virtual?.persistableChanges?.viz).toEqual(viz);
+      expect((virtual?.persistableChanges as Partial<QuestionContent> | undefined)?.viz).toEqual(viz);
     });
     fireEvent.click(screen.getByLabelText('Save view'));
 

@@ -20,7 +20,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, VStack, HStack, Text, Button, Input } from '@chakra-ui/react';
 import { LuSave, LuTriangleAlert, LuTrash2 } from 'react-icons/lu';
 import QuestionContainerV2 from '@/components/containers/QuestionContainerV2';
-import { setFile, selectMergedContent } from '@/store/filesSlice';
+import { setFile, selectMergedContent, removeVirtualFile } from '@/store/filesSlice';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { createDefaultTableViz } from '@/lib/data/story/template-defaults';
 import type { DbFile, QuestionContent, ViewColumn, ViewDef } from '@/lib/types';
@@ -120,12 +120,16 @@ export default function ViewWorkbench({
         ...(view?.whitelistedColumns ? { whitelistedColumns: view.whitelistedColumns } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
       });
+      // The question editor is only a scratch surface for authoring the view.
+      // Once its contents have been copied into the context, remove it so the
+      // global dirty-file selector cannot report it as an unrelated change.
+      dispatch(removeVirtualFile(fileId));
     } catch {
       setError('Could not save the view');
     } finally {
       setSaving(false);
     }
-  }, [contextPath, connection, name, description, edited, view, onSave]);
+  }, [contextPath, connection, name, description, edited, view, onSave, dispatch, fileId]);
 
   const canSave = !!name.trim() && !!edited?.query?.trim() && !saving;
 

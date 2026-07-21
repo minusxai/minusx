@@ -699,6 +699,27 @@ const filesSlice = createSlice({
     },
 
     /**
+     * Remove a client-only virtual file without touching a real file that may
+     * share its synthetic path. Used for short-lived editor scratch files.
+     */
+    removeVirtualFile(state, action: PayloadAction<FileId>) {
+      const id = action.payload;
+      if (id >= 0 || !state.files[id]) return;
+
+      delete state.files[id];
+
+      Object.entries(state.pathIndex).forEach(([path, indexedId]) => {
+        if (indexedId === id) delete state.pathIndex[path];
+      });
+
+      Object.values(state.files).forEach(file => {
+        if (file.references.includes(id)) {
+          file.references = file.references.filter(refId => refId !== id);
+        }
+      });
+    },
+
+    /**
      * Add a new file/folder to Redux cache
      * Updates parent folder to include the new file in references
      */
@@ -908,6 +929,7 @@ export const {
   updateFileContent,
   setFolderInfo,
   deleteFile,
+  removeVirtualFile,
   addFile,
   addQuestionToDashboard,
   addTextBlockToDashboard,
