@@ -12,13 +12,21 @@
  * stamped DOM is render output only; new-format stories persist JSX source, never DOM.
  */
 import React from 'react';
-import type { JsxNode } from '@/lib/jsx';
+import type { JsxNode, JsxElement } from '@/lib/jsx';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
 
 export interface StoryInterpreterOptions {
   /** Component registry: shadcn components + embeds. Unknown component tags render nothing. */
   components: Record<string, React.ComponentType<Record<string, unknown>>>;
+  /**
+   * Optional per-element decoration hook, called with every rendered element node (the built
+   * React element, its AST node, and its AST path). The WYSIWYG editor uses it to wrap text
+   * hosts with contenteditable + the render-during-edit freeze. The returned node replaces
+   * the element in the tree — implementations must keep `element`'s key (it carries the AST
+   * path) on whatever they return.
+   */
+  decorateElement?: (element: React.ReactElement, node: JsxElement, path: string) => React.ReactNode;
 }
 
 /** JSX attr names → React prop names for HTML tags (agents author HTML spellings). */
@@ -66,7 +74,8 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   const type = (Component ?? node.tag.toLowerCase()) as React.ElementType;
   // Void HTML elements must not receive children (React throws).
   const kids = children.length > 0 ? children : undefined;
-  return React.createElement(type, { ...props, key: path }, ...(kids ?? []));
+  const element = React.createElement(type, { ...props, key: path }, ...(kids ?? []));
+  return options.decorateElement ? options.decorateElement(element, node, path) : element;
 }
 
 function buildProps(

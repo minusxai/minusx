@@ -191,8 +191,11 @@ describe('AgentHtml format="jsx" — embed adapters mount the SAME embed compone
   });
 });
 
-describe('AgentHtml format="jsx" — WYSIWYG disabled (read-only render path)', () => {
-  it('serialize() returns null and editable never sets contenteditable on a jsx story', async () => {
+describe('AgentHtml format="jsx" — WYSIWYG scoping (component chrome stays locked)', () => {
+  // Scoped contenteditable + write-back behavior is covered in story-jsx-edit.ui.test.tsx;
+  // this guards the LOCKED side: an all-component story has no HTML text hosts, so editable
+  // mode makes nothing editable, and serialize() reports "no pending edits" (null).
+  it('serialize() returns null with no edits, and component chrome never gets contenteditable', async () => {
     const ref = createRef<AgentHtmlHandle>();
     render(
       <AgentHtml

@@ -244,7 +244,8 @@ export class Screenshot extends MXTool<typeof ReviewFileParams, RemoteAnalystCon
 
 // ─── ClarifyFrontend ─────────────────────────────────────────────────────────
 // Schema matches `registerFrontendTool('ClarifyFrontend', ...)` at line 382 —
-// handler reads `question`, `options[{label, description?}]`, `multiSelect?`.
+// handler reads `question`, `options[{label, description?, value?, imageUrl?}]`, `multiSelect?`,
+// and the optional `type` preset ('design' → app-supplied theme options).
 // Naming: we expose the LLM-visible name as `ClarifyFrontend` (matches the
 // frontend handler exactly, no spawn-wrapper needed). The server-side `Clarify`
 // spawns into `ClarifyFrontend`; v2 short-circuits the spawn since the
@@ -254,8 +255,13 @@ const ClarifyFrontendParams = Type.Object({
   options: Type.Array(Type.Object({
     label: Type.String({ description: 'Short label shown on the option button.' }),
     description: Type.Optional(Type.String({ description: 'Longer description shown beneath the label.' })),
-  }), { description: 'Multiple-choice options the user can select from.' }),
+    value: Type.Optional(Type.String({ description: 'Machine value returned when this option is picked (defaults to the label).' })),
+    imageUrl: Type.Optional(Type.String({ description: 'Preview image URL — when present, options render as image cards.' })),
+  }), { description: "Multiple-choice options the user can select from. Ignored when `type: 'design'` (pass [])." }),
   multiSelect: Type.Optional(Type.Boolean({ description: 'Allow selecting more than one option (default false).' })),
+  type: Type.Optional(Type.Literal('design', {
+    description: "Preset picker. 'design' shows the story design-theme picker: the app supplies the six theme options (with preview images) itself — pass `options: []`. The result returns the chosen theme's value and its personality description.",
+  })),
 });
 
 export class ClarifyFrontend extends MXTool<typeof ClarifyFrontendParams, RemoteAnalystContext> {

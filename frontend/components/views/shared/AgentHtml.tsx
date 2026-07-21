@@ -13,7 +13,7 @@ import { mountStorySurface, type StorySurface, type StorySurfaceKind } from '@/l
 import StoryEmbeds, {
   type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget, type StoryQuestionEditRequest,
 } from '@/components/views/shared/StoryEmbeds';
-import StoryJsxBody from '@/components/views/shared/StoryJsxBody';
+import StoryJsxBody, { type StoryJsxEditApi } from '@/components/views/shared/StoryJsxBody';
 import { STORY_FLOATING_CSS } from '@/lib/story-ui';
 import StorySelectionPopover from '@/components/views/story/StorySelectionPopover';
 import { paramFromPlaceholderEl, type StoryParam } from '@/lib/data/story/story-params';
@@ -28,7 +28,8 @@ interface AgentHtmlProps {
    * Story body format. Undefined (default) = legacy sanitized-HTML path (placeholder embeds).
    * 'jsx' = new-format story (Story_Design_V2 §2): `html` carries STATIC JSX source, parsed and
    * rendered through the lib/story-ui interpreter into the same nested-in-iframe React root the
-   * legacy path uses for embeds (see StoryJsxBody). WYSIWYG editing is disabled for jsx bodies.
+   * legacy path uses for embeds (see StoryJsxBody). WYSIWYG edits commit by AST write-back
+   * (applyDomEditsToJsx) — the DOM is render output, never scraped into the file.
    */
   format?: 'jsx';
   /** Fixed logical canvas width in px (the agent authors against it). */
@@ -121,6 +122,8 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   const [inlineTargets, setInlineTargets] = useState<InlineChartTarget[]>([]);
   const [numberTargets, setNumberTargets] = useState<NumberTarget[]>([]);
   const [paramTargets, setParamTargets] = useState<ParamTarget[]>([]);
+  // Jsx WYSIWYG: pending-edit access into StoryJsxBody (AST write-back) for serialize().
+  const jsxEditApiRef = useRef<StoryJsxEditApi | null>(null);
 
   const isJsx = format === 'jsx';
   // Legacy path: sanitize + innerHTML-inject. Jsx path: the raw source IS the body input — it is
@@ -371,6 +374,9 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
             onParamValuesChange={onParamValuesChange}
             filePath={filePath}
             colorMode={colorMode}
+            editable={editable && !readOnly}
+            onChange={onChange}
+            editApiRef={jsxEditApiRef}
           />,
           surfaceRoot,
         ),
@@ -432,8 +438,8 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   // embeds locked as atomic, non-editable islands. Runs after the doc + targets exist.
   useEffect(() => {
     const root = surfaceRef.current?.root;
-    // Jsx stories: WYSIWYG is disabled (AST write-back is a follow-up) — React owns the DOM, so
-    // contenteditable must never be turned on under it.
+    // Jsx stories manage their own scoped contenteditable via React props (StoryJsxBody) —
+    // this DOM-level pass is legacy-only (mutating attributes under React would be clobbered).
     if (!root || isJsx) return;
     Array.from(root.children).forEach(el => {
       if (el.tagName === 'STYLE' || el.hasAttribute('data-mx-embed-root')) return;
@@ -479,9 +485,10 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   // Read the edited story back out as a clean content.story string.
   useImperativeHandle(ref, () => ({
     serialize: () => {
-      // Jsx stories serialize via AST write-back (follow-up) — the DOM is render output, never
-      // the source of truth, so DOM serialization would corrupt the file. Report "no edit".
-      if (isJsx) return null;
+      // Jsx stories serialize via AST write-back (StoryJsxBody → applyDomEditsToJsx): the
+      // current source with pending edits applied, or null when nothing was edited. The DOM
+      // is render output, never the source of truth — no DOM scraping.
+      if (isJsx) return jsxEditApiRef.current?.serialize() ?? null;
       const root = surfaceRef.current?.root;
       return root ? serializeEditedStory(root, []) : null;
     },

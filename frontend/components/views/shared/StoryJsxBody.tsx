@@ -15,13 +15,21 @@
  * `data-*` placeholders resolve to (SmartEmbeddedQuestionContainer / EmbeddedQuestionContainer /
  * InlineNumber / StoryParamControl). Chart rendering is never reimplemented here.
  *
- * WYSIWYG editing is intentionally absent: the jsx render path is read-only for now (AgentHtml's
- * serialize() returns null for jsx stories); AST write-back is a follow-up.
+ * WYSIWYG editing (Story_Design_V2 §2): with `editable`, HTML text hosts (direct non-whitespace
+ * text, no component/embed descendants — isEditableTextHost) render contenteditable; component
+ * chrome stays locked. A blur after REAL user input commits by AST write-back
+ * (applyDomEditsToJsx against the CURRENT `jsx` prop, with the full accumulated edit set so
+ * sequential edits compose) and emits the new source via `onChange`. While a host has focus its
+ * rendered subtree is FROZEN (the last element is returned by reference, so React bails out of
+ * reconciling it) — an upstream re-render (param change, embed refetch) can never clobber typing.
  */
-import { createContext, useContext, useMemo, useState, type ComponentType } from 'react';
+import {
+  createContext, memo, useContext, useEffect, useMemo, useState,
+  cloneElement, type ComponentType, type ReactElement, type RefObject, type FocusEvent, type FormEvent,
+} from 'react';
 import { Box } from '@chakra-ui/react';
 
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { parseJsx, type JsxNode, type JsxElement } from '@/lib/jsx';
 import {
   STORY_UI_COMPONENTS, TooltipProvider, renderStoryNodes, AST_PATH_ATTR,
 } from '@/lib/story-ui';
@@ -37,6 +45,7 @@ import { numberFromJsxAttrs } from '@/lib/data/story/story-number';
 import {
   paramFromJsxAttrs, storyParamToQuestionParameter, type StoryParam,
 } from '@/lib/data/story/story-params';
+import { applyDomEditsToJsx, isEditableTextHost } from '@/lib/data/story/jsx-edit';
 import { envelopeVizType } from '@/lib/viz/viz-templates';
 import type { QuestionParameter } from '@/lib/types';
 
@@ -60,7 +69,101 @@ export interface StoryJsxBodyProps {
   filePath?: string;
   /** The story surface's color mode — pins the embedded chart stack's theme (see StoryEmbeds). */
   colorMode?: 'light' | 'dark';
+  /** WYSIWYG edit mode: text hosts become contenteditable (component chrome stays locked). */
+  editable?: boolean;
+  /** Fired with the updated JSX SOURCE after each blur-commit (AST write-back, never DOM scrape). */
+  onChange?: (story: string) => void;
+  /** Imperative pending-edit access for AgentHtml's serialize() handle. */
+  editApiRef?: RefObject<StoryJsxEditApi | null>;
 }
+
+export interface StoryJsxEditApi {
+  /** The current source with all pending edits applied — null when there is nothing to commit. */
+  serialize: () => string | null;
+}
+
+/**
+ * Mutable WYSIWYG session shared between the render-time decorator and the host handlers.
+ * ONE stable instance per body; ALL mutable state lives in the factory's closure (an
+ * imperative subsystem beside React, like a store), so handlers captured by a frozen host
+ * always read live state and commits always run against the CURRENT source prop.
+ */
+interface EditSession {
+  /** Sync the latest props in (post-commit, before any user event can fire). */
+  setProps: (jsx: string, onChange?: (story: string) => void) => void;
+  /** True while `path` is the focused host — its rendered subtree must stay frozen. */
+  isEditing: (path: string) => boolean;
+  onFocus: (path: string, el: HTMLElement) => void;
+  onInput: () => void;
+  onBlur: () => void;
+  /** Current source with all pending edits applied; null when there is nothing to commit. */
+  serialize: () => string | null;
+}
+
+function createEditSession(): EditSession {
+  let jsx = '';
+  let onChange: ((story: string) => void) | undefined;
+  let active: { path: string; el: HTMLElement; snapshot: string; userEdited: boolean } | null = null;
+  // Committed edits (astPath → innerHTML), ALL re-applied against the CURRENT source prop on
+  // every commit — sequential edits compose even though the rendered AST stays the original's.
+  const edits = new Map<string, string>();
+  const asEdits = (m: Map<string, string>) => [...m].map(([astPath, innerHtml]) => ({ astPath, innerHtml }));
+  return {
+    setProps(nextJsx, nextOnChange) {
+      jsx = nextJsx;
+      onChange = nextOnChange;
+    },
+    isEditing: (path) => active?.path === path,
+    onFocus(path, el) {
+      active = { path, el, snapshot: el.innerHTML, userEdited: false };
+    },
+    onInput() {
+      if (active) active.userEdited = true;
+    },
+    onBlur() {
+      const a = active;
+      active = null;
+      // Real user input only (the legacy userEdited gate): programmatic focus churn from
+      // embeds mounting/unmounting must never echo a serialization into the file.
+      if (!a || !a.userEdited || a.el.innerHTML === a.snapshot) return;
+      edits.set(a.path, a.el.innerHTML);
+      onChange?.(applyDomEditsToJsx(jsx, asEdits(edits)).source);
+    },
+    serialize() {
+      // Committed edits + the in-progress one (Save can land before the host blurs).
+      const pending = new Map(edits);
+      if (active && active.userEdited && active.el.innerHTML !== active.snapshot) {
+        pending.set(active.path, active.el.innerHTML);
+      }
+      if (pending.size === 0) return null;
+      return applyDomEditsToJsx(jsx, asEdits(pending)).source;
+    },
+  };
+}
+
+/**
+ * Wraps a text host with scoped contenteditable. The memo comparator IS the render-during-edit
+ * guard (§2): while this host has focus (`session.isEditing(path)`) it reports props "equal",
+ * so React bails out and never reconciles the focused subtree — an upstream re-render (param
+ * change, embed refetch) cannot clobber in-progress typing. Handlers are gated to the editing
+ * host itself (`target === currentTarget`) so bubbled focus/input from nested markup — or, with
+ * nested hosts, from the outer editing host — never double-commits.
+ */
+const EditableTextHost = memo(function EditableTextHost({ path, session, children }: {
+  path: string;
+  session: EditSession;
+  children: ReactElement<Record<string, unknown>>;
+}) {
+  const gate = <E extends { target: EventTarget; currentTarget: EventTarget }>(fn: (e: E) => void) =>
+    (e: E) => { if (e.target === e.currentTarget) fn(e); };
+  return cloneElement(children, {
+    contentEditable: true,
+    suppressContentEditableWarning: true,
+    onFocus: gate((e: FocusEvent<HTMLElement>) => session.onFocus(path, e.currentTarget)),
+    onInput: gate((_e: FormEvent<HTMLElement>) => session.onInput()),
+    onBlur: gate((_e: FocusEvent<HTMLElement>) => session.onBlur()),
+  });
+}, (_prev, next) => next.session.isEditing(next.path));
 
 /** Shared embed context: what every adapter needs beyond its own JSX attrs. */
 interface StoryJsxEmbedContextValue {
@@ -219,9 +322,33 @@ function collectStoryParams(nodes: JsxNode[]): StoryParam[] {
 const NO_NODES: JsxNode[] = [];
 
 export default function StoryJsxBody({
-  doc, jsx, readOnly, paramValues, onParamValuesChange, filePath, colorMode,
+  doc, jsx, readOnly, paramValues, onParamValuesChange, filePath, colorMode, editable, onChange, editApiRef,
 }: StoryJsxBodyProps) {
   const parsed = useMemo(() => parseJsx(jsx), [jsx]);
+
+  // ── WYSIWYG edit session ─────────────────────────────────────────────────────────────────
+  // One stable session per body; the latest source/callback are synced in (post-commit, before
+  // any user event can fire) so handlers captured inside frozen, cached elements always commit
+  // against the current props.
+  const session = useMemo(() => createEditSession(), []);
+  useEffect(() => {
+    session.setProps(jsx, onChange);
+  }, [session, jsx, onChange]);
+
+  useEffect(() => {
+    if (!editApiRef) return;
+    editApiRef.current = { serialize: () => session.serialize() };
+    return () => { editApiRef.current = null; };
+  }, [editApiRef, session]);
+
+  // Text hosts get contenteditable + the render-during-edit freeze; everything else is locked
+  // by default (only decorated hosts ever carry contentEditable under the interpreter).
+  const decorateElement = editable
+    ? (element: ReactElement, node: JsxElement, path: string) =>
+        isEditableTextHost(node)
+          ? <EditableTextHost key={path} path={path} session={session}>{element as ReactElement<Record<string, unknown>>}</EditableTextHost>
+          : element
+    : undefined;
   const nodes = parsed.ok ? parsed.nodes : NO_NODES;
   const storyParams = useMemo(() => collectStoryParams(nodes), [nodes]);
   const externalParameters = useMemo(
@@ -255,7 +382,7 @@ export default function StoryJsxBody({
     <StoryEmbedProviders doc={doc} colorMode={colorMode}>
       <StoryJsxEmbedContext.Provider value={ctx}>
         <TooltipProvider>
-          {renderStoryNodes(nodes, { components: STORY_JSX_REGISTRY })}
+          {renderStoryNodes(nodes, { components: STORY_JSX_REGISTRY, decorateElement })}
         </TooltipProvider>
       </StoryJsxEmbedContext.Provider>
     </StoryEmbedProviders>

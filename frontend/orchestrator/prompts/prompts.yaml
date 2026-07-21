@@ -752,7 +752,7 @@ templates:
 
       Every story, from scratch or from a dashboard, follows the same loop:
 
-      1. **Clarify** with the user (via the `clarify` tool). Settle three things: the **look/tone** (immersive editorial vs clean board-ready), the **audience and goal**, and the **scope/data** to cover. Infer what you reasonably can and just confirm.
+      1. **Clarify** with the user (via the `clarify` tool). Settle three things: the **look/feel**, the **audience and goal**, and the **scope/data** to cover. For look/feel, call clarify with `type: 'design'` and `options: []` — the app shows the design-theme picker itself and the result returns the chosen theme's value plus its personality description. If the user answers "Figure it out", choose the theme yourself from the story's content and audience. Infer what you reasonably can and just confirm.
       2. **Build** the story (Procedures, section 4): find the lead, storyboard the beats, write the shadcn JSX.
       3. **Review** it and judge it as the intended reader. Every EditFile already returns the screenshot + full rubric (LLM visual review included); call ReviewFile when you want a fresh grade without editing.
       4. **Fix and improve.** ALWAYS fix every `error` finding (any error gates `overall` to 0), then work through the `warn`s, applying each finding's `fix`, and raise the `overall` score. Repeat. **Do not stop until every `error` is cleared AND `overall` is at least 4.** Keep going past that only if it still looks off.

@@ -190,8 +190,8 @@ An item is checked only when its tests exist, went red before implementation, an
 - [ ] Sanitization tests (hostile code-view user): `on*`, `dangerouslySetInnerHTML`, `ref`/`key`, `formAction`, `srcDoc`, `is`, style injection blocked; every URL-carrying attribute (`href`, `src`, `srcset`, `xlinkHref`, `ping`) scheme-filtered and fuzzed (`java\tscript:`, mixed-case, entity-encoded, unicode confusables); real component usage passes.
 - [ ] Embeds regression: `Question`/`Number`/`Param` render, execute, edit exactly as before; embed views consume theme tokens.
 - [ ] `validateJsxSource`: new allowlist (registry + HTML allowlist + embeds); `legacy: true` from `data-c` attribute detection; red test: legacy re-save validates, new story with old names rejects.
-- [ ] WYSIWYG: scoped `contenteditable` (chrome locked, text hosts editable), commit on blur, children-level AST write-back through `validateJsxSource` + deny list; hostile-paste test (`onclick`/`<iframe>`/`javascript:` sanitized out); round-trip test including a bolded word.
-- [ ] Render-during-edit guard: a focused text host's subtree is frozen against upstream re-renders; forced re-render commits first. Test: trigger a Redux update (embed refetch) mid-edit → typed text survives.
+- [x] WYSIWYG: scoped `contenteditable` (chrome locked, text hosts editable), commit on blur, children-level AST write-back through `validateJsxSource` + deny list; hostile-paste test (`onclick`/`<iframe>`/`javascript:` sanitized out); round-trip test including a bolded word.
+- [x] Render-during-edit guard: a focused text host's subtree is frozen against upstream re-renders; forced re-render commits first. Test: trigger a Redux update (embed refetch) mid-edit → typed text survives.
 - [ ] `TW_INPUT` preamble + neutral defaults; base sheet from registry source unioned with per-story candidates.
 - [ ] Prompt/schema rewrite: per-component docs deleted, ~3-line contract in; `--st-accent` removed; Vega-always prompt rule in `skill_stories` + `skill_questions` (data visuals are `<Question>`+`<viz>` embeds, never HTML/CSS approximations) and the `ReviewFile` rubric line "no hand-drawn charts — all data visuals are live embeds" (§7).
 - [ ] E2E via faux LLM: agent authors a shadcn story; renders interactively; saves; reloads identically.
@@ -216,10 +216,10 @@ An item is checked only when its tests exist, went red before implementation, an
 - [ ] Per-theme font assets (extending Phase 2's mechanism); preview-generation script (`frontend/scripts/`, Playwright over a canonical fragment); six PNGs committed to `public/story-themes/<name>.png`.
 
 ### Phase 4 — Clarify + theme picker
-- [ ] Option schema gains `imageUrl` + real `value`; threaded through `user-input-exception.ts`, `clarify.ts`, `ClarifyDisplay.tsx`, `clarify-answer-stash.ts`.
-- [ ] `UserInputComponent.tsx` card-grid branch; radio/checkbox, "Other", "Figure it out" preserved; `getOptionKey` uses real `value`.
-- [ ] `type:'design'` preset: options populated from the registry; result returns theme `name` via `value`.
-- [ ] Prompt wiring: new story / look-feel question → Clarify `type:'design'`.
+- [x] Option schema gains `imageUrl` + real `value`; threaded through `user-input-exception.ts`, `clarify.ts`, `ClarifyDisplay.tsx`, `clarify-answer-stash.ts`.
+- [x] `UserInputComponent.tsx` card-grid branch; radio/checkbox, "Other", "Figure it out" preserved; `getOptionKey` uses real `value`.
+- [x] `type:'design'` preset: options populated (TEMPORARY hardcoded §5 list in `lib/branding/story-theme-options.ts` until Phase 3's `story-themes.ts` registry lands); result returns theme `name` via `value` plus its personality `description`.
+- [x] Prompt wiring: new story / look-feel question → Clarify `type:'design'`.
 - [ ] E2E via faux LLM: design Clarify → card pick → `<theme>` written → themed render in next screenshot.
 
 ### Phase 5 — headless capture

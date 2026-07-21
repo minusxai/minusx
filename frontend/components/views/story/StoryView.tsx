@@ -75,9 +75,10 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
   // lib/story-ui interpreter (AgentHtml format="jsx"); anything else is the legacy HTML path.
   const storyFormat = content.format === 'jsx' ? ('jsx' as const) : undefined;
   const canEdit = !readOnly && numericId !== undefined;
-  // WYSIWYG (contenteditable) editing is HTML-path only for now; jsx stories render read-only
-  // (AST write-back is a follow-up) — the agent/JSON tab remain the edit paths.
-  const editing = canEdit && headerEditMode && storyFormat !== 'jsx';
+  // WYSIWYG editing works on both paths: legacy HTML edits serialize from the DOM
+  // (serializeEditedStory); jsx stories commit by AST write-back (applyDomEditsToJsx via
+  // AgentHtml/StoryJsxBody) — the onChange contract is identical either way.
+  const editing = canEdit && headerEditMode;
 
   // Inline <Number> query editing opens the full SqlEditor in a light-DOM modal (Monaco can't live
   // in the story iframe). The story's path feeds schema/connection autocomplete.
