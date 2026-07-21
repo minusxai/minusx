@@ -27,7 +27,7 @@ import { VizTypeSelector, isClassicVizType } from '@/components/question/VizType
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
 import { QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
-import { paramTypeMap, syncParametersWithSQL } from '@/lib/sql/sql-params';
+import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { connectionTypeToDialect } from '@/lib/types';
@@ -84,7 +84,7 @@ export default function NotebookSqlCell({
     executed?.query ?? '',
     executed?.params ?? EMPTY_PARAMS,
     executed?.database ?? '',
-    { skip: !executed, parameterTypes: paramTypeMap(cell.parameters ?? undefined) },
+    { skip: !executed },
   );
 
   const mergedParameters = useMemo(() => cell.parameters ?? [], [cell.parameters]);

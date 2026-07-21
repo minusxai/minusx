@@ -122,12 +122,6 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
   };
   const executedSpreadsheet = queryToExecute.spreadsheet;
 
-  // Build a name→type map from the declared parameters so asyncpg can coerce date strings
-  const parameterTypes = useMemo(() => {
-    if (!mergedContent?.parameters?.length) return undefined;
-    return Object.fromEntries(mergedContent.parameters.map(p => [p.name, p.type])) as Record<string, 'text' | 'number' | 'date'>;
-  }, [mergedContent?.parameters]);
-
   // Per-file cache SWR windows (content.cachePolicy) — forwarded so /api/query honors them.
   // Memoized on the field values so the query effect isn't re-fired by an unstable object identity.
   const cachePolicy = mergedContent?.cachePolicy;
@@ -168,7 +162,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
     queryToExecute.query,
     queryToExecute.params,
     queryToExecute.database,
-    { skip: !!executedSpreadsheet || !queryToExecute.query || (!!file?.draft && !lastExecuted), parameterTypes, filePath: file?.path, cachePolicy: cachePolicyOpt }
+    { skip: !!executedSpreadsheet || !queryToExecute.query || (!!file?.draft && !lastExecuted), filePath: file?.path, cachePolicy: cachePolicyOpt }
   );
   const spreadsheetResult = useSpreadsheetResult(executedSpreadsheet, {
     skip: !executedSpreadsheet || (!!file?.draft && !lastExecuted),
@@ -234,11 +228,11 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
     // in-flight request (queryPromiseManager keyed by query/params/db), so it's one hit.
     if (opts?.force) {
       getQueryResult(
-        { ...newQuery, parameterTypes, filePath: file?.path },
+        { ...newQuery, filePath: file?.path },
         { forceLoad: true },
       ).catch(() => { /* error already lands in Redux */ });
     }
-  }, [mergedContent, fileId, dispatch, urlParamOverrides, parameterTypes, file?.path]);
+  }, [mergedContent, fileId, dispatch, urlParamOverrides, file?.path]);
 
   // Auto-execute once per mount with current mergedContent (includes persistableChanges).
   // Using a ref (not lastExecuted) as the guard so every fresh mount runs the current query —

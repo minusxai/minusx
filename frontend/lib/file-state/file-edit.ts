@@ -16,7 +16,7 @@ import { fileToMarkup, markupToContent } from '@/lib/data/story/file-markup';
 import { shapeContextForAgent, foldContextAgentView } from '@/lib/context/context-agent-view';
 import { extractStoryParams, lintStoryParams, lintDashboardParams, lintStoryParamSources, type EmbeddedQuestion } from '@/lib/data/story/story-params';
 import { extractSavedQuestionIds, extractInlineQuestions } from '@/lib/data/story/story-question';
-import { paramTypeMap, buildQueryParamValues } from '@/lib/sql/sql-params';
+import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import type { FileState, FileType, DbFile, QuestionContent } from '@/lib/types';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { getQueryResult } from '@/lib/file-state/query-results';
@@ -127,11 +127,10 @@ export async function replaceFileState(fileId: number, targetFileObj: { name?: s
         console.warn('[replaceFileState] Spreadsheet validation failed:', materialized.errors);
       }
     } else if (finalContent?.query && finalContent?.connection_name) {
-      const types = paramTypeMap(finalContent.parameters);
       // Canonical params (effective + None-coerced) so the stored key matches the augmentation lookup.
       const params = buildQueryParamValues(finalContent.parameters ?? [], finalContent.parameterValues ?? {}, {});
       try {
-        await getQueryResult({ query: finalContent.query, params, parameterTypes: types, database: finalContent.connection_name, filePath: fileState.path, fileId, fileVersion: fileState.version });
+        await getQueryResult({ query: finalContent.query, params, database: finalContent.connection_name, filePath: fileState.path, fileId, fileVersion: fileState.version });
         getStore().dispatch(setEphemeral({
           fileId: fileId as FileId,
           changes: {
