@@ -9,7 +9,10 @@ import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
 import { AGENT_IFRAME_CSP } from '@/lib/html/agent-iframe-csp';
 import { serializeEditedStory } from '@/lib/html/serialize-story';
 import { collectStoryFontImports, resolveImportFontCss } from '@/lib/html/resolve-story-fonts';
-import { mountStorySurface, type StorySurface, type StorySurfaceKind } from '@/lib/story-surface';
+import {
+  mountStorySurface, autoSizeStorySurface, STORY_FLUID_SHIM_CSS,
+  type StorySurface, type StorySurfaceKind,
+} from '@/lib/story-surface';
 import StoryEmbeds, {
   type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget, type StoryQuestionEditRequest,
 } from '@/components/views/shared/StoryEmbeds';
@@ -226,23 +229,15 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     embedRoot.style.display = 'none';
     doc.body.appendChild(embedRoot);
 
-    // Fluid (mobile) shim: cap fixed-width chart embeds / media to the viewport so the authored layout
-    // reflows instead of overflowing. Appended last so it wins ties. Never touches <canvas>.
+    // Fluid (mobile) shim: cap fixed-width chart embeds / media to the container so the authored
+    // layout reflows instead of overflowing (STORY_FLUID_SHIM_CSS — the other half of the surface's
+    // width contract). Appended last so it wins ties. Into the surface root, not the body: on the
+    // SVG surface the shim must sit inside the serialized subtree or a capture would render without
+    // it (uncapped chart widths).
     if (fluid) {
       const shim = doc.createElement('style');
       shim.setAttribute('data-mx-fluid-shim', '');
-      shim.textContent =
-        // Block chart embeds — saved (data-question-id) AND inline (data-question-inline). The inline
-        // selector was missing, so an inline chart authored wider than the viewport (e.g. width:1100px)
-        // overflowed the canvas and got cut off with the chat panel open; cap it like the saved kind.
-        '[data-question-id],[data-question-inline]{max-width:100%!important;width:100%!important;min-width:0!important}' +
-        // Inline numbers live in prose — clamp their max-width without forcing block width.
-        '[data-number-inline]{max-width:100%!important}' +
-        // Belt-and-braces: never let the authored document force horizontal scroll/cutoff of the page.
-        'img,svg,video,table,pre{max-width:100%!important}img,video{height:auto!important}' +
-        'html,body{max-width:100%!important;overflow-x:hidden!important}';
-      // Into the surface root, not the body: on the SVG surface the shim must sit inside the
-      // serialized subtree or a capture would render without it (uncapped chart widths).
+      shim.textContent = STORY_FLUID_SHIM_CSS;
       surface.root.appendChild(shim);
     }
 
@@ -324,27 +319,11 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setParamTargets(paramsFound);
 
-    // Content-driven height: keep the iframe as tall as its content (no inner scrollbar).
-    // On the SVG surface there's an extra link in the chain — an <svg> does NOT auto-size to its
-    // foreignObject content (it would sit at the 150px default), so the measured height must be
-    // pushed into the svg+foreignObject before the iframe is sized to it.
-    let ro: ResizeObserver | undefined;
-    const syncHeight = () => {
-      const s = surfaceRef.current;
-      if (height !== undefined || !iframeRef.current || !docRef.current || !s) return;
-      const contentHeight = s.measureHeight();
-      s.applyHeight(contentHeight);
-      iframeRef.current.style.height = `${contentHeight}px`;
-    };
-    syncHeight();
-    if (height === undefined && typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(syncHeight);
-      ro.observe(surface.root);
-      // The body lives in another document, where ResizeObserver delivery is not guaranteed.
-      // Observing the iframe element itself (same-document) makes pane-width changes (side-chat
-      // toggle) — which rewrap the fluid story to a different content height — always resync.
-      ro.observe(iframe);
-    }
+    // Keep the surface sized to its container — as wide as the iframe (fluid only), as tall as its
+    // content — at mount and on every later resize (side-chat toggle, window resize). The whole
+    // sizing contract (order, fluid gating, ResizeObserver wiring) lives in lib/story-surface, where
+    // the real-browser guard (scripts/story-width-matrix.ts) drives it directly.
+    const disposeAutoSize = autoSizeStorySurface({ surface, iframe, doc, fluid, fixedHeight: height });
 
     // Re-mirror app styles whenever the iframe tree mutates — emotion injects each tile's styles lazily
     // (into the MAIN document.head) only when that tile mounts; mirrorAppStyles copies them across.
@@ -358,7 +337,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     const timers = [250, 1500, 3000].map(ms => window.setTimeout(() => { if (docRef.current) mirrorAppStyles(docRef.current); }, ms));
 
     return () => {
-      ro?.disconnect();
+      disposeAutoSize();
       observer.disconnect();
       if (debounce) window.clearTimeout(debounce);
       timers.forEach(t => window.clearTimeout(t));

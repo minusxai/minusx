@@ -1,5 +1,10 @@
 /**
- * Three-engine capture matrix (Story_Design_V2 §4/§11 Phase 2) — the gate for snapdom removal.
+ * Three-engine browser matrix (Story_Design_V2 §4/§11 Phase 2) — the gate for snapdom removal, and
+ * the home of every property that only a REAL layout engine can assert. Two suites run here:
+ *  1. the CAPTURE matrix (below) — serialize → data: URL → <img> → canvas, on every fixture shape;
+ *  2. the FLUID-WIDTH guard (scripts/story-width-matrix.ts) — the story must lay out at the width
+ *     the reader actually has, at first paint and after a resize, and the capture must match it.
+ * Both run under `npm run capture-matrix`; the process exits non-zero if either fails.
  *
  * Drives the REAL serialization-capture modules (lib/screenshot/serialize-element.ts,
  * lib/story-surface/serialize.ts svgToImage, lib/data/story/banned-css.ts), esbuild-bundled and
@@ -19,6 +24,7 @@ import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { chromium, webkit, firefox, type BrowserType } from '@playwright/test';
+import { WIDTH_BUNDLE_ENTRY, WIDTH_FIXTURES, runWidthChecks } from './story-width-matrix';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -119,6 +125,9 @@ const FIXTURES: Record<string, string> = {
       <div class="keep" style="width:120px;height:60px">kept</div>
     </div>`),
 };
+
+/** Capture fixtures + the fluid-width guard's fixtures, served from the one origin. */
+const ALL_FIXTURES: Record<string, string> = { ...FIXTURES, ...WIDTH_FIXTURES };
 
 function serve(port: number, handler: http.RequestListener): Promise<http.Server> {
   const server = http.createServer(handler);
@@ -247,6 +256,10 @@ async function runEngine(browserType: BrowserType, base: string): Promise<CheckR
       detail: 'noImport=' + noImport + ' noExternal=' + noExternal + ' noFixed=' + noFixed + ' kept=' + keptRendered };
   }`);
 
+  // The fluid-width guard runs on the same context/engine (its fixtures are served from the same
+  // map and drive the same bundle).
+  results.push(...await runWidthChecks(ctx, base));
+
   await browser.close();
   return results;
 }
@@ -260,6 +273,7 @@ async function main(): Promise<void> {
         import { svgToImage } from '@/lib/story-surface/serialize';
         import { sanitizeCssText } from '@/lib/data/story/banned-css';
         (window as unknown as { __matrix: object }).__matrix = { serializeElementToSvg, svgToImage, sanitizeCssText };
+        ${WIDTH_BUNDLE_ENTRY}
       `,
       resolveDir: ROOT,
       loader: 'ts',
@@ -278,7 +292,7 @@ async function main(): Promise<void> {
       res.end(bundleJs);
       return;
     }
-    const fixture = FIXTURES[req.url ?? ''];
+    const fixture = ALL_FIXTURES[req.url ?? ''];
     if (fixture) {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(fixture);

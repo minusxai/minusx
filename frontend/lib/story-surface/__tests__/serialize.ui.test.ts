@@ -194,6 +194,29 @@ describe('serializeStorySvg — self-contained root', () => {
     expect(img.getAttribute('src')).toBe('/hero.png');
   });
 
+  // CAPTURE PARITY (Story_Design_V2 §4 "no fidelity fork"): the serialized SVG's intrinsic size is
+  // its width/height ATTRIBUTES, while every capture site derives its output box from the LIVE svg's
+  // element box. A surface pinned wider than the container the user sees would serialize that wider
+  // layout — the agent's screenshot would show content the reader cannot. So whatever width the
+  // surface was told to apply must be exactly what the serialized root carries.
+  it('carries the APPLIED (user-visible) width — not a logical canvas width', async () => {
+    const { svg } = makeSvg();
+    const fo = svg.querySelector('foreignObject')!;
+    svg.setAttribute('width', '1280'); // mounted at the logical canvas width…
+    fo.setAttribute('width', '1280');
+    svg.setAttribute('height', '0');
+    // …then the fluid caller pushes the measured container width in (mountStorySurface().applyWidth).
+    svg.setAttribute('width', '1104');
+    fo.setAttribute('width', '1104');
+    svg.setAttribute('height', '600');
+    const out = await serializeStorySvg(svg);
+    expect(out).toMatch(/<svg[^>]*\swidth="1104"/);
+    expect(out).toMatch(/<foreignObject[^>]*\swidth="1104"/);
+    // The explicit-size stamp must NOT fire here (attrs are present) — jsdom's zero-sized
+    // getBoundingClientRect would otherwise overwrite the applied width with 0.
+    expect(out).not.toMatch(/<svg[^>]*\swidth="0"/);
+  });
+
   it('stamps live form values into the serialized copy (fixup pass)', async () => {
     const { svg, root } = makeSvg();
     (root.querySelector('#live-input') as HTMLInputElement).value = 'hello';
