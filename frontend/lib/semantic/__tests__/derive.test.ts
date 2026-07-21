@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { deriveSemanticModels, deriveModelStubs, classifyColumn, humanizeName, validateTableRelationships, mirrorRelationshipView, normalizeRelationshipView } from '../derive';
 import { detectSemanticQuery } from '../detect-sql';
-import type { DatabaseWithSchema, SemanticModel, TableRelationship } from '@/lib/types';
+import type { DatabaseWithSchema, SemanticModelV2, TableRelationship } from '@/lib/types';
 
 const col = (name: string, type: string, category?: 'categorical' | 'numeric' | 'temporal' | 'text' | 'other') =>
   category ? { name, type, meta: { category } } : { name, type };
@@ -49,8 +49,8 @@ const ORDERS_REL: TableRelationship[] = [{
   relationship: 'many_to_one',
 }];
 
-const modelFor = (models: SemanticModel[], table: string) => {
-  const m = models.find((x) => x.table === table);
+const modelFor = (models: SemanticModelV2[], table: string) => {
+  const m = models.find((x) => x.primary.kind === 'table' && x.primary.table === table);
   expect(m, `expected a derived model for ${table}`).toBeTruthy();
   return m!;
 };
@@ -104,12 +104,16 @@ describe('deriveSemanticModels — vocabulary', () => {
   it('derives one model per table with columns', () => {
     const m = models();
     expect(m).toHaveLength(2);
-    expect(modelFor(m, 'orders')).toMatchObject({ name: 'Orders', connection: 'warehouse', schema: 'public' });
+    expect(modelFor(m, 'orders')).toMatchObject({
+      name: 'Orders',
+      connection: 'warehouse',
+      primary: { kind: 'table', schema: 'public', table: 'orders' },
+    });
   });
 
   it('categorical/text columns become dimensions; ids become dimensions too', () => {
     const orders = modelFor(models(), 'orders');
-    const dimCols = orders.dimensions.filter((d) => !d.join).map((d) => d.column);
+    const dimCols = orders.dimensions.filter((d) => d.source === 'primary').map((d) => d.column);
     expect(dimCols).toContain('status');
     expect(dimCols).toContain('id');
     expect(dimCols).toContain('customer_id');
@@ -153,28 +157,26 @@ describe('deriveSemanticModels — vocabulary', () => {
     expect([...byName.values()].some((me) => me.agg === 'SUM' && me.column === 'customer_id')).toBe(false);
   });
 
-  it('declared relationships become LEFT lookup joins with the target dims join-qualified', () => {
+  it('declared relationships become LEFT lookup references with the target dims alias-qualified', () => {
     const orders = modelFor(models(), 'orders');
-    expect(orders.joins).toEqual([{
-      table: 'customers',
-      schema: 'public',
+    expect(orders.references).toEqual([{
+      source: { kind: 'table', table: 'customers', schema: 'public' },
       alias: 'customers',
-      type: 'LEFT',
       relationship: 'many_to_one',
-      leftColumn: 'customer_id',
-      rightColumn: 'id',
+      joinType: 'LEFT',
+      on: [{ primaryColumn: 'customer_id', referencedColumn: 'id' }],
     }]);
-    const joined = orders.dimensions.filter((d) => d.join === 'customers');
+    const joined = orders.dimensions.filter((d) => d.source === 'customers');
     expect(joined.map((d) => d.column)).toEqual(expect.arrayContaining(['name', 'segment']));
     expect(joined.find((d) => d.column === 'segment')?.name).toBe('Customers Segment');
-    // the lookup's own model has no joins (relationship is declared on orders)
-    expect(modelFor(models(), 'customers').joins ?? []).toEqual([]);
+    // the lookup's own model has no references (relationship is declared on orders)
+    expect(modelFor(models(), 'customers').references ?? []).toEqual([]);
   });
 
-  it('relationship scoping: only the owning table gets the join', () => {
+  it('relationship scoping: only the owning table gets the reference', () => {
     const rels: TableRelationship[] = [{ ...ORDERS_REL[0], table: 'nonexistent' }];
     const m = deriveSemanticModels([ORDERS], rels);
-    expect(modelFor(m, 'orders').joins ?? []).toEqual([]);
+    expect(modelFor(m, 'orders').references ?? []).toEqual([]);
   });
 
   it('disambiguates duplicate table names across schemas', () => {
@@ -283,7 +285,7 @@ describe('validateTableRelationships', () => {
 
   it('derivation ignores self-join relationships defensively', () => {
     const models = deriveSemanticModels([ORDERS], [{ ...base, targetTable: 'orders', targetColumn: 'id' }]);
-    expect(models.find((m) => m.table === 'orders')?.joins ?? []).toEqual([]);
+    expect(modelFor(models, 'orders').references ?? []).toEqual([]);
   });
 });
 

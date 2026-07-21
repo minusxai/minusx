@@ -10,7 +10,7 @@
  */
 
 import type { AnyQueryIR } from '@/lib/sql/ir-types';
-import type { SemanticModel } from '@/lib/types/semantic';
+import type { SemanticModelV2 } from '@/lib/types/semantic';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
 import { semanticSpecFromIr } from './detect';
@@ -22,7 +22,7 @@ import { semanticSpecFromIr } from './detect';
  */
 export async function detectSemanticQuery(
   sql: string,
-  models: SemanticModel[],
+  models: SemanticModelV2[],
   dialect: string,
 ): Promise<SemanticQuerySpec | null> {
   if (!sql.trim() || models.length === 0) return null;

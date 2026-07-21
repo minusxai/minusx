@@ -91,6 +91,44 @@ describe('semantic model save gate (tier 1)', () => {
     ).rejects.toThrow(/share one namespace/i);
   });
 
+  it('tier 2: compile-probes every metric on save (an uncompilable metric blocks)', async () => {
+    // A ratio metric that survives a hypothetical weaker tier-1 but must be
+    // compile-probed: numerator names a METRIC (not a measure) — tier-1 catches
+    // this too, but the assertion locks that the save path reports it.
+    const bad = model({
+      metrics: [
+        { name: 'Half Revenue', type: 'sql', sql: 'SUM(primary.total) / 2' },
+        { name: 'Broken', type: 'ratio', numerator: 'Half Revenue', denominator: 'Revenue' },
+      ],
+    });
+    await expect(
+      FilesAPI.saveFile(contextId, 'context', '/org/context', content([bad]) as never, [], admin),
+    ).rejects.toThrow(/Half Revenue|measure/);
+  });
+
+  it('tier 2: a model whose ONLY dimensions are m2m still saves (probe must not pick an m2m dimension)', async () => {
+    // m2m compilation is deferred — the tier-2 probe must skip m2m-sourced
+    // dimensions or a perfectly valid model becomes unsaveable.
+    const m2mOnly = model({
+      primaryKey: ['zone_name'],
+      references: [{
+        source: { kind: 'table', schema: 'mxfood', table: 'orders' },
+        alias: 'tagged',
+        relationship: 'many_to_many',
+        through: {
+          source: { kind: 'table', schema: 'mxfood', table: 'orders' },
+          primaryOn: [{ primaryColumn: 'zone_name', bridgeColumn: 'zone_name' }],
+          referencedOn: [{ bridgeColumn: 'zone_name', referencedColumn: 'zone_name' }],
+        },
+      }],
+      dimensions: [{ name: 'Tagged Zone', source: 'tagged', column: 'zone_name' }],
+      metrics: [{ name: 'Total Revenue', type: 'sql', sql: 'SUM(primary.total)' }],
+    });
+    await expect(
+      FilesAPI.saveFile(contextId, 'context', '/org/context', content([m2mOnly]) as never, [], admin),
+    ).resolves.toBeTruthy();
+  });
+
   it('reverse direction: blocks saving a VIEW named like an existing semantic model', async () => {
     // Model exists in the saved content; adding a clashing view must fail too.
     const v: ViewDef = { name: 'Orders', connection: 'warehouse', sql: 'SELECT 1 AS x' };

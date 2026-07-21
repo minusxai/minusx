@@ -18,9 +18,12 @@ import { compileSemanticQuery } from '../compile';
 import { semanticSpecFromIr } from '../detect';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
-import type { DatabaseWithSchema, SemanticModel, TableRelationship } from '@/lib/types';
+import type { DatabaseWithSchema, SemanticModelV2, TableRelationship } from '@/lib/types';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 import type { AnyQueryIR } from '@/lib/sql/ir-types';
+
+const primaryTable = (m: SemanticModelV2): string =>
+  m.primary.kind === 'table' ? m.primary.table : m.primary.view;
 
 // ---------------------------------------------------------------------------
 // Real schema with DELIBERATELY overlapping column names across the join
@@ -172,15 +175,15 @@ const SPECS: Array<[string, SemanticQuerySpec]> = [
 
 describe('derived models compile to SQL that actually EXECUTES (real DuckDB)', () => {
   let db: DuckDBConnection;
-  let models: SemanticModel[];
-  let spendModel: SemanticModel;
+  let models: SemanticModelV2[];
+  let spendModel: SemanticModelV2;
 
   beforeAll(async () => {
     const instance = await DuckDBInstance.create(':memory:');
     db = await instance.connect();
     await db.run(DDL);
     models = deriveSemanticModels([SCHEMA], RELATIONSHIPS);
-    spendModel = models.find((m) => m.table === 'ad_spend')!;
+    spendModel = models.find((m) => primaryTable(m) === 'ad_spend')!;
   });
 
   afterAll(() => {
@@ -221,7 +224,7 @@ describe('derived models compile to SQL that actually EXECUTES (real DuckDB)', (
   }
 
   it('timeColumn: a NON-default temporal column (end_date) is a valid time axis', async () => {
-    const campaigns = models.find((m) => m.table === 'ad_campaigns')!;
+    const campaigns = models.find((m) => primaryTable(m) === 'ad_campaigns')!;
     const spec: SemanticQuerySpec = {
       model: 'Ad Campaigns', table: 'ad_campaigns', schema: 'mxfood',
       measures: ['Count'], dimensions: [], timeGrain: 'MONTH', timeColumn: 'end_date',

@@ -7,21 +7,24 @@ import { describe, it, expect } from 'vitest';
 import { compileSemanticQuery, validateSemanticQuery, semanticAlias, SemanticCompileError } from '../compile';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
-import type { SemanticModel } from '@/lib/types/semantic';
+import type { SemanticModelV2 } from '@/lib/types/semantic';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 
-const ORDERS_MODEL: SemanticModel = {
+const ORDERS_MODEL: SemanticModelV2 = {
   name: 'Orders',
   connection: 'warehouse',
-  schema: 'analytics',
-  table: 'orders',
+  primary: { kind: 'table', schema: 'analytics', table: 'orders' },
   timeDimension: { column: 'created_at', label: 'Order date' },
   dimensions: [
-    { name: 'Status', column: 'status' },
-    { name: 'Region', column: 'region', join: 'c' },
+    { name: 'Status', source: 'primary', column: 'status' },
+    { name: 'Region', source: 'c', column: 'region' },
   ],
-  joins: [
-    { table: 'customers', schema: 'analytics', alias: 'c', type: 'LEFT', leftColumn: 'customer_id', rightColumn: 'id' },
+  references: [
+    {
+      source: { kind: 'table', schema: 'analytics', table: 'customers' },
+      alias: 'c', relationship: 'many_to_one', joinType: 'LEFT',
+      on: [{ primaryColumn: 'customer_id', referencedColumn: 'id' }],
+    },
   ],
   measures: [
     { name: 'Revenue', agg: 'SUM', column: 'amount' },
@@ -66,7 +69,7 @@ describe('validateSemanticQuery', () => {
 
   it('flags empty measures and timeGrain without a model time dimension', () => {
     expect(validateSemanticQuery(spec({ measures: [] }), ORDERS_MODEL).join('; ')).toMatch(/measure/i);
-    const noTime: SemanticModel = { ...ORDERS_MODEL, timeDimension: undefined };
+    const noTime: SemanticModelV2 = { ...ORDERS_MODEL, timeDimension: undefined };
     expect(validateSemanticQuery(spec({ timeGrain: 'MONTH' }), noTime).join('; ')).toMatch(/time/i);
   });
 });

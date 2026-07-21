@@ -18,29 +18,36 @@ import { semanticSpecFromIr } from '../detect';
 import { detectSemanticQuery } from '../detect-sql';
 import { compileSemanticQuery } from '../compile';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
-import type { SemanticModel } from '@/lib/types/semantic';
+import type { SemanticModelV2 } from '@/lib/types/semantic';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 
 // ---------------------------------------------------------------------------
 // Fixtures: two models on the same connection + a schemaless one
 // ---------------------------------------------------------------------------
 
-const ORDERS: SemanticModel = {
+const ORDERS: SemanticModelV2 = {
   name: 'Orders',
   connection: 'warehouse',
-  schema: 'mxfood',
-  table: 'orders',
+  primary: { kind: 'table', schema: 'mxfood', table: 'orders' },
   timeDimension: { column: 'created_at' },
   dimensions: [
-    { name: 'Status', column: 'status' },
-    { name: 'Platform', column: 'platform' },
-    { name: 'Is Subscription', column: 'is_subscription' },
-    { name: 'Region', column: 'region', join: 'c' },
-    { name: 'Customer Tier', column: 'tier', join: 'c' },
+    { name: 'Status', source: 'primary', column: 'status' },
+    { name: 'Platform', source: 'primary', column: 'platform' },
+    { name: 'Is Subscription', source: 'primary', column: 'is_subscription' },
+    { name: 'Region', source: 'c', column: 'region' },
+    { name: 'Customer Tier', source: 'c', column: 'tier' },
   ],
-  joins: [
-    { table: 'customers', schema: 'mxfood', alias: 'c', relationship: 'many_to_one', leftColumn: 'customer_id', rightColumn: 'id' },
-    { table: 'zones', schema: 'mxfood', alias: 'z', type: 'INNER', relationship: 'one_to_one', leftColumn: 'zone_id', rightColumn: 'id' },
+  references: [
+    {
+      source: { kind: 'table', schema: 'mxfood', table: 'customers' },
+      alias: 'c', relationship: 'many_to_one',
+      on: [{ primaryColumn: 'customer_id', referencedColumn: 'id' }],
+    },
+    {
+      source: { kind: 'table', schema: 'mxfood', table: 'zones' },
+      alias: 'z', relationship: 'one_to_one', joinType: 'INNER',
+      on: [{ primaryColumn: 'zone_id', referencedColumn: 'id' }],
+    },
   ],
   measures: [
     { name: 'Count', agg: 'COUNT' },
@@ -55,12 +62,12 @@ const ORDERS: SemanticModel = {
   ],
 };
 
-const EVENTS: SemanticModel = {
+const EVENTS: SemanticModelV2 = {
   name: 'Events',
   connection: 'warehouse',
-  table: 'events', // no schema — unqualified table
+  primary: { kind: 'table', table: 'events' }, // no schema — unqualified table
   timeDimension: { column: 'event_ts' },
-  dimensions: [{ name: 'Event Name', column: 'event_name' }],
+  dimensions: [{ name: 'Event Name', source: 'primary', column: 'event_name' }],
   measures: [
     { name: 'Events', agg: 'COUNT' },
     { name: 'Sessions', agg: 'COUNT_DISTINCT', column: 'session_id' },
@@ -121,7 +128,8 @@ const SPECS: Array<[string, SemanticQuerySpec]> = [
 // re-fetch the model on demand — expected specs gain them here.
 const scoped = (spec: SemanticQuerySpec): SemanticQuerySpec => {
   const model = MODELS.find((m) => m.name === spec.model)!;
-  return { ...spec, table: model.table, ...(model.schema ? { schema: model.schema } : {}) };
+  const primary = model.primary as { kind: 'table'; schema?: string; table: string };
+  return { ...spec, table: primary.table, ...(primary.schema ? { schema: primary.schema } : {}) };
 };
 
 // ---------------------------------------------------------------------------

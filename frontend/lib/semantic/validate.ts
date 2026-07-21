@@ -12,8 +12,13 @@
 import type { SemanticModelV2, SemanticReference, SemanticReferenceM2M, SemanticSource } from '@/lib/types/semantic';
 import type { DatabaseWithSchema, ViewDef } from '@/lib/types';
 import { exposedColumns } from '@/lib/types/views';
-import { immutableSet } from '@/lib/utils/immutable-collections';
 import { semanticAlias } from './compile';
+import { lexMetricSql } from './metric-sql';
+
+// The lexer lives in ./metric-sql (shared with the compiler); re-exported here
+// so validation consumers keep one import site.
+export { lexMetricSql } from './metric-sql';
+export type { MetricRef, MetricLexResult } from './metric-sql';
 
 /** What the validator resolves sources against. */
 export interface SemanticModelCtx {
@@ -23,132 +28,6 @@ export interface SemanticModelCtx {
   views: ViewDef[];
   /** Names of OTHER semantic models visible in the tree (excluding this one). */
   otherModelNames?: string[];
-}
-
-/** A qualified `alias.column` reference found in metric SQL. */
-export interface MetricRef {
-  alias: string;
-  column: string;
-}
-
-/** Lexer output for one metric SQL expression. */
-export interface MetricLexResult {
-  /** Qualified `alias.column` refs (outside strings/comments). */
-  refs: MetricRef[];
-  /** Bare identifiers (unqualified) with the exposed fields they could mean. */
-  bare: Array<{ ident: string; candidates: string[] }>;
-  /** True when the SQL contains a quoted (`"…"` / backtick) identifier. */
-  quoted: boolean;
-}
-
-// Common SQL keywords — never treated as bare column refs. Deliberately broad:
-// a keyword wrongly in this list only silences a bare-ref hint (tier 3 still
-// catches real mistakes); a keyword missing from it produces a false positive.
-const SQL_KEYWORDS = immutableSet([
-  'select', 'from', 'where', 'case', 'when', 'then', 'else', 'end', 'and', 'or',
-  'not', 'null', 'is', 'in', 'like', 'ilike', 'between', 'as', 'distinct',
-  'cast', 'interval', 'true', 'false', 'over', 'partition', 'by', 'order',
-  'group', 'having', 'limit', 'asc', 'desc', 'on', 'join', 'left', 'right',
-  'inner', 'outer', 'exists', 'all', 'any', 'nulls', 'first', 'last',
-]);
-
-const IDENT_START = /[A-Za-z_]/;
-const IDENT_CHAR = /[A-Za-z0-9_]/;
-
-/**
- * Comment/string-aware scan of a metric SQL expression.
- * `knownFields` maps a source key ('primary' or a reference alias) to its
- * exposed column names — used only to flag ambiguous bare identifiers.
- */
-export function lexMetricSql(
-  sql: string,
-  knownFields: Map<string, Set<string>>,
-): MetricLexResult {
-  const refs: MetricRef[] = [];
-  const bare: Array<{ ident: string; candidates: string[] }> = [];
-  let quoted = false;
-
-  // Token scan: identifiers + the structural chars we care about ('.', '(').
-  type Tok = { kind: 'ident' | 'dot' | 'lparen' | 'other'; text: string };
-  const toks: Tok[] = [];
-
-  let i = 0;
-  const n = sql.length;
-  while (i < n) {
-    const c = sql[i];
-    // Single-quoted string ('' escapes)
-    if (c === "'") {
-      i++;
-      while (i < n) {
-        if (sql[i] === "'" && sql[i + 1] === "'") { i += 2; continue; }
-        if (sql[i] === "'") { i++; break; }
-        i++;
-      }
-      toks.push({ kind: 'other', text: "'str'" });
-      continue;
-    }
-    // Line comment
-    if (c === '-' && sql[i + 1] === '-') {
-      while (i < n && sql[i] !== '\n') i++;
-      continue;
-    }
-    // Block comment
-    if (c === '/' && sql[i + 1] === '*') {
-      i += 2;
-      while (i < n && !(sql[i] === '*' && sql[i + 1] === '/')) i++;
-      i += 2;
-      continue;
-    }
-    // Quoted identifiers — rejected by policy, just flag their presence.
-    if (c === '"' || c === '`') {
-      quoted = true;
-      const close = c;
-      i++;
-      while (i < n && sql[i] !== close) i++;
-      i++;
-      toks.push({ kind: 'other', text: 'quoted-ident' });
-      continue;
-    }
-    if (IDENT_START.test(c)) {
-      let j = i + 1;
-      while (j < n && IDENT_CHAR.test(sql[j])) j++;
-      toks.push({ kind: 'ident', text: sql.slice(i, j) });
-      i = j;
-      continue;
-    }
-    if (c === '.') { toks.push({ kind: 'dot', text: '.' }); i++; continue; }
-    if (c === '(') { toks.push({ kind: 'lparen', text: '(' }); i++; continue; }
-    if (!/\s/.test(c)) toks.push({ kind: 'other', text: c });
-    i++;
-  }
-
-  const seenBare = new Set<string>();
-  for (let t = 0; t < toks.length; t++) {
-    const tok = toks[t];
-    if (tok.kind !== 'ident') continue;
-    const prev = toks[t - 1];
-    const next = toks[t + 1];
-    if (next?.kind === 'dot' && toks[t + 2]?.kind === 'ident') {
-      // Qualified ref: alias '.' column — consume all three.
-      refs.push({ alias: tok.text, column: toks[t + 2].text });
-      t += 2;
-      continue;
-    }
-    if (prev?.kind === 'dot') continue;              // column side already consumed / stray
-    if (next?.kind === 'lparen') continue;           // function name
-    if (SQL_KEYWORDS.has(tok.text.toLowerCase())) continue;
-    // Bare identifier — flag only when it matches an exposed field somewhere.
-    const candidates: string[] = [];
-    for (const [source, cols] of knownFields) {
-      if (cols.has(tok.text)) candidates.push(`${source}.${tok.text}`);
-    }
-    if (candidates.length > 0 && !seenBare.has(tok.text)) {
-      seenBare.add(tok.text);
-      bare.push({ ident: tok.text, candidates: candidates.sort() });
-    }
-  }
-
-  return { refs, bare, quoted };
 }
 
 const TEMPORAL_TYPE = /date|time/i;

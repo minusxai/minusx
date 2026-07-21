@@ -9,19 +9,19 @@
  * page reload is acceptable staleness for that.
  */
 
-import type { SemanticModel } from '@/lib/types';
+import type { SemanticModelV2 } from '@/lib/types';
 import type { SemanticFieldHit } from '@/lib/semantic/models.server';
 
 export type { SemanticFieldHit };
 
 // eslint-disable-next-line no-restricted-syntax -- module-level session cache; vocabulary is stable per page load
-const cache = new Map<string, Promise<SemanticModel[]>>();
+const cache = new Map<string, Promise<SemanticModelV2[]>>();
 
 export async function fetchScopedModels(
   path: string,
   connection: string,
   tables: string[],
-): Promise<SemanticModel[]> {
+): Promise<SemanticModelV2[]> {
   const wanted = [...new Set(tables)].sort();
   if (!path || !connection || wanted.length === 0) return [];
   const key = `${path}|${connection}|${wanted.join(',')}`;
@@ -33,10 +33,10 @@ export async function fetchScopedModels(
     body: JSON.stringify({ path, connection, tables: wanted }),
   })
     .then((r) => (r.ok ? r.json() : { data: { models: [] } }))
-    .then((body) => (body?.data?.models ?? []) as SemanticModel[])
+    .then((body) => (body?.data?.models ?? []) as SemanticModelV2[])
     .catch(() => {
       cache.delete(key); // don't cache transport failures
-      return [] as SemanticModel[];
+      return [] as SemanticModelV2[];
     });
   cache.set(key, load);
   return load;

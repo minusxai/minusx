@@ -96,14 +96,18 @@ describe('getScopedSemanticModels', () => {
     const models = await getScopedSemanticModels(admin, {
       path: '/org', connection: 'warehouse', tables: ['orders'],
     });
-    expect(models.map((m) => m.table)).toEqual(['orders']);
+    expect(models.map((m) => (m.primary.kind === 'table' ? m.primary.table : m.primary.view))).toEqual(['orders']);
     const orders = models[0];
     expect(orders.name).toBe('Orders');
     expect(orders.timeDimension?.column).toBe('created_at');
-    expect(orders.joins).toEqual([expect.objectContaining({ table: 'users', leftColumn: 'user_id', rightColumn: 'id' })]);
+    expect(orders.references).toEqual([expect.objectContaining({
+      source: expect.objectContaining({ kind: 'table', table: 'users' }),
+      alias: 'users',
+      on: [{ primaryColumn: 'user_id', referencedColumn: 'id' }],
+    })]);
     // join dims come from the target table even though it wasn't requested
     expect(orders.dimensions).toEqual(expect.arrayContaining([
-      expect.objectContaining({ column: 'country', join: 'users' }),
+      expect.objectContaining({ column: 'country', source: 'users' }),
     ]));
   });
 
@@ -119,7 +123,7 @@ describe('getScopedSemanticModels', () => {
     const models = await getScopedSemanticModels(admin, {
       path: '/org', connection: 'warehouse', tables: ['secrets', 'users'],
     });
-    expect(models.map((m) => m.table).sort()).toEqual(['secrets', 'users']);
+    expect(models.map((m) => (m.primary.kind === 'table' ? m.primary.table : m.primary.view)).sort()).toEqual(['secrets', 'users']);
   });
 
   it('searchSemanticFields finds measures and dimensions across every whitelisted table', async () => {

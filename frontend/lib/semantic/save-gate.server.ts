@@ -10,8 +10,10 @@ import 'server-only';
 import { computeSchemaFromWhitelist } from '@/lib/data/loaders/context-loader-utils';
 import { resolveVersionWhitelist, getPublishedVersionForUser } from '@/lib/context/context-utils';
 import { validateSemanticModel } from '@/lib/semantic/validate';
+import { compileSemanticQuery, SemanticCompileError } from '@/lib/semantic/compile';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ContextContent, DatabaseWithSchema, SemanticModelV2, ViewDef } from '@/lib/types';
+import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 
 export class SemanticModelSaveError extends Error {
   issues: string[];
@@ -62,11 +64,44 @@ export async function validateSemanticModelsGate(
         ...models.filter((m) => m !== model).map((m) => m.name),
       ];
       const issues = validateSemanticModel(model, { fullSchema, views, otherModelNames });
+      if (issues.length === 0) issues.push(...compileProbeIssues(model));
       problems.push(...issues.map((i) => `Semantic model "${model.name}": ${i}`));
     }
   }
 
   if (problems.length > 0) throw new SemanticModelSaveError(problems);
+}
+
+/**
+ * Tier 2: compile-probe every metric through the real compiler. Pure and
+ * synchronous — catches structural compile failures tier 1 can't see, and is
+ * the seam the tier-3 dry-run (M4) reuses for its probe specs.
+ */
+function compileProbeIssues(model: SemanticModelV2): string[] {
+  const issues: string[] = [];
+  // Probe dimension = the first NON-m2m dimension. Picking an m2m-sourced one
+  // would make every valid m2m-only-dimension model unsaveable (m2m compiles
+  // in M3), and m2m dims add nothing to metric validation anyway.
+  const m2mAliases = new Set(
+    (model.references ?? []).filter((r) => r.relationship === 'many_to_many').map((r) => r.alias),
+  );
+  const probeDimension = model.dimensions.find((d) => !m2mAliases.has(d.source));
+  for (const metric of model.metrics ?? []) {
+    const probe: SemanticQuerySpec = {
+      model: model.name,
+      table: model.primary.kind === 'table' ? model.primary.table : model.primary.view,
+      schema: model.primary.kind === 'table' ? model.primary.schema ?? null : null,
+      measures: [metric.name],
+      dimensions: probeDimension ? [probeDimension.name] : [],
+    } as SemanticQuerySpec;
+    try {
+      compileSemanticQuery(probe, model);
+    } catch (err) {
+      const detail = err instanceof SemanticCompileError ? err.issues.join('; ') : (err instanceof Error ? err.message : String(err));
+      issues.push(`metric "${metric.name}" does not compile: ${detail}`);
+    }
+  }
+  return issues;
 }
 
 /**

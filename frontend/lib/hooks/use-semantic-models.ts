@@ -8,14 +8,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { fetchScopedModels } from '@/lib/semantic/models-client';
-import type { SemanticModel } from '@/lib/types';
+import type { SemanticModelV2 } from '@/lib/types';
 
 export function useSemanticModels(
   path: string | undefined,
   connection: string | undefined,
   tables: string[],
-): { models: SemanticModel[]; loading: boolean } {
-  const [state, setState] = useState<{ models: SemanticModel[]; loading: boolean }>({ models: [], loading: false });
+): { models: SemanticModelV2[]; loading: boolean } {
+  const [state, setState] = useState<{ models: SemanticModelV2[]; loading: boolean }>({ models: [], loading: false });
   const key = useMemo(() => `${path ?? ''}|${connection ?? ''}|${[...new Set(tables)].sort().join(',')}`, [path, connection, tables]);
 
   useEffect(() => {

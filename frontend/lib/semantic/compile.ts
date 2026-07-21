@@ -1,24 +1,38 @@
 /**
  * Semantic query compiler — deterministically compiles a SemanticQuerySpec
- * (measures + dimensions + optional time grain + filters) against a
- * SemanticModel into the shared QueryIR, which `irToSqlLocal` then turns into
+ * (measures + dimensions + optional time grain + filters) against an authored
+ * SemanticModelV2 into the shared QueryIR, which `irToSqlLocal` then turns into
  * dialect SQL. This is the whole "engine" of the Semantic tier: no SQL is
  * generated here, only IR.
  *
- * Compilation rules:
+ * Compilation rules (Semantic_Model_v2.md §2.3/§2.5):
+ *  - the FROM comes from `model.primary` — a table (`schema.table`) or a data
+ *    model (view), addressed as `_views.<name>`
  *  - measures resolve to aggregate select columns (alias = slug of the name);
- *    ratio metrics compile to a raw `num * 1.0 / NULLIF(den, 0)` expression
- *  - dimensions resolve to plain columns (table-qualified when they live on a
- *    joined table); each referenced join contributes one LEFT/INNER JoinClause
+ *    ratio metrics compile to a raw `num * 1.0 / NULLIF(den, 0)` expression;
+ *    SQL metrics compile to raw select columns after the `primary.` →
+ *    base-qualifier rewrite (reference aliases already ARE the join aliases)
+ *  - dimensions resolve to plain columns (alias-qualified when they live on a
+ *    reference); each used to-one reference contributes one JoinClause. A
+ *    reference counts as USED when a selected dimension, filter, or SQL-metric
+ *    ref touches it — metric-only joins are included (a metric may aggregate a
+ *    reference column no dimension selects)
  *  - `timeGrain` uses the model's timeDimension as DATE_TRUNC(grain, column)
  *  - GROUP BY mirrors dimensions + time; filters become a flat AND WHERE
  *  - ORDER BY: time ascending when present, else first measure descending
  *  - limit defaults to 1000
+ *  - many_to_many references are declared-but-not-compiled until M3: touching
+ *    one throws a clear SemanticCompileError rather than fanning out silently
  */
 
 import type { QueryIR, SelectColumn, GroupByItem, FilterCondition, JoinClause, OrderByClause } from '@/lib/sql/ir-types';
-import type { SemanticModel, SemanticMeasure, SemanticDimension, SemanticRatioMetric } from '@/lib/types/semantic';
+import type {
+  SemanticModelV2, SemanticMeasureV2, SemanticDimensionV2, SemanticMetricV2,
+  SemanticRatioMetricV2, SemanticSqlMetric, SemanticReference, SemanticReferenceToOne, SemanticSource,
+} from '@/lib/types/semantic';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
+import { VIEWS_SCHEMA } from '@/lib/types/views';
+import { lexMetricSql, rewriteMetricSql } from './metric-sql';
 
 export class SemanticCompileError extends Error {
   issues: string[];
@@ -39,22 +53,37 @@ export function semanticAlias(name: string): string {
 }
 
 type Measurable =
-  | { kind: 'measure'; measure: SemanticMeasure }
-  | { kind: 'metric'; metric: SemanticRatioMetric };
+  | { kind: 'measure'; measure: SemanticMeasureV2 }
+  | { kind: 'ratio'; metric: SemanticRatioMetricV2 }
+  | { kind: 'sql'; metric: SemanticSqlMetric };
 
-function findMeasurable(model: SemanticModel, name: string): Measurable | null {
+function findMeasurable(model: SemanticModelV2, name: string): Measurable | null {
   const measure = model.measures.find((m) => m.name === name);
   if (measure) return { kind: 'measure', measure };
-  const metric = model.metrics?.find((m) => m.name === name);
-  if (metric) return { kind: 'metric', metric };
+  const metric = (model.metrics ?? []).find((m) => m.name === name);
+  if (metric) return metric.type === 'ratio' ? { kind: 'ratio', metric } : { kind: 'sql', metric };
   return null;
 }
 
-const findDimension = (model: SemanticModel, name: string): SemanticDimension | undefined =>
+const findDimension = (model: SemanticModelV2, name: string): SemanticDimensionV2 | undefined =>
   model.dimensions.find((d) => d.name === name);
 
+const findReference = (model: SemanticModelV2, alias: string): SemanticReference | undefined =>
+  (model.references ?? []).find((r) => r.alias === alias);
+
+const isToOne = (r: SemanticReference): r is SemanticReferenceToOne => r.relationship !== 'many_to_many';
+
+/** The name a source is addressed by in SQL (its FROM/qualifier identity). */
+const sourceTableName = (s: SemanticSource): string => (s.kind === 'table' ? s.table : s.view);
+
+/** The IR table reference for a source (views live under `_views`). */
+const sourceTableRef = (s: SemanticSource): { table: string; schema?: string } =>
+  s.kind === 'table'
+    ? { table: s.table, ...(s.schema ? { schema: s.schema } : {}) }
+    : { table: s.view, schema: VIEWS_SCHEMA };
+
 /** Validate a spec against its model; returns human-readable issues (empty = valid). */
-export function validateSemanticQuery(spec: SemanticQuerySpec, model: SemanticModel): string[] {
+export function validateSemanticQuery(spec: SemanticQuerySpec, model: SemanticModelV2): string[] {
   const issues: string[] = [];
 
   if (spec.measures.length === 0) {
@@ -64,7 +93,7 @@ export function validateSemanticQuery(spec: SemanticQuerySpec, model: SemanticMo
     const found = findMeasurable(model, name);
     if (!found) {
       issues.push(`unknown measure "${name}"`);
-    } else if (found.kind === 'metric') {
+    } else if (found.kind === 'ratio') {
       for (const ref of [found.metric.numerator, found.metric.denominator]) {
         if (!model.measures.some((m) => m.name === ref)) {
           issues.push(`metric "${name}" references unknown measure "${ref}"`);
@@ -80,8 +109,8 @@ export function validateSemanticQuery(spec: SemanticQuerySpec, model: SemanticMo
   }
   for (const d of [...spec.dimensions, ...(spec.filters ?? []).map((f) => f.dimension)]) {
     const dim = findDimension(model, d);
-    if (dim?.join && !model.joins?.some((j) => j.alias === dim.join)) {
-      issues.push(`dimension "${d}" references unknown join "${dim.join}"`);
+    if (dim && dim.source !== 'primary' && !findReference(model, dim.source)) {
+      issues.push(`dimension "${d}" references unknown reference "${dim.source}"`);
     }
   }
   if (spec.timeGrain && !resolveTimeColumn(spec, model)) {
@@ -94,53 +123,82 @@ export function validateSemanticQuery(spec: SemanticQuerySpec, model: SemanticMo
 }
 
 /**
- * The time-axis column for a spec: spec.timeColumn when it names a BASE
+ * The time-axis column for a spec: spec.timeColumn when it names a PRIMARY
  * temporal column (any date/time column may be the axis, not just the model's
  * default), else the model's timeDimension.
  */
-export function resolveTimeColumn(spec: SemanticQuerySpec, model: SemanticModel): string | undefined {
+export function resolveTimeColumn(spec: SemanticQuerySpec, model: SemanticModelV2): string | undefined {
   if (spec.timeColumn) {
     if (model.timeDimension?.column === spec.timeColumn) return spec.timeColumn;
-    const dim = model.dimensions.find((d) => d.column === spec.timeColumn && d.temporal && !d.join);
+    const dim = model.dimensions.find((d) => d.column === spec.timeColumn && d.temporal && d.source === 'primary');
     return dim ? spec.timeColumn : undefined;
   }
   return model.timeDimension?.column;
 }
 
 /**
- * Aggregate SQL fragment for a ratio metric component (base-table columns).
- * `qualifier` prefixes columns with the base table when the query joins —
- * unqualified names are ambiguous the moment another table shares them.
+ * Aggregate SQL fragment for a ratio metric component (primary columns).
+ * `qualifier` prefixes columns with the base when the query joins —
+ * unqualified names are ambiguous the moment another source shares them.
  */
-export const aggSql = (m: SemanticMeasure, qualifier?: string): string => {
+export const aggSql = (m: SemanticMeasureV2, qualifier?: string): string => {
   const col = qualifier && m.column ? `${qualifier}.${m.column}` : m.column;
   return m.agg === 'COUNT' && !m.column ? 'COUNT(*)'
     : m.agg === 'COUNT_DISTINCT' ? `COUNT(DISTINCT ${col})`
     : `${m.agg}(${col})`;
 };
 
+/**
+ * Which references does this spec actually use? A reference is used when a
+ * selected dimension / filter lives on it, OR a SQL metric's qualified refs
+ * touch it (metric-only join inclusion — skipping this silently emits invalid
+ * SQL for `SUM(costs.total)` with no costs dimension selected).
+ */
+function collectUsedReferences(spec: SemanticQuerySpec, model: SemanticModelV2): Set<string> {
+  const used = new Set<string>();
+  for (const name of [...spec.dimensions, ...(spec.filters ?? []).map((f) => f.dimension)]) {
+    const dim = findDimension(model, name);
+    if (dim && dim.source !== 'primary') used.add(dim.source);
+  }
+  for (const name of spec.measures) {
+    const found = findMeasurable(model, name);
+    if (found?.kind === 'sql') {
+      for (const ref of lexMetricSql(found.metric.sql, new Map()).refs) {
+        if (ref.alias !== 'primary' && findReference(model, ref.alias)) used.add(ref.alias);
+      }
+    }
+  }
+  return used;
+}
+
 /** Compile a valid spec to QueryIR. Throws SemanticCompileError on invalid specs. */
-export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticModel): QueryIR {
+export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticModelV2): QueryIR {
   const issues = validateSemanticQuery(spec, model);
   if (issues.length > 0) throw new SemanticCompileError(issues);
+
+  const usedRefs = collectUsedReferences(spec, model);
+
+  // m2m is declared in V2 but compiles in M3 — refuse loudly, never fan out.
+  for (const alias of usedRefs) {
+    const ref = findReference(model, alias);
+    if (ref && !isToOne(ref)) {
+      throw new SemanticCompileError([
+        `reference "${alias}" is many_to_many — m2m compilation is not available yet (lands in M3); use a pre-aggregating data model in the meantime`,
+      ]);
+    }
+  }
 
   const select: SelectColumn[] = [];
   const groupColumns: GroupByItem[] = [];
 
-  // Pre-pass: which joins does this query actually use? Once ANY join is in
-  // play, every base-table column MUST be qualified — an unqualified name is
-  // ambiguous the moment the joined table shares it (campaign_id, created_at,
-  // id are all common on both sides of an FK).
-  const usedJoins = new Set<string>();
-  for (const name of [...spec.dimensions, ...(spec.filters ?? []).map((f) => f.dimension)]) {
-    const dim = findDimension(model, name);
-    if (dim?.join) usedJoins.add(dim.join);
-  }
-  const baseQual = usedJoins.size > 0 ? model.table : undefined;
+  // Once ANY join is in play, every base column MUST be qualified — an
+  // unqualified name is ambiguous the moment a joined source shares it.
+  const baseName = sourceTableName(model.primary);
+  const baseQual = usedRefs.size > 0 ? baseName : undefined;
 
   const resolveDimension = (name: string): { column: string; table?: string } => {
     const dim = findDimension(model, name)!;
-    const table = dim.join ?? baseQual;
+    const table = dim.source !== 'primary' ? dim.source : baseQual;
     return { column: dim.column, ...(table ? { table } : {}) };
   };
 
@@ -152,7 +210,7 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
   }
 
   // Time grain → DATE_TRUNC on the spec's time column (default: the model's
-  // timeDimension; any base temporal column is allowed via spec.timeColumn).
+  // timeDimension; any primary temporal column is allowed via spec.timeColumn).
   const timeColumn = resolveTimeColumn(spec, model);
   const time = spec.timeGrain && timeColumn
     ? { column: timeColumn, unit: spec.timeGrain }
@@ -172,7 +230,8 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     });
   }
 
-  // Measures/metrics → aggregates (or NULLIF-guarded raw ratios).
+  // Measures/metrics → aggregates, NULLIF-guarded raw ratios, or rewritten
+  // raw SQL-metric expressions.
   const measureAliases: string[] = [];
   for (const name of spec.measures) {
     const found = findMeasurable(model, name)!;
@@ -186,12 +245,20 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
         ...(baseQual && found.measure.column ? { table: baseQual } : {}),
         alias,
       });
-    } else {
+    } else if (found.kind === 'ratio') {
       const num = model.measures.find((m) => m.name === found.metric.numerator)!;
       const den = model.measures.find((m) => m.name === found.metric.denominator)!;
       select.push({
         type: 'raw',
         raw_sql: `${aggSql(num, baseQual)} * 1.0 / NULLIF(${aggSql(den, baseQual)}, 0)`,
+        alias,
+      });
+    } else {
+      // SQL metric: `primary.` → base qualifier; reference aliases already
+      // match the compiled join aliases, so they pass through untouched.
+      select.push({
+        type: 'raw',
+        raw_sql: rewriteMetricSql(found.metric.sql, baseName),
         alias,
       });
     }
@@ -208,18 +275,19 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     };
   });
 
-  // Joins: only relationships actually referenced by a dimension/filter.
-  const joins: JoinClause[] = (model.joins ?? [])
-    .filter((j) => usedJoins.has(j.alias))
-    .map((j) => ({
-      type: j.type ?? 'LEFT',
-      table: { table: j.table, ...(j.schema ? { schema: j.schema } : {}), alias: j.alias },
-      on: [{
-        left_table: model.table,
-        left_column: j.leftColumn,
-        right_table: j.alias,
-        right_column: j.rightColumn,
-      }],
+  // Joins: only to-one references actually used by this query. The join is
+  // aliased by the AUTHOR's alias — dimensions/metrics qualify by it.
+  const joins: JoinClause[] = (model.references ?? [])
+    .filter((r): r is SemanticReferenceToOne => usedRefs.has(r.alias) && isToOne(r))
+    .map((r) => ({
+      type: r.joinType ?? 'LEFT',
+      table: { ...sourceTableRef(r.source), alias: r.alias },
+      on: r.on.map((o) => ({
+        left_table: baseName,
+        left_column: o.primaryColumn,
+        right_table: r.alias,
+        right_column: o.referencedColumn,
+      })),
     }));
 
   // Deterministic ordering: time ascending when present, else first measure desc.
@@ -231,7 +299,7 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     type: 'simple',
     version: 1,
     select,
-    from: { table: model.table, ...(model.schema ? { schema: model.schema } : {}) },
+    from: sourceTableRef(model.primary),
     ...(joins.length > 0 ? { joins } : {}),
     ...(conditions.length > 0 ? { where: { operator: 'AND', conditions } } : {}),
     ...(groupColumns.length > 0 ? { group_by: { columns: groupColumns } } : {}),
@@ -239,3 +307,6 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     limit: spec.limit ?? 1000,
   };
 }
+
+/** All metric kinds a spec may name in `measures` (measure | ratio | sql). */
+export type { SemanticMetricV2 };

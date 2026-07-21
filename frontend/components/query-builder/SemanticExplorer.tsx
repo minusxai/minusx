@@ -36,7 +36,7 @@ import { inferVizType } from '@/lib/semantic/infer-viz';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { searchFields, type SemanticFieldHit } from '@/lib/semantic/models-client';
 import type { ModelStub } from '@/lib/semantic/derive';
-import { VIEWS_SCHEMA, type SemanticAggregate, type SemanticModel, type SemanticTimeGrain, type VizSettings } from '@/lib/types';
+import { VIEWS_SCHEMA, type SemanticAggregate, type SemanticModelV2, type SemanticTimeGrain, type VizSettings } from '@/lib/types';
 import type { SemanticQuerySpec, SemanticQueryFilter } from '@/lib/validation/atlas-schemas';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AddChipButton } from './QueryChip';
@@ -64,7 +64,7 @@ export interface SemanticVizAssignment {
 
 interface SemanticExplorerProps {
   /** Full models loaded for the tables in play (fetched on demand). */
-  models: SemanticModel[];
+  models: SemanticModelV2[];
   /** One cheap stub per whitelisted table — the empty-state table list. */
   stubs: ModelStub[];
   /** Ask the parent to load the full model for a picked stub / search hit. */
@@ -147,7 +147,7 @@ export function SemanticExplorer({
   const model = spec ? models.find((m) => m.name === spec.model) : undefined;
   const issues = spec && model ? validateSemanticQuery(spec, model) : [];
 
-  const apply = useCallback((next: SemanticQuerySpec, nextModel: SemanticModel) => {
+  const apply = useCallback((next: SemanticQuerySpec, nextModel: SemanticModelV2) => {
     setSpec(next);
     if (validateSemanticQuery(next, nextModel).length > 0) return;
     try {
@@ -250,19 +250,19 @@ export function SemanticExplorer({
   // The effective time axis (spec.timeColumn overrides the model default).
   const effectiveTimeColumn = spec?.timeColumn ?? model?.timeDimension?.column;
   const timeLabel = model
-    ? (model.dimensions.find((d) => d.column === effectiveTimeColumn && !d.join)?.name
+    ? (model.dimensions.find((d) => d.column === effectiveTimeColumn && d.source === 'primary')?.name
         ?? model.timeDimension?.label ?? model.timeDimension?.column ?? 'Time')
     : 'Time';
 
   const visibleMeasures = model ? model.measures.filter((m) => matches(query, m.name)) : [];
-  const temporalDims = model ? model.dimensions.filter((d) => d.temporal && !d.join) : [];
+  const temporalDims = model ? model.dimensions.filter((d) => d.temporal && d.source === 'primary') : [];
   const visibleTemporal = temporalDims.filter((d) => matches(query, d.name));
   // The model default may lack a dimension entry (hand-authored models) — give it a row.
   const defaultHasRow = !model?.timeDimension || temporalDims.some((d) => d.column === model.timeDimension!.column);
   const defaultTimeLabel = model?.timeDimension?.label ?? model?.timeDimension?.column ?? 'Time';
   const visibleDefaultTime = !defaultHasRow && !!model?.timeDimension && matches(query, defaultTimeLabel);
   const visibleDimensions = model
-    ? model.dimensions.filter((d) => !(d.temporal && !d.join) && d.column !== model.timeDimension?.column && matches(query, d.name))
+    ? model.dimensions.filter((d) => !(d.temporal && d.source === 'primary') && d.column !== model.timeDimension?.column && matches(query, d.name))
     : [];
   // Cross-table hits, minus the current model's own fields (already listed).
   const foreignHits = otherHits.filter((h) => h.model !== spec?.model).slice(0, 20);

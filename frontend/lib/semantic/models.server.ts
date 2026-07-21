@@ -25,7 +25,7 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { VIEWS_SCHEMA } from '@/lib/types';
 import { resolveViewsForContext } from '@/lib/views/views.server';
 import { exposedColumns } from '@/lib/types/views';
-import type { ContextContent, DatabaseSchema, DatabaseWithSchema, SemanticModel, TableRelationship } from '@/lib/types';
+import type { ContextContent, DatabaseSchema, DatabaseWithSchema, SemanticModelV2, TableRelationship } from '@/lib/types';
 
 export interface ScopedModelsParams {
   /** Folder the requesting file lives in (context resolution anchor), e.g. "/org". */
@@ -117,7 +117,7 @@ async function resolveScope(
 export async function getScopedSemanticModels(
   user: EffectiveUser,
   { path, connection, tables }: ScopedModelsParams,
-): Promise<SemanticModel[]> {
+): Promise<SemanticModelV2[]> {
   if (tables.length === 0) return [];
 
   const scope = await resolveScope(user, path, connection);
@@ -153,7 +153,8 @@ export async function getScopedSemanticModels(
   const naming: DatabaseWithSchema = { databaseName: connection, schemas: namingSchemas };
 
   return deriveSemanticModels([scoped], relationships, [naming])
-    .filter((m) => requested.has(`${m.schema ?? ''}|${m.table}`));
+    // A non-table primary can never match a requested raw table.
+    .filter((m) => m.primary.kind === 'table' && requested.has(`${m.primary.schema ?? ''}|${m.primary.table}`));
 }
 
 // ---------------------------------------------------------------------------
@@ -196,11 +197,14 @@ export async function searchSemanticFields(
     const models = deriveSemanticModels([all], scope.relationships);
     const fields: SemanticFieldHit[] = [];
     for (const m of models) {
+      if (m.primary.kind !== 'table') continue; // derived models are always table-primaries
+      const { table: mTable } = m.primary;
+      const mSchema = m.primary.schema ?? undefined;
       for (const me of m.measures) {
-        fields.push({ kind: 'measure', name: me.name, model: m.name, connection, schema: m.schema, table: m.table });
+        fields.push({ kind: 'measure', name: me.name, model: m.name, connection, schema: mSchema, table: mTable });
       }
       for (const d of m.dimensions) {
-        fields.push({ kind: 'dimension', name: d.name, model: m.name, connection, schema: m.schema, table: m.table });
+        fields.push({ kind: 'dimension', name: d.name, model: m.name, connection, schema: mSchema, table: mTable });
       }
     }
     entry = { at: Date.now(), fields };

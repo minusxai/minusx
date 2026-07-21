@@ -16,14 +16,14 @@ import React, { useEffect, useState } from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
-import type { QuestionContent, SemanticModel, VizSettings } from '@/lib/types';
+import type { QuestionContent, SemanticModelV2, VizSettings } from '@/lib/types';
 
-const ORDERS_MODEL: SemanticModel = {
+const ORDERS_MODEL: SemanticModelV2 = {
   name: 'Orders',
   connection: 'warehouse',
-  table: 'orders',
+  primary: { kind: 'table', table: 'orders' },
   timeDimension: { column: 'created_at', label: 'Order date' },
-  dimensions: [{ name: 'Status', column: 'status' }],
+  dimensions: [{ name: 'Status', source: 'primary', column: 'status' }],
   measures: [{ name: 'Revenue', agg: 'SUM', column: 'amount' }],
 };
 

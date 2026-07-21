@@ -25,9 +25,10 @@
 
 import type {
   DatabaseWithSchema,
-  SemanticDimension,
-  SemanticMeasure,
-  SemanticModel,
+  SemanticDimensionV2,
+  SemanticMeasureV2,
+  SemanticModelV2,
+  SemanticReferenceToOne,
   TableRelationship,
 } from '@/lib/types';
 
@@ -195,7 +196,7 @@ export function deriveSemanticModels(
   databases: DatabaseWithSchema[],
   relationships: TableRelationship[] = [],
   namingDatabases?: DatabaseWithSchema[],
-): SemanticModel[] {
+): SemanticModelV2[] {
   const stubNames = new Map(
     deriveModelStubs(namingDatabases ?? databases).map((st) => [tableKey(st.connection, st.schema, st.table), st.name]),
   );
@@ -209,33 +210,33 @@ export function deriveSemanticModels(
     }
   }
 
-  const models: SemanticModel[] = [];
+  const models: SemanticModelV2[] = [];
   for (const db of databases) {
     for (const s of db.schemas ?? []) {
       for (const t of s.tables ?? []) {
         const columns = (t.columns ?? []) as SchemaColumnLike[];
         if (columns.length === 0) continue; // names-only (bounded) → inherited fallback below
 
-        const dimensions: SemanticDimension[] = [];
-        const measures: SemanticMeasure[] = [{ name: 'Count', agg: 'COUNT' }];
+        const dimensions: SemanticDimensionV2[] = [];
+        const measures: SemanticMeasureV2[] = [{ name: 'Count', agg: 'COUNT' }];
         const temporal: SchemaColumnLike[] = [];
 
         for (const c of columns) {
           const kind = classifyColumn(c);
           if (kind === 'dimension') {
-            dimensions.push({ name: humanizeName(c.name), column: c.name });
+            dimensions.push({ name: humanizeName(c.name), column: c.name, source: 'primary' });
           } else if (kind === 'time') {
             temporal.push(c);
-            dimensions.push({ name: humanizeName(c.name), column: c.name, temporal: true });
+            dimensions.push({ name: humanizeName(c.name), column: c.name, source: 'primary', temporal: true });
           } else if (kind === 'id') {
-            dimensions.push({ name: humanizeName(c.name), column: c.name });
+            dimensions.push({ name: humanizeName(c.name), column: c.name, source: 'primary' });
             measures.push({ name: `Unique ${idBaseName(c.name)}`, agg: 'COUNT_DISTINCT', column: c.name });
           } else {
             measures.push({ name: `Total ${humanizeName(c.name)}`, agg: 'SUM', column: c.name });
             measures.push({ name: `Avg ${humanizeName(c.name)}`, agg: 'AVG', column: c.name });
             // Profiled categorical (low-cardinality) numerics stay groupable too.
             if (c.meta?.category === 'categorical') {
-              dimensions.push({ name: humanizeName(c.name), column: c.name });
+              dimensions.push({ name: humanizeName(c.name), column: c.name, source: 'primary' });
             }
           }
         }
@@ -245,8 +246,8 @@ export function deriveSemanticModels(
           ? { column: temporal[0].name, label: humanizeName(temporal[0].name) }
           : undefined;
 
-        // Declared relationships on this table → lookup joins + joined dimensions.
-        const joins = relationships
+        // Declared relationships on this table → to-one references + referenced dimensions.
+        const references: SemanticReferenceToOne[] = relationships
           .filter((r) =>
             r.connection === db.databaseName &&
             (r.schema ?? '') === (s.schema ?? '') &&
@@ -255,23 +256,22 @@ export function deriveSemanticModels(
             !isSelfJoin(r),
           )
           .map((r) => ({
-            table: r.targetTable,
-            schema: r.targetSchema,
+            source: { kind: 'table' as const, table: r.targetTable, ...(r.targetSchema ? { schema: r.targetSchema } : {}) },
             alias: r.targetTable,
-            type: 'LEFT' as const,
             relationship: r.relationship ?? ('many_to_one' as const),
-            leftColumn: r.column,
-            rightColumn: r.targetColumn,
+            joinType: 'LEFT' as const,
+            on: [{ primaryColumn: r.column, referencedColumn: r.targetColumn }],
           }));
-        for (const join of joins) {
-          const targetCols = columnsByTable.get(tableKey(db.databaseName, join.schema, join.table)) ?? [];
+        for (const ref of references) {
+          if (ref.source.kind !== 'table') continue;
+          const targetCols = columnsByTable.get(tableKey(db.databaseName, ref.source.schema ?? undefined, ref.source.table)) ?? [];
           for (const c of targetCols) {
             const kind = classifyColumn(c);
             if (kind === 'dimension' || kind === 'time') {
               dimensions.push({
-                name: `${humanizeName(join.alias)} ${humanizeName(c.name)}`,
+                name: `${humanizeName(ref.alias)} ${humanizeName(c.name)}`,
                 column: c.name,
-                join: join.alias,
+                source: ref.alias,
                 ...(kind === 'time' ? { temporal: true } : {}),
               });
             }
@@ -281,12 +281,11 @@ export function deriveSemanticModels(
         models.push({
           name: stubNames.get(tableKey(db.databaseName, s.schema, t.table)) ?? humanizeName(t.table),
           connection: db.databaseName,
-          schema: s.schema,
-          table: t.table,
+          primary: { kind: 'table', schema: s.schema, table: t.table },
           timeDimension,
           dimensions,
           measures,
-          ...(joins.length > 0 ? { joins } : {}),
+          ...(references.length > 0 ? { references } : {}),
         });
       }
     }

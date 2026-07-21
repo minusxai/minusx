@@ -12,19 +12,25 @@ import React from 'react';
 import { screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { SemanticExplorer } from '@/components/query-builder';
-import type { SemanticModel } from '@/lib/types';
+import type { SemanticModelV2 } from '@/lib/types';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 
-const ORDERS_MODEL: SemanticModel = {
+const ORDERS_MODEL: SemanticModelV2 = {
   name: 'Orders',
   connection: 'warehouse',
-  table: 'orders',
+  primary: { kind: 'table', table: 'orders' },
   timeDimension: { column: 'created_at', label: 'Order date' },
   dimensions: [
-    { name: 'Status', column: 'status' },
-    { name: 'Region', column: 'region', join: 'c' },
+    { name: 'Status', source: 'primary', column: 'status' },
+    { name: 'Region', source: 'c', column: 'region' },
   ],
-  joins: [{ table: 'customers', alias: 'c', leftColumn: 'customer_id', rightColumn: 'id' }],
+  references: [{
+    source: { kind: 'table', table: 'customers' },
+    alias: 'c',
+    relationship: 'many_to_one',
+    joinType: 'LEFT',
+    on: [{ primaryColumn: 'customer_id', referencedColumn: 'id' }],
+  }],
   measures: [
     { name: 'Revenue', agg: 'SUM', column: 'amount' },
     { name: 'Orders', agg: 'COUNT' },
@@ -186,11 +192,11 @@ describe('SemanticExplorer', () => {
   });
 
   it('ANY temporal column can be the time axis (timeColumn on non-default)', async () => {
-    const model: SemanticModel = {
+    const model: SemanticModelV2 = {
       ...ORDERS_MODEL,
       dimensions: [
         ...ORDERS_MODEL.dimensions,
-        { name: 'Delivered At', column: 'delivered_at', temporal: true },
+        { name: 'Delivered At', source: 'primary', column: 'delivered_at', temporal: true },
       ],
     };
     const { onChange } = renderExplorer({ models: [model] });

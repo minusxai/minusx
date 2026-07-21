@@ -318,9 +318,9 @@ describe('lexMetricSql', () => {
       FIELDS,
     );
     expect(r.refs).toEqual(expect.arrayContaining([
-      { alias: 'primary', column: 'amount' },
-      { alias: 'costs', column: 'total' },
-      { alias: 'primary', column: 'region' },
+      expect.objectContaining({ alias: 'primary', column: 'amount' }),
+      expect.objectContaining({ alias: 'costs', column: 'total' }),
+      expect.objectContaining({ alias: 'primary', column: 'region' }),
     ]));
     expect(r.refs).toHaveLength(3);
     expect(r.quoted).toBe(false);

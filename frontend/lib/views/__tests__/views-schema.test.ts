@@ -138,7 +138,7 @@ describe('views as tables', () => {
     });
     expect(models).toHaveLength(1);
     const m = models[0];
-    expect(m).toMatchObject({ table: 'zone_revenue', schema: VIEWS_SCHEMA });
+    expect(m).toMatchObject({ primary: { kind: 'table', table: 'zone_revenue', schema: VIEWS_SCHEMA } });
     expect(m.measures.map((x) => x.name)).toEqual(expect.arrayContaining(['Count', 'Total Revenue', 'Avg Revenue']));
     expect(m.dimensions.map((d) => d.column)).toContain('zone_name');
     expect(m.timeDimension?.column).toBe('created_at'); // time axis, for free
