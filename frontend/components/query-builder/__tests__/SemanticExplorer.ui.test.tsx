@@ -64,6 +64,17 @@ function renderExplorer(props: Partial<React.ComponentProps<typeof SemanticExplo
 }
 
 describe('SemanticExplorer', () => {
+  // --- M5: authored models only — no-models empty state ----------------------
+
+  it('with NO models, renders an empty state pointing at the context editor', () => {
+    renderExplorer({ models: [], value: null });
+    const empty = screen.getByLabelText('semantic-models-empty-state');
+    expect(empty.textContent).toContain('No semantic models yet');
+    expect(empty.textContent).toContain('knowledge base');
+    // no raw-table browser — models are authored now, not derived from tables
+    expect(screen.queryByLabelText('Pick table: Orders')).toBeNull();
+  });
+
   // --- LAYOUT: shelves on top, two field columns (Time under Dimensions) -----
 
   it('splits the field vocabulary into Dimensions / Measures / Time sections', () => {

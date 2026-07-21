@@ -1,8 +1,8 @@
 /**
- * POST /api/semantic-models — derive semantic models ON DEMAND, scoped to the
- * requested tables. Models are never stored on the context content (multi-MB
- * on large workspaces); this endpoint is the only way clients obtain full
- * model vocabulary. See lib/semantic/models.server.ts.
+ * POST /api/semantic-models — serve AUTHORED semantic models (stored on
+ * context versions, inherited via fullSemanticModels), scoped to the requested
+ * primaries. This endpoint is the only way clients obtain full model
+ * vocabulary. See lib/semantic/models.server.ts.
  */
 import { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/http/with-auth';

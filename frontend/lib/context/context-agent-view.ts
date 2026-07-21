@@ -19,6 +19,7 @@ import { getPublishedVersion } from '@/lib/context/context-utils';
 import type {
   ContextContent, ContextVersion, DocEntry, MetricDef, TableAnnotation, TableRelationship, SkillEntry, Test,
 } from '@/lib/types';
+import type { SemanticModelV2 } from '@/lib/validation/atlas-schemas';
 
 /**
  * The live version for the agent: the published version, falling back to the first version when the
@@ -35,9 +36,9 @@ function liveVersion(content: ContextContent): ContextVersion | undefined {
  * Shape a context's stored content into the agent's FLAT working view:
  *   - docs + metrics + annotations from the live version,
  *   - evals + skills from the content level.
- * ALL FIVE authored fields are ALWAYS present (defaulting to `[]` when absent) so the agent always
- * sees the full surface it can author — an empty `metrics`/`annotations`/`skills`/`evals` renders as
- * an empty `<tag/>`, signalling "you may add these" rather than vanishing.
+ * ALL authored fields are ALWAYS present (defaulting to `[]` when absent) so the agent always
+ * sees the full surface it can author — an empty `metrics`/`annotations`/`semanticModels`/`skills`/
+ * `evals` renders as an empty `<tag/>`, signalling "you may add these" rather than vanishing.
  * Everything else — the whitelist, versions[], published, the schedule/recipient eval-job fields, and
  * the server-computed menus (fullSchema/parentSchema/full*) — is dropped: it's the human-managed
  * whitelist, version bookkeeping, or re-derived on load, none of it agent-authored. Returns a fresh
@@ -55,6 +56,7 @@ export function shapeContextForAgent<T>(content: T): T {
     metrics: live?.metrics ?? [],
     annotations: live?.annotations ?? [],
     relationships: live?.relationships ?? [],
+    semanticModels: live?.semanticModels ?? [],
     skills: c.skills ?? [],
     evals: c.evals ?? [],
   };
@@ -84,6 +86,7 @@ export function foldContextAgentView(existing: unknown, edited: unknown): Record
     if ('metrics' in e) v.metrics = e.metrics as MetricDef[] | undefined;
     if ('annotations' in e) v.annotations = e.annotations as TableAnnotation[] | undefined;
     if ('relationships' in e) v.relationships = e.relationships as TableRelationship[] | undefined;
+    if ('semanticModels' in e) v.semanticModels = e.semanticModels as SemanticModelV2[] | undefined;
     const next = versions.slice();
     next[liveIdx] = v;
     out.versions = next;
@@ -94,16 +97,14 @@ export function foldContextAgentView(existing: unknown, edited: unknown): Record
 }
 
 // Server-computed fields: re-derived on load, stripped on save — ignore them when bounding edits.
-// `fullSemanticModels` is computed like fullViews. NOTE: `semanticModels` is deliberately NOT in
-// EDITABLE_VERSION_FIELDS yet — agent write access lands in M5a together with
-// skill_semantic_models and the tier-2/3 save gates (Semantic_Model_v2.md).
+// `fullSemanticModels` is computed like fullViews.
 const COMPUTED_CONTEXT_FIELDS = immutableSet([
   'fullSchema', 'parentSchema', 'fullDocs', 'fullMetrics', 'fullAnnotations', 'fullRelationships', 'fullViews', 'fullSemanticModels', 'fullSkills',
 ]);
 // Version fields the agent authors (folded into the live version) — ignore when bounding edits.
 // `whitelist` is NOT here: it's not in the agent's view, so the guard treats any whitelist change as
 // out of bounds (the fold preserves it, so a legitimate edit never trips this).
-const EDITABLE_VERSION_FIELDS = immutableSet(['docs', 'metrics', 'annotations', 'relationships']);
+const EDITABLE_VERSION_FIELDS = immutableSet(['docs', 'metrics', 'annotations', 'relationships', 'semanticModels']);
 // Content-level fields the agent authors — ignore when bounding edits.
 const EDITABLE_CONTENT_FIELDS = immutableSet(['evals', 'skills']);
 

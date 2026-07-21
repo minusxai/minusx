@@ -9,6 +9,7 @@
  * for interactive chat's on-demand Context Library).
  */
 import { ContextContent, DocEntry, MetricDef, TableAnnotation, type ResolvedContextDoc, type ResolvedContextDocs } from '../types';
+import type { SemanticModelV2, SemanticSource, SemanticReference, SemanticMetricV2 } from '../validation/atlas-schemas';
 import { getPublishedVersionForUser } from '../context/context-utils';
 import { CONTEXT_BUDGETS, PER_DOC_CONTENT_CHARS } from '../context/context-budgets';
 import { budgetAnnotationNotes, backfillAnnotationConnections } from './annotation-notes';
@@ -19,7 +20,56 @@ import { budgetAnnotationNotes, backfillAnnotationConnections } from './annotati
  * to say. (Profiled column descriptions/stats reach the agent separately via the
  * SearchDBSchema tool; this surfaces the editorial context layer + metrics.)
  */
-function buildSchemaNotes(annotations: TableAnnotation[], metrics: MetricDef[]): string | undefined {
+/** Render a semantic source compactly: `schema.table` for tables, `_views.<name>` for data models. */
+function semanticSourceLabel(source: SemanticSource): string {
+  if (source.kind === 'model') return `_views.${source.view}`;
+  return source.schema ? `${source.schema}.${source.table}` : source.table;
+}
+
+/** One compact line per reference: `alias = <cardinality> <source> [THROUGH <bridge>] ON …`. */
+function semanticReferenceLabel(ref: SemanticReference): string {
+  if (ref.relationship === 'many_to_many') {
+    const on = [
+      ...ref.through.primaryOn.map((o) => `${o.primaryColumn}=${o.bridgeColumn}`),
+      ...ref.through.referencedOn.map((o) => `${o.bridgeColumn}=${o.referencedColumn}`),
+    ].join(', ');
+    return `${ref.alias} = many_to_many ${semanticSourceLabel(ref.source)} THROUGH ${semanticSourceLabel(ref.through.source)} ON ${on}`;
+  }
+  const on = ref.on.map((o) => `${o.primaryColumn}=${o.referencedColumn}`).join(', ');
+  return `${ref.alias} = ${ref.relationship} ${semanticSourceLabel(ref.source)} ON ${on}`;
+}
+
+function semanticMetricLabel(m: SemanticMetricV2): string {
+  return m.type === 'ratio' ? `${m.name} = ${m.numerator} / ${m.denominator}` : `${m.name} = ${m.sql}`;
+}
+
+/**
+ * Project one authored semantic model into a compact reference bullet for the
+ * agent's free-SQL docs: name, primary, references (alias, cardinality, join
+ * columns), dimensions (name → source.column), measures, and metric
+ * definitions. UNVALIDATED documentation — helps the agent write correct joins
+ * and metric SQL by hand; validated execution goes through semantic queries.
+ */
+function semanticModelToNote(model: SemanticModelV2): string {
+  const parts: string[] = [];
+  if (model.references && model.references.length > 0) {
+    parts.push(`refs: ${model.references.map(semanticReferenceLabel).join('; ')}`);
+  }
+  if (model.dimensions.length > 0) {
+    parts.push(`dims: ${model.dimensions.map((d) => `${d.name}=${d.source === 'primary' ? '' : `${d.source}.`}${d.column}`).join(', ')}`);
+  }
+  if (model.measures.length > 0) {
+    parts.push(`measures: ${model.measures.map((m) => `${m.name}=${m.agg}(${m.column ?? '*'})`).join(', ')}`);
+  }
+  if (model.metrics && model.metrics.length > 0) {
+    parts.push(`metrics: ${model.metrics.map(semanticMetricLabel).join(', ')}`);
+  }
+  const desc = model.description ? ` — ${model.description}` : '';
+  const body = parts.length > 0 ? `: ${parts.join('; ')}` : '';
+  return `- Semantic model "${model.name}" (connection ${model.connection}, primary ${semanticSourceLabel(model.primary)})${desc}${body}`;
+}
+
+function buildSchemaNotes(annotations: TableAnnotation[], metrics: MetricDef[], semanticModels: SemanticModelV2[] = []): string | undefined {
   const lines: string[] = [];
 
   const { lines: annLines, droppedTables, droppedColumns } = budgetAnnotationNotes(annotations);
@@ -40,6 +90,15 @@ function buildSchemaNotes(annotations: TableAnnotation[], metrics: MetricDef[]):
     return `- ${m.name}${loc}${desc}${sql}`;
   });
   if (metricLines.length > 0) lines.push('### Metrics', 'Note: These metrics were specially noted by the context authors. Pay attention to the SQL definitions, if available.', ...metricLines);
+
+  const modelLines = semanticModels.map(semanticModelToNote);
+  if (modelLines.length > 0) {
+    lines.push(
+      '### Semantic Models',
+      'Note: Authored semantic models — use their references as join documentation and their measure/metric definitions as the canonical formulas when writing SQL. Metric SQL qualifies columns as primary.<col> / <alias>.<col> relative to the model, not as runnable table names.',
+      ...modelLines,
+    );
+  }
 
   return lines.length > 0 ? `## Schema Notes\n\n${lines.join('\n')}` : undefined;
 }
@@ -93,7 +152,8 @@ function collectContextDocs(
   const rawAnnotations = [...(contextContent.fullAnnotations || []), ...(selectedVersion?.annotations || [])];
   const annotations = backfillAnnotationConnections(rawAnnotations, contextContent.fullSchema);
   const metrics = [...(contextContent.fullMetrics || []), ...(selectedVersion?.metrics || [])];
-  const schemaNotes = buildSchemaNotes(annotations, metrics);
+  const semanticModels = [...(contextContent.fullSemanticModels || []), ...(selectedVersion?.semanticModels || [])];
+  const schemaNotes = buildSchemaNotes(annotations, metrics, semanticModels);
 
   return { docs: [...inheritedDocs, ...ownDocs], schemaNotes };
 }

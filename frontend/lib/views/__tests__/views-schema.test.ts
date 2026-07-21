@@ -109,12 +109,45 @@ describe('views as tables', () => {
     expect(db!.schemas.some((s) => s.schema === 'mxfood')).toBe(true);
   });
 
-  it('SECURITY: a column whitelist hides the column from the SEMANTIC model too, not just queries', async () => {
-    // Deselect `revenue` on the view — it must not surface as a measure in the GUI.
+  it('SECURITY: a column whitelist hides the column from the SEMANTIC layer too, not just queries', async () => {
+    // Deselect `revenue` on the view — an AUTHORED model may not reference it.
+    // (Derived models no longer serve queries; the whitelist is enforced by the
+    // semantic save gate, end-to-end through the real save path.)
     const restricted = { ...ZONE_REVENUE, whitelistedColumns: ['zone_name', 'created_at'] };
     const version: ContextVersion = {
       version: 1, whitelist: [{ name: 'warehouse', type: 'connection' }], docs: [],
-      views: [restricted], createdAt: new Date().toISOString(), createdBy: 1,
+      views: [restricted],
+      semanticModels: [{
+        name: 'Zone Revenue Model',
+        connection: 'warehouse',
+        primary: { kind: 'model', view: 'zone_revenue' },
+        dimensions: [{ name: 'Hidden Revenue', source: 'primary', column: 'revenue' }],
+        measures: [{ name: 'Rows', agg: 'COUNT' }],
+      }],
+      createdAt: new Date().toISOString(), createdBy: 1,
+    };
+    await expect(
+      FilesAPI.saveFile(orgContextId, 'context', '/org/context',
+        { versions: [version], published: { all: 1 } } as never, [], admin),
+    ).rejects.toThrow(/not an exposed field/);
+  });
+
+  it('an AUTHORED model over a view is served with its curated fields', async () => {
+    const version: ContextVersion = {
+      version: 1, whitelist: [{ name: 'warehouse', type: 'connection' }], docs: [],
+      views: [ZONE_REVENUE],
+      semanticModels: [{
+        name: 'Zone Revenue Model',
+        connection: 'warehouse',
+        primary: { kind: 'model', view: 'zone_revenue' },
+        dimensions: [
+          { name: 'Zone', source: 'primary', column: 'zone_name' },
+          { name: 'Created At', source: 'primary', column: 'created_at', temporal: true },
+        ],
+        measures: [{ name: 'Total Revenue', agg: 'SUM', column: 'revenue' }],
+        timeDimension: { column: 'created_at' },
+      }],
+      createdAt: new Date().toISOString(), createdBy: 1,
     };
     await getModules().db.exec("DELETE FROM files WHERE type = 'context'", []);
     await mkPublished('context', '/org/context', 'context',
@@ -123,25 +156,12 @@ describe('views as tables', () => {
     const models = await getScopedSemanticModels(admin, {
       path: '/org', connection: 'warehouse', tables: ['zone_revenue'],
     });
-    const m = models[0];
-    // revenue is gone → no "Total Revenue" measure, no revenue dimension.
-    expect(m.measures.map((x) => x.name)).not.toContain('Total Revenue');
-    expect(m.dimensions.map((d) => d.column)).not.toContain('revenue');
-    // the exposed ones remain
-    expect(m.dimensions.map((d) => d.column)).toContain('zone_name');
-    expect(m.timeDimension?.column).toBe('created_at');
-  });
-
-  it('a view derives a full semantic model from its columns (no config)', async () => {
-    const models = await getScopedSemanticModels(admin, {
-      path: '/org', connection: 'warehouse', tables: ['zone_revenue'],
-    });
     expect(models).toHaveLength(1);
     const m = models[0];
-    expect(m).toMatchObject({ primary: { kind: 'table', table: 'zone_revenue', schema: VIEWS_SCHEMA } });
-    expect(m.measures.map((x) => x.name)).toEqual(expect.arrayContaining(['Count', 'Total Revenue', 'Avg Revenue']));
-    expect(m.dimensions.map((d) => d.column)).toContain('zone_name');
-    expect(m.timeDimension?.column).toBe('created_at'); // time axis, for free
+    expect(m).toMatchObject({ primary: { kind: 'model', view: 'zone_revenue' } });
+    expect(m.measures.map((x) => x.name)).toEqual(['Total Revenue']);
+    expect(m.dimensions.map((d) => d.column)).toEqual(['zone_name', 'created_at']);
+    expect(m.timeDimension?.column).toBe('created_at');
   });
 
   it('views inherit: a child context sees the parent\'s views', async () => {

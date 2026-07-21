@@ -32,6 +32,7 @@ import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { useContext as useKnowledgeContext } from '@/lib/hooks/useContext';
 import { DatabasesTabContent } from './DatabasesTabContent';
+import SemanticModelsEditor from './SemanticModelsEditor';
 import { SkillsTabContent } from './SkillsTabContent';
 import { EvalsTabContent } from './EvalsTabContent';
 
@@ -110,8 +111,8 @@ export default function ContextEditorV2({
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  type TopTab = 'databases' | 'docs' | 'skills' | 'evals';
-  const validTabs: TopTab[] = ['databases', 'docs', 'skills', 'evals'];
+  type TopTab = 'databases' | 'semantic' | 'docs' | 'skills' | 'evals';
+  const validTabs: TopTab[] = ['databases', 'semantic', 'docs', 'skills', 'evals'];
   const parseTab = (val: string | null): TopTab => validTabs.includes(val as TopTab) ? val as TopTab : 'databases';
 
   const [topTab, setTopTabState] = useState<TopTab>(() => parseTab(searchParams.get('tab')));
@@ -480,6 +481,14 @@ export default function ContextEditorV2({
           <Tabs.Trigger value="databases" fontFamily="mono" fontSize="sm">
             Databases
           </Tabs.Trigger>
+          <Tabs.Trigger value="semantic" fontFamily="mono" fontSize="sm">
+            Semantic
+            {(content.semanticModels?.length ?? 0) > 0 && (
+              <Badge size="xs" colorPalette="gray" variant="subtle" ml={1.5}>
+                {content.semanticModels!.length}
+              </Badge>
+            )}
+          </Tabs.Trigger>
           <Tabs.Trigger value="docs" fontFamily="mono" fontSize="sm">
             Docs
             {(content.docs?.length ?? 0) > 0 && (
@@ -536,6 +545,23 @@ export default function ContextEditorV2({
           onYamlChange={handleYamlChange}
           contextPath={file?.path ?? ''}
         />
+
+        {/* Semantic Models Tab — authored SemanticModelV2 on the current
+            version (Semantic_Model_v2.md M5b). Same onChange pattern as views;
+            save-gate tier-1/2/3 errors surface through the shared saveError /
+            error banner above. */}
+        <Tabs.Content value="semantic">
+          {topTab === 'semantic' && (
+            <SemanticModelsEditor
+              models={content.semanticModels || []}
+              inheritedModels={content.fullSemanticModels || []}
+              databases={availableDatabases}
+              views={[...(content.fullViews || []), ...(content.views || [])]}
+              editMode={editMode}
+              onChange={(semanticModels) => onChange({ semanticModels })}
+            />
+          )}
+        </Tabs.Content>
 
         {/* Docs Tab */}
         <Tabs.Content value="docs">

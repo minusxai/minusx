@@ -21,11 +21,20 @@ const schemaWithCols = [
 
 const wl1 = [{ name: 'wh', type: 'connection', children: [] }];
 
+// A minimal authored semantic model (SemanticModelV2) for write-path tests.
+const model1 = {
+  name: 'Orders',
+  connection: 'wh',
+  primary: { kind: 'table', schema: 'sales', table: 'orders' },
+  dimensions: [{ name: 'Region', source: 'primary', column: 'region' }],
+  measures: [{ name: 'Revenue', agg: 'SUM', column: 'amount' }],
+};
+
 // A realistic stored (version-based) context: live version is #2 (published.all), with an older #1.
 const ctx = () => ({
   versions: [
     { version: 1, whitelist: [], docs: [{ content: 'old', title: 'Old', description: 'old doc' }], createdAt: 't1', createdBy: 1 },
-    { version: 2, whitelist: wl1, docs: [{ content: '# Sales', title: 'Sales', description: 'sales docs' }], metrics: [{ name: 'Revenue' }], createdAt: 't2', createdBy: 1, description: 'v2 notes' },
+    { version: 2, whitelist: wl1, docs: [{ content: '# Sales', title: 'Sales', description: 'sales docs' }], metrics: [{ name: 'Revenue' }], semanticModels: [model1], createdAt: 't2', createdBy: 1, description: 'v2 notes' },
   ],
   published: { all: 2 },
   skills: [{ name: 'skill1', description: 'd', content: 'c', enabled: true, createdAt: 't', updatedAt: 't', createdBy: 1 }],
@@ -38,16 +47,21 @@ const ctx = () => ({
 describe('shapeContextForAgent — flatten to the live version', () => {
   it('exposes only the flat knowledge view; drops whitelist/versions/published/computed', () => {
     const shaped: any = shapeContextForAgent(ctx());
-    expect(Object.keys(shaped).sort()).toEqual(['annotations', 'docs', 'evals', 'metrics', 'relationships', 'skills']);
+    expect(Object.keys(shaped).sort()).toEqual(['annotations', 'docs', 'evals', 'metrics', 'relationships', 'semanticModels', 'skills']);
     for (const noise of ['whitelist', 'versions', 'published', 'fullSchema', 'parentSchema', 'fullDocs']) {
       expect(noise in shaped).toBe(false);
     }
   });
 
-  it('always exposes all six authored fields, defaulting absent ones to [] (discoverable surface)', () => {
+  it('always exposes all seven authored fields, defaulting absent ones to [] (discoverable surface)', () => {
     const minimal = { versions: [{ version: 1, whitelist: [], docs: [], createdAt: 't', createdBy: 1 }], published: { all: 1 } };
     const shaped: any = shapeContextForAgent(minimal);
-    expect(shaped).toEqual({ docs: [], metrics: [], annotations: [], relationships: [], skills: [], evals: [] });
+    expect(shaped).toEqual({ docs: [], metrics: [], annotations: [], relationships: [], semanticModels: [], skills: [], evals: [] });
+  });
+
+  it("exposes the live version's authored semanticModels", () => {
+    const shaped: any = shapeContextForAgent(ctx());
+    expect(shaped.semanticModels).toEqual([model1]);
   });
 
   it('flattens the LIVE (published) version, not the first', () => {
@@ -107,6 +121,25 @@ describe('foldContextAgentView — fold edits back into the live version', () =>
     expect(folded.skills).toEqual(before.skills);
   });
 
+  it('writes edited semanticModels into the live version', () => {
+    const before = ctx();
+    const renamed = { ...model1, name: 'Orders v2' };
+    const edited = { ...shapeContextForAgent(before) as any, semanticModels: [renamed] };
+    const folded: any = foldContextAgentView(before, edited);
+    expect(folded.versions[1].semanticModels).toEqual([renamed]); // live version updated
+    expect(folded.versions[0].semanticModels).toBeUndefined();    // other version untouched
+    expect(folded.versions[1].whitelist).toEqual(wl1);            // rest of live version preserved
+  });
+
+  it('preserves stored semanticModels when the edited view omits them', () => {
+    const before = ctx();
+    const edited: any = { ...shapeContextForAgent(before) as any, docs: [{ content: '# new', title: 'Sales', description: 'd' }] };
+    delete edited.semanticModels;
+    const folded: any = foldContextAgentView(before, edited);
+    expect(folded.versions[1].semanticModels).toEqual([model1]);  // untouched
+    expect(folded.versions[1].docs[0].content).toBe('# new');
+  });
+
   it('folds content-level evals + skills back to the content level', () => {
     const before = ctx();
     const edited = { ...shapeContextForAgent(before) as any, evals: [] };
@@ -123,6 +156,8 @@ describe('contextEditWithinBounds', () => {
     expect(contextEditWithinBounds(a, docEdit)).toBe(true);
     const evalEdit = foldContextAgentView(a, { ...shapeContextForAgent(a) as any, evals: [] });
     expect(contextEditWithinBounds(a, evalEdit)).toBe(true);
+    const modelEdit = foldContextAgentView(a, { ...shapeContextForAgent(a) as any, semanticModels: [{ ...model1, name: 'Orders v2' }] });
+    expect(contextEditWithinBounds(a, modelEdit)).toBe(true);
   });
 
   it('ignores changes to the server-computed fields (re-derived on load)', () => {

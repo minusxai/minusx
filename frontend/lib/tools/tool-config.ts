@@ -44,6 +44,17 @@ const TOOL_CONFIGS: Record<string, ToolConfig> = {
 
     timelineVerb: 'Querying',
   },
+  // Semantic-layer sibling of ExecuteQuery — returns the identical result
+  // payload, so it reuses ExecuteQuery's display config wholesale.
+  'RunSemanticQuery': {
+    displayComponent: ExecuteQueryDisplay,
+
+    chipLabel: 'query',
+    chipLabelPlural: 'queries',
+    chipIcon: LuDatabase,
+
+    timelineVerb: 'Querying',
+  },
   'Clarify': {
     displayComponent: ClarifyDisplay,
 

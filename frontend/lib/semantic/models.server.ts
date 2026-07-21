@@ -1,42 +1,41 @@
 /**
- * Scoped semantic-model derivation. Full models are derived PER REQUEST for
- * the tables in play, never stored on the context content — a large workspace
- * derives multi-MB of vocabulary, which must not ship in every context load
- * (see lib/semantic/derive.ts). Served by POST /api/semantic-models.
+ * AUTHORED semantic models, served scoped to a path (Semantic_Model_v2.md
+ * §2.7 M5). Models are authored on context versions
+ * (`ContextVersion.semanticModels`) and inherited down the context tree as
+ * `content.fullSemanticModels` — resolution mirrors views
+ * (lib/views/views.server.ts): nearest context for the path, inherited models
+ * plus the user-visible published version's own. Served by
+ * POST /api/semantic-models.
  *
- * Composition:
- *  - whitelist scope + declared relationships → nearest context for the path
- *    (table NAMES survive schema bounding, so scoping works on any size)
- *  - columns + profiled meta → the connection's persisted schema (always full)
- *  - business names → deriveModelStubs over the whole whitelisted table list,
- *    so scoped names match what the client shows globally
+ * Derivation (lib/semantic/derive.ts) no longer feeds these entry points — it
+ * survives only as the draft-suggestion engine ("create a semantic model from
+ * this table" pre-fills a draft).
  */
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
-import { getPersistedConnectionSchema } from '@/lib/data/connections.server';
 import { findNearestContextPath, getPublishedVersionForUser } from '@/lib/context/context-utils';
 import { resolvePath } from '@/lib/mode/path-resolver';
-import { deriveSemanticModels } from '@/lib/semantic/derive';
 import { detectSemanticQuery } from '@/lib/semantic/detect-sql';
-import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
-import { connectionTypeToDialect } from '@/lib/types';
+import { connectionTypeToDialect, VIEWS_SCHEMA } from '@/lib/types';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { VIEWS_SCHEMA } from '@/lib/types';
-import { resolveViewsForContext } from '@/lib/views/views.server';
-import { exposedColumns } from '@/lib/types/views';
-import type { ContextContent, DatabaseSchema, DatabaseWithSchema, SemanticModelV2, TableRelationship } from '@/lib/types';
+import type { ContextContent, SemanticModelV2 } from '@/lib/types';
 
 export interface ScopedModelsParams {
   /** Folder the requesting file lives in (context resolution anchor), e.g. "/org". */
   path: string;
   /** Connection (database) name. */
   connection: string;
-  /** Base tables to derive models for. */
-  tables: string[];
+  /**
+   * Optional primary scoping: only models whose primary (table name for
+   * table-primaries, view name for model-primaries) is listed. Omit for ALL
+   * authored models on the connection.
+   */
+  tables?: string[];
 }
 
-async function loadNearestContext(user: EffectiveUser, basePath: string): Promise<ContextContent | null> {
+/** Load the nearest context (by serving folder) for `basePath` — the same resolution chat uses. */
+export async function loadNearestContext(user: EffectiveUser, basePath: string): Promise<ContextContent | null> {
   const modePath = resolvePath(user.mode, '/');
   const { data: contextFiles } = await FilesAPI.getFiles(
     { type: 'context', paths: [modePath], depth: -1 },
@@ -48,117 +47,49 @@ async function loadNearestContext(user: EffectiveUser, basePath: string): Promis
   return (data?.content as ContextContent) ?? null;
 }
 
-interface ConnectionScope {
-  schema: DatabaseSchema;
-  whitelisted: Set<string>;                 // `${schema}|${table}` of every in-scope table
-  namingSchemas: DatabaseWithSchema['schemas'];  // whitelisted names-only list (global naming)
-  relationships: TableRelationship[];
+/**
+ * Everything a context exposes: inherited (fullSemanticModels, computed by the
+ * loader) + the user-visible published version's own — mirrors
+ * resolveViewsForContext.
+ */
+export function resolveModelsForContext(content: ContextContent | null, userId: number): SemanticModelV2[] {
+  if (!content) return [];
+  const version = content.versions?.find(
+    (v) => v.version === getPublishedVersionForUser(content, userId),
+  ) ?? content.versions?.[0];
+  return [...(content.fullSemanticModels ?? []), ...(version?.semanticModels ?? [])];
 }
 
-/** Shared resolution: connection columns + context whitelist + relationships. */
-async function resolveScope(
+/** The name a model's primary is scoped/searched by (table name, or view name). */
+const primaryName = (m: SemanticModelV2): string =>
+  m.primary.kind === 'table' ? m.primary.table : m.primary.view;
+
+/** Authored models visible at `path`, on one connection. */
+async function authoredModelsForPath(
   user: EffectiveUser,
   path: string,
   connection: string,
-): Promise<ConnectionScope | null> {
-  const schema = await getPersistedConnectionSchema(connection, user);
-  if (!schema) return null;
-
+): Promise<SemanticModelV2[]> {
   let context: ContextContent | null = null;
   try {
     context = await loadNearestContext(user, path);
   } catch {
-    context = null; // no context → scope to the connection schema directly
+    context = null; // no context / not readable → no authored models
   }
-
-  // Views live on the context, not in the connection's schema — merge them in as
-  // `_views` tables so they derive semantic models exactly like real tables.
-  const views = resolveViewsForContext(context, user.userId).filter((v) => v.connection === connection);
-  const schemaWithViews: DatabaseSchema = views.length === 0 ? schema : {
-    ...schema,
-    schemas: [
-      ...(schema.schemas ?? []).filter((s) => s.schema !== VIEWS_SCHEMA),
-      // exposedColumns applies the view's column whitelist — a deselected column
-      // must not surface as a semantic measure/dimension, matching what query
-      // execution already projects away.
-      {
-        schema: VIEWS_SCHEMA,
-        tables: views
-          .filter((v) => exposedColumns(v).length > 0)
-          .map((v) => ({ table: v.name, columns: exposedColumns(v).map((c) => ({ ...c })) })),
-      },
-    ],
-  };
-
-  // Whitelisted table names for this connection (names survive bounding).
-  // Without a context, every table in the connection is in scope.
-  const contextDb = context?.fullSchema?.find((db) => db.databaseName === connection);
-  const source = contextDb ?? { databaseName: connection, schemas: schemaWithViews.schemas };
-  const whitelisted = new Set<string>();
-  for (const s of source.schemas ?? []) {
-    for (const t of s.tables ?? []) whitelisted.add(`${s.schema}|${t.table}`);
-  }
-  // Views are curated by construction — always in scope for the context that sees them.
-  for (const v of views) whitelisted.add(`${VIEWS_SCHEMA}|${v.name}`);
-
-  // Inherited (fullRelationships) + the live version's own — mirrors how
-  // metrics resolve (full* fields are inherited-only).
-  const liveVersion = context?.versions?.find(
-    (v) => v.version === getPublishedVersionForUser(context, 0),
-  ) ?? context?.versions?.[0];
-  const relationships: TableRelationship[] = [
-    ...(context?.fullRelationships ?? []),
-    ...(liveVersion?.relationships ?? []),
-  ].filter((r) => r.connection === connection);
-
-  return { schema: schemaWithViews, whitelisted, namingSchemas: source.schemas ?? [], relationships };
+  return resolveModelsForContext(context, user.userId).filter((m) => m.connection === connection);
 }
 
 export async function getScopedSemanticModels(
   user: EffectiveUser,
   { path, connection, tables }: ScopedModelsParams,
 ): Promise<SemanticModelV2[]> {
-  if (tables.length === 0) return [];
-
-  const scope = await resolveScope(user, path, connection);
-  if (!scope) return [];
-  const { schema, whitelisted, namingSchemas, relationships } = scope;
-
-  // Requested tables (∩ whitelist) plus their relationship targets (∩ whitelist)
-  // — targets contribute join dimensions without getting models of their own.
-  const requested = new Set<string>();
-  for (const s of schema.schemas ?? []) {
-    for (const t of s.tables ?? []) {
-      if (tables.includes(t.table) && whitelisted.has(`${s.schema}|${t.table}`)) {
-        requested.add(`${s.schema}|${t.table}`);
-      }
-    }
-  }
-  const inScope = new Set(requested);
-  for (const r of relationships) {
-    if (requested.has(`${r.schema ?? ''}|${r.table}`)) {
-      const target = `${r.targetSchema ?? ''}|${r.targetTable}`;
-      if (whitelisted.has(target)) inScope.add(target);
-    }
-  }
-  if (requested.size === 0) return [];
-
-  const scoped: DatabaseWithSchema = {
-    databaseName: connection,
-    schemas: (schema.schemas ?? [])
-      .map((s) => ({ ...s, tables: (s.tables ?? []).filter((t) => inScope.has(`${s.schema}|${t.table}`)) }))
-      .filter((s) => s.tables.length > 0),
-  };
-  // Global naming scope: all whitelisted tables (names-only is fine).
-  const naming: DatabaseWithSchema = { databaseName: connection, schemas: namingSchemas };
-
-  return deriveSemanticModels([scoped], relationships, [naming])
-    // A non-table primary can never match a requested raw table.
-    .filter((m) => m.primary.kind === 'table' && requested.has(`${m.primary.schema ?? ''}|${m.primary.table}`));
+  const models = await authoredModelsForPath(user, path, connection);
+  if (tables === undefined) return models;
+  return models.filter((m) => tables.includes(primaryName(m)));
 }
 
 // ---------------------------------------------------------------------------
-// Metrics-first search — find measures/dimensions across the WHOLE whitelist
+// Metrics-first search — find measures/dimensions across every authored model
 // ---------------------------------------------------------------------------
 
 export interface SemanticFieldHit {
@@ -170,52 +101,29 @@ export interface SemanticFieldHit {
   table: string;
 }
 
-// Deriving every whitelisted table's vocabulary is CPU work proportional to the
-// schema, and search fires per keystroke — cache the flattened field list
-// briefly per (mode, connection, schema freshness). 30s staleness after a
-// whitelist/relationship edit is acceptable for a typeahead.
-// eslint-disable-next-line no-restricted-syntax -- server-side per-process typeahead cache; entries expire in 30s
-const fieldCache = new Map<string, { at: number; fields: SemanticFieldHit[] }>();
-const FIELD_CACHE_TTL_MS = 30_000;
-
 export async function searchSemanticFields(
   user: EffectiveUser,
   { path, connection, q, limit = 50 }: { path: string; connection: string; q: string; limit?: number },
 ): Promise<SemanticFieldHit[]> {
-  const scope = await resolveScope(user, path, connection);
-  if (!scope) return [];
+  const models = await authoredModelsForPath(user, path, connection);
 
-  const cacheKey = `${user.mode}|${connection}|${scope.schema.updated_at}|${scope.whitelisted.size}|${JSON.stringify(scope.relationships)}`;
-  let entry = fieldCache.get(cacheKey);
-  if (!entry || Date.now() - entry.at > FIELD_CACHE_TTL_MS) {
-    const all: DatabaseWithSchema = {
-      databaseName: connection,
-      schemas: (scope.schema.schemas ?? [])
-        .map((s) => ({ ...s, tables: (s.tables ?? []).filter((t) => scope.whitelisted.has(`${s.schema}|${t.table}`)) }))
-        .filter((s) => s.tables.length > 0),
-    };
-    const models = deriveSemanticModels([all], scope.relationships);
-    const fields: SemanticFieldHit[] = [];
-    for (const m of models) {
-      if (m.primary.kind !== 'table') continue; // derived models are always table-primaries
-      const { table: mTable } = m.primary;
-      const mSchema = m.primary.schema ?? undefined;
-      for (const me of m.measures) {
-        fields.push({ kind: 'measure', name: me.name, model: m.name, connection, schema: mSchema, table: mTable });
-      }
-      for (const d of m.dimensions) {
-        fields.push({ kind: 'dimension', name: d.name, model: m.name, connection, schema: mSchema, table: mTable });
-      }
+  const fields: SemanticFieldHit[] = [];
+  for (const m of models) {
+    const table = primaryName(m);
+    // Model-primaries are queried as _views.<name> — surface them there.
+    const schema = m.primary.kind === 'table' ? (m.primary.schema ?? undefined) : VIEWS_SCHEMA;
+    for (const me of m.measures) {
+      fields.push({ kind: 'measure', name: me.name, model: m.name, connection, schema, table });
     }
-    entry = { at: Date.now(), fields };
-    fieldCache.set(cacheKey, entry);
-    if (fieldCache.size > 8) fieldCache.delete(fieldCache.keys().next().value!); // tiny LRU-ish bound
+    for (const d of m.dimensions) {
+      fields.push({ kind: 'dimension', name: d.name, model: m.name, connection, schema, table });
+    }
   }
 
   const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
   const matches = tokens.length === 0
-    ? entry.fields
-    : entry.fields.filter((f) => {
+    ? fields
+    : fields.filter((f) => {
         const hay = `${f.name} ${f.model}`.toLowerCase();
         return tokens.every((t) => hay.includes(t));
       });
@@ -223,13 +131,15 @@ export async function searchSemanticFields(
 }
 
 // ---------------------------------------------------------------------------
-// Server-side detection — parse → scope models to the SQL's tables → detect
+// Server-side detection — authored models only
 // ---------------------------------------------------------------------------
 
 /**
  * The same reliability-gated detection the question page runs client-side
- * (parse to IR, fetch models scoped to the tables the SQL touches, recompile-
- * verify), in one server call. Returns the spec or null.
+ * (parse to IR, match against the models visible at the path, recompile-
+ * verify), in one server call. Detects against AUTHORED models only — with no
+ * authored models the Semantic tab simply doesn't light up. Returns the spec
+ * or null.
  */
 export async function detectSemanticSql(
   user: EffectiveUser,
@@ -243,20 +153,7 @@ export async function detectSemanticSql(
   } catch {
     return null;
   }
-  // detectSemanticQuery parses first; give it models scoped to every table the
-  // SQL names (parse once here to learn the tables).
-  let tables: string[];
-  try {
-    const ir = await parseSqlToIrLocal(sql, dialect);
-    if (!ir || (ir as { type?: string }).type === 'compound') return null;
-    const simple = ir as import('@/lib/sql/ir-types').QueryIR;
-    tables = [simple.from?.table, ...(simple.joins ?? []).map((j) => j.table?.table)]
-      .filter((t): t is string => !!t);
-  } catch {
-    return null;
-  }
-  if (tables.length === 0) return null;
-  const models = await getScopedSemanticModels(user, { path, connection, tables });
+  const models = await getScopedSemanticModels(user, { path, connection });
   if (models.length === 0) return null;
   return detectSemanticQuery(sql, models, dialect);
 }

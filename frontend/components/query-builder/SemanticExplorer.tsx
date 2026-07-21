@@ -667,6 +667,26 @@ export function SemanticExplorer({
     </Box>
   );
 
+  // M5 (Semantic_Model_v2.md §2.7): models are AUTHORED, not derived — with
+  // none authored there is nothing to explore, so point at where they're made.
+  if (models.length === 0) {
+    return (
+      <VStack align="center" justify="center" h="100%" minH={0} px={6} py={8} gap={2}>
+        <Icon as={LuLayers} boxSize={5} color="fg.subtle" />
+        <Text
+          aria-label="semantic-models-empty-state"
+          fontSize="xs"
+          fontFamily="mono"
+          color="fg.muted"
+          textAlign="center"
+          maxW="360px"
+        >
+          No semantic models yet — create one in the knowledge base (context) editor
+        </Text>
+      </VStack>
+    );
+  }
+
   return (
     <VStack align="stretch" gap={0} h="100%" minH={0}>
       {!browsingTables && shelves}

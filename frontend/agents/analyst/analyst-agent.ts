@@ -15,6 +15,7 @@ import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
 import {
   SearchDBSchema,
   ExecuteQuery,
+  RunSemanticQuery,
 } from '@/agents/benchmark-analyst/db-tools.server';
 import { LoadContext } from '@/agents/web-analyst/web-tools';
 import { formatContextDocsSection } from '@/lib/sql/context-docs';
@@ -60,6 +61,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     ListDBConnections.schema,
     SearchDBSchema.schema,
     ExecuteQuery.schema,
+    RunSemanticQuery.schema,
     ReadFiles.schema,
     SearchFiles.schema,
     LoadContext.schema,

@@ -28,6 +28,7 @@ import {
   convertDatabaseContextToWhitelist,
 } from '@/lib/context/context-utils';
 import { validateTableRelationships } from '@/lib/semantic/derive';
+import { applyContextContentChange } from '@/lib/context/version-edit';
 
 interface ContextContainerV2Props {
   fileId: FileId;
@@ -218,6 +219,7 @@ export default function ContextContainerV2({
       annotations: sourceVersion.annotations ? JSON.parse(JSON.stringify(sourceVersion.annotations)) : undefined,
       relationships: sourceVersion.relationships ? JSON.parse(JSON.stringify(sourceVersion.relationships)) : undefined,
       views: sourceVersion.views ? JSON.parse(JSON.stringify(sourceVersion.views)) : undefined,
+      semanticModels: sourceVersion.semanticModels ? JSON.parse(JSON.stringify(sourceVersion.semanticModels)) : undefined,
       createdAt: new Date().toISOString(),
       createdBy: user.id,
       description: description || ''
@@ -335,41 +337,22 @@ export default function ContextContainerV2({
     setSaveError(null);
   }, [fileId, handleEditModeChange]);
 
-  // Handle changes from editor (for the selected version)
+  // Handle changes from editor (for the selected version). The version-scoped
+  // fold lives in lib/context/version-edit.ts (pure + unit-tested): a
+  // version-scoped field written at the content root would bypass the save
+  // gates and be invisible to the loader.
   const handleChange = useCallback((updates: Partial<ContextContent>) => {
     if (!currentContent || !currentVersionContent || !user?.id) return;
 
-    // If updating databases, docs, metrics, or annotations, update the selected version
-    if (updates.databases !== undefined || updates.docs !== undefined || updates.metrics !== undefined || updates.annotations !== undefined || updates.relationships !== undefined || updates.views !== undefined) {
-      // Convert DatabaseContext[] | '*' (editor format) → Whitelist (storage format)
-      const newWhitelist: Whitelist | undefined = updates.databases !== undefined
-        ? updates.databases === '*'
-          ? '*'
-          : convertDatabaseContextToWhitelist(updates.databases as DatabaseContext[])
-        : undefined;
+    // Convert DatabaseContext[] | '*' (editor format) → Whitelist (storage format)
+    const newWhitelist: Whitelist | undefined = updates.databases !== undefined
+      ? updates.databases === '*'
+        ? '*'
+        : convertDatabaseContextToWhitelist(updates.databases as DatabaseContext[])
+      : undefined;
 
-      const updatedVersions = currentContent.versions?.map(v => {
-        if (v.version === selectedVersion) {
-          return {
-            ...v,
-            ...(newWhitelist !== undefined ? { whitelist: newWhitelist } : {}),
-            docs: updates.docs ?? v.docs,
-            metrics: updates.metrics ?? v.metrics,
-            annotations: updates.annotations ?? v.annotations,
-            relationships: updates.relationships ?? v.relationships,
-            views: updates.views ?? v.views,
-            lastEditedAt: new Date().toISOString(),
-            lastEditedBy: user.id
-          };
-        }
-        return v;
-      });
-
-      editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: { ...currentContent, versions: updatedVersions } as ContextContent } });
-    } else {
-      // Other updates go through directly
-      editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: { ...currentContent, ...updates } as ContextContent } });
-    }
+    const nextContent = applyContextContentChange(currentContent, selectedVersion, updates, user.id, newWhitelist);
+    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: nextContent } });
   }, [currentContent, currentVersionContent, selectedVersion, user?.id, fileId]);
 
   // Job runs for context evals
@@ -428,6 +411,7 @@ export default function ContextContainerV2({
       annotations: currentVersionContent.annotations,
       relationships: currentVersionContent.relationships,
       views: currentVersionContent.views,
+      semanticModels: currentVersionContent.semanticModels,
       published: currentContent.published // Ensure published is always present
     };
   }, [currentContent, currentVersionContent]);
