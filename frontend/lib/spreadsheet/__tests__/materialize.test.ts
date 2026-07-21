@@ -101,6 +101,21 @@ describe('runSpreadsheetSource', () => {
     expect(result).toMatchObject({ ok: false, errors: [{ code: 'row_width', row: 1, column: 1 }] });
   });
 
+  it('rejects malformed sources instead of throwing (MINUSX-BI-3Q/3R)', () => {
+    const malformed: unknown[] = [
+      { version: 1, rows: [['a']] }, // missing columns — the shape seen in production
+      { version: 1, columns: [{ name: 'a', type: 'auto' }] }, // missing rows
+      { version: 1, columns: 'nope', rows: [] }, // non-array columns
+      {},
+      null,
+      undefined,
+    ];
+    for (const source of malformed) {
+      const result = runSpreadsheetSource(source as SpreadsheetSource);
+      expect(result).toMatchObject({ ok: false, errors: [{ code: 'malformed_source' }] });
+    }
+  });
+
   it('uses stable, content-addressed execution identities', () => {
     const a = getSpreadsheetExecution(source());
     const b = getSpreadsheetExecution(JSON.parse(JSON.stringify(source())));

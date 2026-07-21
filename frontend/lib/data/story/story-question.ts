@@ -13,6 +13,7 @@
  */
 import type { QuestionParameter, VizSettings, QuestionContent, VizEnvelope, SpreadsheetSource } from '@/lib/validation/atlas-schemas';
 import { vizSettingsToEnvelopeStatic } from '@/lib/viz/from-vizsettings';
+import { isSpreadsheetSource } from '@/lib/spreadsheet/materialize';
 import { escAttr, escTemplate, serializeJsonAttr, parseJsonAttr } from './html-attr';
 
 /** An inline question embedded directly in a story body (no saved file). Its data comes from
@@ -64,11 +65,7 @@ function inlineVizFromValue(v: unknown, query?: string): VizEnvelope | undefined
 }
 
 function spreadsheetFromAttr(v: unknown): SpreadsheetSource | undefined {
-  if (v && typeof v === 'object' && !Array.isArray(v)) {
-    const s = v as { version?: unknown; columns?: unknown; rows?: unknown };
-    if (s.version === 1 && Array.isArray(s.columns) && Array.isArray(s.rows)) return v as SpreadsheetSource;
-  }
-  return undefined;
+  return isSpreadsheetSource(v) ? v : undefined;
 }
 
 /**

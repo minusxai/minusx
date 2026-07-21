@@ -1,6 +1,6 @@
 import type { QuestionContent, SpreadsheetSource } from '@/lib/types';
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
-import { getSpreadsheetExecution } from './materialize';
+import { getSpreadsheetExecution, isSpreadsheetSource } from './materialize';
 
 export type QuestionExecution =
   | {
@@ -23,7 +23,7 @@ export function getQuestionExecution(
   inheritedParams: Record<string, unknown> = {},
 ): QuestionExecution | null {
   if (!content) return null;
-  if (content.spreadsheet) {
+  if (isSpreadsheetSource(content.spreadsheet)) {
     const execution = getSpreadsheetExecution(content.spreadsheet);
     return { kind: 'spreadsheet', ...execution, spreadsheet: content.spreadsheet };
   }

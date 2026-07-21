@@ -17,6 +17,7 @@ export const MAX_SPREADSHEET_ROWS = QUESTION_SPREADSHEET_LIMITS.maxRows;
 export const MAX_SPREADSHEET_COLUMNS = QUESTION_SPREADSHEET_LIMITS.maxColumns;
 
 export type CellValidationErrorCode =
+  | 'malformed_source'
   | 'row_limit'
   | 'column_limit'
   | 'empty_header'
@@ -55,6 +56,14 @@ export interface SpreadsheetExecution {
 export function getSpreadsheetExecution(source: SpreadsheetSource): SpreadsheetExecution {
   const query = `spreadsheet:${hashContent(source)}`;
   return { query, params: {}, database: '', id: getQueryHash(query, {}, '') };
+}
+
+/** Structural guard for spreadsheet data read from persisted content, which may predate
+ *  validation or have been written by an agent — never trust the declared type alone. */
+export function isSpreadsheetSource(value: unknown): value is SpreadsheetSource {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const source = value as Partial<SpreadsheetSource>;
+  return source.version === 1 && Array.isArray(source.columns) && Array.isArray(source.rows);
 }
 
 function valueOrNull(value: string | null | undefined): string | null {
@@ -131,6 +140,16 @@ export function runSpreadsheetSource(
   limits: SpreadsheetLimits = QUESTION_SPREADSHEET_LIMITS,
 ): SpreadsheetRunResult {
   const errors: CellValidationError[] = [];
+
+  if (!isSpreadsheetSource(source)) {
+    return {
+      ok: false,
+      errors: [{
+        code: 'malformed_source', row: 0, column: 0,
+        message: 'Spreadsheet data is malformed and cannot be displayed.',
+      }],
+    };
+  }
 
   if (source.rows.length > limits.maxRows) {
     errors.push({
