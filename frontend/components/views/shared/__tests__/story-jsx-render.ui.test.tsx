@@ -107,11 +107,13 @@ describe('AgentHtml format="jsx" — shadcn components in the iframe', () => {
     expect(tabB.getAttribute('data-state')).toBe('active');
   });
 
-  it('injects the floating-element CSS into the iframe head (absolute-positioned poppers)', async () => {
+  it('injects the floating-element CSS inside the story root (absolute-positioned poppers)', async () => {
+    // In-root, not head (Story_Design_V2 §4): the serialized <svg> subtree must carry it.
     render(<AgentHtml html={TABS_JSX} format="jsx" width={800} colorMode="light" />);
     const doc = iframeDoc();
-    await waitFor(() => expect(doc.head.querySelector('style[data-mx-floating]')).toBeTruthy());
-    expect(doc.head.querySelector('style[data-mx-floating]')!.textContent).toContain('data-radix-popper-content-wrapper');
+    await waitFor(() => expect(doc.querySelector('[data-mx-story-root] style[data-mx-floating]')).toBeTruthy());
+    expect(doc.querySelector('[data-mx-story-root] style[data-mx-floating]')!.textContent).toContain('data-radix-popper-content-wrapper');
+    expect(doc.head.querySelector('style[data-mx-floating]')).toBeNull();
   });
 });
 

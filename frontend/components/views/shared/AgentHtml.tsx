@@ -15,6 +15,7 @@ import StoryEmbeds, {
 } from '@/components/views/shared/StoryEmbeds';
 import StoryJsxBody, { type StoryJsxEditApi } from '@/components/views/shared/StoryJsxBody';
 import { STORY_FLOATING_CSS } from '@/lib/story-ui';
+import { getStoryFontCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import StorySelectionPopover from '@/components/views/story/StorySelectionPopover';
 import { paramFromPlaceholderEl, type StoryParam } from '@/lib/data/story/story-params';
 import { inlineQuestionFromEl, inlineEmbedToQuestionContent, savedQuestionVizFromEl } from '@/lib/data/story/story-question';
@@ -47,9 +48,10 @@ interface AgentHtmlProps {
   fluid?: boolean;
   /**
    * Where the story body mounts inside the iframe (see lib/story-surface):
-   *  - 'dom' (default) — the body IS document.body; captured via snapdom.
-   *  - 'svg' — the body sits in <svg><foreignObject>, so a capture can serialize the LIVE surface
-   *    (browser-rendered, snapdom-free). Renders and behaves identically either way.
+   *  - 'svg' (default, and the only production path) — the body sits in <svg><foreignObject>, so a
+   *    capture can serialize the LIVE surface (browser-rendered, snapdom-free).
+   *  - 'dom' — the body IS document.body. Kept as the surface abstraction's second implementation
+   *    (not selectable via any config).
    */
   surface?: StorySurfaceKind;
   /**
@@ -111,7 +113,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, format, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'dom', paramValues, onParamValuesChange, onEditNumber, onEditQuestion, selectionSource, onChange, filePath, colorMode, compiledCss },
+  { html, format, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'svg', paramValues, onParamValuesChange, onEditNumber, onEditQuestion, selectionSource, onChange, filePath, colorMode, compiledCss },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -137,15 +139,16 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     const doc = iframe?.contentDocument;
     if (!iframe || !doc) return;
 
-    // Fresh document each build. <style data-mx-app-styles> sits FIRST (in <head>) so the story's own
-    // <style> blocks (in <body>, later in document order) win ties.
+    // Fresh document each build. Injected styles do NOT go in <head>: they live INSIDE the story
+    // root (Story_Design_V2 §4 self-contained doc) so a serialized capture of the <svg> surface
+    // carries them without head-cloning — see the prepend below.
     // Defense-in-depth CSP for the agent-authored document (see lib/html/agent-iframe-csp.ts).
     const CSP = AGENT_IFRAME_CSP;
     // `<base target="_top">`: links inside an iframe navigate the IFRAME by default, which would load
     // the whole app inside it (e.g. clicking an embedded chart's title → /f/<id>). Targeting _top sends
     // every link navigation (chart titles, author links) to the top window instead.
     doc.open();
-    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}"><base target="_top"><style data-mx-app-styles></style></head><body></body></html>`);
+    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}"><base target="_top"></head><body></body></html>`);
     doc.close();
     docRef.current = doc;
     const root = doc.documentElement;
@@ -167,24 +170,6 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       doc.documentElement.style.minHeight = '0';
       doc.body.style.minHeight = '0';
     }
-    // Design-system stylesheet (server-compiled Tailwind) — into <head> via textContent (DOM
-    // insertion, not doc.write, so no escaping concerns), after the app-styles mirror. Body
-    // <style> blocks come later in document order and win ties; the WYSIWYG serializer reads
-    // body only, so this can never echo into a save.
-    if (compiledCss) {
-      const tw = doc.createElement('style');
-      tw.setAttribute('data-mx-tw', '');
-      tw.textContent = compiledCss;
-      doc.head.appendChild(tw);
-    }
-    // Jsx stories: the vendored Tooltip/Popover render un-portaled, and Radix's popper wrapper
-    // must be forced to absolute positioning (fixed is broken inside <svg><foreignObject>).
-    if (isJsx) {
-      const fl = doc.createElement('style');
-      fl.setAttribute('data-mx-floating', '');
-      fl.textContent = STORY_FLOATING_CSS;
-      doc.head.appendChild(fl);
-    }
     // Where the story body lives: document.body ('dom') or an <svg><foreignObject> in it ('svg').
     // Everything downstream (embeds, editing, serialization, height) targets `surface.root`, so the
     // renderer difference is confined to lib/story-surface.
@@ -194,6 +179,33 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // interpreter into the nested React root below (portaled into surface.root) — never innerHTML.
     // @import web-fonts load natively inside an iframe (unlike a shadow root) — no hoisting needed.
     if (!isJsx) surface.root.innerHTML = sanitized;
+
+    // ── Injected styles: INSIDE the story root, as data-mx-*-tagged nodes (Story_Design_V2 §4) ──
+    // The serialized <svg> subtree must be self-contained, so everything the story depends on lives
+    // in-root, not in <head>. Prepend order (first → last): app-styles mirror, compiled Tailwind,
+    // floating css, platform fonts — the story's own <style> blocks come later in document order and
+    // win ties. Every save path strips these via INJECTED_STYLE_SELECTOR (lib/html/serialize-story).
+    const injectedStyles: HTMLStyleElement[] = [];
+    const makeStyle = (attr: string, css: string) => {
+      const el = doc.createElement('style');
+      el.setAttribute(attr, '');
+      el.textContent = css;
+      injectedStyles.push(el);
+    };
+    makeStyle('data-mx-app-styles', ''); // filled by mirrorAppStyles below (it finds the tag by attr)
+    // Design-system stylesheet (server-compiled Tailwind), via textContent (DOM insertion, not
+    // doc.write, so no escaping concerns).
+    if (compiledCss) makeStyle('data-mx-tw', compiledCss);
+    if (isJsx) {
+      // Vendored Tooltip/Popover render un-portaled, and Radix's popper wrapper must be forced to
+      // absolute positioning (fixed is broken inside <svg><foreignObject>).
+      makeStyle('data-mx-floating', STORY_FLOATING_CSS);
+      // Platform-provided fonts (neutral default; theme registry — lib/data/story/story-fonts.ts).
+      // Live form is URL-loaded static assets; capture splices data-URIs into the parsed copy only.
+      const fontCss = getStoryFontCss();
+      if (fontCss) makeStyle(STORY_FONTS_ATTR, fontCss);
+    }
+    surface.root.prepend(...injectedStyles);
     mirrorAppStyles(doc);
 
     // A hidden host for the nested React root that portals the live embeds into the placeholders below.

@@ -32,20 +32,6 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { selectCreditsEnabled } from '@/store/configsSlice';
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
-import { STORY_RENDERERS, resolveStoryRenderer, type StoryRenderer } from '@/lib/branding/whitelabel';
-
-const STORY_RENDERER_LABELS: Record<StoryRenderer, string> = {
-  dom: 'DOM',
-  svg: 'SVG',
-  canvas: 'Canvas',
-};
-
-const STORY_RENDERER_DESCRIPTIONS: Record<StoryRenderer, string> = {
-  dom: 'Stories render in an iframe (classic). Captures go through snapdom.',
-  svg: 'Stories render inside an SVG foreignObject — captures serialize the live surface, no snapdom.',
-  canvas: 'Stories render as one bitmap surface (Takumi). Falls back to DOM per story if rendering fails.',
-};
-
 type TabId = 'general' | 'usage' | 'homepage' | 'dev' | 'data' | 'users' | 'appearance' | 'configs' | 'styles' | 'messaging' | 'integrations' | 'models';
 
 interface SettingEntry {
@@ -384,8 +370,6 @@ function SettingsContent() {
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
   const creditsEnabled = useAppSelector(selectCreditsEnabled);
   const { config } = useConfigs();
-  // Single source of truth for the active renderer, incl. the legacy useCanvasRenderer fallback.
-  const activeStoryRenderer = resolveStoryRenderer(config);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -484,17 +468,6 @@ function SettingsContent() {
     });
   }, []);
 
-  const handleStoryRendererChange = useCallback(async (value: string) => {
-    const renderer = value as StoryRenderer;
-    await updateConfig({ storyRenderer: renderer });
-    toaster.create({
-      title: `Story renderer: ${STORY_RENDERER_LABELS[renderer]}`,
-      description: STORY_RENDERER_DESCRIPTIONS[renderer],
-      type: 'info',
-      duration: 5000,
-    });
-  }, []);
-
   // ── Settings config ──────────────────────────────────────────────
   const settings: SettingEntry[] = useMemo(() => [
     // ── General: Feature Flags (all users) ──
@@ -504,38 +477,6 @@ function SettingsContent() {
       title: 'Appearance: Dark Mode',
       description: 'Switch between light and dark theme',
       control: <ColorModeSwitch />,
-    },
-    {
-      tab: 'general',
-      section: 'Feature Flags',
-      title: 'Story Renderer',
-      description: 'Which engine renders stories. DOM is the classic iframe. SVG renders the same DOM inside an SVG so captures serialize the live surface (no snapdom). Canvas renders one bitmap surface (Takumi).',
-      control: (
-        // storyRenderer is workspace-level: the resolver always reads the ORG config
-        // (lib/data/configs.server.ts), so a write from a non-org mode lands on a doc the resolver
-        // ignores — a live no-op. Gate to org mode, mirroring the LLM Models section.
-        <Flex direction="column" align="flex-start" gap={2}>
-          <Flex gap={2}>
-            {STORY_RENDERERS.map((r) => (
-              <Button
-                key={r}
-                size="sm"
-                variant={activeStoryRenderer === r ? 'solid' : 'outline'}
-                disabled={mode !== 'org'}
-                aria-label={`Story renderer: ${STORY_RENDERER_LABELS[r]}`}
-                onClick={() => handleStoryRendererChange(r)}
-              >
-                {STORY_RENDERER_LABELS[r]}
-              </Button>
-            ))}
-          </Flex>
-          {mode !== 'org' && (
-            <Text fontSize="xs" color="fg.muted" fontFamily="mono" aria-label="Story renderer workspace-level notice">
-              Workspace-level setting — switch to org mode to change it.
-            </Text>
-          )}
-        </Flex>
-      ),
     },
     {
       tab: 'general',
@@ -734,7 +675,7 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, handleStoryRendererChange, showAdvanced, vizV2, vizRenderer, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics, activeStoryRenderer]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, vizV2, vizRenderer, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

@@ -39,6 +39,13 @@ describe('inlineFontUrls', () => {
     expect(out).not.toContain('https://cdn/x.woff2');
   });
 
+  it('rewrites root-relative font urls (platform story fonts are same-origin static assets)', async () => {
+    fakeFontFetch();
+    const out = await inlineFontUrls('@font-face{font-family:"Inter";src:url("/fonts/i.woff2")}');
+    expect(out).toContain('data:font/woff2;base64,');
+    expect(out).not.toContain('/fonts/i.woff2');
+  });
+
   it('leaves css without remote urls untouched', async () => {
     const css = '.a{color:red}';
     expect(await inlineFontUrls(css)).toBe(css);
@@ -152,6 +159,39 @@ describe('serializeStorySvg — self-contained root', () => {
     const out = await serializeStorySvg(svg);
     expect(out).toMatch(/<svg[^>]*\swidth="816"/);
     expect(out).toMatch(/<svg[^>]*\sheight="1056"/);
+  });
+
+  it('splices data-URI fonts into IN-ROOT style nodes in the parsed copy only (live DOM untouched)', async () => {
+    // Styles (incl. the platform font css) live inside the story root now — the serializer must
+    // rewrite their remote url() refs to data: URIs in the CLONE, and never touch the live node.
+    fakeFontFetch();
+    const { svg, root } = makeSvg();
+    const fonts = document.createElement('style');
+    fonts.setAttribute('data-mx-fonts', '');
+    fonts.textContent = '@font-face{font-family:X;src:url(https://cdn/x.woff2)}';
+    root.insertBefore(fonts, root.firstChild);
+    const out = await serializeStorySvg(svg);
+    expect(out).toContain('data:font/woff2;base64,');
+    expect(out).not.toContain('https://cdn/x.woff2');
+    // The live DOM keeps the cacheable URL form.
+    expect(fonts.textContent).toContain('https://cdn/x.woff2');
+  });
+
+  it('inlines <img> srcs as data: URIs in the parsed copy (SVG-as-image blocks external refs)', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      headers: { get: () => 'image/png' },
+      arrayBuffer: async () => new Uint8Array([9, 8, 7]).buffer,
+    }) as unknown as Response) as unknown as typeof fetch;
+    const { svg, root } = makeSvg();
+    const img = document.createElement('img');
+    img.setAttribute('src', '/hero.png');
+    root.appendChild(img);
+    const out = await serializeStorySvg(svg);
+    expect(out).toContain('data:image/png;base64,');
+    expect(out).not.toContain('src="/hero.png"');
+    // The live DOM keeps the URL form.
+    expect(img.getAttribute('src')).toBe('/hero.png');
   });
 
   it('stamps live form values into the serialized copy (fixup pass)', async () => {

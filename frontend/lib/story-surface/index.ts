@@ -16,8 +16,9 @@
  *             measured content on every sync — that's the one real cost of this surface.
  */
 /**
- * The surfaces AgentHtml can mount into. Deliberately narrower than the `StoryRenderer` config union:
- * 'canvas' is a different component (CanvasStoryView/takumi), not a surface of the DOM renderer.
+ * The surfaces AgentHtml can mount into. 'svg' is the default and the only production render path
+ * (Story_Design_V2 §4); 'dom' is kept as the abstraction's second implementation, not selectable
+ * via any config.
  */
 export type StorySurfaceKind = 'dom' | 'svg';
 

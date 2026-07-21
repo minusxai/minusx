@@ -36,6 +36,24 @@ describe('serializeEditedStory', () => {
     expect(out).not.toContain('data-mx-fluid-shim');
   });
 
+  it('drops every render-injected data-mx-* style node (compiledCss, floating css, fonts)', () => {
+    // Styles now live INSIDE the story root (Story_Design_V2 §4 self-contained doc), so every save
+    // path reading root contents must strip them — else derived CSS compounds into content.story.
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<style data-mx-tw>.tw{display:flex}</style>' +
+      '<style data-mx-floating>[data-scope=popover]{position:absolute}</style>' +
+      '<style data-mx-fonts>@font-face{font-family:"Inter";src:url("/fonts/Inter-Variable.ttf")}</style>' +
+      '<h1>Kept</h1>';
+    const out = serializeEditedStory(root, []);
+    expect(out).toContain('<h1>Kept</h1>');
+    expect(out).not.toContain('data-mx-tw');
+    expect(out).not.toContain('.tw{display:flex}');
+    expect(out).not.toContain('data-mx-floating');
+    expect(out).not.toContain('data-mx-fonts');
+    expect(out).not.toContain('@font-face');
+  });
+
   it('preserves edited text and the story style block', () => {
     const out = serializeEditedStory(makeRoot(), []);
     expect(out).toContain('EDITED HEADLINE');

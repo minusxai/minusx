@@ -353,8 +353,9 @@ describe('StoryView', () => {
   });
 
   // Design-system stories: the server-compiled Tailwind stylesheet (content.compiledCss) is
-  // injected into the iframe HEAD (so the story's own <style> blocks, later in document order,
-  // win ties) — and, living in <head>, it can never leak into the WYSIWYG body serialization.
+  // injected INSIDE the story root as a data-mx-tw node (Story_Design_V2 §4 — the serialized
+  // <svg> must carry it without head-cloning), prepended before the story's own <style> blocks
+  // so authored CSS wins ties; save paths strip it via INJECTED_STYLE_SELECTOR.
   describe('design-system CSS injection', () => {
     const twContent = {
       description: null,
@@ -362,15 +363,16 @@ describe('StoryView', () => {
     } as StoryContent;
     const twCss = '.grid{display:grid}.gap-4{gap:1rem}.text-3xl{font-size:1.875rem}';
 
-    it('injects compiledCss as a head stylesheet when present', async () => {
+    it('injects compiledCss as an in-root style node when present', async () => {
       renderWithProviders(<StoryView content={twContent} compiledCss={twCss} {...NOEDIT_PROPS} />);
       await waitFor(() => {
         const iframe = screen.getByLabelText('Story document') as HTMLIFrameElement;
-        const tw = iframe.contentDocument!.head.querySelector('style[data-mx-tw]');
+        const doc = iframe.contentDocument!;
+        // In-root, not head: the serialized <svg> subtree must carry the stylesheet.
+        const tw = doc.querySelector('[data-mx-story-root] style[data-mx-tw]');
         expect(tw).not.toBeNull();
         expect(tw!.textContent).toContain('.gap-4');
-        // Head placement, not body: the WYSIWYG serializer reads body only.
-        expect(iframe.contentDocument!.body.querySelector('style[data-mx-tw]')).toBeNull();
+        expect(doc.head.querySelector('style[data-mx-tw]')).toBeNull();
       });
     });
 

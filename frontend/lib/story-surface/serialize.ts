@@ -16,10 +16,12 @@
 import { STORY_SVG_ATTR } from '@/lib/story-surface';
 import { collectStoryFontImports, resolveImportFontCss } from '@/lib/html/resolve-story-fonts';
 
-const FONT_URL_RE = /url\(\s*(["']?)(https?:\/\/[^"')]+)\1\s*\)/g;
+// Absolute (https://cdn/…) AND root-relative (/fonts/…) refs: platform story fonts are served as
+// same-origin static assets (lib/data/story/story-fonts.ts), which fetch() resolves natively.
+const FONT_URL_RE = /url\(\s*(["']?)((?:https?:\/\/|\/)[^"')]+)\1\s*\)/g;
 
-/** Cache: font file URL → data: URL. Font files are global + immutable, so this never invalidates:
- *  every capture after the first reuses the same inlined bytes.
+/** Cache: resource URL (font file / image) → data: URL. These assets are effectively immutable,
+ *  so this never invalidates: every capture after the first reuses the same inlined bytes.
  *  eslint-disable-next-line no-restricted-syntax -- browser-only capture cache; no per-request scope. */
 // eslint-disable-next-line no-restricted-syntax -- browser-only capture cache, keyed by immutable font URL
 const fontDataUrls = new Map<string, Promise<string | null>>();
@@ -162,6 +164,28 @@ export async function serializeStorySvg(svg: SVGSVGElement): Promise<string> {
     if (w) clone.setAttribute('width', String(w));
     if (h) clone.setAttribute('height', String(h));
   }
+
+  // In-root styles (compiledCss, app-styles mirror, platform font css — Story_Design_V2 §4) travel
+  // inside the cloned subtree already, but their remote url() refs (e.g. data-mx-fonts @font-face
+  // src) can't load in an <img>-rendered SVG. Splice the data-URI form into the PARSED COPY only —
+  // the live DOM keeps the cacheable URL form.
+  await Promise.all(
+    Array.from(clone.querySelectorAll('style')).map(async (style) => {
+      const cssText = style.textContent || '';
+      if (cssText) style.textContent = await inlineFontUrls(cssText);
+    }),
+  );
+
+  // Images: SVG-as-image blocks ALL external references, so <img> srcs must be data: URIs in the
+  // parsed copy (failures keep the URL — the image just won't render; never fail the capture).
+  await Promise.all(
+    Array.from(clone.querySelectorAll('img')).map(async (img) => {
+      const src = img.getAttribute('src');
+      if (!src || src.startsWith('data:')) return;
+      const data = await toDataUrl(src);
+      if (data) img.setAttribute('src', data);
+    }),
+  );
 
   const css = await collectSurfaceCss(doc);
   if (css.trim()) {

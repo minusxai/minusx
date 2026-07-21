@@ -87,6 +87,10 @@ const nextConfig: NextConfig = {
     //   design-system CSS (lib/data/story/story-css.server.ts). oxide is a native addon and
     //   node resolves stylesheets from disk; bundling either breaks the story save path.
     '@tailwindcss/node', '@tailwindcss/oxide', 'tailwindcss',
+    // 'playwright-core' — headless story capture backend (lib/headless-capture). Drives a
+    //   real browser via node child processes + registry lookups on disk; bundling it breaks
+    //   its driver/executable resolution. External → resolved from node_modules at runtime.
+    'playwright-core',
   ],
 
   // Belt-and-suspenders: explicitly externalize duckdb in webpack config too.

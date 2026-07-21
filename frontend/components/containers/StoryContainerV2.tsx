@@ -17,8 +17,6 @@ import { LuGlobe } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectIsDirty } from '@/store/filesSlice';
 import { useStoryPreviewCss } from '@/lib/hooks/use-story-preview-css';
-import { useConfigs } from '@/lib/hooks/useConfigs';
-import { resolveStoryRenderer } from '@/lib/branding/whitelabel';
 import { selectFileEditMode } from '@/store/uiSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -40,7 +38,6 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   // Persisted compiledCss for clean saved stories; preview-compiled for drafts/staged edits.
   const compiledCss = useStoryPreviewCss(mergedContent, isDirty);
-  const { config } = useConfigs();
   // The story SURFACE renders in the mode the story declares (a light board deck stays light in
   // a dark app): the declared mode drives the iframe's .dark/.light class (design-system `dark:`
   // variants + mirrored token CSS) AND the embedded chart stack (via StoryEmbeds' store
@@ -70,7 +67,6 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
         storyName={numericId !== undefined ? file.name : undefined}
         colorMode={effectiveColorMode}
         compiledCss={compiledCss}
-        storyRenderer={resolveStoryRenderer(config)}
         showDevMarkers={devMode}
       />
       {canShare && numericId !== undefined && (

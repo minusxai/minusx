@@ -11,13 +11,11 @@ import { StoryEmptyState } from '@/components/views/shared/empty-states';
 import { StoryContent, QuestionContent } from '@/lib/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
-import type { StoryRenderer } from '@/lib/branding/whitelabel';
 import { applyStoryHtmlEdit } from '@/lib/file-state/file-state';
 import {
   updateSavedQuestionVizInHtml, updateInlineQuestionInHtml, questionContentToInlineEmbed,
 } from '@/lib/data/story/story-question';
 import { STORY_W } from './ScaledStoryFrame';
-import CanvasStoryView from './CanvasStoryView';
 import { PageMarkerDevOverlay } from './PageMarkerDevOverlay';
 
 // Max on-screen width of the reading column. Stories render FLUID (no transform
@@ -53,9 +51,6 @@ interface StoryViewProps {
   colorMode: 'light' | 'dark';
   /** Design-system stylesheet for the rendered story (persisted or preview-compiled), sourced by the container. */
   compiledCss?: string | null;
-  /** Which engine renders the story (Settings → "Story Renderer"), sourced by the container from
-   *  configs. 'canvas' and 'svg' fall back to the DOM path per story on failure. */
-  storyRenderer?: StoryRenderer;
   /** DEV-ONLY: overlay the app-state screenshot's position markers on the live view (sourced from
    *  devMode by the container). Never shown to end users; mounts OUTSIDE the captured subtree. */
   showDevMarkers?: boolean;
@@ -69,7 +64,7 @@ interface StoryViewProps {
  * `onChange` (so the header's Save persists them and Cancel reverts them); the html is frozen during
  * the session so the iframe doesn't rebuild mid-edit.
  */
-export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss, storyRenderer = 'dom', showDevMarkers = false }: StoryViewProps) {
+export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss, showDevMarkers = false }: StoryViewProps) {
   const numericId = typeof fileId === 'number' ? fileId : undefined;
   // New-format story (Story_Design_V2 §2): content.story holds JSX source, rendered through the
   // lib/story-ui interpreter (AgentHtml format="jsx"); anything else is the legacy HTML path.
@@ -151,52 +146,14 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
     <Box aria-label="Story page" w="100%" minH="420px">
       <Box display="flex" justifyContent="center">
         {/* Relative wrapper anchors the DEV marker overlay OVER the captured box without being INSIDE
-            it — so snapdom/canvas/svg capture the story alone, and the app-state screenshot's baked
+            it — so the serialized capture sees the story alone, and the app-state screenshot's baked
             gutter is the only numbering in the image (no double markers). */}
         <Box position="relative" w="100%" maxW={STORY_MAX_W}>
         {/* data-story-capture → OG share-card preview; data-file-id → the standard FileView capture
             (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
         <Box w="100%" {...(numericId !== undefined ? { 'data-story-capture': numericId, 'data-file-id': numericId } : {})}>
-          {/* The canvas renderer rasterizes legacy story HTML — it cannot render jsx bodies,
-              so a jsx story always takes the AgentHtml interpreter path. */}
-          {storyRenderer === 'canvas' && storyFormat !== 'jsx' ? (
-            <CanvasStoryView
-              // While editing, render the LIVE story (each block commit re-rasters from
-              // source — the overlay owns the caret, so there's no cursor to preserve).
-              // STABLE key: unlike the iframe path, the canvas path re-rasters on an html
-              // prop change while keeping the old bitmap on screen — keying by content
-              // hash would remount the whole surface (blank flash) on every block commit.
-              key="canvas"
-              html={editing ? liveStory : htmlForRender}
-              compiledCss={compiledCss}
-              width={STORY_W}
-              readOnly={readOnly}
-              colorMode={colorMode}
-              editable={editing}
-              onStoryChange={onStoryChange}
-              paramValues={content.parameterValues ?? undefined}
-              storyPath={storyPath}
-              fallback={
-                <AgentHtml
-                  key={`${session.key}:${hashStory(htmlForRender)}`}
-                  html={htmlForRender}
-                  format={storyFormat}
-                  width={STORY_W}
-                  fluid
-                  editable={false}
-                  readOnly={readOnly}
-                  colorMode={colorMode}
-                  compiledCss={compiledCss}
-                  filePath={storyPath}
-                  paramValues={content.parameterValues ?? undefined}
-                  onEditNumber={setNumberEdit}
-                  onEditQuestion={editing ? setQuestionEdit : undefined}
-                  onChange={onStoryChange}
-                  selectionSource={selectionSource}
-                />
-              }
-            />
-          ) : (
+          {/* AgentHtml defaults to the svg surface — the story body mounts inside
+              <svg><foreignObject> in the iframe, so the capture serializes the live surface. */}
           <AgentHtml
             // Remount on external content change (viewing) AND once per edit-session exit (see above).
             key={`${session.key}:${hashStory(htmlForRender)}`}
@@ -204,9 +161,6 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             format={storyFormat}
             width={STORY_W}
             fluid
-            // 'svg' mounts the same story body inside <svg><foreignObject> in the same iframe, so the
-            // capture can serialize the live surface instead of re-deriving it with snapdom.
-            surface={storyRenderer === 'svg' ? 'svg' : 'dom'}
             editable={editing}
             readOnly={readOnly}
             colorMode={colorMode}
@@ -218,7 +172,6 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             onChange={onStoryChange}
             selectionSource={selectionSource}
           />
-          )}
         </Box>
           <PageMarkerDevOverlay enabled={showDevMarkers} colorMode={colorMode} />
         </Box>
