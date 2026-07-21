@@ -18,8 +18,11 @@
 import 'server-only';
 import { computeSchemaFromWhitelist } from '@/lib/data/loaders/context-loader-utils';
 import { resolveVersionWhitelist, getPublishedVersionForUser } from '@/lib/context/context-utils';
-import { validateSemanticModel, primaryFieldNames } from '@/lib/semantic/validate';
-import { compileSemanticQuery, SemanticCompileError } from '@/lib/semantic/compile';
+import { primaryFieldNames } from '@/lib/semantic/validate';
+import { compileSemanticQuery } from '@/lib/semantic/compile';
+// Tiers 1–2 + the probe spec live in the PURE module so the agent's EditFile path
+// (browser-side — it cannot import this server-only file) runs the identical checks.
+import { semanticModelIssues, probeSpec, sortedJson } from '@/lib/semantic/edit-check';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { resolveViewsInSql } from '@/lib/views/resolve';
 import { runQuery } from '@/lib/connections/run-query';
@@ -27,7 +30,6 @@ import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { connectionTypeToDialect } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ContextContent, ContextVersion, DatabaseWithSchema, SemanticModelV2, SemanticMetricV2, ViewDef } from '@/lib/types';
-import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 import type { QueryIR } from '@/lib/sql/ir-types';
 
 export class SemanticModelSaveError extends Error {
@@ -92,8 +94,7 @@ export async function validateSemanticModelsGate(
         ...models.filter((m) => m !== model).map((m) => m.name),
       ];
       const ctx = { fullSchema, views, otherModelNames };
-      const issues = validateSemanticModel(model, ctx);        // tier 1
-      if (issues.length === 0) issues.push(...compileProbeIssues(model)); // tier 2
+      const issues = semanticModelIssues(model, ctx);          // tiers 1–2 (shared with EditFile)
       if (issues.length > 0) {
         problems.push(...issues.map((i) => `Semantic model "${model.name}": ${i}`));
         nextModels.push(model);
@@ -111,45 +112,8 @@ export async function validateSemanticModelsGate(
   return { ...content, versions: nextVersions };
 }
 
-// ── Tier 2: pure compile probe ───────────────────────────────────────────────
-
-/**
- * Compile-probe every metric through the real compiler. Pure and synchronous —
- * catches structural compile failures tier 1 can't see; also the seam tier 3
- * builds its probe specs on.
- */
-function compileProbeIssues(model: SemanticModelV2): string[] {
-  const issues: string[] = [];
-  for (const metric of model.metrics ?? []) {
-    try {
-      compileSemanticQuery(probeSpec(model, metric), model);
-    } catch (err) {
-      const detail = err instanceof SemanticCompileError ? err.issues.join('; ') : (err instanceof Error ? err.message : String(err));
-      issues.push(`metric "${metric.name}" does not compile: ${detail}`);
-    }
-  }
-  return issues;
-}
-
-/**
- * Probe spec = the metric plus the first NON-m2m dimension. m2m-sourced probe
- * dimensions would add a bridge join that contributes nothing to metric
- * validation; the zero-dimension GROUP BY is injected post-compile instead
- * (§2.5 probe shape).
- */
-function probeSpec(model: SemanticModelV2, metric: SemanticMetricV2): SemanticQuerySpec {
-  const m2mAliases = new Set(
-    (model.references ?? []).filter((r) => r.relationship === 'many_to_many').map((r) => r.alias),
-  );
-  const probeDimension = model.dimensions.find((d) => !m2mAliases.has(d.source));
-  return {
-    model: model.name,
-    table: model.primary.kind === 'table' ? model.primary.table : model.primary.view,
-    schema: model.primary.kind === 'table' ? model.primary.schema ?? null : null,
-    measures: [metric.name],
-    dimensions: probeDimension ? [probeDimension.name] : [],
-  } as SemanticQuerySpec;
-}
+// Tiers 1–2 (`semanticModelIssues`) and the probe spec they share with tier 3
+// live in ./edit-check — the pure module the browser-side EditFile path imports.
 
 // ── Tier 3: dry-run against the engine ───────────────────────────────────────
 
@@ -252,22 +216,6 @@ function probeScope(model: SemanticModelV2, oldModel: SemanticModelV2 | undefine
     if (m.verified === false && metrics.some((n) => n.name === m.name)) names.add(m.name); // sticky
   }
   return names;
-}
-
-/**
- * Deterministic stringify (recursively key-sorted). Stored JSONB (PGLite /
- * Postgres) does NOT preserve object key order, so a plain JSON.stringify
- * comparison of new-vs-stored would misclassify every save as structural.
- */
-function sortedJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(sortedJson).join(',')}]`;
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : 1));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${sortedJson(v)}`).join(',')}}`;
-  }
-  return JSON.stringify(value) ?? 'null';
 }
 
 /** Model identity minus metrics and pure-metadata fields (descriptions/labels). */

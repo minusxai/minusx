@@ -36,7 +36,6 @@ import { QuestionEmptyState } from '@/components/views/shared/empty-states';
 import type { FileId, FileState } from '@/store/filesSlice';
 import { QueryModeSelector, SemanticExplorer, type QueryTab } from '../query-builder';
 import { VizPanel } from '../question/VizPanel';
-import { deriveModelStubs, type ModelStub } from '@/lib/semantic/derive';
 import { useSemanticModels } from '@/lib/hooks/use-semantic-models';
 import { VizTypeSelector, isClassicVizType } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
@@ -235,20 +234,6 @@ export default function QuestionViewV2({
   // whenever the current SQL reliably detects as a semantic query (or a spec
   // was persisted); SQL otherwise. No explicit choice needed on mount — the
   // detection effect below promotes to Semantic exactly once.
-  // Semantic tier: one derived model per whitelisted table. Stubs (names only)
-  // come from the schema already in the store; full model vocabulary is fetched
-  // ON DEMAND for the tables in play — never in bulk (multi-MB on large
-  // workspaces). Memoized: stable identities keep the detection effect quiet.
-  const semanticStubs = useMemo(() => {
-    const db = schemaData?.find((d) => d.databaseName === content.connection_name);
-    return db ? deriveModelStubs([db]) : [];
-  }, [schemaData, content.connection_name]);
-  const [pickedTables, setPickedTables] = useState<string[]>([]);
-  const semanticTables = useMemo(() => {
-    const tables = [...pickedTables];
-    if (content.semanticQuery?.table) tables.push(content.semanticQuery.table);
-    return tables;
-  }, [pickedTables, content.semanticQuery?.table]);
   // The envelope the Viz panel edits. V1 mode (flag off): none — the classic
   // panel edits vizSettings and the converter never feeds the editor. V2 mode:
   // the saved `viz`, or — for a vizSettings-only chart — its JIT-converted
@@ -283,21 +268,21 @@ export default function QuestionViewV2({
     };
   }, []);
 
+  // The semantic vocabulary: every AUTHORED model visible at this file's path
+  // on its connection (Semantic_Model_v2.md §2.7 M5 — models are authored, not
+  // derived from the schema, so this is a human-sized set fetched unscoped).
+  // It's both the explorer's picker list and the gate: no authored models, no
+  // GUI tab (a raw whitelisted table is no longer a reason to offer one).
+  const { models: semanticModels } = useSemanticModels(filePath || '/org', content.connection_name);
+  const showSemanticTab = semanticModels.length > 0;
+
   // Proactive GUI compatibility check: dims the GUI tab (with a tooltip reason) when
   // the query can't be parsed into the builder IR, so it's already disabled when the
   // user opens a question — no surprise on mode switch.
   const { detected: detectedSemanticSpec, canUseSemantic } = useSemanticCompat(
     content.query, dialect,
-    { path: filePath || '/org', connectionName: content.connection_name, hasTables: semanticStubs.length > 0 },
+    { path: filePath || '/org', connectionName: content.connection_name, hasTables: showSemanticTab },
   );
-  const builderTables = useMemo(
-    () => (detectedSemanticSpec?.table ? [...semanticTables, detectedSemanticSpec.table] : semanticTables),
-    [semanticTables, detectedSemanticSpec?.table],
-  );
-  const { models: semanticModels } = useSemanticModels(
-    filePath || '/org', content.connection_name, builderTables,
-  );
-  const showSemanticTab = semanticStubs.length > 0;
 
   // Use compact layout when container is narrow (< 700px) - stacked vertical layout
   const useCompactLayout = (containerWidth > 0 && containerWidth < 700) || !fullMode;
@@ -839,8 +824,6 @@ export default function QuestionViewV2({
                   <Box flex={1} overflow="hidden" display="flex" flexDirection="column" minHeight={0}>
                     <SemanticExplorer
                       models={semanticModels}
-                      stubs={semanticStubs}
-                      onSelectModel={(stub: ModelStub) => setPickedTables((prev) => prev.includes(stub.table) ? prev : [...prev, stub.table])}
                       dialect={dialect}
                       path={filePath || '/org'}
                       connectionName={content.connection_name}

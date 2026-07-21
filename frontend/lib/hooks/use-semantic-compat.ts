@@ -27,9 +27,9 @@ export interface SemanticCompatSource {
 /**
  * Detects whether the current SQL is expressible as a semantic query. Parsing
  * happens server-side (CompletionsAPI.sqlToIR — the same dialect-aware parser
- * everything else uses); models are fetched ON DEMAND scoped to the tables the
- * SQL actually touches (fetchScopedModels — models are never shipped in bulk);
- * the vocabulary mapping and recompile-verification run locally (pure,
+ * everything else uses); authored models are fetched SCOPED to the primaries
+ * the SQL actually touches (fetchScopedModels — detection only ever needs
+ * those); the vocabulary mapping and recompile-verification run locally (pure,
  * lib/semantic/detect).
  *
  * Empty SQL counts as semantic-capable (a fresh question can start semantic);

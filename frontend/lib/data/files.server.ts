@@ -632,7 +632,13 @@ class FilesDataLayerServer implements IFilesDataLayer {
           contentToSave as ContextContent, existingFile.content as ContextContent | undefined, path, user,
         ) as BaseFileContent;
       } catch (err) {
-        if (err instanceof ViewSaveError || err instanceof SemanticModelSaveError) throw new UserFacingError(err.message);
+        if (err instanceof ViewSaveError) throw new UserFacingError(err.message);
+        // Semantic issues stay a LIST across the boundary: newline-joined (the
+        // gate's own `; ` join is lossy — tier-2 details already contain `; `),
+        // so the editor can put each issue under the model/metric row that
+        // caused it instead of one run-on banner line. Recovered client-side by
+        // `parseSemanticModelIssues` (components/context/SemanticModelsEditor).
+        if (err instanceof SemanticModelSaveError) throw new UserFacingError(err.issues.join('\n'));
         throw err;
       }
     }

@@ -254,6 +254,27 @@ describe('fileToMarkup / markupToContent — context (flattened agent view)', ()
       expect(back.content).not.toHaveProperty('whitelist');
     }
   });
+
+  it('round-trips semanticModels — the agent cannot author what the markup drops', () => {
+    // ContextAgentContent drives BOTH directions of the markup projection
+    // (contentToJsx/jsxToContent iterate the schema's properties), so a field
+    // missing there is silently dropped on the way out AND on the way back —
+    // which made the whole EditFile authoring path (§3) inert for models.
+    const model = {
+      name: 'Orders',
+      connection: 'wh',
+      primary: { kind: 'table', schema: 'main', table: 'orders' },
+      dimensions: [{ name: 'Region', source: 'primary', column: 'region' }],
+      measures: [{ name: 'Revenue', agg: 'SUM', column: 'amount' }],
+      metrics: [{ name: 'Net Revenue', type: 'sql', sql: 'SUM(primary.amount) - SUM(primary.refund)' }],
+    };
+    const markup = fileToMarkup('context', { docs: [], semanticModels: [model] });
+    expect(markup).toContain('semanticModels');
+
+    const back = markupToContent('context', markup);
+    expect(back.ok).toBe(true);
+    if (back.ok) expect(back.content.semanticModels).toEqual([model]);
+  });
 });
 
 describe('fileToMarkup — schemaless connection (type="…")', () => {

@@ -86,6 +86,10 @@ const ORDERS: SemanticModelV2 = {
     { name: 'Total Amount', agg: 'SUM', column: 'amount' },
     { name: 'Avg Amount', agg: 'AVG', column: 'amount' },
   ],
+  metrics: [
+    { name: 'Avg Basket', type: 'ratio', numerator: 'Total Amount', denominator: 'Count' },
+    { name: 'Net Revenue', type: 'sql', sql: 'SUM(primary.amount) - SUM(primary.refund)' },
+  ],
   timeDimension: { column: 'created_at', label: 'Order date' },
 };
 
@@ -174,6 +178,14 @@ describe('models.server — authored semantic models', () => {
     expect(models.map((m) => m.name).sort()).toEqual(['Orders', 'Revenue Model', 'Users']);
   });
 
+  it('an EMPTY `tables` array is no scoping either — the unscoped picker list', async () => {
+    // The explorer asks for every authored model on the connection before any
+    // model is picked; the API route always sends an array, so [] must mean
+    // "unscoped" exactly like an omitted `tables`.
+    const models = await getScopedSemanticModels(admin, { path: '/org', connection: 'warehouse', tables: [] });
+    expect(models.map((m) => m.name).sort()).toEqual(['Orders', 'Revenue Model', 'Users']);
+  });
+
   it('a model-primary is scoped by its VIEW name', async () => {
     const models = await getScopedSemanticModels(admin, {
       path: '/org', connection: 'warehouse', tables: ['revenue_model'],
@@ -227,6 +239,18 @@ describe('models.server — authored semantic models', () => {
     // nothing is derived from unmodelled schema tables
     const none = await searchSemanticFields(admin, { path: '/org', connection: 'warehouse', q: 'token' });
     expect(none).toEqual([]);
+  });
+
+  it('searchSemanticFields surfaces authored METRICS (ratio and SQL), not just measures', async () => {
+    const ratio = await searchSemanticFields(admin, { path: '/org', connection: 'warehouse', q: 'basket' });
+    expect(ratio).toEqual([
+      { kind: 'metric', name: 'Avg Basket', model: 'Orders', connection: 'warehouse', schema: 'public', table: 'orders' },
+    ]);
+
+    const sql = await searchSemanticFields(admin, { path: '/org', connection: 'warehouse', q: 'net' });
+    expect(sql).toEqual([
+      { kind: 'metric', name: 'Net Revenue', model: 'Orders', connection: 'warehouse', schema: 'public', table: 'orders' },
+    ]);
   });
 
   it('searchSemanticFields surfaces model-primary fields under the views schema', async () => {

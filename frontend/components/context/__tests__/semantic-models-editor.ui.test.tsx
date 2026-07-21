@@ -8,7 +8,7 @@
 import React from 'react';
 import { screen, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
-import SemanticModelsEditor from '@/components/context/SemanticModelsEditor';
+import SemanticModelsEditor, { parseSemanticModelIssues } from '@/components/context/SemanticModelsEditor';
 import type { SemanticModelV2, DatabaseWithSchema, ViewDef } from '@/lib/types';
 
 const DATABASES: DatabaseWithSchema[] = [
@@ -241,4 +241,61 @@ describe('SemanticModelsEditor — view mode', () => {
     expect(next.dimensions.find((d: { name: string }) => d.name === 'Customer Name').source).toBe('buyer');
   });
 
+});
+
+// ---------------------------------------------------------------------------
+// Save-gate issues (Semantic_Model_v2.md §2.5 tiers 1–3) rendered INLINE.
+// The gate emits `Semantic model "<name>": …` strings (metric problems as
+// `metric "<name>" …`); the editor must put each one under the row it names
+// rather than leaving the author to read one long banner line.
+// ---------------------------------------------------------------------------
+
+const ENGINE_ISSUE =
+  'Semantic model "Orders": metric "Net Revenue" failed engine validation: Binder Error: Referenced column "totl" not found\n'
+  + 'LINE 1: SELECT SUM(orders.totl) - 5';
+const MODEL_ISSUE =
+  'Semantic model "Orders": dimension "Customer Name" is not an exposed column of reference "customer"';
+const UNKNOWN_MODEL_ISSUE =
+  'Semantic model "Shipments": primary table mxfood.shipments is not exposed by this context';
+
+describe('SemanticModelsEditor — save-gate issues', () => {
+  it('renders each issue under the model / metric row it names', () => {
+    renderEditor({ issues: [ENGINE_ISSUE, MODEL_ISSUE, UNKNOWN_MODEL_ISSUE] });
+
+    // metric issue lands on the metric it names ('Net Revenue' is metric index 1)
+    const metricIssue = screen.getByLabelText('semantic-model-0-metric-1-issue');
+    expect(metricIssue.textContent).toContain('Binder Error');
+    // the multi-line engine error stays whole — not split into a second issue
+    expect(metricIssue.textContent).toContain('SELECT SUM(orders.totl)');
+    // the sibling metric is clean
+    expect(screen.queryByLabelText('semantic-model-0-metric-0-issue')).toBeNull();
+
+    // model-scoped issue lands on the model, and does NOT duplicate the metric one
+    const modelIssues = screen.getByLabelText('semantic-model-0-issues');
+    expect(modelIssues.textContent).toContain('Customer Name');
+    expect(modelIssues.textContent).not.toContain('Binder Error');
+
+    // an issue naming a model that isn't on screen still has to be readable
+    const unattributed = screen.getByLabelText('semantic-model-unattributed-issues');
+    expect(unattributed.textContent).toContain('Shipments');
+  });
+
+  it('renders no issue elements when the save gate reported nothing', () => {
+    renderEditor();
+    expect(screen.queryByLabelText('semantic-model-0-issues')).toBeNull();
+    expect(screen.queryByLabelText('semantic-model-0-metric-1-issue')).toBeNull();
+    expect(screen.queryByLabelText('semantic-model-unattributed-issues')).toBeNull();
+  });
+
+  it('parseSemanticModelIssues recovers the issue LIST from the save-error message', () => {
+    // The gate joins its issues with \n across the HTTP boundary; an issue may
+    // itself be multi-line (engine errors quote the SQL), so the split is
+    // prefix-anchored — a bare \n split would shred the engine error.
+    const parsed = parseSemanticModelIssues([ENGINE_ISSUE, MODEL_ISSUE, UNKNOWN_MODEL_ISSUE].join('\n'));
+    expect(parsed).toEqual([ENGINE_ISSUE, MODEL_ISSUE, UNKNOWN_MODEL_ISSUE]);
+
+    // Unrelated save failures are NOT semantic issues — they stay banner-only.
+    expect(parseSemanticModelIssues('View "zone_revenue" reads a table outside the whitelist')).toEqual([]);
+    expect(parseSemanticModelIssues('')).toEqual([]);
+  });
 });

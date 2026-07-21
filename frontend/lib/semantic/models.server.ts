@@ -28,8 +28,10 @@ export interface ScopedModelsParams {
   connection: string;
   /**
    * Optional primary scoping: only models whose primary (table name for
-   * table-primaries, view name for model-primaries) is listed. Omit for ALL
-   * authored models on the connection.
+   * table-primaries, view name for model-primaries) is listed. Omit — or pass
+   * an EMPTY array — for ALL authored models on the connection: the explorer
+   * needs the whole picker list before any model is picked, and the API route
+   * always sends an array.
    */
   tables?: string[];
 }
@@ -84,16 +86,18 @@ export async function getScopedSemanticModels(
   { path, connection, tables }: ScopedModelsParams,
 ): Promise<SemanticModelV2[]> {
   const models = await authoredModelsForPath(user, path, connection);
-  if (tables === undefined) return models;
+  if (tables === undefined || tables.length === 0) return models;
   return models.filter((m) => tables.includes(primaryName(m)));
 }
 
 // ---------------------------------------------------------------------------
-// Metrics-first search — find measures/dimensions across every authored model
+// Metrics-first search — find metrics/measures/dimensions across every
+// authored model
 // ---------------------------------------------------------------------------
 
 export interface SemanticFieldHit {
-  kind: 'measure' | 'dimension';
+  /** `metric` covers both ratio and SQL metrics — both select like a measure. */
+  kind: 'measure' | 'dimension' | 'metric';
   name: string;
   model: string;
   connection: string;
@@ -114,6 +118,10 @@ export async function searchSemanticFields(
     const schema = m.primary.kind === 'table' ? (m.primary.schema ?? undefined) : VIEWS_SCHEMA;
     for (const me of m.measures) {
       fields.push({ kind: 'measure', name: me.name, model: m.name, connection, schema, table });
+    }
+    // Metrics are the headline vocabulary (§2.4) — never searchable-invisible.
+    for (const me of m.metrics ?? []) {
+      fields.push({ kind: 'metric', name: me.name, model: m.name, connection, schema, table });
     }
     for (const d of m.dimensions) {
       fields.push({ kind: 'dimension', name: d.name, model: m.name, connection, schema, table });

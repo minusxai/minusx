@@ -47,6 +47,13 @@ interface ContextEditorV2Props {
   isDirty: boolean;
   isSaving: boolean;
   saveError?: string | null;
+  /**
+   * Semantic save-gate issues (tiers 1–3) recovered from `saveError` by the
+   * container — rendered inline per model/metric row by SemanticModelsEditor.
+   * The banner keeps showing everything: the inline rows are only visible on
+   * the Semantic tab, and a save can fail while the author is on another tab.
+   */
+  semanticIssues?: string[];
   editMode: boolean;
   onChange: (updates: Partial<ContextContent>) => void;
   onMetadataChange: (changes: { name?: string }) => void;
@@ -84,6 +91,7 @@ export default function ContextEditorV2({
   isDirty,
   isSaving,
   saveError,
+  semanticIssues = [],
   editMode,
   onChange,
   onMetadataChange,
@@ -389,7 +397,7 @@ export default function ContextEditorV2({
             if (docsMissingMeta) return 'Every active document needs a title and description — fill them in (or use ✨ Auto) before saving.';
             return null;
           }}
-          saveError={saveError}
+          saveError={semanticIssues.length > 0 ? semanticIssues.join(' · ') : saveError}
           readOnlyName={true}
           hideDescription={true}
           onNameChange={(name) => onMetadataChange({ name })}
@@ -548,8 +556,8 @@ export default function ContextEditorV2({
 
         {/* Semantic Models Tab — authored SemanticModelV2 on the current
             version (Semantic_Model_v2.md M5b). Same onChange pattern as views;
-            save-gate tier-1/2/3 errors surface through the shared saveError /
-            error banner above. */}
+            save-gate tier-1/2/3 issues are rendered INLINE at the model/metric
+            row each one names (§2.5), with the banner above as the fallback. */}
         <Tabs.Content value="semantic">
           {topTab === 'semantic' && (
             <SemanticModelsEditor
@@ -558,6 +566,7 @@ export default function ContextEditorV2({
               databases={availableDatabases}
               views={[...(content.fullViews || []), ...(content.views || [])]}
               editMode={editMode}
+              issues={semanticIssues}
               onChange={(semanticModels) => onChange({ semanticModels })}
             />
           )}

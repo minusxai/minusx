@@ -11,6 +11,7 @@ import { selectFileEditMode, setFileEditMode } from '@/store/uiSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges, reloadFile } from '@/lib/file-state/file-state';
 import ContextEditorV2 from '@/components/context/ContextEditorV2';
+import { parseSemanticModelIssues } from '@/components/context/SemanticModelsEditor';
 import { ContextContent, ContextVersion, DocEntry, Whitelist, WhitelistNode, DatabaseContext, WhitelistItem } from '@/lib/types';
 import { useJobRuns } from '@/lib/hooks/job-runs-hooks';
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
@@ -63,6 +64,11 @@ export default function ContextContainerV2({
 
   // Save error state (for user-facing errors)
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Semantic-model save-gate failures arrive as a newline-joined issue LIST
+  // (lib/data/files.server.ts). Recover it so the editor can render each issue
+  // at the model/metric row it names; the banner still shows the whole message.
+  const semanticIssues = useMemo(() => parseSemanticModelIssues(saveError), [saveError]);
 
   // Edit mode lives in the shared Redux `fileEditMode` (like dashboards/stories),
   // so the breadcrumb edit banner can read it. Keyed by the numeric fileId.
@@ -417,6 +423,7 @@ export default function ContextContainerV2({
         isDirty={isDirty}
         isSaving={saving}
         saveError={saveError}
+        semanticIssues={semanticIssues}
         editMode={editMode}
         onChange={handleChange}
         onMetadataChange={handleMetadataChange}

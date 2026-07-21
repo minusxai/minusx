@@ -18,7 +18,7 @@
  * renders.
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Box, VStack, HStack, Text, Button, Input, Textarea, Icon } from '@chakra-ui/react';
 import { LuPlus, LuTrash2, LuBoxes, LuTriangleAlert } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -40,6 +40,13 @@ interface SemanticModelsEditorProps {
   views: ViewDef[];
   editMode: boolean;
   onChange: (next: SemanticModelV2[]) => void;
+  /**
+   * Save-gate issues (tiers 1–3) exactly as the gate emitted them, i.e. still
+   * prefixed `Semantic model "<name>": …`. Recover the list from a save-error
+   * message with `parseSemanticModelIssues`; the editor attributes each one to
+   * the model (and metric) row it names.
+   */
+  issues?: string[];
 }
 
 type Column = { name: string; type: string };
@@ -97,6 +104,63 @@ function sourceOptionsFor(connection: string, databases: DatabaseWithSchema[], v
 
 function columnsOfSource(source: SemanticSource | undefined, options: SourceOption[]): Column[] {
   return options.find((o) => o.value === encodeSource(source))?.columns ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// Save-gate issues — recovering the LIST, then attributing each issue to a row.
+//
+// The gate (lib/semantic/save-gate.server.ts) throws a SemanticModelSaveError
+// carrying `issues: string[]`; the HTTP boundary can only carry a message, so
+// the issues cross it newline-joined and are recovered here. The split is
+// ANCHORED on the `Semantic model "` prefix every issue starts with, because a
+// single issue can itself be multi-line (tier-3 engine errors quote the SQL) —
+// a bare \n split would shred one error into several nonsense ones.
+// ---------------------------------------------------------------------------
+
+const ISSUE_PREFIX = 'Semantic model "';
+/** `Semantic model "<name>": <detail>` — detail may span lines. */
+const MODEL_ISSUE = /^Semantic model "([^"]+)":\s*([\s\S]*)$/;
+/** Metric problems lead with the metric name (`does not compile` / `failed engine validation`). */
+const METRIC_NAME = /metric "([^"]+)"/;
+
+/**
+ * Recover the issue list from a save-error message. Returns `[]` for anything
+ * that is not a semantic-gate message (view-gate errors, generic failures) —
+ * those stay banner-only rather than being mis-attributed to a model row.
+ */
+export function parseSemanticModelIssues(message: string | null | undefined): string[] {
+  if (!message || !message.startsWith(ISSUE_PREFIX)) return [];
+  return message.split(new RegExp(`\\n(?=${ISSUE_PREFIX})`)).map((s) => s.trim()).filter(Boolean);
+}
+
+interface AttributedIssues {
+  /** model index → issue details */
+  byModel: Map<number, string[]>;
+  /** `${modelIndex}:${metricIndex}` → issue details */
+  byMetric: Map<string, string[]>;
+  /** issues naming a model that isn't on screen (another version, or renamed) */
+  unattributed: string[];
+}
+
+function attributeIssues(issues: string[], models: SemanticModelV2[]): AttributedIssues {
+  const attributed: AttributedIssues = { byModel: new Map(), byMetric: new Map(), unattributed: [] };
+  const push = <K,>(map: Map<K, string[]>, key: K, text: string) => {
+    const list = map.get(key);
+    if (list) list.push(text); else map.set(key, [text]);
+  };
+  for (const issue of issues) {
+    const match = MODEL_ISSUE.exec(issue);
+    const modelIndex = match ? models.findIndex((m) => m.name === match[1]) : -1;
+    if (!match || modelIndex < 0) { attributed.unattributed.push(issue); continue; }
+    const detail = match[2];
+    const metricName = METRIC_NAME.exec(detail)?.[1];
+    const metricIndex = metricName
+      ? (models[modelIndex].metrics ?? []).findIndex((mt) => mt.name === metricName)
+      : -1;
+    if (metricIndex >= 0) push(attributed.byMetric, `${modelIndex}:${metricIndex}`, detail);
+    else push(attributed.byModel, modelIndex, detail);
+  }
+  return attributed;
 }
 
 // ---------------------------------------------------------------------------
@@ -164,15 +228,31 @@ function UnverifiedBadge({ label }: { label: string }) {
   );
 }
 
+/** Save-gate issues for one row (model / metric) or the unattributed fallback. */
+function IssueList({ label, issues }: { label: string; issues: string[] }) {
+  return (
+    <VStack aria-label={label} align="stretch" gap={1} px={2} py={1.5}
+      bg="accent.danger/8" border="1px solid" borderColor="accent.danger/20" borderRadius="md">
+      {issues.map((text, i) => (
+        <HStack key={i} gap={1.5} align="start">
+          <Box pt="2px" flexShrink={0}><Icon as={LuTriangleAlert} boxSize={3} color="accent.danger" /></Box>
+          <Text fontSize="xs" fontFamily="mono" color="accent.danger" whiteSpace="pre-wrap">{text}</Text>
+        </HStack>
+      ))}
+    </VStack>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // The editor
 // ---------------------------------------------------------------------------
 
 export default function SemanticModelsEditor({
-  models, inheritedModels = [], databases, views, editMode, onChange,
+  models, inheritedModels = [], databases, views, editMode, onChange, issues = [],
 }: SemanticModelsEditorProps) {
   const [browseMode, setBrowseMode] = useState<'edit' | 'catalog'>('edit');
   const mode = editMode ? browseMode : 'catalog';
+  const attributed = useMemo(() => attributeIssues(issues, models), [issues, models]);
 
   const patchModel = (i: number, changes: Partial<SemanticModelV2>) =>
     onChange(models.map((m, idx) => (idx === i ? { ...m, ...changes } : m)));
@@ -200,6 +280,8 @@ export default function SemanticModelsEditor({
         ? primaryColumns
         : columnsOfSource(refs.find((r) => r.alias === source)?.source, options);
     const hasM2M = refs.some((r) => r.relationship === 'many_to_many');
+    const modelIssues = attributed.byModel.get(i) ?? [];
+    const metricIssues = (j: number) => attributed.byMetric.get(`${i}:${j}`) ?? [];
     const temporalColumns = primaryColumns.filter((c) => TEMPORAL_TYPE.test(c.type));
     const measureNames = m.measures.map((ms) => ms.name);
 
@@ -276,6 +358,11 @@ export default function SemanticModelsEditor({
         </VStack>
 
         <VStack align="stretch" gap={3} p={3}>
+          {/* Save-gate issues that name this model but no metric of it. */}
+          {modelIssues.length > 0 && (
+            <IssueList label={`semantic-model-${i}-issues`} issues={modelIssues} />
+          )}
+
           {/* References */}
           <VStack align="stretch" gap={1}>
             <SectionLabel>References</SectionLabel>
@@ -499,6 +586,10 @@ export default function SemanticModelsEditor({
                     </Text>
                   </VStack>
                 )}
+                {/* Tier-2/3 problems for THIS metric, at the row that caused them. */}
+                {metricIssues(j).length > 0 && (
+                  <IssueList label={`semantic-model-${i}-metric-${j}-issue`} issues={metricIssues(j)} />
+                )}
               </VStack>
             ))}
             <AddRowButton label={`semantic-model-${i}-add-metric`} text="Add metric"
@@ -621,6 +712,11 @@ export default function SemanticModelsEditor({
           </HStack>
         )}
       </HStack>
+      {/* Issues we could not pin to a row on screen (a model of another
+          version, or one renamed since the failed save) — never dropped. */}
+      {attributed.unattributed.length > 0 && (
+        <IssueList label="semantic-model-unattributed-issues" issues={attributed.unattributed} />
+      )}
       {mode === 'edit' ? (
         <VStack align="stretch" gap={3}>
           {models.length === 0 && (

@@ -1,12 +1,13 @@
 'use client';
 
 /**
- * Client access to on-demand semantic models (POST /api/semantic-models).
- * Models are derived per request, scoped to the tables in play — never stored
- * on the context content (multi-MB on large workspaces; see derive.ts).
- * Responses are cached per (path, connection, tables) for the session; the
- * vocabulary only changes when the schema changes, and a
- * page reload is acceptable staleness for that.
+ * Client access to AUTHORED semantic models (POST /api/semantic-models).
+ * Optionally scoped to the primaries in play (detection asks for exactly the
+ * tables the SQL touches); an EMPTY table list means UNSCOPED — every authored
+ * model on the connection, which is what the explorer's model picker lists
+ * before anything is picked. Responses are cached per (path, connection,
+ * tables) for the session; the vocabulary only changes when a model is
+ * re-authored, and a page reload is acceptable staleness for that.
  */
 
 import type { SemanticModelV2 } from '@/lib/types';
@@ -20,10 +21,10 @@ const cache = new Map<string, Promise<SemanticModelV2[]>>();
 export async function fetchScopedModels(
   path: string,
   connection: string,
-  tables: string[],
+  tables: string[] = [],
 ): Promise<SemanticModelV2[]> {
   const wanted = [...new Set(tables)].sort();
-  if (!path || !connection || wanted.length === 0) return [];
+  if (!path || !connection) return [];
   const key = `${path}|${connection}|${wanted.join(',')}`;
   const hit = cache.get(key);
   if (hit) return hit;

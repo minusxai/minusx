@@ -154,6 +154,67 @@ describe('tier-3 dry-run save gate', () => {
     expect(probeSqls()).toHaveLength(2);
   });
 
+  // §2.5 rename rules. Both fall out of structureOf() serializing measure /
+  // dimension names + the references array while EXCLUDING metrics — an
+  // innocent refactor of structureOf (e.g. dropping the `name` off measures,
+  // or folding metrics back in) silently flips both scopes, so lock them.
+  it('a MEASURE rename is structural: ALL metrics are probed', async () => {
+    await save(contextId, model([M_A, M_B]));
+    mockQuery.mockClear();
+    await save(contextId, model(
+      [{ ...M_A, verified: true }, { ...M_B, verified: true }],
+      { measures: [{ name: 'Rev', agg: 'SUM', column: 'total' }] }, // Revenue → Rev
+    ));
+    // Neither metric's SQL mentions the measure, yet both re-probe: a rename
+    // can break definitions that name it (ratio metrics), so scope is ALL.
+    expect(probeSqls()).toHaveLength(2);
+  });
+
+  it('a METRIC rename stays case (1): only the renamed metric is probed', async () => {
+    await save(contextId, model([M_A, M_B]));
+    mockQuery.mockClear();
+    await save(contextId, model([
+      { ...M_A, verified: true },
+      { ...M_B, name: 'Net B2', verified: true }, // rename only — SQL untouched
+    ]));
+    const sqls = probeSqls();
+    expect(sqls).toHaveLength(1);          // NOT structural, and the old name's
+    expect(sqls[0]).toContain('- 2');      // disappearance is a pure deletion
+    expect(sqls[0]).toContain('net_b2');   // probed under the NEW name
+  });
+
+  // §2.5 probe execution policy: parallel, capped at 4, per-probe error
+  // classification — "one slow metric never aborts the rest".
+  it('probes are isolated + capped: one infra failure leaves its peers verified and the save SUCCEEDS', async () => {
+    const metrics: SemanticMetricV2[] = [1, 2, 3, 4, 5, 999].map((n) => ({
+      name: `Net ${n}`, type: 'sql', sql: `SUM(primary.total) - ${n}`,
+    }));
+    let inFlight = 0;
+    let maxInFlight = 0;
+    mockQuery.mockImplementation(async (sql: string) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 20)); // force real overlap
+        if (sql.includes('- 999')) {
+          throw new Error('Query timed out after 60s (server bound; tune via QUERY_SERVER_TIMEOUT_MS).');
+        }
+        return { columns: ['_probe_dim', 'm'], types: ['VARCHAR', 'DOUBLE'], rows: [] };
+      } finally {
+        inFlight -= 1;
+      }
+    });
+
+    await expect(save(contextId, model(metrics))).resolves.toBeTruthy();
+
+    const verified = new Map((await savedModel(contextId)).metrics!.map((m) => [m.name, m.verified]));
+    expect(verified.get('Net 999')).toBe(false);                       // infra → fails open
+    for (const n of [1, 2, 3, 4, 5]) expect(verified.get(`Net ${n}`)).toBe(true); // peers unaffected
+    expect(probeSqls()).toHaveLength(6);                               // every metric probed
+    expect(maxInFlight).toBeLessThanOrEqual(4);                        // PROBE_CONCURRENCY cap
+    expect(maxInFlight).toBeGreaterThan(1);                            // …and not sequential
+  });
+
   it('verified: false metrics are STICKY in every subsequent probe set until they verify', async () => {
     mockQuery.mockRejectedValueOnce(new Error('connect ECONNREFUSED 10.0.0.1:5432'));
     await save(contextId, model([M_A, M_B])); // A fails infra → verified: false; B ok

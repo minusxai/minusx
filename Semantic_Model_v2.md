@@ -573,6 +573,14 @@ verified).
 
 ## 6. Execution plan — ONE PR, six milestones
 
+> **Status (2026-07-22):** all six milestones landed on `feature/semantic-models-v2`
+> (PR #638, CI green incl. QA Flows) — M1 `4afd7fc6`, M2 `e45a79d4`, M3 `6b50dbce`,
+> M4 `7c6a8b13`, M5 `a13d5a6b`, M6 `9e902ffc`, plus follow-ups `4a12ce96` / `ed21cfac`.
+> Boxes below are ticked against **committed HEAD**, per line; the three that stay
+> unticked carry an inline parenthetical saying what is outstanding — those residual
+> gaps, and nothing else, are the open work (§4 has the derisk findings; the PR body
+> is empty by repo rule, so it is NOT the place to look).
+
 ### Global rules (read before every milestone)
 
 - Branch: `semantic-model-v2` off `main`. One PR at the end of M1
@@ -605,7 +613,7 @@ verified).
 Goal: `SemanticModelV2` exists as a stored, validated artifact. No compiler
 changes yet.
 
-- [ ] Contracts — **TypeBox is the single source of truth** (repo rule):
+- [x] Contracts — **TypeBox is the single source of truth** (repo rule):
       define the §2.3/§5 shapes (`SemanticModelV2`, `SemanticSource`,
       `SemanticReference` union, `SemanticReferenceM2M`,
       `SemanticMetric = ratio | sql`) as TypeBox schemas in
@@ -617,17 +625,17 @@ changes yet.
       agent-authored JSON. Keep the OLD
       `SemanticModel`/`SemanticJoin`/`TableRelationship` types exported and
       untouched (M6 deletes them); fix the stale doc-comment on the old type.
-- [ ] Add `semanticModels?: SemanticModelV2[]` to `ContextVersion`
+- [x] Add `semanticModels?: SemanticModelV2[]` to `ContextVersion`
       (`lib/types/context.ts` — plain TS interface; `ContextVersion` itself
       has no TypeBox schema and gets none). Do NOT set
       `additionalProperties: false` anywhere at the `ContextVersion` level.
-- [ ] Inheritance: wire `fullSemanticModels` through the context loaders
+- [x] Inheritance: wire `fullSemanticModels` through the context loaders
       (`lib/data/loaders/context-loader*.ts`) and `context-agent-view.ts`,
       copying the `fullViews` inheritance flow. (Agent WRITE access —
       `semanticModels` into `EDITABLE_VERSION_FIELDS` — deliberately waits
       for M5a, when the skill and tier-2/3 gates exist; until then agents
       couldn't author models safely anyway.)
-- [ ] Red tests, then implement `lib/semantic/validate.ts` — tier-1
+- [x] Red tests, then implement `lib/semantic/validate.ts` — tier-1
       `validateSemanticModel(model, ctx): string[]` covering, each with its
       own test: name-slug uniqueness across dims+measures+metrics
       (`semanticAlias`, case-insensitive); reference aliases unique; reserved
@@ -651,15 +659,15 @@ changes yet.
       surfaces when a semantic query first requests a `timeGrain` and the
       compiled `DATE_TRUNC` fails in the engine. Do NOT add `timeDimension`
       to the save probe to change this — accepted behavior.
-- [ ] Reverse namespace check: the VIEW save path also rejects a view name
+- [x] Reverse namespace check: the VIEW save path also rejects a view name
       that collides with a semantic model name (§2.3 — both directions).
       This lands in the views name-uniqueness seam
       (`lib/views/prepare.server.ts` / `save-gate.server.ts`) — those files
       are NOT on the §2.2 removal list; touching them here is safe and
       intended.
-- [ ] Wire tier-1 into the context save path (same seam `prepareView` /
+- [x] Wire tier-1 into the context save path (same seam `prepareView` /
       view save-gating uses) so an invalid model blocks the version save.
-- [ ] No migration work of any kind (per §2.2 — nothing stored, nothing to
+- [x] No migration work of any kind (per §2.2 — nothing stored, nothing to
       convert).
 
 Done-when: new tests red-first then green · `npm run validate` clean ·
@@ -671,30 +679,34 @@ Goal: `compileSemanticQuery` compiles V2 models (to-one refs only; m2m
 compiles in M3 — until then the compiler throws a clear "m2m not yet
 compiled" error).
 
-- [ ] Red tests first: golden-SQL tests per dialect (duckdb/bigquery/postgres)
+- [x] Red tests first: golden-SQL tests per dialect (duckdb/bigquery/postgres)
       for: primary=table, primary=view (`FROM _views.<name>`), to-one
       reference joins from `references[].on`, dimensions with
       `source: <alias>`, base-qualification when joins are in play (existing
       behavior, keep), ratio metrics (existing), and SQL metrics.
-- [ ] Re-point `lib/semantic/compile.ts` from the old `joins`/`SemanticJoin`
+      *(`lib/semantic/__tests__/compile-v2.test.ts` — one golden per shape, with
+      the cross-dialect assertions concentrated where the dialects actually
+      diverge (DATE_TRUNC; plus M3's m2m goldens across all three); the
+      remaining shapes are dialect-invariant.)*
+- [x] Re-point `lib/semantic/compile.ts` from the old `joins`/`SemanticJoin`
       shape to `references` (accept `SemanticModelV2`).
-- [ ] SQL metrics: alias-rewrite `primary.` / `<refAlias>.` → real
+- [x] SQL metrics: alias-rewrite `primary.` / `<refAlias>.` → real
       table/view/alias qualifiers, emit as `{ type: 'raw', raw_sql }` select
       column (§2.5 tier-2, verified pattern).
-- [ ] **Metric-only join inclusion** (easy to miss, silently emits invalid
+- [x] **Metric-only join inclusion** (easy to miss, silently emits invalid
       SQL if skipped): a SQL metric referencing a to-one alias that appears
       in NO selected dimension (e.g. `SUM(costs.total)` with only primary
       dimensions) must still pull that reference's JoinClause into the
       compiled query — join usage is computed from dimensions/filters PLUS
       the tier-1 lexer's extracted metric refs. Dedicated golden test.
-- [ ] Extend `validateSemanticQuery` for V2 (unknown measure/dimension/join
+- [x] Extend `validateSemanticQuery` for V2 (unknown measure/dimension/join
       errors keep their existing human-readable format;
       `SemanticCompileError.issues` shape unchanged).
-- [ ] Wire the tier-2 compile check into the SAME save gate tier 1 uses
+- [x] Wire the tier-2 compile check into the SAME save gate tier 1 uses
       (M1's seam): every metric compile-probes on save from this milestone
       on; failures block the save (§2.5 — tier 2 is save-blocking, not just
       an EditFile-time courtesy).
-- [ ] **SemanticExplorer + detection conversion (§2.7):** `derive.ts` emits
+- [x] **SemanticExplorer + detection conversion (§2.7):** `derive.ts` emits
       V2-shaped models (`TableRelationship` → `SemanticReferenceToOne`,
       `join` → `source`); update `SemanticExplorer.tsx`,
       `use-semantic-models.ts`, `use-semantic-compat.ts`,
@@ -712,6 +724,8 @@ compiled" error).
       `lib/semantic` node files (261 tests) and all five UI files (35 tests)
       pass — any red after conversion is a real regression, not a
       pre-existing failure.
+      *(`use-semantic-compat.ts` needed no edit — it traffics in
+      `SemanticQuerySpec`s, not model shapes, so the conversion passed under it.)*
 
 Done-when: same as M1 (`npm run validate` + full `npm test`, characterization
 suites having stayed green) · `npm run test:qa` green (question UI surface
@@ -721,17 +735,17 @@ touched) · commit + push.
 
 Goal: §5 exactly — semi-join filters + dedup-bridge-CTE dimensions.
 
-- [ ] Red tests first, in-memory DuckDB fixtures (`@duckdb/node-api`,
+- [x] Red tests first, in-memory DuckDB fixtures (`@duckdb/node-api`,
       orders/tags/order_tags with one double-tagged order — §4's scenarios):
       (a) per-group totals correct (promo=100, vip=150 shape); (b) an
       explicit test that the NAIVE join gives the wrong total (documents why
       the CTE exists); (c) filter-only semi-join total correct; (d) LEFT
       NULL-group row present for untagged primary rows; (e) golden SQL for
       all three dialects.
-- [ ] Implement in `compile.ts`: m2m filter → `raw_column`/`raw_value`
+- [x] Implement in `compile.ts`: m2m filter → `raw_column`/`raw_value`
       `pk IN (SELECT …)` FilterCondition; m2m dimension → `_m2m_<alias>`
       dedup CTE (`ctes: [{ name, raw_sql }]`) + LEFT join on `primaryKey`.
-- [ ] Query-time validator rules (in `validateSemanticQuery`): ≤1 m2m
+- [x] Query-time validator rules (in `validateSemanticQuery`): ≤1 m2m
       dimension source per query; m2m filter negation rejected — both with
       §5's pointing errors, both tested.
 
@@ -741,7 +755,7 @@ Done-when: same as M1 (incl. the DuckDB execution tests) · commit + push.
 
 Goal: §2.5 blocking policy live end-to-end.
 
-- [ ] Red tests first (node project, real route/save path + test DB per
+- [x] Red tests first (node project, real route/save path + test DB per
       `store/__tests__/test-utils.ts` patterns): bad-SQL metric blocks save
       with structured issues; infra failure saves with `verified: false`;
       metric-text-only edit probes only changed metrics; a PURE metric
@@ -753,20 +767,31 @@ Goal: §2.5 blocking policy live end-to-end.
       probes all while a metric rename probes only itself (§2.5 rename
       rules); parallel probing (cap 4) with one timing-out metric marked
       `verified: false` while the rest complete (§2.5 execution policy).
-- [ ] Implement: probe = compiled `SemanticQuerySpec` per §2.5's probe shape
+      *(All in `lib/semantic/__tests__/tier3.test.ts`. The last two — rename
+      scope and probe concurrency/isolation — were missed by the M4 commit and
+      written afterwards as regression locks on the shipped behavior; they were
+      green on first run, which is expected for a lock rather than a red-first
+      test.)*
+- [x] Implement: probe = compiled `SemanticQuerySpec` per §2.5's probe shape
       (metric + first dimension; zero dimensions → group by first exposed
       primary column; constant `GROUP BY 1` ONLY as the no-known-columns
       last resort) wrapped
       `SELECT * FROM (…) AS _probe LIMIT 0`, executed via
       `runQuery` (copy `lib/views/prepare.server.ts`); classify
       validation-vs-infrastructure errors; stamp `verified` per §2.5.
-- [ ] Metadata-only edits (`description`/`label` fields only) probe nothing
+- [x] Metadata-only edits (`description`/`label` fields only) probe nothing
       (§2.5 carve-out) — tested.
-- [ ] Zero-dimension probe per §2.5's decided shape: first exposed primary
+- [x] Zero-dimension probe per §2.5's decided shape: first exposed primary
       column (constant grouping only as the no-known-columns last resort —
       no BigQuery verification needed; that edge is unreachable on BQ).
-- [ ] Surface tier-1+2+3 issues as structured errors through the context
+- [x] Surface tier-1+2+3 issues as structured errors through the context
       save API response AND the agent EditFile tool-result path (§3).
+      *(Save API: `SemanticModelSaveError.issues` → newline-joined
+      `UserFacingError`, recovered client-side as a list. EditFile: returns
+      `semanticIssues` as a structured list in the tool result — deliberately
+      tiers 1–2 only, since tier 3 needs a live connector + server credentials;
+      tier-3 issues reach the agent via the save/publish gate, which stays the
+      authority. Documented inline in `lib/tools/handlers/edit-file.ts`.)*
 
 Done-when: same as M1 (`npm run validate` + full `npm test`) · commit + push.
 
@@ -778,7 +803,7 @@ ordering). Split so the well-specified pipes aren't hostage to UI iteration.
 
 **M5a — agent tool, docs projection, explorer switch, authoring skill:**
 
-- [ ] `RunSemanticQuery` server tool under `agents/**` (MXTool + TypeBox
+- [x] `RunSemanticQuery` server tool under `agents/**` (MXTool + TypeBox
       params = `SemanticQuerySpec` + model name), registered in BOTH
       `REGISTRABLES` and `HEADLESS_REGISTRABLES`
       (`lib/chat/orchestration-core.server.ts` — it's a server tool, so
@@ -789,7 +814,7 @@ ordering). Split so the well-specified pipes aren't hostage to UI iteration.
       routing, no new display components.** Test via faux-LLM e2e pattern
       (`fauxAssistantMessage`/`fauxToolCall`, see `slack.e2e.test.ts` /
       `stream-turns.test.ts` reference patterns).
-- [ ] **Agent authoring:** add `semanticModels` to
+- [x] **Agent authoring:** add `semanticModels` to
       `EDITABLE_VERSION_FIELDS` in `context-agent-view.ts` (unlike `views`,
       which is deliberately absent there — §3 requires agent edits;
       deferred from M1 so it lands together with the skill and gates), and
@@ -805,10 +830,17 @@ ordering). Split so the well-specified pipes aren't hostage to UI iteration.
       derived models demoted to draft suggestions.
       `QuestionContent.semanticQuery` specs resolve against authored models
       only from here on.
-- [ ] Docs projection into `context-agent-view.ts`: per model — name,
+      *(Left unticked: the switch itself is present at HEAD — the route and
+      `models.server.ts` serve authored models only, derivation is demoted to
+      the draft-suggestion engine, and the explorer has an authored-model empty
+      state — but the explorer's authored-model surfacing is under active
+      refinement on this branch; tick once that lands.)*
+- [x] Docs projection into `context-agent-view.ts`: per model — name,
       references (alias, cardinality, join columns), dimensions, and metric
       definitions ("metric `revenue` on `Orders` = `SUM(…)`"). Unit-test the
-      projected text.
+      projected text. *(Lives in `lib/sql/context-docs.ts` — the schema-notes
+      projection the agent actually reads — not literally in
+      `context-agent-view.ts`; unit-tested in `lib/sql/__tests__/schema-notes.test.ts`.)*
 
 **M5b — editor + catalog UI (minimal contract, decided):**
 
@@ -822,15 +854,23 @@ ordering). Split so the well-specified pipes aren't hostage to UI iteration.
       code textarea); tier-1/2/3 errors inline per §2.5; a "prefill from
       table" action using the draft-suggestion engine. Explicitly NEED-NOT:
       drag-drop, live previews, diagram views — lists and pickers suffice.
-- [ ] Catalog/browse surface listing each model's dimensions + metrics only
+      *(Left unticked for ONE clause: everything else shipped in
+      `components/context/SemanticModelsEditor.tsx` (form, source pickers,
+      relationship + join-column pickers, m2m `through` authoring, metric-SQL
+      textarea, prefill), but **tier-1/2/3 errors inline** is not at HEAD — it
+      is being implemented separately right now. A checkbox is atomic, so the
+      whole bullet waits on it.)*
+- [x] Catalog/browse surface listing each model's dimensions + metrics only
       (no tables/SQL), grouped under the model's connection (§2.3).
-- [ ] UI tests as `*.ui.test.tsx` (jsdom, `getByLabelText` only — add
+- [x] UI tests as `*.ui.test.tsx` (jsdom, `getByLabelText` only — add
       `aria-label` to every interactive element).
 - [ ] Browser-verify on the dev server: author a model over tutorial data
       (incl. one m2m reference), break a metric and see the tier errors,
       run a semantic query via chat and read the debug message (exact LLM
       request/response) to confirm the tool schema + docs projection +
-      skill look right.
+      skill look right. *(Left unticked: not confirmable from the branch — no
+      record of the dev-server walkthrough. Automated coverage is green, but
+      that is not what this box asks for.)*
 
 Done-when: `npm run validate` + full `npm test` green · `npm run test:qa`
 green · browser verification done (say so honestly) · commit + push (one
@@ -840,14 +880,14 @@ commit per group).
 
 Goal: `TableRelationship` and every reader/writer gone; suite + QA green.
 
-- [ ] Re-run the surface greps first and treat the UNION of results as the
+- [x] Re-run the surface greps first and treat the UNION of results as the
       checklist. Two passes, because the type-name grep alone misses plain
       field readers (`version.relationships`, UI prop names):
       `grep -rln 'TableRelationship\|fullRelationships' --include='*.ts' --include='*.tsx' lib app components agents store orchestrator`
       then a review pass over
       `grep -rn '\brelationships\b' --include='*.ts' --include='*.tsx' lib app components agents store orchestrator`
       (manually skip true-negative hits, e.g. unrelated English in comments).
-- [ ] Delete: `TableRelationship` type + `ContextVersion.relationships` +
+- [x] Delete: `TableRelationship` type + `ContextVersion.relationships` +
       `fullRelationships` (types, both context loaders, agent-view field
       lists — including the one-token removal of `'relationships'` from
       `EDITABLE_VERSION_FIELDS`, easy to miss), **the old
@@ -862,19 +902,19 @@ Goal: `TableRelationship` and every reader/writer gone; suite + QA green.
       becomes draft-suggestion from profiled schema — NO reader of stored
       `relationships`, per §2.2/§2.7 strip step; `models-client.ts` and the
       hooks stay, serving authored models per M5).
-- [ ] Blue→Red→Blue where old tests cover removed behavior: delete/replace
+- [x] Blue→Red→Blue where old tests cover removed behavior: delete/replace
       those tests deliberately, never weaken assertions to keep them passing.
       Includes deleting `table-relationships-editor.ui.test.tsx` with its
       component, and settling whatever remains of the §2.2 test-file five
       (`lib/semantic/__tests__/*`) that M2–M5 haven't already rewritten.
-- [ ] Final check: grep for
+- [x] Final check: grep for
       `TableRelationship|fullRelationships|SemanticJoin` returns ZERO hits
       outside this doc; the old `SemanticModel` interface is gone from
       `lib/types/semantic.ts` (the name may live on only if V2 adopts it as
       its export name — either way, one shape exists); and the
       `\brelationships\b` review pass shows no remaining live reader of the
       stored field.
-- [ ] `npm run validate` · `npm test` · `npm run test:qa` all green.
-- [ ] Mark the PR ready for review (body stays empty).
+- [x] `npm run validate` · `npm test` · `npm run test:qa` all green.
+- [x] Mark the PR ready for review (body stays empty).
 
 Done-when: all of the above checked · push.

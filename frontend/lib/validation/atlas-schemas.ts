@@ -677,26 +677,6 @@ const CtxTableAnnotation = Type.Object({
   columns: Nullable(Type.Array(CtxColumnAnnotation)),
 }, { title: 'ContextTableAnnotation' });
 
-const CtxSkillEntry = Type.Object({
-  name: Type.String(),
-  description: Type.String(),
-  content: Type.String(),
-  enabled: Type.Boolean(),
-  createdAt: Type.String(),
-  updatedAt: Type.String(),
-  createdBy: Type.Integer(),
-}, { title: 'ContextSkillEntry' });
-
-export const ContextAgentContent = Type.Object({
-  docs: Type.Array(CtxDocEntry, { description: 'documentation entries the agent authors for this context' }),
-  metrics: Nullable(Type.Array(CtxMetricDef, { description: 'named metrics attached to tables' })),
-  annotations: Nullable(Type.Array(CtxTableAnnotation, { description: 'editorial table/column descriptions' })),
-  skills: Nullable(Type.Array(CtxSkillEntry, { description: 'user-defined skills available in this context' })),
-  evals: Nullable(Type.Array(Type.Unknown(), { description:
-    'eval test definitions for this context (each an opaque Test object: { type, subject, answerType, operator, value })' })),
-}, { title: 'ContextContent' });
-export type ContextAgentContent = Static<typeof ContextAgentContent>;
-
 // ============================================================================
 // Semantic Models V2 — authored semantic layer (Semantic_Model_v2.md §2.3/§5).
 // TypeBox is the single source of truth for these shapes; lib/types/semantic.ts
@@ -825,6 +805,28 @@ export const SemanticModelV2 = Type.Object({
   })),
 }, { title: 'SemanticModelV2' });
 export type SemanticModelV2 = Static<typeof SemanticModelV2>;
+
+const CtxSkillEntry = Type.Object({
+  name: Type.String(),
+  description: Type.String(),
+  content: Type.String(),
+  enabled: Type.Boolean(),
+  createdAt: Type.String(),
+  updatedAt: Type.String(),
+  createdBy: Type.Integer(),
+}, { title: 'ContextSkillEntry' });
+
+export const ContextAgentContent = Type.Object({
+  docs: Type.Array(CtxDocEntry, { description: 'documentation entries the agent authors for this context' }),
+  metrics: Nullable(Type.Array(CtxMetricDef, { description: 'named metrics attached to tables' })),
+  annotations: Nullable(Type.Array(CtxTableAnnotation, { description: 'editorial table/column descriptions' })),
+  skills: Nullable(Type.Array(CtxSkillEntry, { description: 'user-defined skills available in this context' })),
+  semanticModels: Nullable(Type.Array(SemanticModelV2, { description:
+    'authored semantic models — see the semantic_models skill for the format' })),
+  evals: Nullable(Type.Array(Type.Unknown(), { description:
+    'eval test definitions for this context (each an opaque Test object: { type, subject, answerType, operator, value })' })),
+}, { title: 'ContextContent' });
+export type ContextAgentContent = Static<typeof ContextAgentContent>;
 
 // ============================================================================
 // Top-level discriminated file models
