@@ -1,7 +1,7 @@
 // POST /api/chat/debug-context — the /debug visualization's "Projected" data
 // source: the exact next-call Context (system prompt + projected messages +
-// tool-definition size) from the same preview path /api/chat/context-size
-// uses. Admin only (it exposes the raw system prompt).
+// tool-definition size) via previewNextChatContext. Admin only (it exposes the
+// raw system prompt).
 
 vi.mock('@/lib/auth/auth-helpers', () => ({ getEffectiveUser: vi.fn() }));
 vi.mock('@/lib/chat/orchestration-core.server', () => ({ previewNextChatContext: vi.fn() }));

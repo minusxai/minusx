@@ -95,6 +95,21 @@ describe('v3 chat routes (turns + stream)', () => {
     expect(msgSeqs.every((s) => s > 0)).toBe(true); // seq 0 (already had it) is not re-sent
   });
 
+  it('a completed turn stamps meta.lastContextTokens with the last LLM call context size', async () => {
+    webAnalystFaux.setResponses([fauxAssistantMessage('stamped.', { stopReason: 'stop' })]);
+    const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+    await turnsRoute(new NextRequest(`http://localhost/api/conversations/${conv.id}/turns`, {
+      method: 'POST', body: JSON.stringify({ userMessage: 'stamp me' }),
+    }), idCtx(conv.id));
+    await waitForIdle(conv.id);
+
+    const after = await getConversation(conv.id);
+    // The faux provider derives usage from the prompt text, so the exact value varies —
+    // the contract is: present, numeric, and positive (it's the whole-context token count).
+    expect(typeof after?.meta?.lastContextTokens).toBe('number');
+    expect(after?.meta?.lastContextTokens as number).toBeGreaterThan(0);
+  });
+
   it('interrupt route authorizes and returns ok', async () => {
     const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
     const res = await interruptRoute(

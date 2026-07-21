@@ -119,6 +119,7 @@ export function useConversation(conversationId?: number) {
             title: v3detail.conversation.meta?.titleGenerated && v3detail.conversation.title?.trim()
               ? v3detail.conversation.title
               : undefined,
+            lastContextTokens: v3detail.conversation.meta?.lastContextTokens,
           },
           setAsActive: false,
         }));

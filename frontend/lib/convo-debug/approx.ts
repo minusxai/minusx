@@ -1,7 +1,7 @@
 /**
  * Token approximation for the /debug visualization.
  *
- * Text: chars/4 (same heuristic as `lib/chat/context-size-estimate.ts`).
+ * Text: chars/4.
  * Images: Anthropic's (width × height) / 750 formula, capped at 1600 tokens,
  * with dimensions parsed from the base64 header (PNG IHDR / JPEG SOF). URL
  * images and unparseable payloads fall back to a flat estimate.

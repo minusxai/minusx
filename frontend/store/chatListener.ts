@@ -291,6 +291,7 @@ async function runV3TurnInListener(
       streamedThinking: '',
       executionState: status === 'paused' ? 'EXECUTING' : 'FINISHED',
       version: 3,
+      lastContextTokens: detail.conversation?.meta?.lastContextTokens,
     },
     setAsActive: false,
   }));
@@ -348,6 +349,7 @@ async function renderFromDurableLog(
       streamedThinking: '',
       executionState,
       version: 3,
+      lastContextTokens: detail.conversation?.meta?.lastContextTokens,
       // Durable errors[] (already in `messages`) are the truth; a stale client-side error banner
       // (e.g. an interrupt artifact) must not survive the remote re-render.
       error: undefined,

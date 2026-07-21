@@ -242,6 +242,21 @@ export async function setGeneratedConversationTitle(id: number, title: string): 
   );
 }
 
+/**
+ * Stamp the turn's final context size (`usage.totalTokens` of its last LLM call) onto meta.
+ * The conversation row rides every GET /api/conversations/:id response, so the client's
+ * "conversation too long" gate works on reload without usage rows on the display wire.
+ */
+export async function setLastContextTokens(id: number, tokens: number): Promise<void> {
+  if (!Number.isFinite(tokens) || tokens <= 0) return;
+  await db().exec(
+    `UPDATE conversations
+     SET meta = jsonb_set(COALESCE(meta, '{}'::jsonb), '{lastContextTokens}', $2::text::jsonb)
+     WHERE id = $1`,
+    [id, String(Math.round(tokens))],
+  );
+}
+
 export async function setRunStatus(id: number, status: RunStatus): Promise<void> {
   await db().exec('UPDATE conversations SET run_status = $2 WHERE id = $1', [id, status]);
 }

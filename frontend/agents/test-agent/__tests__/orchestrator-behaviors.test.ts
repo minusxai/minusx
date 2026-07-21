@@ -1226,3 +1226,55 @@ describe('unknown tool handling', () => {
     expect(errorTrm!.parent_id).not.toBe(root.id);
   });
 });
+
+describe("stopReason 'length' — truncated responses are terminal, never retried", () => {
+  // A 'length' stop means the response was cut off (context window exhausted, or the
+  // output cap hit). Re-calling with the SAME context re-fails identically while
+  // paying full input cost each time — a real conversation once burned $20 looping
+  // on 16-token "I'm sorry" stubs. The loop must fail the run on the FIRST one.
+  const ctx: AgentContext = { userId: 'u', mode: 'org' };
+
+  // The faux provider derives `usage` from the message text (chars/4), so output
+  // size is controlled via text length: a tiny stub ≈ the context-clamp case, a
+  // huge body ≈ the output-cap case.
+  async function runTruncated(text: string) {
+    let calls = 0;
+    fauxRegistration.setResponses(
+      Array.from({ length: 5 }, () => () => {
+        calls += 1;
+        return fauxAssistantMessage(text, { stopReason: 'length' });
+      }),
+    );
+    const orch = new Orchestrator([EchoTool, PendingTool, ErrorTool, DeepAgent, NestedAgent, TestAgent]);
+    const agent = new TestAgent(orch, { userMessage: 'go' }, ctx);
+    const stream = orch.run(agent);
+    const events: StreamEvent[] = [];
+    for await (const ev of stream) events.push(ev);
+    const result = await stream.result();
+    return { calls: () => calls, events, result };
+  }
+
+  it('fails the run on the first truncated response instead of looping', async () => {
+    const { calls, events, result } = await runTruncated("I'm sorry");
+    expect(calls()).toBe(1); // the money-burning bug was calls() === maxSteps
+    expect(result).toBeNull();
+    const errorEvent = events.find((e) => e.type === 'error') as
+      | { error: { errorMessage?: string } }
+      | undefined;
+    expect(errorEvent).toBeDefined();
+  });
+
+  it('context-clamped truncation (tiny output) says the conversation is too long', async () => {
+    const { events } = await runTruncated("I'm sorry");
+    const errorEvent = events.find((e) => e.type === 'error') as { error: { errorMessage?: string } };
+    expect(errorEvent.error.errorMessage).toMatch(/context window/i);
+    expect(errorEvent.error.errorMessage).toMatch(/new conversation/i);
+  });
+
+  it('output-cap truncation (large output) blames the response length, not the conversation', async () => {
+    const { events } = await runTruncated('long truncated story output... '.repeat(2_000));
+    const errorEvent = events.find((e) => e.type === 'error') as { error: { errorMessage?: string } };
+    expect(errorEvent.error.errorMessage).toMatch(/output/i);
+    expect(errorEvent.error.errorMessage).not.toMatch(/context window/i);
+  });
+});
