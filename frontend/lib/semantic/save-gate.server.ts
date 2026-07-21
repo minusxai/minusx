@@ -216,6 +216,13 @@ async function runProbe(
         : undefined;
       ir.select.unshift({ type: 'column', column: col, ...(table ? { table } : {}), alias: '_probe_dim' });
       ir.group_by = { columns: [{ column: col, ...(table ? { table } : {}) }] };
+    } else {
+      // Last resort — no exposed column is known (e.g. a view whose columns
+      // have not been snapshotted yet). The probe MUST still carry a GROUP BY:
+      // tier 3 is the only aggregate gate by design, so dropping it would let
+      // a non-aggregate metric be stamped verified and fail at query time.
+      ir.select.unshift({ type: 'raw', raw_sql: '1', alias: '_probe_dim' });
+      ir.group_by = { columns: [{ column: '1' }] };
     }
   }
   const sql = irToSqlLocal(ir, dialect);

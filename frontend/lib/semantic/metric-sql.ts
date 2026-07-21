@@ -127,12 +127,21 @@ export function lexMetricSql(
     if (prev?.kind === 'dot') continue;              // column side already consumed / stray
     if (next?.kind === 'lparen') continue;           // function name
     if (SQL_KEYWORDS.has(tok.text.toLowerCase())) continue;
-    // Bare identifier — flag only when it matches an exposed field somewhere.
+    // Bare identifier. EVERY one is reported: qualification is mandatory, so a
+    // bare ref is an error whether or not we can name candidates. (Matching
+    // only known fields left a hole — `SUM(AMOUNT)` against an exposed
+    // `amount` found no candidates under the exact-case lookup and sailed
+    // through tiers 1-3, then broke at query time once a joined source shared
+    // the column.) Candidates are matched case-insensitively so the error can
+    // still point at the right spelling.
+    const lower = tok.text.toLowerCase();
     const candidates: string[] = [];
     for (const [source, cols] of knownFields) {
-      if (cols.has(tok.text)) candidates.push(`${source}.${tok.text}`);
+      for (const col of cols) {
+        if (col.toLowerCase() === lower) candidates.push(`${source}.${col}`);
+      }
     }
-    if (candidates.length > 0 && !seenBare.has(tok.text)) {
+    if (!seenBare.has(tok.text)) {
       seenBare.add(tok.text);
       bare.push({ ident: tok.text, candidates: candidates.sort() });
     }

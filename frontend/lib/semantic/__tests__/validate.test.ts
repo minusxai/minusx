@@ -341,4 +341,55 @@ describe('lexMetricSql', () => {
     expect(lexMetricSql('SUM(`My Col`)', FIELDS).quoted).toBe(true);
     expect(lexMetricSql("SUM(primary.amount) + 'a \"quoted\" string'", FIELDS).quoted).toBe(false);
   });
+
+describe('runtime shape gate (agent-authored JSON is not type-checked)', () => {
+  const bad = (m: unknown): string[] => validateSemanticModel(m as never, CTX);
+
+  it('reports missing required fields instead of throwing', () => {
+    expect(() => bad({ name: 'X', connection: 'wh' })).not.toThrow();
+    expect(bad({ name: 'X', connection: 'wh' })[0]).toMatch(/malformed model/i);
+  });
+
+  it('reports a to-one reference missing relationship/on instead of passing it through', () => {
+    const m = validModel() as unknown as { references: unknown[] };
+    m.references = [{ source: { kind: 'table', schema: 'main', table: 'customers' }, alias: 'c' }];
+    const issues = bad(m);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues[0]).toMatch(/malformed model/i);
+  });
+
+  it('reports an m2m reference missing `through` instead of throwing', () => {
+    const m = validModel() as unknown as { references: unknown[] };
+    m.references = [{ source: { kind: 'table', schema: 'main', table: 'tags' }, alias: 't', relationship: 'many_to_many' }];
+    expect(() => bad(m)).not.toThrow();
+    expect(bad(m)[0]).toMatch(/malformed model/i);
+  });
+});
+
+describe('m2m grain: primaryKey must match the bridge join key', () => {
+  it('rejects through.primaryOn disagreeing with the declared primaryKey', () => {
+    const issues = errorsFor((m) => {
+      (m.references![2] as { through: { primaryOn: { primaryColumn: string; bridgeColumn: string }[] } })
+        .through.primaryOn = [{ primaryColumn: 'region', bridgeColumn: 'order_id' }];
+    });
+    expect(issues.some((e) => e.includes('primaryKey') && e.includes('region'))).toBe(true);
+  });
+});
+
+describe('metric SQL: every bare ref must be qualified', () => {
+  it('rejects a CASE-MISMATCHED bare ref that no exact-case lookup would find', () => {
+    const issues = errorsFor((m) => {
+      m.metrics!.push({ name: 'Cased', type: 'sql', sql: 'SUM(AMOUNT)' });
+    });
+    expect(issues.some((e) => e.includes('AMOUNT'))).toBe(true);
+  });
+
+  it('rejects a bare ref that matches no exposed field at all', () => {
+    const issues = errorsFor((m) => {
+      m.metrics!.push({ name: 'Unknown', type: 'sql', sql: 'SUM(mystery_col)' });
+    });
+    expect(issues.some((e) => e.includes('mystery_col') && e.includes('not qualified'))).toBe(true);
+  });
+});
+
 });

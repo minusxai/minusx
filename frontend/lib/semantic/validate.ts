@@ -9,6 +9,8 @@
  * `raw` select columns for any compound aggregate (verified), so a
  * comment/string-aware token scan over qualified identifiers is the mechanism.
  */
+import { Errors } from 'typebox/value';
+import { SemanticModelV2 as SemanticModelV2Schema } from '@/lib/validation/atlas-schemas';
 import type { SemanticModelV2, SemanticReference, SemanticReferenceM2M, SemanticSource } from '@/lib/types/semantic';
 import type { DatabaseWithSchema, ViewDef } from '@/lib/types';
 import { exposedColumns } from '@/lib/types/views';
@@ -94,6 +96,21 @@ export function validateSemanticModel(
   model: SemanticModelV2,
   ctx: SemanticModelCtx,
 ): string[] {
+  // SHAPE GATE FIRST. The Static type makes `primary`/`dimensions`/`measures`
+  // and each reference's `relationship`/`on`/`through` required, so the rules
+  // below dereference them unguarded — but nothing enforces that at RUNTIME on
+  // agent- or JSON-authored models. Without this, a model missing a field
+  // throws a raw TypeError that escapes as an HTTP 500 with no issue list,
+  // which is exactly the failure an LLM writing this JSON hits first and the
+  // one it cannot self-correct from. Bail out here: the shape must be right
+  // before any semantic rule can be evaluated.
+  const shapeIssues = [...Errors(SemanticModelV2Schema, model)]
+    .slice(0, 10)
+    .map((e) => `${e.instancePath || '(root)'} ${e.message}`);
+  if (shapeIssues.length > 0) {
+    return [`malformed model — fix its shape first: ${shapeIssues.join('; ')}`];
+  }
+
   const issues: string[] = [];
 
   // ── Model name ────────────────────────────────────────────────────────────
@@ -141,6 +158,12 @@ export function validateSemanticModel(
       if (bridgeRes.error) issues.push(bridgeRes.error);
       if (ref.through.primaryOn.length !== 1 || ref.through.referencedOn.length !== 1) {
         issues.push(`${at}: many_to_many join keys must be a single column each — composite-key m2m is not supported; add a surrogate key or a concatenated key column in a data model`);
+      } else if (model.primaryKey?.length === 1 && ref.through.primaryOn[0].primaryColumn !== model.primaryKey[0]) {
+        // The compiler keys the bridge join off `through.primaryOn`, so a
+        // mismatch here would silently compile at a grain that is NOT the
+        // declared primaryKey — the "two m2m references can never disagree"
+        // guarantee (§2.3) has to be enforced, not just declared.
+        issues.push(`${at}: through.primaryOn joins the primary on "${ref.through.primaryOn[0].primaryColumn}", but the model's primaryKey is "${model.primaryKey[0]}" — the m2m grain must be the declared primary key`);
       }
     }
   }
@@ -246,7 +269,9 @@ export function validateSemanticModel(
       }
     }
     for (const b of lex.bare) {
-      issues.push(`${at}: "${b.ident}" is ambiguous — qualify it as ${b.candidates.join(' or ')}`);
+      issues.push(b.candidates.length > 0
+        ? `${at}: "${b.ident}" is ambiguous — qualify it as ${b.candidates.join(' or ')}`
+        : `${at}: "${b.ident}" is not qualified — write primary.${b.ident} or <alias>.${b.ident}`);
     }
   }
 

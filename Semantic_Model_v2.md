@@ -118,8 +118,10 @@ a new file type.
   workspace has declared relationships or authored models**
   (operator-confirmed, 2026-07-21; the seed template also contains zero —
   verified), so inert data is vacuously absent and a fallback/suggester read
-  path would be dead code. The draft-suggestion engine proposes `references`
-  from profiled schema (FK-shaped columns), not from stored relationships.
+  path would be dead code. The draft-suggestion engine proposes a single-table
+  draft (dimensions / measures / time axis) from profiled schema, not from
+  stored relationships; **references are always authored explicitly** — nothing
+  infers them.
 - **Real removal surface (verified by grep, 21 files = 16 source + 5 test):**
   source — `lib/types/semantic.ts` + `lib/types/context.ts` + `lib/types.ts`,
   `lib/semantic/{derive,models.server,verify.server}.ts`,
@@ -338,7 +340,10 @@ and to the agent tool result. **Blocking policy (decided):**
   case), until they verify. No query-time re-probing — saves are the only
   probe trigger, so the whole policy lives in one place (M4).
 - Probe shape: the probe query is the metric plus a GROUP BY in every case —
-  the model's **first dimension** when one exists; with zero dimensions,
+  the model's **first non-m2m-sourced dimension** when one exists (an m2m probe
+  dimension would drag a bridge CTE into a probe that only needs to validate the
+  metric, so a model whose dimensions are all m2m-sourced takes the
+  zero-dimension path); with zero dimensions,
   group by the **first exposed column of the primary** (plain-column
   grouping — standard SQL everywhere; execution-verified on DuckDB and real
   Postgres/PGLite, incl. that a non-aggregate metric correctly fails).
