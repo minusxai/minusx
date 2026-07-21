@@ -111,7 +111,7 @@ Everything else needs no rejection: foreignObject renders with the real browser 
 ### 6a. Theme picking via Clarify (no new tool)
 
 - **Layer A — image options:** optional `imageUrl` + real `value` on the Clarify option schema (`web-tools.ts`), threaded through `user-input-exception.ts` → handler (`clarify.ts`, which currently drops extra fields) → `UserInputComponent.tsx` card-grid branch (image top, label + check below) → `ClarifyDisplay.tsx`, `clarify-answer-stash.ts`. Radio/checkbox semantics, "Other", "Figure it out" all kept.
-- **Layer B — `type: 'design'` preset:** when set, `options` is ignored and the frontend handler populates the six theme options from the registry (label, description, preview). The model's call is one line; the list can't drift; the result returns the theme `name` via `value`. The next app-state screenshot shows the themed render — no need to return images to the model.
+- **Layer B — `type: 'design'` preset:** when set, `options` is ignored and the frontend handler populates the six theme options from the registry (label, description, preview). The model's call is one line; the list can't drift; the result returns the theme `name` via `value` PLUS the theme's registry description (personality, fonts, palette feel) so the agent can write custom CSS that harmonizes with the chosen theme without guessing. The next app-state screenshot shows the themed render — no need to return images to the model.
 - **Prompt wiring:** new story or look/feel question → call Clarify with `type:'design'`; honor "figure it out" by choosing.
 
 ### 6b. Agent reading rendered state — existing pipeline only
@@ -184,7 +184,7 @@ An item is checked only when its tests exist, went red before implementation, an
 
 ### Phase 1 — shadcn foundation
 - [ ] shadcn/ui + Radix copied into `lib/story-ui/`; registry per §2 (overlays absent); Tooltip/Popover patched to `absolute`, portaled in the story root.
-- [ ] Radix-in-surface check: extend the §12 harness with real Tabs + patched Popover in the svg surface — interaction + serialize-capture pass on all three engines.
+- [x] Radix-in-surface check: real Tabs + patched (portal-free, absolute) Popover in the svg surface — interaction + serialize-capture pass on Chromium, WebKit, Firefox (§12).
 - [ ] Interpreter: JSX-AST → `React.createElement` from the parent tree via `createPortal` (StoryEmbeds pattern); no eval; controlled→uncontrolled prop mapping; prop deny list wired in.
 - [ ] Parse restrictions (hard parse errors, red tests each): expression containers `{...}`, spread attributes, member-expression tags (`<Foo.Bar>`), namespaced tags all rejected; prop values only string/number/boolean literals (objects only as sanitized `style`).
 - [ ] Sanitization tests (hostile code-view user): `on*`, `dangerouslySetInnerHTML`, `ref`/`key`, `formAction`, `srcDoc`, `is`, style injection blocked; every URL-carrying attribute (`href`, `src`, `srcset`, `xlinkHref`, `ping`) scheme-filtered and fuzzed (`java\tscript:`, mixed-case, entity-encoded, unicode confusables); real component usage passes.
@@ -247,4 +247,4 @@ Executed, not assumed: a Playwright harness (Chromium, WebKit, Firefox) drove a 
 
 **Editor audit** (code-verified): `AgentHtml.tsx:387` applies full rich `contentEditable` — inline formatting works today, so the write-back must handle inline-element children (plaintext-only ruled out).
 
-**Not exercised** (needs the dependency; it is a Phase 1 checklist item): real Radix Tabs/Popover mounted in the surface. The primitives they compose — absolute positioning, hit-testing, events inside foreignObject — are all proven above.
+**Radix-in-surface (run during Phase 1, real dependency):** actual `@radix-ui/react-tabs` + portal-free `@radix-ui/react-popover` (the story patch: no Portal, `[data-radix-popper-content-wrapper]{position:absolute}`) bundled with esbuild and mounted inside `<svg><foreignObject>` on all three engines — tab switching works, the popover opens visible with an `absolute` wrapper (x:0, y:73–78 across engines), open state serializes, and the capture rasterizes untainted with both panels' pixels present. Chromium / WebKit / Firefox: all pass. Every §12 assumption is now validated with real dependencies.
