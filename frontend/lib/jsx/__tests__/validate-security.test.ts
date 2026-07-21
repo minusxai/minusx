@@ -88,3 +88,16 @@ describe('parse restrictions (already-enforced contracts, pinned)', () => {
     ok('<Question id={1017} viz={{ type: "bar" }} />');
   });
 });
+
+describe('scheme-filter: encoded/confusable shapes', () => {
+  it('entity-encoded scheme is DECODED at parse and rejected (acorn-jsx decodes attr entities)', () => {
+    // The parser decodes "&#106;avascript:" to "javascript:" before validation, so the scheme
+    // filter sees the real scheme — encoding is not an escape hatch.
+    expect(bad('<a href="&#106;avascript:alert(1)">x</a>').length).toBeGreaterThan(0);
+  });
+  it('unicode-confusable scheme chars do not form a real scheme; control-char smuggling still rejects', () => {
+    ok('<a href="ｊavascript:alert(1)">x</a>'); // fullwidth j: not resolvable as javascript:
+    const nulSmuggled = '<a href="' + String.fromCharCode(0) + 'javascript:alert(1)">x</a>';
+    expect(bad(nulSmuggled).length).toBeGreaterThan(0); // browsers strip NUL -> real scheme
+  });
+});

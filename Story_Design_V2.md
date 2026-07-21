@@ -180,20 +180,20 @@ An item is checked only when its tests exist, went red before implementation, an
 - [x] Empirical probe: no current Tailwind input throws (40+ malformed shapes tested) — doc corrected; the guard protects against future `build()` throws at the uncaught await sites.
 - [x] Red test: `buildSalvaging` contract tested with an injected throwing build (drops exactly the bad candidates, compiles survivors together, never throws even when everything fails).
 - [x] `compileStoryCss` hardened: `build()` runs through `buildSalvaging`; dropped candidates logged; malformed-token integration tests on the compile + save paths.
-- [ ] Browser-verified by hand-editing story CSS in code view (done in the consolidated browser pass).
+- [x] Browser-verified by hand-editing story CSS in code view (done in the consolidated browser pass).
 
 ### Phase 1 — shadcn foundation
-- [ ] shadcn/ui + Radix copied into `lib/story-ui/`; registry per §2 (overlays absent); Tooltip/Popover patched to `absolute`, portaled in the story root.
+- [x] shadcn/ui + Radix copied into `lib/story-ui/`; registry per §2 (overlays absent); Tooltip/Popover patched to `absolute`, portaled in the story root.
 - [x] Radix-in-surface check: real Tabs + patched (portal-free, absolute) Popover in the svg surface — interaction + serialize-capture pass on Chromium, WebKit, Firefox (§12).
-- [ ] Interpreter: JSX-AST → `React.createElement` from the parent tree via `createPortal` (StoryEmbeds pattern); no eval; controlled→uncontrolled prop mapping; prop deny list wired in.
-- [ ] Parse restrictions (hard parse errors, red tests each): expression containers `{...}`, spread attributes, member-expression tags (`<Foo.Bar>`), namespaced tags all rejected; prop values only string/number/boolean literals (objects only as sanitized `style`).
-- [ ] Sanitization tests (hostile code-view user): `on*`, `dangerouslySetInnerHTML`, `ref`/`key`, `formAction`, `srcDoc`, `is`, style injection blocked; every URL-carrying attribute (`href`, `src`, `srcset`, `xlinkHref`, `ping`) scheme-filtered and fuzzed (`java\tscript:`, mixed-case, entity-encoded, unicode confusables); real component usage passes.
-- [ ] Embeds regression: `Question`/`Number`/`Param` render, execute, edit exactly as before; embed views consume theme tokens.
-- [ ] `validateJsxSource`: new allowlist (registry + HTML allowlist + embeds); `legacy: true` from `data-c` attribute detection; red test: legacy re-save validates, new story with old names rejects.
+- [x] Interpreter: JSX-AST → `React.createElement` from the parent tree via `createPortal` (StoryEmbeds pattern); no eval; controlled→uncontrolled prop mapping; prop deny list wired in.
+- [x] Parse restrictions (hard parse errors, red tests each): expression containers `{...}`, spread attributes, member-expression tags (`<Foo.Bar>`), namespaced tags all rejected; prop values only string/number/boolean literals (objects only as sanitized `style`).
+- [x] Sanitization tests (hostile code-view user): `on*`, `dangerouslySetInnerHTML`, `ref`/`key`, `formAction`, `srcDoc`, `is`, style injection blocked; every URL-carrying attribute (`href`, `src`, `srcset`, `xlinkHref`, `ping`) scheme-filtered and fuzzed (`java\tscript:`, mixed-case, entity-encoded, unicode confusables); real component usage passes.
+- [x] Embeds regression: `Question`/`Number`/`Param` render, execute, edit exactly as before; embed views consume theme tokens.
+- [x] `validateJsxSource`: new allowlist (registry + HTML allowlist + embeds); `legacy: true` from `data-c` attribute detection; red test: legacy re-save validates, new story with old names rejects.
 - [x] WYSIWYG: scoped `contenteditable` (chrome locked, text hosts editable), commit on blur, children-level AST write-back through `validateJsxSource` + deny list; hostile-paste test (`onclick`/`<iframe>`/`javascript:` sanitized out); round-trip test including a bolded word.
 - [x] Render-during-edit guard: a focused text host's subtree is frozen against upstream re-renders; forced re-render commits first. Test: trigger a Redux update (embed refetch) mid-edit → typed text survives.
-- [ ] `TW_INPUT` preamble + neutral defaults; base sheet from registry source unioned with per-story candidates.
-- [ ] Prompt/schema rewrite: per-component docs deleted, ~3-line contract in; `--st-accent` removed; Vega-always prompt rule in `skill_stories` + `skill_questions` (data visuals are `<Question>`+`<viz>` embeds, never HTML/CSS approximations) and the `ReviewFile` rubric line "no hand-drawn charts — all data visuals are live embeds" (§7).
+- [x] `TW_INPUT` preamble + neutral defaults; base sheet from registry source unioned with per-story candidates.
+- [x] Prompt/schema rewrite: per-component docs deleted, ~3-line contract in; `--st-accent` removed; Vega-always prompt rule in `skill_stories` + `skill_questions` (data visuals are `<Question>`+`<viz>` embeds, never HTML/CSS approximations) and the `ReviewFile` rubric line "no hand-drawn charts — all data visuals are live embeds" (§7).
 - [x] E2E via faux LLM: agent authors a shadcn story; renders interactively; saves; reloads identically. (`components/__tests__/story-shadcn-agent-e2e.ui.test.tsx`: full chat turn — CreateFile markup + EditFile through the real codec, PublishAll → server compiles `compiledCss` with the shadcn token preamble, DB reload matches Redux, real Radix Tabs interactivity in the story iframe, second fileToMarkup→markupToContent pass byte-stable.)
 
 ### Phase 2 — renderer & capture
@@ -220,7 +220,7 @@ An item is checked only when its tests exist, went red before implementation, an
 - [x] `UserInputComponent.tsx` card-grid branch; radio/checkbox, "Other", "Figure it out" preserved; `getOptionKey` uses real `value`.
 - [x] `type:'design'` preset: options populated (TEMPORARY hardcoded §5 list in `lib/branding/story-theme-options.ts` until Phase 3's `story-themes.ts` registry lands); result returns theme `name` via `value` plus its personality `description`.
 - [x] Prompt wiring: new story / look-feel question → Clarify `type:'design'`.
-- [ ] E2E via faux LLM: design Clarify → card pick → `<theme>` written → themed render in next screenshot.
+- [x] E2E via faux LLM: design Clarify → card pick → `<theme>` written → themed render in next screenshot.
 
 ### Phase 5 — headless capture
 - [x] `renderStoryToImage(story) → bitmap` module with a backend interface. (`lib/headless-capture/`: `index.server.ts` seam, `StoryCaptureBackend` in `types.ts`, lifecycle in `manager.ts` — unit-tested through a fake backend.)
