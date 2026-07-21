@@ -8,21 +8,19 @@ import {
   getMaxSeq,
   deleteConversation,
   setGeneratedConversationTitle,
+  canReadConversation,
+  ownsConversation,
 } from '@/lib/data/conversations.server';
 import { parseConversationView, projectMessageRowForDisplay } from '@/lib/data/conversation-projection';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-/** A v3 conversation is visible only to its owner, within the same mode. */
-function ownsConversation(conv: { ownerUserId: number; mode: string }, user: { userId: number; mode: string }) {
-  return conv.ownerUserId === user.userId && conv.mode === user.mode;
-}
-
 /**
  * GET /api/conversations/:id?view=display|full&since=<seq>
  * Returns the conversation row + its message log (pi entries) + parallel error stream.
  * The frontend rebuilds the chat from `messages[].content`.
+ * Readable by the owner (same mode) or any admin by direct id; mutations below stay owner-only.
  *
  * Conversations V2 (see /conversations-v2.md): the default `display` view projects each entry
  * to display-grade size (LLM-only payloads stripped); `view=full` (dev mode) returns the
@@ -42,7 +40,7 @@ export const GET = withAuth(async (
 
     const conversation = await getConversation(conversationId);
     if (!conversation) return ApiErrors.notFound('Conversation');
-    if (!ownsConversation(conversation, user)) return ApiErrors.forbidden();
+    if (!canReadConversation(conversation, user)) return ApiErrors.forbidden();
 
     const searchParams = new URL(request.url).searchParams;
     const view = parseConversationView(searchParams.get('view'));

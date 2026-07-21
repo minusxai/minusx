@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import { getConversation, loadMessages, loadLog, isRunLeaseStale, releaseRunLease, appendError, MAX_AUTO_RETRIES, AUTO_RETRY_EXHAUSTED_MESSAGE } from '@/lib/data/conversations.server';
+import { getConversation, loadMessages, loadLog, isRunLeaseStale, releaseRunLease, appendError, canReadConversation, MAX_AUTO_RETRIES, AUTO_RETRY_EXHAUSTED_MESSAGE } from '@/lib/data/conversations.server';
 import { subscribe } from '@/lib/chat/conversation-stream.server';
 import { derivePendingToolCalls } from '@/lib/data/conversation-log';
 import { parseConversationView, projectLogEntryForDisplay } from '@/lib/data/conversation-projection';
@@ -33,7 +33,7 @@ export async function GET(
 
   const conversation = await getConversation(conversationId);
   if (!conversation) return new Response('Not found', { status: 404 });
-  if (conversation.ownerUserId !== user.userId || conversation.mode !== user.mode) {
+  if (!canReadConversation(conversation, user)) {
     return new Response('Forbidden', { status: 403 });
   }
 

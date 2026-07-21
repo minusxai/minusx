@@ -6,6 +6,7 @@ import { NextRequest } from 'next/server';
 import { POST, GET as listConversationsRoute } from '@/app/api/conversations/route';
 import { GET as getConversationRoute, DELETE as deleteConversationRoute } from '@/app/api/conversations/[id]/route';
 import { createConversation, appendMessages } from '@/lib/data/conversations.server';
+import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 import type { ConversationLog } from '@/orchestrator/types';
@@ -90,10 +91,17 @@ describe('v3 conversations REST', () => {
     expect(body.data.messages[0].content.arguments.userMessage).toBe('hi');
   });
 
-  it('GET :id is forbidden for a conversation owned by another user', async () => {
+  it("GET :id on another user's conversation: allowed for admins, forbidden otherwise", async () => {
     const other = await createConversation({ ownerUserId: 999, mode: 'org', agent: 'WebAnalystAgent' });
-    const res = await getConversationRoute(new NextRequest(`http://localhost/api/conversations/${other.id}`), idCtx(other.id) as never);
-    expect(res.status).toBe(403);
+    // The default test user is an admin → direct read access (see admin-read-access.test.ts).
+    const asAdmin = await getConversationRoute(new NextRequest(`http://localhost/api/conversations/${other.id}`), idCtx(other.id) as never);
+    expect(asAdmin.status).toBe(200);
+
+    vi.mocked(getEffectiveUser).mockResolvedValueOnce({
+      userId: 1, email: 'editor@example.com', name: 'Editor', role: 'editor', home_folder: '/org', mode: 'org',
+    } as Awaited<ReturnType<typeof getEffectiveUser>>);
+    const asEditor = await getConversationRoute(new NextRequest(`http://localhost/api/conversations/${other.id}`), idCtx(other.id) as never);
+    expect(asEditor.status).toBe(403);
   });
 
   it('DELETE :id removes it (idempotent); 403 for another user\'s', async () => {

@@ -13,6 +13,8 @@
  * Direct DB access is confined here (the data layer). Routes/orchestrator go through these fns.
  */
 import { getModules } from '@/lib/modules/registry';
+import { isAdmin } from '@/lib/auth/role-helpers';
+import type { UserRole } from '@/lib/types';
 import type { ConversationLog, ConversationLogEntry } from '@/orchestrator/types';
 import { entriesToInserts, rowsToLog } from './conversation-log';
 import type {
@@ -25,6 +27,24 @@ import type {
 } from './conversations.types';
 
 const db = () => getModules().db;
+
+/** Owner check for conversation MUTATIONS (turns, interrupt, delete, rename, fork):
+ *  strictly the owning user, in the same mode — no admin bypass. */
+export function ownsConversation(
+  conv: { ownerUserId: number; mode: string },
+  user: { userId: number; mode: string },
+): boolean {
+  return conv.ownerUserId === user.userId && conv.mode === user.mode;
+}
+
+/** READ access (GET conversation + stream): the owner, or any admin by direct id —
+ *  admins may view every conversation (across modes) but never act in it. */
+export function canReadConversation(
+  conv: { ownerUserId: number; mode: string },
+  user: { userId: number; mode: string; role: UserRole },
+): boolean {
+  return ownsConversation(conv, user) || isAdmin(user.role);
+}
 
 /** Concurrent-append collision (another writer took this seq) → the caller forks. */
 export class ConcurrentAppendError extends Error {
