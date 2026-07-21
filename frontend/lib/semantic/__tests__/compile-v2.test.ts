@@ -5,7 +5,7 @@
  * then it throws a clear SemanticCompileError.
  */
 import { describe, it, expect } from 'vitest';
-import { compileSemanticQuery, validateSemanticQuery, SemanticCompileError } from '../compile';
+import { compileSemanticQuery, validateSemanticQuery } from '../compile';
 import { rewriteMetricSql } from '../metric-sql';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import type { SemanticModelV2 } from '@/lib/types/semantic';
@@ -165,18 +165,16 @@ describe('V2 SQL metrics', () => {
   });
 });
 
-describe('m2m: deferred to M3 with a clear error', () => {
-  it('throws SemanticCompileError for an m2m dimension', () => {
-    expect(() => compileSemanticQuery(spec({ measures: ['Revenue'], dimensions: ['Tag'] }), MODEL))
-      .toThrow(SemanticCompileError);
-    expect(() => compileSemanticQuery(spec({ measures: ['Revenue'], dimensions: ['Tag'] }), MODEL))
-      .toThrow(/many_to_many|m2m/i);
+describe('m2m compiles (full coverage in m2m.test.ts)', () => {
+  it('an m2m dimension compiles to a dedup-bridge CTE + LEFT join', () => {
+    const sql = sqlFor(spec({ measures: ['Revenue'], dimensions: ['Tag'] }));
+    expect(sql).toMatch(/^WITH _m2m_tag AS \(/);
+    expect(sql).toContain('LEFT JOIN _m2m_tag ON orders.id = _m2m_tag._pk');
   });
 
-  it('throws for an m2m filter too', () => {
-    expect(() => compileSemanticQuery(
-      spec({ measures: ['Revenue'], filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }] }), MODEL))
-      .toThrow(/many_to_many|m2m/i);
+  it('an m2m filter compiles to a semi-join', () => {
+    const sql = sqlFor(spec({ measures: ['Revenue'], filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }] }));
+    expect(sql).toContain('orders.id IN (SELECT');
   });
 });
 

@@ -25,13 +25,15 @@
  *    one throws a clear SemanticCompileError rather than fanning out silently
  */
 
-import type { QueryIR, SelectColumn, GroupByItem, FilterCondition, JoinClause, OrderByClause } from '@/lib/sql/ir-types';
+import type { QueryIR, SelectColumn, GroupByItem, FilterCondition, JoinClause, OrderByClause, CTE } from '@/lib/sql/ir-types';
 import type {
   SemanticModelV2, SemanticMeasureV2, SemanticDimensionV2, SemanticMetricV2,
-  SemanticRatioMetricV2, SemanticSqlMetric, SemanticReference, SemanticReferenceToOne, SemanticSource,
+  SemanticRatioMetricV2, SemanticSqlMetric, SemanticReference, SemanticReferenceToOne,
+  SemanticReferenceM2M, SemanticSource,
 } from '@/lib/types/semantic';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 import { VIEWS_SCHEMA } from '@/lib/types/views';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 import { lexMetricSql, rewriteMetricSql } from './metric-sql';
 
 export class SemanticCompileError extends Error {
@@ -82,6 +84,23 @@ const sourceTableRef = (s: SemanticSource): { table: string; schema?: string } =
     ? { table: s.table, ...(s.schema ? { schema: s.schema } : {}) }
     : { table: s.view, schema: VIEWS_SCHEMA };
 
+/** The full SQL spelling of a source (`schema.table` / `_views.view`). */
+const sourceSqlName = (s: SemanticSource): string => {
+  const ref = sourceTableRef(s);
+  return ref.schema ? `${ref.schema}.${ref.table}` : ref.table;
+};
+
+/** m2m filter operators expressing positive membership (§5 — negation deferred). */
+const NEGATED_OPERATORS = immutableSet(['!=', 'IS NULL', 'IS NOT NULL']);
+
+/** SQL literal for a semi-join WHERE value (mirrors ir-to-sql's formatValue). */
+const formatSqlValue = (value: unknown): string => {
+  if (value == null) return 'NULL';
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+  if (typeof value === 'number') return String(value);
+  return `'${String(value).replace(/'/g, "''")}'`;
+};
+
 /** Validate a spec against its model; returns human-readable issues (empty = valid). */
 export function validateSemanticQuery(spec: SemanticQuerySpec, model: SemanticModelV2): string[] {
   const issues: string[] = [];
@@ -117,6 +136,25 @@ export function validateSemanticQuery(spec: SemanticQuerySpec, model: SemanticMo
     issues.push(spec.timeColumn
       ? `"${spec.timeColumn}" is not a temporal column of this model`
       : 'the model has no time dimension configured');
+  }
+
+  // m2m rules (§5): GROUP BY dimensions from at most ONE m2m reference (two
+  // bridges cross-multiply and re-inflate measures within groups); m2m filters
+  // express positive membership only — negation (NOT EXISTS) is deferred.
+  const m2mAliasOf = (dimName: string): string | undefined => {
+    const dim = findDimension(model, dimName);
+    if (!dim || dim.source === 'primary') return undefined;
+    const ref = findReference(model, dim.source);
+    return ref && !isToOne(ref) ? ref.alias : undefined;
+  };
+  const groupedM2M = new Set(spec.dimensions.map(m2mAliasOf).filter((a): a is string => !!a));
+  if (groupedM2M.size > 1) {
+    issues.push(`a semantic query may GROUP BY dimensions from at most one m2m reference (got ${[...groupedM2M].join(', ')}) — split into two queries or model a combined bridge view`);
+  }
+  for (const f of spec.filters ?? []) {
+    if (m2mAliasOf(f.dimension) && NEGATED_OPERATORS.has(f.operator)) {
+      issues.push(`filter on "${f.dimension}": m2m filters express positive membership only ("tagged vip") — negation is not supported yet`);
+    }
   }
 
   return issues;
@@ -178,15 +216,20 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
 
   const usedRefs = collectUsedReferences(spec, model);
 
-  // m2m is declared in V2 but compiles in M3 — refuse loudly, never fan out.
+  // Partition used m2m references: GROUPED (some selected dimension lives on
+  // them → dedup-bridge CTE + LEFT join) vs FILTER-ONLY (→ semi-join; never
+  // joined, so it can never fan out). §5.
+  const m2mByAlias = new Map<string, SemanticReferenceM2M>();
   for (const alias of usedRefs) {
     const ref = findReference(model, alias);
-    if (ref && !isToOne(ref)) {
-      throw new SemanticCompileError([
-        `reference "${alias}" is many_to_many — m2m compilation is not available yet (lands in M3); use a pre-aggregating data model in the meantime`,
-      ]);
-    }
+    if (ref && !isToOne(ref)) m2mByAlias.set(alias, ref);
   }
+  const groupedM2M = new Set(
+    spec.dimensions
+      .map((n) => findDimension(model, n)!)
+      .filter((d) => m2mByAlias.has(d.source))
+      .map((d) => d.source),
+  );
 
   const select: SelectColumn[] = [];
   const groupColumns: GroupByItem[] = [];
@@ -198,7 +241,9 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
 
   const resolveDimension = (name: string): { column: string; table?: string } => {
     const dim = findDimension(model, name)!;
-    const table = dim.source !== 'primary' ? dim.source : baseQual;
+    const table = dim.source === 'primary' ? baseQual
+      : groupedM2M.has(dim.source) ? `_m2m_${dim.source}`
+      : dim.source;
     return { column: dim.column, ...(table ? { table } : {}) };
   };
 
@@ -264,19 +309,53 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     }
   }
 
-  // Filters → flat AND conditions (dimension-level, pre-aggregation).
-  const conditions: FilterCondition[] = (spec.filters ?? []).map((f) => {
+  // Filters → flat AND conditions. Filters on a FILTER-ONLY m2m alias become
+  // semi-joins (`pk IN (bridge lookup)`) — grouped-m2m and ordinary filters
+  // stay dimension-level conditions (grouped-m2m ones qualify by the CTE).
+  const semiJoinFilters = new Map<string, Array<{ column: string; operator: string; value?: unknown }>>();
+  const conditions: FilterCondition[] = [];
+  for (const f of spec.filters ?? []) {
+    const dim = findDimension(model, f.dimension)!;
+    if (m2mByAlias.has(dim.source) && !groupedM2M.has(dim.source)) {
+      const list = semiJoinFilters.get(dim.source) ?? [];
+      list.push({ column: dim.column, operator: f.operator, value: f.value });
+      semiJoinFilters.set(dim.source, list);
+      continue;
+    }
     const { column, table } = resolveDimension(f.dimension);
-    return {
+    conditions.push({
       column,
       ...(table ? { table } : {}),
       operator: f.operator,
       ...(f.value != null ? { value: f.value } : {}),
-    };
-  });
+    });
+  }
 
-  // Joins: only to-one references actually used by this query. The join is
-  // aliased by the AUTHOR's alias — dimensions/metrics qualify by it.
+  // Semi-joins: one `primary.pk IN (SELECT bridge.pk … WHERE …)` per
+  // filter-only m2m reference. Independent semi-joins compose (AND).
+  for (const [alias, filters] of semiJoinFilters) {
+    const ref = m2mByAlias.get(alias)!;
+    const bridgeName = sourceTableName(ref.through.source);
+    const farName = sourceTableName(ref.source);
+    const pOn = ref.through.primaryOn[0];
+    const rOn = ref.through.referencedOn[0];
+    const where = filters.map((f) => {
+      const lhs = `${farName}.${f.column}`;
+      if (f.operator === 'IN') {
+        const values = Array.isArray(f.value) ? f.value : [f.value];
+        return `${lhs} IN (${values.map(formatSqlValue).join(', ')})`;
+      }
+      return `${lhs} ${f.operator} ${formatSqlValue(f.value)}`;
+    }).join(' AND ');
+    conditions.push({
+      raw_column: `${baseName}.${pOn.primaryColumn}`,
+      operator: 'IN',
+      raw_value: `(SELECT ${bridgeName}.${pOn.bridgeColumn} FROM ${sourceSqlName(ref.through.source)} JOIN ${sourceSqlName(ref.source)} ON ${bridgeName}.${rOn.bridgeColumn} = ${farName}.${rOn.referencedColumn} WHERE ${where})`,
+    });
+  }
+
+  // Joins: to-one references actually used by this query, aliased by the
+  // AUTHOR's alias — dimensions/metrics qualify by it.
   const joins: JoinClause[] = (model.references ?? [])
     .filter((r): r is SemanticReferenceToOne => usedRefs.has(r.alias) && isToOne(r))
     .map((r) => ({
@@ -290,6 +369,40 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
       })),
     }));
 
+  // Grouped m2m → dedup-bridge CTE + LEFT join at the primary's grain (§5,
+  // execution-verified): one row per (pk, dim value) by construction, so no
+  // within-group double counting; LEFT keeps unmatched primaries as a NULL
+  // group. DISTINCT also absorbs duplicate bridge rows.
+  const ctes: CTE[] = [];
+  for (const alias of groupedM2M) {
+    const ref = m2mByAlias.get(alias)!;
+    const bridgeName = sourceTableName(ref.through.source);
+    const farName = sourceTableName(ref.source);
+    const pOn = ref.through.primaryOn[0];
+    const rOn = ref.through.referencedOn[0];
+    const cteName = `_m2m_${alias}`;
+    const usedColumns = [...new Set(
+      [...spec.dimensions, ...(spec.filters ?? []).map((f) => f.dimension)]
+        .map((n) => findDimension(model, n)!)
+        .filter((d) => d.source === alias)
+        .map((d) => d.column),
+    )];
+    ctes.push({
+      name: cteName,
+      raw_sql: `SELECT DISTINCT ${bridgeName}.${pOn.bridgeColumn} AS _pk, ${usedColumns.map((c) => `${farName}.${c} AS ${c}`).join(', ')} FROM ${sourceSqlName(ref.through.source)} JOIN ${sourceSqlName(ref.source)} ON ${bridgeName}.${rOn.bridgeColumn} = ${farName}.${rOn.referencedColumn}`,
+    });
+    joins.push({
+      type: 'LEFT',
+      table: { table: cteName },
+      on: [{
+        left_table: baseName,
+        left_column: pOn.primaryColumn,
+        right_table: cteName,
+        right_column: '_pk',
+      }],
+    });
+  }
+
   // Deterministic ordering: time ascending when present, else first measure desc.
   const orderBy: OrderByClause[] = time
     ? [{ type: 'expression', function: 'DATE_TRUNC', unit: time.unit, column: time.column, ...(baseQual ? { table: baseQual } : {}), direction: 'ASC' }]
@@ -298,6 +411,7 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
   return {
     type: 'simple',
     version: 1,
+    ...(ctes.length > 0 ? { ctes } : {}),
     select,
     from: sourceTableRef(model.primary),
     ...(joins.length > 0 ? { joins } : {}),
