@@ -19,7 +19,8 @@ import {
 import { LoadContext } from '@/agents/web-analyst/web-tools';
 import { formatContextDocsSection } from '@/lib/sql/context-docs';
 import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
-import type { RemoteAnalystContext, AgentAttachment } from './types';
+import type { RemoteAnalystContext } from './types';
+import { buildUserTurnContent } from '@/orchestrator/utils';
 import type { AppState } from '@/lib/appState';
 import { projectMessages, type WithAppState } from '@/lib/projection/messages';
 
@@ -125,34 +126,10 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
    * pass (CurrentTime right after the AppState).
    */
   protected buildUserContent(): (TextContent | ImageContent)[] {
-    const raw = this.userMessage;
-    const items: (TextContent | ImageContent)[] =
-      typeof raw === 'string' ? [{ type: 'text', text: raw }] : raw;
-
-    const msgImages = items.filter((c): c is ImageContent => c.type === 'image');
-    const goal = items
-      .filter((c): c is TextContent => c.type === 'text')
-      .map((c) => c.text)
-      .join('\n');
-
-    // Attachments (server-normalized): images → ImageContent (base64), text →
-    // <Attachment …> blocks.
-    const attachments = this.context.attachments ?? [];
-    const attachmentImages: ImageContent[] = attachments
-      .filter((a): a is Extract<AgentAttachment, { type: 'image' }> => a.type === 'image')
-      .map((a) => (a.url ? { type: 'image', url: a.url } : { type: 'image', data: a.data, mimeType: a.mimeType }));
-    const textAttachments = attachments
-      .filter((a): a is Extract<AgentAttachment, { type: 'text' }> => a.type === 'text')
-      .map((a) => {
-        const header = `[${a.name ?? 'attachment'}]` + (a.pages ? ` (${a.pages} pages)` : '');
-        return `<Attachment ${header}>\n${a.content}\n</Attachment>`;
-      })
-      .join('\n');
-
-    const blocks: (TextContent | ImageContent)[] = [];
-    if (textAttachments) blocks.push({ type: 'text', text: textAttachments });
-    blocks.push(...msgImages, ...attachmentImages, { type: 'text', text: goal });
-    return blocks;
+    // Attachments (server-normalized): images → ImageContent (base64/url), text →
+    // <Attachment …> blocks. Shared with projectRootThreadHistory so a prior turn's
+    // attachments re-render identically in history.
+    return buildUserTurnContent(this.userMessage, this.context.attachments ?? []);
   }
 
   /**

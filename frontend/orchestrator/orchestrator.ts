@@ -20,7 +20,7 @@ import {
   type ToolMessage,
   type ToolResponse,
 } from './types';
-import { coerceParameters, normalizeParameters, synthErrorAssistantMessage, validateParameters } from './utils';
+import { buildUserTurnContent, coerceParameters, normalizeParameters, synthErrorAssistantMessage, validateParameters, type UserTurnAttachment } from './utils';
 import { createSemaphore, parseConcurrencyLimit } from './concurrency';
 
 // Optional process-wide cap on concurrent LLM calls. Set via the
@@ -638,10 +638,15 @@ export class Orchestrator {
         // the invocation's stored context). The projection pass (`projectMessages`) renders + diffs
         // it against the whole conversation so unchanged app state collapses across turns. Carried
         // as a non-wire field; the orchestrator stays decoupled from the projection/rendering code.
-        const priorCtx = e.context as { appState?: unknown; currentTime?: string } | undefined;
+        const priorCtx = e.context as { appState?: unknown; currentTime?: string; attachments?: UserTurnAttachment[] } | undefined;
+        const priorMessage = ((e.arguments as { userMessage?: string }).userMessage ?? '') as string;
+        // Re-attach the turn's user attachments (images/files) — without them the model
+        // loses access to an image the user sent one turn earlier and asks to re-upload.
+        // No attachments → keep the plain string (identical render, prompt cache stays valid).
+        const priorAttachments = priorCtx?.attachments;
         out.push({
           role: 'user',
-          content: ((e.arguments as { userMessage?: string }).userMessage ?? '') as string,
+          content: priorAttachments?.length ? buildUserTurnContent(priorMessage, priorAttachments) : priorMessage,
           timestamp: Date.now(),
           // Both carried as non-wire fields read off the stored invocation context, so the prior turn
           // re-renders IDENTICALLY (frozen <CurrentTime>, diffed app state) → prompt cache stays valid.

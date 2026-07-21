@@ -215,7 +215,14 @@ const chatSlice = createSlice({
         conv.active = true;
       }
 
-      state.conversations[conv.conversationID] = conv;
+      // The queue is EPHEMERAL client state, mutated only by queueMessage/clear/flush — the
+      // live store is its single source of truth. Turn-completion renders dispatch this with a
+      // conversation snapshot captured at turn start; taking the snapshot's queue would wipe
+      // anything the user queued while the turn ran (or resurrect already-flushed messages).
+      const existing = state.conversations[conv.conversationID];
+      state.conversations[conv.conversationID] = existing
+        ? { ...conv, queuedMessages: existing.queuedMessages }
+        : conv;
     },
 
     // User sends message (existing conversation) → triggers listener

@@ -1278,3 +1278,64 @@ describe("stopReason 'length' — truncated responses are terminal, never retrie
     expect(errorEvent.error.errorMessage).not.toMatch(/context window/i);
   });
 });
+
+describe('prior-turn attachments survive into threadHistory', () => {
+  // Users attach images/files to a message; on follow-up turns the prior user
+  // message is rebuilt from the log by projectRootThreadHistory. It used to keep
+  // only `arguments.userMessage` (text), silently dropping `context.attachments`
+  // — so the model truthfully claimed it could no longer see an image from an
+  // earlier turn and asked the user to re-upload.
+  it('rebuilds a prior user turn with its image and text attachments', async () => {
+    fauxRegistration.setResponses([
+      fauxAssistantMessage('saw it.', { stopReason: 'stop' }),
+      fauxAssistantMessage('still see it.', { stopReason: 'stop' }),
+    ]);
+    const registrables = [EchoTool, PendingTool, NestedAgent, TestAgent];
+    const ctxWithAttachments = {
+      userId: 'u', mode: 'org',
+      attachments: [
+        { type: 'image', data: 'aGVsbG8=', mimeType: 'image/png' },
+        { type: 'text', name: 'notes.txt', content: 'quarterly targets' },
+      ],
+    } as AgentContext;
+
+    const orchA = new Orchestrator(registrables);
+    const a1 = new TestAgent(orchA, { userMessage: 'what is in this image?' }, ctxWithAttachments);
+    const s1 = orchA.run(a1);
+    for await (const _ of s1) {/* drain */}
+
+    const orchB = new Orchestrator(registrables, orchA.log);
+    const a2 = new TestAgent(orchB, { userMessage: 'zoom into the top left' }, { userId: 'u', mode: 'org' });
+    const s2 = orchB.run(a2);
+    for await (const _ of s2) {/* drain */}
+
+    const firstUser = a2.threadHistory.find((m): m is UserMessage => m.role === 'user');
+    expect(firstUser).toBeDefined();
+    const blocks = firstUser!.content as Array<{ type: string; text?: string; data?: string }>;
+    expect(Array.isArray(blocks)).toBe(true);
+    expect(blocks.some((b) => b.type === 'image' && b.data === 'aGVsbG8=')).toBe(true);
+    expect(blocks.some((b) => b.type === 'text' && /notes\.txt/.test(b.text ?? '') && /quarterly targets/.test(b.text ?? ''))).toBe(true);
+    expect(blocks.some((b) => b.type === 'text' && /what is in this image\?/.test(b.text ?? ''))).toBe(true);
+  });
+
+  it('a prior turn without attachments keeps its plain-string content (cache-stable)', async () => {
+    fauxRegistration.setResponses([
+      fauxAssistantMessage('one.', { stopReason: 'stop' }),
+      fauxAssistantMessage('two.', { stopReason: 'stop' }),
+    ]);
+    const registrables = [EchoTool, PendingTool, NestedAgent, TestAgent];
+    const ctx: AgentContext = { userId: 'u', mode: 'org' };
+    const orchA = new Orchestrator(registrables);
+    const a1 = new TestAgent(orchA, { userMessage: 'plain' }, ctx);
+    const s1 = orchA.run(a1);
+    for await (const _ of s1) {/* drain */}
+
+    const orchB = new Orchestrator(registrables, orchA.log);
+    const a2 = new TestAgent(orchB, { userMessage: 'follow-up' }, ctx);
+    const s2 = orchB.run(a2);
+    for await (const _ of s2) {/* drain */}
+
+    const firstUser = a2.threadHistory.find((m): m is UserMessage => m.role === 'user');
+    expect(firstUser!.content).toBe('plain');
+  });
+});

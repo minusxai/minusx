@@ -831,14 +831,19 @@ chatListenerMiddleware.startListening({
 });
 
 /**
- * updateConversation | queueMessage → Auto-send queued messages when conversation finishes.
+ * updateConversation | queueMessage | loadConversation → Auto-send queued messages when the
+ * conversation finishes. `loadConversation` is in the matcher because an idle v3 turn finishes
+ * via the durable-log re-render (renderFromDurableLog → loadConversation) — without it a message
+ * queued mid-turn just sat in the queue with nothing left to flush it.
  */
 chatListenerMiddleware.startListening({
-  matcher: isAnyOf(updateConversation, queueMessage),
+  matcher: isAnyOf(updateConversation, queueMessage, loadConversation),
   effect: async (action: any, listenerApi) => {
     const state = listenerApi.getState() as RootState;
     if (!selectAllowChatQueue(state)) return;
-    const effectiveId = action.payload.newConversationID || action.payload.conversationID;
+    const effectiveId = action.payload.newConversationID
+      || action.payload.conversationID
+      || action.payload.conversation?.conversationID;
     const conversation = selectConversation(state, effectiveId);
 
     if (!conversation || conversation.executionState !== 'FINISHED') return;
