@@ -316,6 +316,68 @@ describe('Autocomplete API — E2E', () => {
   // Scope filtering — real mxfood queries
   // -------------------------------------------------------------------------
 
+  describe('Whitelist invariant — completions never widen beyond the passed schemaData', () => {
+    // Callers build schemaData from the context's WHITELISTED schemas
+    // (ContextInfo.databases). The server must complete only from that —
+    // never from the connection's full schema or any other source.
+    test('FROM-clause table completion offers only whitelisted tables', async () => {
+      const whitelistedOnly: DatabaseWithSchema[] = [{
+        databaseName: 'mxfood',
+        schemas: [{
+          schema: mxfoodSchema[0].schemas[0].schema,
+          tables: mxfoodSchema[0].schemas[0].tables.filter((t) => t.table === 'orders'),
+        }],
+      } as unknown as DatabaseWithSchema];
+
+      const query = 'SELECT * FROM ';
+      const result = await CompletionsAPI.getSqlCompletions({
+        query,
+        cursorOffset: query.length,
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: whitelistedOnly,
+          databaseName: 'mxfood',
+          connectionType: 'duckdb',
+        },
+      });
+
+      const labels = result.suggestions.map((s: any) => s.label);
+      expect(labels).toContain('orders');
+      // Tables that exist in the connection but NOT in the whitelist never appear.
+      expect(labels).not.toContain('users');
+      expect(labels).not.toContain('drivers');
+      expect(labels).not.toContain('events');
+      expect(labels).not.toContain('zones');
+    });
+
+    test('column completion cannot reach a non-whitelisted table', async () => {
+      const whitelistedOnly: DatabaseWithSchema[] = [{
+        databaseName: 'mxfood',
+        schemas: [{
+          schema: mxfoodSchema[0].schemas[0].schema,
+          tables: mxfoodSchema[0].schemas[0].tables.filter((t) => t.table === 'orders'),
+        }],
+      } as unknown as DatabaseWithSchema];
+
+      // Querying a table OUTSIDE the whitelist yields no column suggestions from it.
+      const query = 'SELECT * FROM users WHERE ';
+      const result = await CompletionsAPI.getSqlCompletions({
+        query,
+        cursorOffset: query.length,
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: whitelistedOnly,
+          databaseName: 'mxfood',
+          connectionType: 'duckdb',
+        },
+      });
+
+      const labels = result.suggestions.map((s: any) => s.label);
+      expect(labels).not.toContain('first_name');
+      expect(labels).not.toContain('email');
+    });
+  });
+
   describe('Scope filtering — real mxfood queries', () => {
     test('WHERE on FROM orders — only orders columns returned (question 17)', async () => {
       const query =
