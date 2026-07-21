@@ -1,6 +1,6 @@
 import { MentionItem } from '@/lib/data/completions/types';
 import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, ACCENT_HEX } from '@/lib/ui/file-metadata';
-import type { DatabaseWithSchema, MetricDef, SkillMention, SlashCommand } from '@/lib/types';
+import type { DatabaseWithSchema, SkillMention, SlashCommand } from '@/lib/types';
 import { LuTerminal } from 'react-icons/lu';
 
 export type MentionOption = MentionItem | SkillMention | SlashCommand;
@@ -97,25 +97,6 @@ export function getTableColumns(
     }
   }
   return [];
-}
-
-/** Metrics attached to a given table. */
-export function getTableMetrics(metrics: MetricDef[] | undefined, schema: string | undefined, table: string): MetricDef[] {
-  if (!metrics) return [];
-  return metrics.filter((m) => m.table === table && (!schema || !m.schema || m.schema === schema));
-}
-
-export type SubItem = { kind: 'metric'; metric: MetricDef } | { kind: 'column'; column: ColumnInfo };
-
-/** The combined drill-down items for a table: its metrics first, then its columns. */
-export function getSubmenuItems(
-  table: MentionItem,
-  whitelistedSchemas: DatabaseWithSchema[] | undefined,
-  metrics: MetricDef[] | undefined,
-): SubItem[] {
-  const ms: SubItem[] = getTableMetrics(metrics, table.schema, table.name).map((m) => ({ kind: 'metric', metric: m }));
-  const cs: SubItem[] = getTableColumns(whitelistedSchemas, table.schema, table.name).map((c) => ({ kind: 'column', column: c }));
-  return [...ms, ...cs];
 }
 
 export function getMentionPrimaryText(mention: MentionOption) {

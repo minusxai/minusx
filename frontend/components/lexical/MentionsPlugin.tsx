@@ -19,17 +19,16 @@ import { $createMentionNode, MentionData } from './MentionNode';
 import { Box, HStack, VStack, Text, Portal } from '@chakra-ui/react';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { MentionItem } from '@/lib/data/completions/types';
-import type { DatabaseWithSchema, MetricDef, SkillMention, SlashCommand } from '@/lib/types';
+import type { DatabaseWithSchema, SkillMention, SlashCommand } from '@/lib/types';
 import {
   MentionOption,
   MentionTrigger,
-  SubItem,
   ColumnInfo,
   isSlashCommand,
   getFilteredMentions,
   getDropdownTitle,
-  getSubmenuItems,
 } from './mentions-plugin-utils';
+import { useTableColumns } from './use-table-columns';
 import { MentionRow } from './MentionRow';
 import { MentionSubmenu } from './MentionSubmenu';
 
@@ -39,8 +38,6 @@ interface MentionsPluginProps {
   availableSkills?: SkillMention[];
   availableCommands?: SlashCommand[];
   onCommandExecute?: (command: SlashCommand) => void;
-  /** Context metrics — surfaced in a table's column drill-down. */
-  metrics?: MetricDef[];
   /**
    * When true, anchor the dropdown at the text caret and drop it below (for
    * in-document editors like docs). Default false keeps the chat-input behavior
@@ -49,7 +46,7 @@ interface MentionsPluginProps {
   anchorToCaret?: boolean;
 }
 
-export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkills = [], availableCommands = [], onCommandExecute, metrics, anchorToCaret = false }: MentionsPluginProps) {
+export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkills = [], availableCommands = [], onCommandExecute, anchorToCaret = false }: MentionsPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [mentions, setMentions] = useState<MentionOption[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -144,20 +141,6 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
     insertMentionData(mentionData, triggerLength);
   }, [insertMentionData]);
 
-  // Insert a metric mention drilled into from a table row.
-  const insertMetric = useCallback((metric: MetricDef, table: MentionItem, triggerLength: number) => {
-    const mentionData: MentionData = { type: 'metric', name: metric.name, table: table.name };
-    if (table.schema) mentionData.schema = table.schema;
-    if (table.connection) mentionData.connection = table.connection;
-    insertMentionData(mentionData, triggerLength);
-  }, [insertMentionData]);
-
-  // Insert the selected drill-down item (metric or column).
-  const insertSubItem = useCallback((item: SubItem, table: MentionItem, triggerLength: number) => {
-    if (item.kind === 'metric') insertMetric(item.metric, table, triggerLength);
-    else insertColumn(item.column, table, triggerLength);
-  }, [insertMetric, insertColumn]);
-
   useEffect(() => {
     // Monitor text changes to detect @ and / triggers
     return editor.registerUpdateListener(({ editorState }) => {
@@ -248,18 +231,18 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
     }
   }, [selectedIndex]);
 
+  const filteredMentions = getFilteredMentions(mentions, mentionType);
+
+  // The highlighted table (if any) and its columns — drives the drill-down
+  // submenu. Columns come from the whitelisted schemas when present, else are
+  // fetched on demand (the bounded schema may have had them stripped).
+  const activeOption = filteredMentions[selectedIndex];
+  const activeTable = activeOption && !isSlashCommand(activeOption) && activeOption.type === 'table'
+    ? (activeOption as MentionItem) : null;
+  const activeColumns = useTableColumns(showDropdown ? activeTable : null, whitelistedSchemas, databaseName);
+
   useEffect(() => {
-    // The active table's columns (empty unless the highlighted item is a table
-    // with known columns) — drives the column drill-down submenu.
-    const getActive = () => {
-      const fm = getFilteredMentions(mentions, mentionType);
-      const sel = fm[selectedIndex];
-      if (sel && !isSlashCommand(sel) && sel.type === 'table') {
-        const table = sel as MentionItem;
-        return { fm, table, items: getSubmenuItems(table, whitelistedSchemas, metrics) };
-      }
-      return { fm, table: null as MentionItem | null, items: [] as SubItem[] };
-    };
+    const getActive = () => ({ fm: filteredMentions, table: activeTable, items: activeColumns });
 
     // Register keyboard commands for dropdown navigation
     const removeArrowDown = editor.registerCommand(
@@ -328,12 +311,12 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
         if (!showDropdown || fm.length === 0) return false;
         const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
 
-        // In the drill-down submenu: insert the highlighted metric or column.
+        // In the drill-down submenu: insert the highlighted column.
         if (inSubmenu) {
           const item = items[columnIndex];
           if (item && table) {
             event?.preventDefault();
-            insertSubItem(item, table, triggerLength);
+            insertColumn(item, table, triggerLength);
             return true;
           }
           return false;
@@ -388,9 +371,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
       removeEnter();
       removeEscape();
     };
-  }, [editor, showDropdown, mentions, selectedIndex, mentionType, query, insertMention, insertSubItem, onCommandExecute, inSubmenu, columnIndex, whitelistedSchemas, metrics]);
-
-  const filteredMentions = getFilteredMentions(mentions, mentionType);
+  }, [editor, showDropdown, filteredMentions, activeTable, activeColumns, mentionType, query, insertMention, insertColumn, onCommandExecute, inSubmenu, columnIndex]);
 
   // Reset selectedIndex if it's out of bounds after filtering — intentional setState in effect
   useEffect(() => {
@@ -427,12 +408,8 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
     return <Box ref={anchorRef} position="absolute" top={0} left={0} right={0} pointerEvents="none" />;
   }
 
-  // Drill-down: the highlighted table's metrics + columns, if any are known.
-  const activeMention = filteredMentions[selectedIndex];
-  const activeTable = activeMention && !isSlashCommand(activeMention) && activeMention.type === 'table'
-    ? (activeMention as MentionItem) : null;
-  const activeItems = activeTable ? getSubmenuItems(activeTable, whitelistedSchemas, metrics) : [];
-  const showSubmenu = !!activeTable && activeItems.length > 0;
+  // Drill-down: the highlighted table's columns, if any are known (yet).
+  const showSubmenu = !!activeTable && activeColumns.length > 0;
 
   return (
     <>
@@ -505,8 +482,6 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
                     selectedItemRef={selectedItemRef}
                     isUserSkillHeader={isUserSkillHeader}
                     isSystemSkillHeader={isSystemSkillHeader}
-                    whitelistedSchemas={whitelistedSchemas}
-                    metrics={metrics}
                     onHover={(hoverIndex) => { setSelectedIndex(hoverIndex); setInSubmenu(false); }}
                     onSelect={(selectedMention) => {
                       if (mentionType === 'commands' && isSlashCommand(selectedMention)) {
@@ -532,17 +507,17 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
           </Box>
         </Box>
 
-        {/* Drill-down submenu (metrics + columns) for the highlighted table */}
+        {/* Column drill-down submenu for the highlighted table */}
         {showSubmenu && activeTable && (
           <MentionSubmenu
             table={activeTable}
-            items={activeItems}
+            items={activeColumns}
             inSubmenu={inSubmenu}
             columnIndex={columnIndex}
             onHoverItem={(i) => { setInSubmenu(true); setColumnIndex(i); }}
-            onSelectItem={(item) => {
+            onSelectItem={(column) => {
               const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
-              insertSubItem(item, activeTable, triggerLength);
+              insertColumn(column, activeTable, triggerLength);
             }}
           />
         )}

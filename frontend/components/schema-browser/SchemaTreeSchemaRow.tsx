@@ -6,9 +6,8 @@ import { LuTable, LuChevronRight, LuChevronDown, LuDatabase, LuEye } from 'react
 import { Checkbox } from '@/components/ui/checkbox';
 import SchemaColumnRow from './SchemaColumnRow';
 import ChildPathSelector from '../selectors/ChildPathSelector';
-import TableMetricsEditor from '../context/TableMetricsEditor';
 import TableRelationshipsEditor from '../context/TableRelationshipsEditor';
-import type { TableAnnotation, MetricDef, TableRelationship } from '@/lib/types';
+import type { TableAnnotation, TableRelationship } from '@/lib/types';
 import type { SchemaTreeItem, WhitelistItem } from './SchemaTreeView';
 
 const TABLES_PER_PAGE = 25;
@@ -56,10 +55,6 @@ interface SchemaTreeSchemaRowProps {
   annotationsEditable: boolean;
   annotations: TableAnnotation[];
   inheritedAnnotations: TableAnnotation[];
-
-  metrics: MetricDef[];
-  onMetricsChange?: (next: MetricDef[]) => void;
-  inheritedMetrics: MetricDef[];
 
   relationships: TableRelationship[];
   onRelationshipsChange?: (next: TableRelationship[]) => void;
@@ -111,9 +106,6 @@ export default function SchemaTreeSchemaRow({
   annotationsEditable,
   annotations,
   inheritedAnnotations,
-  metrics,
-  onMetricsChange,
-  inheritedMetrics,
   relationships,
   onRelationshipsChange,
   inheritedRelationships,
@@ -429,19 +421,6 @@ export default function SchemaTreeSchemaRow({
                           borderLeft="1px solid"
                           borderColor="border.muted"
                         >
-                          {/* Per-table metrics (edited inline) */}
-                          {(onMetricsChange || metrics.length > 0 || inheritedMetrics.length > 0) && (
-                            <Box borderBottom="1px solid" borderColor="border.muted">
-                              <TableMetricsEditor
-                                connection={connectionName}
-                                schema={schemaItem.schema}
-                                table={table.table}
-                                metrics={metrics}
-                                onMetricsChange={onMetricsChange}
-                                inheritedMetrics={inheritedMetrics}
-                              />
-                            </Box>
-                          )}
                           {/* Per-table FK relationships (edited inline) — feed the derived semantic layer */}
                           {(onRelationshipsChange || relationships.length > 0 || inheritedRelationships.length > 0) && (
                             <Box borderBottom="1px solid" borderColor="border.muted">

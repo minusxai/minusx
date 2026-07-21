@@ -546,7 +546,7 @@ export default function ContextEditorV2({
             inheritedDocs={content.fullDocs}
             originalDocs={originalDocs}
             availableChildPaths={availableChildPaths}
-            mentions={{ whitelistedSchemas: availableDatabases, metrics: [...(content.fullMetrics || []), ...(content.metrics || [])] }}
+            mentions={{ whitelistedSchemas: availableDatabases }}
             editMode={editMode}
           />
           ) : (
