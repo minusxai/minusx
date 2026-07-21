@@ -88,7 +88,8 @@ describe('fileToMarkup / markupToContent — story (jsx field inline)', () => {
     expect(markup).toContain('<colorMode>dark</colorMode>');
     expect(markup).not.toContain('<jsx>');
     expect(markup).not.toContain('<assets>');              // body is the source — no assets field
-    const back = markupToContent('story', markup);
+    // Legacy pipeline: the existing stored content (non-empty legacy HTML) selects it.
+    const back = markupToContent('story', markup, content);
     expect(back.ok).toBe(true);
     if (back.ok) {
       expect(back.content.colorMode).toBe('dark');
@@ -103,13 +104,13 @@ describe('fileToMarkup / markupToContent — story (jsx field inline)', () => {
     // EditFile fails at the same position forever.
     const story = '<div class="story"><h1 style="font-family: &quot;Inter Display&quot;, Georgia, serif; color: #123;">Q1 Review</h1><p style="font-family: &quot;Space Mono&quot;, monospace;">All fine.</p></div>';
     const markup = fileToMarkup('story', { story });
-    const back = markupToContent('story', markup);
+    const back = markupToContent('story', markup, { story });
     expect(back.ok, !back.ok ? back.error : '').toBe(true);
     if (!back.ok) return;
     expect(back.content.story).toContain('&quot;Inter Display&quot;'); // stored form preserved
     // Fixpoint: a second round-trip through the edit surface is stable.
     const markup2 = fileToMarkup('story', { story: back.content.story as string });
-    const back2 = markupToContent('story', markup2);
+    const back2 = markupToContent('story', markup2, { story: back.content.story as string });
     expect(back2.ok).toBe(true);
     if (back2.ok) expect(back2.content.story).toBe(back.content.story);
   });
@@ -125,12 +126,12 @@ describe('fileToMarkup / markupToContent — story (jsx field inline)', () => {
     ];
     for (const story of poisonedBodies) {
       const markup = fileToMarkup('story', { story });
-      const back = markupToContent('story', markup);
+      const back = markupToContent('story', markup, { story });
       expect(back.ok, `round-trip failed for ${story}: ${!back.ok ? back.error : ''}`).toBe(true);
       if (!back.ok) continue;
       // Healed body is stable: a second round-trip through the edit surface is a fixpoint.
       const markup2 = fileToMarkup('story', { story: back.content.story as string });
-      const back2 = markupToContent('story', markup2);
+      const back2 = markupToContent('story', markup2, { story: back.content.story as string });
       expect(back2.ok).toBe(true);
       if (back2.ok) expect(back2.content.story).toBe(back.content.story);
     }
@@ -156,7 +157,10 @@ describe('markupToContent — story authored WITHOUT the <story> wrapper (Create
       const story = back.content.story as string;
       expect(story).toContain('.story-x');                    // style preserved
       expect(story).toContain('<h1>Churn doubled.</h1>');     // body preserved
-      expect(story).toContain('data-question-id="142"');      // embed parsed to placeholder HTML
+      // A brand-new story is format:'jsx': the embed stays JSX source, never placeholder HTML.
+      expect(back.content.format).toBe('jsx');
+      expect(story).toContain('<Question id={142}');
+      expect(story).not.toContain('data-question-id');
     }
   });
 
@@ -197,7 +201,8 @@ describe('fileToMarkup / markupToContent — story with <Param>', () => {
     const markup = fileToMarkup('story', content);
     expect(markup).toContain('<Param name="city" type="text" nullable={false} id={5}'); // inline, agent-friendly
     expect(markup).toContain('<parameterValues>');
-    const back = markupToContent('story', markup);
+    const back = markupToContent('story', markup, content); // legacy: existing stored HTML body
+
     expect(back.ok).toBe(true);
     if (back.ok) {
       expect(back.content.story).toContain('data-param-name="city"'); // placeholder preserved
@@ -310,5 +315,97 @@ describe('markupToContent — vizSettings is optional (viz-first authoring)', ()
       '<query>SELECT 1</query><connection_name>db</connection_name><vizSettings><type>bar</type><xCols><item>m</item></xCols><yCols><item>v</item></yCols></vizSettings>');
     expect(back.ok).toBe(true);
     if (back.ok) expect(back.content.vizSettings).toEqual({ type: 'bar', xCols: ['m'], yCols: ['v'] });
+  });
+});
+
+// ── New-format (`format:'jsx'`) stories — Story_Design_V2 §2/§3 ────────────────────────────
+// New stories store the agent's shadcn JSX SOURCE verbatim in `content.story` with
+// `format:'jsx'`; legacy stories (stored data-c HTML, no format) keep the old compile
+// pipeline byte-identical. Legacy-ness derives EXCLUSIVELY from the EXISTING stored content.
+describe('markupToContent / fileToMarkup — jsx-format stories', () => {
+  const LEGACY_EXISTING = {
+    description: null,
+    story: '<div class="story"><span data-c="Pill" data-tone="bad" class="x">▼</span></div>',
+  };
+  const JSX_MARKUP =
+    '<description>d</description>\n<story><div className="p-6">' +
+    '<Card><CardHeader><CardTitle>Revenue</CardTitle></CardHeader>' +
+    '<CardContent><Question id={1017} height="300px" /></CardContent></Card>' +
+    '</div></story>';
+
+  it('a NEW story (no existing content) stores the jsx source verbatim with format:"jsx"', () => {
+    const back = markupToContent('story', JSX_MARKUP);
+    expect(back.ok, !back.ok ? back.error : '').toBe(true);
+    if (!back.ok) return;
+    expect(back.content.format).toBe('jsx');
+    const story = back.content.story as string;
+    expect(story).toContain('<Card>');
+    expect(story).toContain('<Question id={1017}');
+    expect(story).not.toContain('data-question-id'); // never compiled to placeholder HTML
+    expect(story).not.toContain('data-c=');
+  });
+
+  it('content → markup emits the jsx source verbatim, and the round trip is stable', () => {
+    const back = markupToContent('story', JSX_MARKUP);
+    if (!back.ok) throw new Error(back.error);
+    const markup = fileToMarkup('story', back.content);
+    expect(markup).toContain('<Card>');
+    expect(markup).toContain('<Question id={1017}');
+    // Second pass (edit of a jsx-format story: existing content IS the jsx content).
+    const back2 = markupToContent('story', markup, back.content);
+    expect(back2.ok).toBe(true);
+    if (back2.ok) {
+      expect(back2.content.format).toBe('jsx');
+      expect(back2.content.story).toBe(back.content.story);
+    }
+  });
+
+  it('a NEW story rejects legacy component names and disallowed HTML tags', () => {
+    const pill = markupToContent('story', '<story><div><Pill tone="bad">x</Pill></div></story>');
+    expect(pill.ok).toBe(false);
+    if (!pill.ok) expect(pill.error).toContain('Pill');
+    const video = markupToContent('story', '<story><div><video src="x.mp4"></video></div></story>');
+    expect(video.ok).toBe(false);
+    if (!video.ok) expect(video.error).toContain('video');
+  });
+
+  it('a LEGACY story (stored data-c HTML) keeps the old pipeline: components compile to HTML', () => {
+    const markup =
+      '<story><div data-design="tw" class="@container"><Pill tone="bad">▼ 3%</Pill>' +
+      '<Question id={14} height="300px" /></div></story>';
+    const back = markupToContent('story', markup, LEGACY_EXISTING);
+    expect(back.ok, !back.ok ? back.error : '').toBe(true);
+    if (!back.ok) return;
+    expect(back.content.format).toBeUndefined(); // legacy stays legacy
+    const story = back.content.story as string;
+    expect(story).toContain('data-c="Pill"');
+    expect(story).toContain('data-question-id="14"');
+  });
+
+  it('a plain non-empty legacy story (no data-c) is still legacy', () => {
+    const existing = { description: null, story: '<div class="story"><h1>old</h1></div>' };
+    const back = markupToContent('story', '<story><div class="story"><h1>new</h1></div></story>', existing);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      expect(back.content.format).toBeUndefined();
+      expect(back.content.story).toBe('<div class="story"><h1>new</h1></div>');
+    }
+  });
+
+  it('legacy cannot be forged from the INCOMING markup (data-c in prose is still a new story)', () => {
+    const markup = '<story><div><p>the old data-c="Pill" attribute is gone</p></div></story>';
+    const back = markupToContent('story', markup);
+    expect(back.ok, !back.ok ? back.error : '').toBe(true);
+    if (back.ok) expect(back.content.format).toBe('jsx');
+  });
+
+  it('an existing format:"jsx" story with an empty body stays on the new pipeline', () => {
+    const existing = { description: null, story: '', format: 'jsx' };
+    const back = markupToContent('story', '<story><div><Badge>ok</Badge></div></story>', existing);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      expect(back.content.format).toBe('jsx');
+      expect(back.content.story).toContain('<Badge>');
+    }
   });
 });

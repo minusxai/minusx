@@ -71,8 +71,14 @@ interface StoryViewProps {
  */
 export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss, storyRenderer = 'dom', showDevMarkers = false }: StoryViewProps) {
   const numericId = typeof fileId === 'number' ? fileId : undefined;
+  // New-format story (Story_Design_V2 §2): content.story holds JSX source, rendered through the
+  // lib/story-ui interpreter (AgentHtml format="jsx"). The cast tolerates the field landing in
+  // StoryContent alongside this render path; anything but 'jsx' means the legacy HTML path.
+  const storyFormat = (content as StoryContent & { format?: string }).format === 'jsx' ? ('jsx' as const) : undefined;
   const canEdit = !readOnly && numericId !== undefined;
-  const editing = canEdit && headerEditMode;
+  // WYSIWYG (contenteditable) editing is HTML-path only for now; jsx stories render read-only
+  // (AST write-back is a follow-up) — the agent/JSON tab remain the edit paths.
+  const editing = canEdit && headerEditMode && storyFormat !== 'jsx';
 
   // Inline <Number> query editing opens the full SqlEditor in a light-DOM modal (Monaco can't live
   // in the story iframe). The story's path feeds schema/connection autocomplete.
@@ -151,7 +157,9 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
         {/* data-story-capture → OG share-card preview; data-file-id → the standard FileView capture
             (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
         <Box w="100%" {...(numericId !== undefined ? { 'data-story-capture': numericId, 'data-file-id': numericId } : {})}>
-          {storyRenderer === 'canvas' ? (
+          {/* The canvas renderer rasterizes legacy story HTML — it cannot render jsx bodies,
+              so a jsx story always takes the AgentHtml interpreter path. */}
+          {storyRenderer === 'canvas' && storyFormat !== 'jsx' ? (
             <CanvasStoryView
               // While editing, render the LIVE story (each block commit re-rasters from
               // source — the overlay owns the caret, so there's no cursor to preserve).
@@ -172,6 +180,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
                 <AgentHtml
                   key={`${session.key}:${hashStory(htmlForRender)}`}
                   html={htmlForRender}
+                  format={storyFormat}
                   width={STORY_W}
                   fluid
                   editable={false}
@@ -192,6 +201,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             // Remount on external content change (viewing) AND once per edit-session exit (see above).
             key={`${session.key}:${hashStory(htmlForRender)}`}
             html={htmlForRender}
+            format={storyFormat}
             width={STORY_W}
             fluid
             // 'svg' mounts the same story body inside <svg><foreignObject> in the same iframe, so the

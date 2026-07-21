@@ -48,3 +48,22 @@ describe('POST /api/story-css', () => {
     expect(res.status).toBe(400);
   });
 });
+
+// jsx-format drafts (Story_Design_V2 §3): no data-design marker exists in shadcn JSX source,
+// so the client sends format:'jsx' and the route force-compiles — otherwise drafts render
+// unstyled until save.
+describe('format:"jsx" force compile', () => {
+  it('compiles a markerless jsx draft when format is jsx', async () => {
+    const res = await post({ story: '<Card className="bg-amber-100">x</Card>', format: 'jsx' });
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.data.css).toContain('.bg-amber-100');
+  });
+
+  it('still returns null css for a markerless legacy draft without format', async () => {
+    const res = await post({ story: '<div class="bg-amber-100">x</div>' });
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.data.css).toBeNull();
+  });
+});

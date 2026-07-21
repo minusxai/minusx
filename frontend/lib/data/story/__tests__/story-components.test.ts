@@ -72,6 +72,11 @@ describe('reverseStoryComponents', () => {
   });
 });
 
+// Component markup only compiles for LEGACY stories now (new `format:'jsx'` stories reject the
+// old component names) — legacy-ness derives from the EXISTING stored content, so these
+// round-trip invariants pass a legacy stored body as the existing content.
+const LEGACY_EXISTING = { description: null, story: '<div class="story"><h1>old</h1></div>' };
+
 describe('full agent round trip', () => {
   const MARKUP =
     '<description>d</description>\n<story><div data-design="tw" class="@container">' +
@@ -83,7 +88,7 @@ describe('full agent round trip', () => {
     '</Grid></Section></div></story>';
 
   it('markup → content → markup is lossless for components', () => {
-    const parsed = markupToContent('story', MARKUP);
+    const parsed = markupToContent('story', MARKUP, LEGACY_EXISTING);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     const content = parsed.content as StoryContent;
@@ -99,7 +104,7 @@ describe('full agent round trip', () => {
   });
 
   it('a WYSIWYG text edit inside a component survives the reverse pass', () => {
-    const parsed = markupToContent('story', MARKUP);
+    const parsed = markupToContent('story', MARKUP, LEGACY_EXISTING);
     if (!parsed.ok) throw new Error('parse failed');
     const content = parsed.content as StoryContent;
     // User edits the pill text in the browser; the DOM (and thus stored HTML) changes in place.
@@ -165,7 +170,7 @@ describe('class prop — customization without leaving the component system', ()
       '<description>d</description>\n<story><div data-design="tw" class="@container">' +
       '<Section><Headline class="text-center">Claim.</Headline>' +
       '<FigurePlate><Question id={14} height="300px" /><p>cap</p></FigurePlate></Section></div></story>';
-    const parsed = markupToContent('story', markup);
+    const parsed = markupToContent('story', markup, LEGACY_EXISTING);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     const emitted = fileToMarkup('story', parsed.content as StoryContent);

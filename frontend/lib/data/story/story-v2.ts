@@ -34,6 +34,30 @@ const VOID_TAGS = immutableSet([
   'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr',
 ]);
 
+/**
+ * Saved-file ids embedded in a NEW-format (`format:'jsx'`) story body: `<Question id={N}/>`
+ * and `<Number id={N}/>` elements, read from the parsed JSX AST (the source is stored
+ * verbatim — there is no placeholder HTML to regex). Mirrors the legacy
+ * extractSavedQuestionIds/extractNumberQuestionIds reference flow. Best-effort: an
+ * unparseable body yields no references.
+ */
+export function extractJsxEmbedIds(source: string | null | undefined): number[] {
+  if (!source) return [];
+  const r = parseJsx(source);
+  if (!r.ok) return [];
+  const ids: number[] = [];
+  const walk = (n: JsxNode): void => {
+    if (n.type !== 'element') return;
+    if (n.tag === 'Question' || n.tag === 'Number') {
+      const idAttr = n.attributes.find((a) => a.name === 'id' && a.value.static && typeof a.value.json === 'number');
+      if (idAttr && idAttr.value.static) ids.push(idAttr.value.json as number);
+    }
+    n.children.forEach(walk);
+  };
+  r.nodes.forEach(walk);
+  return [...new Set(ids)];
+}
+
 export interface StoryV2Parsed {
   html: string;
   assets: number[];

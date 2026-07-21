@@ -52,3 +52,16 @@ describe('StoryContent schema', () => {
     })).not.toBeNull();
   });
 });
+
+describe('StoryContent schema — format field (jsx-format stories)', () => {
+  it('accepts format:"jsx", null, and absent', () => {
+    expect(validateFileState({ type: 'story', content: { ...baseStory, format: 'jsx' } })).toBeNull();
+    expect(validateFileState({ type: 'story', content: { ...baseStory, format: null } })).toBeNull();
+    expect(validateFileState({ type: 'story', content: baseStory })).toBeNull();
+  });
+
+  it('rejects any other format value (e.g. "html")', () => {
+    expect(validateFileState({ type: 'story', content: { ...baseStory, format: 'html' } })).not.toBeNull();
+    expect(validateFileState({ type: 'story', content: { ...baseStory, format: 1 } })).not.toBeNull();
+  });
+});

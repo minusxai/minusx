@@ -1,6 +1,7 @@
 import { BaseFileContent, FileType } from '@/lib/types';
 import { extractSavedQuestionIds } from '@/lib/data/story/story-question';
 import { extractNumberQuestionIds } from '@/lib/data/story/story-number';
+import { extractJsxEmbedIds } from '@/lib/data/story/story-v2';
 
 /**
  * CLIENT-SIDE: Extract reference IDs from content for caching in references column
@@ -13,8 +14,11 @@ export function extractReferencesFromContent(content: BaseFileContent, type: Fil
   // `data-question-id` (chart embeds) and `data-number-id` (<Number id> figures) in content.story.
   // Inline `<Question query>` / `<Number query>` carry no file id, so they are not references.
   if (type === 'story') {
-    const story = (content as { story?: string | null } | null)?.story;
-    return [...new Set([...extractSavedQuestionIds(story), ...extractNumberQuestionIds(story)])];
+    const c = content as { story?: string | null; format?: string | null } | null;
+    // New-format (`format:'jsx'`) stories store the JSX source verbatim — ids come from the
+    // parsed AST (<Question id={N}/> / <Number id={N}/>), not the legacy placeholder HTML.
+    if (c?.format === 'jsx') return extractJsxEmbedIds(c.story);
+    return [...new Set([...extractSavedQuestionIds(c?.story), ...extractNumberQuestionIds(c?.story)])];
   }
 
   // Dashboards have no body — their content IS the ordered `assets` (tiles), so question

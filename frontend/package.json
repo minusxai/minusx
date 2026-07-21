@@ -26,7 +26,8 @@
     "migrate-conversations-to-v3": "node --env-file-if-exists=.env node_modules/.bin/tsx --conditions react-server scripts/migrate-conversations-to-v3.ts",
     "heal-stories": "node --env-file-if-exists=.env node_modules/.bin/tsx --conditions react-server scripts/heal-stories.ts",
     "knip": "knip --no-config-hints",
-    "build:setup-cli": "esbuild scripts/setup-cli/validate-llm.ts scripts/setup-cli/validate-connection.ts scripts/setup-cli/list-models.ts --bundle --platform=node --format=esm --target=node20 --packages=external --alias:server-only=./scripts/setup-cli/server-only-empty.js --outdir=setup-cli"
+    "build:setup-cli": "esbuild scripts/setup-cli/validate-llm.ts scripts/setup-cli/validate-connection.ts scripts/setup-cli/list-models.ts --bundle --platform=node --format=esm --target=node20 --packages=external --alias:server-only=./scripts/setup-cli/server-only-empty.js --outdir=setup-cli",
+    "generate-story-ui-classes": "tsx scripts/generate-story-ui-classes.ts"
   },
   "dependencies": {
     "@aws-sdk/client-athena": "^3.1032.0",
