@@ -7,12 +7,14 @@
  * content back out of Redux and stores it as a ViewDef.
  */
 import React from 'react';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import ViewWorkbench from '@/components/context/ViewWorkbench';
 import * as storeModule from '@/store/store';
 import { setQueryResult } from '@/store/queryResultsSlice';
-import type { ViewDef } from '@/lib/types';
+import { selectDirtyFiles, setEdit } from '@/store/filesSlice';
+import type { QuestionContent, ViewDef } from '@/lib/types';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 const ZONE_REVENUE: ViewDef = {
   name: 'zone_revenue',
@@ -56,6 +58,9 @@ describe('ViewWorkbench', () => {
     // panel), so their presence proves reuse.
     expect(await screen.findByLabelText('SQL')).toBeTruthy();
     expect(await screen.findByLabelText('Viz panel')).toBeTruthy();
+    // A data model is born with an authoritative V2 table envelope, so the
+    // panel is VegaVizPanel's DOM-table UI — never the classic V1 panel.
+    expect(await screen.findByLabelText('Table fields hint')).toBeTruthy();
   });
 
   it('seeds the editor with the view\'s SQL and connection', async () => {
@@ -65,7 +70,36 @@ describe('ViewWorkbench', () => {
       const virtual = Object.values(files).find((f: any) => f.id < 0) as any;
       expect(virtual?.content?.query).toBe(ZONE_REVENUE.sql);
       expect(virtual?.content?.connection_name).toBe('warehouse');
+      expect(virtual?.content?.viz).toEqual({
+        version: 2,
+        source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null },
+      });
+      expect(virtual?.content).not.toHaveProperty('vizSettings');
     });
+  });
+
+  it('waits for Run before executing SQL in a new data model', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, body: null });
+    vi.stubGlobal('fetch', fetchMock);
+    const { testStore } = setup();
+
+    fireEvent.change(await screen.findByLabelText('SQL editor'), {
+      target: { value: 'SELECT 1 AS value' },
+    });
+
+    await waitFor(() => {
+      const virtual = Object.values(testStore.getState().files.files)
+        .find((f: any) => f.id < 0) as any;
+      expect(virtual?.draft).toBe(true);
+      expect(virtual?.persistableChanges?.query).toBe('SELECT 1 AS value');
+    });
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/query')).toHaveLength(0);
+
+    fireEvent.click(screen.getByLabelText('Run query'));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/query')).toBe(true);
+    });
+    vi.unstubAllGlobals();
   });
 
   it('saving sends the EDITED sql (from the question file) to /api/views/prepare', async () => {
@@ -78,7 +112,18 @@ describe('ViewWorkbench', () => {
       return { ok: true, text: async () => '', json: async () => ({}) };
     });
     vi.stubGlobal('fetch', fetchMock);
-    const { onSave } = setup({ view: ZONE_REVENUE });
+    const { onSave, testStore } = setup({ view: ZONE_REVENUE });
+
+    let virtualId: number | undefined;
+    await waitFor(() => {
+      virtualId = Object.values(testStore.getState().files.files)
+        .find(f => f.id < 0)?.id;
+      expect(virtualId).toBeDefined();
+    });
+    act(() => {
+      testStore.dispatch(setEdit({ fileId: virtualId!, edits: { query: 'SELECT 2 AS x' } }));
+    });
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(1);
 
     fireEvent.change(await screen.findByLabelText('View name'), { target: { value: 'zone_revenue' } });
     fireEvent.click(screen.getByLabelText('Save view'));
@@ -86,9 +131,51 @@ describe('ViewWorkbench', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     const prepareCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/views/prepare'))!;
     const body = JSON.parse(prepareCall[1].body as string);
-    expect(body).toMatchObject({ name: 'zone_revenue', connection: 'warehouse', sql: ZONE_REVENUE.sql });
+    expect(body).toMatchObject({ name: 'zone_revenue', connection: 'warehouse', sql: 'SELECT 2 AS x' });
     // the snapshot comes back from the server, not from the client
     expect(onSave.mock.calls[0][0]).toMatchObject({ columns: [{ name: 'x', type: 'BIGINT' }] });
+    expect(testStore.getState().files.files[virtualId!]).toBeUndefined();
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
+  it('saves only the edited V2 viz envelope on the data model', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (String(url).includes('/api/views/prepare')) {
+        return { ok: true, json: async () => ({ success: true, data: { columns: [{ name: 'x', type: 'BIGINT' }] } }) };
+      }
+      return { ok: true, text: async () => '', json: async () => ({}) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { onSave, testStore } = setup({ view: ZONE_REVENUE });
+
+    let virtualId: number | undefined;
+    await waitFor(() => {
+      virtualId = Object.values(testStore.getState().files.files)
+        .find((f: any) => f.id < 0)?.id as number | undefined;
+      expect(virtualId).toBeDefined();
+    });
+
+    const viz: VizEnvelope = {
+      version: 2,
+      source: {
+        kind: 'vega-lite', grammar: 'vega-lite@6',
+        spec: { mark: 'bar', encoding: { x: { field: 'x', type: 'nominal' } } },
+      },
+    };
+    act(() => {
+      testStore.dispatch(setEdit({ fileId: virtualId!, edits: { viz } }));
+    });
+    await waitFor(() => {
+      const virtual = testStore.getState().files.files[virtualId!];
+      expect((virtual?.persistableChanges as Partial<QuestionContent> | undefined)?.viz).toEqual(viz);
+    });
+    fireEvent.click(screen.getByLabelText('Save view'));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    const saved = onSave.mock.calls[0][0];
+    expect(saved.viz).toEqual(viz);
+    expect(saved).not.toHaveProperty('vizSettings');
     vi.unstubAllGlobals();
   });
 

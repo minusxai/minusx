@@ -20,8 +20,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, VStack, HStack, Text, Button, Input } from '@chakra-ui/react';
 import { LuSave, LuTriangleAlert, LuTrash2 } from 'react-icons/lu';
 import QuestionContainerV2 from '@/components/containers/QuestionContainerV2';
-import { setFile, selectMergedContent } from '@/store/filesSlice';
+import { setFile, selectMergedContent, removeVirtualFile } from '@/store/filesSlice';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { createDefaultTableViz } from '@/lib/data/story/template-defaults';
 import type { DbFile, QuestionContent, ViewColumn, ViewDef } from '@/lib/types';
 
 interface ViewWorkbenchProps {
@@ -62,7 +63,7 @@ export default function ViewWorkbench({
     const content: QuestionContent = {
       description: null,
       query: view?.sql ?? '',
-      vizSettings: view?.vizSettings ?? { type: 'table' },
+      viz: view?.viz ?? createDefaultTableViz(),
       parameters: [],
       parameterValues: {},
       connection_name: connection,
@@ -79,10 +80,13 @@ export default function ViewWorkbench({
       updated_at: new Date().toISOString(),
       version: 1,
       last_edit_id: null,
+      // New models must behave like new questions: keep the live SQL inert until
+      // the user explicitly clicks Run. Existing definitions still auto-preview.
+      draft: !view,
     } as unknown as DbFile;
 
     dispatch(setFile({ file, references: [] }));
-  }, [dispatch, fileId, contextPath, connection, view?.sql, view?.name, view?.vizSettings]);
+  }, [dispatch, fileId, contextPath, connection, view?.sql, view?.name, view?.viz]);
 
   // What the user has actually built in the editor (SQL + chart), live from Redux.
   const edited = useAppSelector((s) => selectMergedContent(s, fileId)) as QuestionContent | undefined;
@@ -112,16 +116,20 @@ export default function ViewWorkbench({
         connection,
         sql,
         columns,
-        ...(edited?.vizSettings ? { vizSettings: edited.vizSettings } : {}),
+        viz: edited?.viz ?? createDefaultTableViz(),
         ...(view?.whitelistedColumns ? { whitelistedColumns: view.whitelistedColumns } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
       });
+      // The question editor is only a scratch surface for authoring the view.
+      // Once its contents have been copied into the context, remove it so the
+      // global dirty-file selector cannot report it as an unrelated change.
+      dispatch(removeVirtualFile(fileId));
     } catch {
       setError('Could not save the view');
     } finally {
       setSaving(false);
     }
-  }, [contextPath, connection, name, description, edited, view, onSave]);
+  }, [contextPath, connection, name, description, edited, view, onSave, dispatch, fileId]);
 
   const canSave = !!name.trim() && !!edited?.query?.trim() && !saving;
 
@@ -184,7 +192,7 @@ export default function ViewWorkbench({
               size="xs" bg="accent.teal" color="white"
               onClick={save} disabled={!canSave} loading={saving}
             >
-              <LuSave size={12} /> <Text ml={1}>Save Data Model</Text>
+              <LuSave size={12} /> <Text ml={1}>Update</Text>
             </Button>
           </HStack>
         </HStack>

@@ -146,7 +146,10 @@ describe('promoteQuestionToView', () => {
     const q: QuestionContent = {
       query: 'SELECT zone_name, SUM(total) AS revenue FROM mxfood.orders GROUP BY 1',
       connection_name: 'warehouse',
-      vizSettings: { type: 'table' },
+      viz: {
+        version: 2,
+        source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null },
+      },
     } as QuestionContent;
     const qid = await mkPublished('Zone Revenue', '/org/zone-revenue', 'question', q);
 
@@ -157,7 +160,9 @@ describe('promoteQuestionToView', () => {
       sql: q.query,
       description: 'from question',
       columns: [{ name: 'zone_name', type: 'VARCHAR' }, { name: 'revenue', type: 'DOUBLE' }],
+      viz: { version: 2, source: { kind: 'table' } },
     });
+    expect(view).not.toHaveProperty('vizSettings');
 
     // it actually landed on the context's live version
     const { data } = await FilesAPI.loadFileByPath('/org/context', admin);

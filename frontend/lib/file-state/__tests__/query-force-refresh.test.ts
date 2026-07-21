@@ -74,3 +74,23 @@ describe('getQueryResult — cachePolicy plumbing', () => {
     expect(noPolicy.cachePolicy).toBeUndefined();
   });
 });
+
+describe('getQueryResult — raw parameter binding', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('sends date-shaped values without warehouse parameter-type metadata', async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      String(url).includes('/api/query') ? emptyJsonlResponse() : ({ ok: true, status: 200, json: async () => ({}) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await getQueryResult({
+      query: 'SELECT * FROM files WHERE created_at >= :start_date',
+      params: { start_date: '2026-01-01' },
+      database: 'wh',
+    });
+
+    const body = bodyOf(fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/query'))!);
+    expect(body.parameters).toEqual({ start_date: '2026-01-01' });
+    expect(body.parameterTypes).toBeUndefined();
+  });
+});

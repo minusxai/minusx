@@ -29,6 +29,15 @@ export class UnsupportedSQLError extends Error {
   }
 }
 
+export interface ParseSqlToIrOptions {
+  /**
+   * Enforce the subset of SQL that can be represented and edited by the GUI.
+   * Dependency-only consumers may disable this because they never round-trip
+   * the resulting filters back to SQL.
+   */
+  enforceGuiCompatibility?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
@@ -36,6 +45,7 @@ export class UnsupportedSQLError extends Error {
 export async function parseSqlToIrLocal(
   sql: string,
   dialect: string,
+  options: ParseSqlToIrOptions = {},
 ): Promise<AnyQueryIR> {
   await ensureInit();
 
@@ -46,15 +56,19 @@ export async function parseSqlToIrLocal(
 
   const ast = result.ast[0];
 
-  // Pre-validate: check for unsupported features
-  const unsupported = validateSqlForGui(ast);
-  if (unsupported.length > 0) {
-    const hint = generateHint(unsupported);
-    throw new UnsupportedSQLError(
-      `SQL contains unsupported features: ${unsupported.join(', ')}`,
-      unsupported,
-      hint,
-    );
+  // Pre-validate features that cannot be represented by the visual editor.
+  // Some consumers only need structural information (for example table/view
+  // dependencies) and do not round-trip the resulting IR back to SQL.
+  if (options.enforceGuiCompatibility !== false) {
+    const unsupported = validateSqlForGui(ast);
+    if (unsupported.length > 0) {
+      const hint = generateHint(unsupported);
+      throw new UnsupportedSQLError(
+        `SQL contains unsupported features: ${unsupported.join(', ')}`,
+        unsupported,
+        hint,
+      );
+    }
   }
 
   // Check for UNION/compound query

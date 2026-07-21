@@ -28,8 +28,19 @@ vi.mock('@google-cloud/bigquery', () => {
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BigQueryConnector } from '../bigquery-connector';
 
-describe('BigQueryConnector — declared date params bind as a real DATE value', () => {
+describe('BigQueryConnector — date-shaped parameter binding', () => {
   beforeEach(() => { captured.config = null; });
+
+  it('leaves an undeclared YYYY-MM-DD parameter as STRING for contextual DATE/TIMESTAMP coercion', async () => {
+    const conn = new BigQueryConnector('bq', { project_id: 'p', service_account_json: '{}' });
+    await conn.queryStream(
+      'SELECT * FROM t WHERE created_at >= :start',
+      { start: '2024-01-01' },
+    );
+    expect(captured.config.query).toContain('@start');
+    expect(captured.config.params.start).toBe('2024-01-01');
+    expect(captured.config.types?.start).toBeUndefined();
+  });
 
   it('binds a declared `date` param as a BigQueryDate value (not a string, no DATE type)', async () => {
     const conn = new BigQueryConnector('bq', { project_id: 'p', service_account_json: '{}' });

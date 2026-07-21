@@ -21,7 +21,7 @@
 // get different numbers).
 // ============================================================================
 
-import type { VizSettings } from '@/lib/validation/atlas-schemas';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 /** The virtual schema every view lives in. */
 export const VIEWS_SCHEMA = '_views';
@@ -65,8 +65,8 @@ export interface ViewDef {
    * real enforcement, not just concealment.
    */
   whitelistedColumns?: string[];
-  /** The chart the view was authored with (restored when the view is reopened). */
-  vizSettings?: VizSettings;
+  /** Authoritative Viz V2 envelope restored when the data model is reopened. */
+  viz?: VizEnvelope;
   description?: string;
 }
 

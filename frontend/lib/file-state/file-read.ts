@@ -28,7 +28,6 @@ import { FilesAPI, getFiles } from '@/lib/data/files';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import { isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
-import { paramTypeMap } from '@/lib/sql/sql-params';
 import { getRootParams } from '@/lib/data/helpers/param-resolution';
 import type { AugmentedFile, QuestionContent } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
@@ -196,12 +195,9 @@ export async function readFiles(
           cacheSpreadsheetSource(execution.spreadsheet);
           continue;
         }
-        const params = content?.parameters ?? [];
-        const types = paramTypeMap(params);
         runs.push(getQueryResult({
           query: execution.query,
           params: execution.params,
-          parameterTypes: types,
           database: execution.database,
           filePath: f.path,
           fileId: f.id,

@@ -18,6 +18,7 @@ import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { connectionTypeToDialect } from '@/lib/types';
 import { resolveViewsInSql, validateViews } from '@/lib/views/resolve';
 import { getViewsForPath, getAllViewsInTree } from '@/lib/views/views.server';
+import { createDefaultTableViz } from '@/lib/data/story/template-defaults';
 import { FilesAPI } from '@/lib/data/files.server';
 import { findNearestContextPath, getPublishedVersionForUser } from '@/lib/context/context-utils';
 import { resolvePath } from '@/lib/mode/path-resolver';
@@ -104,6 +105,7 @@ export async function promoteQuestionToView(
   const { columns } = await prepareView(user, { path: contextPath, connection, name, sql: content.query });
   const view: ViewDef = {
     name, connection, sql: content.query, columns,
+    viz: content.viz ?? createDefaultTableViz(),
     ...(description?.trim() ? { description: description.trim() } : {}),
   };
 
