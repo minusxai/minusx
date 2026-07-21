@@ -13,6 +13,7 @@
  */
 import React from 'react';
 import type { JsxNode } from '@/lib/jsx';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
 
 export interface StoryInterpreterOptions {
@@ -29,11 +30,11 @@ const CONTROLLED_TO_DEFAULT: Record<string, string> = {
 };
 
 /** Name-denied props, lowercase (mirrors lib/jsx/validate.ts DENIED_ATTRS + React internals). */
-const DENIED_PROPS = new Set(['dangerouslysetinnerhtml', 'ref', 'key', 'srcdoc', 'is']);
+const DENIED_PROPS = immutableSet(['dangerouslysetinnerhtml', 'ref', 'key', 'srcdoc', 'is']);
 
 /** URL-bearing props, lowercase (scheme-filtered; list-valued ones checked per entry). */
-const URL_PROPS = new Set(['href', 'src', 'action', 'formaction', 'poster', 'background', 'cite', 'data', 'xlinkhref', 'ping']);
-const URL_LIST_PROPS = new Set(['srcset', 'ping']);
+const URL_PROPS = immutableSet(['href', 'src', 'action', 'formaction', 'poster', 'background', 'cite', 'data', 'xlinkhref', 'ping']);
+const URL_LIST_PROPS = immutableSet(['srcset', 'ping']);
 
 export const AST_PATH_ATTR = 'data-mx-ast';
 
