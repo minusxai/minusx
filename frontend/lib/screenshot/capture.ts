@@ -15,6 +15,7 @@
  * Blob URL, which taints the canvas in Chromium/WebKit.
  */
 import { findStorySvg, serializeStorySvg, svgToImage } from '@/lib/story-surface/serialize';
+import { findSurfaceSvg, serializeSurfaceSvg } from './serialize-surface';
 import { serializeElementToSvg } from './serialize-element';
 import { waitForFileViewReady } from './readiness';
 import { AGENT_IMAGE_MAX_PX, AGENT_IMAGE_PIXEL_RATIO, AGENT_IMAGE_JPEG_QUALITY } from './constants';
@@ -107,12 +108,32 @@ async function cropFromSvgStory(
   return canvasToBlob(out, mimeFor(opts.format), opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
 }
 
+/**
+ * Full capture from a main-document live-svg surface (Renderer_v2 Phase 4, B2): the dashboard's
+ * content already lives in `<svg data-mx-surface-svg><foreignObject>`, so serialize THAT live svg
+ * (document CSS inlined) rather than re-wrapping a clone. Null when `element` hosts no surface.
+ */
+async function captureFromSvgSurface(element: HTMLElement, opts: CaptureOptions): Promise<Blob | null> {
+  const svg = findSurfaceSvg(element);
+  if (!svg) return null;
+  const box = svg.getBoundingClientRect();
+  const cssWidth = box.width || svg.width.baseVal.value;
+  const cssHeight = box.height || svg.height.baseVal.value;
+  if (!cssWidth || !cssHeight) return null;
+  const scale = opts.maxWidth != null ? opts.maxWidth / cssWidth : (opts.pixelRatio ?? 0.75);
+  const img = await svgToImage(await serializeSurfaceSvg(svg));
+  return rasterToBlob(img, cssWidth, cssHeight, scale, opts);
+}
+
 /** Render a single DOM element to an image Blob (jpeg by default). */
 export async function captureElementBlob(element: HTMLElement, opts: CaptureOptions): Promise<Blob> {
   // SVG story renderer: the story is already an <svg> — serialize the LIVE surface and let the
   // browser rasterize it, so the capture is the same renderer the user is looking at.
   const fromSvg = await captureFromSvgStory(element, opts);
   if (fromSvg) return fromSvg;
+  // Main-document live-svg surface (dashboards): same principle, styles from the parent document.
+  const fromSurface = await captureFromSvgSurface(element, opts);
+  if (fromSurface) return fromSurface;
   // Generic app-page path: serialize the element with the parent document's CSS inlined. Always
   // scale the RASTER (drawImage), never the element — no reflow. maxWidth → scale to hit that
   // width; else use pixelRatio (default 0.75).

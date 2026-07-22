@@ -110,6 +110,20 @@ describe('serializeElementToSvg', () => {
     document.documentElement.classList.remove('dark');
   });
 
+  // Renderer_v2 Phase 3/4: re-skinned views consume shadcn tokens declared under
+  // `[data-mx-theme-host]` / `.dark [data-mx-theme-host]` (app/theme-tokens.css). The live host
+  // is an ANCESTOR outside the captured subtree (FileLayout's content root), so without a host
+  // stamp in the wrapper every token-backed Tailwind style (bg-muted, text-foreground, chart
+  // palette) rasterizes unresolved. It must sit NESTED INSIDE the mode wrapper so the
+  // `.dark [data-mx-theme-host]` descendant selector matches in dark mode.
+  it('stamps the shadcn token host nested inside the mode wrapper', async () => {
+    const el = document.createElement('div');
+    stubRect(el, 100, 50);
+    document.body.appendChild(el);
+    const out = await serializeElementToSvg(el);
+    expect(out).toMatch(/<div[^>]*class="chakra-theme[^"]*"[^>]*><div[^>]*data-mx-theme-host/);
+  });
+
   it('applies the fixup pass: scroll transforms and form-value stamping, live DOM untouched', async () => {
     const el = document.createElement('div');
     el.innerHTML = '<div id="scroller"><table id="t"></table></div><input id="i" type="text">';

@@ -25,6 +25,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { chromium, webkit, firefox, type BrowserType } from '@playwright/test';
 import { WIDTH_BUNDLE_ENTRY, WIDTH_FIXTURES, runWidthChecks } from './story-width-matrix';
+import { B2_BUNDLE_ENTRY, B2_FIXTURES, runB2Checks } from './b2-surface-matrix';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -143,8 +144,8 @@ const FIXTURES: Record<string, string> = {
     </div>`),
 };
 
-/** Capture fixtures + the fluid-width guard's fixtures, served from the one origin. */
-const ALL_FIXTURES: Record<string, string> = { ...FIXTURES, ...WIDTH_FIXTURES };
+/** Capture + fluid-width + B2 dashboard-surface fixtures, served from the one origin. */
+const ALL_FIXTURES: Record<string, string> = { ...FIXTURES, ...WIDTH_FIXTURES, ...B2_FIXTURES };
 
 function serve(port: number, handler: http.RequestListener): Promise<http.Server> {
   const server = http.createServer(handler);
@@ -306,9 +307,10 @@ async function runEngine(browserType: BrowserType, base: string): Promise<CheckR
       detail: 'noImport=' + noImport + ' noExternal=' + noExternal + ' noFixed=' + noFixed + ' kept=' + keptRendered };
   }`);
 
-  // The fluid-width guard runs on the same context/engine (its fixtures are served from the same
-  // map and drive the same bundle).
+  // The fluid-width guard and the B2 dashboard-surface suite run on the same context/engine
+  // (their fixtures are served from the same map and drive the same bundle).
   results.push(...await runWidthChecks(ctx, base));
+  results.push(...await runB2Checks(ctx, base));
 
   await browser.close();
   return results;
@@ -324,6 +326,7 @@ async function main(): Promise<void> {
         import { sanitizeCssText } from '@/lib/data/story/banned-css';
         (window as unknown as { __matrix: object }).__matrix = { serializeElementToSvg, svgToImage, sanitizeCssText };
         ${WIDTH_BUNDLE_ENTRY}
+        ${B2_BUNDLE_ENTRY}
       `,
       resolveDir: ROOT,
       loader: 'ts',
@@ -332,6 +335,7 @@ async function main(): Promise<void> {
     write: false,
     format: 'iife',
     platform: 'browser',
+    jsx: 'automatic',
     alias: { '@': ROOT },
   });
   const bundleJs = bundle.outputFiles[0].text;

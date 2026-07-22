@@ -400,21 +400,34 @@ so the surface phase re-proves with the REAL (post-re-skin) chrome anyway.
       the main document PASSES on Chromium + WebKit + Firefox** — layout correct, drag commits a
       layout change, resize commits, and the live-svg serialize→rasterize capture renders all
       tiles untainted with matching pixel counts across engines.
-- [ ] Remaining spike: popover/menu behavior OVER the surface during drag (expect: portals escape
-      the svg and don't capture — acceptable; verify no hit-testing surprises).
-- [ ] Remaining spike: TEXT EDITING inside the surface — `TextBlockCard` contenteditable and
-      `ParameterRow` inputs (caret, focus, selection) on all three engines. The story surface
-      already proves contenteditable/focus/hit-testing inside foreignObject in production, so
-      risk is low — but Safari/Firefox caret history says prove the dashboard shapes explicitly.
-- [ ] Remaining spike: `position:sticky` inside foreignObject (a pinned parameter row is the
-      obvious candidate) — its cross-engine history is separate from `position:fixed`'s and is
-      not covered by the existing checks.
-- [ ] Remaining check: text selection, find-in-page, and screen-reader traversal of content
-      inside the surface — dashboards are a read surface for humans, and B2 changes the DOM
-      context they read in.
-- [ ] Re-prove the §7.2 result with the REAL post-Phase-3 tile chrome (the spike grid was bare).
-- [ ] Promote the spike into `capture-matrix.ts` as a permanent fixture; then mount
-      `DashboardView`'s grid in the surface and switch its capture to the live-svg serializer.
+- [x] Spike: popover/menu OVER the surface — PROVEN (matrix `b2-popover` fixture, 3 engines): a
+      fixed-position portal over the svg receives clicks, the surface below stays interactive,
+      and the portal is EXCLUDED from the serialized capture.
+- [x] Spike: TEXT EDITING inside the surface — PROVEN (matrix `b2-edit`, 3 engines): input
+      focus/typing/caret position, contenteditable typing, and the typed value BAKED into the
+      capture (form stamping through `serializeSurfaceSvg`).
+- [x] Spike: `position:sticky` inside foreignObject — PROVEN (matrix `b2-sticky`, 3 engines):
+      a sticky header pins at the top of a scrolled foreignObject container (delta ≤ 2px).
+- [x] Check: text SELECTION works across foreignObject content (triple-click selects), and the
+      content is exposed to the ACCESSIBILITY tree (role=region resolvable by name) — matrix
+      `b2-edit`, 3 engines. Find-in-page rides the same AX/text exposure; not separately
+      automatable in the harness, verified implicitly by selection + role resolution.
+- [x] §7.2 re-proof with REAL machinery — the b2 fixtures drive the SHIPPED `SvgPageSurface`
+      component + SHIPPED `serializeSurfaceSvg` + the dashboard's real `WidthProvider(Responsive)`
+      grid: container-width layout inside foreignObject, real mouse drag/resize COMMIT, capture
+      untainted with every tile present INCLUDING a token-backed tile (`--chart-1` under
+      `[data-mx-theme-host]` — the shadcn token chain proven in the serialized copy). One finding
+      worth keeping: RGL's mount/drag transition makes position probes time-dependent (~1s crawl
+      under headless load) — the fixture disables it; the app keeps it (cosmetic).
+- [x] Promoted into `capture-matrix.ts` (`b2-surface-matrix.ts` + `b2-surface-drivers.tsx`, runs
+      under `npm run capture-matrix`); `DashboardView` mounts its region INSIDE the surface
+      (`[data-file-id] > SvgPageSurface > [aria-label="Dashboard"][data-theme]` — the theme stamp
+      travels with the serialized copy), and `captureElementBlob` branches to the live-svg
+      serializer via `findSurfaceSvg`. Browser-verified on the seeded dashboard: render, Get
+      image with markers baked (badges 1–4), sidebar-toggle resize re-track, edit-mode drag
+      commit + discard. Bonus fix caught by the red test: `serializeElementToSvg` (still used by
+      question/notebook/report) now stamps `[data-mx-theme-host]` nested inside the mode wrapper —
+      without it every re-skinned token-backed style rasterized unresolved in captures.
 
 ### Phase 5 — Question workbench to Tailwind/shadcn (COMMITTED scope — user decision)
 **Deferral was proposed by review and REJECTED by the user: the final outcome (§8) is every

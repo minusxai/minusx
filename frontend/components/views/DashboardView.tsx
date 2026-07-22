@@ -6,6 +6,7 @@ import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionC
 import TextBlockCard from '../TextBlockCard';
 import ParameterRow from '../params/ParameterRow';
 import { PageMarkerDevOverlay } from '@/components/views/story/PageMarkerDevOverlay';
+import { SvgPageSurface } from '@/components/views/shared/SvgPageSurface';
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -447,7 +448,12 @@ export default function DashboardView({
     // it is a live-DOM dev preview and must never leak into serialized/rasterized captures.
     <div className="relative flex-1">
       <PageMarkerDevOverlay enabled={!!showDevMarkers} colorMode={colorMode ?? 'light'} />
-    <div data-file-id={fileId} role="region" aria-label="Dashboard" {...(theme ? { 'data-theme': theme } : {})}>
+    {/* B2 surface (Renderer_v2 Phase 4): the [data-file-id] capture anchor wraps the live-svg
+        surface; the dashboard region — including the [data-theme] stamp — renders INSIDE the
+        foreignObject so the serialized copy carries the theme with it. */}
+    <div data-file-id={fileId}>
+    <SvgPageSurface>
+    <div role="region" aria-label="Dashboard" {...(theme ? { 'data-theme': theme } : {})}>
 
       {/* Visual View (the Code view is rendered upstream by FileView) */}
       {(
@@ -534,6 +540,8 @@ export default function DashboardView({
         </>
       )}
 
+    </div>
+    </SvgPageSurface>
     </div>
     </div>
   );

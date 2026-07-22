@@ -118,7 +118,7 @@ export function stampCanvases(liveRoot: Element, cloneRoot: Element): void {
 }
 
 /** Inline every non-data <img> src in the clone as a data: URI; failures are left as-is. */
-async function inlineImageSources(cloneRoot: Element, baseHref: string): Promise<void> {
+export async function inlineImageSources(cloneRoot: Element, baseHref: string): Promise<void> {
   const imgs = Array.from(cloneRoot.querySelectorAll('img'));
   await Promise.all(imgs.map(async (img) => {
     const src = img.getAttribute('src');
@@ -207,6 +207,11 @@ export async function serializeElementToSvg(
   outer.setAttribute('style', `width:${width}px;height:${height}px;overflow:hidden;`
     + (opts.backgroundColor ? `background:${opts.backgroundColor};` : ''));
   const inner = doc.createElement('div');
+  // shadcn token host (Renderer_v2 Phase 3+): re-skinned views consume tokens declared under
+  // `[data-mx-theme-host]` / `.dark [data-mx-theme-host]` (app/theme-tokens.css), and the live
+  // host is an ANCESTOR outside the captured subtree (FileLayout's content root). Stamp it on the
+  // INNER wrapper — nested under the mode wrapper — so the dark-descendant selector matches too.
+  inner.setAttribute('data-mx-theme-host', '');
   if (doc.body?.className) inner.setAttribute('class', doc.body.className);
   inner.appendChild(clone);
   outer.appendChild(inner);

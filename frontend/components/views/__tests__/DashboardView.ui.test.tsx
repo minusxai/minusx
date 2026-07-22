@@ -419,6 +419,23 @@ describe('DashboardView via DashboardContainerV2', () => {
     });
   });
 
+  // B2 surface (Renderer_v2 Phase 4): the dashboard content lives inside the live-svg surface
+  // (svg[data-mx-surface-svg] > foreignObject), inside the [data-file-id] capture anchor — so
+  // capture serializes the LIVE svg the user is looking at instead of re-wrapping a clone.
+  describe('live-svg surface', () => {
+    it('mounts the dashboard region inside svg[data-mx-surface-svg] > foreignObject', () => {
+      const store = setup(makeDashboardFile());
+      renderWithProviders(<DashboardContainerV2 fileId={DASH_ID} mode="view" />, { store });
+      const region = screen.getByLabelText('Dashboard');
+      const fo = region.closest('foreignObject');
+      expect(fo).toBeTruthy();
+      const svg = fo!.closest('svg[data-mx-surface-svg]');
+      expect(svg).toBeTruthy();
+      // The capture anchor wraps the surface (captureFileViewBlob resolves [data-file-id] first).
+      expect(svg!.closest('[data-file-id]')).toBeTruthy();
+    });
+  });
+
   // Dashboards are marker-flagged (Renderer_v2 Phase 1): under dev mode the same numbered
   // position-marker preview stories get (PageMarkerDevOverlay) must mount on the dashboard root,
   // so the DevTools Markers checkbox previews exactly what the agent capture bakes in.
