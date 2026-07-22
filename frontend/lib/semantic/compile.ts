@@ -409,8 +409,6 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     const ref = m2mByAlias.get(alias)!;
     const bridgeName = sourceTableName(ref.through.source);
     const farName = sourceTableName(ref.source);
-    const pOn = ref.through.primaryOn[0];
-    const rOn = ref.through.referencedOn[0];
     const cteName = `_m2m_${alias}`;
     const groupedColumns = [...new Set(
       spec.dimensions
@@ -420,19 +418,28 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     )];
     const aliasFilters = groupedM2MFilters.get(alias) ?? [];
     const cteWhere = aliasFilters.length > 0 ? ` WHERE ${farWhere(farName, aliasFilters)}` : '';
+    // EVERY key column rides along as `_pk<k>` and the join maps them ALL —
+    // a prefix of a composite key is not identity, and a bridge row matching
+    // on the first column alone must not leak its far value into a group.
+    const pkProjection = ref.through.primaryOn
+      .map((p, k) => `${bridgeName}.${p.bridgeColumn} AS _pk${k}`)
+      .join(', ');
+    const bridgeToFar = ref.through.referencedOn
+      .map((r) => `${bridgeName}.${r.bridgeColumn} = ${farName}.${r.referencedColumn}`)
+      .join(' AND ');
     ctes.push({
       name: cteName,
-      raw_sql: `SELECT DISTINCT ${bridgeName}.${pOn.bridgeColumn} AS _pk, ${groupedColumns.map((c) => `${farName}.${c} AS ${c}`).join(', ')} FROM ${sourceSqlName(ref.through.source)} JOIN ${sourceSqlName(ref.source)} ON ${bridgeName}.${rOn.bridgeColumn} = ${farName}.${rOn.referencedColumn}${cteWhere}`,
+      raw_sql: `SELECT DISTINCT ${pkProjection}, ${groupedColumns.map((c) => `${farName}.${c} AS ${c}`).join(', ')} FROM ${sourceSqlName(ref.through.source)} JOIN ${sourceSqlName(ref.source)} ON ${bridgeToFar}${cteWhere}`,
     });
     joins.push({
       type: aliasFilters.length > 0 ? 'INNER' : 'LEFT',
       table: { table: cteName },
-      on: [{
+      on: ref.through.primaryOn.map((p, k) => ({
         left_table: baseName,
-        left_column: pOn.primaryColumn,
+        left_column: p.primaryColumn,
         right_table: cteName,
-        right_column: '_pk',
-      }],
+        right_column: `_pk${k}`,
+      })),
     });
   }
 

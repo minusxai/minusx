@@ -180,7 +180,7 @@ describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
     for (const dialect of ['duckdb', 'bigquery', 'postgres']) {
       const sql = sqlFor(spec({ measures: ['Revenue'], dimensions: ['Tag'] }), dialect);
       expect(sql).toMatch(/^WITH _m2m_tag AS \(\nSELECT DISTINCT /);
-      expect(sql).toContain('LEFT JOIN _m2m_tag ON orders.id = _m2m_tag._pk');
+      expect(sql).toContain('LEFT JOIN _m2m_tag ON orders.id = _m2m_tag._pk0');
       expect(sql).toContain('GROUP BY _m2m_tag.name');
     }
   });
@@ -296,6 +296,19 @@ describe('composite-key m2m', () => {
     })));
     const byTag = new Map(rows.map((r) => [r[0], Number(r[1])]));
     expect(byTag.get('vip')).toBe(150); // (1,east) + (2,west)
+    // The (1,'west',20) bridge row matches order 1 on order_id ALONE — its
+    // region is wrong, so promo must not surface as a group at all. A CTE
+    // keyed on a prefix of the composite key leaks it in.
+    expect(byTag.has('promo')).toBe(false);
+  });
+
+  it('golden: the dedup CTE carries EVERY key column, and the join maps them all', () => {
+    const sql = csql(spec({
+      model: 'OrdersComposite', measures: ['Revenue'], dimensions: ['Tag'],
+    }));
+    expect(sql).toContain('ot_composite.order_id AS _pk0');
+    expect(sql).toContain('ot_composite.order_region AS _pk1');
+    expect(sql).toContain('ON orders.id = _m2m_tag._pk0 AND orders.region = _m2m_tag._pk1');
   });
 
   it('golden: correlated EXISTS names every key pair, in all three dialects', () => {

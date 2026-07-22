@@ -169,7 +169,7 @@ describe('m2m compiles (full coverage in m2m.test.ts)', () => {
   it('an m2m dimension compiles to a dedup-bridge CTE + LEFT join', () => {
     const sql = sqlFor(spec({ measures: ['Revenue'], dimensions: ['Tag'] }));
     expect(sql).toMatch(/^WITH _m2m_tag AS \(/);
-    expect(sql).toContain('LEFT JOIN _m2m_tag ON orders.id = _m2m_tag._pk');
+    expect(sql).toContain('LEFT JOIN _m2m_tag ON orders.id = _m2m_tag._pk0');
   });
 
   it('an m2m filter compiles to a correlated EXISTS', () => {
