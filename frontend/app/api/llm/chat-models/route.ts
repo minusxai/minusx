@@ -5,10 +5,10 @@ import { getRawConfig } from '@/lib/data/configs.server';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { listProviders } from '@/orchestrator/llm';
 import { getModelCatalog, mergedListModels } from '@/lib/llm/model-catalog.server';
-import { buildChatModelCatalog } from '@/lib/llm/chat-model-catalog';
+import { buildChatGradeCatalog } from '@/lib/llm/chat-grade-catalog';
 import type { LlmConfig } from '@/lib/llm/llm-config-types';
 
-/** Safe allowed-model catalog for every authenticated chat user. */
+/** Safe grade catalog for every authenticated chat user. */
 export const GET = withAuth(async (_request: NextRequest) => {
   try {
     const [raw, liveCatalog] = await Promise.all([
@@ -19,7 +19,7 @@ export const GET = withAuth(async (_request: NextRequest) => {
       slug,
       models: mergedListModels(slug, liveCatalog),
     }));
-    return successResponse(buildChatModelCatalog(raw.llm as LlmConfig | undefined, registry));
+    return successResponse(buildChatGradeCatalog(raw.llm as LlmConfig | undefined, registry));
   } catch (error) {
     return handleApiError(error);
   }
