@@ -54,6 +54,11 @@ export interface FilterCondition {
   raw_value?: string;
   // For verbatim SQL on the left/column side (e.g. lower(city), SPLIT_PART(col, '-', 1))
   raw_column?: string;
+  // Verbatim SQL for the WHOLE predicate, when it has no column/operator shape
+  // at all — e.g. the correlated `EXISTS (SELECT 1 …)` the semantic compiler
+  // emits for many-to-many membership. Generated only; the GUI parser never
+  // produces it.
+  raw_sql?: string;
 }
 
 export interface FilterGroup {

@@ -2,9 +2,9 @@
 // Views — curated SQL exposed as ordinary tables.
 //
 // A view is SQL, defined on a context version (versioned + inherited exactly
-// like metrics/relationships), that the rest of the app treats as a TABLE: it
+// like metrics), that the rest of the app treats as a TABLE: it
 // appears in the schema tree under the `_views` schema, derives a semantic
-// model from its output columns, can carry metrics and relationships, and is
+// model from its output columns, can carry metrics, and is
 // visible to the agent.
 //
 // Views are VIRTUAL: nothing is created in the warehouse (most production

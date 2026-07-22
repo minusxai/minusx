@@ -88,6 +88,9 @@ function generateJoinClause(join: JoinClause): string {
 }
 
 function generateFilterCondition(cond: FilterCondition, dialect: string): string {
+  // Whole-predicate passthrough (correlated EXISTS, …) — no column/operator.
+  if (cond.raw_sql) return cond.raw_sql;
+
   // Raw column expression
   if ((cond as any).raw_column) {
     const column = (cond as any).raw_column;

@@ -9,7 +9,7 @@ import type { ScheduledJobContent } from './jobs';
 import type { DatabaseWithSchema } from './connections';
 import type { Test } from './evals';
 import type { SkillMention } from './chat';
-import type { TableRelationship } from './semantic';
+import type { SemanticModelV2 } from './semantic';
 import type { ViewDef, ViewProblem } from './views';
 
 /**
@@ -114,8 +114,8 @@ export interface ContextVersion {
   docs: DocEntry[];                  // Documentation entries with optional childPaths
   metrics?: MetricDef[];             // Named metrics attached to tables
   annotations?: TableAnnotation[];   // Editorial table/column descriptions
-  relationships?: TableRelationship[]; // Declared FK relationships (semantic joins), attached to tables
   views?: ViewDef[];                 // Curated SQL exposed as tables under the `_views` schema
+  semanticModels?: SemanticModelV2[]; // Authored semantic models (Semantic_Model_v2.md)
   createdAt: string;                 // ISO timestamp
   createdBy: number;                 // User ID who created version
   lastEditedAt?: string;             // ISO timestamp of last edit
@@ -138,8 +138,8 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   fullDocs?: DocEntry[];               // Computed by loader - inherited docs
   fullMetrics?: MetricDef[];           // Computed by loader - inherited + own metrics
   fullAnnotations?: TableAnnotation[]; // Computed by loader - inherited + own annotations
-  fullRelationships?: TableRelationship[]; // Computed by loader - inherited relationships
   fullViews?: ViewDef[];               // Computed by loader - inherited views (valid ones only)
+  fullSemanticModels?: SemanticModelV2[]; // Computed by loader - inherited + own authored semantic models
   viewProblems?: ViewProblem[];        // Computed by loader - views DISABLED here, and why
   fullSkills?: SkillEntry[];           // Computed by loader - inherited user-defined skills
 
@@ -148,8 +148,8 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   docs?: DocEntry[];                  // Current version's docs (container only)
   metrics?: MetricDef[];             // Current version's metrics (container only)
   annotations?: TableAnnotation[];   // Current version's annotations (container only)
-  relationships?: TableRelationship[]; // Current version's relationships (container only)
   views?: ViewDef[];                 // Current version's views (container only)
+  semanticModels?: SemanticModelV2[]; // Current version's authored semantic models (container only)
 
   // Evals (stored at content level, independent of versions)
   evals?: Test[];

@@ -5,7 +5,7 @@
  * type is UNLOCKED (time → line, dimensions → bar, else table — the exact
  * semantics SemanticExplorer.vizOf always had). `recommendedVizTypes` is the
  * wider set the type selector highlights: every type that makes sense for
- * the current dims/measures/time shape, always including the inferred
+ * the current dims/metrics/time shape, always including the inferred
  * default and 'table'.
  */
 import { describe, it, expect } from 'vitest';
@@ -13,7 +13,7 @@ import { inferVizType, recommendedVizTypes } from '@/lib/semantic/infer-viz';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 
 const spec = (over: Partial<SemanticQuerySpec>): SemanticQuerySpec => ({
-  model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: [], ...over,
+  model: 'Orders', table: 'orders', metrics: ['Revenue'], dimensions: [], ...over,
 });
 
 describe('inferVizType', () => {
@@ -26,7 +26,7 @@ describe('inferVizType', () => {
     expect(inferVizType(spec({ dimensions: ['Status'] }))).toBe('bar');
   });
 
-  it('bare measures → table', () => {
+  it('bare metrics → table', () => {
     expect(inferVizType(spec({}))).toBe('table');
   });
 });
@@ -46,19 +46,19 @@ describe('recommendedVizTypes', () => {
     expect(rec).not.toContain('pie');
   });
 
-  it('categorical (one measure) recommends bar/row/pie', () => {
+  it('categorical (one metric) recommends bar/row/pie', () => {
     const rec = recommendedVizTypes(spec({ dimensions: ['Status'] }));
     expect(rec).toEqual(expect.arrayContaining(['bar', 'row', 'pie']));
     expect(rec).not.toContain('line');
   });
 
-  it('categorical with several measures drops pie, adds scatter', () => {
-    const rec = recommendedVizTypes(spec({ dimensions: ['Status'], measures: ['Revenue', 'Orders'] }));
+  it('categorical with several metrics drops pie, adds scatter', () => {
+    const rec = recommendedVizTypes(spec({ dimensions: ['Status'], metrics: ['Revenue', 'Orders'] }));
     expect(rec).not.toContain('pie');
     expect(rec).toContain('scatter');
   });
 
-  it('bare measures recommend the big number', () => {
+  it('bare metrics recommend the big number', () => {
     expect(recommendedVizTypes(spec({}))).toContain('single_value');
   });
 

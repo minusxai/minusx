@@ -56,3 +56,75 @@ describe('getDocumentationForUser — Schema Notes', () => {
     expect(doc).toContain('- Active Users [public.users]');
   });
 });
+
+describe('getDocumentationForUser — Semantic Models projection', () => {
+  const ordersModel = {
+    name: 'Orders',
+    description: 'Order-grain revenue model',
+    connection: 'wh',
+    primary: { kind: 'table' as const, schema: 'main', table: 'orders' },
+    primaryKey: ['id'],
+    references: [
+      {
+        source: { kind: 'table' as const, schema: 'main', table: 'customers' },
+        alias: 'buyer',
+        relationship: 'many_to_one' as const,
+        on: [{ primaryColumn: 'customer_id', referencedColumn: 'id' }],
+      },
+      {
+        source: { kind: 'table' as const, schema: 'main', table: 'tags' },
+        alias: 'tags',
+        relationship: 'many_to_many' as const,
+        through: {
+          source: { kind: 'table' as const, schema: 'main', table: 'order_tags' },
+          primaryOn: [{ primaryColumn: 'id', bridgeColumn: 'order_id' }],
+          referencedOn: [{ bridgeColumn: 'tag_id', referencedColumn: 'id' }],
+        },
+      },
+    ],
+    dimensions: [
+      { name: 'Region', source: 'primary', column: 'region' },
+      { name: 'Buyer Name', source: 'buyer', column: 'name' },
+    ],
+    metrics: [
+      { name: 'Revenue', type: 'aggregation' as const, agg: 'SUM' as const, column: 'amount' },
+      { name: 'Orders Count', type: 'aggregation' as const, agg: 'COUNT' as const },
+      { name: 'AOV', type: 'ratio' as const, numerator: 'Revenue', denominator: 'Orders Count' },
+      { name: 'Net Revenue', type: 'sql' as const, sql: 'SUM(primary.amount) - SUM(costs.total)' },
+    ],
+  };
+
+  it('renders the live version\'s authored models compactly (name, primary, refs, dims, metrics)', () => {
+    const ctx = makeContext({ semanticModels: [ordersModel] } as never);
+    const doc = getDocumentationForUser(ctx, 1)!;
+    expect(doc).toContain('### Semantic Models');
+    expect(doc).toContain('Semantic model "Orders" (connection wh, primary main.orders)');
+    expect(doc).toContain('Order-grain revenue model');
+    expect(doc).toContain('refs: buyer = many_to_one main.customers ON customer_id=id; tags = many_to_many main.tags THROUGH main.order_tags ON id=order_id, tag_id=id');
+    expect(doc).toContain('dims: Region=region, Buyer Name=buyer.name');
+    expect(doc).toContain('metrics: Revenue = SUM(amount), Orders Count = COUNT(*), AOV = Revenue / Orders Count, Net Revenue = SUM(primary.amount) - SUM(costs.total)');
+  });
+
+  it('includes inherited models (fullSemanticModels) alongside the live version\'s own', () => {
+    const ctx = makeContext({ semanticModels: [ordersModel] } as never);
+    ctx.fullSemanticModels = [{
+      name: 'Users',
+      connection: 'wh',
+      primary: { kind: 'model', view: 'active_users' },
+      dimensions: [{ name: 'Country', source: 'primary', column: 'country' }],
+      metrics: [{ name: 'Users', type: 'aggregation', agg: 'COUNT_DISTINCT', column: 'user_id' }],
+    }];
+    const doc = getDocumentationForUser(ctx, 1)!;
+    expect(doc).toContain('Semantic model "Users" (connection wh, primary _views.active_users)');
+    expect(doc).toContain('metrics: Users = COUNT_DISTINCT(user_id)');
+    expect(doc).toContain('Semantic model "Orders"');
+  });
+
+  it('omits the section when no models exist, and Schema Notes appears for models alone', () => {
+    expect(getDocumentationForUser(makeContext(), 1)!).not.toContain('Semantic Models');
+    const modelsOnly = makeContext({ semanticModels: [ordersModel] } as never);
+    const doc = getDocumentationForUser(modelsOnly, 1)!;
+    expect(doc).toContain('## Schema Notes');
+    expect(doc).toContain('### Semantic Models');
+  });
+});

@@ -39,8 +39,22 @@ vi.mock('@/lib/hooks/useConnections', () => ({
 vi.mock('@/lib/hooks/use-semantic-compat', () => ({
   useSemanticCompat: () => ({ detected: null, canUseSemantic: true }),
 }));
+// The GUI tab is gated on AUTHORED semantic models (Semantic_Model_v2.md §2.4),
+// so this mock keys off the path the container resolves — which is the very
+// thing the test is proving. Returning a model only for the draft's real folder
+// path makes the tab's appearance a sharper signal than the old raw-table stub.
 vi.mock('@/lib/hooks/use-semantic-models', () => ({
-  useSemanticModels: () => ({ models: [] }),
+  useSemanticModels: (path?: string) => ({
+    models: path?.startsWith('/tutorial')
+      ? [{
+          name: 'Orders',
+          connection: 'test-db',
+          primary: { kind: 'table', schema: 'public', table: 'orders' },
+          dimensions: [{ name: 'Status', source: 'primary', column: 'status' }],
+          metrics: [{ name: 'Count', type: 'aggregation', agg: 'COUNT' }],
+        }]
+      : [],
+  }),
 }));
 vi.mock('@/lib/hooks/useAvailableQuestions', () => ({
   useAvailableQuestions: () => ({ questions: [], loading: false }),

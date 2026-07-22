@@ -37,7 +37,7 @@ import { OnboardingContextAgent, OnboardingDashboardAgent } from '@/agents/onboa
 import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
 import { CatalogSearchDBSchema, ChainedExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
 import { FetchHandleV2 } from '@/agents/benchmark-analyst/v2/fetch-handle';
-import { SearchDBSchema, ExecuteQuery, FuzzyMatch } from '@/agents/benchmark-analyst/db-tools.server';
+import { SearchDBSchema, ExecuteQuery, FuzzyMatch, RunSemanticQuery } from '@/agents/benchmark-analyst/db-tools.server';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import {
   DoubleCheckBenchmarkAgent,
@@ -110,6 +110,11 @@ setLlmCallRecorder({
 export const REGISTRABLES: RegistrableClass[] = [
   SearchDBSchema,
   ExecuteQuery,
+  // Semantic-layer sibling of ExecuteQuery: compiles a SemanticQuerySpec against
+  // an authored model, then executes through the same ExecuteQuery path.
+  // Server-only (no frontend bridge), so HEADLESS_REGISTRABLES — derived from
+  // this array via withSwaps below — includes it automatically.
+  RunSemanticQuery,
   FuzzyMatch,
   ReadFiles,
   SearchFiles,

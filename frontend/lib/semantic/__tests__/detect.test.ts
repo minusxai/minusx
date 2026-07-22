@@ -18,52 +18,59 @@ import { semanticSpecFromIr } from '../detect';
 import { detectSemanticQuery } from '../detect-sql';
 import { compileSemanticQuery } from '../compile';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
-import type { SemanticModel } from '@/lib/types/semantic';
+import type { SemanticModelV2 } from '@/lib/types/semantic';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 
 // ---------------------------------------------------------------------------
 // Fixtures: two models on the same connection + a schemaless one
 // ---------------------------------------------------------------------------
 
-const ORDERS: SemanticModel = {
+const ORDERS: SemanticModelV2 = {
   name: 'Orders',
   connection: 'warehouse',
-  schema: 'mxfood',
-  table: 'orders',
-  timeDimension: { column: 'created_at' },
+  primary: { kind: 'table', schema: 'mxfood', table: 'orders' },
   dimensions: [
-    { name: 'Status', column: 'status' },
-    { name: 'Platform', column: 'platform' },
-    { name: 'Is Subscription', column: 'is_subscription' },
-    { name: 'Region', column: 'region', join: 'c' },
-    { name: 'Customer Tier', column: 'tier', join: 'c' },
+    { name: 'Created At', source: 'primary', column: 'created_at', temporal: true },
+    { name: 'Status', source: 'primary', column: 'status' },
+    { name: 'Platform', source: 'primary', column: 'platform' },
+    { name: 'Is Subscription', source: 'primary', column: 'is_subscription' },
+    { name: 'Region', source: 'c', column: 'region' },
+    { name: 'Customer Tier', source: 'c', column: 'tier' },
   ],
-  joins: [
-    { table: 'customers', schema: 'mxfood', alias: 'c', relationship: 'many_to_one', leftColumn: 'customer_id', rightColumn: 'id' },
-    { table: 'zones', schema: 'mxfood', alias: 'z', type: 'INNER', relationship: 'one_to_one', leftColumn: 'zone_id', rightColumn: 'id' },
-  ],
-  measures: [
-    { name: 'Count', agg: 'COUNT' },
-    { name: 'Revenue', agg: 'SUM', column: 'total' },
-    { name: 'Avg Delivery Mins', agg: 'AVG', column: 'delivery_mins' },
-    { name: 'Buyers', agg: 'COUNT_DISTINCT', column: 'customer_id' },
-    { name: 'Max Total', agg: 'MAX', column: 'total' },
+  references: [
+    {
+      source: { kind: 'table', schema: 'mxfood', table: 'customers' },
+      alias: 'c', relationship: 'many_to_one',
+      on: [{ primaryColumn: 'customer_id', referencedColumn: 'id' }],
+    },
+    {
+      source: { kind: 'table', schema: 'mxfood', table: 'zones' },
+      alias: 'z', relationship: 'one_to_one', joinType: 'INNER',
+      on: [{ primaryColumn: 'zone_id', referencedColumn: 'id' }],
+    },
   ],
   metrics: [
+    { name: 'Count', type: 'aggregation', agg: 'COUNT' },
+    { name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'total' },
+    { name: 'Avg Delivery Mins', type: 'aggregation', agg: 'AVG', column: 'delivery_mins' },
+    { name: 'Buyers', type: 'aggregation', agg: 'COUNT_DISTINCT', column: 'customer_id' },
+    { name: 'Max Total', type: 'aggregation', agg: 'MAX', column: 'total' },
     { name: 'AOV', type: 'ratio', numerator: 'Revenue', denominator: 'Count' },
     { name: 'Revenue per Buyer', type: 'ratio', numerator: 'Revenue', denominator: 'Buyers' },
   ],
 };
 
-const EVENTS: SemanticModel = {
+const EVENTS: SemanticModelV2 = {
   name: 'Events',
   connection: 'warehouse',
-  table: 'events', // no schema — unqualified table
-  timeDimension: { column: 'event_ts' },
-  dimensions: [{ name: 'Event Name', column: 'event_name' }],
-  measures: [
-    { name: 'Events', agg: 'COUNT' },
-    { name: 'Sessions', agg: 'COUNT_DISTINCT', column: 'session_id' },
+  primary: { kind: 'table', table: 'events' }, // no schema — unqualified table
+  dimensions: [
+    { name: 'Event Ts', source: 'primary', column: 'event_ts', temporal: true },
+    { name: 'Event Name', source: 'primary', column: 'event_name' },
+  ],
+  metrics: [
+    { name: 'Events', type: 'aggregation', agg: 'COUNT' },
+    { name: 'Sessions', type: 'aggregation', agg: 'COUNT_DISTINCT', column: 'session_id' },
   ],
 };
 
@@ -71,42 +78,42 @@ const MODELS = [ORDERS, EVENTS];
 
 // Diverse spec shapes for round trips + the dialect matrix.
 const SPECS: Array<[string, SemanticQuerySpec]> = [
-  ['single measure, no dims', { model: 'Orders', measures: ['Revenue'], dimensions: [] }],
-  ['count only', { model: 'Orders', measures: ['Count'], dimensions: [] }],
-  ['multiple measures + dim', { model: 'Orders', measures: ['Count', 'Revenue', 'Avg Delivery Mins'], dimensions: ['Status'] }],
-  ['two dims + time (MONTH)', { model: 'Orders', measures: ['Revenue'], dimensions: ['Status', 'Platform'], timeGrain: 'MONTH' }],
-  ['time only (WEEK)', { model: 'Orders', measures: ['Count'], dimensions: [], timeGrain: 'WEEK' }],
-  ['quarter grain', { model: 'Orders', measures: ['Revenue'], dimensions: [], timeGrain: 'QUARTER' }],
-  ['hour grain', { model: 'Orders', measures: ['Count'], dimensions: [], timeGrain: 'HOUR' }],
-  ['joined dimension (LEFT)', { model: 'Orders', measures: ['Buyers'], dimensions: ['Region'] }],
-  ['two joined dims, same join', { model: 'Orders', measures: ['Count'], dimensions: ['Region', 'Customer Tier'] }],
-  ['ratio metric', { model: 'Orders', measures: ['AOV'], dimensions: ['Status'] }],
-  ['ratio with COUNT_DISTINCT denominator', { model: 'Orders', measures: ['Revenue per Buyer'], dimensions: [] }],
-  ['measure + metric mixed', { model: 'Orders', measures: ['Revenue', 'AOV'], dimensions: ['Platform'] }],
+  ['single measure, no dims', { model: 'Orders', metrics: ['Revenue'], dimensions: [] }],
+  ['count only', { model: 'Orders', metrics: ['Count'], dimensions: [] }],
+  ['multiple measures + dim', { model: 'Orders', metrics: ['Count', 'Revenue', 'Avg Delivery Mins'], dimensions: ['Status'] }],
+  ['two dims + time (MONTH)', { model: 'Orders', metrics: ['Revenue'], dimensions: ['Status', 'Platform'], timeGrain: 'MONTH' }],
+  ['time only (WEEK)', { model: 'Orders', metrics: ['Count'], dimensions: [], timeGrain: 'WEEK' }],
+  ['quarter grain', { model: 'Orders', metrics: ['Revenue'], dimensions: [], timeGrain: 'QUARTER' }],
+  ['hour grain', { model: 'Orders', metrics: ['Count'], dimensions: [], timeGrain: 'HOUR' }],
+  ['joined dimension (LEFT)', { model: 'Orders', metrics: ['Buyers'], dimensions: ['Region'] }],
+  ['two joined dims, same join', { model: 'Orders', metrics: ['Count'], dimensions: ['Region', 'Customer Tier'] }],
+  ['ratio metric', { model: 'Orders', metrics: ['AOV'], dimensions: ['Status'] }],
+  ['ratio with COUNT_DISTINCT denominator', { model: 'Orders', metrics: ['Revenue per Buyer'], dimensions: [] }],
+  ['measure + metric mixed', { model: 'Orders', metrics: ['Revenue', 'AOV'], dimensions: ['Platform'] }],
   ['equality filter', {
-    model: 'Orders', measures: ['Revenue'], dimensions: ['Status'],
+    model: 'Orders', metrics: ['Revenue'], dimensions: ['Status'],
     filters: [{ dimension: 'Status', operator: '=', value: 'completed' }],
   }],
   ['IN + numeric filters', {
-    model: 'Orders', measures: ['Count'], dimensions: [],
+    model: 'Orders', metrics: ['Count'], dimensions: [],
     filters: [
       { dimension: 'Status', operator: 'IN', value: ['completed', 'shipped'] },
       { dimension: 'Platform', operator: '!=', value: 'web' },
     ],
   }],
   ['IS NOT NULL filter on joined dim', {
-    model: 'Orders', measures: ['Count'], dimensions: ['Region'],
+    model: 'Orders', metrics: ['Count'], dimensions: ['Region'],
     filters: [{ dimension: 'Region', operator: 'IS NOT NULL' }],
   }],
   ['LIKE filter', {
-    model: 'Orders', measures: ['Count'], dimensions: [],
+    model: 'Orders', metrics: ['Count'], dimensions: [],
     filters: [{ dimension: 'Platform', operator: 'LIKE', value: 'ios%' }],
   }],
-  ['custom limit', { model: 'Orders', measures: ['Revenue'], dimensions: ['Status'], limit: 25 }],
-  ['second model, schemaless', { model: 'Events', measures: ['Events', 'Sessions'], dimensions: ['Event Name'], timeGrain: 'DAY' }],
+  ['custom limit', { model: 'Orders', metrics: ['Revenue'], dimensions: ['Status'], limit: 25 }],
+  ['second model, schemaless', { model: 'Events', metrics: ['Events', 'Sessions'], dimensions: ['Event Name'], timeGrain: 'DAY' }],
   ['kitchen sink', {
     model: 'Orders',
-    measures: ['Count', 'Revenue', 'AOV'],
+    metrics: ['Count', 'Revenue', 'AOV'],
     dimensions: ['Status', 'Region'],
     timeGrain: 'MONTH',
     filters: [
@@ -121,7 +128,8 @@ const SPECS: Array<[string, SemanticQuerySpec]> = [
 // re-fetch the model on demand — expected specs gain them here.
 const scoped = (spec: SemanticQuerySpec): SemanticQuerySpec => {
   const model = MODELS.find((m) => m.name === spec.model)!;
-  return { ...spec, table: model.table, ...(model.schema ? { schema: model.schema } : {}) };
+  const primary = model.primary as { kind: 'table'; schema?: string; table: string };
+  return { ...spec, table: primary.table, ...(primary.schema ? { schema: primary.schema } : {}) };
 };
 
 // ---------------------------------------------------------------------------
@@ -138,7 +146,7 @@ describe('semanticSpecFromIr — IR round trips (dialect-free)', () => {
   }
 
   it('resolves the RIGHT model among several', () => {
-    const spec: SemanticQuerySpec = { model: 'Events', measures: ['Events'], dimensions: [] };
+    const spec: SemanticQuerySpec = { model: 'Events', metrics: ['Events'], dimensions: [] };
     const ir = compileSemanticQuery(spec, EVENTS);
     expect(semanticSpecFromIr(ir, MODELS)?.model).toBe('Events');
   });
@@ -157,7 +165,7 @@ describe('detectSemanticQuery — hand-written SQL variants', () => {
       ORDER BY month`;
     expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
       model: 'Orders',
-      measures: ['Count', 'Revenue'],
+      metrics: ['Count', 'Revenue'],
       dimensions: ['Status'],
       timeGrain: 'MONTH',
       filters: [{ dimension: 'Status', operator: '!=', value: 'cancelled' }],
@@ -168,14 +176,14 @@ describe('detectSemanticQuery — hand-written SQL variants', () => {
     const sql = `SELECT SUM(total) AS revenue, COUNT(*) AS n, platform
       FROM mxfood.orders GROUP BY platform`;
     expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
-      model: 'Orders', measures: ['Revenue', 'Count'], dimensions: ['Platform'],
+      model: 'Orders', metrics: ['Revenue', 'Count'], dimensions: ['Platform'],
     }));
   });
 
   it('positional GROUP BY (GROUP BY 1, 2)', async () => {
     const sql = `SELECT status, platform, COUNT(*) AS n FROM mxfood.orders GROUP BY 1, 2`;
     expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
-      model: 'Orders', measures: ['Count'], dimensions: ['Status', 'Platform'],
+      model: 'Orders', metrics: ['Count'], dimensions: ['Status', 'Platform'],
     }));
   });
 
@@ -185,7 +193,7 @@ describe('detectSemanticQuery — hand-written SQL variants', () => {
       LEFT JOIN mxfood.customers cust ON orders.customer_id = cust.id
       GROUP BY cust.region`;
     expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
-      model: 'Orders', measures: ['Buyers'], dimensions: ['Region'],
+      model: 'Orders', metrics: ['Buyers'], dimensions: ['Region'],
     }));
   });
 
@@ -204,7 +212,7 @@ describe('detectSemanticQuery — hand-written SQL variants', () => {
       WHERE c2.tier = 'gold'
       GROUP BY c2.region`;
     expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
-      model: 'Orders', measures: ['Count'], dimensions: ['Region'],
+      model: 'Orders', metrics: ['Count'], dimensions: ['Region'],
       filters: [{ dimension: 'Customer Tier', operator: '=', value: 'gold' }],
     }));
   });
@@ -212,14 +220,14 @@ describe('detectSemanticQuery — hand-written SQL variants', () => {
   it('LIMIT 1000 is treated as the default (omitted from the spec)', async () => {
     const sql = `SELECT COUNT(*) AS n FROM mxfood.orders LIMIT 1000`;
     expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
-      model: 'Orders', measures: ['Count'], dimensions: [],
+      model: 'Orders', metrics: ['Count'], dimensions: [],
     }));
   });
 
   it('schemaless model table (events)', async () => {
     const sql = `SELECT event_name, COUNT(DISTINCT session_id) AS s FROM events GROUP BY event_name`;
     expect(await detectSemanticQuery(sql, MODELS, 'duckdb')).toEqual(scoped({
-      model: 'Events', measures: ['Sessions'], dimensions: ['Event Name'],
+      model: 'Events', metrics: ['Sessions'], dimensions: ['Event Name'],
     }));
   });
 
@@ -227,7 +235,7 @@ describe('detectSemanticQuery — hand-written SQL variants', () => {
     const sql = `SELECT DATE_TRUNC(created_at, MONTH) AS month, SUM(total) AS revenue
       FROM mxfood.orders GROUP BY DATE_TRUNC(created_at, MONTH)`;
     expect(await detectSemanticQuery(sql, MODELS, 'bigquery')).toEqual(scoped({
-      model: 'Orders', measures: ['Revenue'], dimensions: [], timeGrain: 'MONTH',
+      model: 'Orders', metrics: ['Revenue'], dimensions: [], timeGrain: 'MONTH',
     }));
   });
 
@@ -235,7 +243,7 @@ describe('detectSemanticQuery — hand-written SQL variants', () => {
     const sql = `SELECT status, COUNT(*) AS n FROM mxfood.orders
       WHERE status IN ('completed', 'shipped') GROUP BY status`;
     expect(await detectSemanticQuery(sql, MODELS, 'postgres')).toEqual(scoped({
-      model: 'Orders', measures: ['Count'], dimensions: ['Status'],
+      model: 'Orders', metrics: ['Count'], dimensions: ['Status'],
       filters: [{ dimension: 'Status', operator: 'IN', value: ['completed', 'shipped'] }],
     }));
   });

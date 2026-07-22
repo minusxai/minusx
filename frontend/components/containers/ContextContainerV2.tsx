@@ -11,6 +11,7 @@ import { selectFileEditMode, setFileEditMode } from '@/store/uiSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges, reloadFile } from '@/lib/file-state/file-state';
 import ContextEditorV2 from '@/components/context/ContextEditorV2';
+import { parseSemanticModelIssues } from '@/components/context/SemanticModelsEditor';
 import { ContextContent, ContextVersion, DocEntry, Whitelist, WhitelistNode, DatabaseContext, WhitelistItem } from '@/lib/types';
 import { useJobRuns } from '@/lib/hooks/job-runs-hooks';
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
@@ -27,7 +28,7 @@ import {
   resolveVersionWhitelist,
   convertDatabaseContextToWhitelist,
 } from '@/lib/context/context-utils';
-import { validateTableRelationships } from '@/lib/semantic/derive';
+import { applyContextContentChange } from '@/lib/context/version-edit';
 
 interface ContextContainerV2Props {
   fileId: FileId;
@@ -63,6 +64,11 @@ export default function ContextContainerV2({
 
   // Save error state (for user-facing errors)
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Semantic-model save-gate failures arrive as a newline-joined issue LIST
+  // (lib/data/files.server.ts). Recover it so the editor can render each issue
+  // at the model/metric row it names; the banner still shows the whole message.
+  const semanticIssues = useMemo(() => parseSemanticModelIssues(saveError), [saveError]);
 
   // Edit mode lives in the shared Redux `fileEditMode` (like dashboards/stories),
   // so the breadcrumb edit banner can read it. Keyed by the numeric fileId.
@@ -216,8 +222,8 @@ export default function ContextContainerV2({
       docs: sourceVersion.docs.map((doc: DocEntry) => ({ ...doc, childPaths: doc.childPaths ? [...doc.childPaths] : undefined })),
       metrics: sourceVersion.metrics ? JSON.parse(JSON.stringify(sourceVersion.metrics)) : undefined,
       annotations: sourceVersion.annotations ? JSON.parse(JSON.stringify(sourceVersion.annotations)) : undefined,
-      relationships: sourceVersion.relationships ? JSON.parse(JSON.stringify(sourceVersion.relationships)) : undefined,
       views: sourceVersion.views ? JSON.parse(JSON.stringify(sourceVersion.views)) : undefined,
+      semanticModels: sourceVersion.semanticModels ? JSON.parse(JSON.stringify(sourceVersion.semanticModels)) : undefined,
       createdAt: new Date().toISOString(),
       createdBy: user.id,
       description: description || ''
@@ -298,15 +304,6 @@ export default function ContextContainerV2({
       return;
     }
 
-    // Declared relationships must be complete before they persist (the loader
-    // derives semantic joins from them and trusts what is saved).
-    const relationshipIssues = (currentContent.versions ?? [])
-      .flatMap(v => validateTableRelationships(v.relationships));
-    if (relationshipIssues.length > 0) {
-      setSaveError(relationshipIssues[0] + (relationshipIssues.length > 1 ? ` (+${relationshipIssues.length - 1} more)` : ''));
-      return;
-    }
-
     try {
       if (typeof fileId === 'number') {
         const result = await publishFile({ fileId });
@@ -335,41 +332,22 @@ export default function ContextContainerV2({
     setSaveError(null);
   }, [fileId, handleEditModeChange]);
 
-  // Handle changes from editor (for the selected version)
+  // Handle changes from editor (for the selected version). The version-scoped
+  // fold lives in lib/context/version-edit.ts (pure + unit-tested): a
+  // version-scoped field written at the content root would bypass the save
+  // gates and be invisible to the loader.
   const handleChange = useCallback((updates: Partial<ContextContent>) => {
     if (!currentContent || !currentVersionContent || !user?.id) return;
 
-    // If updating databases, docs, metrics, or annotations, update the selected version
-    if (updates.databases !== undefined || updates.docs !== undefined || updates.metrics !== undefined || updates.annotations !== undefined || updates.relationships !== undefined || updates.views !== undefined) {
-      // Convert DatabaseContext[] | '*' (editor format) → Whitelist (storage format)
-      const newWhitelist: Whitelist | undefined = updates.databases !== undefined
-        ? updates.databases === '*'
-          ? '*'
-          : convertDatabaseContextToWhitelist(updates.databases as DatabaseContext[])
-        : undefined;
+    // Convert DatabaseContext[] | '*' (editor format) → Whitelist (storage format)
+    const newWhitelist: Whitelist | undefined = updates.databases !== undefined
+      ? updates.databases === '*'
+        ? '*'
+        : convertDatabaseContextToWhitelist(updates.databases as DatabaseContext[])
+      : undefined;
 
-      const updatedVersions = currentContent.versions?.map(v => {
-        if (v.version === selectedVersion) {
-          return {
-            ...v,
-            ...(newWhitelist !== undefined ? { whitelist: newWhitelist } : {}),
-            docs: updates.docs ?? v.docs,
-            metrics: updates.metrics ?? v.metrics,
-            annotations: updates.annotations ?? v.annotations,
-            relationships: updates.relationships ?? v.relationships,
-            views: updates.views ?? v.views,
-            lastEditedAt: new Date().toISOString(),
-            lastEditedBy: user.id
-          };
-        }
-        return v;
-      });
-
-      editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: { ...currentContent, versions: updatedVersions } as ContextContent } });
-    } else {
-      // Other updates go through directly
-      editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: { ...currentContent, ...updates } as ContextContent } });
-    }
+    const nextContent = applyContextContentChange(currentContent, selectedVersion, updates, user.id, newWhitelist);
+    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: nextContent } });
   }, [currentContent, currentVersionContent, selectedVersion, user?.id, fileId]);
 
   // Job runs for context evals
@@ -426,8 +404,8 @@ export default function ContextContainerV2({
       docs: currentVersionContent.docs,
       metrics: currentVersionContent.metrics,
       annotations: currentVersionContent.annotations,
-      relationships: currentVersionContent.relationships,
       views: currentVersionContent.views,
+      semanticModels: currentVersionContent.semanticModels,
       published: currentContent.published // Ensure published is always present
     };
   }, [currentContent, currentVersionContent]);
@@ -445,6 +423,7 @@ export default function ContextContainerV2({
         isDirty={isDirty}
         isSaving={saving}
         saveError={saveError}
+        semanticIssues={semanticIssues}
         editMode={editMode}
         onChange={handleChange}
         onMetadataChange={handleMetadataChange}

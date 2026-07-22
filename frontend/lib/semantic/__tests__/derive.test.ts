@@ -1,12 +1,12 @@
 /**
- * Derived semantic models — schema + declared relationships → SemanticModel[],
- * with no authored model config. Ends with an end-to-end proof: SQL written
- * against a derived model detects back into a semantic spec.
+ * Derived semantic models — profiled schema → draft SemanticModelV2[] (the
+ * suggestion engine; no authored config, no joins). Ends with an end-to-end
+ * proof: SQL written against a derived model detects back into a semantic spec.
  */
 import { describe, it, expect } from 'vitest';
-import { deriveSemanticModels, deriveModelStubs, classifyColumn, humanizeName, validateTableRelationships, mirrorRelationshipView, normalizeRelationshipView } from '../derive';
+import { deriveSemanticModels, deriveModelStubs, classifyColumn, humanizeName } from '../derive';
 import { detectSemanticQuery } from '../detect-sql';
-import type { DatabaseWithSchema, SemanticModel, TableRelationship } from '@/lib/types';
+import type { DatabaseWithSchema, SemanticModelV2 } from '@/lib/types';
 
 const col = (name: string, type: string, category?: 'categorical' | 'numeric' | 'temporal' | 'text' | 'other') =>
   category ? { name, type, meta: { category } } : { name, type };
@@ -38,19 +38,8 @@ const ORDERS = db('warehouse', {
   ],
 });
 
-const ORDERS_REL: TableRelationship[] = [{
-  connection: 'warehouse',
-  schema: 'public',
-  table: 'orders',
-  column: 'customer_id',
-  targetSchema: 'public',
-  targetTable: 'customers',
-  targetColumn: 'id',
-  relationship: 'many_to_one',
-}];
-
-const modelFor = (models: SemanticModel[], table: string) => {
-  const m = models.find((x) => x.table === table);
+const modelFor = (models: SemanticModelV2[], table: string) => {
+  const m = models.find((x) => x.primary.kind === 'table' && x.primary.table === table);
   expect(m, `expected a derived model for ${table}`).toBeTruthy();
   return m!;
 };
@@ -99,17 +88,21 @@ describe('classifyColumn', () => {
 });
 
 describe('deriveSemanticModels — vocabulary', () => {
-  const models = () => deriveSemanticModels([ORDERS], ORDERS_REL);
+  const models = () => deriveSemanticModels([ORDERS]);
 
   it('derives one model per table with columns', () => {
     const m = models();
     expect(m).toHaveLength(2);
-    expect(modelFor(m, 'orders')).toMatchObject({ name: 'Orders', connection: 'warehouse', schema: 'public' });
+    expect(modelFor(m, 'orders')).toMatchObject({
+      name: 'Orders',
+      connection: 'warehouse',
+      primary: { kind: 'table', schema: 'public', table: 'orders' },
+    });
   });
 
   it('categorical/text columns become dimensions; ids become dimensions too', () => {
     const orders = modelFor(models(), 'orders');
-    const dimCols = orders.dimensions.filter((d) => !d.join).map((d) => d.column);
+    const dimCols = orders.dimensions.filter((d) => d.source === 'primary').map((d) => d.column);
     expect(dimCols).toContain('status');
     expect(dimCols).toContain('id');
     expect(dimCols).toContain('customer_id');
@@ -117,64 +110,56 @@ describe('deriveSemanticModels — vocabulary', () => {
     expect(dimCols).not.toContain('amount');
   });
 
-  it('temporal columns are dimensions and the created_at-style one wins timeDimension', () => {
+  it('temporal columns are dimensions, listed first, and the created_at-style one leads (default time axis)', () => {
     const orders = modelFor(models(), 'orders');
-    expect(orders.timeDimension?.column).toBe('created_at');
+    // The FIRST primary temporal dimension is the default time axis — the
+    // created_at-style column wins over other temporal columns.
+    const firstTemporal = orders.dimensions.find((d) => d.source === 'primary' && d.temporal);
+    expect(firstTemporal?.column).toBe('created_at');
+    // Temporal dimensions come first in the array, preference-sorted.
+    expect(orders.dimensions[0]).toMatchObject({ column: 'created_at', temporal: true });
+    expect(orders.dimensions[1]).toMatchObject({ column: 'shipped_date', temporal: true });
     const dimCols = orders.dimensions.map((d) => d.column);
     expect(dimCols).toContain('created_at');
     expect(dimCols).toContain('shipped_date');
     // customers has a single temporal column — it just wins
-    expect(modelFor(models(), 'customers').timeDimension?.column).toBe('signup_date');
+    const customersFirst = modelFor(models(), 'customers').dimensions.find((d) => d.temporal);
+    expect(customersFirst?.column).toBe('signup_date');
   });
 
-  it('a categorical-profiled numeric is BOTH: measures + a groupable dimension', () => {
+  it('a categorical-profiled numeric is BOTH: aggregation metrics + a groupable dimension', () => {
     const db2 = db('warehouse', {
       spend: [
         col('clicks', 'BIGINT', 'categorical'),
         col('amount', 'DOUBLE', 'numeric'),
       ],
     });
-    const m = modelFor(deriveSemanticModels([db2], []), 'spend');
-    expect(m.measures.map((me) => me.name)).toEqual(expect.arrayContaining(['Total Clicks', 'Avg Clicks']));
+    const m = modelFor(deriveSemanticModels([db2]), 'spend');
+    expect(m.metrics.map((me) => me.name)).toEqual(expect.arrayContaining(['Total Clicks', 'Avg Clicks']));
     expect(m.dimensions.map((d) => d.column)).toContain('clicks');  // profiled groupable
     expect(m.dimensions.map((d) => d.column)).not.toContain('amount'); // plain numeric: measure only
   });
 
-  it('numeric columns derive Total/Avg measures; ids derive Unique; Count always exists', () => {
+  it('numeric columns derive Total/Avg metrics; ids derive Unique; Count always exists', () => {
     const orders = modelFor(models(), 'orders');
-    const byName = new Map(orders.measures.map((me) => [me.name, me]));
-    expect(byName.get('Count')).toMatchObject({ agg: 'COUNT' });
+    // Every derived metric is an aggregation metric.
+    expect(orders.metrics.every((me) => me.type === 'aggregation')).toBe(true);
+    const aggs = orders.metrics.filter((me) => me.type === 'aggregation');
+    const byName = new Map(aggs.map((me) => [me.name, me]));
+    expect(byName.get('Count')).toMatchObject({ type: 'aggregation', agg: 'COUNT' });
     expect(byName.get('Count')?.column).toBeUndefined();
-    expect(byName.get('Total Amount')).toMatchObject({ agg: 'SUM', column: 'amount' });
-    expect(byName.get('Avg Amount')).toMatchObject({ agg: 'AVG', column: 'amount' });
-    expect(byName.get('Total Discount')).toMatchObject({ agg: 'SUM', column: 'discount' });
-    expect(byName.get('Unique Customer')).toMatchObject({ agg: 'COUNT_DISTINCT', column: 'customer_id' });
+    expect(byName.get('Total Amount')).toMatchObject({ type: 'aggregation', agg: 'SUM', column: 'amount' });
+    expect(byName.get('Avg Amount')).toMatchObject({ type: 'aggregation', agg: 'AVG', column: 'amount' });
+    expect(byName.get('Total Discount')).toMatchObject({ type: 'aggregation', agg: 'SUM', column: 'discount' });
+    expect(byName.get('Unique Customer')).toMatchObject({ type: 'aggregation', agg: 'COUNT_DISTINCT', column: 'customer_id' });
     // id columns never SUM
     expect([...byName.values()].some((me) => me.agg === 'SUM' && me.column === 'customer_id')).toBe(false);
   });
 
-  it('declared relationships become LEFT lookup joins with the target dims join-qualified', () => {
-    const orders = modelFor(models(), 'orders');
-    expect(orders.joins).toEqual([{
-      table: 'customers',
-      schema: 'public',
-      alias: 'customers',
-      type: 'LEFT',
-      relationship: 'many_to_one',
-      leftColumn: 'customer_id',
-      rightColumn: 'id',
-    }]);
-    const joined = orders.dimensions.filter((d) => d.join === 'customers');
-    expect(joined.map((d) => d.column)).toEqual(expect.arrayContaining(['name', 'segment']));
-    expect(joined.find((d) => d.column === 'segment')?.name).toBe('Customers Segment');
-    // the lookup's own model has no joins (relationship is declared on orders)
-    expect(modelFor(models(), 'customers').joins ?? []).toEqual([]);
-  });
-
-  it('relationship scoping: only the owning table gets the join', () => {
-    const rels: TableRelationship[] = [{ ...ORDERS_REL[0], table: 'nonexistent' }];
-    const m = deriveSemanticModels([ORDERS], rels);
-    expect(modelFor(m, 'orders').joins ?? []).toEqual([]);
+  it('derived drafts never carry references — joins are authored, not derived', () => {
+    for (const m of models()) {
+      expect(m.references ?? []).toEqual([]);
+    }
   });
 
   it('disambiguates duplicate table names across schemas', () => {
@@ -185,7 +170,7 @@ describe('deriveSemanticModels — vocabulary', () => {
         { schema: 'staging', tables: [{ table: 'events', columns: [col('kind', 'VARCHAR', 'categorical')] }] },
       ],
     };
-    const names = deriveSemanticModels([twoSchemas], []).map((m) => m.name).sort();
+    const names = deriveSemanticModels([twoSchemas]).map((m) => m.name).sort();
     expect(names).toEqual(['Events (prod)', 'Events (staging)']);
   });
 });
@@ -226,93 +211,37 @@ describe('deriveModelStubs — global naming over names-only schemas', () => {
       databaseName: 'warehouse',
       schemas: [{ schema: 'prod', tables: [{ table: 'events', columns: [col('kind', 'VARCHAR', 'categorical')] }] }],
     };
-    const models = deriveSemanticModels([scoped], [], [NAMES_ONLY]);
+    const models = deriveSemanticModels([scoped], [NAMES_ONLY]);
     expect(models).toHaveLength(1);
     expect(models[0].name).toBe('Events (prod)'); // not plain "Events" — global naming wins
   });
 });
 
-describe('relationship views — bidirectional display + one-to-many sugar', () => {
-  const stored = ORDERS_REL[0]; // orders.user_id → users.id, many_to_one (normalized storage)
-
-  it('mirrors a stored many_to_one as one_to_many from the target table', () => {
-    const view = mirrorRelationshipView(stored);
-    expect(view).toMatchObject({
-      table: 'customers', schema: 'public', column: 'id',
-      targetTable: 'orders', targetSchema: 'public', targetColumn: 'customer_id',
-      relationship: 'one_to_many',
-    });
-  });
-
-  it('mirrors one_to_one as one_to_one (symmetric)', () => {
-    expect(mirrorRelationshipView({ ...stored, relationship: 'one_to_one' }).relationship).toBe('one_to_one');
-  });
-
-  it('normalizes a one_to_many view back to many→one storage (swap)', () => {
-    const view = mirrorRelationshipView(stored);
-    expect(normalizeRelationshipView(view)).toEqual(stored);
-  });
-
-  it('normalization is a no-op for already-normal cardinalities', () => {
-    expect(normalizeRelationshipView(stored)).toEqual(stored);
-    const oto = { ...stored, relationship: 'one_to_one' as const };
-    expect(normalizeRelationshipView(oto)).toEqual(oto);
-  });
-});
-
-describe('validateTableRelationships', () => {
-  const base = ORDERS_REL[0];
-  it('accepts a complete relationship and empty/undefined lists', () => {
-    expect(validateTableRelationships([base])).toEqual([]);
-    expect(validateTableRelationships([])).toEqual([]);
-    expect(validateTableRelationships(undefined)).toEqual([]);
-  });
-  it('flags missing fields and bad cardinality', () => {
-    expect(validateTableRelationships([{ ...base, column: '' }]).length).toBeGreaterThan(0);
-    expect(validateTableRelationships([{ ...base, targetTable: '' }]).length).toBeGreaterThan(0);
-    expect(validateTableRelationships([{ ...base, relationship: 'one_to_many' as never }]).length).toBeGreaterThan(0);
-  });
-  it('rejects ANY self-join — the compiler cannot alias a table against itself', () => {
-    // same column (degenerate)
-    expect(validateTableRelationships([{ ...base, targetTable: 'orders', targetColumn: 'customer_id' }]).length).toBeGreaterThan(0);
-    // different column (hierarchies like manager_id → id): still rejected for now
-    expect(validateTableRelationships([{ ...base, targetTable: 'orders', targetColumn: 'id' }]).length).toBeGreaterThan(0);
-    // same table name in a DIFFERENT schema is a normal join, not a self-join
-    expect(validateTableRelationships([{ ...base, targetSchema: 'staging', targetTable: 'orders', targetColumn: 'id' }])).toEqual([]);
-  });
-
-  it('derivation ignores self-join relationships defensively', () => {
-    const models = deriveSemanticModels([ORDERS], [{ ...base, targetTable: 'orders', targetColumn: 'id' }]);
-    expect(models.find((m) => m.table === 'orders')?.joins ?? []).toEqual([]);
-  });
-});
-
 describe('end-to-end: SQL against a derived model detects as semantic', () => {
-  const models = () => deriveSemanticModels([ORDERS], ORDERS_REL);
+  const models = () => deriveSemanticModels([ORDERS]);
 
-  it('grouped aggregate over base + lookup dims round-trips (postgres)', async () => {
+  it('grouped aggregate over base dims round-trips (postgres)', async () => {
     const spec = await detectSemanticQuery(
-      `SELECT c.segment, o.status, SUM(o.amount), COUNT(*)
+      `SELECT o.status, SUM(o.amount), COUNT(*)
          FROM public.orders o
-         LEFT JOIN public.customers c ON o.customer_id = c.id
-        GROUP BY c.segment, o.status`,
+        GROUP BY o.status`,
       models(),
       'postgres',
     );
     expect(spec).toMatchObject({
       model: 'Orders',
-      dimensions: expect.arrayContaining(['Customers Segment', 'Status']),
-      measures: expect.arrayContaining(['Total Amount', 'Count']),
+      dimensions: ['Status'],
+      metrics: expect.arrayContaining(['Total Amount', 'Count']),
     });
   });
 
-  it('time-grain query maps onto the derived timeDimension (bigquery)', async () => {
+  it('time-grain query maps onto the derived time axis (bigquery)', async () => {
     const spec = await detectSemanticQuery(
       `SELECT DATE_TRUNC(created_at, MONTH), AVG(amount) FROM public.orders GROUP BY 1`,
       models(),
       'bigquery',
     );
-    expect(spec).toMatchObject({ model: 'Orders', timeGrain: 'MONTH', measures: ['Avg Amount'] });
+    expect(spec).toMatchObject({ model: 'Orders', timeGrain: 'MONTH', metrics: ['Avg Amount'] });
   });
 
   it('refuses SQL outside the derived vocabulary (window function)', async () => {

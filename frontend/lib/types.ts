@@ -101,8 +101,11 @@ export type {
 
 // Semantic layer domain — see lib/types/semantic.ts
 export type {
-  SemanticAggregate, SemanticTimeGrain, SemanticDimension, SemanticJoin, SemanticJoinRelationship,
-  SemanticMeasure, SemanticRatioMetric, SemanticModel, TableRelationship,
+  SemanticAggregate, SemanticTimeGrain,
+  // Authored models — TypeBox single-source in lib/validation/atlas-schemas.ts
+  SemanticSource, SemanticReference, SemanticReferenceToOne, SemanticReferenceM2M,
+  SemanticDimensionV2, SemanticAggMetricV2, SemanticRatioMetricV2, SemanticSqlMetric,
+  SemanticMetricV2, SemanticModelV2,
 } from './types/semantic';
 
 // Views domain — see lib/types/views.ts

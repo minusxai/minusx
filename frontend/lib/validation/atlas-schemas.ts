@@ -415,10 +415,10 @@ export const SemanticQuerySpec = Type.Object({
   model: Type.String({ description: 'semantic model name (derived per table from the whitelisted schema)' }),
   table: Nullable(Type.String({ description: 'base table the model derives from (scopes on-demand model loading)' })),
   schema: Nullable(Type.String({ description: 'schema of the base table' })),
-  measures: Type.Array(Type.String(), { description: 'measure/metric names to compute (at least one)' }),
+  metrics: Type.Array(Type.String(), { description: 'metric names to compute (at least one)' }),
   dimensions: Type.Array(Type.String(), { description: 'dimension names to group by' }),
   timeGrain: Nullable(StringEnum(['HOUR', 'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'])),
-  timeColumn: Nullable(Type.String({ description: 'temporal column for the time axis; defaults to the model timeDimension' })),
+  timeColumn: Nullable(Type.String({ description: "temporal column for the time axis; defaults to the model's first temporal dimension" })),
   filters: Nullable(Type.Array(SemanticQueryFilter)),
   limit: Nullable(Type.Integer()),
 }, { title: 'SemanticQuerySpec' });
@@ -447,7 +447,8 @@ export const QuestionContent = Type.Object({
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
   connection_name: Type.String({ description: 'connection name (empty string if none)' }),
   cachePolicy: Nullable(CachePolicy),
-  semanticQuery: NullableD(SemanticQuerySpec, 'Semantic-tier state; query holds the compiled SQL; to be ignored for now.'),
+  semanticQuery: NullableD(SemanticQuerySpec,
+    'Semantic-tier state: the spec this question was built from, against an AUTHORED semantic model (see the semantic_models skill). `query` holds the SQL the compiler produced from it — edit the spec, not the SQL, when this is set.'),
   spreadsheet: Type.Optional(NullableD(SpreadsheetSource,
     'Direct data entered in the spreadsheet editor. Mutually exclusive with query-backed sources.')),
   viz: NullableD(VizEnvelope,
@@ -692,6 +693,139 @@ const CtxTableAnnotation = Type.Object({
   columns: Nullable(Type.Array(CtxColumnAnnotation)),
 }, { title: 'ContextTableAnnotation' });
 
+// ============================================================================
+// Semantic Models V2 — authored semantic layer (Semantic_Model_v2.md §2.3/§5).
+// TypeBox is the single source of truth for these shapes; lib/types/semantic.ts
+// re-exports the Static types. The tier-1 validator (lib/semantic/validate.ts)
+// uses SemanticModelV2 as its shape gate for agent-authored JSON.
+// ============================================================================
+
+/** Where a semantic model reads from: a raw table or a data model (view). */
+export const SemanticSource = Type.Union([
+  Type.Object({
+    kind: Type.Literal('table'),
+    schema: Nullable(Type.String()),
+    table: Type.String(),
+  }, { title: 'SemanticSourceTable' }),
+  Type.Object({
+    kind: Type.Literal('model'),
+    view: Type.String({ description: 'a data model (view) name — queried as _views.<name>' }),
+  }, { title: 'SemanticSourceModel' }),
+], { title: 'SemanticSource' });
+export type SemanticSource = Static<typeof SemanticSource>;
+
+/** To-one reference: joins the primary directly via `on` (composite keys OK). */
+export const SemanticReferenceToOne = Type.Object({
+  source: SemanticSource,
+  alias: Type.String({ description: 'unique within the model; dimensions/metrics refer to it' }),
+  relationship: StringEnum(['many_to_one', 'one_to_one'], 'cardinality from the primary\'s perspective'),
+  joinType: Nullable(StringEnum(['LEFT', 'INNER'], 'join type; default LEFT')),
+  on: Type.Array(Type.Object({
+    primaryColumn: Type.String(),
+    referencedColumn: Type.String(),
+  }), { minItems: 1 }),
+}, { title: 'SemanticReferenceToOne' });
+export type SemanticReferenceToOne = Static<typeof SemanticReferenceToOne>;
+
+/** Many-to-many reference: joins through an explicit bridge (junction) source. */
+export const SemanticReferenceM2M = Type.Object({
+  source: SemanticSource,
+  alias: Type.String({ description: 'unique within the model; dimensions refer to it' }),
+  relationship: Type.Literal('many_to_many'),
+  through: Type.Object({
+    source: SemanticSource,
+    primaryOn: Type.Array(Type.Object({
+      primaryColumn: Type.String(),
+      bridgeColumn: Type.String(),
+    }), { minItems: 1 }),
+    referencedOn: Type.Array(Type.Object({
+      bridgeColumn: Type.String(),
+      referencedColumn: Type.String(),
+    }), { minItems: 1 }),
+  }, { description: 'bridge (junction) source and its join columns' }),
+}, { title: 'SemanticReferenceM2M' });
+export type SemanticReferenceM2M = Static<typeof SemanticReferenceM2M>;
+
+/** Discriminated on `relationship`. */
+export const SemanticReference = Type.Union([SemanticReferenceToOne, SemanticReferenceM2M], { title: 'SemanticReference' });
+export type SemanticReference = Static<typeof SemanticReference>;
+
+/** An exposed group-by/filter field; `source` names where its column lives. */
+export const SemanticDimensionV2 = Type.Object({
+  name: Type.String(),
+  source: Type.String({ description: "'primary' or a declared reference alias" }),
+  column: Type.String(),
+  description: Nullable(Type.String()),
+  temporal: Nullable(Type.Boolean({ description: 'date/time-typed — usable as the query time axis' })),
+}, { title: 'SemanticDimensionV2' });
+export type SemanticDimensionV2 = Static<typeof SemanticDimensionV2>;
+
+/**
+ * Aggregation metric over a PRIMARY-source column (`column` omitted for
+ * COUNT(*)) — the simple, declarative metric kind (what other semantic layers
+ * call a "measure"; this model deliberately has ONE user-facing concept).
+ */
+export const SemanticAggMetricV2 = Type.Object({
+  name: Type.String(),
+  type: Type.Literal('aggregation'),
+  agg: StringEnum(['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COUNT_DISTINCT']),
+  column: Nullable(Type.String({ description: 'primary-source column; omitted for COUNT(*)' })),
+  description: Nullable(Type.String()),
+  verified: Nullable(Type.Boolean({ description: 'tier-3 dry-run outcome; false = probe failed on infrastructure, re-probed on next save' })),
+}, { title: 'SemanticAggMetricV2' });
+export type SemanticAggMetricV2 = Static<typeof SemanticAggMetricV2>;
+
+/** A metric derived from two aggregation metrics (numerator / denominator). */
+export const SemanticRatioMetricV2 = Type.Object({
+  name: Type.String(),
+  type: Type.Literal('ratio'),
+  numerator: Type.String({ description: 'the name of an aggregation metric of this model' }),
+  denominator: Type.String({ description: 'the name of an aggregation metric of this model' }),
+  description: Nullable(Type.String()),
+  verified: Nullable(Type.Boolean({ description: 'tier-3 dry-run outcome; false = probe failed on infrastructure, re-probed on next save' })),
+}, { title: 'SemanticRatioMetricV2' });
+export type SemanticRatioMetricV2 = Static<typeof SemanticRatioMetricV2>;
+
+/**
+ * Free-form SQL metric. Column refs MUST be qualified `primary.<col>` or
+ * `<referenceAlias>.<col>` (to-one aliases only); quoted identifiers rejected.
+ */
+export const SemanticSqlMetric = Type.Object({
+  name: Type.String(),
+  type: Type.Literal('sql'),
+  sql: Type.String({ description: 'aggregate SQL expression, e.g. "SUM(primary.amount) - SUM(costs.total)"' }),
+  description: Nullable(Type.String()),
+  verified: Nullable(Type.Boolean({ description: 'tier-3 dry-run outcome; false = probe failed on infrastructure, re-probed on next save' })),
+}, { title: 'SemanticSqlMetric' });
+export type SemanticSqlMetric = Static<typeof SemanticSqlMetric>;
+
+/** Discriminated on `type`: aggregation | ratio | sql. */
+export const SemanticMetricV2 = Type.Union([SemanticAggMetricV2, SemanticRatioMetricV2, SemanticSqlMetric], { title: 'SemanticMetricV2' });
+export type SemanticMetricV2 = Static<typeof SemanticMetricV2>;
+
+/**
+ * An authored semantic model: ONE primary table/model exposed through
+ * business-named dimensions and metrics, plus referenced sources with
+ * declared relationships. Stored on ContextVersion.semanticModels
+ * (versioned + inherited like views). The time axis is implicit: dimensions
+ * flagged `temporal` are the model's time dimensions, the first one the
+ * default axis — there is no separate timeDimension field.
+ */
+export const SemanticModelV2 = Type.Object({
+  name: Type.String({ description: 'unique per context tree; shares one namespace with view names' }),
+  description: Nullable(Type.String()),
+  connection: Type.String({ description: 'connection (database) the model queries; all sources must live on it' }),
+  primary: SemanticSource,
+  primaryKey: Nullable(Type.Array(Type.String(), {
+    minItems: 1,
+    description: "PK column(s) of the primary — the model's grain. Always allowed; REQUIRED when any reference is many_to_many.",
+  })),
+  references: Nullable(Type.Array(SemanticReference)),
+  dimensions: Type.Array(SemanticDimensionV2),
+  metrics: Type.Array(SemanticMetricV2),
+}, { title: 'SemanticModelV2' });
+export type SemanticModelV2 = Static<typeof SemanticModelV2>;
+
 const CtxSkillEntry = Type.Object({
   name: Type.String(),
   description: Type.String(),
@@ -707,6 +841,8 @@ export const ContextAgentContent = Type.Object({
   metrics: Nullable(Type.Array(CtxMetricDef, { description: 'named metrics attached to tables' })),
   annotations: Nullable(Type.Array(CtxTableAnnotation, { description: 'editorial table/column descriptions' })),
   skills: Nullable(Type.Array(CtxSkillEntry, { description: 'user-defined skills available in this context' })),
+  semanticModels: Nullable(Type.Array(SemanticModelV2, { description:
+    'authored semantic models — see the semantic_models skill for the format' })),
   evals: Nullable(Type.Array(Type.Unknown(), { description:
     'eval test definitions for this context (each an opaque Test object: { type, subject, answerType, operator, value })' })),
 }, { title: 'ContextContent' });

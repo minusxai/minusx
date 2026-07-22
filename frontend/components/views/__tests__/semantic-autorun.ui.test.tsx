@@ -9,18 +9,20 @@ import React, { useState } from 'react';
 import { screen, fireEvent, act } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
-import type { QuestionContent, SemanticModel } from '@/lib/types';
+import type { QuestionContent, SemanticModelV2 } from '@/lib/types';
 
-const ORDERS_MODEL: SemanticModel = {
+const ORDERS_MODEL: SemanticModelV2 = {
   name: 'Orders',
   connection: 'warehouse',
-  table: 'orders',
-  timeDimension: { column: 'created_at', label: 'Order date' },
-  dimensions: [{ name: 'Status', column: 'status' }],
-  measures: [{ name: 'Revenue', agg: 'SUM', column: 'amount' }],
+  primary: { kind: 'table', table: 'orders' },
+  dimensions: [
+    { name: 'Created At', source: 'primary', column: 'created_at', temporal: true },
+    { name: 'Status', source: 'primary', column: 'status' },
+  ],
+  metrics: [{ name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'amount' }],
 };
 
-const SPEC = { model: 'Orders', table: 'orders', measures: ['Revenue'], dimensions: [] };
+const SPEC = { model: 'Orders', table: 'orders', metrics: ['Revenue'], dimensions: [] };
 
 vi.mock('@/lib/hooks/useContext', () => ({
   useContext: () => ({ databases: [{ databaseName: 'warehouse', schemas: [] }], hasContext: false }),

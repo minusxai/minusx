@@ -457,6 +457,69 @@ templates:
       - Column: `@{"type":"column","name":"amount","schema":"public","table":"orders","connection":"warehouse"}`
       - Metric (a metric defined in this context): `@{"type":"metric","name":"Monthly Revenue","schema":"public","table":"orders","connection":"warehouse"}`
       Prefer a mention over plain backticked text when you want the reference to resolve to the actual schema object; plain `schema.table` prose is fine for casual mentions.
+
+      ### Semantic Models
+      A context version also carries `semanticModels` — authored semantic models (primary + references + dimensions/measures/metrics). Use `LoadSkill("semantic_models")` for the full authoring format and validation rules before adding or editing one.
+  skill_semantic_models:
+    description: Authoring semantic models on a context (SemanticModelV2 JSON — primary/references, dimensions, metrics, save-time validation feedback)
+    content: |
+      ## Semantic Models
+
+      A semantic model is a declarative, validated layer on a context: ONE **primary** table or data model, optional **references** (joined sources with declared relationships), and business-named **dimensions** and **metrics**. Models live in the context's `semanticModels` array (edit via EditFile, like `annotations`). Each model's JSON shape:
+
+      ```json
+      {
+        "name": "Orders",
+        "description": "Order-grain revenue model",
+        "connection": "warehouse",
+        "primary": { "kind": "table", "schema": "main", "table": "orders" },
+        "primaryKey": ["id"],
+        "references": [
+          { "source": { "kind": "table", "schema": "main", "table": "customers" },
+            "alias": "buyer", "relationship": "many_to_one",
+            "on": [{ "primaryColumn": "customer_id", "referencedColumn": "id" }] },
+          { "source": { "kind": "table", "schema": "main", "table": "tags" },
+            "alias": "tags", "relationship": "many_to_many",
+            "through": { "source": { "kind": "table", "schema": "main", "table": "order_tags" },
+                         "primaryOn": [{ "primaryColumn": "id", "bridgeColumn": "order_id" }],
+                         "referencedOn": [{ "bridgeColumn": "tag_id", "referencedColumn": "id" }] } }
+        ],
+        "dimensions": [
+          { "name": "Order Date", "source": "primary", "column": "created_at", "temporal": true },
+          { "name": "Region", "source": "primary", "column": "region" },
+          { "name": "Buyer Name", "source": "buyer", "column": "name" }
+        ],
+        "metrics": [
+          { "name": "Revenue", "type": "aggregation", "agg": "SUM", "column": "amount" },
+          { "name": "Orders Count", "type": "aggregation", "agg": "COUNT" },
+          { "name": "AOV", "type": "ratio", "numerator": "Revenue", "denominator": "Orders Count" },
+          { "name": "Net Revenue", "type": "sql", "sql": "SUM(primary.amount) - SUM(costs.total)" }
+        ]
+      }
+      ```
+
+      ### Sources & references
+      - A source is a raw table (`"kind": "table"`, with `schema`/`table`) or a data model / view (`"kind": "model"`, `"view": "<name>"` — queried as `_views.<name>`). Semantic models can NEVER reference other semantic models.
+      - **To-one references** (`many_to_one` / `one_to_one`): direct lookup joins via `on` (composite keys allowed); optional `joinType` `LEFT` (default) or `INNER`. They aggregate the primary, so they never fan out.
+      - **many_to_many references**: join through an explicit bridge via `through` (`primaryOn` + `referencedOn`). The model-level `primaryKey` is REQUIRED when any m2m reference exists, and `through.primaryOn` must name exactly the `primaryKey` columns in order. Composite keys are supported on every dialect.
+      - **Reserved aliases**: a reference `alias` may not be `primary`, `_views`, `_probe`, `_grain`, or start with `_m2m_`.
+      - **Connection consistency**: the primary and every reference/bridge source must live on the model's single `connection` — cross-connection joins are rejected at save.
+      - **Namespace**: model names are unique per context tree AND share one namespace with view (data model) names — a model cannot take a view's name or vice versa.
+
+      ### Dimensions & metrics
+      - `dimensions[].source` is `'primary'` or a declared reference alias; `column` must be an exposed field of that source. Give referenced fields explicit business names (`Buyer Name`), never bare collision-prone column names.
+      - A dimension with `"temporal": true` is a TIME dimension; the FIRST primary temporal dimension is the model's default time axis for time-grain queries (there is no separate timeDimension field).
+      - `metrics` is ONE list with three types:
+        - `aggregation` — `agg` (COUNT/SUM/AVG/MIN/MAX/COUNT_DISTINCT) over a PRIMARY-source `column` (omit `column` for COUNT(*)). To aggregate a referenced column, use a SQL metric.
+        - `ratio` — `numerator` / `denominator` each name a declared AGGREGATION metric of this model.
+        - `sql` — a free-form aggregate expression. Every column ref MUST be qualified `primary.<col>` or `<referenceAlias>.<col>` — unqualified refs are rejected with candidates listed. Quoted identifiers (`"…"`/backticks) are rejected — rename awkward columns in a data model first. Referencing a many_to_many alias in metric SQL is forbidden (it would fan out — pre-aggregate in a data model).
+      - Dimension and metric names share ONE namespace per model (case-insensitive on slugs).
+
+      ### Save feedback loop
+      Saving runs three validation tiers and returns any issues as save errors listing each problem — read them, fix the model, and save again:
+      1. **Static** — shape, names, aliases, column resolution, metric-SQL ref rules (blocks the save).
+      2. **Compile** — each metric compiles to real SQL over the joined sources (blocks the save).
+      3. **Dry-run** — compiled metric probes execute against the warehouse. Bad SQL blocks the save; an unreachable warehouse does NOT — the metric is saved stamped `verified: false` (an infrastructure outcome, not a bug in your model) and is re-probed on the next save.
   skill_reports:
     description: Dealing with report files — freeform reportPrompt with @ mentions, schedule, recipients, report page behavior guidelines
     content: |

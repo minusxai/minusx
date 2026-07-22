@@ -30,6 +30,7 @@ import { getTemplateDefaults } from '@/lib/data/story/template-defaults';
 import { withCompiledStoryCss } from '@/lib/data/story/story-css.server';
 import { validateFileStateServer } from '@/lib/validation/content-validators.server';
 import { stampAndValidateViews, ViewSaveError } from '@/lib/views/save-gate.server';
+import { validateSemanticModelsGate, SemanticModelSaveError } from '@/lib/semantic/save-gate.server';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
 import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType, canCreateFileByRole } from '@/lib/auth/access-rules';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
@@ -624,8 +625,20 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (existingFile.type === 'context') {
       try {
         contentToSave = await stampAndValidateViews(contentToSave as ContextContent, path, user) as BaseFileContent;
+        // The semantic-model gate (tiers 1–3 — Semantic_Model_v2.md §2.5): an
+        // invalid authored model blocks the version save, same seam as views;
+        // the stored content drives probe scoping + sticky `verified` stamps.
+        contentToSave = await validateSemanticModelsGate(
+          contentToSave as ContextContent, existingFile.content as ContextContent | undefined, path, user,
+        ) as BaseFileContent;
       } catch (err) {
         if (err instanceof ViewSaveError) throw new UserFacingError(err.message);
+        // Semantic issues stay a LIST across the boundary: newline-joined (the
+        // gate's own `; ` join is lossy — tier-2 details already contain `; `),
+        // so the editor can put each issue under the model/metric row that
+        // caused it instead of one run-on banner line. Recovered client-side by
+        // `parseSemanticModelIssues` (components/context/SemanticModelsEditor).
+        if (err instanceof SemanticModelSaveError) throw new UserFacingError(err.issues.join('\n'));
         throw err;
       }
     }

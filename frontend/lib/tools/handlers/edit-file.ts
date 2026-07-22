@@ -11,7 +11,8 @@ import type { EditFileDetails, NotebookContent, NotebookSqlCell } from '@/lib/ty
 import type { VizEnvelope, VizSettings } from '@/lib/validation/atlas-schemas';
 import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
 import { isTitleMissing, missingTitleFeedback } from '@/lib/data/story/file-title';
-import { contextEditWithinBounds } from '@/lib/context/context-agent-view';
+import { contextEditWithinBounds, foldContextAgentView } from '@/lib/context/context-agent-view';
+import { changedSemanticModelIssues } from '@/lib/semantic/edit-check';
 import isEqual from 'lodash/isEqual';
 import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import { markupToContent } from '@/lib/data/story/file-markup';
@@ -198,6 +199,29 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
               + formatVizIssues(verdict.issues);
             return { content: { success: false, error: err, vizIssues: verdict.issues }, details: { success: false, error: err } };
           }
+        }
+      }
+    }
+
+    // Inline semantic-model validation (Semantic_Model_v2.md §3, same compiler model as viz
+    // above): tiers 1–2 run BEFORE the edit applies, over the context this edit would leave
+    // staged — errors reject atomically with the ISSUE LIST in the tool result, so the agent
+    // self-corrects in-loop instead of meeting the publish gate's flattened, human-facing
+    // message. Tier 3 (the warehouse `LIMIT 0` dry-run) is deliberately NOT run here: it needs
+    // a live connector + server credentials, and the save gate owns it — this path is the
+    // pure tiers only, and the gate stays the authority.
+    if (fileState?.type === 'context') {
+      const parsedNext = markupToContent('context', workingStr);
+      if (parsedNext.ok) {
+        // The SAME fold editFileStr applies below, so we check exactly the content that would
+        // be staged — diffed against what's SAVED (fileState.content), which scopes the block
+        // to models authored/changed since the last publish (see changedSemanticModelIssues).
+        const nextContent = foldContextAgentView(built.mergedContent, parsedNext.content);
+        const semanticIssues = changedSemanticModelIssues(nextContent, fileState.content);
+        if (semanticIssues.length > 0) {
+          const err = 'Semantic model validation failed — NO changes were applied. Fix the issues and retry:\n'
+            + semanticIssues.map((i) => `- ${i}`).join('\n');
+          return { content: { success: false, error: err, semanticIssues }, details: { success: false, error: err } };
         }
       }
     }

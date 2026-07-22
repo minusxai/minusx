@@ -29,6 +29,17 @@ import {
   ExecuteQueryParamsNoTimeout,
   EXECUTE_QUERY_DESCRIPTION,
 } from './db-tools';
+import { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
+import { validateSemanticQuery, compileSemanticQuery, SemanticCompileError } from '@/lib/semantic/compile';
+import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
+import { resolveViewsInSql } from '@/lib/views/resolve';
+import { resolveViewsForContext } from '@/lib/views/views.server';
+import { loadNearestContext, resolveModelsForContext } from '@/lib/semantic/models.server';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
+import { connectionTypeToDialect } from '@/lib/types';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import type { ContextContent } from '@/lib/types';
+import type { QueryIR } from '@/lib/sql/ir-types';
 
 /**
  * Production ExecuteQuery variant. Overrides `_initialiseConnectors` to a
@@ -182,6 +193,125 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, RemoteAnalystCon
         content: [{ type: 'text', text: JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }) }],
         isError: true,
       };
+    }
+  }
+}
+
+/**
+ * RunSemanticQuery — query an AUTHORED semantic model by name instead of
+ * writing SQL. Params reuse the SemanticQuerySpec shape (measures/dimensions/
+ * filters/timeGrain/timeColumn/limit — see lib/validation/atlas-schemas.ts);
+ * the spec is validated (`validateSemanticQuery` issues come back as a tool
+ * error so the agent can self-correct), compiled to dialect SQL
+ * (`compileSemanticQuery` → `irToSqlLocal`), view refs inlined
+ * (`resolveViewsInSql`), and then EXECUTED BY DELEGATING to the production
+ * `ExecuteQuery` above — same runQueryStream-through-durable-cache path, same
+ * result shaping/truncation, same payload (`finalQuery` carries the compiled
+ * SQL), so chat display works identically.
+ *
+ * Model resolution mirrors POST /api/semantic-models: nearest context for the
+ * user's home folder (`loadNearestContext`), authored models = inherited
+ * `fullSemanticModels` + the user-visible published version's own
+ * (`resolveModelsForContext`).
+ */
+const RunSemanticQueryParams = Type.Object({
+  model: Type.String({ description: 'Name of the authored semantic model to query (case-insensitive).' }),
+  ...Type.Pick(SemanticQuerySpec, ['metrics']).properties,
+  ...Type.Partial(Type.Pick(SemanticQuerySpec, ['dimensions', 'filters', 'timeGrain', 'timeColumn', 'limit'])).properties,
+});
+
+export class RunSemanticQuery extends MXTool<typeof RunSemanticQueryParams, RemoteAnalystContext> {
+  static readonly schema: Tool<typeof RunSemanticQueryParams> = {
+    name: 'RunSemanticQuery',
+    description:
+      'Run a query against an AUTHORED SEMANTIC MODEL by name — pick metrics and dimensions ' +
+      'from the model instead of writing SQL. Optional filters (dimension/operator/value), timeGrain ' +
+      '(with timeColumn to override the model\'s default time axis), and limit. The spec is validated ' +
+      'against the model (errors list the exact issues — fix and retry), compiled to dialect SQL, and ' +
+      'executed exactly like ExecuteQuery. Returns the same JSON payload as ExecuteQuery (data as GFM ' +
+      'markdown, totalRows, shownRows, columns, types) with finalQuery = the compiled SQL. An unknown ' +
+      'model name returns the list of available model names.',
+    parameters: RunSemanticQueryParams,
+  };
+
+  async run(): Promise<ToolResponse> {
+    const fail = (error: string): ToolResponse => ({
+      content: [{ type: 'text', text: JSON.stringify({ success: false, error }) }],
+      isError: true,
+    });
+
+    const user = this.context.effectiveUser;
+    if (!user) {
+      return fail('RunSemanticQuery: missing effectiveUser on agent context — cannot resolve the semantic model. This is a server bug; please report.');
+    }
+
+    // Nearest context for the user's home folder — the same anchor chat uses.
+    const basePath = this.context.homeFolder ?? resolveHomeFolderSync(user.mode, user.home_folder || '');
+    let contextContent: ContextContent | null = null;
+    try {
+      contextContent = await loadNearestContext(user, basePath);
+    } catch {
+      contextContent = null;
+    }
+
+    const models = resolveModelsForContext(contextContent, user.userId);
+    const requested = this.parameters.model;
+    const model = models.find((m) => m.name.toLowerCase() === requested.toLowerCase());
+    if (!model) {
+      const available = models.map((m) => m.name).join(', ') || '(none)';
+      return fail(`Unknown semantic model "${requested}". Available models: ${available}.`);
+    }
+
+    const spec: SemanticQuerySpec = {
+      model: model.name,
+      table: null,
+      schema: null,
+      metrics: this.parameters.metrics,
+      dimensions: this.parameters.dimensions ?? [],
+      filters: this.parameters.filters ?? null,
+      timeGrain: this.parameters.timeGrain ?? null,
+      timeColumn: this.parameters.timeColumn ?? null,
+      limit: this.parameters.limit ?? null,
+    };
+
+    const issues = validateSemanticQuery(spec, model);
+    if (issues.length > 0) {
+      return fail(`Invalid semantic query for model "${model.name}": ${issues.join('; ')}`);
+    }
+
+    let sql: string;
+    try {
+      const ir = compileSemanticQuery(spec, model) as QueryIR;
+      const dialect = await this._dialectFor(model.connection, user.mode);
+      const rawSql = irToSqlLocal(ir, dialect);
+      const views = resolveViewsForContext(contextContent, user.userId)
+        .filter((v) => v.connection === model.connection);
+      sql = await resolveViewsInSql(rawSql, dialect, views as never);
+    } catch (err) {
+      const detail = err instanceof SemanticCompileError
+        ? err.issues.join('; ')
+        : (err instanceof Error ? err.message : String(err));
+      return fail(`Failed to compile semantic query for model "${model.name}": ${detail}`);
+    }
+
+    // Execute EXACTLY like ExecuteQuery (same tool, same run()) — shared durable
+    // cache, same truncation, same payload shape; finalQuery = the compiled SQL.
+    const exec = new ExecuteQuery(
+      this.orchestrator,
+      { connectionId: model.connection, query: sql },
+      this.context,
+      this.id,
+    );
+    return exec.run();
+  }
+
+  /** Connection dialect (same seam as the semantic save gate); duckdb fallback. */
+  private async _dialectFor(connection: string, mode: EffectiveUser['mode']): Promise<string> {
+    try {
+      const { type } = await ConnectionsAPI.getRawByName(connection, mode);
+      return connectionTypeToDialect(type);
+    } catch {
+      return 'duckdb';
     }
   }
 }

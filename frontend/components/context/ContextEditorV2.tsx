@@ -46,6 +46,14 @@ interface ContextEditorV2Props {
   isDirty: boolean;
   isSaving: boolean;
   saveError?: string | null;
+  /**
+   * Semantic save-gate issues (tiers 1–3) recovered from `saveError` by the
+   * container — rendered inline per model/metric row in the Databases tab's
+   * per-connection Semantic Models sections.
+   * The banner keeps showing everything: the inline rows are only visible on
+   * the Semantic tab, and a save can fail while the author is on another tab.
+   */
+  semanticIssues?: string[];
   editMode: boolean;
   onChange: (updates: Partial<ContextContent>) => void;
   onMetadataChange: (changes: { name?: string }) => void;
@@ -83,6 +91,7 @@ export default function ContextEditorV2({
   isDirty,
   isSaving,
   saveError,
+  semanticIssues = [],
   editMode,
   onChange,
   onMetadataChange,
@@ -396,7 +405,7 @@ export default function ContextEditorV2({
             if (docsMissingMeta) return 'Every active document needs a title and description — fill them in (or use ✨ Auto) before saving.';
             return null;
           }}
-          saveError={saveError}
+          saveError={semanticIssues.length > 0 ? semanticIssues.join(' · ') : saveError}
           readOnlyName={true}
           hideDescription={true}
           onNameChange={(name) => onMetadataChange({ name })}
@@ -474,7 +483,7 @@ export default function ContextEditorV2({
           persistableContent={codeViewPersistableContent}
           mergedContent={codeViewMergedContent}
           editable={editMode}
-          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullAnnotations', 'fullMetrics', 'fullRelationships', 'fullViews', 'fullSkills']}
+          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullAnnotations', 'fullMetrics', 'fullViews', 'fullSkills']}
           xmlContentTransform={shapeContextForAgent}
         />
       ) : (
@@ -543,6 +552,7 @@ export default function ContextEditorV2({
           yamlText={yamlText}
           onYamlChange={handleYamlChange}
           contextPath={file?.path ?? ''}
+          semanticIssues={semanticIssues}
         />
 
         {/* Docs Tab */}

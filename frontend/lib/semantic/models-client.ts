@@ -1,29 +1,30 @@
 'use client';
 
 /**
- * Client access to on-demand semantic models (POST /api/semantic-models).
- * Models are derived per request, scoped to the tables in play — never stored
- * on the context content (multi-MB on large workspaces; see derive.ts).
- * Responses are cached per (path, connection, tables) for the session; the
- * vocabulary only changes when the schema or relationships change, and a
- * page reload is acceptable staleness for that.
+ * Client access to AUTHORED semantic models (POST /api/semantic-models).
+ * Optionally scoped to the primaries in play (detection asks for exactly the
+ * tables the SQL touches); an EMPTY table list means UNSCOPED — every authored
+ * model on the connection, which is what the explorer's model picker lists
+ * before anything is picked. Responses are cached per (path, connection,
+ * tables) for the session; the vocabulary only changes when a model is
+ * re-authored, and a page reload is acceptable staleness for that.
  */
 
-import type { SemanticModel } from '@/lib/types';
+import type { SemanticModelV2 } from '@/lib/types';
 import type { SemanticFieldHit } from '@/lib/semantic/models.server';
 
 export type { SemanticFieldHit };
 
 // eslint-disable-next-line no-restricted-syntax -- module-level session cache; vocabulary is stable per page load
-const cache = new Map<string, Promise<SemanticModel[]>>();
+const cache = new Map<string, Promise<SemanticModelV2[]>>();
 
 export async function fetchScopedModels(
   path: string,
   connection: string,
-  tables: string[],
-): Promise<SemanticModel[]> {
+  tables: string[] = [],
+): Promise<SemanticModelV2[]> {
   const wanted = [...new Set(tables)].sort();
-  if (!path || !connection || wanted.length === 0) return [];
+  if (!path || !connection) return [];
   const key = `${path}|${connection}|${wanted.join(',')}`;
   const hit = cache.get(key);
   if (hit) return hit;
@@ -33,16 +34,16 @@ export async function fetchScopedModels(
     body: JSON.stringify({ path, connection, tables: wanted }),
   })
     .then((r) => (r.ok ? r.json() : { data: { models: [] } }))
-    .then((body) => (body?.data?.models ?? []) as SemanticModel[])
+    .then((body) => (body?.data?.models ?? []) as SemanticModelV2[])
     .catch(() => {
       cache.delete(key); // don't cache transport failures
-      return [] as SemanticModel[];
+      return [] as SemanticModelV2[];
     });
   cache.set(key, load);
   return load;
 }
 
-/** Metrics-first typeahead: search measures/dimensions across the whitelist. */
+/** Metrics-first typeahead: search metrics/dimensions across the whitelist. */
 export async function searchFields(
   path: string,
   connection: string,
@@ -60,5 +61,33 @@ export async function searchFields(
     return (body?.data?.fields ?? []) as SemanticFieldHit[];
   } catch {
     return [];
+  }
+}
+
+export interface SemanticModelTestResult {
+  issues: string[];
+  verified: Record<string, boolean>;
+}
+
+/**
+ * The editor's Test button: run save-gate tiers 1–3 for one STAGED model
+ * (metric SQL probes execute against the live warehouse) without saving.
+ * Transport failures come back as a single issue rather than throwing.
+ */
+export async function testSemanticModel(
+  path: string,
+  model: SemanticModelV2,
+): Promise<SemanticModelTestResult> {
+  try {
+    const r = await fetch('/api/semantic-models', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, connection: model.connection, testModel: model }),
+    });
+    if (!r.ok) return { issues: [`Semantic model "${model.name}": test failed (HTTP ${r.status})`], verified: {} };
+    const body = await r.json();
+    return (body?.data?.test as SemanticModelTestResult) ?? { issues: [`Semantic model "${model.name}": test failed (malformed response)`], verified: {} };
+  } catch {
+    return { issues: [`Semantic model "${model.name}": test failed — could not reach the server`], verified: {} };
   }
 }

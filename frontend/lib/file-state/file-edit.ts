@@ -19,6 +19,7 @@ import { extractSavedQuestionIds, extractInlineQuestions } from '@/lib/data/stor
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import type { FileState, FileType, DbFile, QuestionContent } from '@/lib/types';
 import { validateFileState } from '@/lib/validation/content-validators';
+import { changedSemanticModelIssues } from '@/lib/semantic/edit-check';
 import { getQueryResult } from '@/lib/file-state/query-results';
 import { cacheSpreadsheetSource } from '@/lib/spreadsheet/result-cache';
 import { getSpreadsheetExecution } from '@/lib/spreadsheet/materialize';
@@ -350,6 +351,15 @@ function collectEditValidation(state: ReturnType<ReturnType<typeof getStore>['ge
     // when two questions use the same :param name with conflicting types — auto-derive silently
     // splits them into separate filters. Non-blocking, same channel as the story lint.
     issues.push(...lintDashboardParams(collectEmbeddedQuestions(state, content, 'dashboard')));
+  } else if (fileState.type === 'context') {
+    // Semantic models (Semantic_Model_v2.md §3): tiers 1–2 over EVERY authored model in the
+    // edited content — `undefined` for the saved side, so nothing is skipped as "unchanged".
+    // This is the NON-blocking half: the EditFile handler already rejected an edit that
+    // introduced or changed a broken model, so what surfaces here is a model that was already
+    // saved and has since drifted (a dropped column, a narrowed whitelist) — worth telling the
+    // author about on every write path (JSON editor, replaceFileState, the agent's EditFile),
+    // but not worth making an unrelated docs edit un-appliable over. Tier 3 stays with the gate.
+    issues.push(...changedSemanticModelIssues(content, undefined));
   }
   return issues;
 }

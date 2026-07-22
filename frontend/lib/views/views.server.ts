@@ -3,7 +3,7 @@
  * context (where views are authored, versioned and inherited) and the query
  * pipeline (where they are inlined).
  *
- * Resolution mirrors metrics/relationships: a context sees its own version's
+ * Resolution mirrors metrics: a context sees its own version's
  * views plus everything inherited from ancestors (`fullViews`, computed by the
  * context loader).
  */

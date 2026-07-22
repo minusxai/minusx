@@ -5,45 +5,46 @@
  * ThoughtSpot style.
  *
  * TOP (never scrolls away):
- *  - the shelves first: what's currently selected — Measures / Dimensions /
+ *  - the shelves first: what's currently selected — Metrics / Dimensions /
  *    Time / Filters chips (removable), plus the row limit;
- *  - then a compact strip: the table chip, the field search, validation, Run.
+ *  - then a compact strip: the model chip, the field search, validation, Run.
  * BELOW (fills the panel): the FULL field vocabulary of the current model in
  * two scrollable columns — Dimensions with Time beneath (neither list is
- * usually long) | Measures — so the whole vocabulary is visible at once.
+ * usually long) | Metrics — so the whole vocabulary is visible at once.
  *
  * Interaction is CLICK-TO-TOGGLE — no drag and drop. Every field has exactly
- * one home (dimension → Dimensions, measure → Measures, temporal → Time), so
- * a click is unambiguous; dragging would add ceremony without choices.
+ * one home (dimension → Dimensions, metric → Metrics, temporal → Time), so a
+ * click is unambiguous; dragging would add ceremony without choices.
  *
  * The search bar FILTERS the columns as you type (they shrink), and
- * additionally surfaces matching fields from OTHER whitelisted tables
+ * additionally surfaces matching fields from OTHER authored models
  * (server search, POST /api/semantic-models {q}) — picking one switches the
- * model. With no model picked yet, the columns give way to a browsable table
- * list, so there is never a blank screen.
+ * model. With no model picked yet, the columns give way to the AUTHORED-MODEL
+ * picker, so a fresh question can always start a semantic query and there is
+ * never a blank screen. Per §2.4 the picker lists MODELS (with their primary
+ * source as a subtitle) — never raw tables.
  *
  * Every edit compiles the spec to dialect SQL client-side
  * (compileSemanticQuery → irToSqlLocal) and emits `(spec, sql, viz)` — the viz
- * columns are implied by the spec (x = time else dimensions, y = measures).
+ * columns are implied by the spec (x = time else dimensions, y = metrics).
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, VStack, HStack, Text, Button, Input, Icon, Grid } from '@chakra-ui/react';
-import { LuPlay, LuPause, LuRefreshCw, LuSigma, LuTag, LuCalendarDays, LuSearch, LuTriangleAlert, LuX, LuTable, LuCheck, LuLayers, LuListFilter, LuHash, LuFingerprint, LuDivide, LuArrowDownToLine, LuArrowUpToLine } from 'react-icons/lu';
+import { LuPlay, LuPause, LuRefreshCw, LuSigma, LuTag, LuCalendarDays, LuSearch, LuTriangleAlert, LuX, LuCheck, LuLayers, LuListFilter, LuHash, LuFingerprint, LuDivide, LuArrowDownToLine, LuArrowUpToLine, LuPercent, LuSquareFunction } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
-import { compileSemanticQuery, validateSemanticQuery, semanticAlias } from '@/lib/semantic/compile';
+import { compileSemanticQuery, validateSemanticQuery, semanticAlias, timeDimensionsOf } from '@/lib/semantic/compile';
 import { inferVizType } from '@/lib/semantic/infer-viz';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { searchFields, type SemanticFieldHit } from '@/lib/semantic/models-client';
-import type { ModelStub } from '@/lib/semantic/derive';
-import { VIEWS_SCHEMA, type SemanticAggregate, type SemanticModel, type SemanticTimeGrain, type VizSettings } from '@/lib/types';
+import { VIEWS_SCHEMA, type SemanticAggregate, type SemanticMetricV2, type SemanticModelV2, type SemanticTimeGrain, type VizSettings } from '@/lib/types';
 import type { SemanticQuerySpec, SemanticQueryFilter } from '@/lib/validation/atlas-schemas';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AddChipButton } from './QueryChip';
 
 const TIME_GRAINS: SemanticTimeGrain[] = ['HOUR', 'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'];
 
-/** One icon per aggregation — the measure list telegraphs HOW each aggregates. */
+/** One icon per aggregation — the metric list telegraphs HOW each aggregates. */
 const AGG_ICONS: Record<SemanticAggregate, IconType> = {
   SUM: LuSigma,
   COUNT: LuHash,
@@ -53,6 +54,11 @@ const AGG_ICONS: Record<SemanticAggregate, IconType> = {
   MAX: LuArrowUpToLine,
 };
 const aggIcon = (agg?: SemanticAggregate): IconType => (agg && AGG_ICONS[agg]) || LuSigma;
+
+/** Ratio/SQL metrics have no `agg` — their TYPE distinguishes them in the list. */
+const metricIcon = (m: SemanticMetricV2): IconType =>
+  m.type === 'aggregation' ? aggIcon(m.agg) : m.type === 'ratio' ? LuPercent : LuSquareFunction;
+
 const OPERATORS: SemanticQueryFilter['operator'][] = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'IN', 'IS NULL', 'IS NOT NULL'];
 
 /** The viz assignment implied by the spec. */
@@ -63,14 +69,13 @@ export interface SemanticVizAssignment {
 }
 
 interface SemanticExplorerProps {
-  /** Full models loaded for the tables in play (fetched on demand). */
-  models: SemanticModel[];
-  /** One cheap stub per whitelisted table — the empty-state table list. */
-  stubs: ModelStub[];
-  /** Ask the parent to load the full model for a picked stub / search hit. */
-  onSelectModel: (stub: ModelStub) => void;
+  /**
+   * Every AUTHORED model visible at `path` on this connection — the picker's
+   * list AND the vocabulary source, so picking one never waits on a fetch.
+   */
+  models: SemanticModelV2[];
   dialect: string;
-  /** Context anchor + connection for the cross-table field search. */
+  /** Context anchor + connection for the cross-model field search. */
   path: string;
   connectionName: string;
   /** Persisted spec from content.semanticQuery, if any. */
@@ -84,13 +89,38 @@ interface SemanticExplorerProps {
   onToggleAutoRun?: () => void;
 }
 
-const specForStub = (stub: ModelStub): SemanticQuerySpec => ({
-  model: stub.name,
-  table: stub.table,
-  ...(stub.schema ? { schema: stub.schema } : {}),
-  measures: [],
+/** How a model's primary is addressed in SQL — and subtitled in the picker. */
+const primaryRef = (m: SemanticModelV2): { table: string; schema?: string } =>
+  m.primary.kind === 'table'
+    ? { table: m.primary.table, ...(m.primary.schema ? { schema: m.primary.schema } : {}) }
+    : { table: m.primary.view, schema: VIEWS_SCHEMA };
+
+const primaryLabel = (m: SemanticModelV2): string => {
+  const ref = primaryRef(m);
+  return ref.schema ? `${ref.schema}.${ref.table}` : ref.table;
+};
+
+/**
+ * The seed spec for a picked model: `model` is the AUTHORED NAME (what the
+ * compiler and the stored `content.semanticQuery` resolve against), and
+ * table/schema carry its primary so scoped reloads find it again.
+ */
+const specForModel = (m: SemanticModelV2): SemanticQuerySpec => ({
+  model: m.name,
+  ...primaryRef(m),
+  metrics: [],
   dimensions: [],
 });
+
+/** Everything selectable into the Metrics shelf. */
+type MetricItem = { name: string; icon: IconType; tag?: string };
+
+const metricItemsOf = (m: SemanticModelV2): MetricItem[] =>
+  m.metrics.map((me): MetricItem => ({
+    name: me.name,
+    icon: metricIcon(me),
+    tag: me.type === 'aggregation' ? me.agg : me.type,
+  }));
 
 const vizOf = (spec: SemanticQuerySpec): SemanticVizAssignment => ({
   type: inferVizType(spec),
@@ -98,7 +128,7 @@ const vizOf = (spec: SemanticQuerySpec): SemanticVizAssignment => ({
     ...(spec.timeGrain ? [spec.timeGrain.toLowerCase()] : []),
     ...spec.dimensions.map(semanticAlias),
   ],
-  yCols: spec.measures.map(semanticAlias),
+  yCols: spec.metrics.map(semanticAlias),
 });
 
 const matches = (q: string, name: string) => {
@@ -108,8 +138,6 @@ const matches = (q: string, name: string) => {
 
 export function SemanticExplorer({
   models,
-  stubs,
-  onSelectModel,
   dialect,
   path,
   connectionName,
@@ -121,7 +149,7 @@ export function SemanticExplorer({
   onToggleAutoRun,
 }: SemanticExplorerProps) {
   const [spec, setSpec] = useState<SemanticQuerySpec | null>(() => value ?? null);
-  const [browsingTables, setBrowsingTables] = useState(false);
+  const [browsingModels, setBrowsingModels] = useState(false);
   const [query, setQuery] = useState('');
   const [otherHits, setOtherHits] = useState<SemanticFieldHit[]>([]);
   const searchSeq = useRef(0);
@@ -131,7 +159,7 @@ export function SemanticExplorer({
   // the value prop changes and it isn't just our own last edit echoing back
   // through content, adopt it — otherwise the shelves keep showing a
   // selection the query no longer has. Local-only intermediate states (a
-  // freshly picked table before its default measure lands) are safe: the
+  // freshly picked model before its default measure lands) are safe: the
   // value prop hasn't changed then, so this never clobbers them.
   const lastEmittedJson = useRef<string | null>(null);
   const prevValueJson = useRef<string>(JSON.stringify(value ?? null));
@@ -141,13 +169,13 @@ export function SemanticExplorer({
     prevValueJson.current = json;
     if (json === lastEmittedJson.current) return; // our own edit, persisted and echoed
     setSpec(value ?? null);
-    setBrowsingTables(false);
+    setBrowsingModels(false);
   }, [value]);
 
   const model = spec ? models.find((m) => m.name === spec.model) : undefined;
   const issues = spec && model ? validateSemanticQuery(spec, model) : [];
 
-  const apply = useCallback((next: SemanticQuerySpec, nextModel: SemanticModel) => {
+  const apply = useCallback((next: SemanticQuerySpec, nextModel: SemanticModelV2) => {
     setSpec(next);
     if (validateSemanticQuery(next, nextModel).length > 0) return;
     try {
@@ -165,12 +193,12 @@ export function SemanticExplorer({
 
   // --- toggles ----------------------------------------------------------------
 
-  const toggleMeasure = useCallback((name: string) => {
+  const toggleMetric = useCallback((name: string) => {
     if (!spec || !model) return;
     update({
-      measures: spec.measures.includes(name)
-        ? spec.measures.filter((m) => m !== name)
-        : [...spec.measures, name],
+      metrics: spec.metrics.includes(name)
+        ? spec.metrics.filter((m) => m !== name)
+        : [...spec.metrics, name],
     });
   }, [spec, model, update]);
 
@@ -183,35 +211,37 @@ export function SemanticExplorer({
     });
   }, [spec, model, update]);
 
-  // Any BASE temporal column can be the time axis. Clicking the active one
-  // clears it; clicking another temporal column moves the axis there.
+  // Any PRIMARY temporal dimension can be the time axis (the FIRST is the
+  // model default). Clicking the active one clears it; clicking another
+  // temporal column moves the axis there.
   const toggleTime = useCallback((column?: string) => {
     if (!spec || !model) return;
-    const target = column ?? model.timeDimension?.column;
+    const defaultAxis = timeDimensionsOf(model)[0]?.column;
+    const target = column ?? defaultAxis;
     if (!target) return;
-    const effective = spec.timeColumn ?? model.timeDimension?.column;
+    const effective = spec.timeColumn ?? defaultAxis;
     if (spec.timeGrain && effective === target) {
       update({ timeGrain: undefined, timeColumn: undefined });
     } else {
       update({
         timeGrain: spec.timeGrain ?? 'MONTH',
-        timeColumn: target === model.timeDimension?.column ? undefined : target,
+        timeColumn: target === defaultAxis ? undefined : target,
       });
     }
   }, [spec, model, update]);
 
-  // A freshly picked (or detected/persisted) model finishing its fetch: give
-  // the spec its default measure so the query is immediately runnable.
+  // A freshly picked (or detected/persisted) model: give the spec its first
+  // metric so the query executes the moment it's picked.
   useEffect(() => {
-    if (!spec || spec.measures.length > 0) return;
+    if (!spec || spec.metrics.length > 0) return;
     const loaded = models.find((m) => m.name === spec.model);
-    if (loaded && loaded.measures.length > 0) {
-      Promise.resolve().then(() => apply({ ...spec, measures: [loaded.measures[0].name] }, loaded));
-    }
+    if (!loaded) return;
+    const first = metricItemsOf(loaded)[0];
+    if (first) Promise.resolve().then(() => apply({ ...spec, metrics: [first.name] }, loaded));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [models, spec?.model, spec?.measures.length]);
+  }, [models, spec?.model, spec?.metrics.length]);
 
-  // --- cross-table search (feeds the "Other tables" strip) --------------------
+  // --- cross-model search (feeds the "Other models" strip) --------------------
 
   const runSearch = useCallback((q: string) => {
     setQuery(q);
@@ -224,50 +254,43 @@ export function SemanticExplorer({
     }, 250);
   }, [path, connectionName]);
 
-  const pickStub = useCallback((stub: ModelStub) => {
-    onSelectModel(stub);
-    setSpec(specForStub(stub));
-    setBrowsingTables(false);
+  const pickModel = useCallback((picked: SemanticModelV2) => {
+    setSpec(specForModel(picked));
+    setBrowsingModels(false);
     setQuery('');
     setOtherHits([]);
-  }, [onSelectModel]);
+  }, []);
 
   const pickOtherHit = useCallback((hit: SemanticFieldHit) => {
-    onSelectModel({ name: hit.model, connection: hit.connection, schema: hit.schema, table: hit.table });
     setSpec({
       model: hit.model,
       table: hit.table,
       ...(hit.schema ? { schema: hit.schema } : {}),
-      measures: hit.kind === 'measure' ? [hit.name] : [],
+      metrics: hit.kind === 'dimension' ? [] : [hit.name],
       dimensions: hit.kind === 'dimension' ? [hit.name] : [],
     });
+    setBrowsingModels(false);
     setQuery('');
     setOtherHits([]);
-  }, [onSelectModel]);
+  }, []);
 
   // --- field vocabulary, split by home column ----------------------------------
 
-  // The effective time axis (spec.timeColumn overrides the model default).
-  const effectiveTimeColumn = spec?.timeColumn ?? model?.timeDimension?.column;
-  const timeLabel = model
-    ? (model.dimensions.find((d) => d.column === effectiveTimeColumn && !d.join)?.name
-        ?? model.timeDimension?.label ?? model.timeDimension?.column ?? 'Time')
-    : 'Time';
+  // The effective time axis (spec.timeColumn overrides the model default —
+  // the FIRST primary temporal dimension).
+  const temporalDims = model ? timeDimensionsOf(model) : [];
+  const effectiveTimeColumn = spec?.timeColumn ?? temporalDims[0]?.column;
+  const timeLabel = temporalDims.find((d) => d.column === effectiveTimeColumn)?.name ?? 'Time';
 
-  const visibleMeasures = model ? model.measures.filter((m) => matches(query, m.name)) : [];
-  const temporalDims = model ? model.dimensions.filter((d) => d.temporal && !d.join) : [];
+  const visibleMetrics = model ? metricItemsOf(model).filter((m) => matches(query, m.name)) : [];
   const visibleTemporal = temporalDims.filter((d) => matches(query, d.name));
-  // The model default may lack a dimension entry (hand-authored models) — give it a row.
-  const defaultHasRow = !model?.timeDimension || temporalDims.some((d) => d.column === model.timeDimension!.column);
-  const defaultTimeLabel = model?.timeDimension?.label ?? model?.timeDimension?.column ?? 'Time';
-  const visibleDefaultTime = !defaultHasRow && !!model?.timeDimension && matches(query, defaultTimeLabel);
   const visibleDimensions = model
-    ? model.dimensions.filter((d) => !(d.temporal && !d.join) && d.column !== model.timeDimension?.column && matches(query, d.name))
+    ? model.dimensions.filter((d) => !(d.temporal && d.source === 'primary') && matches(query, d.name))
     : [];
   // Cross-table hits, minus the current model's own fields (already listed).
   const foreignHits = otherHits.filter((h) => h.model !== spec?.model).slice(0, 20);
 
-  const fieldRow = (label: string, assigned: boolean, accent: string, icon: React.ReactNode, onClick: () => void, ariaLabel: string) => (
+  const fieldRow = (label: string, assigned: boolean, accent: string, icon: React.ReactNode, onClick: () => void, ariaLabel: string, tag?: string) => (
     <HStack
       key={ariaLabel}
       aria-label={ariaLabel}
@@ -287,6 +310,7 @@ export function SemanticExplorer({
     >
       {icon}
       <Text fontSize="xs" fontFamily="mono" truncate flex={1}>{label}</Text>
+      {tag && <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" flexShrink={0}>{tag}</Text>}
       {assigned && <Box flexShrink={0}><LuCheck size={12} color={`var(--chakra-colors-${accent.replace('.', '-')})`} /></Box>}
     </HStack>
   );
@@ -298,17 +322,17 @@ export function SemanticExplorer({
       {spec && (
         <HStack
           as="button"
-          aria-label="Change table"
+          aria-label="Change model"
           gap={1.5} px={2} py={1}
           borderRadius="md" border="1px solid" borderColor="border.muted"
-          bg={browsingTables ? 'bg.muted' : 'bg.surface'}
+          bg={browsingModels ? 'bg.muted' : 'bg.surface'}
           _hover={{ bg: 'bg.muted' }}
-          onClick={() => setBrowsingTables((b) => !b)}
+          onClick={() => setBrowsingModels((b) => !b)}
           flexShrink={0}
           maxW="200px"
-          title="Pick a different table (starts a fresh query)"
+          title="Pick a different semantic model (starts a fresh query)"
         >
-          <Icon as={LuTable} boxSize={3} color="accent.teal" flexShrink={0} />
+          <Icon as={LuLayers} boxSize={3} color="accent.teal" flexShrink={0} />
           <Text fontSize="xs" fontFamily="mono" fontWeight="600" truncate>{spec.model}</Text>
           <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">▾</Text>
         </HStack>
@@ -323,7 +347,7 @@ export function SemanticExplorer({
           fontFamily="mono"
           fontSize="xs"
           border="none"
-          placeholder={model ? 'Filter fields…' : 'Search fields across all tables…'}
+          placeholder={model && !browsingModels ? 'Filter fields…' : 'Search models and fields…'}
           value={query}
           onChange={(e) => runSearch(e.target.value)}
         />
@@ -392,13 +416,13 @@ export function SemanticExplorer({
     <Box aria-label="Semantic shelves" px={3} py={2} flexShrink={0} borderBottom="1px solid" borderColor="border.muted" bg="bg.surface">
       <HStack gap={4} rowGap={1.5} flexWrap="wrap" align="center">
         <HStack gap={1.5} align="center" flexWrap="wrap">
-          {shelfLabel('Measures', spec.measures.length === 0)}
-          {spec.measures.map((name) => (
+          {shelfLabel('Metrics', spec.metrics.length === 0)}
+          {spec.metrics.map((name) => (
             <ShelfChip
               key={name}
-              label={`Measures chip: ${name}`}
+              label={`Metrics chip: ${name}`}
               accent="accent.primary"
-              onRemove={spec.measures.length > 1 ? () => update({ measures: spec.measures.filter((m) => m !== name) }) : undefined}
+              onRemove={spec.metrics.length > 1 ? () => update({ metrics: spec.metrics.filter((m) => m !== name) }) : undefined}
             >
               <Text fontSize="xs" fontFamily="mono">{name}</Text>
             </ShelfChip>
@@ -417,7 +441,7 @@ export function SemanticExplorer({
             </ShelfChip>
           ))}
         </HStack>
-        {model?.timeDimension && (
+        {temporalDims.length > 0 && (
           <HStack gap={1.5} align="center" flexWrap="wrap">
             {shelfLabel('Time', !spec.timeGrain)}
             {spec.timeGrain && (
@@ -549,16 +573,8 @@ export function SemanticExplorer({
         {fieldSection(
           'Time column', 'Time',
           <LuCalendarDays size={11} color="var(--chakra-colors-accent-secondary)" />,
-          visibleTemporal.length + (visibleDefaultTime ? 1 : 0),
+          visibleTemporal.length,
           <>
-            {visibleDefaultTime && fieldRow(
-              defaultTimeLabel,
-              !!spec.timeGrain && effectiveTimeColumn === model.timeDimension!.column,
-              'accent.secondary',
-              <LuCalendarDays size={12} color="var(--chakra-colors-accent-secondary)" />,
-              () => toggleTime(model.timeDimension!.column),
-              `Field time: ${defaultTimeLabel}`,
-            )}
             {visibleTemporal.map((d) => fieldRow(
               d.name,
               (!!spec.timeGrain && effectiveTimeColumn === d.column) || spec.dimensions.includes(d.name),
@@ -574,79 +590,89 @@ export function SemanticExplorer({
       </Box>
       <Box overflowY="auto" minH={0} minW={0}>
         {fieldSection(
-          'Measures column', 'Measures',
+          'Metrics column', 'Metrics',
           <LuSigma size={11} color="var(--chakra-colors-accent-primary)" />,
-          visibleMeasures.length,
-          visibleMeasures.map((m) => {
-            const MeasureIcon = aggIcon(m.agg);
+          visibleMetrics.length,
+          visibleMetrics.map((m) => {
+            const MetricRowIcon = m.icon;
             return fieldRow(
               m.name,
-              spec.measures.includes(m.name),
+              spec.metrics.includes(m.name),
               'accent.primary',
-              <MeasureIcon size={12} color="var(--chakra-colors-accent-primary)" />,
-              () => toggleMeasure(m.name),
-              `Field measure: ${m.name}`,
+              <MetricRowIcon size={12} color="var(--chakra-colors-accent-primary)" />,
+              () => toggleMetric(m.name),
+              `Field metric: ${m.name}`,
+              m.tag,
             );
           }),
-          query ? 'No matches' : 'No measures',
+          query ? 'No matches' : 'No metrics',
         )}
       </Box>
     </Grid>
   );
 
-  // --- table browser (no model yet, or explicitly changing table) ----------------
-  // Data models (views, the curated `_views` schema) come first, subtly
-  // separated from the raw tables beneath.
+  // --- model picker (no model yet, or explicitly changing model) -----------------
+  // §2.4: the browse surface lists MODELS — never raw tables. Each row is the
+  // authored NAME (what the spec/compiler resolve against) subtitled with the
+  // primary source it reads and its description.
 
-  const modelStubs = stubs.filter((st) => st.schema === VIEWS_SCHEMA && matches(query, st.name));
-  const tableStubs = stubs.filter((st) => st.schema !== VIEWS_SCHEMA && matches(query, st.name)).slice(0, 200);
+  const visibleModels = models.filter((m) => matches(query, `${m.name} ${m.description ?? ''}`));
 
-  const browserHeader = (label: string, icon: React.ReactNode, count: number) => (
-    <HStack gap={1.5} pb={1}>
-      {icon}
-      <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">{label}</Text>
-      <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" ml="auto">{count}</Text>
-    </HStack>
-  );
-
-  const tableBrowser = (
-    <VStack align="stretch" gap={1} px={3} py={2} overflowY="auto" flex={1} minH={0}>
-      {modelStubs.length > 0 && (
-        <VStack aria-label="Data models section" align="stretch" gap={1} pb={2} mb={1} borderBottom="1px solid" borderColor="border.muted">
-          {browserHeader('Data models', <Icon as={LuLayers} boxSize={3} color="accent.secondary" />, modelStubs.length)}
-          {modelStubs.map((st) => fieldRow(
-            st.name, false, 'accent.secondary',
-            <Icon as={LuLayers} boxSize={3} color="accent.secondary" flexShrink={0} />,
-            () => pickStub(st),
-            `Pick table: ${st.name}`,
-          ))}
-        </VStack>
+  const modelPicker = (
+    <VStack aria-label="Semantic model picker" align="stretch" gap={1} px={3} py={2} overflowY="auto" flex={1} minH={0}>
+      {spec && !model && (
+        <Text aria-label="semantic-model-unavailable" fontSize="2xs" fontFamily="mono" color="orange.400" px={1} pb={1}>
+          &quot;{spec.model}&quot; isn&apos;t available here — pick a model below
+        </Text>
       )}
-      <VStack aria-label="Tables section" align="stretch" gap={1}>
-        {browserHeader('Tables', <Icon as={LuTable} boxSize={3} color="accent.teal" />, tableStubs.length)}
-        {tableStubs.map((st) => fieldRow(
-          st.name, false, 'accent.teal',
-          <Icon as={LuTable} boxSize={3} color="fg.muted" flexShrink={0} />,
-          () => pickStub(st),
-          `Pick table: ${st.name}`,
-        ))}
-      </VStack>
+      <HStack gap={1.5} pb={1}>
+        <Icon as={LuLayers} boxSize={3} color="accent.secondary" />
+        <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">Semantic models</Text>
+        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" ml="auto">{visibleModels.length}</Text>
+      </HStack>
+      {visibleModels.length === 0 ? (
+        <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" px={1} py={1}>No models match</Text>
+      ) : visibleModels.map((m) => (
+        <HStack
+          key={m.name}
+          aria-label={`Pick model: ${m.name}`}
+          as="button"
+          gap={2} px={2} py={1.5}
+          borderRadius="md" border="1px solid" borderColor="transparent"
+          cursor="pointer"
+          _hover={{ bg: 'bg.muted' }}
+          onClick={() => pickModel(m)}
+          userSelect="none"
+          width="100%"
+          textAlign="left"
+          flexShrink={0}
+          transition="background 0.1s ease"
+        >
+          <Icon as={LuLayers} boxSize={3.5} color="accent.secondary" flexShrink={0} />
+          <VStack align="stretch" gap={0} flex={1} minW={0}>
+            <Text fontSize="xs" fontFamily="mono" fontWeight="600" truncate>{m.name}</Text>
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate>
+              {primaryLabel(m)}{m.description ? ` · ${m.description}` : ''}
+            </Text>
+          </VStack>
+        </HStack>
+      ))}
     </VStack>
   );
 
-  // --- cross-table search hits (pinned under the columns) -------------------------
+  // --- cross-model search hits (pinned under the columns) -------------------------
 
   const otherTablesStrip = foreignHits.length > 0 && (
     <Box flexShrink={0} borderTop="1px solid" borderColor="border.muted" px={3} py={2} maxH="160px" overflowY="auto" bg="bg.surface">
       <HStack gap={1.5} pb={1.5}>
         <LuListFilter size={11} color="var(--chakra-colors-fg-subtle)" />
-        <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">Other tables</Text>
+        <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">Other models</Text>
       </HStack>
       <VStack align="stretch" gap={1}>
         {foreignHits.map((h) => (
           <HStack
             key={`${h.kind}:${h.model}:${h.name}`}
-            aria-label={`Other table field ${h.kind}: ${h.name} (${h.model})`}
+            aria-label={`Other model field ${h.kind}: ${h.name} (${h.model})`}
             as="button"
             gap={1.5} px={2} py={1}
             borderRadius="md" border="1px dashed" borderColor="border.muted"
@@ -656,9 +682,9 @@ export function SemanticExplorer({
             textAlign="left"
             flexShrink={0}
           >
-            {h.kind === 'measure'
-              ? <LuSigma size={12} color="var(--chakra-colors-accent-primary)" />
-              : <LuTag size={12} color="var(--chakra-colors-accent-warning)" />}
+            {h.kind === 'dimension'
+              ? <LuTag size={12} color="var(--chakra-colors-accent-warning)" />
+              : <LuSigma size={12} color="var(--chakra-colors-accent-primary)" />}
             <Text fontSize="xs" fontFamily="mono" flex={1} truncate>{h.name}</Text>
             <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate maxW="90px">{h.model}</Text>
           </HStack>
@@ -667,17 +693,35 @@ export function SemanticExplorer({
     </Box>
   );
 
+  // M5 (Semantic_Model_v2.md §2.7): models are AUTHORED, not derived. `models`
+  // is the FULL authored set for this connection (fetched unscoped), so an
+  // empty one genuinely means "none authored" — point at where they're made.
+  // Anything else lands on the picker below, never on this state.
+  if (models.length === 0) {
+    return (
+      <VStack align="center" justify="center" h="100%" minH={0} px={6} py={8} gap={2}>
+        <Icon as={LuLayers} boxSize={5} color="fg.subtle" />
+        <Text
+          aria-label="semantic-models-empty-state"
+          fontSize="xs"
+          fontFamily="mono"
+          color="fg.muted"
+          textAlign="center"
+          maxW="360px"
+        >
+          No semantic models yet — create one in the knowledge base (context) editor
+        </Text>
+      </VStack>
+    );
+  }
+
   return (
     <VStack align="stretch" gap={0} h="100%" minH={0}>
-      {!browsingTables && shelves}
+      {!browsingModels && shelves}
       {topStrip}
-      {!spec || browsingTables ? (
-        tableBrowser
-      ) : !model ? (
-        <Text fontSize="xs" color="fg.subtle" fontFamily="mono" px={3} py={3}>Loading {spec.model}…</Text>
-      ) : (
-        columns
-      )}
+      {/* No spec, explicitly changing model, or a spec naming a model that no
+          longer exists → the picker. Never a dead "Loading …" screen. */}
+      {!spec || browsingModels || !model ? modelPicker : columns}
       {otherTablesStrip}
     </VStack>
   );

@@ -7,9 +7,11 @@
  * sides) — the exact ambiguity class hit in production ("Ambiguous reference
  * to column name campaign_id").
  *
- * Vocabulary is DERIVED (deriveSemanticModels over the schema + declared
- * relationships), not hand-written — so this validates what the app actually
- * uses, end to end: derive → compile → execute → parse → detect.
+ * Base vocabulary is DERIVED (deriveSemanticModels over the profiled schema)
+ * and the join is AUTHORED on the model (a SemanticReferenceToOne + its
+ * alias-qualified dimensions), matching how authored models carry joins — so
+ * this validates the real pipeline end to end: model → compile → execute →
+ * parse → detect.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api';
@@ -18,9 +20,12 @@ import { compileSemanticQuery } from '../compile';
 import { semanticSpecFromIr } from '../detect';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
-import type { DatabaseWithSchema, SemanticModel, TableRelationship } from '@/lib/types';
+import type { DatabaseWithSchema, SemanticModelV2, SemanticReferenceToOne } from '@/lib/types';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 import type { AnyQueryIR } from '@/lib/sql/ir-types';
+
+const primaryTable = (m: SemanticModelV2): string =>
+  m.primary.kind === 'table' ? m.primary.table : m.primary.view;
 
 // ---------------------------------------------------------------------------
 // Real schema with DELIBERATELY overlapping column names across the join
@@ -90,11 +95,21 @@ const SCHEMA: DatabaseWithSchema = {
   }],
 };
 
-const RELATIONSHIPS: TableRelationship[] = [{
-  connection: 'warehouse', schema: 'mxfood', table: 'ad_spend',
-  column: 'campaign_id', targetSchema: 'mxfood', targetTable: 'ad_campaigns', targetColumn: 'campaign_id',
+// Authored join: ad_spend.campaign_id → ad_campaigns.campaign_id (many-to-one
+// lookup), plus the alias-qualified dimensions the lookup exposes.
+const CAMPAIGNS_REF: SemanticReferenceToOne = {
+  source: { kind: 'table', table: 'ad_campaigns', schema: 'mxfood' },
+  alias: 'ad_campaigns',
   relationship: 'many_to_one',
-}];
+  joinType: 'LEFT',
+  on: [{ primaryColumn: 'campaign_id', referencedColumn: 'campaign_id' }],
+};
+const CAMPAIGNS_DIMS = [
+  { name: 'Ad Campaigns Campaign Name', column: 'campaign_name', source: 'ad_campaigns' },
+  { name: 'Ad Campaigns Channel', column: 'channel', source: 'ad_campaigns' },
+  { name: 'Ad Campaigns Created At', column: 'created_at', source: 'ad_campaigns', temporal: true },
+  { name: 'Ad Campaigns End Date', column: 'end_date', source: 'ad_campaigns', temporal: true },
+];
 
 // ---------------------------------------------------------------------------
 // The diverse spec matrix — every vocabulary shape, with and without the join
@@ -102,62 +117,62 @@ const RELATIONSHIPS: TableRelationship[] = [{
 
 const spendSpec = (partial: Partial<SemanticQuerySpec>): SemanticQuerySpec => ({
   model: 'Ad Spend', table: 'ad_spend', schema: 'mxfood',
-  measures: [], dimensions: [], ...partial,
+  metrics: [], dimensions: [], ...partial,
 });
 
 const SPECS: Array<[string, SemanticQuerySpec]> = [
   // -- the production bug: COUNT_DISTINCT on a column that exists on BOTH sides,
   //    combined with a joined dimension
   ['ambiguous COUNT_DISTINCT + joined dim (the prod bug)', spendSpec({
-    measures: ['Count', 'Unique Campaign'],
+    metrics: ['Count', 'Unique Campaign'],
     dimensions: ['Ad Campaigns Campaign Name'],
   })],
   // -- base-only shapes
-  ['count only', spendSpec({ measures: ['Count'] })],
-  ['SUM + AVG + base dim', spendSpec({ measures: ['Total Spend', 'Avg Spend'], dimensions: ['Status'] })],
-  ['COUNT_DISTINCT without join (no ambiguity)', spendSpec({ measures: ['Unique Campaign'] })],
-  ['time grain only', spendSpec({ measures: ['Count'], timeGrain: 'MONTH' })],
-  ['limit', spendSpec({ measures: ['Count'], dimensions: ['Status'], limit: 2 })],
+  ['count only', spendSpec({ metrics: ['Count'] })],
+  ['SUM + AVG + base dim', spendSpec({ metrics: ['Total Spend', 'Avg Spend'], dimensions: ['Status'] })],
+  ['COUNT_DISTINCT without join (no ambiguity)', spendSpec({ metrics: ['Unique Campaign'] })],
+  ['time grain only', spendSpec({ metrics: ['Count'], timeGrain: 'MONTH' })],
+  ['limit', spendSpec({ metrics: ['Count'], dimensions: ['Status'], limit: 2 })],
   // -- joined shapes
-  ['joined dim only', spendSpec({ measures: ['Total Spend'], dimensions: ['Ad Campaigns Channel'] })],
+  ['joined dim only', spendSpec({ metrics: ['Total Spend'], dimensions: ['Ad Campaigns Channel'] })],
   ['base + joined dims together', spendSpec({
-    measures: ['Count'], dimensions: ['Status', 'Ad Campaigns Channel'],
+    metrics: ['Count'], dimensions: ['Status', 'Ad Campaigns Channel'],
   })],
   ['two joined dims', spendSpec({
-    measures: ['Total Impressions'],
+    metrics: ['Total Impressions'],
     dimensions: ['Ad Campaigns Campaign Name', 'Ad Campaigns Channel'],
   })],
   ['time grain + joined dim (created_at overlaps too)', spendSpec({
-    measures: ['Total Spend'], dimensions: ['Ad Campaigns Channel'], timeGrain: 'MONTH',
+    metrics: ['Total Spend'], dimensions: ['Ad Campaigns Channel'], timeGrain: 'MONTH',
   })],
   ['SUM of joined-side-overlapping name via join (Daily Budget lives on campaigns)', spendSpec({
-    measures: ['Count'], dimensions: ['Ad Campaigns Campaign Name'],
+    metrics: ['Count'], dimensions: ['Ad Campaigns Campaign Name'],
     filters: [{ dimension: 'Ad Campaigns Campaign Name', operator: '!=', value: 'Brand' }],
   })],
   // -- filters across the join boundary
   ['filter on base dim + joined dim in SELECT', spendSpec({
-    measures: ['Count'], dimensions: ['Ad Campaigns Channel'],
+    metrics: ['Count'], dimensions: ['Ad Campaigns Channel'],
     filters: [{ dimension: 'Status', operator: '=', value: 'active' }],
   })],
   ['filter on joined dim + base dim in SELECT', spendSpec({
-    measures: ['Count'], dimensions: ['Status'],
+    metrics: ['Count'], dimensions: ['Status'],
     filters: [{ dimension: 'Ad Campaigns Channel', operator: '=', value: 'social' }],
   })],
   ['IN filter on ambiguous fk column (dimension Campaign Id) with join', spendSpec({
-    measures: ['Count'], dimensions: ['Ad Campaigns Campaign Name'],
+    metrics: ['Count'], dimensions: ['Ad Campaigns Campaign Name'],
     filters: [{ dimension: 'Campaign Id', operator: 'IN', value: ['101', '102'] }],
   })],
   ['IS NOT NULL filter on joined dim', spendSpec({
-    measures: ['Count'], dimensions: ['Ad Campaigns Campaign Name'],
+    metrics: ['Count'], dimensions: ['Ad Campaigns Campaign Name'],
     filters: [{ dimension: 'Ad Campaigns Campaign Name', operator: 'IS NOT NULL' }],
   })],
   // -- alternate time axis (spec.timeColumn: any base temporal column)
   ['timeColumn: created_at is the default; explicit works', spendSpec({
-    measures: ['Count'], timeGrain: 'WEEK', timeColumn: 'created_at',
+    metrics: ['Count'], timeGrain: 'WEEK', timeColumn: 'created_at',
   })],
   // -- everything at once
   ['kitchen sink: time + base dim + joined dim + filters + limit', spendSpec({
-    measures: ['Count', 'Total Spend', 'Unique Campaign'],
+    metrics: ['Count', 'Total Spend', 'Unique Campaign'],
     dimensions: ['Status', 'Ad Campaigns Channel'],
     timeGrain: 'MONTH',
     filters: [
@@ -172,15 +187,21 @@ const SPECS: Array<[string, SemanticQuerySpec]> = [
 
 describe('derived models compile to SQL that actually EXECUTES (real DuckDB)', () => {
   let db: DuckDBConnection;
-  let models: SemanticModel[];
-  let spendModel: SemanticModel;
+  let models: SemanticModelV2[];
+  let spendModel: SemanticModelV2;
 
   beforeAll(async () => {
     const instance = await DuckDBInstance.create(':memory:');
     db = await instance.connect();
     await db.run(DDL);
-    models = deriveSemanticModels([SCHEMA], RELATIONSHIPS);
-    spendModel = models.find((m) => m.table === 'ad_spend')!;
+    models = deriveSemanticModels([SCHEMA]);
+    const spendIdx = models.findIndex((m) => primaryTable(m) === 'ad_spend');
+    spendModel = {
+      ...models[spendIdx],
+      dimensions: [...models[spendIdx].dimensions, ...CAMPAIGNS_DIMS],
+      references: [CAMPAIGNS_REF],
+    };
+    models[spendIdx] = spendModel;
   });
 
   afterAll(() => {
@@ -188,8 +209,8 @@ describe('derived models compile to SQL that actually EXECUTES (real DuckDB)', (
   });
 
   it('the derived vocabulary contains everything the matrix uses', () => {
-    const measureNames = spendModel.measures.map((m) => m.name);
-    expect(measureNames).toEqual(expect.arrayContaining(['Count', 'Total Spend', 'Avg Spend', 'Unique Campaign', 'Total Impressions']));
+    const metricNames = spendModel.metrics.filter((m) => m.type === 'aggregation').map((m) => m.name);
+    expect(metricNames).toEqual(expect.arrayContaining(['Count', 'Total Spend', 'Avg Spend', 'Unique Campaign', 'Total Impressions']));
     const dimNames = spendModel.dimensions.map((d) => d.name);
     expect(dimNames).toEqual(expect.arrayContaining(['Status', 'Campaign Id', 'Ad Campaigns Campaign Name', 'Ad Campaigns Channel']));
   });
@@ -214,17 +235,17 @@ describe('derived models compile to SQL that actually EXECUTES (real DuckDB)', (
       const detected = semanticSpecFromIr(parsed as AnyQueryIR, models);
       expect(detected).toBeTruthy();
       expect(detected!.model).toBe(spec.model);
-      expect([...detected!.measures].sort()).toEqual([...spec.measures].sort());
+      expect([...detected!.metrics].sort()).toEqual([...spec.metrics].sort());
       expect([...detected!.dimensions].sort()).toEqual([...spec.dimensions].sort());
       expect(detected!.timeGrain ?? undefined).toBe(spec.timeGrain ?? undefined);
     });
   }
 
   it('timeColumn: a NON-default temporal column (end_date) is a valid time axis', async () => {
-    const campaigns = models.find((m) => m.table === 'ad_campaigns')!;
+    const campaigns = models.find((m) => primaryTable(m) === 'ad_campaigns')!;
     const spec: SemanticQuerySpec = {
       model: 'Ad Campaigns', table: 'ad_campaigns', schema: 'mxfood',
-      measures: ['Count'], dimensions: [], timeGrain: 'MONTH', timeColumn: 'end_date',
+      metrics: ['Count'], dimensions: [], timeGrain: 'MONTH', timeColumn: 'end_date',
     };
     const sql = irToSqlLocal(compileSemanticQuery(spec, campaigns), 'duckdb');
     expect(sql).toContain("DATE_TRUNC('MONTH', end_date)");
@@ -237,13 +258,13 @@ describe('derived models compile to SQL that actually EXECUTES (real DuckDB)', (
   });
 
   it('timeColumn: a non-temporal column is rejected at compile', () => {
-    const spec = spendSpec({ measures: ['Count'], timeGrain: 'MONTH', timeColumn: 'status' });
+    const spec = spendSpec({ metrics: ['Count'], timeGrain: 'MONTH', timeColumn: 'status' });
     expect(() => compileSemanticQuery(spec, spendModel)).toThrow(/not a temporal column/);
   });
 
   it('sanity: the prod-bug query returns correct grouped counts', async () => {
     const ir = compileSemanticQuery(spendSpec({
-      measures: ['Count'], dimensions: ['Ad Campaigns Campaign Name'],
+      metrics: ['Count'], dimensions: ['Ad Campaigns Campaign Name'],
     }), spendModel);
     const reader = await db.runAndReadAll(irToSqlLocal(ir, 'duckdb'));
     const byName = new Map(reader.getRows().map((r) => [r[0], Number(r[1])]));

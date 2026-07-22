@@ -6,8 +6,7 @@ import { LuTable, LuChevronRight, LuChevronDown, LuDatabase, LuEye } from 'react
 import { Checkbox } from '@/components/ui/checkbox';
 import SchemaColumnRow from './SchemaColumnRow';
 import ChildPathSelector from '../selectors/ChildPathSelector';
-import TableRelationshipsEditor from '../context/TableRelationshipsEditor';
-import type { TableAnnotation, TableRelationship } from '@/lib/types';
+import type { TableAnnotation } from '@/lib/types';
 import type { SchemaTreeItem, WhitelistItem } from './SchemaTreeView';
 import { useTableColumns } from '@/lib/hooks/use-table-columns';
 
@@ -57,12 +56,6 @@ interface SchemaTreeSchemaRowProps {
   annotations: TableAnnotation[];
   inheritedAnnotations: TableAnnotation[];
 
-  relationships: TableRelationship[];
-  onRelationshipsChange?: (next: TableRelationship[]) => void;
-  inheritedRelationships: TableRelationship[];
-  /** All tables in this connection (join target candidates). */
-  allTables: Array<{ schema: string; table: string; columns: Array<{ name: string; type: string }> }>;
-
   expandedSchemas: Set<string>;
   expandedTables: Set<string>;
 
@@ -107,10 +100,6 @@ export default function SchemaTreeSchemaRow({
   annotationsEditable,
   annotations,
   inheritedAnnotations,
-  relationships,
-  onRelationshipsChange,
-  inheritedRelationships,
-  allTables,
   expandedSchemas,
   expandedTables,
   isSchemaWhitelisted,
@@ -422,10 +411,6 @@ export default function SchemaTreeSchemaRow({
                       table={table}
                       tableKey={tableKey}
                       connectionName={connectionName}
-                      onRelationshipsChange={onRelationshipsChange}
-                      relationships={relationships}
-                      inheritedRelationships={inheritedRelationships}
-                      allTables={allTables}
                       getFilteredColumns={getFilteredColumns}
                       getVisibleColumnCount={getVisibleColumnCount}
                       showMoreColumns={showMoreColumns}
@@ -471,11 +456,6 @@ interface ExpandedTableColumnsProps {
   tableKey: string;
   connectionName?: string;
 
-  onRelationshipsChange?: (next: TableRelationship[]) => void;
-  relationships: TableRelationship[];
-  inheritedRelationships: TableRelationship[];
-  allTables: Array<{ schema: string; table: string; columns: Array<{ name: string; type: string }> }>;
-
   getFilteredColumns: SchemaTreeSchemaRowProps['getFilteredColumns'];
   getVisibleColumnCount: SchemaTreeSchemaRowProps['getVisibleColumnCount'];
   showMoreColumns: (tableKey: string) => void;
@@ -488,20 +468,16 @@ interface ExpandedTableColumnsProps {
 }
 
 /**
- * The expanded table's column list (plus the inline FK-relationships editor).
- * Split out of the table map so it can call useTableColumns: the schema shipped
- * to the client may be names-only (memory-bounded), in which case the columns
- * are fetched on demand — same API and cache as the @ mention drill-down.
+ * The expanded table's column list. Split out of the table map so it can call
+ * useTableColumns: the schema shipped to the client may be names-only
+ * (memory-bounded), in which case the columns are fetched on demand — same API
+ * and cache as the @ mention drill-down.
  */
 function ExpandedTableColumns({
   schemaName,
   table,
   tableKey,
   connectionName,
-  onRelationshipsChange,
-  relationships,
-  inheritedRelationships,
-  allTables,
   getFilteredColumns,
   getVisibleColumnCount,
   showMoreColumns,
@@ -528,21 +504,6 @@ function ExpandedTableColumns({
           borderLeft="1px solid"
           borderColor="border.muted"
         >
-          {/* Per-table FK relationships (edited inline) — feed the derived semantic layer */}
-          {(onRelationshipsChange || relationships.length > 0 || inheritedRelationships.length > 0) && (
-            <Box borderBottom="1px solid" borderColor="border.muted">
-              <TableRelationshipsEditor
-                connection={connectionName}
-                schema={schemaName}
-                table={table.table}
-                columns={effectiveColumns}
-                tables={allTables}
-                relationships={relationships}
-                onRelationshipsChange={onRelationshipsChange}
-                inheritedRelationships={inheritedRelationships}
-              />
-            </Box>
-          )}
           {filteredColumns.slice(0, getVisibleColumnCount(tableKey, filteredColumns.length)).map((column) => {
             const profiledDesc = (column as { meta?: { description?: string } }).meta?.description;
             const colDesc = effectiveColumnDescription(schemaName, table.table, column.name, profiledDesc);
