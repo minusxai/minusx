@@ -3,7 +3,6 @@
  * (Renderer_v2 Phase 2 removed ECharts): a row per value with a truncated label, a
  * proportional bar, and a native <title> tooltip.
  */
-import { Box, Text } from '@chakra-ui/react'
 
 interface MiniBarChartProps {
   data: Array<{ value: string; count: number }>
@@ -27,7 +26,7 @@ export const MiniBarChart = ({
   const chartH = data.length * ROW_H
 
   return (
-    <Box>
+    <div>
       <svg
         aria-label="Top values bar chart"
         width="100%"
@@ -59,10 +58,10 @@ export const MiniBarChart = ({
         })}
       </svg>
       {remaining > 0 && (
-        <Text fontSize="3xs" color="fg.subtle" fontFamily="mono" mt={0.5}>
+        <p className="mt-0.5 font-mono text-[9px] text-muted-foreground">
           +{remaining.toLocaleString()} more
-        </Text>
+        </p>
       )}
-    </Box>
+    </div>
   )
 }

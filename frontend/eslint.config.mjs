@@ -290,6 +290,39 @@ const eslintConfig = defineConfig([
       "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI], patterns: [RESTRICT_PI_AI_SUBPATHS] }],
     },
   },
+  // Chakra exit — EMBED TREE + re-skinned chrome (Renderer_v2 Phase 3/6a): these files are
+  // kit/Tailwind now, and the story iframe's style mirror no longer carries Chakra for them.
+  // "No Chakra in the embed render tree" is an `npm run validate` fact, not a review claim —
+  // add each file here as its re-skin lands (lists miss things; PivotTable proved it).
+  {
+    files: [
+      "components/kit/**/*.tsx",
+      "components/containers/SmartEmbeddedQuestionContainer.tsx",
+      "components/TextBlockCard.tsx",
+      "components/params/ParameterRow.tsx",
+      "components/params/ParameterInput.tsx",
+      "components/views/story/StoryParamControl.tsx",
+      "components/question/QuestionVisualization.tsx",
+      "components/views/DashboardView.tsx",
+      "components/plotx/MiniHistogram.tsx",
+      "components/plotx/MiniBarChart.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@chakra-ui/*", "@chakra-ui"],
+              message:
+                "This file is on the kit/Tailwind stack (Renderer_v2 Chakra exit) — no @chakra-ui " +
+                "imports. Use components/kit primitives and Tailwind classes instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Container/View convention (CLAUDE.md "Component Patterns") — these views were
   // migrated to pure presentation; guard against regression. See RESTRICT_VIEW_REDUX.
   {

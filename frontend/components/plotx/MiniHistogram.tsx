@@ -3,7 +3,6 @@
  * (Renderer_v2 Phase 2 removed ECharts): N bars is a handful of <rect>s, and the native
  * <title> tooltip carries the bin range + count.
  */
-import { Box, HStack, Text } from '@chakra-ui/react'
 
 interface MiniHistogramProps {
   data: Array<{ bin: number; binMin: number; binMax: number; count: number }>
@@ -49,7 +48,7 @@ export const MiniHistogram = ({
   const barW = 100 / data.length
 
   return (
-    <Box position="relative">
+    <div className="relative">
       <svg
         aria-label={`Histogram of ${data.length} bins`}
         width="100%"
@@ -74,10 +73,10 @@ export const MiniHistogram = ({
           )
         })}
       </svg>
-      <HStack justify="space-between" fontSize="3xs" color="fg.subtle" fontFamily="mono" mt={0.5}>
-        <Text>{formatEdge(data[0]?.binMin, isDate)}</Text>
-        <Text>{formatEdge(data[data.length - 1]?.binMax, isDate)}</Text>
-      </HStack>
-    </Box>
+      <div className="mt-0.5 flex justify-between font-mono text-[9px] text-muted-foreground">
+        <span>{formatEdge(data[0]?.binMin, isDate)}</span>
+        <span>{formatEdge(data[data.length - 1]?.binMax, isDate)}</span>
+      </div>
+    </div>
   )
 }

@@ -166,6 +166,7 @@ export default function DashboardContainerV2({ fileId, mode }: DashboardContaine
       onAddTextBlock={onAddTextBlock}
       showDevMarkers={devMode}
       colorMode={colorMode}
+      theme={(mergedContent as { theme?: string | null } | undefined)?.theme ?? null}
     />
   );
 }

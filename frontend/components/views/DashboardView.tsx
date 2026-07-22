@@ -57,6 +57,8 @@ interface DashboardViewProps {
   // container passes devMode + colorMode and the same overlay stories use mounts on this root.
   showDevMarkers?: boolean;
   colorMode?: 'light' | 'dark';
+  /** Design theme (Renderer_v2 Phase 3): stamps [data-theme] so the six story token sets apply. */
+  theme?: string | null;
 }
 
 export default function DashboardView({
@@ -78,6 +80,7 @@ export default function DashboardView({
   onAddTextBlock,
   showDevMarkers,
   colorMode,
+  theme,
 }: DashboardViewProps) {
   // Ref to always have the latest document for callbacks that may fire with stale closures
   const documentRef = useRef(document);
@@ -444,7 +447,7 @@ export default function DashboardView({
     // it is a live-DOM dev preview and must never leak into serialized/rasterized captures.
     <div className="relative flex-1">
       <PageMarkerDevOverlay enabled={!!showDevMarkers} colorMode={colorMode ?? 'light'} />
-    <div data-file-id={fileId} role="region" aria-label="Dashboard">
+    <div data-file-id={fileId} role="region" aria-label="Dashboard" {...(theme ? { 'data-theme': theme } : {})}>
 
       {/* Visual View (the Code view is rendered upstream by FileView) */}
       {(

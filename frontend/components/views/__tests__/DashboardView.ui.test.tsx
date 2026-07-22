@@ -402,6 +402,23 @@ describe('DashboardView via DashboardContainerV2', () => {
     });
   });
 
+  // Dashboard themes (Renderer_v2 Phase 3, §9 Q2): content.theme stamps [data-theme] on the
+  // dashboard root so the six story design-token sets restyle it; absent → no attribute (the
+  // neutral app look).
+  describe('design theme stamp', () => {
+    it('stamps data-theme on the dashboard root from content.theme', () => {
+      const store = setup(makeDashboardFile({ theme: 'modernist' } as any));
+      renderWithProviders(<DashboardContainerV2 fileId={DASH_ID} mode="view" />, { store });
+      expect(screen.getByLabelText('Dashboard').getAttribute('data-theme')).toBe('modernist');
+    });
+
+    it('no theme → no data-theme attribute', () => {
+      const store = setup(makeDashboardFile());
+      renderWithProviders(<DashboardContainerV2 fileId={DASH_ID} mode="view" />, { store });
+      expect(screen.getByLabelText('Dashboard').hasAttribute('data-theme')).toBe(false);
+    });
+  });
+
   // Dashboards are marker-flagged (Renderer_v2 Phase 1): under dev mode the same numbered
   // position-marker preview stories get (PageMarkerDevOverlay) must mount on the dashboard root,
   // so the DevTools Markers checkbox previews exactly what the agent capture bakes in.
