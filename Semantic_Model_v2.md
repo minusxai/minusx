@@ -538,22 +538,22 @@ honest — both have named safety nets, neither warrants pre-work):
   `join` → `source`) and `detect.ts` join-matching move are read-verified
   only. Safety net: the characterization baseline verified blue on `main`
   (261 node + 8 UI tests) — a semantics slip turns red in M2 itself.
-- The zero-dimension probe's plain-column GROUP BY was executed on DuckDB +
-  real Postgres (PGLite) but not BigQuery (no credentials exist locally —
-  verified). Accepted on standard-SQL grounds plus the `prepareView`
-  precedent, which already runs identical `LIMIT 0` probes against real BQ
-  connections in production.
-- BigQuery m2m execution overall is golden-SQL-only (DuckDB is the
-  execution engine for M3's fixtures). **Post-merge check (named so the
-  residual doesn't become "assumed forever"): run one m2m semantic query —
-  a dimension grouping AND a semi-join filter — against a real BQ
-  connection in a deployed environment.** This is the ONLY remaining
-  deferral, and it is environmental: no BigQuery credentials exist in this
-  workspace (verified — no env vars, no gcloud ADC, no BQ connection), so it
-  cannot be executed here at any effort level. Risk is low: the emitted SQL
-  uses only `WITH` + `LEFT/INNER JOIN` + `SELECT DISTINCT` + correlated
-  `EXISTS`, all standard on BQ, and `prepareView` already runs equivalent
-  `LIMIT 0` probes against real BQ connections in production.
+- **BigQuery spot-check: DONE** (pre-merge, against a live `mx_bq` tutorial
+  connection). It caught three real bugs, all fixed and CI-verified:
+  (1) reserved-word aliases (`AS rows` — `semanticAlias` now suffixes `_`
+  when a slug hits a reserved word); (2) names-only bounded schemas crashing
+  tier-1 / live validation (both now degrade like the EditFile path);
+  (3) the SILENT self-bridge tautology — when the m2m bridge IS the primary
+  table, the EXISTS correlation compiled to `t.pk = t.pk` and matched every
+  row on every engine; bridge/far are now always aliased `_b`/`_f` in
+  compiled subqueries (which also fixes bridge==far duplicate aliases on
+  BQ). Verified executing on live BigQuery: tier-3 probes (blocked a save
+  with a real BQ error, then stamped `verified: true`), and correlated
+  `EXISTS` / `NOT EXISTS` m2m filters returning correct, self-consistent
+  row counts. The grouped dedup-CTE shape passed BigQuery's analyzer (an
+  invalid statement fails there in seconds, as observed thrice) and
+  executes fully on real Postgres (PGLite) + DuckDB — both now pinned as
+  permanent CI execution tests (`m2m.test.ts`, `m2m-postgres.test.ts`).
 
 ## 5. many_to_many — in scope, same PR
 
