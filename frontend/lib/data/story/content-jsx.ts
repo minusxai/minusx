@@ -43,6 +43,10 @@ export interface SchemaCtx {
     toJsx(value: string): string;
     /** inline jsx (already security-validated) → stored content string. */
     fromJsx(inner: string): string;
+    /** Component allowlist for the field's security validation (default: JSX_COMPONENT_NAMES). */
+    components?: readonly string[];
+    /** Explicit lowercase-HTML-tag allowlist (default: none — any non-dangerous tag passes). */
+    allowedHtmlTags?: readonly string[];
   };
 }
 
@@ -289,7 +293,7 @@ function elementToValue(node: JsxElement, schema: JsonSchema, ctx: SchemaCtx): u
   // components) are enforced HERE — generic to any jsx field — before it reaches the render path.
   if (isJsxField(s)) {
     const inner = serializeJsx(node.children).trim();
-    const errs = validateJsxSource(inner, JSX_COMPONENT_NAMES);
+    const errs = validateJsxSource(inner, ctx.jsxField?.components ?? JSX_COMPONENT_NAMES, ctx.jsxField?.allowedHtmlTags);
     if (errs.length > 0) throw new JsxFieldError(errs.map((e) => e.message).join('; '));
     return ctx.jsxField ? ctx.jsxField.fromJsx(inner) : inner;
   }
@@ -386,7 +390,7 @@ export function jsxToContent(jsx: string, schema: JsonSchema, ctx: SchemaCtx): J
       const adopted = parsed.nodes.filter((n) => !(n.type === 'element' && n.tag in s.properties));
       const inner = serializeJsx(adopted).trim();
       if (inner) {
-        const errs = validateJsxSource(inner, JSX_COMPONENT_NAMES);
+        const errs = validateJsxSource(inner, ctx.jsxField?.components ?? JSX_COMPONENT_NAMES, ctx.jsxField?.allowedHtmlTags);
         if (errs.length > 0) return { ok: false, error: errs.map((e) => e.message).join('; ') };
         obj[jsxKey] = ctx.jsxField ? ctx.jsxField.fromJsx(inner) : inner;
         dropped.length = 0;

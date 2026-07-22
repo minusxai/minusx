@@ -45,3 +45,22 @@ describe('extractReferencesFromContent — dashboard still uses assets', () => {
     expect(extractReferencesFromContent(dash as any, 'dashboard')).toEqual([5, 8]);
   });
 });
+
+describe('extractReferencesFromContent — jsx-format story (ids from the JSX AST)', () => {
+  it('extracts <Question id={N}/> and <Number id={N}/> ids from the jsx source', () => {
+    const content = {
+      description: null,
+      format: 'jsx',
+      story:
+        '<div className="p-6"><Card><Question id={1017} height="300px" /></Card>' +
+        '<p>grew to <Number id={12} prefix="$" /></p>' +
+        '<Question query={`SELECT 1`} connection="db" /></div>',
+    };
+    expect(extractReferencesFromContent(content as any, 'story')).toEqual([1017, 12]);
+  });
+
+  it('returns empty for an unparseable or embed-free jsx story', () => {
+    expect(extractReferencesFromContent({ format: 'jsx', story: '<div>prose</div>' } as any, 'story')).toEqual([]);
+    expect(extractReferencesFromContent({ format: 'jsx', story: '<div><<<' } as any, 'story')).toEqual([]);
+  });
+});

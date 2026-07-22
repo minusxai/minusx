@@ -5,7 +5,7 @@
  * ~1280px story is captured at ~0.4×. A CSS gutter in the live page would shrink with the content and
  * the numbers would be illegible. Drawing here, AFTER the content is scaled, lets the badges be sized
  * in FIXED output pixels — always legible — while only their POSITION tracks the content (band-top y ×
- * the capture's vertical scale). One helper, fed by all three story renderers (canvas/svg/dom) plus
+ * the capture's vertical scale). One helper, fed by story captures plus
  * dashboards/questions, so the numbering is identical everywhere.
  *
  * The gutter is added as extra width on the LEFT; the content is drawn shifted right by it, so numbers

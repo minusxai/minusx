@@ -3,6 +3,7 @@ import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import { readFilesServer } from '@/lib/file-state/file-state.server';
+import { renderStoryImageBlocks } from '@/lib/headless-capture/story-image-blocks.server';
 import { TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/chat/compress-augmented';
 import { takeFilesMarkup, markupTextBlocks } from '@/lib/chat/markup-blocks';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -73,8 +74,13 @@ export class ReadFiles extends MXTool<typeof ReadFilesParams, AnalystAgentContex
       // block so the agent reads real JSX (not an escaped JSON string value).
       const { files: noMarkup, blocks } = takeFilesMarkup(files.map(stripAugmentedContentForLlm));
       const result: ReadFilesResult = { success: true, files: noMarkup };
+      // Headless story capture (§6c): this ReadFiles runs only in clientless turns (Slack,
+      // reports, eval, benchmarks — HEADLESS_TOOL_SWAPS), where no browser screenshot exists.
+      // When the capability is available, attach a rendered story image the same way the
+      // browser handlers do; unavailable ⇒ [] ⇒ unchanged behavior.
+      const storyImageBlocks = await renderStoryImageBlocks(files, { userEmail: user.email });
       return {
-        content: [{ type: 'text', text: JSON.stringify(result) }, ...markupTextBlocks(blocks)],
+        content: [{ type: 'text', text: JSON.stringify(result) }, ...markupTextBlocks(blocks), ...storyImageBlocks],
         isError: false,
       };
     });

@@ -2,7 +2,7 @@
  * Single source of truth for agent-facing image output (sizing, quality, branding).
  *
  * Dependency-free on purpose: this is the one module that the browser capture path
- * (snapdom), the ECharts client renderer, AND the server Sharp/Resvg renderer can all
+ * (serialization), the ECharts client renderer, AND the server Sharp/Resvg renderer can all
  * import without pulling in each other's heavy deps. Every agent-image magic number lives here —
  * do not re-declare these literals at call sites.
  */
@@ -32,7 +32,7 @@ export const AGENT_IMAGE_PIXEL_RATIO = 2;
 
 // ── Quality ─────────────────────────────────────────────────────────────────
 /**
- * JPEG quality (0–1) for every agent image. Used directly by canvas/snapdom encoders; the
+ * JPEG quality (0–1) for every agent image. Used directly by canvas encoders; the
  * server Sharp pipeline takes 0–100, so multiply by 100 there.
  */
 export const AGENT_IMAGE_JPEG_QUALITY = 0.85;

@@ -9,6 +9,7 @@
 import { hasDesignSystemMarker, extractClassCandidates } from '../story-css';
 import { compileStoryCss, withCompiledStoryCss } from '../story-css.server';
 import { fileToMarkup, markupToContent } from '../file-markup';
+import { STORY_THEMES } from '../story-themes';
 
 const TW_STORY =
   '<div class="mx-story" data-design="tw">' +
@@ -153,5 +154,179 @@ describe('compiledCss never crosses the agent-markup boundary', () => {
     );
     expect(r.ok).toBe(true);
     if (r.ok) expect('compiledCss' in r.content).toBe(false);
+  });
+});
+
+// Phase 0 hardening (Story_Design_V2 §3): a malformed class token must never fail the compile —
+// bad candidates are bisected out and the survivors' CSS is returned. Tailwind v4's build()
+// throws on tokens like `w-[calc(100%` (unbalanced bracket); before hardening that threw all
+// the way up and failed the whole save.
+describe('compileStoryCss hardening — malformed candidates never throw', () => {
+  const BROKEN_STORY =
+    '<div class="mx-story" data-design="tw">' +
+    '<p class="bg-amber-100 w-[calc(100% text-slate-900">broken token amid good ones</p></div>';
+
+  it('survives a malformed arbitrary-value token and still compiles the good utilities', async () => {
+    const css = await compileStoryCss(BROKEN_STORY);
+    expect(css).toBeTruthy();
+    expect(css).toContain('.bg-amber-100');
+    expect(css).toContain('.text-slate-900');
+  });
+
+  it('returns base-only CSS when every candidate is malformed (never throws, never null for marked stories)', async () => {
+    const allBad = '<div data-design="tw"><p class="w-[calc(100% h-[min(50">x</p></div>';
+    await expect(compileStoryCss(allBad)).resolves.not.toBeNull();
+  });
+});
+
+// The salvage guard itself, tested with an injected throwing build (no current Tailwind input
+// throws — the guard exists so a future build() throw can never fail a save).
+describe('buildSalvaging', () => {
+  const buildThrowingOn = (bad: string[]) => (candidates: string[]) => {
+    if (candidates.some(c => bad.includes(c))) throw new Error(`Cannot represent ${bad[0]}`);
+    return candidates.map(c => `.${c}{}`).join('');
+  };
+
+  it('drops exactly the throwing candidates and compiles the rest', async () => {
+    const { buildSalvaging } = await import('../story-css.server');
+    const r = buildSalvaging(buildThrowingOn(['bad-1']), ['a', 'bad-1', 'b']);
+    expect(r.css).toBe('.a{}.b{}');
+    expect(r.dropped).toEqual(['bad-1']);
+  });
+
+  it('handles multiple bad candidates scattered through the set', async () => {
+    const { buildSalvaging } = await import('../story-css.server');
+    const r = buildSalvaging(buildThrowingOn(['x', 'y']), ['x', 'a', 'y', 'b', 'c']);
+    expect(r.css).toBe('.a{}.b{}.c{}');
+    expect(r.dropped.sort()).toEqual(['x', 'y']);
+  });
+
+  it('never throws even when every candidate (and the empty build) fails', async () => {
+    const { buildSalvaging } = await import('../story-css.server');
+    const r = buildSalvaging(() => { throw new Error('always'); }, ['a', 'b']);
+    expect(r.css).toBe('');
+    expect(r.dropped.sort()).toEqual(['a', 'b']);
+  });
+});
+
+// ── jsx-format stories (Story_Design_V2 §3) ────────────────────────────────────────────────
+describe('jsx-format stories — className candidates + always-compile', () => {
+  const JSX_STORY =
+    '<div className="p-6 bg-card"><Card className="rounded-xl">' +
+    "<span className='text-[13px] text-muted-foreground'>x</span></Card></div>";
+
+  it('extractClassCandidates matches className="…" and className=\'…\' (JSX spelling)', () => {
+    const c = extractClassCandidates(JSX_STORY);
+    expect(c).toContain('p-6');
+    expect(c).toContain('bg-card');
+    expect(c).toContain('rounded-xl');
+    expect(c).toContain('text-[13px]');
+    expect(c).toContain('text-muted-foreground');
+  });
+
+  it('compileStoryCss compiles with force even without the data-design marker', async () => {
+    const css = await compileStoryCss('<div className="grid grid-cols-3 bg-red-100">x</div>', { force: true });
+    expect(css).toBeTruthy();
+    expect(css).toContain('.grid-cols-3');
+    expect(css).toContain('.bg-red-100');
+  });
+
+  it('withCompiledStoryCss ALWAYS compiles a format:"jsx" story (no marker needed)', async () => {
+    const out = await withCompiledStoryCss({ story: '<div className="p-4 bg-red-100">x</div>', format: 'jsx' as const });
+    expect(out.compiledCss).toBeTruthy();
+    expect(out.compiledCss).toContain('.bg-red-100');
+  });
+
+  it('withCompiledStoryCss keeps the marker gate for legacy stories (no format)', async () => {
+    const out = await withCompiledStoryCss({ story: '<div class="p-4 bg-red-100">legacy</div>' });
+    expect(out.compiledCss).toBeNull();
+  });
+});
+
+// §3 token layer: jsx stories compile against the shadcn preamble (token utilities like
+// bg-card resolve via @theme inline) UNIONED with the registry recipe classes — the shadcn
+// component sources use classes (rounded-xl, border, shadow-sm, …) that never appear in the
+// story's own markup, so without the base sheet a <Card> renders unstyled.
+describe('shadcn token preamble + recipe base sheet (format:jsx)', () => {
+  it('compiles token utilities used in story markup (bg-card, text-muted-foreground)', async () => {
+    const css = (await compileStoryCss('<div className="bg-card text-muted-foreground">x</div>', { force: true }))!;
+    expect(css).toContain('.bg-card');
+    expect(css).toContain('var(--card'); // @theme inline: utilities reference the raw token var
+    expect(css).toContain('.text-muted-foreground');
+  });
+
+  it('includes neutral :root/.dark token defaults so themeless stories look right', async () => {
+    const css = (await compileStoryCss('<div className="bg-card">x</div>', { force: true }))!;
+    expect(css).toMatch(/:root\s*\{[^}]*--card:/);
+    expect(css).toMatch(/\.dark\s*\{[^}]*--card:/);
+    expect(css).toMatch(/--radius:/);
+  });
+
+  it('unions the shadcn recipe classes so component chrome is styled without appearing in markup', async () => {
+    // A jsx story using <Card> only — "rounded-xl"/"shadow-sm" come from the Card recipe, not the story.
+    const css = (await compileStoryCss('<Card className="p-0">x</Card>', { force: true }))!;
+    expect(css).toContain('.rounded-xl');
+    expect(css).toContain('.shadow-sm');
+  });
+
+  it('does not union recipe classes for legacy marked stories (their compile stays lean)', async () => {
+    const css = (await compileStoryCss('<div data-design="tw" class="p-2">x</div>'))!;
+    expect(css).not.toContain('.rounded-xl');
+  });
+});
+
+// Banned-CSS candidate filter (Story_Design_V2 §4): banned Tailwind candidates are dropped
+// BEFORE compile as a SEPARATE guard step — never absorbed by buildSalvaging's error-bisect.
+// Proof of separation: `fixed`/`sticky` compile perfectly fine in Tailwind, so their absence
+// from the output can only come from the guard, not from a compile failure.
+describe('compileStoryCss — banned candidate filter (format:jsx)', () => {
+  it('drops fixed/sticky candidates (including variants) from jsx-story compiles', async () => {
+    const css = (await compileStoryCss(
+      '<div className="fixed md:sticky p-4">x</div>', { force: true },
+    ))!;
+    expect(css).not.toMatch(/position:\s*fixed/);
+    expect(css).not.toMatch(/position:\s*sticky/);
+    expect(css).toContain('.p-4'); // siblings survive
+  });
+
+  it('drops external-url arbitrary-value candidates; data: URIs pass', async () => {
+    const css = (await compileStoryCss(
+      `<div className="bg-[url(https://evil.example/x.png)] bg-[url(data:image/svg+xml;base64,PHN2Zy8+)] p-2">x</div>`,
+      { force: true },
+    ))!;
+    expect(css).not.toContain('evil.example');
+    expect(css).toContain('data:image/svg+xml');
+    expect(css).toContain('.p-2');
+  });
+
+  it('legacy marked stories are NOT candidate-filtered (frozen pipeline keeps its CSS live)', async () => {
+    const css = (await compileStoryCss('<div data-design="tw" class="fixed p-2">x</div>'))!;
+    expect(css).toMatch(/position:\s*fixed/);
+  });
+});
+
+// Theme token blocks (Story_Design_V2 §5): every jsx story's compiledCss ships ALL SIX
+// `[data-theme="<name>"]` variable blocks, so switching a story's theme is an attribute
+// change only — instant preview, no recompile. Appended AFTER the compiled sheet so the
+// attribute-scoped blocks beat the `:root`/`.dark` neutral defaults on document order.
+describe('compileStoryCss — theme token blocks (format:jsx)', () => {
+  it('ships all six [data-theme] blocks, each with its own --primary', async () => {
+    const css = (await compileStoryCss('<p className="p-2">x</p>', { force: true }))!;
+    for (const t of STORY_THEMES) {
+      expect(css).toContain(`[data-theme="${t.name}"]`);
+    }
+    const nocturne = STORY_THEMES.find(t => t.name === 'nocturne')!;
+    expect(css).toContain(`--primary: ${nocturne.cssVars.light['--primary']}`);
+    expect(css).toContain(`.dark [data-theme="nocturne"]`);
+  });
+
+  it('theme blocks come AFTER the neutral :root defaults (document order beats equal specificity)', async () => {
+    const css = (await compileStoryCss('<p className="p-2">x</p>', { force: true }))!;
+    expect(css.indexOf('[data-theme="modernist"]')).toBeGreaterThan(css.indexOf(':root'));
+  });
+
+  it('legacy (non-jsx) compiles carry NO theme blocks (byte-stable legacy pipeline)', async () => {
+    const css = (await compileStoryCss('<div data-design="tw" class="p-2">x</div>'))!;
+    expect(css).not.toContain('[data-theme=');
   });
 });

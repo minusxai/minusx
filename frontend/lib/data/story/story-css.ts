@@ -29,7 +29,8 @@ export function hasDesignSystemMarker(html: string | null | undefined): boolean 
   return !!html && MARKER_RE.test(html);
 }
 
-const CLASS_ATTR_RE = /\bclass\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+// Both spellings: `class` (stored legacy HTML) and `className` (JSX source of format:'jsx' stories).
+const CLASS_ATTR_RE = /\bclass(?:Name)?\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 /** Stored attribute values are entity-escaped (escAttr) — decode before tokenizing. &amp; last. */
 const decodeAttr = (s: string) =>

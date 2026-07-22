@@ -23,7 +23,7 @@ export interface UserInputProps {
   multiline?: boolean;
 
   // For choice selection
-  options?: Array<{ label: string; value?: any; description?: string }>;
+  options?: Array<{ label: string; value?: string; description?: string; imageUrl?: string }>;
   multiSelect?: boolean;  // Allow multiple selections for choice type
   cancellable?: boolean;  // Show cancel button for choice type
 

@@ -15,6 +15,8 @@ import { TOOL_DEFAULT_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/cha
 import { takeFilesMarkup } from '@/lib/chat/markup-blocks';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { inlineQuestionToPlaceholder } from '@/lib/data/story/story-question';
+import { _internal as storyCaptureInternal } from '@/lib/headless-capture/story-image-blocks.server';
+import type { StoryCaptureInput, StoryCaptureResult } from '@/lib/headless-capture/types';
 import { numberToPlaceholder } from '@/lib/data/story/story-number';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { QuestionContent, FolderContent, DocumentContent, CompressedAugmentedFile, ReadFilesResult } from '@/lib/types';
@@ -190,6 +192,56 @@ describe('ReadFiles', () => {
     // Keyed by the SAME hash (params {}, matching the InlineNumber renderer + EditFile auto-execute).
     const expectedId = getQueryHash(numberQuery, {}, 'test');
     expect(out[0].queryResults.map(r => r.id)).toContain(expectedId);
+  });
+
+  it('attaches a headless story capture as an image_url block when the capability is available (§6c)', async () => {
+    const story = await FilesAPI.createFile(
+      { name: 'capture-story', path: `${TEST_FOLDER}/capture-story`, type: 'story', content: { description: 'x', story: '<div class="story"><h1>Hi</h1></div>' } as unknown as DocumentContent },
+      ADMIN,
+    );
+    const captured: StoryCaptureInput[] = [];
+    const realRender = storyCaptureInternal.render;
+    storyCaptureInternal.render = async (input: StoryCaptureInput): Promise<StoryCaptureResult> => {
+      captured.push(input);
+      return { ok: true, buffer: Buffer.from('story-pixels'), mime: 'image/jpeg' };
+    };
+    try {
+      const orch = new Orchestrator([]);
+      const tool = new ReadFiles(orch, { fileIds: [story.data.id] }, {
+        userId: '1', mode: 'org', effectiveUser: ADMIN,
+      } as AnalystAgentContext);
+      const res = await tool.run();
+      expect(res.isError).toBe(false);
+      // The capture is attached as an orchestrator-native ImageContent block — the server-tool
+      // counterpart of the browser handlers' image attachments.
+      const imageBlock = res.content.find((b) => (b as { type?: string }).type === 'image') as
+        | { type: 'image'; data: string; mimeType: string }
+        | undefined;
+      expect(imageBlock).toBeDefined();
+      expect(imageBlock!.data).toBe(Buffer.from('story-pixels').toString('base64'));
+      expect(imageBlock!.mimeType).toBe('image/jpeg');
+      // Captured as the requesting user (session cookie minted for them), for this file.
+      expect(captured).toEqual([
+        expect.objectContaining({ fileId: story.data.id, userEmail: ADMIN.email }),
+      ]);
+    } finally {
+      storyCaptureInternal.render = realRender;
+    }
+  });
+
+  it('attaches NO image block when headless capture is unavailable — exactly today\'s behavior', async () => {
+    const story = await FilesAPI.createFile(
+      { name: 'no-capture-story', path: `${TEST_FOLDER}/no-capture-story`, type: 'story', content: { description: 'x', story: '<div class="story"><h1>Hi</h1></div>' } as unknown as DocumentContent },
+      ADMIN,
+    );
+    // Default seam: renderStoryToImage with HEADLESS_CAPTURE unset ⇒ unavailable ⇒ no blocks.
+    const orch = new Orchestrator([]);
+    const tool = new ReadFiles(orch, { fileIds: [story.data.id] }, {
+      userId: '1', mode: 'org', effectiveUser: ADMIN,
+    } as AnalystAgentContext);
+    const res = await tool.run();
+    expect(res.isError).toBe(false);
+    expect(res.content.some((b) => (b as { type?: string }).type === 'image')).toBe(false);
   });
 
   it('enforces ACL — restricted viewer cannot read a file outside their home folder', async () => {

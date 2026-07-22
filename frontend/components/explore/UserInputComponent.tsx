@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import {
-  Box, HStack, VStack, Text, Button, Input, Textarea, Icon
+  Box, HStack, VStack, Text, Button, Input, Textarea, Icon, Image
 } from '@chakra-ui/react';
 import { LuBadgeInfo } from 'react-icons/lu';
 import { UserInput } from '@/lib/tools/user-input-exception';
@@ -194,13 +194,16 @@ export default function UserInputComponent({
         const FIGURE_IT_OUT = '__figure_it_out__';
         const OTHER = '__other__';
 
-        // Use label as identifier (value is optional)
-        const getOptionKey = (opt: { label: string; value?: any }) => opt.value ?? opt.label;
-        const isSelected = (opt: { label: string; value?: any }) => choiceValues.includes(getOptionKey(opt));
+        // Options with an imageUrl render as an image-card grid instead of compact rows.
+        const hasImageOptions = props.options?.some(opt => opt.imageUrl) ?? false;
+
+        // Use value as identifier when present, falling back to label
+        const getOptionKey = (opt: { label: string; value?: string }) => opt.value ?? opt.label;
+        const isSelected = (opt: { label: string; value?: string }) => choiceValues.includes(getOptionKey(opt));
         const isOtherSelected = choiceValues.includes(OTHER);
         const isFigureItOutSelected = choiceValues.includes(FIGURE_IT_OUT);
 
-        const toggleSelection = (opt: { label: string; value?: any }) => {
+        const toggleSelection = (opt: { label: string; value?: string }) => {
           const key = getOptionKey(opt);
           if (isMultiSelect) {
             // Multi-select: toggle value in array
@@ -239,7 +242,75 @@ export default function UserInputComponent({
 
         return (
           <VStack gap={2} align="stretch">
-            {/* Options as compact stacked rows */}
+            {hasImageOptions ? (
+              /* Options as image cards — preview on top, label + check below */
+              <Box
+                display="grid"
+                gridTemplateColumns="repeat(auto-fill, minmax(150px, 1fr))"
+                gap={2}
+              >
+                {props.options?.map((option, i) => {
+                  const selected = isSelected(option);
+                  return (
+                    <VStack
+                      key={i}
+                      as="button"
+                      aria-label={option.label}
+                      onClick={() => toggleSelection(option)}
+                      gap={0}
+                      align="stretch"
+                      borderRadius="md"
+                      border="1px solid"
+                      borderColor={selected ? 'accent.teal' : 'border.default'}
+                      bg={selected ? 'accent.teal/8' : 'transparent'}
+                      cursor="pointer"
+                      transition="all 0.15s"
+                      _hover={{ borderColor: 'accent.teal', bg: 'accent.teal/8' }}
+                      overflow="hidden"
+                      textAlign="left"
+                    >
+                      {option.imageUrl && (
+                        <Image
+                          aria-label={`${option.label} preview`}
+                          src={option.imageUrl}
+                          alt={`${option.label} preview`}
+                          w="100%"
+                          aspectRatio="4 / 3"
+                          objectFit="cover"
+                          display="block"
+                          bg="bg.muted"
+                        />
+                      )}
+                      <HStack gap={2} px={2.5} py={2} align="start">
+                        {/* Radio/checkbox indicator */}
+                        <Box
+                          w="14px" h="14px" mt="1px" borderRadius={isMultiSelect ? 'sm' : 'full'}
+                          border="2px solid" borderColor={selected ? 'accent.teal' : 'fg.subtle'}
+                          bg={selected ? 'accent.teal' : 'transparent'}
+                          flexShrink={0}
+                          display="flex" alignItems="center" justifyContent="center"
+                        >
+                          {selected && (
+                            <Box w="6px" h="6px" borderRadius={isMultiSelect ? '1px' : 'full'} bg="white" />
+                          )}
+                        </Box>
+                        <VStack gap={0} align="start" flex={1} minW={0}>
+                          <Text fontSize="xs" fontFamily="mono" fontWeight="500" color={selected ? 'accent.teal' : 'fg.default'}>
+                            {option.label}
+                          </Text>
+                          {option.description && (
+                            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+                              {option.description}
+                            </Text>
+                          )}
+                        </VStack>
+                      </HStack>
+                    </VStack>
+                  );
+                })}
+              </Box>
+            ) : (
+            /* Options as compact stacked rows */
             <VStack gap={1} align="stretch">
               {props.options?.map((option, i) => {
                 const selected = isSelected(option);
@@ -287,6 +358,7 @@ export default function UserInputComponent({
                 );
               })}
             </VStack>
+            )}
 
             {/* Special options — side by side */}
             {isCancellable && (
@@ -338,6 +410,7 @@ export default function UserInputComponent({
             {/* Text input for "Other" option */}
             {isOtherSelected && (
               <Input
+                aria-label="Other response"
                 placeholder="Enter your response..."
                 value={otherText}
                 onChange={(e) => setOtherText(e.target.value)}
@@ -363,6 +436,7 @@ export default function UserInputComponent({
                 bg="accent.teal"
                 color="white"
                 fontFamily="mono"
+                aria-label="Submit clarification"
                 onClick={() => handleSubmit(getSubmitValue())}
                 disabled={!canSubmit}
               >

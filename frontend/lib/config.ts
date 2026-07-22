@@ -48,6 +48,10 @@ interface EnvironmentConfig {
   OBJECT_STORE_PUBLIC_URL: string | undefined;
   USE_BASE64_UPLOADS: boolean;
   DISABLE_APP_STATE_IMAGES: boolean;
+  /** Headless story capture (Story_Design_V2 §6c): opt-in flag for the Playwright backend.
+   *  Off by default — when off (or when Chromium can't launch) renderStoryToImage returns
+   *  { ok: false, reason: 'unavailable' } and callers degrade to today's no-image behavior. */
+  HEADLESS_CAPTURE: boolean;
   CREDITS_ENABLED: boolean;
   SHARE_GUEST_CHAT_ENABLED: boolean;
   LOCAL_UPLOAD_PATH: string;
@@ -147,6 +151,8 @@ const config: EnvironmentConfig = {
   OBJECT_STORE_PUBLIC_URL: process.env.OBJECT_STORE_PUBLIC_URL,
   USE_BASE64_UPLOADS: process.env.USE_BASE64_UPLOADS === 'true',
   DISABLE_APP_STATE_IMAGES: process.env.DISABLE_APP_STATE_IMAGES === 'true',
+  // Headless story capture — opt-in (HEADLESS_CAPTURE=1 or true), default off.
+  HEADLESS_CAPTURE: process.env.HEADLESS_CAPTURE === '1' || process.env.HEADLESS_CAPTURE === 'true',
   // Whether the credits usage module (Settings card + sidebar donuts) is shown.
   // Off unless explicitly enabled per deploy.
   CREDITS_ENABLED: process.env.CREDITS_ENABLED === 'true',
@@ -348,6 +354,7 @@ export const OBJECT_STORE_SECRET_ACCESS_KEY = config.OBJECT_STORE_SECRET_ACCESS_
 export const OBJECT_STORE_PUBLIC_URL = config.OBJECT_STORE_PUBLIC_URL;
 export const USE_BASE64_UPLOADS = config.USE_BASE64_UPLOADS;
 export const DISABLE_APP_STATE_IMAGES = config.DISABLE_APP_STATE_IMAGES;
+export const HEADLESS_CAPTURE = config.HEADLESS_CAPTURE;
 export const CREDITS_ENABLED = config.CREDITS_ENABLED;
 export const SHARE_GUEST_CHAT_ENABLED = config.SHARE_GUEST_CHAT_ENABLED;
 export const MAX_CONCURRENT_QUERIES = config.MAX_CONCURRENT_QUERIES;

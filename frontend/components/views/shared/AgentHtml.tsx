@@ -2,16 +2,23 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 
 import { sanitizeAgentHtml } from '@/lib/html/sanitize-agent-html';
 import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
 import { AGENT_IFRAME_CSP } from '@/lib/html/agent-iframe-csp';
 import { serializeEditedStory } from '@/lib/html/serialize-story';
 import { collectStoryFontImports, resolveImportFontCss } from '@/lib/html/resolve-story-fonts';
-import { mountStorySurface, type StorySurface, type StorySurfaceKind } from '@/lib/story-surface';
+import {
+  mountStorySurface, autoSizeStorySurface, STORY_FLUID_SHIM_CSS,
+  type StorySurface, type StorySurfaceKind,
+} from '@/lib/story-surface';
 import StoryEmbeds, {
   type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget, type StoryQuestionEditRequest,
 } from '@/components/views/shared/StoryEmbeds';
+import StoryJsxBody, { type StoryJsxEditApi } from '@/components/views/shared/StoryJsxBody';
+import { STORY_FLOATING_CSS } from '@/lib/story-ui';
+import { getStoryFontCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import StorySelectionPopover from '@/components/views/story/StorySelectionPopover';
 import { paramFromPlaceholderEl, type StoryParam } from '@/lib/data/story/story-params';
 import { inlineQuestionFromEl, inlineEmbedToQuestionContent, savedQuestionVizFromEl } from '@/lib/data/story/story-question';
@@ -21,6 +28,14 @@ import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 
 interface AgentHtmlProps {
   html: string;
+  /**
+   * Story body format. Undefined (default) = legacy sanitized-HTML path (placeholder embeds).
+   * 'jsx' = new-format story (Story_Design_V2 §2): `html` carries STATIC JSX source, parsed and
+   * rendered through the lib/story-ui interpreter into the same nested-in-iframe React root the
+   * legacy path uses for embeds (see StoryJsxBody). WYSIWYG edits commit by AST write-back
+   * (applyDomEditsToJsx) — the DOM is render output, never scraped into the file.
+   */
+  format?: 'jsx';
   /** Fixed logical canvas width in px (the agent authors against it). */
   width: number;
   /** Fixed canvas height in px; omit for content-driven height (story pages). */
@@ -30,15 +45,22 @@ interface AgentHtmlProps {
   /** Color mode for the iframe document's dark/light class (sourced by the caller, M4.2). */
   colorMode: 'light' | 'dark';
   /**
+   * Design theme (Story_Design_V2 §5) — the story's `content.theme`. Jsx stories only: stamped
+   * as `data-theme` on the story root so the compiledCss's `[data-theme]` token blocks (and the
+   * matching platform font set) activate. Switching is an attribute change — no doc rebuild.
+   */
+  theme?: string | null;
+  /**
    * Fluid mode (mobile): render at 100% of the container width and let the
    * authored flow layout reflow, instead of pinning to `width`px.
    */
   fluid?: boolean;
   /**
    * Where the story body mounts inside the iframe (see lib/story-surface):
-   *  - 'dom' (default) — the body IS document.body; captured via snapdom.
-   *  - 'svg' — the body sits in <svg><foreignObject>, so a capture can serialize the LIVE surface
-   *    (browser-rendered, snapdom-free). Renders and behaves identically either way.
+   *  - 'svg' (default, and the only production path) — the body sits in <svg><foreignObject>, so a
+   *    capture can serialize the LIVE surface (browser-rendered, snapdom-free).
+   *  - 'dom' — the body IS document.body. Kept as the surface abstraction's second implementation
+   *    (not selectable via any config).
    */
   surface?: StorySurfaceKind;
   /**
@@ -100,7 +122,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'dom', paramValues, onParamValuesChange, onEditNumber, onEditQuestion, selectionSource, onChange, filePath, colorMode, compiledCss },
+  { html, format, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'svg', paramValues, onParamValuesChange, onEditNumber, onEditQuestion, selectionSource, onChange, filePath, colorMode, theme, compiledCss },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -111,8 +133,14 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   const [inlineTargets, setInlineTargets] = useState<InlineChartTarget[]>([]);
   const [numberTargets, setNumberTargets] = useState<NumberTarget[]>([]);
   const [paramTargets, setParamTargets] = useState<ParamTarget[]>([]);
+  // Jsx WYSIWYG: pending-edit access into StoryJsxBody (AST write-back) for serialize().
+  const jsxEditApiRef = useRef<StoryJsxEditApi | null>(null);
 
-  const sanitized = useMemo(() => sanitizeAgentHtml(html || ''), [html]);
+  const isJsx = format === 'jsx';
+  // Legacy path: sanitize + innerHTML-inject. Jsx path: the raw source IS the body input — it is
+  // parsed to an AST and interpreted (never injected as HTML), so sanitizeAgentHtml never runs.
+  const sanitized = useMemo(() => (isJsx ? '' : sanitizeAgentHtml(html || '')), [html, isJsx]);
+  const bodySource = isJsx ? (html || '') : sanitized;
 
   // ── Build the iframe document + discover embed placeholders ──────────────────────────────────
   useLayoutEffect(() => {
@@ -120,15 +148,16 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     const doc = iframe?.contentDocument;
     if (!iframe || !doc) return;
 
-    // Fresh document each build. <style data-mx-app-styles> sits FIRST (in <head>) so the story's own
-    // <style> blocks (in <body>, later in document order) win ties.
+    // Fresh document each build. Injected styles do NOT go in <head>: they live INSIDE the story
+    // root (Story_Design_V2 §4 self-contained doc) so a serialized capture of the <svg> surface
+    // carries them without head-cloning — see the prepend below.
     // Defense-in-depth CSP for the agent-authored document (see lib/html/agent-iframe-csp.ts).
     const CSP = AGENT_IFRAME_CSP;
     // `<base target="_top">`: links inside an iframe navigate the IFRAME by default, which would load
     // the whole app inside it (e.g. clicking an embedded chart's title → /f/<id>). Targeting _top sends
     // every link navigation (chart titles, author links) to the top window instead.
     doc.open();
-    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}"><base target="_top"><style data-mx-app-styles></style></head><body></body></html>`);
+    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}"><base target="_top"></head><body></body></html>`);
     doc.close();
     docRef.current = doc;
     const root = doc.documentElement;
@@ -150,23 +179,46 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       doc.documentElement.style.minHeight = '0';
       doc.body.style.minHeight = '0';
     }
-    // Design-system stylesheet (server-compiled Tailwind) — into <head> via textContent (DOM
-    // insertion, not doc.write, so no escaping concerns), after the app-styles mirror. Body
-    // <style> blocks come later in document order and win ties; the WYSIWYG serializer reads
-    // body only, so this can never echo into a save.
-    if (compiledCss) {
-      const tw = doc.createElement('style');
-      tw.setAttribute('data-mx-tw', '');
-      tw.textContent = compiledCss;
-      doc.head.appendChild(tw);
-    }
     // Where the story body lives: document.body ('dom') or an <svg><foreignObject> in it ('svg').
     // Everything downstream (embeds, editing, serialization, height) targets `surface.root`, so the
     // renderer difference is confined to lib/story-surface.
     const surface = mountStorySurface(doc, surfaceKind, width);
     surfaceRef.current = surface;
+    // Legacy path only: the sanitized story HTML IS the body. A jsx body renders through the
+    // interpreter into the nested React root below (portaled into surface.root) — never innerHTML.
     // @import web-fonts load natively inside an iframe (unlike a shadow root) — no hoisting needed.
-    surface.root.innerHTML = sanitized;
+    if (!isJsx) surface.root.innerHTML = sanitized;
+
+    // ── Injected styles: INSIDE the story root, as data-mx-*-tagged nodes (Story_Design_V2 §4) ──
+    // The serialized <svg> subtree must be self-contained, so everything the story depends on lives
+    // in-root, not in <head>. Prepend order (first → last): app-styles mirror, compiled Tailwind,
+    // floating css, platform fonts — the story's own <style> blocks come later in document order and
+    // win ties. Every save path strips these via INJECTED_STYLE_SELECTOR (lib/html/serialize-story).
+    const injectedStyles: HTMLStyleElement[] = [];
+    const makeStyle = (attr: string, css: string) => {
+      const el = doc.createElement('style');
+      el.setAttribute(attr, '');
+      el.textContent = css;
+      injectedStyles.push(el);
+    };
+    makeStyle('data-mx-app-styles', ''); // filled by mirrorAppStyles below (it finds the tag by attr)
+    // Design-system stylesheet (server-compiled Tailwind), via textContent (DOM insertion, not
+    // doc.write, so no escaping concerns).
+    if (compiledCss) makeStyle('data-mx-tw', compiledCss);
+    if (isJsx) {
+      // Vendored Tooltip/Popover render un-portaled, and Radix's popper wrapper must be forced to
+      // absolute positioning (fixed is broken inside <svg><foreignObject>).
+      makeStyle('data-mx-floating', STORY_FLOATING_CSS);
+      // Platform-provided fonts (theme registry — lib/data/story/story-fonts.ts; neutral default).
+      // Live form is URL-loaded static assets; capture splices data-URIs into the parsed copy only.
+      const fontCss = getStoryFontCss(theme ?? undefined);
+      if (fontCss) makeStyle(STORY_FONTS_ATTR, fontCss);
+      // Design theme (§5): data-theme on the story root activates the compiledCss's
+      // [data-theme] token blocks. Changes are synced by the theme effect below (attribute
+      // only, no rebuild); this stamp covers fresh documents (theme unchanged across rebuilds).
+      if (theme) surface.root.setAttribute('data-theme', theme);
+    }
+    surface.root.prepend(...injectedStyles);
     mirrorAppStyles(doc);
 
     // A hidden host for the nested React root that portals the live embeds into the placeholders below.
@@ -177,23 +229,15 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     embedRoot.style.display = 'none';
     doc.body.appendChild(embedRoot);
 
-    // Fluid (mobile) shim: cap fixed-width chart embeds / media to the viewport so the authored layout
-    // reflows instead of overflowing. Appended last so it wins ties. Never touches <canvas>.
+    // Fluid (mobile) shim: cap fixed-width chart embeds / media to the container so the authored
+    // layout reflows instead of overflowing (STORY_FLUID_SHIM_CSS — the other half of the surface's
+    // width contract). Appended last so it wins ties. Into the surface root, not the body: on the
+    // SVG surface the shim must sit inside the serialized subtree or a capture would render without
+    // it (uncapped chart widths).
     if (fluid) {
       const shim = doc.createElement('style');
       shim.setAttribute('data-mx-fluid-shim', '');
-      shim.textContent =
-        // Block chart embeds — saved (data-question-id) AND inline (data-question-inline). The inline
-        // selector was missing, so an inline chart authored wider than the viewport (e.g. width:1100px)
-        // overflowed the canvas and got cut off with the chat panel open; cap it like the saved kind.
-        '[data-question-id],[data-question-inline]{max-width:100%!important;width:100%!important;min-width:0!important}' +
-        // Inline numbers live in prose — clamp their max-width without forcing block width.
-        '[data-number-inline]{max-width:100%!important}' +
-        // Belt-and-braces: never let the authored document force horizontal scroll/cutoff of the page.
-        'img,svg,video,table,pre{max-width:100%!important}img,video{height:auto!important}' +
-        'html,body{max-width:100%!important;overflow-x:hidden!important}';
-      // Into the surface root, not the body: on the SVG surface the shim must sit inside the
-      // serialized subtree or a capture would render without it (uncapped chart widths).
+      shim.textContent = STORY_FLUID_SHIM_CSS;
       surface.root.appendChild(shim);
     }
 
@@ -214,14 +258,20 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       el.style.height = `${Number.isFinite(h) ? Math.max(h, minH) : defaultH}px`;
     };
 
+    // Embed placeholder discovery is a LEGACY-path concern: a jsx body has no data-* placeholder
+    // divs — its embeds mount as interpreter adapter components (StoryJsxBody). The state setters
+    // still run below (with empty arrays) so the render effect re-fires against the fresh root.
     const found: ChartTarget[] = [];
+    const inlineFound: InlineChartTarget[] = [];
+    const numbersFound: NumberTarget[] = [];
+    const paramsFound: ParamTarget[] = [];
+    if (!isJsx) {
     doc.querySelectorAll<HTMLElement>('[data-question-id]').forEach(el => {
       const questionId = parseInt(el.getAttribute('data-question-id') || '', 10);
       if (Number.isNaN(questionId)) return;
       sizeEmbedEl(el);
       found.push({ el, questionId, vizOverride: savedQuestionVizFromEl(el) });
     });
-    const inlineFound: InlineChartTarget[] = [];
     doc.querySelectorAll<HTMLElement>('[data-question-inline]').forEach(el => {
       const embed = inlineQuestionFromEl(el);
       if (!embed) return;
@@ -229,7 +279,6 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       sizeEmbedEl(el, isSingleValue ? SINGLE_VALUE_MIN_H : MIN_CHART_H, isSingleValue ? SINGLE_VALUE_DEFAULT_H : DEFAULT_CHART_H);
       inlineFound.push({ el, content: inlineEmbedToQuestionContent(embed), bare: isSingleValue, embed });
     });
-    const numbersFound: NumberTarget[] = [];
     doc.querySelectorAll<HTMLElement>('[data-number-inline]').forEach(el => {
       const embed = numberFromEl(el);
       if (!embed) return;
@@ -237,7 +286,6 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       el.setAttribute('data-mx-busy', 'true'); // cleared by StoryEmbeds on mount (see sizeEmbedEl)
       numbersFound.push({ el, embed });
     });
-    const paramsFound: ParamTarget[] = [];
     doc.querySelectorAll<HTMLElement>('[data-param-name]').forEach(el => {
       const param: StoryParam | null = paramFromPlaceholderEl(el);
       if (!param) return;
@@ -245,6 +293,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       el.setAttribute('data-mx-busy', 'true'); // cleared by StoryEmbeds on mount (see sizeEmbedEl)
       paramsFound.push({ el, param });
     });
+    }
 
     // Mount the nested React root for this fresh document. The deferred teardown (cleanup below)
     // can run after the iframe document was already rewritten; React then throws NOT_FOUND
@@ -270,27 +319,11 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setParamTargets(paramsFound);
 
-    // Content-driven height: keep the iframe as tall as its content (no inner scrollbar).
-    // On the SVG surface there's an extra link in the chain — an <svg> does NOT auto-size to its
-    // foreignObject content (it would sit at the 150px default), so the measured height must be
-    // pushed into the svg+foreignObject before the iframe is sized to it.
-    let ro: ResizeObserver | undefined;
-    const syncHeight = () => {
-      const s = surfaceRef.current;
-      if (height !== undefined || !iframeRef.current || !docRef.current || !s) return;
-      const contentHeight = s.measureHeight();
-      s.applyHeight(contentHeight);
-      iframeRef.current.style.height = `${contentHeight}px`;
-    };
-    syncHeight();
-    if (height === undefined && typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(syncHeight);
-      ro.observe(surface.root);
-      // The body lives in another document, where ResizeObserver delivery is not guaranteed.
-      // Observing the iframe element itself (same-document) makes pane-width changes (side-chat
-      // toggle) — which rewrap the fluid story to a different content height — always resync.
-      ro.observe(iframe);
-    }
+    // Keep the surface sized to its container — as wide as the iframe (fluid only), as tall as its
+    // content — at mount and on every later resize (side-chat toggle, window resize). The whole
+    // sizing contract (order, fluid gating, ResizeObserver wiring) lives in lib/story-surface, where
+    // the real-browser guard (scripts/story-width-matrix.ts) drives it directly.
+    const disposeAutoSize = autoSizeStorySurface({ surface, iframe, doc, fluid, fixedHeight: height });
 
     // Re-mirror app styles whenever the iframe tree mutates — emotion injects each tile's styles lazily
     // (into the MAIN document.head) only when that tile mounts; mirrorAppStyles copies them across.
@@ -304,7 +337,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     const timers = [250, 1500, 3000].map(ms => window.setTimeout(() => { if (docRef.current) mirrorAppStyles(docRef.current); }, ms));
 
     return () => {
-      ro?.disconnect();
+      disposeAutoSize();
       observer.disconnect();
       if (debounce) window.clearTimeout(debounce);
       timers.forEach(t => window.clearTimeout(t));
@@ -320,12 +353,49 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       tearingDown = true;
       if (root) setTimeout(() => { try { root.unmount(); } catch { /* detached doc nodes */ } }, 0);
     };
-  }, [sanitized, fluid, height, compiledCss, surfaceKind, width]); // colorMode handled separately so it doesn't rebuild the doc
+  }, [bodySource, isJsx, sanitized, fluid, height, compiledCss, surfaceKind, width]); // colorMode + theme handled separately so they don't rebuild the doc
+
+  // Keep the story root's design theme in sync without rebuilding the document — a theme switch
+  // is an attribute change only (all [data-theme] token blocks already ship in compiledCss).
+  // The platform font set follows the theme (same node the build effect injected).
+  useEffect(() => {
+    const root = surfaceRef.current?.root;
+    if (!root || !isJsx) return;
+    if (theme) root.setAttribute('data-theme', theme);
+    else root.removeAttribute('data-theme');
+    const fontsEl = root.querySelector(`style[${STORY_FONTS_ATTR}]`);
+    if (fontsEl) fontsEl.textContent = getStoryFontCss(theme ?? undefined);
+  }, [theme, isJsx]);
 
   // Render (and re-render) the nested embeds root with the latest targets/props.
+  // Jsx path: the same nested root instead renders the WHOLE story body (interpreter output),
+  // portaled into the story surface root — the StoryEmbeds architecture generalized from
+  // "portal each embed into its placeholder" to "portal the interpreted body into the surface".
   useEffect(() => {
     const doc = docRef.current;
     if (!doc || !reactRootRef.current) return;
+    if (isJsx) {
+      const surfaceRoot = surfaceRef.current?.root;
+      if (!surfaceRoot) return;
+      reactRootRef.current.render(
+        createPortal(
+          <StoryJsxBody
+            doc={doc}
+            jsx={html || ''}
+            readOnly={readOnly}
+            paramValues={paramValues}
+            onParamValuesChange={onParamValuesChange}
+            filePath={filePath}
+            colorMode={colorMode}
+            editable={editable && !readOnly}
+            onChange={onChange}
+            editApiRef={jsxEditApiRef}
+          />,
+          surfaceRoot,
+        ),
+      );
+      return;
+    }
     reactRootRef.current.render(
       <StoryEmbeds
         doc={doc}
@@ -343,7 +413,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         colorMode={colorMode}
       />,
     );
-  }, [targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, filePath, colorMode]);
+  }, [targets, inlineTargets, numberTargets, paramTargets, isJsx, html, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, filePath, colorMode]);
 
   // Keep the iframe's color-mode class in sync without rebuilding the whole document.
   useEffect(() => {
@@ -375,13 +445,15 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       }).catch(() => {});
     }
     return () => { cancelled = true; tag?.remove(); };
-  }, [sanitized]);
+  }, [bodySource]);
 
   // Inline edit mode: make the story's top-level text containers contenteditable while keeping chart
   // embeds locked as atomic, non-editable islands. Runs after the doc + targets exist.
   useEffect(() => {
     const root = surfaceRef.current?.root;
-    if (!root) return;
+    // Jsx stories manage their own scoped contenteditable via React props (StoryJsxBody) —
+    // this DOM-level pass is legacy-only (mutating attributes under React would be clobbered).
+    if (!root || isJsx) return;
     Array.from(root.children).forEach(el => {
       if (el.tagName === 'STYLE' || el.hasAttribute('data-mx-embed-root')) return;
       (el as HTMLElement).contentEditable = editable ? 'true' : 'inherit';
@@ -389,7 +461,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     root.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline],[data-number-inline]').forEach(el => {
       el.contentEditable = 'false';
     });
-  }, [editable, targets, inlineTargets, numberTargets, sanitized]);
+  }, [editable, targets, inlineTargets, numberTargets, sanitized, isJsx]);
 
   // While editing, sync inline edits out (debounced + flush on focus loss) so the caller can mark the
   // file dirty and the shared header's Save persists them — the iframe DOM is the source of truth.
@@ -402,7 +474,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   useEffect(() => {
     const doc = docRef.current;
     const root = surfaceRef.current?.root;
-    if (!doc || !root || !editable || !onChange) return;
+    if (!doc || !root || !editable || !onChange || isJsx) return;
     let t = 0;
     let userEdited = false;
     // Serialize the SURFACE ROOT, never document.body: on the SVG surface the body also holds the
@@ -421,15 +493,19 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       doc.removeEventListener('focusout', flush);
       if (t) window.clearTimeout(t);
     };
-  }, [editable, onChange, targets]);
+  }, [editable, onChange, targets, isJsx]);
 
   // Read the edited story back out as a clean content.story string.
   useImperativeHandle(ref, () => ({
     serialize: () => {
+      // Jsx stories serialize via AST write-back (StoryJsxBody → applyDomEditsToJsx): the
+      // current source with pending edits applied, or null when nothing was edited. The DOM
+      // is render output, never the source of truth — no DOM scraping.
+      if (isJsx) return jsxEditApiRef.current?.serialize() ?? null;
       const root = surfaceRef.current?.root;
       return root ? serializeEditedStory(root, []) : null;
     },
-  }), []);
+  }), [isJsx]);
 
   return (
     <>

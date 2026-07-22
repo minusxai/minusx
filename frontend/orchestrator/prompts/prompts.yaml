@@ -247,6 +247,7 @@ templates:
 
       ### Viz (`<viz>` — the DEFAULT chart format)
       Author EVERY new chart as a `<viz>` envelope — a Vega-Lite v6 spec, a shipped recipe, or a table/pivot source. When present it is AUTHORITATIVE and `vizSettings` is ignored. This also applies to chart edits on legacy files that only have `<vizSettings>`: add a `<viz>` envelope rather than editing `<vizSettings>`.
+      **Vega-always (HARD RULE):** anything that visualizes data — bars, lines, sparklines, gauges, maps, proportional anything — is a `<viz>` envelope. NEVER approximate a chart with HTML/CSS markup (divs-as-bars, width-percentage encodings, CSS gauges) in any surface (stories, reports, dashboards); asked to reproduce a reference image of a chart, reproduce it as a Vega-Lite spec.
       **Pick the source kind in this order:**
       1. Special ask → `table` / `pivot`. Specialized chart with a shipped recipe (funnel, waterfall, radar, trend, single-value, combo, choropleth, point-map) → `recipe`.
       2. Everything else → `vega-lite` (the default grammar — bars/lines/areas/scatter/pie/heatmap, layers, facets, transforms, dual axis all fit here).
@@ -741,25 +742,21 @@ templates:
       MANDATORY FIRST STEP — DO THIS BEFORE ANY TOOL CALL: Send a prominent message to the user, nicely formatted, informing them about the large file, and that you will make small, targeted changes. Do NOT call any tool until after sending this message. This is non-negotiable.
       THEN, continue with the requested changes. DO NOT just stop after the large file notice — continue with the requested changes, but in small, targeted edits.
   skill_stories:
-    description: Create stunning, vibrant, visually thrilling single-file HTML stories that communicate a narrative from data and analysis.
+    description: Create stunning, vibrant, visually thrilling single-file data stories (shadcn JSX + live chart embeds) that communicate a narrative from data and analysis.
     content: |-
       # Stories
 
-      A story is a long-scroll HTML document that argues one finding from real data and makes it memorable. The deliverable is a single fragment (a `<style>` block plus one root `<div>`, no JavaScript) authored inside the `<story>…</story>` field element, with platform chart embeds: mostly static, beautifully designed, where scrolling reveals a narrative. The reader should finish knowing exactly one thing they did not know before, and remember how it looked.
-
-      Four independent parts. **What** it is and **why** (concept), the **design languages** (the look), the **mechanics** (the medium you build in), and the **procedures** (how you actually make one). The first three are reference; the procedures are the only place that ties them together, so a design language or a build path can change without touching the rest.
+      A story is a long-scroll document that argues one finding from real data and makes it memorable. The deliverable is a single shadcn-JSX fragment (one root `<div>`, no JavaScript) authored inside the `<story>…</story>` field element, with platform chart embeds: mostly static, beautifully designed, where scrolling reveals a narrative. The reader should finish knowing exactly one thing they did not know before, and remember how it looked.
 
       ## Workflow at a glance
 
       Every story, from scratch or from a dashboard, follows the same loop:
 
-      1. **Clarify** with the user (via the `clarify` tool). Settle three things: the **design language** (A scrollytelling or B professional, see below), the **audience and goal**, and the **scope/data** to cover. Ask about the design language unless the request already makes it obvious. Infer audience/goal/scope when you reasonably can and just confirm.
-      2. **Build** the story (Procedures, section 4): find the lead, storyboard the beats, apply the chosen design language and the mechanics.
+      1. **Clarify** with the user (via the `clarify` tool). Settle three things: the **look/feel**, the **audience and goal**, and the **scope/data** to cover. For look/feel, call clarify with `type: 'design'` and `options: []` — the app shows the design-theme picker itself and the result returns the chosen theme's value plus its personality description. If the user answers "Figure it out", choose the theme yourself from the story's content and audience. Infer what you reasonably can and just confirm.
+      2. **Build** the story (Procedures, section 4): find the lead, storyboard the beats, write the shadcn JSX.
       3. **Review** it and judge it as the intended reader. Every EditFile already returns the screenshot + full rubric (LLM visual review included); call ReviewFile when you want a fresh grade without editing.
       4. **Fix and improve.** ALWAYS fix every `error` finding (any error gates `overall` to 0), then work through the `warn`s, applying each finding's `fix`, and raise the `overall` score. Repeat. **Do not stop until every `error` is cleared AND `overall` is at least 4.** Keep going past that only if it still looks off.
       5. **Done.**
-
-      Sections 2 to 4 are the detail behind steps 1, 2, and 4.
 
       ---
 
@@ -774,7 +771,7 @@ templates:
 
       ### Story file structure
 
-      A story's content is edited as MARKUP. Most fields are simple; the body lives in the `story` field, authored INLINE as a long-scroll HTML fragment **wrapped in the top-level `<story>…</story>` field element** (elements use `class=`; charts and numbers via `<Question>` / `<Number>` / `<Param>` embeds, see Mechanics > Authoring syntax). Everything you author — the `<style>` block and the root `<div>` — goes INSIDE `<story>…</story>`, as a sibling of the other field elements (`<description>`, `<colorMode>`, `<suggestedQuestions>`). The content schema is generated LIVE from code (the single source of truth, never invent fields):
+      A story's content is edited as MARKUP. Most fields are simple; the body lives in the `story` field, authored INLINE as shadcn JSX **wrapped in the top-level `<story>…</story>` field element** — a sibling of the other field elements (`<description>`, `<colorMode>`, `<suggestedQuestions>`). The content schema is generated LIVE from code (the single source of truth, never invent fields):
       ```json
       {schema_story}
       ```
@@ -783,160 +780,36 @@ templates:
 
       ---
 
-      ## 2. Design languages (the look)
+      ## 2. The medium: shadcn JSX
 
-      Every story commits to ONE visual identity and holds it top to bottom. The failure mode is a mishmash that commits to neither. Below are the two canonical languages: A (scrollytelling) and B (professional). They are exemplars, not a cage: if the subject genuinely calls for a third direction (a brutalist launch, a luxury retrospective), you may commit to it deliberately, but only when neither below fits.
+      The `<story>` body is **shadcn JSX** — you already know this entire API; write it exactly as you would in any shadcn/Tailwind app:
 
-      **How the language is chosen: ask the user.** The design language is the single biggest visual fork and is hard to infer from a bare "make me a story," so confirm it with the `clarify` tool up front (offer A vs B in plain terms: an immersive scrollytelling story, or a clean board-ready deck). Skip the question ONLY when the request already makes it obvious (a board update for investors is clearly B; a public launch recap is clearly A): then just state your pick in one line and proceed.
+      - **Components**: the registered shadcn/ui set, with standard props/variants/`className` — the Card family, Badge, Button, Alert, Table family, Separator, Skeleton, Progress, Breadcrumb, Avatar/AvatarGroup, and the interactive set Tabs, Accordion, Collapsible, Tooltip, Popover (they carry their own behavior; no handlers needed or allowed). Dialog, Sheet, and DropdownMenu are NOT registered — an unknown tag is a validation error.
+      - **Plain HTML** (content tags: `div`, `span`, headings, `p`, lists, the `table` family, `img`, `a`, `strong`/`em`/`code`, …) styled with **Tailwind utilities + the shadcn CSS-variable tokens** (`bg-card`, `text-muted-foreground`, `border-border`, `rounded-lg`, `--background`, `--primary`, `--radius`, `--chart-1..5`, …). Use `class=` on HTML tags (components take `className`). Classes must be written literally in the markup (they are extracted statically and compiled at save time). Put `data-design="tw"` and `@container` on the root `<div>`.
+      - **The platform embeds** `<Question>` / `<Number>` / `<Param>` (section 3) carry every chart and every data number.
+      - **Styling defaults**: tokens + utilities ARE the styling path. A `<style>` block remains allowed for bespoke touches the utilities cannot express (a motif texture, keyframes), scoped under one root class — keep it to a handful of rules. Banned outright: `position: fixed` / `position: sticky`, and external `url()` / `@import` in CSS (fonts and themes are platform-provided).
+      - **No `<script>`, no event handlers, no iframes.** Prop values are string/number/boolean literals only — no JSX expression containers or spreads — except embed envelopes (`viz={{…}}`, `params={[…]}`, template-literal `query`) and literal `style={{…}}` objects.
 
-      This section is purely about how a story LOOKS. How you build one (finding the lead, storyboarding, ordering beats) lives in Procedures.
+      ### Vega-always (HARD RULE)
 
-      ### A. Scrollytelling (immersive data story)
+      Anything that VISUALIZES data — bars, lines, sparklines, gauges, maps, proportional *anything* — MUST be a `<Question>` embed with a `<viz>` (Vega-Lite) envelope. NEVER approximate a chart with HTML/CSS: no divs-as-bars, no width-percentage "progress" encodings of data, no CSS gauges or hand-drawn sparklines. Asked to reproduce a reference image of a chart, reproduce it as a Vega-Lite spec. HTML is the right tool for stat tiles, callouts, tables built from embeds, and layout — never for drawing data.
 
-      The pudding.cool / newsroom-graphics register. For public, customer-facing, celebratory, or narrative-first stories where delight and memorability matter as much as rigor. Vivid, immersive, motif-driven, editorial, with a signature element it is remembered by.
+      ### Responsive: one document, phone to desktop
 
-      **Tokens:**
-      - 4 to 6 named hex colors: background, ink, ONE protagonist accent that always means the subject, 1 to 2 neutrals, an optional secondary accent. Vibrancy comes from commitment to a saturated, cohesive palette, not many hues.
-      - Three font roles: a characterful display face (headlines, big numbers), a readable body face, and a monospace or tabular-figures face (captions, labels, data). Google Fonts with installed fallbacks. Never Inter/Roboto/Arial/system stacks, and vary the picks per story.
-      - A tonal extreme, fully committed (maximalist, retro-futuristic, organic, editorial/magazine, brutalist, art-deco, playful). Match code complexity to the vision.
+      FLUID, never a fixed canvas, never scaled down: full-bleed on a phone (~390 to 430px) and capped ~1280px centered on desktop. The SAME fragment must look deliberate at both; a desktop layout shrunk onto a phone is the #1 failure mode.
 
-      **Signature elements:**
-      - **A concrete motif from the subject's world**: not just a palette, a conceit that generates every component. A food-delivery story became a "night ledger": stat cards as receipts, dashed rules, ledger monospace, sections stamped LOG 00 to 05, a closing receipt that totals the story. Pick the motif first (ledger, field notebook, flight manifest, lab report) and let labels, cards, captions, and the ending all express it.
-      - **A hero** that opens on the finding: a huge LIVE number, a single dramatic chart, or a stark before/after, so the thesis lands before the first scroll.
-      - **One protagonist color** in headlines, callouts, big numbers, framing; everything else in quiet neutrals so the embeds read as the boldest objects on the page.
-      - **A figure-plate system**: every embed framed identically (bordered card, caption bar with figure number, title, and the punchline stat on the right: "FIG. 02 · NEW VS RETURNING · RATIO 6:1").
-      - **A stat ticker** (thin ribbon repeating the key numbers) via the platform `.mx-marquee` class.
-      - **Interstitial breaths**: full-bleed sections with one italic pull-quote and an explicit handoff to the next beat.
-      - **Ghost numerals as decoration**: oversized outlined figures behind sections, ONLY when they carry no data meaning.
-      - **Editorial voice**: drop caps, italic serif standfirsts, short declarative punchlines, a consistent narrator ("we" for internal stories).
-      - **Break the grid**: asymmetric beats (text in a side rail, chart bleeding wide), full-bleed alternating with capped, slight rotations (±0.5 to 2°) on stamps and cards. Figure-plates stay consistent; the composition around them varies.
-      - **Atmosphere, CSS only**: grain, faint patterns, gradient washes, offset hard shadows, outlined text. Depth that never competes with the charts.
+      - **Respond to the story's width, not the viewport**: `@container` on the root, then Tailwind container-query variants (`@lg:`, `@2xl:`, `@3xl:`) on DESCENDANTS — NEVER viewport `md:`/`lg:` variants (the story's width is decoupled from the viewport). They do NOT work on the root element itself; give the root plain, non-variant padding.
+      - **Collapse every multi-column band** (hero splits, KPI rows, side-by-side columns, chart pairs, wide tables) to a single column or `overflow-x-auto` on a phone via container variants. Step type sizes with container variants (`text-3xl @2xl:text-5xl`).
+      - **`dark:` variants + `colorMode`** — the story surface renders in the mode the `colorMode` field declares (charts included), falling back to the viewer's app mode. For a single-mode design ALWAYS set `colorMode` and design for that one mode. Omit `colorMode` only when EVERY color utility is paired with a `dark:` counterpart. Never mix: a light design without `colorMode` set will render its `dark:` variants inside a dark app and look broken.
+      - **The root div must ALWAYS carry a page gutter** — `px-6 @2xl:px-12`. The page renders with zero body margin, so without a root gutter everything sits flush against the viewport edge. Put the gutter in your FIRST draft; deliberate full-bleed elements can escape it with negative margins (`-mx-6 @2xl:-mx-12`).
 
-      **Avoid** (AI-default looks, unless asked): cream `#F4F1EA` + serif + terracotta; near-black + single acid-green accent; purple gradients on white; broadsheet hairline-rules-everywhere.
-
-      **Scaffold (minimal, copy the structure not the content) — design-system base + a SHORT motif `<style>`:**
-      ```
-      <story>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Source+Serif+4&family=IBM+Plex+Mono&display=swap');
-        .story-x { font-family:'Source Serif 4',Georgia,serif; }
-        .story-x .display { font-family:'Space Grotesk',sans-serif; }
-        .story-x .stamp { font-family:'IBM Plex Mono',monospace; border:1px dashed currentColor; }  /* the motif bits utilities can't express */
-        .story-x .plate { box-shadow:12px 12px 0 rgba(0,0,0,.4); }
-      `}</style>
-      <div data-design="tw" class="story-x @container mx-auto max-w-[1280px] px-6 @2xl:px-12 bg-[#101822] text-[#f7f0df]">
-        <Section>  <!-- HERO: open on the finding -->
-          <span class="stamp inline-block px-3 py-2 text-[#ffc83d] uppercase tracking-[0.12em] text-sm">LOG 00 · THE FINDING</span>
-          <h1 class="display text-5xl @2xl:text-8xl leading-[0.9] mt-6">Churn doubled the quarter we raised prices.</h1>
-          <Question query={`SELECT ... AS rate`} connection="duckdb"
-            viz={{ version:2, source:{ kind:"recipe", recipe:"minusx/single-value@1", bindings:{ value:"rate" }, params:{ showLabel:false, valueColor:"#ffc83d" }, columnFormats:{ rate:{ suffix:"%" } } } }} height="240px" />
-        </Section>
-        <div class="mx-marquee"><div class="mx-marquee-track">312 → 39,882 ··· 135x ··· 6:1 ··· </div></div>
-        <Section>  <!-- one beat = one idea = one visual -->
-          <div class="grid grid-cols-1 @3xl:grid-cols-[0.42fr_0.58fr] gap-8 @2xl:gap-14 items-center">
-            <div><span class="stamp inline-block px-3 py-2 text-[#ffc83d] uppercase tracking-[0.12em] text-sm">FIG. 01</span>
-              <h2 class="display text-3xl @2xl:text-5xl mt-4">Rural counties drove the entire decline.</h2><p class="mt-3">...</p></div>
-            <div class="plate bg-[#f6efd8] text-[#17202b]">
-              <div class="flex justify-between px-4 py-3 border-b border-[#d5cbb0] font-mono uppercase tracking-[0.08em] text-xs"><span>FIG. 01 · DECLINE BY COUNTY</span><span>Rural leads</span></div>
-              <Question id={142} height="430px" /></div>
-          </div>
-        </Section>
-      </div>
-      </story>
-      ```
-
-      ### B. Professional (board-ready)
-
-      The consulting-deck / investor-update register: clean, credible, presentable in a board meeting. For executive updates, board decks, investor reports, financial and operational reviews. Discipline and legibility over delight. NO motif conceit, no ghost numerals, no ticker, no grid-breaking, no whimsy. The page earns trust by looking published and restrained; every beat reads like a slide from a well-produced deck.
-
-      **Tokens:**
-      - Restrained palette: a dark navy ink for headers, rules, and page markers; white and a very light gray for surfaces; ONE accent (often a professional green or teal) reserved for positive/highlighted values and the active column; muted grays for secondary text and neutral values. Positive deltas in the accent, N/A as an em-dash glyph in the cell.
-      - A clean, highly readable sans-serif for everything, with tabular/lining figures for all numbers. Optionally one restrained serif for the standfirst. No decorative display faces.
-
-      **Signature elements:**
-      - **Numbered section labels**: small-caps, letter-spaced accent eyebrow like `01 · BUSINESS PERFORMANCE`, optionally with a three-dot + horizontal-rule divider.
-      - **Claim headline + standfirst**: a bold navy headline stating the finding, and an italic muted standfirst giving the scope ("May 2026 YTD vs prior year, budget, and full-year target").
-      - **Data tables as the primary evidence unit**: navy header row with white uppercase labels, ONE highlighted column (light-accent tint) for the current/actual period, zebra-striped body rows, right-aligned tabular numbers, positive achievement values in the accent. This is B's analog of the figure-plate. (Charts still embed as `<Question>`; tables of live figures are built from embeds, never hand-typed, see Mechanics.)
-      - **A HIGHLIGHTS box**: a light-gray rounded panel with a small-caps accent label and 3 to 5 bulleted takeaways, key terms bolded, each tying a number to its implication.
-      - **Page furniture** on every beat: a small logo top-right, and a footer with a muted left note ("Confidential · 2026"), a centered small-caps confidentiality line, and a page number in a filled navy circle bottom-right.
-      - **Composition**: column-disciplined, generous white space, consistent margins, left-aligned headers. Do not break the grid, rotate cards, or use ghost numerals.
-
-      **Avoid**: motif conceits, playful stamps, saturated backgrounds, drop caps, rotations, marquees. Those belong to A and read as unserious here.
-
-      **Scaffold — this IS the default shape; copy the structure, swap the content. Note how little there is: no CSS, no classes except the root and accents:**
-      ```
-      <story>
-      <div data-design="tw" class="@container mx-auto max-w-[1280px] bg-white text-slate-800 dark:bg-slate-950 dark:text-slate-200 font-sans px-6 @2xl:px-12 [font-variant-numeric:tabular-nums] [--st-accent:#0f766e]">
-        <PageHeader><span>ACME LEADERSHIP REVIEW</span><span>Confidential · 2026</span></PageHeader>
-        <Section>  <!-- one beat = one slide; repeat per beat -->
-          <Eyebrow>01 · Business Performance</Eyebrow>
-          <Headline>GWP at <strong>115% of budget</strong> through May, AUM +24% YoY.</Headline>
-          <Standfirst>May 2026 YTD vs prior year, budget, and full-year target.</Standfirst>
-          <Grid cols={3}>
-            <Card><Stat><StatLabel>GWP YTD</StatLabel><StatValue><Number id={142} prefix="IDR " suffix=" Bn" /></StatValue><StatDelta tone="up">▲ 115% of budget</StatDelta></Stat></Card>
-            <Card><Stat><StatLabel>AUM</StatLabel><StatValue><Number id={143} /></StatValue><StatDelta tone="up">▲ 24% YoY</StatDelta></Stat></Card>
-            <Card><Stat><StatLabel>Claims ratio</StatLabel><StatValue><Number id={144} suffix="%" /></StatValue><StatDelta tone="down">▼ 1.2 pp vs plan</StatDelta></Stat></Card>
-          </Grid>
-          <FigurePlate><Question id={142} height="420px" /><p>GWP tracked ahead of budget in every month since February.</p></FigurePlate>
-          <Takeaways>
-            <Eyebrow>Highlights</Eyebrow>
-            <ul><li>GWP YTD reached <Number id={142} prefix="IDR " suffix=" Bn" />, <strong>115% of budget</strong>.</li></ul>
-          </Takeaways>
-        </Section>
-        <PageFooter><span>Confidential · 2026</span><span>Strictly private and confidential</span><span>1</span></PageFooter>
-      </div>
-      </story>
-      ```
+      Gut-check at ~400px wide before shipping: if any band still sits side-by-side, any number is clipped, or any text is low-contrast, fix the `@container` rule or the token.
 
       ---
 
-      ## 3. Mechanics (the medium)
+      ## 3. Chart and number embedding
 
-      The technical substrate shared by every story, in every design language.
-
-      ### Authoring syntax
-
-      The `<story>` body is an HTML fragment, NOT React. Plain HTML elements use HTML attributes: `class="…"` (never `className`). Styling comes from the built-in design system below (Tailwind utilities + story components) — that is the default medium; a `<style>` block is reserved for signature CSS the utilities cannot express. The JSX-flavored tags are the platform embeds `<Question>` / `<Number>` / `<Param>` and the story components (`<Section>`, `<Card>`, `<Pill>`, …): their props take `{…}` for numbers, expressions, and objects (`id={142}`, `cols={3}`, `query={`…`}`, `viz={{…}}`) and quoted strings otherwise (`tone="bad"`, `col="orders"`, `connection="duckdb"`). So: `class=` on your divs, `{}`-props on embeds and components.
-
-      ### Design system: Tailwind + story components (the DEFAULT medium)
-
-      Opt in by putting `data-design="tw"` on your root `<div>` (ALWAYS do this for new stories). The platform then compiles every Tailwind utility class the story uses into a stylesheet at save time — you write almost NO CSS.
-
-      **Tailwind, in full.** All Tailwind v4 utilities work, including arbitrary values (`text-[13px]`, `max-w-[1280px]`, `tracking-[0.14em]`) and arbitrary properties. Two variants matter here:
-      - **Container-query variants** for responsiveness: put `@container` on the root, then `@lg:grid-cols-2 @3xl:grid-cols-3` etc. on DESCENDANTS (NEVER `md:`/`lg:` viewport variants — the story's width is decoupled from the viewport). They do NOT work on the root element itself (an element cannot query its own container) — give the root plain, non-variant padding.
-      - **`dark:` variants + `colorMode`** — the story surface renders in the mode the `colorMode` field declares (charts included), falling back to the viewer's app mode. For a single-mode design (e.g. a white professional deck), ALWAYS set `colorMode` and design for that one mode. Omit `colorMode` only when EVERY color utility is paired with a `dark:` counterpart so both modes look deliberate. Never mix: a light design without `colorMode` set will render its `dark:` variants inside a dark app and look broken.
-      Classes must be written literally in the markup (they are extracted statically).
-
-      **Story components** — the DEFAULT building blocks. Each bakes in the typography, spacing, and both color modes a designed page needs, so you write content, not design decisions:
-
-      *Page & narrative structure:*
-      - `<PageHeader><span>ACME QUARTERLY REVIEW</span><span>CONFIDENTIAL · 2026</span></PageHeader>` — top furniture band (flex-between small caps). `<PageFooter>` is its closing twin.
-      - `<Section>…</Section>` — one beat/page band (vertical rhythm + divider).
-      - `<Eyebrow>01 · Executive Summary</Eyebrow>` — small-caps section label.
-      - `<Headline>Churn doubled the quarter we raised prices.</Headline>` — the claim, in display type (responsive size, tracking, balance all baked in).
-      - `<Standfirst>Scope and framing in one italic serif line.</Standfirst>`
-      - `<Quote>…</Quote>` — pull-quote band.
-
-      *Evidence:*
-      - `<Grid cols={3}>…</Grid>` — responsive grid (`cols` 2/3/4); collapses on narrow widths automatically.
-      - `<Card>…</Card>` — bordered surface card.
-      - `<Stat><StatLabel>Orders</StatLabel><StatValue><Number id={14} /></StatValue><StatDelta tone="up">▲ 6.2%</StatDelta></Stat>` — KPI tile (`StatDelta` tone: `up`/`down`/`neutral`).
-      - `<FigurePlate><Question id={17} height="400px" /><p>One-line caption stating what the chart proves.</p></FigurePlate>` — framed chart with styled caption.
-      - `<Takeaways><Eyebrow>Highlights</Eyebrow><ul><li>…</li></ul></Takeaways>` — the takeaway box; the list styles itself.
-      - `<Pill tone="bad">▼ $2.0m · 44%</Pill>` — status chip (tone: `neutral`/`good`/`bad`/`warn`/`info`).
-      - `<Callout tone="warn">…</Callout>` — accent-edged panel (tone: `info`/`good`/`warn`/`bad`).
-
-      Text ALWAYS goes in children (never props); components nest freely with each other, plain HTML, and embeds. Every component also takes an optional `class` prop for targeted tweaks (`<Card class="bg-teal-50 dark:bg-teal-950">`) — custom classes append after the recipe, so use them to ADD (an accent, an alignment), not to re-specify what the recipe already decides.
-
-      **The accent channel.** Eyebrows, `<strong>` inside a `<Headline>`, and the Takeaways edge all take the story's accent color from ONE variable. Set it on the root, picked from the story's subject, as a mid-tone that reads on both white and near-black: `<div data-design="tw" class="… [--st-accent:#b45309]">` (finance teal `#0f766e` is the default; food/retail amber `#b45309`, risk/alert red `#b91c1c`, product indigo `#4f46e5`…). ALWAYS `<strong>` the key figure in each Headline so the claim carries the accent. That one variable re-themes the whole story for ~25 characters.
-
-      **Components-first is the rule, not a suggestion.** The default story is components + prose + embeds and NOTHING else: no `<style>` block, no font `@import`s, no custom hex colors (except the `--st-accent` value), utility classes only where no component exists for the shape. Per-story personality comes CHEAP: the accent variable plus tone props driven by the data. Escalate beyond that only when the user explicitly asks for custom design.
-
-      **When to still write `<style>`**: web-font `@import`s, a motif/signature element utilities can't express (grain, stamps, ghost numerals — design language A), or keyframe animations. Keep it SHORT (a few rules, scoped under your root class) — if your `<style>` block is growing past ~20 rules, you are re-implementing the design system by hand; stop and use utilities/components.
-
-      ### Chart and number embedding
-
-      Charts AND data numbers are NEVER drawn or typed by hand: no inline SVG / D3 / canvas, and **never a metric written as literal text in the prose**. The platform renders everything via `<Question>` and `<Number>`:
+      Charts AND data numbers are NEVER drawn or typed by hand: no HTML/CSS charts, no inline SVG / canvas, and **never a metric written as literal text in the prose**. The platform renders everything via `<Question>` and `<Number>`:
 
       `<Question>` is polymorphic. Its points of leverage: the **data source** (`id` | `query`+`connection` | `spreadsheet`), the **viz** (restyle/replace the chart), `params`, and `height`. The variants:
 
@@ -952,7 +825,7 @@ templates:
         viz={{ version: 2, source: { kind: "table", columnFormats: null, conditionalFormats: null,
                css: ".mx-th{background:#0f766e;color:#fff} .mx-row-odd{background:transparent}" } }} />
       ```
-      The override MUST be a complete envelope (`{version: 2, source: {…}}`, source kinds `vega-lite` | `recipe` | `table` | `pivot` | `vega`, exactly as taught in the questions skill) and it replaces the question's viz WHOLESALE — nothing is merged, so carry over anything you want to keep. This is also how a story restyles a table/pivot to match its design language: the envelope's `css` field targets the stable `.mx-table` / `.mx-header-row` / `.mx-th` / `.mx-row` / `.mx-cell` / `.mx-col-<columnName>` class contract. Reach for an override when the saved chart's look fights the story (wrong colors for the palette, a table needing the story's header treatment); leave it off when the saved look already works. Read that file id first to see its viz config.
+      The override MUST be a complete envelope (`{version: 2, source: {…}}`, source kinds `vega-lite` | `recipe` | `table` | `pivot` | `vega`, exactly as taught in the questions skill) and it replaces the question's viz WHOLESALE — nothing is merged, so carry over anything you want to keep. This is also how a story restyles a table/pivot to match its design: the envelope's `css` field targets the stable `.mx-table` / `.mx-header-row` / `.mx-th` / `.mx-row` / `.mx-cell` / `.mx-col-<columnName>` class contract. Reach for an override when the saved chart's look fights the story; leave it off when the saved look already works. Read that file id first to see its viz config.
 
       **(C) Inline question, for story-local one-offs.** A number or small chart that does not deserve its own saved file:
       ```
@@ -982,7 +855,7 @@ templates:
       ```
       `rows` are arrays of STRINGS (parsed per `columns[].type`: `auto` | `text` | `number` | `boolean` | `date`); no `connection`. NEVER use a spreadsheet to freeze numbers that exist in the warehouse — those must stay live ((A)–(C)); a spreadsheet embed is only for data the platform cannot query.
 
-      **(C) Inline number, a live figure IN THE PROSE.** When a number belongs inside a sentence or a tight callout, use `<Number>`: it renders the live digits in a `<span>` that flows with the text, no card, no title bar.
+      **(E) Inline number, a live figure IN THE PROSE.** When a number belongs inside a sentence or a tight callout, use `<Number>`: it renders the live digits in a `<span>` that flows with the text, no card, no title bar.
       ```
       MRR has grown to <Number id={142} prefix="$" /> this quarter.
       ```
@@ -994,7 +867,7 @@ templates:
 
       Every figure that conveys data (hero number, pull-quote stat, KPI card, table cell, ratio) is a single-value question (saved or inline), NOT typed into the prose — the `minusx/single-value@1` recipe (bindings: `value` → the measure column). Style it via the recipe `params` (`label` / `showLabel:false` to hide, `caption`, `align` left|center|right, `valueColor`, `valueFontSize`/`labelFontSize`/`captionFontSize` — typography auto-scales to the container when omitted) and per-column `columnFormats` (`prefix`/`suffix` like `"$"` / `"%"`, d3 `format` like `",.0f"`). A `$`-prefixed accent figure is a STYLED single-value embed, not hand-typed text.
 
-      **The ONLY hand-built numeric is pure ornament**: a ghost numeral or outlined ratio carrying no data meaning (A only). A single-fact proportion drawn as a styled bar (width computed from real numbers) is a legitimate device. Everything that states a fact is a live embed.
+      **The ONLY hand-built numeric is pure ornament**: an oversized decorative numeral carrying no data meaning. Everything that states a fact is a live embed, and everything that visualizes data is a `<Question>` (Vega-always, section 2).
 
       Rules for every embed:
       - Explicit px `height` (`height="430px"`) so layout holds through hydration. Missing height defaults to 430px, percentages do not resolve, and anything below 340px is clamped UP. Width is 100%. Vary height with the beat: compact single-value cards ~180 to 260px, tall main-evidence charts 400 to 460px.
@@ -1013,39 +886,17 @@ templates:
       - `type` is `text` | `number` | `date`; `nullable` (default true) lets the reader clear to "Any".
       - `id={N} column="c"` sources an autocomplete from question N's distinct values.
       - `widget="slider"` (number only) renders a range slider.
-      - **Theme it:** `style={{…}}` styles the control, `labelStyle={{…}}` the label, LITERAL CSS objects only (`style={{background:"#1a1a1a", color:"#fff"}}`), never theme tokens: the story renders in a shadow root, so app color-mode tokens resolve against the host and can vanish.
+      - **Theme it:** `style={{…}}` styles the control, `labelStyle={{…}}` the label, LITERAL CSS objects only (`style={{background:"#1a1a1a", color:"#fff"}}`).
 
       Use filters sparingly, only when reader-driven slicing genuinely serves the goal.
-
-      ### Responsive: one document, phone to desktop
-
-      FLUID, never a fixed canvas, never scaled down: full-bleed on a phone (~390 to 430px) and capped ~1280px centered on desktop. The SAME fragment must look deliberate at both; a desktop layout shrunk onto a phone is the #1 failure mode.
-
-      - **Respond to the story's width, not the viewport.** Design-system path (default): `@container` class on the root `<div>`, then Tailwind container-query variants (`@lg:`, `@2xl:`, `@3xl:` — NEVER viewport `md:`/`lg:`); `<Grid>` collapses automatically. Custom-CSS path: `container-type:inline-size; container-name:story` on the root, branch with `@container story (max-width:…)`, NOT `@media`.
-      - **Fluid type and spacing**: step sizes up with container variants (`text-3xl @2xl:text-5xl`) or, in custom CSS, `clamp(min, N cqi, max)` (`cqi` is 1% of the story's own width). Fixed px on hero or section type will not scale down.
-      - **Collapse every multi-column band** (hero splits, KPI rows, tickers, timelines, side-by-side columns, chart pairs, wide tables) to a single column or `overflow-x-auto` on a phone via container variants / `@container` rules.
-      - **One beat is about one viewport tall.** Charts fill their cell at `width:100%`.
-      - **Contrast survives the palette**: never light on light or dark on dark. Set the `colorMode` field ("light"/"dark") so platform charts theme to match.
-
-      Gut-check at ~400px wide before shipping: if any band still sits side-by-side, any number is clipped, or any text is low-contrast, fix the `@container` rule or the token.
-
-      ### Page mechanics (HTML fragment, no JS)
-
-      One root `<div>` (with `data-design="tw"`), optionally preceded by a SHORT `<style>` block — both inside the `<story>…</story>` field element. No `<html>`/`<head>`/`<body>`, and strictly **no `<script>`**.
-
-      **The root div must ALWAYS carry a page gutter** — `px-6 @2xl:px-12` (or equivalent padding in its CSS class). The page renders with zero body margin and NO component adds horizontal padding, so without a root gutter every headline, paragraph, and chart sits flush against the viewport edge. Put the gutter in your FIRST draft, not in a fix-up pass; deliberate full-bleed elements (a marquee, a full-bleed figure) can escape it with negative margins (`-mx-6 @2xl:-mx-12`).
-
-      - **Design system first**: utilities + story components carry the layout, spacing, color, and type scale (see Authoring syntax). `<style>` exists only for fonts, motif/signature CSS, and keyframes — scoped under one root class (`.story-x …`) so styles cannot leak into the host. Never rebuild card/grid/pill/label recipes in CSS that components already provide.
-      - **Fonts via `@import` at the top of `<style>`**, Google Fonts, graceful installed fallbacks in every stack (`'Fraunces', Didot, Georgia, serif`).
-      - **No JS means no scroll triggers.** CSS-only entrance animations (`@keyframes` fade/rise on load, staggered `animation-delay`) are permitted garnish, but the story must read perfectly with zero motion. Respect `prefers-reduced-motion`. (B uses little to no motion.)
-      - **Marquee: use the platform class** (A only), never hand-roll it: `<div class="mx-marquee"><div class="mx-marquee-track">…</div></div>`. Style the outer `.mx-marquee` freely; leave the track's motion to the platform. A hand-rolled `overflow:hidden; white-space:nowrap` strip just clips, it does not scroll.
-      - **Quality floor:** real text not images, sufficient contrast, locale-appropriate number formatting, fluid widths, explicit embed heights. Watch CSS specificity inside `<style>`: element selectors cancelling each other (especially margins between beats) is the common way rhythm breaks.
 
       ---
 
       ## 4. Procedures (how to build)
 
-      The design language and mechanics above are reference. The two procedures below are how you actually assemble a story. Both begin with the **Clarify** step from Workflow at a glance: confirm the design language, the audience and goal (who is this for, and what should they think, feel, or do afterward), and the scope. Ask about the design language unless it is obvious; infer audience/goal/scope when you reasonably can. Then build, screenshot, and improve against the rubric.
+      Both procedures begin with the **Clarify** step from Workflow at a glance: confirm the look/tone, the audience and goal (who is this for, and what should they think, feel, or do afterward), and the scope. Then build, screenshot, and improve against the rubric.
+
+      Design quality comes from commitment, not decoration: one deliberate palette anchored in the shadcn tokens with ONE accent that always means the subject, disciplined type hierarchy, generous whitespace, headlines that state findings. Avoid the AI-default looks (cream + serif + terracotta, acid-green on black, purple gradients) unless asked.
 
       ### 4a. From scratch
 
@@ -1053,10 +904,10 @@ templates:
       2. **Find the lead.** Interrogate the data until you can state the single most important finding in one plain sentence with a number in it ("Churn doubled in the quarter we raised prices"). If you cannot, the analysis is not done: go back to the data.
       3. **Storyboard the beats.** 3 to 7 beats, each advancing the argument: hook, context, the turn or finding, evidence and nuance, so-what. One beat is one section is one idea is (usually) one visual. Two ideas in a section: split it. A chart that does not advance a beat: cut it. Per beat, note the question it references (a saved id, or an inline single-value embed) and what its headline and callout will claim.
       4. **Headlines state findings, not topics.** Every section header and chart title is a claim: "Rural counties drove the entire decline," never "Decline by county type." Reading only the headlines should give the whole story.
-      5. **Decide the takeaway ending.** The final section restates the lead with its full earned weight and answers "so what should the reader think or do?" (In A, close with quantified bets and a colophon; in B, a HIGHLIGHTS box.)
-      6. **Lock the design language tokens.** The language (A or B) was settled in the Clarify step; now fix its palette, fonts, and grammar. Critique the plan: if it resembles what you would produce for any other dataset, revise before coding.
-      7. **pre-Build** : ALWAYS go to the new story page first — `Navigate` with `new_file_type="story"` (the user confirms and can follow along) — then build with EditFile. In interactive chat, `CreateFile` for a story is BLOCKED (like dashboards); only headless/background runs may CreateFile a story directly.
-      8. **Build** the fragment following the plan exactly, every displayed number a live embed (Mechanics), tokens applied with total consistency.
+      5. **Decide the takeaway ending.** The final section restates the lead with its full earned weight and answers "so what should the reader think or do?" — quantified takeaways or a highlights box.
+      6. **Lock the visual direction.** Fix the palette (accent + tokens), type hierarchy, and layout grammar settled in the Clarify step. Critique the plan: if it resembles what you would produce for any other dataset, revise before coding.
+      7. **pre-Build**: ALWAYS go to the new story page first — `Navigate` with `new_file_type="story"` (the user confirms and can follow along) — then build with EditFile. In interactive chat, `CreateFile` for a story is BLOCKED (like dashboards); only headless/background runs may CreateFile a story directly.
+      8. **Build** the fragment following the plan exactly, every displayed number a live embed and every data visual a `<Question>` (section 3), the visual direction applied with total consistency.
       Build the shell first, then fill in the beats one by one. DO NOT attempt to "finish" the story in one pass, it will very likely fail the edit tool.
       9. **Review and grade.** Critique as the intended reader, top to bottom (can the headlines alone tell the story? does the ending deliver the goal? is every claim backed by its embed and true to the data?), and read the screenshot + rubric every EditFile returns (or call ReviewFile for a fresh grade without editing). You MUST include `<Question>` embeds for all prominent charts.
       10. **Fix and improve** against the rubric: ALWAYS fix every `error` (any error gates `overall` to 0), then the `warn`s, each with its `fix`; raise the `overall` score and repeat until every `error` is cleared AND `overall` is at least 4 (keep going past that only if it still looks off).
@@ -1065,16 +916,16 @@ templates:
 
       Turning an existing dashboard into a story: the evidence already exists, so the work is editorial and visual, not analytical. **Do NOT explore the database: run no new SQL, do no data hunting.** Reusing the dashboard's existing questions and files is fine and expected; hunting the warehouse for new numbers is not.
 
-      **The default build is COMPONENTS-FIRST and SMALL.** Unless the user asked for custom design, the whole body is the professional scaffold shape — `PageHeader` → per-beat `Section`/`Eyebrow`/`Headline`/`Standfirst`/`Grid`+`Stat`/`FigurePlate`/`Takeaways` → `PageFooter` — with no `<style>`, no font imports, no custom hexes, and only accent-level `class` props. A converted dashboard story should land WELL UNDER ~6,000 characters of body markup; if yours is bigger, you are hand-writing design the components already provide — replace it. It will look designed BECAUSE the components carry the design.
+      **The default build is components + prose + embeds, and SMALL.** Unless the user asked for custom design, the body is shadcn components (Cards, Tables, Badges, Separators) laid out with utility classes, per-beat sections of eyebrow → claim headline → evidence → takeaways. If your markup balloons, you are hand-writing design the components and tokens already provide — replace it.
 
-      **Every `<Number>` must be provably right** (the #1 first-pass failure is a live number showing the wrong thing): ALWAYS pass `col=` (never rely on the first column — it is often the date), and make the query return exactly the row you claim (`ORDER BY month DESC LIMIT 1` for "latest"; an aggregate for totals). Before finishing, `ReadFiles` with `rawData: true` on the source questions and CHECK each rendered figure against the dashboard's own KPis — a date like `2024-01-01T00:00:00.000Z` or a first-month value where you claimed "latest" means the col/row is wrong; fix it before you screenshot.
+      **Every `<Number>` must be provably right** (the #1 first-pass failure is a live number showing the wrong thing): ALWAYS pass `col=` (never rely on the first column — it is often the date), and make the query return exactly the row you claim (`ORDER BY month DESC LIMIT 1` for "latest"; an aggregate for totals). Before finishing, `ReadFiles` with `rawData: true` on the source questions and CHECK each rendered figure against the dashboard's own KPIs — a date like `2024-01-01T00:00:00.000Z` or a first-month value where you claimed "latest" means the col/row is wrong; fix it before you screenshot.
 
       1. **Read the dashboard.** Its question references (ids), their titles, layout order, and any text/markdown cells are your raw material. Read those referenced questions and files to understand what each shows (that is reading existing artifacts, not database exploration). When you need the ACTUAL row values of a chart question — to pick the number for a claim, target a `<Number>` column, or check sort order — call `ReadFiles` with `rawData: true`: by default a chart question returns only an image + summary and the rows are dropped.
       2. **Find the lead** from what the dashboard already shows, exactly as in 4a step 2, but sourced from the existing questions rather than fresh analysis.
       3. **Curate and reorder.** You do not have to use every question. Drop the ones that do not advance an argument, keep the ones that do, and reorder them into a narrative arc rather than the grid order.
       4. **Storyboard, headline, and end** as in 4a steps 3 to 5: group the kept questions into 3 to 6 beats, write a claim-style headline and standfirst for each (from the questions' titles and the numbers they already contain), and decide the takeaway. Reference each by its existing saved id (`<Question id={N} />`): reuse, do not rebuild. You MUST include `<Question>` embeds for all prominent charts.
-      5. **Lock the design language tokens.** The language was settled in the Clarify step (a board/financial dashboard leans B, a public/marketing one leans A); now fix its palette, fonts, and grammar. Each beat should have "highlights" or "takeaways" of some sort. You can use creative section to separate beats, like a quote or a full-bleed question.
-      6 **Pre-Build, Build, Review, fix** as in 4a steps 7 to 10: the only difference from scratch is that the numbers and charts already exist, so you are giving them an argument and a design, then grading and improving against the rubric each EditFile/ReviewFile returns.
+      5. **Lock the visual direction** as in 4a step 6. Each beat should have highlights or takeaways of some sort; a pull-quote or full-bleed question can separate beats.
+      6. **Pre-Build, Build, Review, fix** as in 4a steps 7 to 10: the only difference from scratch is that the numbers and charts already exist, so you are giving them an argument and a design, then grading and improving against the rubric each EditFile/ReviewFile returns.
 
   skill_notebooks:
     description: Notebook file structure (cells = inline SQL questions + markdown text), the activeCellId convention for editing the right cell, and notebook page behavior

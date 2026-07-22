@@ -12,19 +12,20 @@
  * document-header toolbar (the same generic path notebooks use) and owns the
  * ShareModal — so the header has no story-specific code.
  */
-import { useMemo, useState } from 'react';
-import { LuGlobe } from 'react-icons/lu';
+import { useCallback, useMemo, useState } from 'react';
+import { LuGlobe, LuPalette } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectIsDirty } from '@/store/filesSlice';
 import { useStoryPreviewCss } from '@/lib/hooks/use-story-preview-css';
-import { useConfigs } from '@/lib/hooks/useConfigs';
-import { resolveStoryRenderer } from '@/lib/branding/whitelabel';
 import { selectFileEditMode } from '@/store/uiSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import StoryView from '@/components/views/story/StoryView';
+import StoryThemePicker from '@/components/views/story/StoryThemePicker';
 import ShareModal from '@/components/share/ShareModal';
+import { editFile } from '@/lib/file-state/file-state';
+import { STORY_THEMES } from '@/lib/data/story/story-themes';
 import { useFileToolbarActions, type FileToolbarAction } from '@/components/file-toolbar/FileToolbarContext';
 import { StoryContent } from '@/lib/types';
 import { type FileComponentProps } from '@/lib/ui/fileComponents';
@@ -40,7 +41,6 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   // Persisted compiledCss for clean saved stories; preview-compiled for drafts/staged edits.
   const compiledCss = useStoryPreviewCss(mergedContent, isDirty);
-  const { config } = useConfigs();
   // The story SURFACE renders in the mode the story declares (a light board deck stays light in
   // a dark app): the declared mode drives the iframe's .dark/.light class (design-system `dark:`
   // variants + mirrored token CSS) AND the embedded chart stack (via StoryEmbeds' store
@@ -50,9 +50,22 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
   // Publishing is admin-only; published via a toolbar action + the ShareModal.
   const canShare = numericId !== undefined && isAdmin(effectiveUser?.role || 'viewer');
   const [shareOpen, setShareOpen] = useState(false);
+  // Design theme picker (Story_Design_V2 §5) — jsx stories only; stages a `content.theme`
+  // edit (the shared header's Save persists it, Cancel reverts). All [data-theme] token
+  // blocks already ship in compiledCss, so a pick previews instantly (attribute change only).
+  const canTheme = numericId !== undefined && mergedContent?.format === 'jsx';
+  const [themeOpen, setThemeOpen] = useState(false);
+  const onThemeChange = useCallback((theme: string | null) => {
+    if (numericId !== undefined) {
+      void editFile({ fileId: numericId, changes: { content: { theme: theme as StoryContent['theme'] } } });
+    }
+  }, [numericId]);
   const toolbarActions = useMemo<FileToolbarAction[]>(
-    () => canShare ? [{ id: 'share', ariaLabel: 'Make public', label: 'Make public', icon: <LuGlobe />, onClick: () => setShareOpen(true) }] : [],
-    [canShare],
+    () => [
+      ...(canTheme ? [{ id: 'story-theme', ariaLabel: 'Story theme', label: 'Theme', icon: <LuPalette />, onClick: () => setThemeOpen(true) } satisfies FileToolbarAction] : []),
+      ...(canShare ? [{ id: 'share', ariaLabel: 'Make public', label: 'Make public', icon: <LuGlobe />, onClick: () => setShareOpen(true) } satisfies FileToolbarAction] : []),
+    ],
+    [canShare, canTheme],
   );
   useFileToolbarActions(toolbarActions);
 
@@ -70,11 +83,19 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
         storyName={numericId !== undefined ? file.name : undefined}
         colorMode={effectiveColorMode}
         compiledCss={compiledCss}
-        storyRenderer={resolveStoryRenderer(config)}
         showDevMarkers={devMode}
       />
       {canShare && numericId !== undefined && (
         <ShareModal fileId={numericId} fileName={file.name} isOpen={shareOpen} onClose={() => setShareOpen(false)} />
+      )}
+      {canTheme && (
+        <StoryThemePicker
+          isOpen={themeOpen}
+          onClose={() => setThemeOpen(false)}
+          themes={STORY_THEMES}
+          value={mergedContent.theme ?? null}
+          onChange={onThemeChange}
+        />
       )}
     </>
   );

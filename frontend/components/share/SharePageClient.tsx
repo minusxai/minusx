@@ -21,7 +21,6 @@ import ShareLeadGate from './ShareLeadGate';
 import ShareFloatingChat from './ShareFloatingChat';
 import { StoryContent } from '@/lib/types';
 import type { CompiledCssStoryContent } from '@/lib/data/story/story-css';
-import { STORY_RENDERERS, type StoryRenderer } from '@/lib/branding/whitelabel';
 import type { AppState } from '@/lib/appState';
 import type { Mode } from '@/lib/mode/mode-types';
 
@@ -359,13 +358,6 @@ function SharedStory({ fileId }: { fileId: number }) {
   const { fileState: file } = useFile(fileId) ?? {};
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as StoryContent | undefined;
   const colorMode = useAppSelector(state => state.ui.colorMode);
-  // Public shares default to the DOM renderer (guests can't read the workspace's renderer setting);
-  // `?use=canvas` / `?use=svg` opt a link into another renderer explicitly. Unknown values → DOM.
-  const useParam = useSearchParams().get('use');
-  const storyRenderer: StoryRenderer = STORY_RENDERERS.includes(useParam as StoryRenderer)
-    ? (useParam as StoryRenderer)
-    : 'dom';
-
   const ready = useMemo(() => Boolean(file && !file.loading && mergedContent), [file, mergedContent]);
   if (!ready || !mergedContent) {
     return <Center h="60vh"><Spinner size="lg" /></Center>;
@@ -379,5 +371,5 @@ function SharedStory({ fileId }: { fileId: number }) {
   // chrome, but this keeps the iframe correct even before that effect lands).
   const effectiveColorMode = (mergedContent.colorMode as 'light' | 'dark' | null | undefined) ?? colorMode;
   const storyPath = (file as { path?: string } | undefined)?.path;
-  return <StoryView content={mergedContent} readOnly headerEditMode={false} storyPath={storyPath} storyName={undefined} colorMode={effectiveColorMode} compiledCss={(mergedContent as CompiledCssStoryContent).compiledCss} storyRenderer={storyRenderer} />;
+  return <StoryView content={mergedContent} readOnly headerEditMode={false} storyPath={storyPath} storyName={undefined} colorMode={effectiveColorMode} compiledCss={(mergedContent as CompiledCssStoryContent).compiledCss} />;
 }

@@ -86,7 +86,14 @@ export function toVegaSpec(
   options?: CompileVegaLiteOptions,
 ): { vegaSpec: VegaSpec; parserConfig?: Record<string, unknown> } {
   if (resolved.engine === 'vega') {
-    return { vegaSpec: resolved.spec as unknown as VegaSpec, parserConfig: getVegaParserConfig(mode) };
+    const parserConfig = getVegaParserConfig(mode) as Record<string, unknown>;
+    if (options?.categoryRange?.length) {
+      parserConfig.range = {
+        ...(parserConfig.range as Record<string, unknown> | undefined),
+        category: options.categoryRange,
+      };
+    }
+    return { vegaSpec: resolved.spec as unknown as VegaSpec, parserConfig };
   }
   return { vegaSpec: compileVegaLite(resolved.spec, mode, options) };
 }
@@ -420,6 +427,12 @@ export interface CompileVegaLiteOptions {
   legendPlan?: LegendWrapPlan | null;
   /** Planned x label angle (computeXLabelAngle) — null/undefined = VL defaults. */
   xLabelAngle?: number | null;
+  /**
+   * Categorical color range override — the surrounding design theme's `--chart-1..5` tokens
+   * (lib/viz/chart-tokens.ts). null/undefined = the house palette. Applied to both engines:
+   * baked into the VL config at compile; merged into the parser config for native Vega.
+   */
+  categoryRange?: string[] | null;
 }
 
 export function compileVegaLite(
@@ -471,7 +484,13 @@ export function compileVegaLite(
   }
   // House look: legends are entry labels only, with no redundant heading.
   if (!composed) suppressLegendTitles(prepared);
-  const { spec: vegaSpec } = compile(prepared as unknown as TopLevelSpec, { config: getVegaLiteConfig(mode) });
+  const config = getVegaLiteConfig(mode);
+  // Theme chart tokens (Story_Design_V2 §5): a surrounding [data-theme] scope's --chart-1..5
+  // (resolved by the renderer via lib/viz/chart-tokens.ts) replace the house categorical palette.
+  if (options?.categoryRange?.length) {
+    config.range = { ...config.range, category: options.categoryRange as never };
+  }
+  const { spec: vegaSpec } = compile(prepared as unknown as TopLevelSpec, { config });
   // Center top legends within the chart width (a Vega-level legend layout — VL's
   // config surface doesn't expose it, so it's merged into the compiled config).
   const cfg = ((vegaSpec as unknown as Record<string, unknown>).config ??= {}) as Record<string, unknown>;

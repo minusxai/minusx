@@ -22,7 +22,9 @@ export const POST = withAuth(async (request: NextRequest): Promise<NextResponse>
     if (typeof story !== 'string') {
       return ApiErrors.badRequest('story (string) is required');
     }
-    return successResponse({ css: await compileStoryCss(story) });
+    // format:'jsx' drafts have no data-design marker (shadcn JSX is design-system by
+    // definition) — force the compile so drafts preview styled, same as the save path.
+    return successResponse({ css: await compileStoryCss(story, { force: body?.format === 'jsx' }) });
   } catch (error) {
     return handleApiError(error);
   }

@@ -2,10 +2,10 @@
  * Resolve a story's `@import` web-fonts into concrete `@font-face` rules.
  *
  * Stories load fonts via `@import url(https://fonts.googleapis.com/...)`, which works for LIVE
- * rendering inside the iframe. But snapdom (used for capture) embeds fonts by scanning `@font-face`
+ * rendering inside the iframe. But the serialization capture embeds fonts by scanning `@font-face`
  * rules and does NOT follow `@import`, so a captured story falls back to a wider system serif — the
  * title then wraps to an extra line and overlaps the next block. Fetching the imported CSS (which is
- * itself a list of `@font-face` rules) and injecting it as real rules lets snapdom embed the actual
+ * itself a list of `@font-face` rules) and injecting it as real rules lets the capture embed the actual
  * fonts, so the capture matches the live render.
  *
  * Browser-only. Cached by the set of import URLs (fonts are global + stable), so repeat captures

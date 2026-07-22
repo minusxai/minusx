@@ -240,7 +240,9 @@ export async function editFileStr(
 
   // File Architecture v2: the edited string is MARKUP — parse it back to typed content. A
   // PARSE failure is the only hard error (there's nothing to apply); everything else applies.
-  const parsedContent = markupToContent(fileState.type, editedStr);
+  // Pass the EXISTING content: a story's pipeline (legacy HTML vs `format:'jsx'`) derives
+  // from what's stored, never from the incoming markup.
+  const parsedContent = markupToContent(fileState.type, editedStr, mergedContent);
   if (!parsedContent.ok) {
     return { success: false, error: `Invalid ${fileState.type} after edit: ${parsedContent.error}` };
   }

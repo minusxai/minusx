@@ -16,8 +16,13 @@
  * Operates on a clone, so the live (still-displayed) shadow root is untouched.
  */
 // AgentHtml-injected style tags that are NOT part of the authored story and
-// must be stripped on save: the mirrored app CSS and the fluid/mobile shim.
-const INJECTED_STYLE_SELECTOR = 'style[data-mx-app-styles], style[data-mx-fluid-shim], [data-mx-embed-root]';
+// must be stripped on save. Styles live INSIDE the story root now (Story_Design_V2 §4: the
+// serialized <svg> must carry them without head-cloning), so every save path reading root
+// contents drops the whole data-mx-* family — else derived CSS compounds into content.story:
+// the app-styles mirror, the fluid/mobile shim, the compiled design-system css (data-mx-tw),
+// the jsx floating css, and the platform font css (data-mx-fonts).
+const INJECTED_STYLE_SELECTOR =
+  'style[data-mx-app-styles], style[data-mx-fluid-shim], style[data-mx-tw], style[data-mx-floating], style[data-mx-fonts], [data-mx-embed-root]';
 // sanitizeAgentHtml wraps the authored story in a single <div data-mx-story-root> on EVERY
 // render. We serialize only this wrapper's content (never the wrapper itself), and collapse
 // any nested wrappers that prior buggy saves baked in — otherwise the story re-nests one level

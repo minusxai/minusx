@@ -19,13 +19,22 @@ function parseClarifySelection(content: any): { success: boolean; selection: any
   return { success, selection, message };
 }
 
-function getSelectedLabels(selection: any): Set<string> {
+/** Selection keys for highlight matching — real `value` when present, else label. */
+function getSelectedKeys(selection: any): Set<string> {
   if (!selection) return new Set();
   if (selection.figureItOut || selection.other) return new Set();
+  const keyOf = (s: any) => s?.value ?? s?.label ?? String(s);
   if (Array.isArray(selection)) {
-    return new Set(selection.map((s: any) => s.label || String(s)));
+    return new Set(selection.map(keyOf));
   }
-  return new Set([selection.label || String(selection)]);
+  return new Set([keyOf(selection)]);
+}
+
+/** Human-readable labels of the selection (for the status line). */
+function getSelectionLabels(selection: any): string[] {
+  if (!selection) return [];
+  if (Array.isArray(selection)) return selection.map((s: any) => s.label || String(s));
+  return [selection.label || String(selection)];
 }
 
 // ─── Detail card for AgentTurnContainer carousel ──────────────────
@@ -67,7 +76,7 @@ export function ClarifyDetailCard({ msg }: DetailCardProps) {
   // If tool is still executing but user already submitted, extract selection from resolved user input
   const resolvedUserInput = pendingTool?.userInputs?.find(ui => ui.result !== undefined);
   const effectiveSelection = selection || resolvedUserInput?.result || null;
-  const selectedLabels = getSelectedLabels(effectiveSelection);
+  const selectedKeys = getSelectedKeys(effectiveSelection);
   const isFigureItOut = effectiveSelection?.figureItOut;
   const isOther = effectiveSelection?.other;
   const isProcessing = isPending && !pendingUserInputs?.length && !!resolvedUserInput;
@@ -78,7 +87,7 @@ export function ClarifyDetailCard({ msg }: DetailCardProps) {
     if (!success) return message || 'Cancelled';
     if (isFigureItOut) return 'Agent will figure it out';
     if (isOther) return `Other: "${effectiveSelection.text}"`;
-    return `Selected: ${Array.from(selectedLabels).join(', ')}`;
+    return `Selected: ${getSelectionLabels(effectiveSelection).join(', ')}`;
   };
 
   // Still loading — no content, no user inputs, no selection
@@ -108,7 +117,7 @@ export function ClarifyDetailCard({ msg }: DetailCardProps) {
         {options.length > 0 && (
           <HStack gap={1} flexWrap="wrap">
             {options.map((opt: any, idx: number) => {
-              const isSelected = (!isPending || isProcessing) && selectedLabels.has(opt.label);
+              const isSelected = (!isPending || isProcessing) && selectedKeys.has(opt.value ?? opt.label);
               return (
                 <Badge
                   key={idx}
@@ -176,24 +185,15 @@ export default function ClarifyDisplay({ toolCallTuple }: DisplayProps) {
   const isFigureItOut = selection?.figureItOut;
   const isOther = selection?.other;
 
-  // Get selected labels for highlighting
-  const getSelectedLabels = (): Set<string> => {
-    if (!selection) return new Set();
-    if (isFigureItOut || isOther) return new Set(); // Special options not in original list
-    if (Array.isArray(selection)) {
-      return new Set(selection.map(s => s.label || String(s)));
-    }
-    return new Set([selection.label || String(selection)]);
-  };
-
-  const selectedLabels = getSelectedLabels();
+  // Get selected keys (value ?? label) for highlighting
+  const selectedKeys = getSelectedKeys(selection);
 
   // Format status message
   const getStatusMessage = () => {
     if (!success) return message || 'Cancelled';
     if (isFigureItOut) return 'Agent will figure it out';
     if (isOther) return `Other: "${selection.text}"`;
-    return `Selected: ${Array.from(selectedLabels).join(', ')}`;
+    return `Selected: ${getSelectionLabels(selection).join(', ')}`;
   };
 
   return (
@@ -216,7 +216,7 @@ export default function ClarifyDisplay({ toolCallTuple }: DisplayProps) {
         {/* Options with selection state */}
         <VStack gap={1} align="stretch">
           {options.map((opt: any, idx: number) => {
-            const isSelected = selectedLabels.has(opt.label);
+            const isSelected = selectedKeys.has(opt.value ?? opt.label);
             return (
               <Badge
                 key={idx}

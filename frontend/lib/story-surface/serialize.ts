@@ -11,15 +11,17 @@
  *     they're inlined as data: URLs. Without this, text falls back to a system serif and rewraps.
  *  3. SCROLL — scroll position is DOM *state*, not markup: XMLSerializer drops `scrollLeft`, so a
  *     horizontally-scrolled table would capture reset to column 1. Offsets are translated into a
- *     transform on the clone. (snapdom has this same bug today.)
+ *     transform on the clone.
  */
 import { STORY_SVG_ATTR } from '@/lib/story-surface';
 import { collectStoryFontImports, resolveImportFontCss } from '@/lib/html/resolve-story-fonts';
 
-const FONT_URL_RE = /url\(\s*(["']?)(https?:\/\/[^"')]+)\1\s*\)/g;
+// Absolute (https://cdn/…) AND root-relative (/fonts/…) refs: platform story fonts are served as
+// same-origin static assets (lib/data/story/story-fonts.ts), which fetch() resolves natively.
+const FONT_URL_RE = /url\(\s*(["']?)((?:https?:\/\/|\/)[^"')]+)\1\s*\)/g;
 
-/** Cache: font file URL → data: URL. Font files are global + immutable, so this never invalidates:
- *  every capture after the first reuses the same inlined bytes.
+/** Cache: resource URL (font file / image) → data: URL. These assets are effectively immutable,
+ *  so this never invalidates: every capture after the first reuses the same inlined bytes.
  *  eslint-disable-next-line no-restricted-syntax -- browser-only capture cache; no per-request scope. */
 // eslint-disable-next-line no-restricted-syntax -- browser-only capture cache, keyed by immutable font URL
 const fontDataUrls = new Map<string, Promise<string | null>>();
@@ -104,6 +106,32 @@ export function applyScrollOffsets(liveRoot: Element, cloneRoot: Element): void 
   }
 }
 
+/**
+ * Stamp live form state into the CLONE as serializable markup. `input.value`, `checked`, and select
+ * selection are DOM *properties* — XMLSerializer only emits attributes, so a typed value would
+ * capture as the original (usually empty) markup. Walks live and cloned trees in lockstep.
+ */
+export function stampFormValues(liveRoot: Element, cloneRoot: Element): void {
+  const live = [liveRoot, ...Array.from(liveRoot.querySelectorAll('*'))];
+  const clone = [cloneRoot, ...Array.from(cloneRoot.querySelectorAll('*'))];
+  for (let i = 0; i < live.length && i < clone.length; i++) {
+    const el = live[i];
+    const target = clone[i];
+    const tag = el.tagName;
+    if (tag === 'INPUT') {
+      const input = el as HTMLInputElement;
+      target.setAttribute('value', input.value);
+      if (input.checked) target.setAttribute('checked', '');
+      else target.removeAttribute('checked');
+    } else if (tag === 'TEXTAREA') {
+      target.textContent = (el as HTMLTextAreaElement).value;
+    } else if (tag === 'OPTION') {
+      if ((el as HTMLOptionElement).selected) target.setAttribute('selected', '');
+      else target.removeAttribute('selected');
+    }
+  }
+}
+
 /** The live story `<svg>` hosted inside `element` (an iframe host), or null if it isn't an SVG story. */
 export function findStorySvg(element: HTMLElement): SVGSVGElement | null {
   const iframe = element.tagName === 'IFRAME'
@@ -122,7 +150,51 @@ export async function serializeStorySvg(svg: SVGSVGElement): Promise<string> {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   const liveRoot = svg.querySelector('foreignObject > *');
   const cloneRoot = clone.querySelector('foreignObject > *');
-  if (liveRoot && cloneRoot) applyScrollOffsets(liveRoot, cloneRoot);
+  if (liveRoot && cloneRoot) {
+    applyScrollOffsets(liveRoot, cloneRoot);
+    stampFormValues(liveRoot, cloneRoot);
+    // Chakra token host: the app's token vars are declared under `:where(html, .chakra-theme)`
+    // with color-mode aliases under `:root, .light` / `.dark` — and this standalone document has
+    // NO <html> element (its root is the <svg>), so none of those selectors match and every
+    // var-backed Chakra style (embed tile backgrounds, chart chrome) rasterizes transparent.
+    // Stamping the CLONED root as a `.chakra-theme` host in the current color mode makes the
+    // whole chain resolve on one element, exactly as it does on the live iframe's <html>.
+    const mode = doc.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    const cls = cloneRoot.getAttribute('class');
+    cloneRoot.setAttribute('class', `${cls ? `${cls} ` : ''}chakra-theme ${mode}`);
+  }
+
+  // Explicit intrinsic size on the root: an <img>-rendered SVG without width/height attributes has
+  // no reliable intrinsic size (engines disagree), which skews the rasterized canvas dimensions.
+  if (!clone.getAttribute('width') || !clone.getAttribute('height')) {
+    const box = svg.getBoundingClientRect();
+    const w = box.width || svg.width?.baseVal?.value || 0;
+    const h = box.height || svg.height?.baseVal?.value || 0;
+    if (w) clone.setAttribute('width', String(w));
+    if (h) clone.setAttribute('height', String(h));
+  }
+
+  // In-root styles (compiledCss, app-styles mirror, platform font css — Story_Design_V2 §4) travel
+  // inside the cloned subtree already, but their remote url() refs (e.g. data-mx-fonts @font-face
+  // src) can't load in an <img>-rendered SVG. Splice the data-URI form into the PARSED COPY only —
+  // the live DOM keeps the cacheable URL form.
+  await Promise.all(
+    Array.from(clone.querySelectorAll('style')).map(async (style) => {
+      const cssText = style.textContent || '';
+      if (cssText) style.textContent = await inlineFontUrls(cssText);
+    }),
+  );
+
+  // Images: SVG-as-image blocks ALL external references, so <img> srcs must be data: URIs in the
+  // parsed copy (failures keep the URL — the image just won't render; never fail the capture).
+  await Promise.all(
+    Array.from(clone.querySelectorAll('img')).map(async (img) => {
+      const src = img.getAttribute('src');
+      if (!src || src.startsWith('data:')) return;
+      const data = await toDataUrl(src);
+      if (data) img.setAttribute('src', data);
+    }),
+  );
 
   const css = await collectSurfaceCss(doc);
   if (css.trim()) {
@@ -134,12 +206,30 @@ export async function serializeStorySvg(svg: SVGSVGElement): Promise<string> {
   return new XMLSerializer().serializeToString(clone);
 }
 
-/** Rasterize a serialized SVG string into an <img> the caller can draw. */
-export function svgToImage(svgString: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
+/**
+ * Rasterize a serialized SVG string into an <img> the caller can draw.
+ *
+ * URL scheme is load-bearing: a percent-encoded `data:` URL, NEVER a Blob URL — Blob-URL SVG
+ * rasterization taints the canvas in Chromium and WebKit (Story_Design_V2 §12).
+ *
+ * Awaits `document.fonts.ready` and full image decode before resolving — racing resource decode is
+ * the dominant cause of blank captures (especially Safari), where drawImage lands before the SVG's
+ * text/fonts have finished decoding.
+ */
+export async function svgToImage(svgString: string): Promise<HTMLImageElement> {
+  const img = new Image();
+  const loaded = new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
     img.onerror = () => reject(new Error('SVG rasterize failed'));
-    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
   });
+  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
+  try {
+    await document.fonts?.ready;
+  } catch { /* fonts that fail to load must not fail the capture */ }
+  if (typeof img.decode === 'function') {
+    await img.decode();
+  } else {
+    await loaded;
+  }
+  return img;
 }

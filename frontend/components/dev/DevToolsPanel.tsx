@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Box, VStack, HStack, Text, IconButton, Button, createListCollection } from '@chakra-ui/react';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
-import { LuChevronDown, LuChevronRight, LuDownload, LuRefreshCw } from 'react-icons/lu';
+import { LuChevronDown, LuChevronRight, LuImage, LuRefreshCw } from 'react-icons/lu';
 import { AppState } from '@/lib/appState';
 import AppStateViewer from './AppStateViewer';
 import { getRegisteredToolNames, executeToolCall } from '@/lib/tools/tool-handlers';
@@ -224,15 +224,24 @@ type ImageResult =
 
 const checkboxStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'var(--font-mono)', cursor: 'pointer', userSelect: 'none' };
 
-function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; appState: AppState | null | undefined }) {
+export function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; appState: AppState | null | undefined }) {
   const [webLink, setWebLink] = useState(false);
   const [limit512, setLimit512] = useState(false);  // cap output to 512px wide
+  // Draw the agent's numbered position-marker gutter into the capture. Markers + 512px together
+  // reproduce the agent's app-state screenshot option-for-option (app-state-screenshot.ts), so a
+  // dev can preview the exact image the agent receives.
+  const [markers, setMarkers] = useState(false);
   const [busy, setBusy] = useState(false);
   const [agentBusy, setAgentBusy] = useState(false);
   const [result, setResult] = useState<ImageResult | null>(null);
   // Memoized so captureElement's useCallback deps don't change on every render
-  const screenshotOptions = useMemo(() => limit512 ? { maxWidth: 512 } : undefined, [limit512]);
-  const { captureFileView, blobToDataURL, download } = useScreenshot(screenshotOptions);
+  const screenshotOptions = useMemo(
+    () => (limit512 || markers)
+      ? { ...(limit512 ? { maxWidth: 512 } : {}), ...(markers ? { markers: true } : {}) }
+      : undefined,
+    [limit512, markers],
+  );
+  const { captureFileView, blobToDataURL } = useScreenshot(screenshotOptions);
   const colorMode = useAppSelector(state => state.ui.colorMode);
   const queryResultsMap = useAppSelector(state => state.queryResults.results);
 
@@ -246,7 +255,7 @@ function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; app
     setCaptureStatus('capturing');
     captureCache.current = null;
     try {
-      const blob = await captureFileView(fileId); // viewport-only — no fullHeight, no 100ms wait
+      const blob = await captureFileView(fileId); // readiness-gated inside captureFileViewBlob
       if (captureGenRef.current !== gen) return;  // discard if superseded
       captureCache.current = blob;
       setCaptureStatus('ready');
@@ -294,15 +303,14 @@ function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; app
     }
   };
 
-  const handleDownload = async () => {
+  // Display-only: fetch the capture and show it inline — never trigger a browser download.
+  const handleGetImage = async () => {
     setBusy(true);
     setResult(null);
     try {
       // Instant path: serve pre-captured blob; fall back to live capture if not ready
       const blob = captureCache.current ?? await captureFileView(fileId);
       const dataUrl = await blobToDataURL(blob);
-      const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-      download(blob, `screenshot-${ts}.jpg`);
 
       let url: string | undefined;
       if (webLink) {
@@ -317,7 +325,7 @@ function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; app
       setCaptureStatus('capturing');
       triggerPreCapture(gen);
     } catch (err: any) {
-      setResult({ kind: 'error', error: err.message ?? String(err), label: 'Download' });
+      setResult({ kind: 'error', error: err.message ?? String(err), label: 'Get image' });
     } finally {
       setBusy(false);
     }
@@ -343,12 +351,16 @@ function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; app
             <input type="checkbox" checked={limit512} onChange={e => setLimit512(e.target.checked)} aria-label="Limit width to 512px" />
             <Text fontSize="2xs" color="fg.muted">512px</Text>
           </label>
+          <label style={checkboxStyle}>
+            <input type="checkbox" checked={markers} onChange={e => setMarkers(e.target.checked)} aria-label="Draw agent position markers" />
+            <Text fontSize="2xs" color="fg.muted">Markers</Text>
+          </label>
         </HStack>
 
         <HStack gap={2} align="center">
-          <Button size="2xs" variant="outline" onClick={handleDownload} loading={busy}
-            aria-label="Download image">
-            <LuDownload />Download image
+          <Button size="2xs" variant="outline" onClick={handleGetImage} loading={busy}
+            aria-label="Get image">
+            <LuImage />Get image
           </Button>
           {/* Pre-capture status dot */}
           <Box
@@ -384,7 +396,7 @@ function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; app
                   </HStack>
                   {item.dataUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.dataUrl} alt={item.label} style={{ width: '100%', height: 'auto', display: 'block' }} />
+                    <img src={item.dataUrl} alt={item.label} aria-label={item.label} style={{ width: '100%', height: 'auto', display: 'block' }} />
                   )}
                   {item.url && (
                     <Box px={2} pb={2}>

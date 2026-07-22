@@ -11,7 +11,6 @@
 import { selectFile, selectMergedContent } from '@/store/filesSlice';
 import { getStore } from '@/store/store';
 import { captureFileViewBlob } from '@/lib/screenshot/capture';
-import { waitForFileViewReady } from '@/lib/screenshot/readiness';
 import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { FilesAPI } from '@/lib/data/files';
@@ -93,9 +92,8 @@ export async function captureFileScreenshot(
   // synchronous main-thread work (DOM clone + rasterize) that briefly freezes the UI.
   await new Promise((r) => setTimeout(r, 0));
   // Render→capture handshake: after an edit the view is often mid-rebuild (story iframe
-  // remounting, embed queries re-running). Wait for it to settle (bounded; a stuck query
-  // degrades to a screenshot of its spinner rather than hanging the tool).
-  await waitForFileViewReady(fileId, { timeoutMs: 12000 });
+  // remounting, embed queries re-running). captureFileViewBlob waits for the view to settle
+  // internally (bounded; a stuck query degrades to a screenshot of its spinner).
   const blob = await captureFileViewBlob(fileId, { colorMode: opts.colorMode, fullHeight: !!opts.fullHeight, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg' });
   return uploadBlobOrEmbed(blob, 'screenshot.jpg', 'image/jpeg');
 }

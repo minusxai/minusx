@@ -14,11 +14,11 @@ import { ChartError } from '@/components/plotx/ChartError';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, computeXLabelAngle, injectNamedAssets } from '@/lib/viz/render-vega';
+import { chartTokenRangeFromElement } from '@/lib/viz/chart-tokens';
 import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/viz-templates';
 import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
 import { SharedTooltip } from '@/lib/viz/shared-tooltip';
 import { injectGuideMark, GUIDE_WIDTH, GUIDE_OPACITY, GUIDE_BAND_OPACITY } from '@/lib/viz/guide-mark';
-import { useInCanvasStory } from '@/lib/canvas-story/canvas-render-context';
 
 // Tooltip value/x formatters. Tooltips show the FULL number ("2,574", not the axis's
 // "2.6k") and a readable date — the chart's own d3 format is for the axis, not here.
@@ -101,9 +101,6 @@ function promoteFontAttrs(root: HTMLElement): void {
 }
 
 export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChartProps) {
-  // Inside a canvas-rendered story, draw with vega's CANVAS renderer: captures then
-  // read chart pixels straight off the chart's own <canvas> (no DOM serialization).
-  const inCanvasStory = useInCanvasStory();
   // Latest callback without retriggering the build effect.
   const onViewChangeRef = useRef(onViewChange);
   useEffect(() => { onViewChangeRef.current = onViewChange; });
@@ -116,6 +113,10 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
   // plan is baked into the parsed runtime). The epoch re-arms the build
   // effect only on an actual flip; plain resizes stay signal-only updates.
   const [legendEpoch, setLegendEpoch] = useState(0);
+  // Design-theme chart tokens (Story_Design_V2 §5): `--chart-1..5` from the surrounding
+  // [data-theme] scope drive the categorical range; a theme switch (a data-theme attribute
+  // change anywhere in this document) bumps the epoch so the view rebuilds with new colors.
+  const [themeEpoch, setThemeEpoch] = useState(0);
   const legendPlanRef = useRef<string>('null');
   const vlSpecRef = useRef<Record<string, unknown> | null>(null);
   // Shared multi-series tooltip state (rebuilt per view; data re-indexed on row change).
@@ -164,14 +165,19 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           ? computeXLabelAngle(vlSpecRef.current, rowsRef.current, el.clientWidth)
           : null;
         legendPlanRef.current = JSON.stringify({ legend: legendPlan ?? null, xAngle: xLabelAngle });
-        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan, xLabelAngle });
+        // Theme chart tokens: computed --chart-1..5 at the container (null outside a token
+        // scope → house palette). Resolved per build so a [data-theme] switch recolors.
+        const categoryRange = chartTokenRangeFromElement(el);
+        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan, xLabelAngle, categoryRange });
         // Shared-tooltip charts get a guide-line rule injected BEHIND the data (before parse).
         const tooltipPlan = vlSpecRef.current ? buildTooltipPlan(vlSpecRef.current) : null;
         const hasGuide = tooltipPlan ? injectGuideMark(vegaSpec as Record<string, unknown>) : false;
         if (cancelled) return;
         el.replaceChildren(); // drop any stale chart DOM from a failed predecessor
         view = createVegaView(vegaSpec, rowsRef.current, {
-          renderer: inCanvasStory ? 'canvas' : 'svg',
+          // Always vega's SVG renderer: captures serialize the live DOM (Story_Design_V2 §4/§7 —
+          // <canvas> content serializes empty, so charts must be SVG in every captured surface).
+          renderer: 'svg',
           container: el,
           tooltipTheme: colorMode,
           parserConfig,
@@ -341,7 +347,18 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
       tooltipRef.current = null;
       view?.finalize();
     };
-  }, [envelope, colorMode, legendEpoch]);
+  }, [envelope, colorMode, legendEpoch, themeEpoch]);
+
+  // Rebuild when the surrounding design theme changes: observe data-theme attribute flips in
+  // this chart's OWN document (story charts live in the story iframe). Fires only on an actual
+  // theme switch — never during normal renders — so the observer is effectively free.
+  useEffect(() => {
+    const docEl = containerRef.current?.ownerDocument?.documentElement;
+    if (!docEl || typeof MutationObserver === 'undefined') return;
+    const mo = new MutationObserver(() => setThemeEpoch(e => e + 1));
+    mo.observe(docEl, { subtree: true, attributes: true, attributeFilter: ['data-theme'] });
+    return () => mo.disconnect();
+  }, []);
 
   // Data-only updates: no rebuild — unless the new rows change the legend plan.
   useEffect(() => {

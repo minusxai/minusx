@@ -3,8 +3,8 @@
  * captured LAZILY, only when it's actually needed (on send), with a one-slot cache so an unchanged
  * view is never re-captured.
  *
- * WHY LAZY (the freeze fix): `snapdom` rasterizes the whole file view SYNCHRONOUSLY on the main
- * thread — measured ~4s on an 11-card dashboard, more on bigger ones. The app used to *warm* this
+ * WHY LAZY (the freeze fix): rasterizing the whole file view is expensive on the main thread —
+ * measured ~4s on an 11-card dashboard under the old snapdom pipeline, more on bigger ones. The app used to *warm* this
  * speculatively on every rendered-view change (agent edit, query revalidation, theme toggle, GUI
  * tweak) so the eventual send would be instant. But that meant the main thread froze for seconds
  * whenever the view changed — including WHILE the user was editing or typing — for an image that
@@ -13,7 +13,7 @@
  * The fix: capture ONLY on send, when the image is genuinely needed. Nothing runs on view changes,
  * so editing / typing / query revalidation / theme toggles never pay a capture. The one-slot cache
  * (`lastShot`, keyed by file id + rendered facet) still makes repeated sends of an unchanged view a
- * cache hit. The unavoidable snapdom cost is paid once, at the moment of send — a user-initiated
+ * cache hit. The unavoidable capture cost is paid once, at the moment of send — a user-initiated
  * action shown with the existing "preparing" indicator — never speculatively.
  */
 import type { AppState } from '@/lib/appState';
@@ -107,7 +107,7 @@ async function captureNow(appState: AppState, colorMode: ColorMode): Promise<str
  * SEND path — the ONLY place a capture happens. Always attaches the image so the agent can see the
  * view. A cache hit (same view sent again) is instant; otherwise it captures now — the caller shows
  * the "preparing" indicator during that brief wait. The only image-less result is a capture that
- * throws: a broken snapdom must not wedge the send, so we fall back to sending without the image.
+ * throws: a broken capture must not wedge the send, so we fall back to sending without the image.
  */
 export async function appStateWithFileScreenshot(
   appState: AppState | null | undefined,

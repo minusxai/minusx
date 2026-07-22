@@ -33,7 +33,8 @@ export function useStoryPreviewCss(
 ): string | null {
   const story = content?.story ?? '';
   const persisted = content?.compiledCss ?? null;
-  const marked = hasDesignSystemMarker(story);
+  const isJsx = content?.format === 'jsx';
+  const marked = isJsx || hasDesignSystemMarker(story);
   const needsPreview = marked && (dirty || persisted === null);
   const cached = needsPreview ? cache.get(story) : undefined;
 
@@ -48,7 +49,7 @@ export function useStoryPreviewCss(
       fetch('/api/story-css', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ story }),
+        body: JSON.stringify(isJsx ? { story, format: 'jsx' } : { story }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((j) => {
@@ -59,7 +60,7 @@ export function useStoryPreviewCss(
         .catch(() => {}); // best-effort: a failed preview just renders with the persisted CSS
     }, 300); // debounce mid-edit keystrokes
     return () => { cancelled = true; clearTimeout(t); };
-  }, [needsPreview, cached, story]);
+  }, [needsPreview, cached, story, isJsx]);
 
   if (!marked) return null;
   if (!needsPreview) return persisted;
