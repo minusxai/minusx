@@ -109,6 +109,23 @@ const FIXTURES: Record<string, string> = {
         }
       })();
     </script>`),
+  // The EXACT Chakra v3 token topology (which /appsheet.html's bare `:root` misses — `:root`
+  // happens to match the serialized <svg> root, so it never caught this): base tokens under
+  // `:where(html, .chakra-theme)` (an ELEMENT selector + theme-host class), aliased per color
+  // mode under `:root, .light` / `.dark`, consumed via an escaped-dot var name. A standalone
+  // serialized SVG has no <html>, so without a chakra-theme host stamp in the clone the chain
+  // collapses and var-backed backgrounds rasterize transparent (the "capture loses the embed
+  // backgrounds" bug).
+  '/chakravars.html': page(`
+    <div id="target" style="width:200px;height:100px;background:#ffffff">
+      <div class="tile" style="width:120px;height:60px"></div>
+    </div>`, `
+    <style id="chakra-pattern">
+      @layer tokens { :where(html, .chakra-theme) { --colors-light-bg-subtle: rgb(240, 243, 246); --colors-dark-bg-subtle: rgb(20, 24, 28); } }
+      :root, .light { --colors-bg\\.subtle: var(--colors-light-bg-subtle); }
+      .dark, .dark .chakra-theme:not(.light) { --colors-bg\\.subtle: var(--colors-dark-bg-subtle); }
+      .tile { background: var(--colors-bg\\.subtle); }
+    </style>`),
   '/form.html': page(`
     <div id="target" style="width:260px;height:120px;background:#ffffff">
       <input id="txt" type="text" style="width:200px">
@@ -229,6 +246,39 @@ async function runEngine(browserType: BrowserType, base: string): Promise<CheckR
     const points = hasColor(data, w, h, 230, 140, 20);
     return { pass: line && points && ms < 10000,
       detail: 'line=' + line + ' points=' + points + ' ms=' + Math.round(ms) };
+  }`);
+
+  await check('chakra token vars (html/.chakra-theme topology) resolve — element capture', '/chakravars.html', `async () => {
+    const { data, w, h } = await rasterize(document.getElementById('target'));
+    // colorAt, not hasColor: the default tolerance (40) would accept the white fallback.
+    const px = colorAt(data, w, 30, 30);
+    const pass = Math.abs(px[0] - 240) <= 5 && Math.abs(px[1] - 243) <= 5 && Math.abs(px[2] - 246) <= 5;
+    return { pass, detail: 'tilePx=' + px.join(',') + ' (want 240,243,246)' };
+  }`);
+
+  await check('chakra token vars (html/.chakra-theme topology) resolve — story-surface capture', '/chakravars.html', `async () => {
+    // Same pattern through the STORY path: styles live IN-ROOT (self-contained doc) and the
+    // serializer clones the live <svg> — the stamp must land on the cloned story root.
+    const s = window.__story.mountStorySurface(document, 'svg', 200);
+    const style = document.createElement('style');
+    style.textContent = document.getElementById('chakra-pattern').textContent;
+    s.root.appendChild(style);
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.setAttribute('style', 'width:120px;height:60px');
+    s.root.appendChild(tile);
+    s.applyHeight(100);
+    const xml = await window.__story.serializeStorySvg(document.querySelector('svg[data-mx-story-svg]'));
+    const img = await window.__story.storySvgToImage(xml);
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0);
+    const data = ctx.getImageData(0, 0, c.width, c.height).data; // THROWS if tainted
+    const px = colorAt(data, c.width, 30, 30);
+    const pass = Math.abs(px[0] - 240) <= 5 && Math.abs(px[1] - 243) <= 5 && Math.abs(px[2] - 246) <= 5;
+    return { pass, detail: 'tilePx=' + px.join(',') + ' (want 240,243,246)' };
   }`);
 
   await check('form-control state stamped into the capture', '/form.html', `async () => {

@@ -193,9 +193,15 @@ export async function serializeElementToSvg(
   fo.setAttribute('width', '100%');
   fo.setAttribute('height', '100%');
   // Wrapper layers re-establish the ancestor class/theme context the document CSS keys off
-  // (html/body classes like `.dark`, `data-theme`) — the clone is detached from both.
+  // (html/body classes like `.dark`, `data-theme`) — the clone is detached from both. The wrapper
+  // is additionally a `chakra-theme` host in the current color mode: Chakra's token vars live
+  // under `:where(html, .chakra-theme)` with mode aliases under `:root, .light` / `.dark`, and
+  // `html` is an ELEMENT selector — copying documentElement.className onto a <div> can never
+  // match it, so without this stamp every var-backed Chakra style rasterizes transparent.
   const outer = doc.createElement('div');
-  if (doc.documentElement.className) outer.setAttribute('class', doc.documentElement.className);
+  const mode = doc.documentElement.classList.contains('dark') ? 'dark' : 'light';
+  const htmlClasses = doc.documentElement.className;
+  outer.setAttribute('class', `chakra-theme ${mode}${htmlClasses ? ` ${htmlClasses}` : ''}`);
   const theme = doc.documentElement.getAttribute('data-theme');
   if (theme) outer.setAttribute('data-theme', theme);
   outer.setAttribute('style', `width:${width}px;height:${height}px;overflow:hidden;`

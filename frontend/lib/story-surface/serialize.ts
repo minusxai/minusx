@@ -153,6 +153,15 @@ export async function serializeStorySvg(svg: SVGSVGElement): Promise<string> {
   if (liveRoot && cloneRoot) {
     applyScrollOffsets(liveRoot, cloneRoot);
     stampFormValues(liveRoot, cloneRoot);
+    // Chakra token host: the app's token vars are declared under `:where(html, .chakra-theme)`
+    // with color-mode aliases under `:root, .light` / `.dark` — and this standalone document has
+    // NO <html> element (its root is the <svg>), so none of those selectors match and every
+    // var-backed Chakra style (embed tile backgrounds, chart chrome) rasterizes transparent.
+    // Stamping the CLONED root as a `.chakra-theme` host in the current color mode makes the
+    // whole chain resolve on one element, exactly as it does on the live iframe's <html>.
+    const mode = doc.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    const cls = cloneRoot.getAttribute('class');
+    cloneRoot.setAttribute('class', `${cls ? `${cls} ` : ''}chakra-theme ${mode}`);
   }
 
   // Explicit intrinsic size on the root: an <img>-rendered SVG without width/height attributes has

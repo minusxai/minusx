@@ -93,6 +93,23 @@ describe('serializeElementToSvg', () => {
     expect(out.match(/xmlns="http:\/\/www\.w3\.org\/2000\/svg"/g)!.length).toBe(1); // no duplicate declaration
   });
 
+  // Chakra declares token vars under `:where(html, .chakra-theme)` — `html` is an ELEMENT selector,
+  // so copying documentElement.className onto the wrapper <div> can never match it. Without an
+  // explicit chakra-theme + color-mode host, every var-backed Chakra style in a dashboard/question
+  // capture resolves to nothing and rasterizes transparent.
+  it('wraps the clone in a chakra-theme host carrying the color mode', async () => {
+    const el = document.createElement('div');
+    stubRect(el, 100, 50);
+    document.body.appendChild(el);
+    document.documentElement.classList.remove('dark');
+    const out = await serializeElementToSvg(el);
+    expect(out).toMatch(/<div[^>]*class="chakra-theme light/);
+    document.documentElement.classList.add('dark');
+    const outDark = await serializeElementToSvg(el);
+    expect(outDark).toMatch(/<div[^>]*class="chakra-theme dark/);
+    document.documentElement.classList.remove('dark');
+  });
+
   it('applies the fixup pass: scroll transforms and form-value stamping, live DOM untouched', async () => {
     const el = document.createElement('div');
     el.innerHTML = '<div id="scroller"><table id="t"></table></div><input id="i" type="text">';
