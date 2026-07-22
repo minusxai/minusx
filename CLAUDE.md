@@ -149,17 +149,18 @@ npm run update-workspace-template   # re-runs migrations on the template; review
 - Schema: `files` table with `id`, `name`, `path`, `type`, `content`, timestamps
 
 **File Types**
-- `question` - SQL query with visualization (table, line, bar, area, scatter)
-- `dashboard` - Collection of questions with grid layout
-- `notebook` - Vertical list of cells; each cell is either a full inline SQL question (query + viz + connection + params + @refs) or a rich-text (markdown) cell. Content schema `NotebookContent` (`cells: NotebookCell[]`) in `lib/validation/atlas-schemas.ts`; rendered by `NotebookContainerV2` → `NotebookView` → `NotebookSqlCell`/`NotebookTextCell`
-- `presentation` - Slide-based presentations (future)
-- `report` - Report-style documents (future)
+- `question` - SQL query with visualization (table, charts via Vega, pivot)
+- `dashboard` - Collection of questions with grid layout (react-grid-layout)
+- `story` - Agent-authored scrolling narrative document. `content.story` carries STATIC JSX (shadcn/Tailwind via the `lib/story-ui` interpreter — parsed to an AST, never eval'd/innerHTML'd) rendered in an iframe `<svg><foreignObject>` surface (`lib/story-surface`); server-compiled Tailwind in `content.compiledCss`; six design themes via `content.theme` (`STORY_THEME_NAMES`); live question/number/param embeds portaled through a nested React root
+- `notebook` - Vertical list of cells; each cell is either a full inline SQL question (query + viz + connection + params + @refs) or a rich-text (markdown) cell. Content schema `NotebookContent` (`cells: NotebookCell[]`) in `lib/validation/atlas-schemas.ts`; rendered by `NotebookContainerV2` → `NotebookView` → `NotebookSqlCell`/`NotebookTextCell` (`supported: false` today)
+- `report` - Report-style documents (future); `alert` - alert definitions; `alert_run`/`report_run`/`context_run` - read-only rendered run outputs
 - `connection` - Database connection configuration
 - `context` - Schema whitelist + team documentation
 - `users` - User management
 - `folder` - Organizational containers
-- `conversation` - AI chat conversation logs
 - `config` - Company configuration (branding, settings)
+
+(`conversation` is NOT a file type anymore — conversations moved to their own storage in the v3 chat migration; a vestigial `FILE_TYPE_METADATA` entry remains and is slated for removal.)
 
 **Company Configs System**
 The configs system provides per-company configuration stored as database documents:
@@ -341,29 +342,22 @@ Server-side, `applyNoneParams` (`app/api/query/route.ts`) treats **only `null`**
 
 ### Charting / Visualization Library
 
-**Viz Types** (defined in `lib/types.ts` → `VizSettings`):
-- `table` - Raw data table
-- `line`, `bar`, `area`, `scatter` - Standard charts (ECharts)
-- `funnel`, `pie` - Categorical charts
-- `pivot` - Cross-tab pivot table with Rows/Columns/Values axes, per-value aggregation functions, heatmap, subtotals, and collapsible groups
+**Vega is the production chart engine.** `vizRenderer` defaults to `'vega'` (`store/uiSlice.ts`): every chart on questions, dashboards, and stories draws through `components/viz/VegaChart.tsx`, which hard-forces Vega's **SVG renderer** (captures serialize live DOM — canvas content serializes empty) and reads the design-theme `--chart-1..5` tokens. Legacy charts whose truth is still `vizSettings` render via the just-in-time V1→Vega bridge (`lib/viz/from-vizsettings.ts` — render-only, never written back; its switch is exhaustiveness-guarded). `table`/`pivot` deliberately render on the DOM tier (native `<table>` + tanstack-virtual `TableV2`, `PivotTable`), not through Vega. The old ECharts pipeline (`components/plotx/` `ChartHost`/`EChart`/`BaseChart` + per-type Plots, canvas renderer) survives only behind the `vizRenderer:'echarts'` rollback toggle and is slated for deletion (see `Renderer_v2.md` Phase 2).
 
-`VizSettings` (in `lib/types.ts`) carries `type`, `xCols`/`yCols` (grouping/value columns for non-pivot types; values SUM-aggregated), and `pivotConfig` (pivot only).
+**Viz Types** (`lib/types.ts` → `VizSettings.type`): `table`, `line`, `bar`, `area`, `scatter`, `row`, `pie`, `funnel`, `waterfall`, `radar`, `trend`, `combo`, `single_value`, `pivot`, and the geo types (`choropleth`, `point_map`, `geo`). `VizSettings` carries `type`, `xCols`/`yCols`, `pivotConfig` (pivot), `geoConfig` (geo: `lat = xCols[0]`, `lng = xCols[1]` or explicit `latCol`/`lngCol`).
 
 **Key Files**:
-- `components/plotx/ChartBuilder.tsx` - Main chart component with drag-drop axis selection
-- `components/plotx/AxisComponents.tsx` - Shared drag-drop components (ColumnChip, DropZone, ZoneChip)
-- `components/plotx/PivotAxisBuilder.tsx` - Pivot-specific Rows/Columns/Values drop zones with aggregation function selector
-- `components/plotx/PivotTable.tsx` - Pivot table renderer with nested headers, subtotals, collapsible groups, heatmap
-- `lib/chart/pivot-utils.ts` - Pure pivot aggregation logic (`aggregatePivotData()` → `PivotData`)
-- `components/plotx/{LinePlot,BarPlot,PiePlot,...}.tsx` - Individual viz renderers
+- `components/viz/VegaChart.tsx` - The single browser chart renderer (Vega/vega-lite, SVG-forced)
+- `lib/viz/from-vizsettings.ts` - V1 `vizSettings` → V2 envelope bridge (`vizSettingsToEnvelope`, exhaustiveness-guarded switch)
+- `lib/viz/render-vega.ts` - Headless envelope rendering (`renderEnvelopeToSvg`, `renderer:'none'` → `toSVG()`)
+- `lib/chart/pivot-utils.ts` - Pure pivot aggregation logic; `components/plotx/TableV2.tsx` / `PivotTable.tsx` - DOM-tier table renderers
 - `components/question/VizTypeSelector.tsx` - Viz type icon buttons
-- `components/question/QuestionVisualization.tsx` - Routes to Table or ChartBuilder
-- `lib/chart/chart-utils.ts` - Shared chart utilities (formatting, axis calculations)
+- `components/question/QuestionVisualization.tsx` - The render dispatcher (Vega vs DOM tier vs legacy toggle)
 
-**Chart → LLM Image Pipeline** (`lib/chart/chart-attachments.ts`):
-On every message send from a question or dashboard page, `buildChartAttachments()` renders each chart off-screen via ECharts canvas, converts to JPEG (512px wide, 85% quality), uploads to S3 via presigned URL, and returns the public URL as an image attachment. Results are cached in-memory by `queryResultId|updatedAt|vizSettings|titleOverride|colorMode` — subsequent sends with unchanged data skip render+upload and reuse the cached S3 URL. These image attachments are sent to the LLM as content blocks between the app state block and the user message block.
+**File-view → LLM Image Pipeline** (`lib/screenshot/app-state-screenshot.ts`):
+The old per-chart `buildChartAttachments()` pipeline is DELETED. On message send from a file page, ONE screenshot of the whole rendered view is captured **lazily at send time** through the serialization pipeline (`captureFileViewBlob` → serialize → data-URL SVG → canvas → 512px JPEG), readiness-gated on `data-mx-busy` (never captures half-hydrated embeds) and cached in a one-slot cache keyed by content+results+color-mode. Stories additionally get numbered position markers baked into the image plus a `<Viewport>` scroll pointer (`lib/screenshot/page-markers.ts`; story-only gate `isStoryAppState` — being generalized per `Renderer_v2.md` Phase 1).
 
-**Adding a New Viz Type** — touch-points: add to the `VizSettings.type` union (`lib/types.ts`); add a renderer in `components/plotx/` (takes `ChartProps`) and export it from `components/plotx/index.ts`; wire it into `ChartBuilder.tsx`, `VizTypeSelector.tsx`, `QuestionVisualization.tsx`, and `handleVizTypeChange` in `QuestionViewV2.tsx`.
+**Adding a New Viz Type** — touch-points: add to the `VizSettings.type` union (`lib/types.ts`); extend the `vizSettingsToEnvelope` switch in `lib/viz/from-vizsettings.ts` (the `never` guard forces this); wire `VizTypeSelector.tsx`. Only extend the plotx ECharts path if the rollback toggle must support the new type (it is scheduled for deletion — usually skip).
 
 ## Development Workflow
 
@@ -407,7 +401,7 @@ Browser-side complement to `handleApiError`:
 - **Redux Toolkit** for state management
 - **@electric-sql/pglite** for embedded Postgres (open-source); `pg` for external Postgres (hosted)
 - **Monaco Editor** for SQL editing
-- **ECharts 6** for visualizations (themed with JetBrains Mono fonts)
+- **Vega / vega-lite** for visualizations (SVG-forced, design-theme chart tokens; ECharts 6 remains only behind the `vizRenderer:'echarts'` rollback toggle, slated for deletion)
 - **NextAuth v5** for authentication
 
 ### AI Orchestration (in-process)
