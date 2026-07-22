@@ -27,6 +27,10 @@ export interface MetricLexResult {
   bare: Array<{ ident: string; candidates: string[] }>;
   /** True when the SQL contains a quoted (`"…"` / backtick) identifier. */
   quoted: boolean;
+  /** '(' count never closed (outside strings/comments). */
+  unclosedParens: number;
+  /** ')' count with no matching '(' (outside strings/comments). */
+  extraCloseParens: number;
 }
 
 // Common SQL keywords — never treated as bare column refs. Deliberately broad:
@@ -55,6 +59,8 @@ export function lexMetricSql(
   const refs: MetricRef[] = [];
   const bare: Array<{ ident: string; candidates: string[] }> = [];
   let quoted = false;
+  let parenDepth = 0;
+  let extraCloseParens = 0;
 
   // Token scan: identifiers + the structural chars we care about ('.', '(').
   type Tok = { kind: 'ident' | 'dot' | 'lparen' | 'other'; text: string; start: number; end: number };
@@ -107,7 +113,8 @@ export function lexMetricSql(
       continue;
     }
     if (c === '.') { toks.push({ kind: 'dot', text: '.', start: i, end: i + 1 }); i++; continue; }
-    if (c === '(') { toks.push({ kind: 'lparen', text: '(', start: i, end: i + 1 }); i++; continue; }
+    if (c === '(') { parenDepth++; toks.push({ kind: 'lparen', text: '(', start: i, end: i + 1 }); i++; continue; }
+    if (c === ')') { if (parenDepth > 0) parenDepth--; else extraCloseParens++; }
     if (!/\s/.test(c)) toks.push({ kind: 'other', text: c, start: i, end: i + 1 });
     i++;
   }
@@ -147,7 +154,7 @@ export function lexMetricSql(
     }
   }
 
-  return { refs, bare, quoted };
+  return { refs, bare, quoted, unclosedParens: parenDepth, extraCloseParens };
 }
 
 /**

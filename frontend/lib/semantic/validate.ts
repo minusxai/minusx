@@ -248,6 +248,15 @@ export function validateSemanticModel(
     }
     // SQL metric — lexer-backed rules.
     const lex = lexMetricSql(metric.sql, knownFields);
+    // Paren balance FIRST: the engine's error for this (tier 3) points into
+    // the compiled probe SQL — lines and aliases the author never wrote. A
+    // tier-1 message about THEIR text is the one they can act on.
+    if (lex.unclosedParens > 0) {
+      issues.push(`${at}: unbalanced parentheses — ${lex.unclosedParens} "(" ${lex.unclosedParens === 1 ? 'is' : 'are'} never closed`);
+    }
+    if (lex.extraCloseParens > 0) {
+      issues.push(`${at}: unbalanced parentheses — ${lex.extraCloseParens} ")" ${lex.extraCloseParens === 1 ? 'has' : 'have'} no matching "("`);
+    }
     if (lex.quoted) {
       issues.push(`${at}: quoted identifiers aren't supported in metric SQL — a column that needs quoting must be renamed via a data model before it can be referenced`);
     }

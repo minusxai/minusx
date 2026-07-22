@@ -167,6 +167,32 @@ describe('connection consistency & source resolution', () => {
   });
 });
 
+describe('unbalanced parentheses in metric SQL (tier 1 — no engine round-trip needed)', () => {
+  it('an unclosed "(" is reported with a message about the AUTHORED SQL', () => {
+    const issues = errorsFor((m) => {
+      m.metrics = [...m.metrics, { name: 'Net', type: 'sql', sql: 'SUM(primary.amount) - SUM(primary.amount' }];
+    });
+    expect(issues.some((i) => i.includes('metric "Net"') && i.includes('unbalanced parentheses') && i.includes('never closed'))).toBe(true);
+  });
+
+  it('an extra ")" is reported too', () => {
+    const issues = errorsFor((m) => {
+      m.metrics = [...m.metrics, { name: 'Net', type: 'sql', sql: 'SUM(primary.amount))' }];
+    });
+    expect(issues.some((i) => i.includes('metric "Net"') && i.includes('unbalanced parentheses'))).toBe(true);
+  });
+
+  it('parens inside strings and comments do not count', () => {
+    const issues = errorsFor((m) => {
+      m.metrics = [...m.metrics, {
+        name: 'Net', type: 'sql',
+        sql: "COUNT(CASE WHEN primary.region = '(east' THEN 1 END) -- (note\n + SUM(primary.amount)",
+      }];
+    });
+    expect(issues.some((i) => i.includes('unbalanced'))).toBe(false);
+  });
+});
+
 describe('dimensions, aggregation metrics, temporal dimensions', () => {
   it('rejects a dimension whose source is not primary or a declared alias', () => {
     const issues = errorsFor((m) => { m.dimensions[0].source = 'ghost'; });

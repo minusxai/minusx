@@ -13,7 +13,7 @@
  * toggle, matching pre-extraction behavior.
  */
 
-import { Box, VStack, HStack, Button, Text, Icon, Collapsible, Tabs } from '@chakra-ui/react';
+import { Box, VStack, HStack, Button, Text, Icon, Tabs } from '@chakra-ui/react';
 import { LuCircleAlert, LuCircleCheck, LuGlobe, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import type { ContextContent } from '@/lib/types';
 import type { DatabaseWithSchema } from '@/lib/types';
@@ -238,14 +238,22 @@ export function DatabasesTabContent({
                       overflow="hidden"
                       bg="bg.surface"
                     >
-                      <Collapsible.Root open={isExpanded} onOpenChange={() => toggleDatabase(database.databaseName)}>
-                        <Collapsible.Trigger asChild>
+                      {/* Plain conditional rendering, NOT Collapsible: Ark's
+                          collapse animation pins the content to a MEASURED
+                          --height, and this section's height changes while
+                          open (edit mode, added rows, validation banners) —
+                          the stale fixed height made the card overflow under
+                          the stats footer, which then swallowed every click
+                          (inputs in the overlap became untypable). */}
+                      <>
                           <Box
+                            aria-label={`Toggle database ${database.databaseName}`}
                             px={4}
                             py={3}
                             bg="bg.muted"
                             cursor="pointer"
                             _hover={{ bg: 'bg.emphasized' }}
+                            onClick={() => toggleDatabase(database.databaseName)}
                             {...(isExpanded ? { borderBottom: '1px solid', borderColor: 'border.default' } : {})}
                           >
                             <HStack gap={2}>
@@ -323,8 +331,7 @@ export function DatabasesTabContent({
                               </Box>
                             </HStack>
                           </Box>
-                        </Collapsible.Trigger>
-                        <Collapsible.Content>
+                        {isExpanded && (
                           <Box p={4}>
                             {/* Semantic models: the authored vocabulary layer —
                                 ABOVE data models and the raw schema, since it's
@@ -377,8 +384,8 @@ export function DatabasesTabContent({
                               inheritedAnnotations={content.fullAnnotations}
                             />
                           </Box>
-                        </Collapsible.Content>
-                      </Collapsible.Root>
+                        )}
+                      </>
                     </Box>
                   );
                 })}
