@@ -407,10 +407,10 @@ export const SemanticQuerySpec = Type.Object({
   model: Type.String({ description: 'semantic model name (derived per table from the whitelisted schema)' }),
   table: Nullable(Type.String({ description: 'base table the model derives from (scopes on-demand model loading)' })),
   schema: Nullable(Type.String({ description: 'schema of the base table' })),
-  measures: Type.Array(Type.String(), { description: 'measure/metric names to compute (at least one)' }),
+  metrics: Type.Array(Type.String(), { description: 'metric names to compute (at least one)' }),
   dimensions: Type.Array(Type.String(), { description: 'dimension names to group by' }),
   timeGrain: Nullable(StringEnum(['HOUR', 'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'])),
-  timeColumn: Nullable(Type.String({ description: 'temporal column for the time axis; defaults to the model timeDimension' })),
+  timeColumn: Nullable(Type.String({ description: "temporal column for the time axis; defaults to the model's first temporal dimension" })),
   filters: Nullable(Type.Array(SemanticQueryFilter)),
   limit: Nullable(Type.Integer()),
 }, { title: 'SemanticQuerySpec' });
@@ -744,21 +744,27 @@ export const SemanticDimensionV2 = Type.Object({
 }, { title: 'SemanticDimensionV2' });
 export type SemanticDimensionV2 = Static<typeof SemanticDimensionV2>;
 
-/** Aggregation over a PRIMARY-source column (`column` omitted for COUNT(*)). */
-export const SemanticMeasureV2 = Type.Object({
+/**
+ * Aggregation metric over a PRIMARY-source column (`column` omitted for
+ * COUNT(*)) — the simple, declarative metric kind (what other semantic layers
+ * call a "measure"; this model deliberately has ONE user-facing concept).
+ */
+export const SemanticAggMetricV2 = Type.Object({
   name: Type.String(),
+  type: Type.Literal('aggregation'),
   agg: StringEnum(['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COUNT_DISTINCT']),
   column: Nullable(Type.String({ description: 'primary-source column; omitted for COUNT(*)' })),
   description: Nullable(Type.String()),
-}, { title: 'SemanticMeasureV2' });
-export type SemanticMeasureV2 = Static<typeof SemanticMeasureV2>;
+  verified: Nullable(Type.Boolean({ description: 'tier-3 dry-run outcome; false = probe failed on infrastructure, re-probed on next save' })),
+}, { title: 'SemanticAggMetricV2' });
+export type SemanticAggMetricV2 = Static<typeof SemanticAggMetricV2>;
 
-/** A metric derived from two measures (numerator / denominator). */
+/** A metric derived from two aggregation metrics (numerator / denominator). */
 export const SemanticRatioMetricV2 = Type.Object({
   name: Type.String(),
   type: Type.Literal('ratio'),
-  numerator: Type.String({ description: 'a declared measure name' }),
-  denominator: Type.String({ description: 'a declared measure name' }),
+  numerator: Type.String({ description: 'the name of an aggregation metric of this model' }),
+  denominator: Type.String({ description: 'the name of an aggregation metric of this model' }),
   description: Nullable(Type.String()),
   verified: Nullable(Type.Boolean({ description: 'tier-3 dry-run outcome; false = probe failed on infrastructure, re-probed on next save' })),
 }, { title: 'SemanticRatioMetricV2' });
@@ -777,14 +783,17 @@ export const SemanticSqlMetric = Type.Object({
 }, { title: 'SemanticSqlMetric' });
 export type SemanticSqlMetric = Static<typeof SemanticSqlMetric>;
 
-export const SemanticMetricV2 = Type.Union([SemanticRatioMetricV2, SemanticSqlMetric], { title: 'SemanticMetricV2' });
+/** Discriminated on `type`: aggregation | ratio | sql. */
+export const SemanticMetricV2 = Type.Union([SemanticAggMetricV2, SemanticRatioMetricV2, SemanticSqlMetric], { title: 'SemanticMetricV2' });
 export type SemanticMetricV2 = Static<typeof SemanticMetricV2>;
 
 /**
  * An authored semantic model: ONE primary table/model exposed through
- * business-named dimensions, measures and metrics, plus referenced sources
- * with declared relationships. Stored on ContextVersion.semanticModels
- * (versioned + inherited like views).
+ * business-named dimensions and metrics, plus referenced sources with
+ * declared relationships. Stored on ContextVersion.semanticModels
+ * (versioned + inherited like views). The time axis is implicit: dimensions
+ * flagged `temporal` are the model's time dimensions, the first one the
+ * default axis — there is no separate timeDimension field.
  */
 export const SemanticModelV2 = Type.Object({
   name: Type.String({ description: 'unique per context tree; shares one namespace with view names' }),
@@ -797,12 +806,7 @@ export const SemanticModelV2 = Type.Object({
   })),
   references: Nullable(Type.Array(SemanticReference)),
   dimensions: Type.Array(SemanticDimensionV2),
-  measures: Type.Array(SemanticMeasureV2),
-  metrics: Nullable(Type.Array(SemanticMetricV2)),
-  timeDimension: Nullable(Type.Object({
-    column: Type.String({ description: 'a temporal exposed field of the PRIMARY source' }),
-    label: Nullable(Type.String()),
-  })),
+  metrics: Type.Array(SemanticMetricV2),
 }, { title: 'SemanticModelV2' });
 export type SemanticModelV2 = Static<typeof SemanticModelV2>;
 

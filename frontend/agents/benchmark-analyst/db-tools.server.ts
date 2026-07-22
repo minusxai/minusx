@@ -216,7 +216,7 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, RemoteAnalystCon
  */
 const RunSemanticQueryParams = Type.Object({
   model: Type.String({ description: 'Name of the authored semantic model to query (case-insensitive).' }),
-  ...Type.Pick(SemanticQuerySpec, ['measures']).properties,
+  ...Type.Pick(SemanticQuerySpec, ['metrics']).properties,
   ...Type.Partial(Type.Pick(SemanticQuerySpec, ['dimensions', 'filters', 'timeGrain', 'timeColumn', 'limit'])).properties,
 });
 
@@ -224,7 +224,7 @@ export class RunSemanticQuery extends MXTool<typeof RunSemanticQueryParams, Remo
   static readonly schema: Tool<typeof RunSemanticQueryParams> = {
     name: 'RunSemanticQuery',
     description:
-      'Run a query against an AUTHORED SEMANTIC MODEL by name — pick measures/metrics and dimensions ' +
+      'Run a query against an AUTHORED SEMANTIC MODEL by name — pick metrics and dimensions ' +
       'from the model instead of writing SQL. Optional filters (dimension/operator/value), timeGrain ' +
       '(with timeColumn to override the model\'s default time axis), and limit. The spec is validated ' +
       'against the model (errors list the exact issues — fix and retry), compiled to dialect SQL, and ' +
@@ -266,7 +266,7 @@ export class RunSemanticQuery extends MXTool<typeof RunSemanticQueryParams, Remo
       model: model.name,
       table: null,
       schema: null,
-      measures: this.parameters.measures,
+      metrics: this.parameters.metrics,
       dimensions: this.parameters.dimensions ?? [],
       filters: this.parameters.filters ?? null,
       timeGrain: this.parameters.timeGrain ?? null,

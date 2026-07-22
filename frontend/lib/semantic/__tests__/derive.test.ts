@@ -110,17 +110,24 @@ describe('deriveSemanticModels — vocabulary', () => {
     expect(dimCols).not.toContain('amount');
   });
 
-  it('temporal columns are dimensions and the created_at-style one wins timeDimension', () => {
+  it('temporal columns are dimensions, listed first, and the created_at-style one leads (default time axis)', () => {
     const orders = modelFor(models(), 'orders');
-    expect(orders.timeDimension?.column).toBe('created_at');
+    // The FIRST primary temporal dimension is the default time axis — the
+    // created_at-style column wins over other temporal columns.
+    const firstTemporal = orders.dimensions.find((d) => d.source === 'primary' && d.temporal);
+    expect(firstTemporal?.column).toBe('created_at');
+    // Temporal dimensions come first in the array, preference-sorted.
+    expect(orders.dimensions[0]).toMatchObject({ column: 'created_at', temporal: true });
+    expect(orders.dimensions[1]).toMatchObject({ column: 'shipped_date', temporal: true });
     const dimCols = orders.dimensions.map((d) => d.column);
     expect(dimCols).toContain('created_at');
     expect(dimCols).toContain('shipped_date');
     // customers has a single temporal column — it just wins
-    expect(modelFor(models(), 'customers').timeDimension?.column).toBe('signup_date');
+    const customersFirst = modelFor(models(), 'customers').dimensions.find((d) => d.temporal);
+    expect(customersFirst?.column).toBe('signup_date');
   });
 
-  it('a categorical-profiled numeric is BOTH: measures + a groupable dimension', () => {
+  it('a categorical-profiled numeric is BOTH: aggregation metrics + a groupable dimension', () => {
     const db2 = db('warehouse', {
       spend: [
         col('clicks', 'BIGINT', 'categorical'),
@@ -128,20 +135,23 @@ describe('deriveSemanticModels — vocabulary', () => {
       ],
     });
     const m = modelFor(deriveSemanticModels([db2]), 'spend');
-    expect(m.measures.map((me) => me.name)).toEqual(expect.arrayContaining(['Total Clicks', 'Avg Clicks']));
+    expect(m.metrics.map((me) => me.name)).toEqual(expect.arrayContaining(['Total Clicks', 'Avg Clicks']));
     expect(m.dimensions.map((d) => d.column)).toContain('clicks');  // profiled groupable
     expect(m.dimensions.map((d) => d.column)).not.toContain('amount'); // plain numeric: measure only
   });
 
-  it('numeric columns derive Total/Avg measures; ids derive Unique; Count always exists', () => {
+  it('numeric columns derive Total/Avg metrics; ids derive Unique; Count always exists', () => {
     const orders = modelFor(models(), 'orders');
-    const byName = new Map(orders.measures.map((me) => [me.name, me]));
-    expect(byName.get('Count')).toMatchObject({ agg: 'COUNT' });
+    // Every derived metric is an aggregation metric.
+    expect(orders.metrics.every((me) => me.type === 'aggregation')).toBe(true);
+    const aggs = orders.metrics.filter((me) => me.type === 'aggregation');
+    const byName = new Map(aggs.map((me) => [me.name, me]));
+    expect(byName.get('Count')).toMatchObject({ type: 'aggregation', agg: 'COUNT' });
     expect(byName.get('Count')?.column).toBeUndefined();
-    expect(byName.get('Total Amount')).toMatchObject({ agg: 'SUM', column: 'amount' });
-    expect(byName.get('Avg Amount')).toMatchObject({ agg: 'AVG', column: 'amount' });
-    expect(byName.get('Total Discount')).toMatchObject({ agg: 'SUM', column: 'discount' });
-    expect(byName.get('Unique Customer')).toMatchObject({ agg: 'COUNT_DISTINCT', column: 'customer_id' });
+    expect(byName.get('Total Amount')).toMatchObject({ type: 'aggregation', agg: 'SUM', column: 'amount' });
+    expect(byName.get('Avg Amount')).toMatchObject({ type: 'aggregation', agg: 'AVG', column: 'amount' });
+    expect(byName.get('Total Discount')).toMatchObject({ type: 'aggregation', agg: 'SUM', column: 'discount' });
+    expect(byName.get('Unique Customer')).toMatchObject({ type: 'aggregation', agg: 'COUNT_DISTINCT', column: 'customer_id' });
     // id columns never SUM
     expect([...byName.values()].some((me) => me.agg === 'SUM' && me.column === 'customer_id')).toBe(false);
   });
@@ -221,17 +231,17 @@ describe('end-to-end: SQL against a derived model detects as semantic', () => {
     expect(spec).toMatchObject({
       model: 'Orders',
       dimensions: ['Status'],
-      measures: expect.arrayContaining(['Total Amount', 'Count']),
+      metrics: expect.arrayContaining(['Total Amount', 'Count']),
     });
   });
 
-  it('time-grain query maps onto the derived timeDimension (bigquery)', async () => {
+  it('time-grain query maps onto the derived time axis (bigquery)', async () => {
     const spec = await detectSemanticQuery(
       `SELECT DATE_TRUNC(created_at, MONTH), AVG(amount) FROM public.orders GROUP BY 1`,
       models(),
       'bigquery',
     );
-    expect(spec).toMatchObject({ model: 'Orders', timeGrain: 'MONTH', measures: ['Avg Amount'] });
+    expect(spec).toMatchObject({ model: 'Orders', timeGrain: 'MONTH', metrics: ['Avg Amount'] });
   });
 
   it('refuses SQL outside the derived vocabulary (window function)', async () => {

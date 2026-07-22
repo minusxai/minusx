@@ -21,7 +21,7 @@ const content = (): ContextContent => ({
 const MODEL: SemanticModelV2 = {
   name: 'Orders', connection: 'wh',
   primary: { kind: 'table', table: 'orders' },
-  dimensions: [], measures: [{ name: 'Rows', agg: 'COUNT' }],
+  dimensions: [], metrics: [{ name: 'Rows', type: 'aggregation', agg: 'COUNT' }],
 };
 
 describe('applyContextContentChange', () => {

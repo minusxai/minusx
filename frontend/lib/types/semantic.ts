@@ -6,8 +6,10 @@
 // do not hand-write duplicates.
 //
 // The vocabulary intentionally mirrors the open semantic layer specs
-// (MetricFlow / Cube / OSI): source, explicit references, dimensions,
-// measures, metrics — so an interchange import/export stays a trivial mapping.
+// (MetricFlow / Cube / OSI): source, explicit references, dimensions, metrics
+// — so an interchange import/export stays a trivial mapping. (There is ONE
+// user-facing quantitative concept: metrics. What other layers call a
+// "measure" is the `aggregation` metric type here.)
 // ============================================================================
 
 export type {
@@ -16,7 +18,7 @@ export type {
   SemanticReferenceToOne,
   SemanticReferenceM2M,
   SemanticDimensionV2,
-  SemanticMeasureV2,
+  SemanticAggMetricV2,
   SemanticRatioMetricV2,
   SemanticSqlMetric,
   SemanticMetricV2,

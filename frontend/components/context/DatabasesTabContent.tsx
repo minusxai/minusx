@@ -20,6 +20,7 @@ import type { DatabaseWithSchema } from '@/lib/types';
 import { countResolvedWhitelist } from '@/lib/context/context-utils';
 import SchemaTreeView, { type WhitelistItem } from '../schema-browser/SchemaTreeView';
 import ViewsSection from './ViewsSection';
+import SemanticModelsSection from './SemanticModelsEditor';
 import { Checkbox } from '@/components/ui/checkbox';
 import Editor from '@monaco-editor/react';
 
@@ -46,6 +47,11 @@ interface DatabasesTabContentProps {
   onYamlChange: (newYaml: string) => void;
   /** Path of the context file — views resolve + save against it. */
   contextPath: string;
+  /**
+   * Semantic save-gate issues (tiers 1–3) recovered from the save error —
+   * routed to the database section owning the model each one names.
+   */
+  semanticIssues?: string[];
 }
 
 export function DatabasesTabContent({
@@ -63,7 +69,20 @@ export function DatabasesTabContent({
   toggleDatabase,
   yamlText,
   onYamlChange,
+  semanticIssues = [],
 }: DatabasesTabContentProps) {
+  // Route each semantic issue to the database section owning the model it
+  // names; issues naming no known model surface ONCE, in the first section.
+  const allModels = [...(content.semanticModels || []), ...(content.fullSemanticModels || [])];
+  const issueConnection = (issue: string): string | null => {
+    const m = /^Semantic model "([^"]+)"/.exec(issue);
+    return (m && allModels.find((x) => x.name === m[1])?.connection) ?? null;
+  };
+  const issuesForSection = (connection: string, first: boolean) =>
+    semanticIssues.filter((i) => {
+      const c = issueConnection(i);
+      return c === connection || (c === null && first);
+    });
   // Handle whitelist change - pure controlled
   const handleWhitelistChange = (databaseName: string, newWhitelist: WhitelistItem[]) => {
     // When databases === '*', synthesize a full whitelist for all connections as the starting point
@@ -307,6 +326,24 @@ export function DatabasesTabContent({
                         </Collapsible.Trigger>
                         <Collapsible.Content>
                           <Box p={4}>
+                            {/* Semantic models: the authored vocabulary layer —
+                                ABOVE data models and the raw schema, since it's
+                                the surface agents and the GUI query first. */}
+                            <Box mb={4} border="1px solid" borderColor="border.muted" borderRadius="md" p={3}>
+                              <SemanticModelsSection
+                                connection={database.databaseName}
+                                database={database}
+                                views={[...(content.fullViews || []), ...(content.views || [])]}
+                                models={(content.semanticModels || []).filter((m) => m.connection === database.databaseName)}
+                                inheritedModels={(content.fullSemanticModels || []).filter((m) => m.connection === database.databaseName)}
+                                editMode={editMode}
+                                issues={issuesForSection(database.databaseName, availableDatabases[0]?.databaseName === database.databaseName)}
+                                onChange={(nextForConnection) => {
+                                  const others = (content.semanticModels || []).filter((m) => m.connection !== database.databaseName);
+                                  onChange({ semanticModels: [...nextForConnection, ...others] });
+                                }}
+                              />
+                            </Box>
                             {/* Views: curated SQL that behaves like a table. Sits
                                 above the raw schema — it's the layer people should
                                 reach for first. */}

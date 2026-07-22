@@ -65,8 +65,10 @@ const validModel = (overrides: Partial<SemanticModelV2> = {}): SemanticModelV2 =
   connection: 'warehouse',
   primary: { kind: 'table', schema: 'mxfood', table: 'orders' },
   dimensions: [{ name: 'Zone', source: 'primary', column: 'zone_name' }],
-  measures: [{ name: 'Revenue', agg: 'SUM', column: 'total' }],
-  metrics: [{ name: 'Total Revenue', type: 'sql', sql: 'SUM(primary.total)' }],
+  metrics: [
+    { name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'total' },
+    { name: 'Total Revenue', type: 'sql', sql: 'SUM(primary.total)' },
+  ],
   ...overrides,
 } as SemanticModelV2);
 

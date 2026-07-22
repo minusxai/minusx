@@ -2,9 +2,12 @@
  * Tier-3 dry-run save gate (Semantic_Model_v2.md §2.5, M4): every probe is the
  * compiled metric wrapped `SELECT * FROM (…) AS _probe LIMIT 0`, executed via
  * the real connector seam. Blocking policy: bad SQL blocks; infrastructure
- * failures fail open with `verified: false`; probe scope is exactly
- * three cases (metric-text-only → delta, metadata-only → nothing,
- * structural → all) with `verified: false` metrics sticky in every probe set.
+ * failures fail open with `verified: false`. Probe scope: metadata-only →
+ * nothing; a changed/added metric → itself (an aggregation metric's definition
+ * is EMBEDDED in the essence of every ratio built on it, so changing one
+ * re-probes its dependent ratios too); anything structural outside the metric
+ * list (dimensions, references, primary) → all; `verified: false` metrics are
+ * sticky in every probe set.
  */
 import { DocumentDB } from '@/lib/database/documents-db';
 import { FilesAPI } from '@/lib/data/files.server';
@@ -31,13 +34,16 @@ vi.mock('@/lib/connections/statistics-engine', () => ({
 const TEST_DB_PATH = getTestDbPath('semantic_tier3');
 const admin: EffectiveUser = { userId: 1, name: 'A', email: 'a@e.com', role: 'admin', mode: 'org', home_folder: '' };
 
-const model = (metrics: SemanticMetricV2[], overrides: Partial<SemanticModelV2> = {}): SemanticModelV2 => ({
+const model = (
+  metrics: SemanticMetricV2[],
+  overrides: Partial<SemanticModelV2> = {},
+  aggregations: SemanticMetricV2[] = [{ name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'total' }],
+): SemanticModelV2 => ({
   name: 'Orders',
   connection: 'warehouse',
   primary: { kind: 'table', schema: 'mxfood', table: 'orders' },
   dimensions: [{ name: 'Zone', source: 'primary', column: 'zone_name' }],
-  measures: [{ name: 'Revenue', agg: 'SUM', column: 'total' }],
-  metrics,
+  metrics: [...aggregations, ...metrics],
   ...overrides,
 });
 
@@ -66,6 +72,9 @@ const savedModel = async (contextId: number): Promise<SemanticModelV2> => {
   return (row!.content as ContextContent).versions![0].semanticModels![0];
 };
 
+const savedMetric = async (contextId: number, name: string): Promise<SemanticMetricV2> =>
+  (await savedModel(contextId)).metrics.find((m) => m.name === name)!;
+
 const probeSqls = (): string[] => mockQuery.mock.calls.map((c) => c[0] as string);
 
 describe('tier-3 dry-run save gate', () => {
@@ -82,14 +91,16 @@ describe('tier-3 dry-run save gate', () => {
       { versions: [{ version: 1, whitelist: [{ name: 'warehouse', type: 'connection' }], docs: [], createdAt: new Date().toISOString(), createdBy: 1 }], published: { all: 1 } });
   });
 
-  it('probes each metric as SELECT * FROM (…) AS _probe LIMIT 0 with a GROUP BY', async () => {
+  it('probes EVERY metric of a new model as SELECT * FROM (…) AS _probe LIMIT 0 with a GROUP BY', async () => {
     await save(contextId, model([M_A]));
     const sqls = probeSqls();
-    expect(sqls).toHaveLength(1);
-    expect(sqls[0]).toMatch(/SELECT \* FROM \(/);
-    expect(sqls[0]).toMatch(/AS _probe LIMIT 0/);
-    expect(sqls[0]).toMatch(/GROUP BY zone_name/);      // first non-m2m dimension
-    expect(sqls[0]).toContain('SUM(orders.total) - 1'); // wait — no joins: unqualified
+    expect(sqls).toHaveLength(2); // the Revenue aggregation metric AND Net A
+    for (const sql of sqls) {
+      expect(sql).toMatch(/SELECT \* FROM \(/);
+      expect(sql).toMatch(/AS _probe LIMIT 0/);
+      expect(sql).toMatch(/GROUP BY zone_name/);        // first non-m2m dimension
+    }
+    expect(sqls.some((q) => q.includes('SUM(orders.total) - 1'))).toBe(true); // primary. → base name
   });
 
   it('zero-dimension model: probe groups by the first exposed primary column', async () => {
@@ -104,21 +115,24 @@ describe('tier-3 dry-run save gate', () => {
   });
 
   it('an infrastructure failure fails OPEN: save succeeds, metric stamped verified: false', async () => {
-    mockQuery.mockRejectedValueOnce(new Error('Query timed out after 60s (server bound; tune via QUERY_SERVER_TIMEOUT_MS).'));
+    // Target Net A's probe by its SQL — probe order across workers isn't fixed.
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('- 1')) throw new Error('Query timed out after 60s (server bound; tune via QUERY_SERVER_TIMEOUT_MS).');
+      return { columns: ['_probe_dim', 'm'], types: ['VARCHAR', 'DOUBLE'], rows: [] };
+    });
     await expect(save(contextId, model([M_A]))).resolves.toBeTruthy();
-    const m = await savedModel(contextId);
-    expect(m.metrics![0].verified).toBe(false);
+    expect((await savedMetric(contextId, 'Net A')).verified).toBe(false);
+    expect((await savedMetric(contextId, 'Revenue')).verified).toBe(true);
   });
 
   it('a successful probe stamps verified: true', async () => {
     await save(contextId, model([M_A]));
-    const m = await savedModel(contextId);
-    expect(m.metrics![0].verified).toBe(true);
+    expect((await savedMetric(contextId, 'Net A')).verified).toBe(true);
   });
 
   it('metric-text-only edit probes ONLY the changed metric', async () => {
     await save(contextId, model([M_A, M_B]));
-    expect(probeSqls()).toHaveLength(2);
+    expect(probeSqls()).toHaveLength(3); // Revenue + Net A + Net B (new model)
     mockQuery.mockClear();
     const edited: SemanticMetricV2 = { ...M_B, sql: 'SUM(primary.total) - 20' };
     await save(contextId, model([{ ...M_A, verified: true }, edited]));
@@ -144,30 +158,53 @@ describe('tier-3 dry-run save gate', () => {
     expect(probeSqls()).toHaveLength(0);
   });
 
-  it('ANY structural edit (e.g. a measure column change) probes ALL metrics', async () => {
-    await save(contextId, model([M_A, M_B]));
+  it('an aggregation-metric change probes ITSELF + dependent ratios — not unrelated metrics', async () => {
+    const AGGS: SemanticMetricV2[] = [
+      { name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'total' },
+      { name: 'Cnt', type: 'aggregation', agg: 'COUNT' },
+    ];
+    const RATIO: SemanticMetricV2 = { name: 'AOV', type: 'ratio', numerator: 'Revenue', denominator: 'Cnt' };
+    await save(contextId, model([RATIO, M_A], {}, AGGS));
     mockQuery.mockClear();
+    // Revenue's definition changes: SUM → AVG. The ratio EMBEDS Revenue's
+    // resolved definition in its essence, so it re-probes; Cnt and the
+    // unrelated SQL metric do not.
     await save(contextId, model(
-      [{ ...M_A, verified: true }, { ...M_B, verified: true }],
-      { measures: [{ name: 'Revenue', agg: 'AVG', column: 'total' }] },
+      [{ ...RATIO, verified: true }, { ...M_A, verified: true }],
+      {},
+      [{ name: 'Revenue', type: 'aggregation', agg: 'AVG', column: 'total' }, AGGS[1]],
     ));
-    expect(probeSqls()).toHaveLength(2);
+    const sqls = probeSqls();
+    expect(sqls).toHaveLength(2);
+    expect(sqls.some((q) => q.includes('AVG(total)') && !q.includes('NULLIF'))).toBe(true); // Revenue itself
+    expect(sqls.some((q) => q.includes('NULLIF'))).toBe(true);                              // the ratio
+    expect(sqls.some((q) => q.includes('- 1'))).toBe(false);                                // Net A untouched
   });
 
-  // §2.5 rename rules. Both fall out of structureOf() serializing measure /
-  // dimension names + the references array while EXCLUDING metrics — an
-  // innocent refactor of structureOf (e.g. dropping the `name` off measures,
-  // or folding metrics back in) silently flips both scopes, so lock them.
-  it('a MEASURE rename is structural: ALL metrics are probed', async () => {
+  it('an aggregation-metric RENAME probes it under the new name only', async () => {
     await save(contextId, model([M_A, M_B]));
     mockQuery.mockClear();
     await save(contextId, model(
       [{ ...M_A, verified: true }, { ...M_B, verified: true }],
-      { measures: [{ name: 'Rev', agg: 'SUM', column: 'total' }] }, // Revenue → Rev
+      {},
+      [{ name: 'Rev', type: 'aggregation', agg: 'SUM', column: 'total' }], // Revenue → Rev
     ));
-    // Neither metric's SQL mentions the measure, yet both re-probe: a rename
-    // can break definitions that name it (ratio metrics), so scope is ALL.
-    expect(probeSqls()).toHaveLength(2);
+    // A rename is an add (new name) + pure deletion (old): one probe. A ratio
+    // naming the OLD name would fail tier-1 ("not a declared aggregation
+    // metric") before any probe ran, so nothing else needs re-checking.
+    const sqls = probeSqls();
+    expect(sqls).toHaveLength(1);
+    expect(sqls[0]).toContain('AS rev');
+  });
+
+  it('a TRUE structural edit (dimension change) probes ALL metrics', async () => {
+    await save(contextId, model([M_A, M_B]));
+    mockQuery.mockClear();
+    await save(contextId, model(
+      [{ ...M_A, verified: true }, { ...M_B, verified: true }],
+      { dimensions: [{ name: 'Zone Renamed', source: 'primary', column: 'zone_name' }] },
+    ));
+    expect(probeSqls()).toHaveLength(3); // Revenue + Net A + Net B
   });
 
   it('a METRIC rename stays case (1): only the renamed metric is probed', async () => {
@@ -207,19 +244,25 @@ describe('tier-3 dry-run save gate', () => {
 
     await expect(save(contextId, model(metrics))).resolves.toBeTruthy();
 
-    const verified = new Map((await savedModel(contextId)).metrics!.map((m) => [m.name, m.verified]));
+    const verified = new Map((await savedModel(contextId)).metrics.map((m) => [m.name, m.verified]));
     expect(verified.get('Net 999')).toBe(false);                       // infra → fails open
     for (const n of [1, 2, 3, 4, 5]) expect(verified.get(`Net ${n}`)).toBe(true); // peers unaffected
-    expect(probeSqls()).toHaveLength(6);                               // every metric probed
+    expect(verified.get('Revenue')).toBe(true);
+    expect(probeSqls()).toHaveLength(7);                               // every metric probed (incl. Revenue)
     expect(maxInFlight).toBeLessThanOrEqual(4);                        // PROBE_CONCURRENCY cap
     expect(maxInFlight).toBeGreaterThan(1);                            // …and not sequential
   });
 
   it('verified: false metrics are STICKY in every subsequent probe set until they verify', async () => {
-    mockQuery.mockRejectedValueOnce(new Error('connect ECONNREFUSED 10.0.0.1:5432'));
+    // Target Net A's probe by its SQL — probe order across workers isn't fixed.
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('- 1')) throw new Error('connect ECONNREFUSED 10.0.0.1:5432');
+      return { columns: ['_probe_dim', 'm'], types: ['VARCHAR', 'DOUBLE'], rows: [] };
+    });
     await save(contextId, model([M_A, M_B])); // A fails infra → verified: false; B ok
-    expect((await savedModel(contextId)).metrics![0].verified).toBe(false);
-    mockQuery.mockClear();
+    expect((await savedMetric(contextId, 'Net A')).verified).toBe(false);
+    mockQuery.mockReset();
+    mockQuery.mockResolvedValue({ columns: ['_probe_dim', 'm'], types: ['VARCHAR', 'DOUBLE'], rows: [] });
     // Metadata-only save — would probe nothing, but the sticky rule re-probes A.
     await save(contextId, model([
       { ...M_A, verified: false },
@@ -228,6 +271,6 @@ describe('tier-3 dry-run save gate', () => {
     const sqls = probeSqls();
     expect(sqls).toHaveLength(1);
     expect(sqls[0]).toContain('- 1'); // Net A
-    expect((await savedModel(contextId)).metrics![0].verified).toBe(true); // now verified
+    expect((await savedMetric(contextId, 'Net A')).verified).toBe(true); // now verified
   });
 });

@@ -77,15 +77,12 @@ const validModel = (): SemanticModelV2 => ({
     { name: 'Tag', source: 'tags', column: 'name' },
     { name: 'Created At', source: 'primary', column: 'created_at', temporal: true },
   ],
-  measures: [
-    { name: 'Order Count', agg: 'COUNT' },
-    { name: 'Revenue', agg: 'SUM', column: 'amount' },
-  ],
   metrics: [
+    { name: 'Order Count', type: 'aggregation', agg: 'COUNT' },
+    { name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'amount' },
     { name: 'AOV', type: 'ratio', numerator: 'Revenue', denominator: 'Order Count' },
     { name: 'Net Revenue', type: 'sql', sql: 'SUM(primary.amount) - SUM(costs.total)' },
   ],
-  timeDimension: { column: 'created_at' },
 });
 
 const errorsFor = (mutate: (m: SemanticModelV2) => void, ctx: SemanticModelCtx = CTX): string[] => {
@@ -101,8 +98,8 @@ describe('validateSemanticModel — baseline', () => {
 });
 
 describe('names & namespaces', () => {
-  it('rejects slug collisions across dimensions/measures/metrics (case-insensitive)', () => {
-    const issues = errorsFor((m) => { m.measures.push({ name: 'REGION', agg: 'SUM', column: 'amount' }); });
+  it('rejects slug collisions across dimensions/metrics (case-insensitive)', () => {
+    const issues = errorsFor((m) => { m.metrics.push({ name: 'REGION', type: 'aggregation', agg: 'SUM', column: 'amount' }); });
     expect(issues.some((e) => e.includes('REGION') && e.toLowerCase().includes('unique'))).toBe(true);
   });
 
@@ -170,7 +167,7 @@ describe('connection consistency & source resolution', () => {
   });
 });
 
-describe('dimensions, measures, timeDimension', () => {
+describe('dimensions, aggregation metrics, temporal dimensions', () => {
   it('rejects a dimension whose source is not primary or a declared alias', () => {
     const issues = errorsFor((m) => { m.dimensions[0].source = 'ghost'; });
     expect(issues.some((e) => e.includes('ghost'))).toBe(true);
@@ -188,19 +185,16 @@ describe('dimensions, measures, timeDimension', () => {
     expect(issues.some((e) => e.includes('hidden_col'))).toBe(true);
   });
 
-  it('rejects a measure column not exposed on the PRIMARY', () => {
-    // `name` exists on customers but measures are primary-only by construction.
-    const issues = errorsFor((m) => { m.measures.push({ name: 'Bad Measure', agg: 'SUM', column: 'name' }); });
+  it('rejects an aggregation metric column not exposed on the PRIMARY', () => {
+    // `name` exists on customers but aggregation metrics are primary-only by construction.
+    const issues = errorsFor((m) => { m.metrics.push({ name: 'Bad Measure', type: 'aggregation', agg: 'SUM', column: 'name' }); });
     expect(issues.some((e) => e.includes('Bad Measure') || e.includes('name'))).toBe(true);
   });
 
-  it('rejects timeDimension.column not exposed on the primary', () => {
-    const issues = errorsFor((m) => { m.timeDimension = { column: 'nope_col' }; });
-    expect(issues.some((e) => e.includes('nope_col'))).toBe(true);
-  });
-
-  it('rejects a non-temporal timeDimension.column when the type is known', () => {
-    const issues = errorsFor((m) => { m.timeDimension = { column: 'region' }; });
+  it('rejects a temporal-flagged dimension whose known column type is not date/time-like', () => {
+    const issues = errorsFor((m) => {
+      m.dimensions.push({ name: 'Bad Time', source: 'primary', column: 'region', temporal: true });
+    });
     expect(issues.some((e) => e.includes('region') && e.toLowerCase().includes('temporal'))).toBe(true);
   });
 
@@ -209,10 +203,8 @@ describe('dimensions, measures, timeDimension', () => {
       m.primary = { kind: 'table', schema: 'main', table: 'mystery' };
       m.primaryKey = undefined;
       m.references = [];
-      m.dimensions = [{ name: 'When', source: 'primary', column: 'when_col' }];
-      m.measures = [{ name: 'Rows', agg: 'COUNT' }];
-      m.metrics = [];
-      m.timeDimension = { column: 'when_col' };
+      m.dimensions = [{ name: 'When', source: 'primary', column: 'when_col', temporal: true }];
+      m.metrics = [{ name: 'Rows', type: 'aggregation', agg: 'COUNT' }];
     });
     expect(issues).toEqual([]);
   });
@@ -258,7 +250,7 @@ describe('m2m rules', () => {
 });
 
 describe('ratio metrics', () => {
-  it('rejects numerator/denominator that are not declared measures', () => {
+  it('rejects numerator/denominator that are not declared aggregation metrics', () => {
     const issues = errorsFor((m) => {
       m.metrics!.push({ name: 'Broken Ratio', type: 'ratio', numerator: 'Revenue', denominator: 'Ghost Measure' });
     });

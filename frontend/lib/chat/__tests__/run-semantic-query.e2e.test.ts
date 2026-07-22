@@ -43,7 +43,7 @@ const MODEL: SemanticModelV2 = {
   connection: 'warehouse',
   primary: { kind: 'table', schema: 'mxfood', table: 'orders' },
   dimensions: [{ name: 'Zone', source: 'primary', column: 'zone_name' }],
-  measures: [{ name: 'Revenue', agg: 'SUM', column: 'total' }],
+  metrics: [{ name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'total' }],
 };
 
 const contextContent = (m: SemanticModelV2): ContextContent => ({
@@ -134,7 +134,7 @@ describe('RunSemanticQuery e2e (real chat routes, faux LLM)', () => {
   });
 
   it('valid spec → compiles, executes like ExecuteQuery, returns rows + compiled SQL', async () => {
-    const { text, isError } = await runTurnWith({ model: 'Orders', measures: ['Revenue'], dimensions: ['Zone'] });
+    const { text, isError } = await runTurnWith({ model: 'Orders', metrics: ['Revenue'], dimensions: ['Zone'] });
     expect(isError).toBe(false);
 
     const payload = JSON.parse(text) as {
@@ -156,17 +156,17 @@ describe('RunSemanticQuery e2e (real chat routes, faux LLM)', () => {
     expect(ranSql).toMatch(/SUM\(\s*"?total"?\s*\)/i);
   });
 
-  it('unknown measure → validation issues returned as tool error (agent can self-correct)', async () => {
-    const { text, isError } = await runTurnWith({ model: 'Orders', measures: ['Profit'] });
+  it('unknown metric → validation issues returned as tool error (agent can self-correct)', async () => {
+    const { text, isError } = await runTurnWith({ model: 'Orders', metrics: ['Profit'] });
     expect(isError).toBe(true);
     const payload = JSON.parse(text) as { success: boolean; error: string };
     expect(payload.success).toBe(false);
-    expect(payload.error).toContain('unknown measure "Profit"');
+    expect(payload.error).toContain('unknown metric "Profit"');
     expect(mockQuery).not.toHaveBeenCalled();
   });
 
   it('unknown model → helpful error listing available model names', async () => {
-    const { text, isError } = await runTurnWith({ model: 'Sales', measures: ['Revenue'] });
+    const { text, isError } = await runTurnWith({ model: 'Sales', metrics: ['Revenue'] });
     expect(isError).toBe(true);
     expect(text).toContain('Orders'); // available models listed
     expect(mockQuery).not.toHaveBeenCalled();

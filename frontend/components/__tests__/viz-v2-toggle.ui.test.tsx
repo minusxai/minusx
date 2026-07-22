@@ -308,7 +308,7 @@ describe('QuestionViewV2 — wide-layout right panel follows the flag', () => {
   it('flag ON: a SEMANTIC question keeps the classic panel (inference/type-lock own vizSettings)', async () => {
     const semanticContent = {
       ...legacyLineContent,
-      semanticQuery: { table: 'orders', dimensions: [], measures: [] },
+      semanticQuery: { table: 'orders', dimensions: [], metrics: [] },
     } as unknown as QuestionContent
     renderWideView(semanticContent, { vizV2Enabled: true })
     expect(await screen.findByLabelText('Classic viz config panel')).toBeInTheDocument()

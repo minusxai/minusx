@@ -122,7 +122,7 @@ describe('views as tables', () => {
         connection: 'warehouse',
         primary: { kind: 'model', view: 'zone_revenue' },
         dimensions: [{ name: 'Hidden Revenue', source: 'primary', column: 'revenue' }],
-        measures: [{ name: 'Rows', agg: 'COUNT' }],
+        metrics: [{ name: 'Rows', type: 'aggregation', agg: 'COUNT' }],
       }],
       createdAt: new Date().toISOString(), createdBy: 1,
     };
@@ -144,8 +144,7 @@ describe('views as tables', () => {
           { name: 'Zone', source: 'primary', column: 'zone_name' },
           { name: 'Created At', source: 'primary', column: 'created_at', temporal: true },
         ],
-        measures: [{ name: 'Total Revenue', agg: 'SUM', column: 'revenue' }],
-        timeDimension: { column: 'created_at' },
+        metrics: [{ name: 'Total Revenue', type: 'aggregation', agg: 'SUM', column: 'revenue' }],
       }],
       createdAt: new Date().toISOString(), createdBy: 1,
     };
@@ -159,9 +158,10 @@ describe('views as tables', () => {
     expect(models).toHaveLength(1);
     const m = models[0];
     expect(m).toMatchObject({ primary: { kind: 'model', view: 'zone_revenue' } });
-    expect(m.measures.map((x) => x.name)).toEqual(['Total Revenue']);
+    expect(m.metrics.map((x) => x.name)).toEqual(['Total Revenue']);
     expect(m.dimensions.map((d) => d.column)).toEqual(['zone_name', 'created_at']);
-    expect(m.timeDimension?.column).toBe('created_at');
+    // the authored temporal dimension (the time axis) is served as-authored
+    expect(m.dimensions.find((d) => d.temporal)?.column).toBe('created_at');
   });
 
   it('views inherit: a child context sees the parent\'s views', async () => {

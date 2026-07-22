@@ -44,9 +44,9 @@ const MODEL: SemanticModelV2 = {
     { name: 'Tag Kind', source: 'tag', column: 'kind' },
     { name: 'Category', source: 'cat', column: 'name' },
   ],
-  measures: [
-    { name: 'Order Count', agg: 'COUNT' },
-    { name: 'Revenue', agg: 'SUM', column: 'amount' },
+  metrics: [
+    { name: 'Order Count', type: 'aggregation', agg: 'COUNT' },
+    { name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'amount' },
   ],
 };
 
@@ -70,12 +70,12 @@ const COMPOSITE: SemanticModelV2 = {
     },
   }],
   dimensions: [{ name: 'Tag', source: 'tag', column: 'name' }],
-  measures: [{ name: 'Revenue', agg: 'SUM', column: 'amount' }],
+  metrics: [{ name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'amount' }],
 };
 
 const spec = (over: Partial<SemanticQuerySpec>): SemanticQuerySpec => ({
   model: 'Orders', table: 'orders', schema: null,
-  measures: [], dimensions: [],
+  metrics: [], dimensions: [],
   ...over,
 } as SemanticQuerySpec);
 
@@ -115,7 +115,7 @@ const run = async (sql: string): Promise<unknown[][]> => {
 
 describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
   it('per-tag revenue is exactly right where the naive join double-counts', async () => {
-    const rows = await run(sqlFor(spec({ measures: ['Revenue'], dimensions: ['Tag'] })));
+    const rows = await run(sqlFor(spec({ metrics: ['Revenue'], dimensions: ['Tag'] })));
     const byTag = new Map(rows.map((r) => [r[0], Number(r[1])]));
     expect(byTag.get('vip')).toBe(150);    // orders 1 + 2, order 1 counted ONCE despite duplicate bridge row
     expect(byTag.get('promo')).toBe(100);  // order 1 only
@@ -129,14 +129,14 @@ describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
   });
 
   it('LEFT semantics: untagged orders appear once under a NULL group', async () => {
-    const rows = await run(sqlFor(spec({ measures: ['Revenue'], dimensions: ['Tag'] })));
+    const rows = await run(sqlFor(spec({ metrics: ['Revenue'], dimensions: ['Tag'] })));
     const nullRow = rows.find((r) => r[0] === null);
     expect(nullRow).toBeDefined();
     expect(Number(nullRow![1])).toBe(25);  // order 3
   });
 
   it('m2m dimension composes with primary dimensions', async () => {
-    const rows = await run(sqlFor(spec({ measures: ['Revenue'], dimensions: ['Region', 'Tag'] })));
+    const rows = await run(sqlFor(spec({ metrics: ['Revenue'], dimensions: ['Region', 'Tag'] })));
     // east+vip = order 1 (100); west+vip = order 2 (50); east+promo = 100; east+NULL = 25
     const key = (r: unknown[]) => `${r[0]}|${r[1]}`;
     const m = new Map(rows.map((r) => [key(r), Number(r[2])]));
@@ -148,7 +148,7 @@ describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
 
   it('a filter on the GROUPED m2m alias is applied INSIDE the dedup CTE', async () => {
     const rows = await run(sqlFor(spec({
-      measures: ['Revenue'], dimensions: ['Tag'],
+      metrics: ['Revenue'], dimensions: ['Tag'],
       filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }],
     })));
     expect(rows).toHaveLength(1);
@@ -161,7 +161,7 @@ describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
     // the filter column into the CTE would keep both rows for one order and
     // double-count it inside the 'promo' group.
     const rows = await run(sqlFor(spec({
-      measures: ['Revenue'], dimensions: ['Tag'],
+      metrics: ['Revenue'], dimensions: ['Tag'],
       filters: [{ dimension: 'Tag Kind', operator: 'IN', value: ['manual', 'auto'] }],
     })));
     const promo = rows.find((r) => r[0] === 'promo');
@@ -170,7 +170,7 @@ describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
 
   it('a filter on the grouped alias RESTRICTS the primary set (no NULL group when filtering)', async () => {
     const rows = await run(sqlFor(spec({
-      measures: ['Revenue'], dimensions: ['Tag'],
+      metrics: ['Revenue'], dimensions: ['Tag'],
       filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }],
     })));
     expect(rows.every((r) => r[0] !== null)).toBe(true); // untagged order 3 excluded
@@ -178,7 +178,7 @@ describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
 
   it('golden: renders WITH dedup CTE + LEFT join on the primary key in all three dialects', () => {
     for (const dialect of ['duckdb', 'bigquery', 'postgres']) {
-      const sql = sqlFor(spec({ measures: ['Revenue'], dimensions: ['Tag'] }), dialect);
+      const sql = sqlFor(spec({ metrics: ['Revenue'], dimensions: ['Tag'] }), dialect);
       expect(sql).toMatch(/^WITH _m2m_tag AS \(\nSELECT DISTINCT /);
       expect(sql).toContain('LEFT JOIN _m2m_tag ON orders.id = _m2m_tag._pk0');
       expect(sql).toContain('GROUP BY _m2m_tag.name');
@@ -189,7 +189,7 @@ describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
 describe('m2m filters — semi-join, never fans out', () => {
   it('filter-only m2m compiles to a correlated EXISTS and returns the right total', async () => {
     const sql = sqlFor(spec({
-      measures: ['Revenue'],
+      metrics: ['Revenue'],
       filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }],
     }));
     expect(sql).toContain('EXISTS (SELECT 1');
@@ -200,7 +200,7 @@ describe('m2m filters — semi-join, never fans out', () => {
 
   it('multiple filter-only m2m references compose as independent semi-joins', async () => {
     const sql = sqlFor(spec({
-      measures: ['Revenue'],
+      metrics: ['Revenue'],
       filters: [
         { dimension: 'Tag', operator: '=', value: 'promo' },
         { dimension: 'Category', operator: '=', value: 'food' },
@@ -212,7 +212,7 @@ describe('m2m filters — semi-join, never fans out', () => {
 
   it('IN-list filters work through the semi-join', async () => {
     const rows = await run(sqlFor(spec({
-      measures: ['Order Count'],
+      metrics: ['Order Count'],
       filters: [{ dimension: 'Tag', operator: 'IN', value: ['vip', 'promo'] }],
     })));
     expect(Number(rows[0][0])).toBe(2); // orders 1 and 2, once each
@@ -221,16 +221,16 @@ describe('m2m filters — semi-join, never fans out', () => {
 
 describe('m2m validator rules', () => {
   it('rejects GROUP BY dimensions from more than one m2m reference', () => {
-    const issues = validateSemanticQuery(spec({ measures: ['Revenue'], dimensions: ['Tag', 'Category'] }), MODEL);
+    const issues = validateSemanticQuery(spec({ metrics: ['Revenue'], dimensions: ['Tag', 'Category'] }), MODEL);
     expect(issues.some((i) => /at most one|one m2m/i.test(i))).toBe(true);
-    expect(() => compileSemanticQuery(spec({ measures: ['Revenue'], dimensions: ['Tag', 'Category'] }), MODEL))
+    expect(() => compileSemanticQuery(spec({ metrics: ['Revenue'], dimensions: ['Tag', 'Category'] }), MODEL))
       .toThrow(SemanticCompileError);
   });
 
   it('accepts negated m2m filters (compiled as NOT EXISTS)', () => {
     for (const operator of ['!=', 'IS NOT NULL', 'IS NULL'] as const) {
       expect(validateSemanticQuery(spec({
-        measures: ['Revenue'],
+        metrics: ['Revenue'],
         filters: [{ dimension: 'Tag', operator, value: 'vip' }],
       }), MODEL)).toEqual([]);
     }
@@ -238,7 +238,7 @@ describe('m2m validator rules', () => {
 
   it('still allows negation on NON-m2m dimensions', () => {
     const issues = validateSemanticQuery(spec({
-      measures: ['Revenue'],
+      metrics: ['Revenue'],
       filters: [{ dimension: 'Region', operator: '!=', value: 'east' }],
     }), MODEL);
     expect(issues).toEqual([]);
@@ -248,7 +248,7 @@ describe('m2m validator rules', () => {
 describe('m2m negation — NOT EXISTS, NULL-safe', () => {
   it('"not tagged vip" excludes tagged orders and keeps untagged ones', async () => {
     const sql = sqlFor(spec({
-      measures: ['Revenue'],
+      metrics: ['Revenue'],
       filters: [{ dimension: 'Tag', operator: '!=', value: 'vip' }],
     }));
     expect(sql).toContain('NOT EXISTS (SELECT 1');
@@ -260,7 +260,7 @@ describe('m2m negation — NOT EXISTS, NULL-safe', () => {
 
   it('IS NULL means "has no related row at all"', async () => {
     const rows = await run(sqlFor(spec({
-      measures: ['Revenue'],
+      metrics: ['Revenue'],
       filters: [{ dimension: 'Tag', operator: 'IS NULL' }],
     })));
     expect(Number(rows[0][0])).toBe(25); // only the untagged order
@@ -268,7 +268,7 @@ describe('m2m negation — NOT EXISTS, NULL-safe', () => {
 
   it('IS NOT NULL means "has at least one related row"', async () => {
     const rows = await run(sqlFor(spec({
-      measures: ['Revenue'],
+      metrics: ['Revenue'],
       filters: [{ dimension: 'Tag', operator: 'IS NOT NULL' }],
     })));
     expect(Number(rows[0][0])).toBe(150); // orders 1 + 2, each once
@@ -281,7 +281,7 @@ describe('composite-key m2m', () => {
 
   it('filter correlates on EVERY key column (a partial match must not count)', async () => {
     const sql = csql(spec({
-      model: 'OrdersComposite', measures: ['Revenue'],
+      model: 'OrdersComposite', metrics: ['Revenue'],
       filters: [{ dimension: 'Tag', operator: '=', value: 'promo' }],
     }));
     const rows = await run(sql);
@@ -292,7 +292,7 @@ describe('composite-key m2m', () => {
 
   it('groups by an m2m dimension at the composite grain without fan-out', async () => {
     const rows = await run(csql(spec({
-      model: 'OrdersComposite', measures: ['Revenue'], dimensions: ['Tag'],
+      model: 'OrdersComposite', metrics: ['Revenue'], dimensions: ['Tag'],
     })));
     const byTag = new Map(rows.map((r) => [r[0], Number(r[1])]));
     expect(byTag.get('vip')).toBe(150); // (1,east) + (2,west)
@@ -304,7 +304,7 @@ describe('composite-key m2m', () => {
 
   it('golden: the dedup CTE carries EVERY key column, and the join maps them all', () => {
     const sql = csql(spec({
-      model: 'OrdersComposite', measures: ['Revenue'], dimensions: ['Tag'],
+      model: 'OrdersComposite', metrics: ['Revenue'], dimensions: ['Tag'],
     }));
     expect(sql).toContain('ot_composite.order_id AS _pk0');
     expect(sql).toContain('ot_composite.order_region AS _pk1');
@@ -314,7 +314,7 @@ describe('composite-key m2m', () => {
   it('golden: correlated EXISTS names every key pair, in all three dialects', () => {
     for (const dialect of ['duckdb', 'bigquery', 'postgres']) {
       const sql = csql(spec({
-        model: 'OrdersComposite', measures: ['Revenue'],
+        model: 'OrdersComposite', metrics: ['Revenue'],
         filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }],
       }), dialect);
       expect(sql).toContain('ot_composite.order_id = orders.id');

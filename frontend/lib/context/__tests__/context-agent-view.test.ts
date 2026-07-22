@@ -27,7 +27,7 @@ const model1 = {
   connection: 'wh',
   primary: { kind: 'table', schema: 'sales', table: 'orders' },
   dimensions: [{ name: 'Region', source: 'primary', column: 'region' }],
-  measures: [{ name: 'Revenue', agg: 'SUM', column: 'amount' }],
+  metrics: [{ name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'amount' }],
 };
 
 // A realistic stored (version-based) context: live version is #2 (published.all), with an older #1.

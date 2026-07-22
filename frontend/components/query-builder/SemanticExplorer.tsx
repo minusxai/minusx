@@ -5,18 +5,16 @@
  * ThoughtSpot style.
  *
  * TOP (never scrolls away):
- *  - the shelves first: what's currently selected — Measures / Dimensions /
+ *  - the shelves first: what's currently selected — Metrics / Dimensions /
  *    Time / Filters chips (removable), plus the row limit;
  *  - then a compact strip: the model chip, the field search, validation, Run.
  * BELOW (fills the panel): the FULL field vocabulary of the current model in
  * two scrollable columns — Dimensions with Time beneath (neither list is
- * usually long) | Measures AND metrics — so the whole vocabulary is visible
- * at once.
+ * usually long) | Metrics — so the whole vocabulary is visible at once.
  *
  * Interaction is CLICK-TO-TOGGLE — no drag and drop. Every field has exactly
- * one home (dimension → Dimensions, measure/metric → Measures, temporal →
- * Time), so a click is unambiguous; dragging would add ceremony without
- * choices.
+ * one home (dimension → Dimensions, metric → Metrics, temporal → Time), so a
+ * click is unambiguous; dragging would add ceremony without choices.
  *
  * The search bar FILTERS the columns as you type (they shrink), and
  * additionally surfaces matching fields from OTHER authored models
@@ -28,14 +26,14 @@
  *
  * Every edit compiles the spec to dialect SQL client-side
  * (compileSemanticQuery → irToSqlLocal) and emits `(spec, sql, viz)` — the viz
- * columns are implied by the spec (x = time else dimensions, y = measures).
+ * columns are implied by the spec (x = time else dimensions, y = metrics).
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, VStack, HStack, Text, Button, Input, Icon, Grid } from '@chakra-ui/react';
 import { LuPlay, LuPause, LuRefreshCw, LuSigma, LuTag, LuCalendarDays, LuSearch, LuTriangleAlert, LuX, LuCheck, LuLayers, LuListFilter, LuHash, LuFingerprint, LuDivide, LuArrowDownToLine, LuArrowUpToLine, LuPercent, LuSquareFunction } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
-import { compileSemanticQuery, validateSemanticQuery, semanticAlias } from '@/lib/semantic/compile';
+import { compileSemanticQuery, validateSemanticQuery, semanticAlias, timeDimensionsOf } from '@/lib/semantic/compile';
 import { inferVizType } from '@/lib/semantic/infer-viz';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { searchFields, type SemanticFieldHit } from '@/lib/semantic/models-client';
@@ -46,7 +44,7 @@ import { AddChipButton } from './QueryChip';
 
 const TIME_GRAINS: SemanticTimeGrain[] = ['HOUR', 'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'];
 
-/** One icon per aggregation — the measure list telegraphs HOW each aggregates. */
+/** One icon per aggregation — the metric list telegraphs HOW each aggregates. */
 const AGG_ICONS: Record<SemanticAggregate, IconType> = {
   SUM: LuSigma,
   COUNT: LuHash,
@@ -57,11 +55,9 @@ const AGG_ICONS: Record<SemanticAggregate, IconType> = {
 };
 const aggIcon = (agg?: SemanticAggregate): IconType => (agg && AGG_ICONS[agg]) || LuSigma;
 
-/** Metrics have no `agg` — their TYPE is what distinguishes them in the list. */
-const METRIC_ICONS: Record<SemanticMetricV2['type'], IconType> = {
-  ratio: LuPercent,
-  sql: LuSquareFunction,
-};
+/** Ratio/SQL metrics have no `agg` — their TYPE distinguishes them in the list. */
+const metricIcon = (m: SemanticMetricV2): IconType =>
+  m.type === 'aggregation' ? aggIcon(m.agg) : m.type === 'ratio' ? LuPercent : LuSquareFunction;
 
 const OPERATORS: SemanticQueryFilter['operator'][] = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'IN', 'IS NULL', 'IS NOT NULL'];
 
@@ -112,17 +108,19 @@ const primaryLabel = (m: SemanticModelV2): string => {
 const specForModel = (m: SemanticModelV2): SemanticQuerySpec => ({
   model: m.name,
   ...primaryRef(m),
-  measures: [],
+  metrics: [],
   dimensions: [],
 });
 
-/** Everything selectable into the Measures shelf: measures AND metrics. */
-type Measurable = { name: string; kind: 'measure' | 'metric'; icon: IconType; tag?: string };
+/** Everything selectable into the Metrics shelf. */
+type MetricItem = { name: string; icon: IconType; tag?: string };
 
-const measurablesOf = (m: SemanticModelV2): Measurable[] => [
-  ...m.measures.map((me): Measurable => ({ name: me.name, kind: 'measure', icon: aggIcon(me.agg), tag: me.agg })),
-  ...(m.metrics ?? []).map((me): Measurable => ({ name: me.name, kind: 'metric', icon: METRIC_ICONS[me.type], tag: me.type })),
-];
+const metricItemsOf = (m: SemanticModelV2): MetricItem[] =>
+  m.metrics.map((me): MetricItem => ({
+    name: me.name,
+    icon: metricIcon(me),
+    tag: me.type === 'aggregation' ? me.agg : me.type,
+  }));
 
 const vizOf = (spec: SemanticQuerySpec): SemanticVizAssignment => ({
   type: inferVizType(spec),
@@ -130,7 +128,7 @@ const vizOf = (spec: SemanticQuerySpec): SemanticVizAssignment => ({
     ...(spec.timeGrain ? [spec.timeGrain.toLowerCase()] : []),
     ...spec.dimensions.map(semanticAlias),
   ],
-  yCols: spec.measures.map(semanticAlias),
+  yCols: spec.metrics.map(semanticAlias),
 });
 
 const matches = (q: string, name: string) => {
@@ -195,12 +193,12 @@ export function SemanticExplorer({
 
   // --- toggles ----------------------------------------------------------------
 
-  const toggleMeasure = useCallback((name: string) => {
+  const toggleMetric = useCallback((name: string) => {
     if (!spec || !model) return;
     update({
-      measures: spec.measures.includes(name)
-        ? spec.measures.filter((m) => m !== name)
-        : [...spec.measures, name],
+      metrics: spec.metrics.includes(name)
+        ? spec.metrics.filter((m) => m !== name)
+        : [...spec.metrics, name],
     });
   }, [spec, model, update]);
 
@@ -213,34 +211,35 @@ export function SemanticExplorer({
     });
   }, [spec, model, update]);
 
-  // Any BASE temporal column can be the time axis. Clicking the active one
-  // clears it; clicking another temporal column moves the axis there.
+  // Any PRIMARY temporal dimension can be the time axis (the FIRST is the
+  // model default). Clicking the active one clears it; clicking another
+  // temporal column moves the axis there.
   const toggleTime = useCallback((column?: string) => {
     if (!spec || !model) return;
-    const target = column ?? model.timeDimension?.column;
+    const defaultAxis = timeDimensionsOf(model)[0]?.column;
+    const target = column ?? defaultAxis;
     if (!target) return;
-    const effective = spec.timeColumn ?? model.timeDimension?.column;
+    const effective = spec.timeColumn ?? defaultAxis;
     if (spec.timeGrain && effective === target) {
       update({ timeGrain: undefined, timeColumn: undefined });
     } else {
       update({
         timeGrain: spec.timeGrain ?? 'MONTH',
-        timeColumn: target === model.timeDimension?.column ? undefined : target,
+        timeColumn: target === defaultAxis ? undefined : target,
       });
     }
   }, [spec, model, update]);
 
-  // A freshly picked (or detected/persisted) model: give the spec its default
-  // measure — a metric counts, so a metrics-only model is runnable too — so
-  // the query executes the moment it's picked.
+  // A freshly picked (or detected/persisted) model: give the spec its first
+  // metric so the query executes the moment it's picked.
   useEffect(() => {
-    if (!spec || spec.measures.length > 0) return;
+    if (!spec || spec.metrics.length > 0) return;
     const loaded = models.find((m) => m.name === spec.model);
     if (!loaded) return;
-    const first = measurablesOf(loaded)[0];
-    if (first) Promise.resolve().then(() => apply({ ...spec, measures: [first.name] }, loaded));
+    const first = metricItemsOf(loaded)[0];
+    if (first) Promise.resolve().then(() => apply({ ...spec, metrics: [first.name] }, loaded));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [models, spec?.model, spec?.measures.length]);
+  }, [models, spec?.model, spec?.metrics.length]);
 
   // --- cross-model search (feeds the "Other models" strip) --------------------
 
@@ -267,8 +266,7 @@ export function SemanticExplorer({
       model: hit.model,
       table: hit.table,
       ...(hit.schema ? { schema: hit.schema } : {}),
-      // metrics select exactly like measures — the compiler resolves both
-      measures: hit.kind === 'dimension' ? [] : [hit.name],
+      metrics: hit.kind === 'dimension' ? [] : [hit.name],
       dimensions: hit.kind === 'dimension' ? [hit.name] : [],
     });
     setBrowsingModels(false);
@@ -278,24 +276,16 @@ export function SemanticExplorer({
 
   // --- field vocabulary, split by home column ----------------------------------
 
-  // The effective time axis (spec.timeColumn overrides the model default).
-  const effectiveTimeColumn = spec?.timeColumn ?? model?.timeDimension?.column;
-  const timeLabel = model
-    ? (model.dimensions.find((d) => d.column === effectiveTimeColumn && d.source === 'primary')?.name
-        ?? model.timeDimension?.label ?? model.timeDimension?.column ?? 'Time')
-    : 'Time';
+  // The effective time axis (spec.timeColumn overrides the model default —
+  // the FIRST primary temporal dimension).
+  const temporalDims = model ? timeDimensionsOf(model) : [];
+  const effectiveTimeColumn = spec?.timeColumn ?? temporalDims[0]?.column;
+  const timeLabel = temporalDims.find((d) => d.column === effectiveTimeColumn)?.name ?? 'Time';
 
-  // Measures AND metrics share the Measures shelf — a metric is just a
-  // measurable with no `agg` (compile.ts resolves both from spec.measures).
-  const visibleMeasures = model ? measurablesOf(model).filter((m) => matches(query, m.name)) : [];
-  const temporalDims = model ? model.dimensions.filter((d) => d.temporal && d.source === 'primary') : [];
+  const visibleMetrics = model ? metricItemsOf(model).filter((m) => matches(query, m.name)) : [];
   const visibleTemporal = temporalDims.filter((d) => matches(query, d.name));
-  // The model default may lack a dimension entry (hand-authored models) — give it a row.
-  const defaultHasRow = !model?.timeDimension || temporalDims.some((d) => d.column === model.timeDimension!.column);
-  const defaultTimeLabel = model?.timeDimension?.label ?? model?.timeDimension?.column ?? 'Time';
-  const visibleDefaultTime = !defaultHasRow && !!model?.timeDimension && matches(query, defaultTimeLabel);
   const visibleDimensions = model
-    ? model.dimensions.filter((d) => !(d.temporal && d.source === 'primary') && d.column !== model.timeDimension?.column && matches(query, d.name))
+    ? model.dimensions.filter((d) => !(d.temporal && d.source === 'primary') && matches(query, d.name))
     : [];
   // Cross-table hits, minus the current model's own fields (already listed).
   const foreignHits = otherHits.filter((h) => h.model !== spec?.model).slice(0, 20);
@@ -426,13 +416,13 @@ export function SemanticExplorer({
     <Box aria-label="Semantic shelves" px={3} py={2} flexShrink={0} borderBottom="1px solid" borderColor="border.muted" bg="bg.surface">
       <HStack gap={4} rowGap={1.5} flexWrap="wrap" align="center">
         <HStack gap={1.5} align="center" flexWrap="wrap">
-          {shelfLabel('Measures', spec.measures.length === 0)}
-          {spec.measures.map((name) => (
+          {shelfLabel('Metrics', spec.metrics.length === 0)}
+          {spec.metrics.map((name) => (
             <ShelfChip
               key={name}
-              label={`Measures chip: ${name}`}
+              label={`Metrics chip: ${name}`}
               accent="accent.primary"
-              onRemove={spec.measures.length > 1 ? () => update({ measures: spec.measures.filter((m) => m !== name) }) : undefined}
+              onRemove={spec.metrics.length > 1 ? () => update({ metrics: spec.metrics.filter((m) => m !== name) }) : undefined}
             >
               <Text fontSize="xs" fontFamily="mono">{name}</Text>
             </ShelfChip>
@@ -451,7 +441,7 @@ export function SemanticExplorer({
             </ShelfChip>
           ))}
         </HStack>
-        {model?.timeDimension && (
+        {temporalDims.length > 0 && (
           <HStack gap={1.5} align="center" flexWrap="wrap">
             {shelfLabel('Time', !spec.timeGrain)}
             {spec.timeGrain && (
@@ -583,16 +573,8 @@ export function SemanticExplorer({
         {fieldSection(
           'Time column', 'Time',
           <LuCalendarDays size={11} color="var(--chakra-colors-accent-secondary)" />,
-          visibleTemporal.length + (visibleDefaultTime ? 1 : 0),
+          visibleTemporal.length,
           <>
-            {visibleDefaultTime && fieldRow(
-              defaultTimeLabel,
-              !!spec.timeGrain && effectiveTimeColumn === model.timeDimension!.column,
-              'accent.secondary',
-              <LuCalendarDays size={12} color="var(--chakra-colors-accent-secondary)" />,
-              () => toggleTime(model.timeDimension!.column),
-              `Field time: ${defaultTimeLabel}`,
-            )}
             {visibleTemporal.map((d) => fieldRow(
               d.name,
               (!!spec.timeGrain && effectiveTimeColumn === d.column) || spec.dimensions.includes(d.name),
@@ -608,22 +590,22 @@ export function SemanticExplorer({
       </Box>
       <Box overflowY="auto" minH={0} minW={0}>
         {fieldSection(
-          'Measures column', 'Measures',
+          'Metrics column', 'Metrics',
           <LuSigma size={11} color="var(--chakra-colors-accent-primary)" />,
-          visibleMeasures.length,
-          visibleMeasures.map((m) => {
-            const MeasureIcon = m.icon;
+          visibleMetrics.length,
+          visibleMetrics.map((m) => {
+            const MetricRowIcon = m.icon;
             return fieldRow(
               m.name,
-              spec.measures.includes(m.name),
+              spec.metrics.includes(m.name),
               'accent.primary',
-              <MeasureIcon size={12} color="var(--chakra-colors-accent-primary)" />,
-              () => toggleMeasure(m.name),
-              `Field ${m.kind}: ${m.name}`,
+              <MetricRowIcon size={12} color="var(--chakra-colors-accent-primary)" />,
+              () => toggleMetric(m.name),
+              `Field metric: ${m.name}`,
               m.tag,
             );
           }),
-          query ? 'No matches' : 'No measures',
+          query ? 'No matches' : 'No metrics',
         )}
       </Box>
     </Grid>
@@ -702,9 +684,7 @@ export function SemanticExplorer({
           >
             {h.kind === 'dimension'
               ? <LuTag size={12} color="var(--chakra-colors-accent-warning)" />
-              : h.kind === 'metric'
-                ? <LuPercent size={12} color="var(--chakra-colors-accent-primary)" />
-                : <LuSigma size={12} color="var(--chakra-colors-accent-primary)" />}
+              : <LuSigma size={12} color="var(--chakra-colors-accent-primary)" />}
             <Text fontSize="xs" fontFamily="mono" flex={1} truncate>{h.name}</Text>
             <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate maxW="90px">{h.model}</Text>
           </HStack>

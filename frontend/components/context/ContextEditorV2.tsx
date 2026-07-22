@@ -32,7 +32,6 @@ import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { useContext as useKnowledgeContext } from '@/lib/hooks/useContext';
 import { DatabasesTabContent } from './DatabasesTabContent';
-import SemanticModelsEditor from './SemanticModelsEditor';
 import { SkillsTabContent } from './SkillsTabContent';
 import { EvalsTabContent } from './EvalsTabContent';
 
@@ -49,7 +48,8 @@ interface ContextEditorV2Props {
   saveError?: string | null;
   /**
    * Semantic save-gate issues (tiers 1–3) recovered from `saveError` by the
-   * container — rendered inline per model/metric row by SemanticModelsEditor.
+   * container — rendered inline per model/metric row in the Databases tab's
+   * per-connection Semantic Models sections.
    * The banner keeps showing everything: the inline rows are only visible on
    * the Semantic tab, and a save can fail while the author is on another tab.
    */
@@ -119,8 +119,8 @@ export default function ContextEditorV2({
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  type TopTab = 'databases' | 'semantic' | 'docs' | 'skills' | 'evals';
-  const validTabs: TopTab[] = ['databases', 'semantic', 'docs', 'skills', 'evals'];
+  type TopTab = 'databases' | 'docs' | 'skills' | 'evals';
+  const validTabs: TopTab[] = ['databases', 'docs', 'skills', 'evals'];
   const parseTab = (val: string | null): TopTab => validTabs.includes(val as TopTab) ? val as TopTab : 'databases';
 
   const [topTab, setTopTabState] = useState<TopTab>(() => parseTab(searchParams.get('tab')));
@@ -497,14 +497,6 @@ export default function ContextEditorV2({
           <Tabs.Trigger value="databases" fontFamily="mono" fontSize="sm">
             Databases
           </Tabs.Trigger>
-          <Tabs.Trigger value="semantic" fontFamily="mono" fontSize="sm">
-            Semantic
-            {(content.semanticModels?.length ?? 0) > 0 && (
-              <Badge size="xs" colorPalette="gray" variant="subtle" ml={1.5}>
-                {content.semanticModels!.length}
-              </Badge>
-            )}
-          </Tabs.Trigger>
           <Tabs.Trigger value="docs" fontFamily="mono" fontSize="sm">
             Docs
             {(content.docs?.length ?? 0) > 0 && (
@@ -560,25 +552,8 @@ export default function ContextEditorV2({
           yamlText={yamlText}
           onYamlChange={handleYamlChange}
           contextPath={file?.path ?? ''}
+          semanticIssues={semanticIssues}
         />
-
-        {/* Semantic Models Tab — authored SemanticModelV2 on the current
-            version (Semantic_Model_v2.md M5b). Same onChange pattern as views;
-            save-gate tier-1/2/3 issues are rendered INLINE at the model/metric
-            row each one names (§2.5), with the banner above as the fallback. */}
-        <Tabs.Content value="semantic">
-          {topTab === 'semantic' && (
-            <SemanticModelsEditor
-              models={content.semanticModels || []}
-              inheritedModels={content.fullSemanticModels || []}
-              databases={availableDatabases}
-              views={[...(content.fullViews || []), ...(content.views || [])]}
-              editMode={editMode}
-              issues={semanticIssues}
-              onChange={(semanticModels) => onChange({ semanticModels })}
-            />
-          )}
-        </Tabs.Content>
 
         {/* Docs Tab */}
         <Tabs.Content value="docs">

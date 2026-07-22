@@ -1,56 +1,59 @@
 'use client';
 
 /**
- * SemanticModelsEditor — M5b form-based editor + catalog for authored semantic
- * models (`SemanticModelV2`, stored on ContextVersion.semanticModels).
+ * SemanticModelsSection — the per-connection semantic-model editor, rendered
+ * inside the Databases tab ABOVE Data Models. The connection is implied by the
+ * database section it lives in — a model here never picks a connection.
  *
- * Minimal contract (Semantic_Model_v2.md §6 M5b): lists and pickers — no
- * drag-drop, no live previews, no diagrams. The connection is fixed by picking
- * the primary: the connection select scopes every source picker (primary,
- * references, m2m bridge) to that connection's tables AND views (`_views`).
- * Edits flow up as the full next `semanticModels` array (same onChange pattern
- * as views); save-time tier-1/2/3 validation happens server-side in the
- * context save gate and surfaces through the editor's existing save-error path.
+ * ONE layout for both modes: read mode renders the same cards with every
+ * definition as text (metric formulas, dimension mappings, join equalities);
+ * edit mode swaps the text for inputs in place. There is no separate catalog.
  *
- * Two modes: Edit (the form) and Catalog — a read-only browse surface listing
- * ONLY business names (dimensions + measures + metrics, no tables/SQL),
- * grouped under each model's connection. Outside edit mode only the catalog
- * renders.
+ * Sections per card: References · Time Dimensions · Dimensions · Metrics, each
+ * with a compact `+` on its heading. Join columns are INFERRED on source pick
+ * (lib/semantic/infer-join) and always DISPLAYED as real `table.column =
+ * table.column` equalities — never as "primary/bridge/referenced" jargon; the
+ * pair pickers only appear when inference fails or the author expands them.
+ *
+ * Edits flow up as this connection's next `models` array; save-time tier-1/2/3
+ * validation happens server-side in the context save gate and surfaces through
+ * `issues` (attributed inline to the model / metric row each one names).
  */
 
 import React, { useMemo, useState } from 'react';
-import { Box, VStack, HStack, Text, Button, Input, Textarea, Icon } from '@chakra-ui/react';
-import { LuPlus, LuTrash2, LuBoxes, LuTriangleAlert } from 'react-icons/lu';
-import { Checkbox } from '@/components/ui/checkbox';
-import { exposedColumns, VIEWS_SCHEMA } from '@/lib/types/views';
-import { deriveSemanticModels } from '@/lib/semantic/derive';
+import { Box, VStack, HStack, Text, Input, Icon } from '@chakra-ui/react';
+import { LuPlus, LuTrash2, LuBoxes, LuTriangleAlert, LuPencil, LuKeyRound } from 'react-icons/lu';
+import { exposedColumns } from '@/lib/types/views';
+import { deriveSemanticModels, humanizeName } from '@/lib/semantic/derive';
+import { inferToOneOn, inferM2MThrough, inferPrimaryKey, singularize } from '@/lib/semantic/infer-join';
 import type {
   DatabaseWithSchema, ViewDef,
-  SemanticModelV2, SemanticSource, SemanticReference, SemanticMetricV2,
+  SemanticModelV2, SemanticSource, SemanticReference, SemanticReferenceM2M, SemanticMetricV2,
+  SemanticDimensionV2,
 } from '@/lib/types';
 
-interface SemanticModelsEditorProps {
-  /** This context version's own models (edited in place). */
-  models: SemanticModelV2[];
-  /** Inherited models (read-only; shown in the catalog). */
-  inheritedModels?: SemanticModelV2[];
-  /** Available connections + schemas (parentSchema from the editor). */
-  databases: DatabaseWithSchema[];
-  /** Views (own + inherited) — sources alongside raw tables. */
+interface SemanticModelsSectionProps {
+  /** The connection this section belongs to — every model here lives on it. */
+  connection: string;
+  /** That connection's schema (source + column pickers). */
+  database: DatabaseWithSchema | undefined;
+  /** Views visible in this context (own + inherited); filtered by connection here. */
   views: ViewDef[];
+  /** THIS CONNECTION's authored models (the parent owns the full array). */
+  models: SemanticModelV2[];
+  /** Inherited models on this connection (read-only cards). */
+  inheritedModels?: SemanticModelV2[];
   editMode: boolean;
   onChange: (next: SemanticModelV2[]) => void;
-  /**
-   * Save-gate issues (tiers 1–3) exactly as the gate emitted them, i.e. still
-   * prefixed `Semantic model "<name>": …`. Recover the list from a save-error
-   * message with `parseSemanticModelIssues`; the editor attributes each one to
-   * the model (and metric) row it names.
-   */
+  /** Save-gate issues (all of them — this section attributes its own). */
   issues?: string[];
 }
 
 type Column = { name: string; type: string };
 type SourceOption = { value: string; label: string; columns: Column[] };
+
+const AGGS = ['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COUNT_DISTINCT'] as const;
+const TEMPORAL_TYPE = /date|time/i;
 
 const selectStyle: React.CSSProperties = {
   fontSize: '12px',
@@ -61,13 +64,11 @@ const selectStyle: React.CSSProperties = {
   background: 'var(--chakra-colors-bg-canvas)',
   color: 'var(--chakra-colors-fg-default)',
   outline: 'none',
-  height: '28px',
+  height: '26px',
   cursor: 'pointer',
-  minWidth: '120px',
+  minWidth: '110px',
+  maxWidth: '240px',
 };
-
-const AGGS = ['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COUNT_DISTINCT'] as const;
-const TEMPORAL_TYPE = /date|time/i;
 
 // ---------------------------------------------------------------------------
 // Source encoding — a SemanticSource as a stable <select> value.
@@ -87,10 +88,9 @@ function decodeSource(value: string): SemanticSource | undefined {
   return { kind: 'table', ...(schema ? { schema } : {}), table };
 }
 
-/** Tables + views of one connection, as source-picker options. */
-function sourceOptionsFor(connection: string, databases: DatabaseWithSchema[], views: ViewDef[]): SourceOption[] {
-  const db = databases.find((d) => d.databaseName === connection);
-  const tables: SourceOption[] = (db?.schemas ?? []).flatMap((s) =>
+/** Tables + views of the connection, as source-picker options. */
+function sourceOptionsFor(database: DatabaseWithSchema | undefined, connection: string, views: ViewDef[]): SourceOption[] {
+  const tables: SourceOption[] = (database?.schemas ?? []).flatMap((s) =>
     s.tables.map((t) => ({
       value: `t|${s.schema}|${t.table}`,
       label: `${s.schema}.${t.table}`,
@@ -102,9 +102,14 @@ function sourceOptionsFor(connection: string, databases: DatabaseWithSchema[], v
   return [...tables, ...viewOpts];
 }
 
-function columnsOfSource(source: SemanticSource | undefined, options: SourceOption[]): Column[] {
-  return options.find((o) => o.value === encodeSource(source))?.columns ?? [];
-}
+const columnsOfSource = (source: SemanticSource | undefined, options: SourceOption[]): Column[] =>
+  options.find((o) => o.value === encodeSource(source))?.columns ?? [];
+
+/** How a source is spelled in a join equality: its table/view NAME. */
+const sourceName = (s: SemanticSource | undefined): string =>
+  !s ? '' : s.kind === 'table' ? s.table : s.view;
+
+const isM2M = (r: SemanticReference): r is SemanticReferenceM2M => r.relationship === 'many_to_many';
 
 // ---------------------------------------------------------------------------
 // Save-gate issues — recovering the LIST, then attributing each issue to a row.
@@ -134,11 +139,8 @@ export function parseSemanticModelIssues(message: string | null | undefined): st
 }
 
 interface AttributedIssues {
-  /** model index → issue details */
   byModel: Map<number, string[]>;
-  /** `${modelIndex}:${metricIndex}` → issue details */
-  byMetric: Map<string, string[]>;
-  /** issues naming a model that isn't on screen (another version, or renamed) */
+  byMetric: Map<string, string[]>; // `${modelIndex}:${metricIndex}`
   unattributed: string[];
 }
 
@@ -155,7 +157,7 @@ function attributeIssues(issues: string[], models: SemanticModelV2[]): Attribute
     const detail = match[2];
     const metricName = METRIC_NAME.exec(detail)?.[1];
     const metricIndex = metricName
-      ? (models[modelIndex].metrics ?? []).findIndex((mt) => mt.name === metricName)
+      ? models[modelIndex].metrics.findIndex((mt) => mt.name === metricName)
       : -1;
     if (metricIndex >= 0) push(attributed.byMetric, `${modelIndex}:${metricIndex}`, detail);
     else push(attributed.byModel, modelIndex, detail);
@@ -167,7 +169,7 @@ function attributeIssues(issues: string[], models: SemanticModelV2[]): Attribute
 // Small shared pieces
 // ---------------------------------------------------------------------------
 
-function ColumnSelect({ label, columns, value, onChange, emptyLabel = 'Select column…' }: {
+function ColumnSelect({ label, columns, value, onChange, emptyLabel = 'column…' }: {
   label: string; columns: Column[]; value: string; onChange: (v: string) => void; emptyLabel?: string;
 }) {
   return (
@@ -184,35 +186,37 @@ function SourceSelect({ label, options, value, onChange }: {
 }) {
   return (
     <select aria-label={label} style={selectStyle} value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">Select source…</option>
+      <option value="">pick table…</option>
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       {value && !options.some((o) => o.value === value) && <option value={value}>{value}</option>}
     </select>
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+/** Section heading with count and (edit mode) a compact + button. */
+function SectionHeading({ label, count, onAdd, addLabel }: {
+  label: string; count: number; onAdd?: () => void; addLabel?: string;
+}) {
   return (
-    <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.02em">
-      {children}
-    </Text>
-  );
-}
-
-function AddRowButton({ label, text, onClick }: { label: string; text: string; onClick: () => void }) {
-  return (
-    <Box>
-      <Button aria-label={label} size="2xs" variant="ghost" onClick={onClick}>
-        <LuPlus /> {text}
-      </Button>
-    </Box>
+    <HStack gap={1.5} align="center">
+      <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.04em">
+        {label}
+      </Text>
+      {count > 0 && <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">{count}</Text>}
+      {onAdd && (
+        <Box as="button" aria-label={addLabel} onClick={onAdd} color="fg.subtle" cursor="pointer"
+          borderRadius="sm" px={0.5} _hover={{ color: 'accent.teal', bg: 'bg.muted' }} lineHeight={1}>
+          <Icon as={LuPlus} boxSize={3} />
+        </Box>
+      )}
+    </HStack>
   );
 }
 
 function DeleteRowButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <Box as="button" aria-label={label} onClick={onClick} color="fg.subtle" cursor="pointer"
-      _hover={{ color: 'accent.danger' }} flexShrink={0}>
+      _hover={{ color: 'accent.danger' }} flexShrink={0} lineHeight={1}>
       <Icon as={LuTrash2} boxSize={3.5} />
     </Box>
   );
@@ -243,488 +247,653 @@ function IssueList({ label, issues }: { label: string; issues: string[] }) {
   );
 }
 
+/** Read-mode definition text (also used for the always-text join lines). */
+function DefText({ label, children, muted = true }: { label?: string; children: React.ReactNode; muted?: boolean }) {
+  return (
+    <Text {...(label ? { 'aria-label': label } : {})} fontSize="xs" fontFamily="mono"
+      color={muted ? 'fg.muted' : 'fg.default'} lineClamp={2}>
+      {children}
+    </Text>
+  );
+}
+
 // ---------------------------------------------------------------------------
-// The editor
+// Definition text builders (read mode + join lines)
 // ---------------------------------------------------------------------------
 
-export default function SemanticModelsEditor({
-  models, inheritedModels = [], databases, views, editMode, onChange, issues = [],
-}: SemanticModelsEditorProps) {
-  const [browseMode, setBrowseMode] = useState<'edit' | 'catalog'>('edit');
-  const mode = editMode ? browseMode : 'catalog';
+const metricDefText = (mt: SemanticMetricV2): string => {
+  if (mt.type === 'aggregation') return `${mt.agg}(${mt.column ?? '*'})`;
+  if (mt.type === 'ratio') return `${mt.numerator} ÷ ${mt.denominator}`;
+  return mt.sql;
+};
+
+const dimensionDefText = (d: SemanticDimensionV2): string =>
+  d.source === 'primary' ? d.column : `${d.source}.${d.column}`;
+
+const relationshipText: Record<SemanticReference['relationship'], string> = {
+  many_to_one: 'many-to-one',
+  one_to_one: 'one-to-one',
+  many_to_many: 'many-to-many',
+};
+
+/** The join line: real `table.column = table.column` equalities. */
+function joinText(model: SemanticModelV2, ref: SemanticReference): string {
+  const base = sourceName(model.primary);
+  const far = sourceName(ref.source);
+  if (!isM2M(ref)) {
+    return ref.on
+      .filter((p) => p.primaryColumn && p.referencedColumn)
+      .map((p) => `${base}.${p.primaryColumn} = ${far}.${p.referencedColumn}`)
+      .join(' AND ');
+  }
+  const via = sourceName(ref.through.source);
+  const near = ref.through.primaryOn
+    .filter((p) => p.primaryColumn && p.bridgeColumn)
+    .map((p) => `${base}.${p.primaryColumn} = ${via}.${p.bridgeColumn}`);
+  const farSide = ref.through.referencedOn
+    .filter((p) => p.bridgeColumn && p.referencedColumn)
+    .map((p) => `${via}.${p.bridgeColumn} = ${far}.${p.referencedColumn}`);
+  return [...near, ...farSide].join(' · ');
+}
+
+const refComplete = (ref: SemanticReference): boolean =>
+  isM2M(ref)
+    ? !!sourceName(ref.through.source)
+      && ref.through.primaryOn.every((p) => p.primaryColumn && p.bridgeColumn)
+      && ref.through.referencedOn.every((p) => p.bridgeColumn && p.referencedColumn)
+    : ref.on.every((p) => p.primaryColumn && p.referencedColumn);
+
+// ---------------------------------------------------------------------------
+// The section
+// ---------------------------------------------------------------------------
+
+export default function SemanticModelsSection({
+  connection, database, views, models, inheritedModels = [], editMode, onChange, issues = [],
+}: SemanticModelsSectionProps) {
+  const options = useMemo(() => sourceOptionsFor(database, connection, views), [database, connection, views]);
   const attributed = useMemo(() => attributeIssues(issues, models), [issues, models]);
+  /** Join-pair pickers are hidden behind the join line; this opens them per reference. */
+  const [openJoins, setOpenJoins] = useState<Set<string>>(new Set());
 
   const patchModel = (i: number, changes: Partial<SemanticModelV2>) =>
     onChange(models.map((m, idx) => (idx === i ? { ...m, ...changes } : m)));
 
+  const allNames = () => new Set([...models, ...inheritedModels].map((m) => m.name));
+
   const addModel = () => {
-    const existing = new Set([...models, ...inheritedModels].map((m) => m.name));
+    const existing = allNames();
     let name = 'new_model';
     let suffix = 2;
     while (existing.has(name)) name = `new_model_${suffix++}`;
-    onChange([...models, {
+    // PREPENDED — the new card must be visible without scrolling.
+    onChange([{
       name,
-      connection: databases[0]?.databaseName ?? '',
+      connection,
       primary: { kind: 'table', table: '' },
       dimensions: [],
-      measures: [],
-    }]);
+      metrics: [],
+    }, ...models]);
   };
 
-  const renderModel = (m: SemanticModelV2, i: number) => {
-    const options = sourceOptionsFor(m.connection, databases, views);
+  /**
+   * Primary picked on an empty model → prefill the whole draft vocabulary
+   * (dimensions with temporal first, Count/Total/Avg metrics, inferred grain,
+   * a name from the table) — one pick yields a working model to prune.
+   */
+  const pickPrimary = (i: number, value: string) => {
+    const m = models[i];
+    const primary = decodeSource(value) ?? { kind: 'table' as const, table: '' };
+    const columns = columnsOfSource(primary, options);
+    const isEmpty = m.dimensions.length === 0 && m.metrics.length === 0;
+    if (!isEmpty || columns.length === 0) {
+      patchModel(i, { primary });
+      return;
+    }
+    const draft = deriveSemanticModels([{
+      databaseName: connection,
+      schemas: [{
+        schema: primary.kind === 'table' ? (primary.schema ?? '') : '_views',
+        tables: [{ table: sourceName(primary), columns }],
+      }],
+    }])[0];
+    const keepName = !/^new_model/.test(m.name);
+    let name = keepName ? m.name : humanizeName(sourceName(primary));
+    const taken = allNames();
+    taken.delete(m.name);
+    let suffix = 2;
+    while (taken.has(name)) name = `${humanizeName(sourceName(primary))} ${suffix++}`;
+    patchModel(i, {
+      primary,
+      name,
+      dimensions: draft?.dimensions ?? [],
+      metrics: draft?.metrics ?? [],
+      ...(inferPrimaryKey(columns, sourceName(primary)) ? { primaryKey: inferPrimaryKey(columns, sourceName(primary))! } : {}),
+    });
+  };
+
+  // -------------------------------------------------------------------------
+  // One model card (same structure in both modes)
+  // -------------------------------------------------------------------------
+
+  const renderModel = (m: SemanticModelV2, i: number, inherited: boolean) => {
+    const canEdit = editMode && !inherited;
     const primaryColumns = columnsOfSource(m.primary, options);
     const refs = m.references ?? [];
-    const aliasColumns = (source: string): Column[] =>
-      source === 'primary'
-        ? primaryColumns
-        : columnsOfSource(refs.find((r) => r.alias === source)?.source, options);
-    const hasM2M = refs.some((r) => r.relationship === 'many_to_many');
+    const hasM2M = refs.some(isM2M);
     const modelIssues = attributed.byModel.get(i) ?? [];
-    const metricIssues = (j: number) => attributed.byMetric.get(`${i}:${j}`) ?? [];
+    const metricIssues = (j: number) => (inherited ? [] : attributed.byMetric.get(`${i}:${j}`) ?? []);
+    const aggMetricNames = m.metrics.filter((mt) => mt.type === 'aggregation').map((mt) => mt.name);
     const temporalColumns = primaryColumns.filter((c) => TEMPORAL_TYPE.test(c.type));
-    const measureNames = m.measures.map((ms) => ms.name);
+    const timeDims = m.dimensions.map((d, j) => ({ d, j })).filter(({ d }) => d.temporal);
+    const plainDims = m.dimensions.map((d, j) => ({ d, j })).filter(({ d }) => !d.temporal);
 
     const patchRef = (j: number, next: SemanticReference) =>
       patchModel(i, { references: refs.map((r, k) => (k === j ? next : r)) });
     const patchMetric = (j: number, next: SemanticMetricV2) =>
-      patchModel(i, { metrics: (m.metrics ?? []).map((mt, k) => (k === j ? next : mt)) });
+      patchModel(i, { metrics: m.metrics.map((mt, k) => (k === j ? next : mt)) });
+    const patchDim = (j: number, next: SemanticDimensionV2) =>
+      patchModel(i, { dimensions: m.dimensions.map((d, k) => (k === j ? next : d)) });
+
+    /** Source pick on a reference: infer alias + join columns in one shot. */
+    const pickRefSource = (j: number, value: string) => {
+      const r = refs[j];
+      const source = decodeSource(value) ?? { kind: 'table' as const, table: '' };
+      const refColumns = columnsOfSource(source, options);
+      const autoAlias = r.alias === '' || r.alias === singularize(sourceName(r.source));
+      const alias = autoAlias && sourceName(source) ? singularize(sourceName(source)) : r.alias;
+      if (isM2M(r)) {
+        patchRef(j, { ...r, source, alias });
+        return;
+      }
+      const inferred = inferToOneOn(primaryColumns, refColumns, sourceName(source));
+      patchRef(j, { ...r, source, alias, on: inferred ?? [{ primaryColumn: '', referencedColumn: '' }] });
+    };
+
+    /** Via (bridge) pick on an m2m reference: infer the whole through + grain. */
+    const pickViaSource = (j: number, value: string) => {
+      const r = refs[j];
+      if (!isM2M(r)) return;
+      const via = decodeSource(value) ?? { kind: 'table' as const, table: '' };
+      const inferred = inferM2MThrough({
+        primaryKey: m.primaryKey ?? [],
+        primaryColumns,
+        bridgeColumns: columnsOfSource(via, options),
+        refColumns: columnsOfSource(r.source, options),
+        primaryTable: sourceName(m.primary),
+        refTable: sourceName(r.source),
+      });
+      const nextRef: SemanticReferenceM2M = {
+        ...r,
+        through: inferred
+          ? { source: via, ...inferred }
+          : { source: via, primaryOn: [{ primaryColumn: '', bridgeColumn: '' }], referencedOn: [{ bridgeColumn: '', referencedColumn: '' }] },
+      };
+      const grain = m.primaryKey?.length
+        ? undefined
+        : inferred
+          ? inferred.primaryOn.map((p) => p.primaryColumn)
+          : inferPrimaryKey(primaryColumns, sourceName(m.primary)) ?? undefined;
+      patchModel(i, {
+        references: refs.map((x, k) => (k === j ? nextRef : x)),
+        ...(grain ? { primaryKey: grain } : {}),
+      });
+    };
+
+    const renameAlias = (j: number, next: string) => {
+      const r = refs[j];
+      // Cascade: dimensions carry the alias in `source` — a rename without
+      // this leaves them dangling and the save gate rejects the whole model.
+      patchModel(i, {
+        references: refs.map((x, k) => (k === j ? { ...x, alias: next } : x)),
+        dimensions: m.dimensions.map((d) => (d.source === r.alias ? { ...d, source: next } : d)),
+      });
+    };
+
+    const joinKey = (j: number) => `${m.name}:${j}`;
+    const toggleJoinOpen = (j: number) => setOpenJoins((prev) => {
+      const next = new Set(prev);
+      const key = joinKey(j);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+
+    // ── rows ────────────────────────────────────────────────────────────────
+
+    const referenceRow = (r: SemanticReference, j: number) => {
+      const refColumns = columnsOfSource(r.source, options);
+      const viaColumns = isM2M(r) ? columnsOfSource(r.through.source, options) : [];
+      const showPairs = canEdit && (openJoins.has(joinKey(j)) || !refComplete(r));
+      const base = sourceName(m.primary);
+      const far = sourceName(r.source);
+      const via = isM2M(r) ? sourceName(r.through.source) : '';
+      return (
+        <VStack key={j} align="stretch" gap={1} py={1}>
+          <HStack gap={2} flexWrap="wrap" align="center">
+            {canEdit ? (
+              <>
+                <Input aria-label={`semantic-model-${i}-reference-${j}-alias`} size="2xs" fontFamily="mono" maxW="110px"
+                  value={r.alias} placeholder="alias"
+                  onChange={(e) => renameAlias(j, e.target.value)} />
+                <Text fontSize="xs" color="fg.subtle">·</Text>
+                <SourceSelect label={`semantic-model-${i}-reference-${j}-source`} options={options}
+                  value={encodeSource(r.source)} onChange={(v) => pickRefSource(j, v)} />
+                <select aria-label={`semantic-model-${i}-reference-${j}-relationship`} style={selectStyle}
+                  value={r.relationship}
+                  onChange={(e) => {
+                    const rel = e.target.value as SemanticReference['relationship'];
+                    if (rel === 'many_to_many') {
+                      patchRef(j, {
+                        source: r.source, alias: r.alias, relationship: 'many_to_many',
+                        through: {
+                          source: { kind: 'table', table: '' },
+                          primaryOn: [{ primaryColumn: '', bridgeColumn: '' }],
+                          referencedOn: [{ bridgeColumn: '', referencedColumn: '' }],
+                        },
+                      });
+                    } else {
+                      const on = !isM2M(r) && r.on.length > 0 ? r.on
+                        : inferToOneOn(primaryColumns, refColumns, sourceName(r.source)) ?? [{ primaryColumn: '', referencedColumn: '' }];
+                      patchRef(j, { source: r.source, alias: r.alias, relationship: rel, on });
+                    }
+                  }}>
+                  <option value="many_to_one">many-to-one</option>
+                  <option value="one_to_one">one-to-one</option>
+                  <option value="many_to_many">many-to-many</option>
+                </select>
+                {isM2M(r) && (
+                  <>
+                    <Text fontSize="xs" color="fg.muted" flexShrink={0}>via</Text>
+                    <SourceSelect label={`semantic-model-${i}-reference-${j}-via-source`} options={options}
+                      value={encodeSource(r.through.source)} onChange={(v) => pickViaSource(j, v)} />
+                  </>
+                )}
+                <Box flex={1} />
+                {refComplete(r) && (
+                  <Box as="button" aria-label={`semantic-model-${i}-reference-${j}-adjust-join`}
+                    onClick={() => toggleJoinOpen(j)} color="fg.subtle" cursor="pointer"
+                    _hover={{ color: 'accent.teal' }} lineHeight={1} title="Adjust join columns">
+                    <Icon as={LuPencil} boxSize={3} />
+                  </Box>
+                )}
+                <DeleteRowButton label={`semantic-model-${i}-reference-${j}-delete`}
+                  onClick={() => patchModel(i, { references: refs.filter((_, k) => k !== j) })} />
+              </>
+            ) : (
+              <DefText muted={false}>
+                <Text as="span" fontWeight="600">{r.alias}</Text>
+                <Text as="span" color="fg.muted"> · {far || '—'} — {relationshipText[r.relationship]}{isM2M(r) && via ? ` via ${via}` : ''}</Text>
+              </DefText>
+            )}
+          </HStack>
+          {/* The join, ALWAYS as real column equalities. */}
+          <Box pl={canEdit ? 0 : 0}>
+            <DefText label={`semantic-model-${i}-reference-${j}-join`}>
+              {joinText(m, r) || 'join columns not set'}
+            </DefText>
+          </Box>
+          {showPairs && !isM2M(r) && (
+            <VStack align="stretch" gap={1}>
+              {r.on.map((pair, k) => (
+                <HStack key={k} gap={1.5} flexWrap="wrap">
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" flexShrink={0}>{base}.</Text>
+                  <ColumnSelect label={`semantic-model-${i}-reference-${j}-on-${k}-primary-column`}
+                    columns={primaryColumns} value={pair.primaryColumn}
+                    onChange={(v) => patchRef(j, { ...r, on: r.on.map((p, x) => (x === k ? { ...p, primaryColumn: v } : p)) })} />
+                  <Text fontSize="xs" color="fg.subtle">=</Text>
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" flexShrink={0}>{far}.</Text>
+                  <ColumnSelect label={`semantic-model-${i}-reference-${j}-on-${k}-referenced-column`}
+                    columns={refColumns} value={pair.referencedColumn}
+                    onChange={(v) => patchRef(j, { ...r, on: r.on.map((p, x) => (x === k ? { ...p, referencedColumn: v } : p)) })} />
+                  {r.on.length > 1 && (
+                    <DeleteRowButton label={`semantic-model-${i}-reference-${j}-on-${k}-delete`}
+                      onClick={() => patchRef(j, { ...r, on: r.on.filter((_, x) => x !== k) })} />
+                  )}
+                </HStack>
+              ))}
+              <Box>
+                <Box as="button" aria-label={`semantic-model-${i}-reference-${j}-add-on-pair`}
+                  onClick={() => patchRef(j, { ...r, on: [...r.on, { primaryColumn: '', referencedColumn: '' }] })}
+                  color="fg.subtle" cursor="pointer" _hover={{ color: 'accent.teal' }} fontSize="11px" fontFamily="mono">
+                  + join column pair
+                </Box>
+              </Box>
+            </VStack>
+          )}
+          {showPairs && isM2M(r) && (() => {
+            const primaryOn = r.through.primaryOn[0] ?? { primaryColumn: '', bridgeColumn: '' };
+            const referencedOn = r.through.referencedOn[0] ?? { bridgeColumn: '', referencedColumn: '' };
+            return (
+              <VStack align="stretch" gap={1}>
+                <HStack gap={1.5} flexWrap="wrap">
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" flexShrink={0}>{base}.</Text>
+                  <ColumnSelect label={`semantic-model-${i}-reference-${j}-primary-on-primary-column`}
+                    columns={primaryColumns} value={primaryOn.primaryColumn}
+                    onChange={(v) => patchRef(j, { ...r, through: { ...r.through, primaryOn: [{ ...primaryOn, primaryColumn: v }] } })} />
+                  <Text fontSize="xs" color="fg.subtle">=</Text>
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" flexShrink={0}>{via || 'via'}.</Text>
+                  <ColumnSelect label={`semantic-model-${i}-reference-${j}-primary-on-bridge-column`}
+                    columns={viaColumns} value={primaryOn.bridgeColumn}
+                    onChange={(v) => patchRef(j, { ...r, through: { ...r.through, primaryOn: [{ ...primaryOn, bridgeColumn: v }] } })} />
+                </HStack>
+                <HStack gap={1.5} flexWrap="wrap">
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" flexShrink={0}>{via || 'via'}.</Text>
+                  <ColumnSelect label={`semantic-model-${i}-reference-${j}-referenced-on-bridge-column`}
+                    columns={viaColumns} value={referencedOn.bridgeColumn}
+                    onChange={(v) => patchRef(j, { ...r, through: { ...r.through, referencedOn: [{ ...referencedOn, bridgeColumn: v }] } })} />
+                  <Text fontSize="xs" color="fg.subtle">=</Text>
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" flexShrink={0}>{far}.</Text>
+                  <ColumnSelect label={`semantic-model-${i}-reference-${j}-referenced-on-referenced-column`}
+                    columns={refColumns} value={referencedOn.referencedColumn}
+                    onChange={(v) => patchRef(j, { ...r, through: { ...r.through, referencedOn: [{ ...referencedOn, referencedColumn: v }] } })} />
+                </HStack>
+              </VStack>
+            );
+          })()}
+        </VStack>
+      );
+    };
+
+    const timeDimRow = ({ d, j }: { d: SemanticDimensionV2; j: number }) => (
+      <HStack key={j} gap={2} align="center" py={0.5}>
+        {canEdit ? (
+          <>
+            <Input aria-label={`semantic-model-${i}-dimension-${j}-name`} size="2xs" maxW="180px"
+              value={d.name} placeholder="name"
+              onChange={(e) => patchDim(j, { ...d, name: e.target.value })} />
+            <Text fontSize="xs" color="fg.subtle">←</Text>
+            <ColumnSelect label={`semantic-model-${i}-dimension-${j}-column`}
+              columns={temporalColumns.length > 0 ? temporalColumns : primaryColumns}
+              value={d.column}
+              onChange={(v) => patchDim(j, { ...d, column: v })} />
+            <Box flex={1} />
+            <DeleteRowButton label={`semantic-model-${i}-dimension-${j}-delete`}
+              onClick={() => patchModel(i, { dimensions: m.dimensions.filter((_, k) => k !== j) })} />
+          </>
+        ) : (
+          <DefText label={`semantic-model-${i}-dimension-${j}-definition`} muted={false}>
+            <Text as="span" fontWeight="600">{d.name}</Text>
+            <Text as="span" color="fg.muted"> ← {dimensionDefText(d)}</Text>
+          </DefText>
+        )}
+      </HStack>
+    );
+
+    // Combined source+column pick for a plain dimension: one select, values
+    // `primary|<col>` and `<alias>|<col>` — two dropdowns collapsed into one.
+    const fieldValue = (d: SemanticDimensionV2) => (d.column ? `${d.source}|${d.column}` : '');
+    const fieldOptions = (): Array<{ value: string; label: string }> => [
+      ...primaryColumns.map((c) => ({ value: `primary|${c.name}`, label: c.name })),
+      ...refs.filter((r) => r.alias).flatMap((r) =>
+        columnsOfSource(r.source, options).map((c) => ({ value: `${r.alias}|${c.name}`, label: `${r.alias}.${c.name}` }))),
+    ];
+
+    const plainDimRow = ({ d, j }: { d: SemanticDimensionV2; j: number }) => (
+      <HStack key={j} gap={2} align="center" py={0.5}>
+        {canEdit ? (
+          <>
+            <Input aria-label={`semantic-model-${i}-dimension-${j}-name`} size="2xs" maxW="180px"
+              value={d.name} placeholder="name"
+              onChange={(e) => patchDim(j, { ...d, name: e.target.value })} />
+            <Text fontSize="xs" color="fg.subtle">←</Text>
+            <select aria-label={`semantic-model-${i}-dimension-${j}-field`} style={selectStyle}
+              value={fieldValue(d)}
+              onChange={(e) => {
+                const [source, column] = e.target.value.split('|');
+                if (column) patchDim(j, { ...d, source, column });
+              }}>
+              <option value="">column…</option>
+              {fieldOptions().map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {fieldValue(d) && !fieldOptions().some((o) => o.value === fieldValue(d)) &&
+                <option value={fieldValue(d)}>{dimensionDefText(d)}</option>}
+            </select>
+            <Box flex={1} />
+            <DeleteRowButton label={`semantic-model-${i}-dimension-${j}-delete`}
+              onClick={() => patchModel(i, { dimensions: m.dimensions.filter((_, k) => k !== j) })} />
+          </>
+        ) : (
+          <DefText label={`semantic-model-${i}-dimension-${j}-definition`} muted={false}>
+            <Text as="span" fontWeight="600">{d.name}</Text>
+            <Text as="span" color="fg.muted"> ← {dimensionDefText(d)}</Text>
+          </DefText>
+        )}
+      </HStack>
+    );
+
+    const metricRow = (mt: SemanticMetricV2, j: number) => (
+      <VStack key={j} align="stretch" gap={1} py={0.5}>
+        <HStack gap={2} align="center" flexWrap="wrap">
+          {canEdit ? (
+            <>
+              <Input aria-label={`semantic-model-${i}-metric-${j}-name`} size="2xs" maxW="180px"
+                value={mt.name} placeholder="name"
+                onChange={(e) => patchMetric(j, { ...mt, name: e.target.value })} />
+              <Text fontSize="xs" color="fg.subtle">=</Text>
+              <select aria-label={`semantic-model-${i}-metric-${j}-type`} style={{ ...selectStyle, minWidth: '96px' }}
+                value={mt.type}
+                onChange={(e) => {
+                  const t = e.target.value as SemanticMetricV2['type'];
+                  if (t === mt.type) return;
+                  if (t === 'aggregation') patchMetric(j, { name: mt.name, type: 'aggregation', agg: 'COUNT', description: mt.description });
+                  else if (t === 'ratio') patchMetric(j, { name: mt.name, type: 'ratio', numerator: '', denominator: '', description: mt.description });
+                  else patchMetric(j, { name: mt.name, type: 'sql', sql: '', description: mt.description });
+                }}>
+                <option value="aggregation">aggregation</option>
+                <option value="ratio">ratio</option>
+                <option value="sql">sql</option>
+              </select>
+              {mt.type === 'aggregation' && (
+                <>
+                  <select aria-label={`semantic-model-${i}-metric-${j}-agg`} style={{ ...selectStyle, minWidth: '90px' }}
+                    value={mt.agg}
+                    onChange={(e) => patchMetric(j, { ...mt, agg: e.target.value as typeof mt.agg })}>
+                    {AGGS.map((a) => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                  <ColumnSelect label={`semantic-model-${i}-metric-${j}-column`} columns={primaryColumns}
+                    value={mt.column ?? ''} emptyLabel="(* — COUNT rows)"
+                    onChange={(v) => patchMetric(j, { ...mt, column: v || undefined })} />
+                </>
+              )}
+              {mt.type === 'ratio' && (
+                <>
+                  <select aria-label={`semantic-model-${i}-metric-${j}-numerator`} style={selectStyle} value={mt.numerator}
+                    onChange={(e) => patchMetric(j, { ...mt, numerator: e.target.value })}>
+                    <option value="">numerator…</option>
+                    {aggMetricNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  <Text fontSize="xs" color="fg.subtle">÷</Text>
+                  <select aria-label={`semantic-model-${i}-metric-${j}-denominator`} style={selectStyle} value={mt.denominator}
+                    onChange={(e) => patchMetric(j, { ...mt, denominator: e.target.value })}>
+                    <option value="">denominator…</option>
+                    {aggMetricNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </>
+              )}
+              {mt.verified === false && <UnverifiedBadge label={`semantic-model-${i}-metric-${j}-unverified`} />}
+              <Box flex={1} />
+              <DeleteRowButton label={`semantic-model-${i}-metric-${j}-delete`}
+                onClick={() => patchModel(i, { metrics: m.metrics.filter((_, k) => k !== j) })} />
+            </>
+          ) : (
+            <>
+              <DefText label={`semantic-model-${i}-metric-${j}-definition`} muted={false}>
+                <Text as="span" fontWeight="600">{mt.name}</Text>
+                <Text as="span" color="fg.muted"> = {metricDefText(mt)}</Text>
+              </DefText>
+              {mt.verified === false && <UnverifiedBadge label={`semantic-model-${i}-metric-${j}-unverified`} />}
+            </>
+          )}
+        </HStack>
+        {canEdit && mt.type === 'sql' && (
+          <VStack align="stretch" gap={0.5}>
+            <textarea aria-label={`semantic-model-${i}-metric-${j}-sql`} rows={2}
+              style={{
+                fontFamily: 'var(--font-jetbrains-mono), monospace', fontSize: '12px',
+                border: '1px solid var(--chakra-colors-border-muted)', borderRadius: '6px',
+                background: 'var(--chakra-colors-bg-canvas)', color: 'var(--chakra-colors-fg-default)',
+                padding: '6px 8px', outline: 'none', resize: 'vertical', width: '100%',
+              }}
+              value={mt.sql} placeholder="SUM(primary.amount) - SUM(costs.total)"
+              onChange={(e) => patchMetric(j, { ...mt, sql: e.target.value })} />
+            <Text fontSize="2xs" color="fg.subtle">qualify columns as primary.&lt;col&gt; or &lt;alias&gt;.&lt;col&gt;</Text>
+          </VStack>
+        )}
+        {metricIssues(j).length > 0 && (
+          <IssueList label={`semantic-model-${i}-metric-${j}-issue`} issues={metricIssues(j)} />
+        )}
+      </VStack>
+    );
+
+    // ── the card ────────────────────────────────────────────────────────────
 
     return (
-      <Box key={i} border="1px solid" borderColor="border.default" borderRadius="md" bg="bg.surface" overflow="hidden">
-        {/* Header: name / description / connection / primary */}
-        <VStack align="stretch" gap={2} p={3} bg="bg.muted" borderBottom="1px solid" borderColor="border.default">
-          <HStack gap={2}>
-            <Icon as={LuBoxes} boxSize={4} color="accent.teal" flexShrink={0} />
-            <Input aria-label={`semantic-model-${i}-name`} size="sm" fontFamily="mono" fontWeight="600" maxW="240px"
-              value={m.name} onChange={(e) => patchModel(i, { name: e.target.value })} placeholder="model name" />
-            <Input aria-label={`semantic-model-${i}-description`} size="sm" flex={1}
-              value={m.description ?? ''} placeholder="description"
-              onChange={(e) => patchModel(i, { description: e.target.value || undefined })} />
-            <DeleteRowButton label={`delete-semantic-model-${m.name}`}
-              onClick={() => onChange(models.filter((_, idx) => idx !== i))} />
-          </HStack>
-          <HStack gap={2} flexWrap="wrap">
-            <Text fontSize="xs" color="fg.muted" flexShrink={0}>Primary:</Text>
-            <select aria-label={`semantic-model-${i}-connection`} style={selectStyle} value={m.connection}
-              onChange={(e) => patchModel(i, {
-                connection: e.target.value,
-                // sources are connection-scoped — a connection change invalidates them
-                primary: { kind: 'table', table: '' },
-                references: undefined,
-              })}>
-              {databases.map((d) => <option key={d.databaseName} value={d.databaseName}>{d.databaseName}</option>)}
-              {m.connection && !databases.some((d) => d.databaseName === m.connection) &&
-                <option value={m.connection}>{m.connection}</option>}
-            </select>
-            <SourceSelect label={`semantic-model-${i}-primary-source`} options={options}
-              value={encodeSource(m.primary)}
-              onChange={(v) => patchModel(i, { primary: decodeSource(v) ?? { kind: 'table', table: '' } })} />
-            {primaryColumns.length > 0 && m.dimensions.length === 0 && m.measures.length === 0 && (
-              <Button aria-label={`semantic-model-${i}-prefill`} size="xs" variant="outline"
-                onClick={() => {
-                  // Draft-suggestion engine: derive dims/measures/time axis from
-                  // the primary's profiled columns as a starting point.
-                  const draft = deriveSemanticModels([{
-                    databaseName: m.connection,
-                    schemas: [{
-                      schema: m.primary.kind === 'table' ? (m.primary.schema ?? '') : VIEWS_SCHEMA,
-                      tables: [{
-                        table: m.primary.kind === 'table' ? m.primary.table : m.primary.view,
-                        columns: primaryColumns,
-                      }],
-                    }],
-                  }])[0];
-                  if (draft) {
-                    patchModel(i, {
-                      dimensions: draft.dimensions,
-                      measures: draft.measures,
-                      ...(draft.timeDimension ? { timeDimension: draft.timeDimension } : {}),
-                    });
-                  }
-                }}>
-                Prefill fields
-              </Button>
+      <Box key={`${inherited ? 'inh' : 'own'}-${m.name}-${i}`} aria-label={`semantic-model-${inherited ? `inherited-${m.name}` : i}`}
+        border="1px solid" borderColor="border.default" borderRadius="md" bg="bg.surface" overflow="hidden">
+        {/* Header: name — description · primary · grain · delete */}
+        <VStack align="stretch" gap={1} px={3} py={2} bg="bg.muted" borderBottom="1px solid" borderColor="border.default">
+          <HStack gap={2} align="center">
+            <Icon as={LuBoxes} boxSize={3.5} color="accent.teal" flexShrink={0} />
+            {canEdit ? (
+              <>
+                <Input aria-label={`semantic-model-${i}-name`} size="2xs" fontFamily="mono" fontWeight="600" maxW="200px"
+                  value={m.name} placeholder="model name"
+                  onChange={(e) => patchModel(i, { name: e.target.value })} />
+                <Input aria-label={`semantic-model-${i}-description`} size="2xs" flex={1} minW="120px"
+                  value={m.description ?? ''} placeholder="description"
+                  onChange={(e) => patchModel(i, { description: e.target.value || undefined })} />
+              </>
+            ) : (
+              <>
+                <Text fontSize="sm" fontWeight="700" fontFamily="mono">{m.name}</Text>
+                {inherited && <Text fontSize="10px" fontWeight="600" color="accent.teal" fontFamily="mono">inherited</Text>}
+                {m.description && <Text fontSize="xs" color="fg.muted" truncate flex={1}>{m.description}</Text>}
+              </>
             )}
-            {hasM2M && (
-              <HStack gap={1}>
-                <Text fontSize="xs" color="fg.muted" flexShrink={0}>Primary key (required for many-to-many):</Text>
-                <ColumnSelect label={`semantic-model-${i}-primary-key`} columns={primaryColumns}
-                  value={m.primaryKey?.[0] ?? ''}
-                  onChange={(v) => patchModel(i, { primaryKey: v ? [v] : undefined })} />
+            {canEdit && (
+              <DeleteRowButton label={`delete-semantic-model-${m.name}`}
+                onClick={() => onChange(models.filter((_, idx) => idx !== i))} />
+            )}
+          </HStack>
+          <HStack gap={2} align="center" flexWrap="wrap">
+            {canEdit ? (
+              <SourceSelect label={`semantic-model-${i}-primary-source`} options={options}
+                value={encodeSource(m.primary)} onChange={(v) => pickPrimary(i, v)} />
+            ) : (
+              <DefText>{options.find((o) => o.value === encodeSource(m.primary))?.label ?? sourceName(m.primary) ?? '—'}</DefText>
+            )}
+            {(hasM2M || (m.primaryKey?.length ?? 0) > 0) && (
+              <HStack gap={1} align="center" title="The model's grain (primary key) — required for many-to-many">
+                <Icon as={LuKeyRound} boxSize={3} color="fg.subtle" />
+                {canEdit ? (
+                  <select aria-label={`semantic-model-${i}-primary-key`} style={{ ...selectStyle, minWidth: '90px' }}
+                    value={m.primaryKey?.[0] ?? ''}
+                    onChange={(e) => patchModel(i, { primaryKey: e.target.value ? [e.target.value] : undefined })}>
+                    <option value="">grain…</option>
+                    {primaryColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                    {m.primaryKey && m.primaryKey.length > 1 && (
+                      <option value={m.primaryKey[0]}>{m.primaryKey.join(', ')}</option>
+                    )}
+                  </select>
+                ) : (
+                  <DefText>{(m.primaryKey ?? []).join(', ')}</DefText>
+                )}
               </HStack>
             )}
           </HStack>
         </VStack>
 
-        <VStack align="stretch" gap={3} p={3}>
-          {/* Save-gate issues that name this model but no metric of it. */}
+        <VStack align="stretch" gap={2.5} px={3} py={2.5}>
           {modelIssues.length > 0 && (
             <IssueList label={`semantic-model-${i}-issues`} issues={modelIssues} />
           )}
 
-          {/* References */}
-          <VStack align="stretch" gap={1}>
-            <SectionLabel>References</SectionLabel>
-            {refs.map((r, j) => {
-              const refColumns = columnsOfSource(r.source, options);
-              return (
-                <VStack key={j} align="stretch" gap={1.5} p={2} border="1px solid" borderColor="border.muted" borderRadius="md">
-                  <HStack gap={2} flexWrap="wrap">
-                    <SourceSelect label={`semantic-model-${i}-reference-${j}-source`} options={options}
-                      value={encodeSource(r.source)}
-                      onChange={(v) => patchRef(j, { ...r, source: decodeSource(v) ?? { kind: 'table', table: '' } })} />
-                    <Input aria-label={`semantic-model-${i}-reference-${j}-alias`} size="sm" fontFamily="mono" maxW="140px"
-                      value={r.alias} placeholder="alias"
-                      onChange={(e) => {
-                        // Cascade the rename: dimensions carry the alias in
-                        // `source`, so renaming without this leaves them
-                        // dangling and the save gate rejects the whole model.
-                        const next = e.target.value;
-                        patchModel(i, {
-                          references: refs.map((x, k) => (k === j ? { ...x, alias: next } : x)),
-                          dimensions: m.dimensions.map((d) => (d.source === r.alias ? { ...d, source: next } : d)),
-                        });
-                      }} />
-                    <select aria-label={`semantic-model-${i}-reference-${j}-relationship`} style={selectStyle}
-                      value={r.relationship}
-                      onChange={(e) => {
-                        const rel = e.target.value as 'many_to_one' | 'one_to_one' | 'many_to_many';
-                        if (rel === 'many_to_many') {
-                          patchRef(j, {
-                            source: r.source, alias: r.alias, relationship: rel,
-                            through: {
-                              source: { kind: 'table', table: '' },
-                              primaryOn: [{ primaryColumn: '', bridgeColumn: '' }],
-                              referencedOn: [{ bridgeColumn: '', referencedColumn: '' }],
-                            },
-                          });
-                        } else {
-                          patchRef(j, {
-                            source: r.source, alias: r.alias, relationship: rel,
-                            on: r.relationship !== 'many_to_many' ? r.on : [{ primaryColumn: '', referencedColumn: '' }],
-                          });
-                        }
-                      }}>
-                      <option value="many_to_one">many-to-one</option>
-                      <option value="one_to_one">one-to-one</option>
-                      <option value="many_to_many">many-to-many</option>
-                    </select>
-                    <Box flex={1} />
-                    <DeleteRowButton label={`semantic-model-${i}-reference-${j}-delete`}
-                      onClick={() => patchModel(i, { references: refs.filter((_, k) => k !== j) })} />
-                  </HStack>
+          {(canEdit || refs.length > 0) && (
+            <VStack align="stretch" gap={0.5}>
+              <SectionHeading label="References" count={refs.length}
+                {...(canEdit ? {
+                  addLabel: `semantic-model-${i}-add-reference`,
+                  onAdd: () => patchModel(i, {
+                    references: [...refs, {
+                      source: { kind: 'table', table: '' }, alias: '', relationship: 'many_to_one',
+                      on: [{ primaryColumn: '', referencedColumn: '' }],
+                    }],
+                  }),
+                } : {})} />
+              {refs.map(referenceRow)}
+            </VStack>
+          )}
 
-                  {r.relationship !== 'many_to_many' ? (
-                    <VStack align="stretch" gap={1}>
-                      {r.on.map((pair, k) => (
-                        <HStack key={k} gap={2}>
-                          <ColumnSelect label={`semantic-model-${i}-reference-${j}-on-${k}-primary-column`}
-                            columns={primaryColumns} value={pair.primaryColumn}
-                            onChange={(v) => patchRef(j, { ...r, on: r.on.map((p, x) => (x === k ? { ...p, primaryColumn: v } : p)) })} />
-                          <Text fontSize="xs" color="fg.subtle">=</Text>
-                          <ColumnSelect label={`semantic-model-${i}-reference-${j}-on-${k}-referenced-column`}
-                            columns={refColumns} value={pair.referencedColumn}
-                            onChange={(v) => patchRef(j, { ...r, on: r.on.map((p, x) => (x === k ? { ...p, referencedColumn: v } : p)) })} />
-                          {r.on.length > 1 && (
-                            <DeleteRowButton label={`semantic-model-${i}-reference-${j}-on-${k}-delete`}
-                              onClick={() => patchRef(j, { ...r, on: r.on.filter((_, x) => x !== k) })} />
-                          )}
-                        </HStack>
-                      ))}
-                      <AddRowButton label={`semantic-model-${i}-reference-${j}-add-on-pair`} text="Add join columns"
-                        onClick={() => patchRef(j, { ...r, on: [...r.on, { primaryColumn: '', referencedColumn: '' }] })} />
-                    </VStack>
-                  ) : (
-                    (() => {
-                      const bridgeColumns = columnsOfSource(r.through.source, options);
-                      const primaryOn = r.through.primaryOn[0] ?? { primaryColumn: '', bridgeColumn: '' };
-                      const referencedOn = r.through.referencedOn[0] ?? { bridgeColumn: '', referencedColumn: '' };
-                      return (
-                        <VStack align="stretch" gap={1}>
-                          <HStack gap={2}>
-                            <Text fontSize="xs" color="fg.muted" flexShrink={0}>through bridge</Text>
-                            <SourceSelect label={`semantic-model-${i}-reference-${j}-bridge-source`} options={options}
-                              value={encodeSource(r.through.source)}
-                              onChange={(v) => patchRef(j, { ...r, through: { ...r.through, source: decodeSource(v) ?? { kind: 'table', table: '' } } })} />
-                          </HStack>
-                          <HStack gap={2}>
-                            <Text fontSize="xs" color="fg.muted" flexShrink={0}>primary</Text>
-                            <ColumnSelect label={`semantic-model-${i}-reference-${j}-primary-on-primary-column`}
-                              columns={primaryColumns} value={primaryOn.primaryColumn}
-                              onChange={(v) => patchRef(j, { ...r, through: { ...r.through, primaryOn: [{ ...primaryOn, primaryColumn: v }] } })} />
-                            <Text fontSize="xs" color="fg.subtle">=</Text>
-                            <ColumnSelect label={`semantic-model-${i}-reference-${j}-primary-on-bridge-column`}
-                              columns={bridgeColumns} value={primaryOn.bridgeColumn}
-                              onChange={(v) => patchRef(j, { ...r, through: { ...r.through, primaryOn: [{ ...primaryOn, bridgeColumn: v }] } })} />
-                            <Text fontSize="xs" color="fg.muted" flexShrink={0}>bridge</Text>
-                          </HStack>
-                          <HStack gap={2}>
-                            <Text fontSize="xs" color="fg.muted" flexShrink={0}>bridge</Text>
-                            <ColumnSelect label={`semantic-model-${i}-reference-${j}-referenced-on-bridge-column`}
-                              columns={bridgeColumns} value={referencedOn.bridgeColumn}
-                              onChange={(v) => patchRef(j, { ...r, through: { ...r.through, referencedOn: [{ ...referencedOn, bridgeColumn: v }] } })} />
-                            <Text fontSize="xs" color="fg.subtle">=</Text>
-                            <ColumnSelect label={`semantic-model-${i}-reference-${j}-referenced-on-referenced-column`}
-                              columns={refColumns} value={referencedOn.referencedColumn}
-                              onChange={(v) => patchRef(j, { ...r, through: { ...r.through, referencedOn: [{ ...referencedOn, referencedColumn: v }] } })} />
-                            <Text fontSize="xs" color="fg.muted" flexShrink={0}>referenced</Text>
-                          </HStack>
-                        </VStack>
-                      );
-                    })()
-                  )}
-                </VStack>
-              );
-            })}
-            <AddRowButton label={`semantic-model-${i}-add-reference`} text="Add reference"
-              onClick={() => patchModel(i, {
-                references: [...refs, {
-                  source: { kind: 'table', table: '' }, alias: '', relationship: 'many_to_one',
-                  on: [{ primaryColumn: '', referencedColumn: '' }],
-                }],
-              })} />
-          </VStack>
+          {(canEdit || timeDims.length > 0) && (
+            <VStack align="stretch" gap={0.5} aria-label={`semantic-model-${i}-time-dimensions`}>
+              <SectionHeading label="Time Dimensions" count={timeDims.length}
+                {...(canEdit ? {
+                  addLabel: `semantic-model-${i}-add-time-dimension`,
+                  onAdd: () => patchModel(i, {
+                    dimensions: [...m.dimensions, { name: '', source: 'primary', column: '', temporal: true }],
+                  }),
+                } : {})} />
+              {timeDims.map(timeDimRow)}
+            </VStack>
+          )}
 
-          {/* Dimensions */}
-          <VStack align="stretch" gap={1}>
-            <SectionLabel>Dimensions</SectionLabel>
-            {m.dimensions.map((d, j) => (
-              <HStack key={j} gap={2} flexWrap="wrap">
-                <Input aria-label={`semantic-model-${i}-dimension-${j}-name`} size="sm" maxW="200px"
-                  value={d.name} placeholder="dimension name"
-                  onChange={(e) => patchModel(i, { dimensions: m.dimensions.map((x, k) => (k === j ? { ...x, name: e.target.value } : x)) })} />
-                <select aria-label={`semantic-model-${i}-dimension-${j}-source`} style={selectStyle} value={d.source}
-                  onChange={(e) => patchModel(i, { dimensions: m.dimensions.map((x, k) => (k === j ? { ...x, source: e.target.value, column: '' } : x)) })}>
-                  <option value="primary">primary</option>
-                  {refs.filter((r) => r.alias).map((r) => <option key={r.alias} value={r.alias}>{r.alias}</option>)}
-                  {d.source !== 'primary' && !refs.some((r) => r.alias === d.source) && <option value={d.source}>{d.source}</option>}
-                </select>
-                <ColumnSelect label={`semantic-model-${i}-dimension-${j}-column`} columns={aliasColumns(d.source)}
-                  value={d.column}
-                  onChange={(v) => patchModel(i, { dimensions: m.dimensions.map((x, k) => (k === j ? { ...x, column: v } : x)) })} />
-                <Checkbox aria-label={`semantic-model-${i}-dimension-${j}-temporal`} size="sm"
-                  checked={!!d.temporal}
-                  onCheckedChange={(e: { checked: boolean | 'indeterminate' }) =>
-                    patchModel(i, { dimensions: m.dimensions.map((x, k) => (k === j ? { ...x, temporal: e.checked === true || undefined } : x)) })}>
-                  <Text fontSize="xs" color="fg.muted">temporal</Text>
-                </Checkbox>
-                <DeleteRowButton label={`semantic-model-${i}-dimension-${j}-delete`}
-                  onClick={() => patchModel(i, { dimensions: m.dimensions.filter((_, k) => k !== j) })} />
-              </HStack>
-            ))}
-            <AddRowButton label={`semantic-model-${i}-add-dimension`} text="Add dimension"
-              onClick={() => patchModel(i, { dimensions: [...m.dimensions, { name: '', source: 'primary', column: '' }] })} />
-          </VStack>
+          {(canEdit || plainDims.length > 0) && (
+            <VStack align="stretch" gap={0.5} aria-label={`semantic-model-${i}-plain-dimensions`}>
+              <SectionHeading label="Dimensions" count={plainDims.length}
+                {...(canEdit ? {
+                  addLabel: `semantic-model-${i}-add-dimension`,
+                  onAdd: () => patchModel(i, {
+                    dimensions: [...m.dimensions, { name: '', source: 'primary', column: '' }],
+                  }),
+                } : {})} />
+              {plainDims.map(plainDimRow)}
+            </VStack>
+          )}
 
-          {/* Measures */}
-          <VStack align="stretch" gap={1}>
-            <SectionLabel>Measures</SectionLabel>
-            {m.measures.map((ms, j) => (
-              <HStack key={j} gap={2} flexWrap="wrap">
-                <Input aria-label={`semantic-model-${i}-measure-${j}-name`} size="sm" maxW="200px"
-                  value={ms.name} placeholder="measure name"
-                  onChange={(e) => patchModel(i, { measures: m.measures.map((x, k) => (k === j ? { ...x, name: e.target.value } : x)) })} />
-                <select aria-label={`semantic-model-${i}-measure-${j}-agg`} style={selectStyle} value={ms.agg}
-                  onChange={(e) => patchModel(i, { measures: m.measures.map((x, k) => (k === j ? { ...x, agg: e.target.value as typeof ms.agg } : x)) })}>
-                  {AGGS.map((a) => <option key={a} value={a}>{a}</option>)}
-                </select>
-                <ColumnSelect label={`semantic-model-${i}-measure-${j}-column`} columns={primaryColumns}
-                  value={ms.column ?? ''} emptyLabel="(no column — COUNT(*))"
-                  onChange={(v) => patchModel(i, { measures: m.measures.map((x, k) => (k === j ? { ...x, column: v || undefined } : x)) })} />
-                <DeleteRowButton label={`semantic-model-${i}-measure-${j}-delete`}
-                  onClick={() => patchModel(i, { measures: m.measures.filter((_, k) => k !== j) })} />
-              </HStack>
-            ))}
-            <AddRowButton label={`semantic-model-${i}-add-measure`} text="Add measure"
-              onClick={() => patchModel(i, { measures: [...m.measures, { name: '', agg: 'SUM', column: '' }] })} />
-          </VStack>
-
-          {/* Metrics */}
-          <VStack align="stretch" gap={1}>
-            <SectionLabel>Metrics</SectionLabel>
-            {(m.metrics ?? []).map((mt, j) => (
-              <VStack key={j} align="stretch" gap={1} p={2} border="1px solid" borderColor="border.muted" borderRadius="md">
-                <HStack gap={2} flexWrap="wrap">
-                  <Input aria-label={`semantic-model-${i}-metric-${j}-name`} size="sm" maxW="200px"
-                    value={mt.name} placeholder="metric name"
-                    onChange={(e) => patchMetric(j, { ...mt, name: e.target.value })} />
-                  <select aria-label={`semantic-model-${i}-metric-${j}-type`} style={selectStyle} value={mt.type}
-                    onChange={(e) => patchMetric(j, e.target.value === 'ratio'
-                      ? { name: mt.name, type: 'ratio', numerator: '', denominator: '', description: mt.description }
-                      : { name: mt.name, type: 'sql', sql: '', description: mt.description })}>
-                    <option value="ratio">ratio</option>
-                    <option value="sql">sql</option>
-                  </select>
-                  {mt.type === 'ratio' && (
-                    <>
-                      <select aria-label={`semantic-model-${i}-metric-${j}-numerator`} style={selectStyle} value={mt.numerator}
-                        onChange={(e) => patchMetric(j, { ...mt, numerator: e.target.value })}>
-                        <option value="">Numerator…</option>
-                        {measureNames.map((n) => <option key={n} value={n}>{n}</option>)}
-                      </select>
-                      <Text fontSize="xs" color="fg.subtle">/</Text>
-                      <select aria-label={`semantic-model-${i}-metric-${j}-denominator`} style={selectStyle} value={mt.denominator}
-                        onChange={(e) => patchMetric(j, { ...mt, denominator: e.target.value })}>
-                        <option value="">Denominator…</option>
-                        {measureNames.map((n) => <option key={n} value={n}>{n}</option>)}
-                      </select>
-                    </>
-                  )}
-                  {mt.verified === false && <UnverifiedBadge label={`semantic-model-${i}-metric-${j}-unverified`} />}
-                  <Box flex={1} />
-                  <DeleteRowButton label={`semantic-model-${i}-metric-${j}-delete`}
-                    onClick={() => patchModel(i, { metrics: (m.metrics ?? []).filter((_, k) => k !== j) })} />
-                </HStack>
-                {mt.type === 'sql' && (
-                  <VStack align="stretch" gap={0.5}>
-                    <Textarea aria-label={`semantic-model-${i}-metric-${j}-sql`} fontFamily="mono" fontSize="xs" rows={2}
-                      value={mt.sql} placeholder="SUM(primary.amount) - SUM(costs.total)"
-                      onChange={(e) => patchMetric(j, { ...mt, sql: e.target.value })} />
-                    <Text fontSize="2xs" color="fg.subtle">
-                      qualify columns as primary.&lt;col&gt; or &lt;alias&gt;.&lt;col&gt;
-                    </Text>
-                  </VStack>
-                )}
-                {/* Tier-2/3 problems for THIS metric, at the row that caused them. */}
-                {metricIssues(j).length > 0 && (
-                  <IssueList label={`semantic-model-${i}-metric-${j}-issue`} issues={metricIssues(j)} />
-                )}
-              </VStack>
-            ))}
-            <AddRowButton label={`semantic-model-${i}-add-metric`} text="Add metric"
-              onClick={() => patchModel(i, { metrics: [...(m.metrics ?? []), { name: '', type: 'ratio', numerator: '', denominator: '' }] })} />
-          </VStack>
-
-          {/* Time dimension */}
-          <VStack align="stretch" gap={1}>
-            <SectionLabel>Time dimension</SectionLabel>
-            <HStack gap={2} flexWrap="wrap">
-              <ColumnSelect label={`semantic-model-${i}-time-dimension-column`}
-                columns={temporalColumns.length > 0 ? temporalColumns : primaryColumns}
-                value={m.timeDimension?.column ?? ''} emptyLabel="(none)"
-                onChange={(v) => patchModel(i, { timeDimension: v ? { ...m.timeDimension, column: v } : undefined })} />
-              {m.timeDimension && (
-                <>
-                  <Input aria-label={`semantic-model-${i}-time-dimension-label`} size="sm" maxW="200px"
-                    value={m.timeDimension.label ?? ''} placeholder="label"
-                    onChange={(e) => patchModel(i, { timeDimension: { ...m.timeDimension!, label: e.target.value || undefined } })} />
-                  <Button aria-label={`semantic-model-${i}-time-dimension-clear`} size="2xs" variant="ghost"
-                    onClick={() => patchModel(i, { timeDimension: undefined })}>Clear</Button>
-                </>
-              )}
-            </HStack>
-          </VStack>
+          {(canEdit || m.metrics.length > 0) && (
+            <VStack align="stretch" gap={0.5}>
+              <SectionHeading label="Metrics" count={m.metrics.length}
+                {...(canEdit ? {
+                  addLabel: `semantic-model-${i}-add-metric`,
+                  onAdd: () => patchModel(i, {
+                    metrics: [...m.metrics, { name: '', type: 'aggregation', agg: 'COUNT' }],
+                  }),
+                } : {})} />
+              {m.metrics.map(metricRow)}
+            </VStack>
+          )}
         </VStack>
       </Box>
     );
   };
 
-  // -------------------------------------------------------------------------
-  // Catalog — business names only (no tables, no SQL), grouped by connection.
-  // -------------------------------------------------------------------------
-
-  const renderCatalog = () => {
-    const all: Array<{ m: SemanticModelV2; inherited: boolean }> = [
-      ...models.map((m) => ({ m, inherited: false })),
-      ...inheritedModels
-        .filter((im) => !models.some((m) => m.name === im.name))
-        .map((m) => ({ m, inherited: true })),
-    ];
-    const connections = Array.from(new Set(all.map(({ m }) => m.connection)));
-    if (all.length === 0) {
-      return <Text fontSize="sm" color="fg.muted" p={3}>No semantic models defined yet.</Text>;
-    }
-    return (
-      <VStack align="stretch" gap={3}>
-        {connections.map((conn) => (
-          <Box key={conn} aria-label={`semantic-model-catalog-${conn}`}
-            border="1px solid" borderColor="border.default" borderRadius="md" bg="bg.surface" overflow="hidden">
-            <Box px={3} py={1.5} bg="bg.muted" borderBottom="1px solid" borderColor="border.default">
-              <Text fontSize="sm" fontWeight="700" fontFamily="mono">{conn}</Text>
-            </Box>
-            <VStack align="stretch" gap={3} p={3}>
-              {all.filter(({ m }) => m.connection === conn).map(({ m, inherited }) => (
-                <Box key={m.name}>
-                  <HStack gap={2} mb={1}>
-                    <Icon as={LuBoxes} boxSize={3.5} color="accent.teal" />
-                    <Text fontSize="sm" fontWeight="700">{m.name}</Text>
-                    {inherited && (
-                      <Text fontSize="10px" fontWeight="600" color="accent.teal" fontFamily="mono">inherited</Text>
-                    )}
-                    {m.description && <Text fontSize="xs" color="fg.muted" truncate>{m.description}</Text>}
-                  </HStack>
-                  <VStack align="stretch" gap={0.5} pl={5}>
-                    {m.dimensions.length > 0 && (
-                      <Box>
-                        <SectionLabel>Dimensions</SectionLabel>
-                        {m.dimensions.map((d) => (
-                          <HStack key={d.name} gap={2}>
-                            <Text fontSize="xs" fontWeight="500">{d.name}</Text>
-                            {d.description && <Text fontSize="xs" color="fg.muted" truncate>{d.description}</Text>}
-                          </HStack>
-                        ))}
-                      </Box>
-                    )}
-                    {(m.measures.length > 0 || (m.metrics ?? []).length > 0) && (
-                      <Box>
-                        <SectionLabel>Measures &amp; Metrics</SectionLabel>
-                        {m.measures.map((ms) => (
-                          <HStack key={ms.name} gap={2}>
-                            <Text fontSize="xs" fontWeight="500">{ms.name}</Text>
-                            {ms.description && <Text fontSize="xs" color="fg.muted" truncate>{ms.description}</Text>}
-                          </HStack>
-                        ))}
-                        {(m.metrics ?? []).map((mt) => (
-                          <HStack key={mt.name} gap={2}>
-                            <Text fontSize="xs" fontWeight="500">{mt.name}</Text>
-                            {mt.description && <Text fontSize="xs" color="fg.muted" truncate>{mt.description}</Text>}
-                            {mt.verified === false && <UnverifiedBadge label={`semantic-model-catalog-${mt.name}-unverified`} />}
-                          </HStack>
-                        ))}
-                      </Box>
-                    )}
-                  </VStack>
-                </Box>
-              ))}
-            </VStack>
-          </Box>
-        ))}
-      </VStack>
-    );
-  };
+  const visibleInherited = inheritedModels.filter((im) => !models.some((m) => m.name === im.name));
+  if (!editMode && models.length === 0 && visibleInherited.length === 0) return null;
 
   return (
-    <VStack align="stretch" gap={3}>
-      <HStack justify="space-between">
+    <VStack align="stretch" gap={2} aria-label={`Semantic models for ${connection}`}>
+      <HStack gap={1.5} align="center">
+        <Icon as={LuBoxes} boxSize={3.5} color="accent.teal" />
         <Text fontSize="sm" fontWeight="700" fontFamily="mono">Semantic Models</Text>
+        {models.length + visibleInherited.length > 0 && (
+          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">{models.length + visibleInherited.length}</Text>
+        )}
         {editMode && (
-          <HStack gap={2}>
-            <Button aria-label="semantic-model-catalog-toggle" size="xs" variant="outline"
-              onClick={() => setBrowseMode(browseMode === 'edit' ? 'catalog' : 'edit')}>
-              {browseMode === 'edit' ? 'Catalog' : 'Edit'}
-            </Button>
-            {mode === 'edit' && (
-              <Button aria-label="add-semantic-model" size="xs" variant="outline" onClick={addModel}>
-                <LuPlus /> New Semantic Model
-              </Button>
-            )}
-          </HStack>
+          <Box as="button" aria-label="add-semantic-model" onClick={addModel} color="fg.subtle" cursor="pointer"
+            borderRadius="sm" px={0.5} _hover={{ color: 'accent.teal', bg: 'bg.muted' }} lineHeight={1}
+            title="New semantic model">
+            <Icon as={LuPlus} boxSize={3.5} />
+          </Box>
         )}
       </HStack>
-      {/* Issues we could not pin to a row on screen (a model of another
-          version, or one renamed since the failed save) — never dropped. */}
       {attributed.unattributed.length > 0 && (
         <IssueList label="semantic-model-unattributed-issues" issues={attributed.unattributed} />
       )}
-      {mode === 'edit' ? (
-        <VStack align="stretch" gap={3}>
-          {models.length === 0 && (
-            <Text fontSize="sm" color="fg.muted">No semantic models defined yet. Add one to expose curated dimensions and metrics.</Text>
-          )}
-          {models.map(renderModel)}
-        </VStack>
-      ) : renderCatalog()}
+      {editMode && models.length === 0 && visibleInherited.length === 0 && (
+        <Text fontSize="xs" color="fg.muted">
+          No semantic models yet — add one to expose curated dimensions and metrics for this connection.
+        </Text>
+      )}
+      {models.map((m, i) => renderModel(m, i, false))}
+      {visibleInherited.map((m, i) => renderModel(m, models.length + i, true))}
     </VStack>
   );
 }

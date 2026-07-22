@@ -2,7 +2,7 @@
  * Derived semantic models — the draft-suggestion engine.
  *
  * A semantic model is pure vocabulary: which columns group (dimensions), which
- * aggregate (measures), and which column is the time axis. All of that is
+ * aggregate (aggregation metrics), and which column is the time axis. All of that is
  * derivable from the whitelisted schema + profiled column metadata
  * (`ColumnMeta.category`), so draft models are DERIVED on demand — one model
  * per table. Authored models (`ContextVersion.semanticModels`) are the source
@@ -25,7 +25,7 @@
 import type {
   DatabaseWithSchema,
   SemanticDimensionV2,
-  SemanticMeasureV2,
+  SemanticAggMetricV2,
   SemanticModelV2,
 } from '@/lib/types';
 
@@ -57,7 +57,7 @@ const TEMPORAL_TYPE = /date|time/i;
  * low-cardinality integers (clicks, impressions) as "categorical" for LLM
  * context, and that must never strip a numeric column's aggregates. A
  * categorical-profiled numeric additionally stays groupable (derive adds a
- * dimension for it alongside the measures).
+ * dimension for it alongside the aggregation metrics).
  */
 export function classifyColumn(column: SchemaColumnLike): ColumnKind {
   if (ID_NAME.test(column.name)) return 'id';
@@ -150,42 +150,39 @@ export function deriveSemanticModels(
         const columns = (t.columns ?? []) as SchemaColumnLike[];
         if (columns.length === 0) continue; // names-only (bounded) → inherited fallback below
 
-        const dimensions: SemanticDimensionV2[] = [];
-        const measures: SemanticMeasureV2[] = [{ name: 'Count', agg: 'COUNT' }];
-        const temporal: SchemaColumnLike[] = [];
+        const plainDims: SemanticDimensionV2[] = [];
+        const timeDims: SemanticDimensionV2[] = [];
+        const metrics: SemanticAggMetricV2[] = [{ name: 'Count', type: 'aggregation', agg: 'COUNT' }];
 
         for (const c of columns) {
           const kind = classifyColumn(c);
           if (kind === 'dimension') {
-            dimensions.push({ name: humanizeName(c.name), column: c.name, source: 'primary' });
+            plainDims.push({ name: humanizeName(c.name), column: c.name, source: 'primary' });
           } else if (kind === 'time') {
-            temporal.push(c);
-            dimensions.push({ name: humanizeName(c.name), column: c.name, source: 'primary', temporal: true });
+            timeDims.push({ name: humanizeName(c.name), column: c.name, source: 'primary', temporal: true });
           } else if (kind === 'id') {
-            dimensions.push({ name: humanizeName(c.name), column: c.name, source: 'primary' });
-            measures.push({ name: `Unique ${idBaseName(c.name)}`, agg: 'COUNT_DISTINCT', column: c.name });
+            plainDims.push({ name: humanizeName(c.name), column: c.name, source: 'primary' });
+            metrics.push({ name: `Unique ${idBaseName(c.name)}`, type: 'aggregation', agg: 'COUNT_DISTINCT', column: c.name });
           } else {
-            measures.push({ name: `Total ${humanizeName(c.name)}`, agg: 'SUM', column: c.name });
-            measures.push({ name: `Avg ${humanizeName(c.name)}`, agg: 'AVG', column: c.name });
+            metrics.push({ name: `Total ${humanizeName(c.name)}`, type: 'aggregation', agg: 'SUM', column: c.name });
+            metrics.push({ name: `Avg ${humanizeName(c.name)}`, type: 'aggregation', agg: 'AVG', column: c.name });
             // Profiled categorical (low-cardinality) numerics stay groupable too.
             if (c.meta?.category === 'categorical') {
-              dimensions.push({ name: humanizeName(c.name), column: c.name, source: 'primary' });
+              plainDims.push({ name: humanizeName(c.name), column: c.name, source: 'primary' });
             }
           }
         }
 
-        temporal.sort((a, b) => timeColumnScore(a.name) - timeColumnScore(b.name));
-        const timeDimension = temporal.length > 0
-          ? { column: temporal[0].name, label: humanizeName(temporal[0].name) }
-          : undefined;
+        // The FIRST temporal dimension is the model's default time axis, so
+        // temporal dims lead the array, best-preferred (created_at-style) first.
+        timeDims.sort((a, b) => timeColumnScore(a.column) - timeColumnScore(b.column));
 
         models.push({
           name: stubNames.get(tableKey(db.databaseName, s.schema, t.table)) ?? humanizeName(t.table),
           connection: db.databaseName,
           primary: { kind: 'table', schema: s.schema, table: t.table },
-          timeDimension,
-          dimensions,
-          measures,
+          dimensions: [...timeDims, ...plainDims],
+          metrics,
         });
       }
     }

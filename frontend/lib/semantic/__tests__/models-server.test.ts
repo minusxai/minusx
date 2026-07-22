@@ -78,19 +78,17 @@ const ORDERS: SemanticModelV2 = {
     on: [{ primaryColumn: 'user_id', referencedColumn: 'id' }],
   }],
   dimensions: [
+    { name: 'Created At', source: 'primary', column: 'created_at', temporal: true },
     { name: 'Status', source: 'primary', column: 'status' },
     { name: 'Country', source: 'users', column: 'country' },
   ],
-  measures: [
-    { name: 'Count', agg: 'COUNT' },
-    { name: 'Total Amount', agg: 'SUM', column: 'amount' },
-    { name: 'Avg Amount', agg: 'AVG', column: 'amount' },
-  ],
   metrics: [
+    { name: 'Count', type: 'aggregation', agg: 'COUNT' },
+    { name: 'Total Amount', type: 'aggregation', agg: 'SUM', column: 'amount' },
+    { name: 'Avg Amount', type: 'aggregation', agg: 'AVG', column: 'amount' },
     { name: 'Avg Basket', type: 'ratio', numerator: 'Total Amount', denominator: 'Count' },
     { name: 'Net Revenue', type: 'sql', sql: 'SUM(primary.amount) - SUM(primary.refund)' },
   ],
-  timeDimension: { column: 'created_at', label: 'Order date' },
 };
 
 const USERS: SemanticModelV2 = {
@@ -98,7 +96,7 @@ const USERS: SemanticModelV2 = {
   connection: 'warehouse',
   primary: { kind: 'table', schema: 'public', table: 'users' },
   dimensions: [{ name: 'Country', source: 'primary', column: 'country' }],
-  measures: [{ name: 'User Count', agg: 'COUNT' }],
+  metrics: [{ name: 'User Count', type: 'aggregation', agg: 'COUNT' }],
 };
 
 // A model-primary (data model / view) — scoping matches on the VIEW name.
@@ -107,7 +105,7 @@ const REVENUE_MODEL: SemanticModelV2 = {
   connection: 'warehouse',
   primary: { kind: 'model', view: 'revenue_model' },
   dimensions: [{ name: 'Month', source: 'primary', column: 'month', temporal: true }],
-  measures: [{ name: 'Revenue', agg: 'SUM', column: 'revenue' }],
+  metrics: [{ name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'revenue' }],
 };
 
 // Lives on ANOTHER connection — must never be served for `warehouse`.
@@ -116,7 +114,7 @@ const EVENTS_ELSEWHERE: SemanticModelV2 = {
   connection: 'clickstream',
   primary: { kind: 'table', schema: 'public', table: 'events' },
   dimensions: [{ name: 'Kind', source: 'primary', column: 'kind' }],
-  measures: [{ name: 'Event Count', agg: 'COUNT' }],
+  metrics: [{ name: 'Event Count', type: 'aggregation', agg: 'COUNT' }],
 };
 
 // Authored on the CHILD context only.
@@ -125,7 +123,7 @@ const SIGNUPS: SemanticModelV2 = {
   connection: 'warehouse',
   primary: { kind: 'table', schema: 'public', table: 'users' },
   dimensions: [{ name: 'Signup Country', source: 'primary', column: 'country' }],
-  measures: [{ name: 'Signup Count', agg: 'COUNT' }],
+  metrics: [{ name: 'Signup Count', type: 'aggregation', agg: 'COUNT' }],
 };
 
 const mkVersion = (semanticModels: SemanticModelV2[]): ContextVersion => ({
@@ -165,11 +163,12 @@ describe('models.server — authored semantic models', () => {
         alias: 'users',
         on: [{ primaryColumn: 'user_id', referencedColumn: 'id' }],
       })],
-      timeDimension: expect.objectContaining({ column: 'created_at' }),
     })]);
-    // authored join dims survive as-authored (nothing is re-derived)
+    // authored join dims survive as-authored (nothing is re-derived), and the
+    // authored temporal dimension (the time axis) is present
     expect(models[0].dimensions).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'Country', source: 'users', column: 'country' }),
+      expect.objectContaining({ column: 'created_at', temporal: true }),
     ]));
   });
 
@@ -223,11 +222,11 @@ describe('models.server — authored semantic models', () => {
 
   // --- search ----------------------------------------------------------------
 
-  it('searchSemanticFields searches authored measures and dimensions (SemanticFieldHit shape)', async () => {
+  it('searchSemanticFields searches authored metrics and dimensions (SemanticFieldHit shape)', async () => {
     const hits = await searchSemanticFields(admin, { path: '/org', connection: 'warehouse', q: 'amount' });
     expect(hits).toEqual(expect.arrayContaining([
-      { kind: 'measure', name: 'Total Amount', model: 'Orders', connection: 'warehouse', schema: 'public', table: 'orders' },
-      expect.objectContaining({ kind: 'measure', name: 'Avg Amount', model: 'Orders' }),
+      { kind: 'metric', name: 'Total Amount', model: 'Orders', connection: 'warehouse', schema: 'public', table: 'orders' },
+      expect.objectContaining({ kind: 'metric', name: 'Avg Amount', model: 'Orders' }),
     ]));
 
     // dimension search reaches other models too
@@ -241,7 +240,7 @@ describe('models.server — authored semantic models', () => {
     expect(none).toEqual([]);
   });
 
-  it('searchSemanticFields surfaces authored METRICS (ratio and SQL), not just measures', async () => {
+  it('searchSemanticFields surfaces authored ratio and SQL metrics, not just aggregations', async () => {
     const ratio = await searchSemanticFields(admin, { path: '/org', connection: 'warehouse', q: 'basket' });
     expect(ratio).toEqual([
       { kind: 'metric', name: 'Avg Basket', model: 'Orders', connection: 'warehouse', schema: 'public', table: 'orders' },
@@ -256,7 +255,7 @@ describe('models.server — authored semantic models', () => {
   it('searchSemanticFields surfaces model-primary fields under the views schema', async () => {
     const hits = await searchSemanticFields(admin, { path: '/org', connection: 'warehouse', q: 'revenue' });
     expect(hits).toEqual(expect.arrayContaining([
-      { kind: 'measure', name: 'Revenue', model: 'Revenue Model', connection: 'warehouse', schema: VIEWS_SCHEMA, table: 'revenue_model' },
+      { kind: 'metric', name: 'Revenue', model: 'Revenue Model', connection: 'warehouse', schema: VIEWS_SCHEMA, table: 'revenue_model' },
     ]));
   });
 
@@ -275,7 +274,7 @@ describe('models.server — authored semantic models', () => {
       path: '/org', connection: 'warehouse',
       sql: 'SELECT status, COUNT(*) FROM public.orders GROUP BY status',
     });
-    expect(detected).toMatchObject({ model: 'Orders', dimensions: ['Status'], measures: ['Count'] });
+    expect(detected).toMatchObject({ model: 'Orders', dimensions: ['Status'], metrics: ['Count'] });
 
     const refused = await detectSemanticSql(admin, {
       path: '/org', connection: 'warehouse',

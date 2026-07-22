@@ -48,20 +48,17 @@ const MODEL: SemanticModelV2 = {
     { name: 'Tag', source: 'tag', column: 'name' },
     { name: 'Created At', source: 'primary', column: 'created_at', temporal: true },
   ],
-  measures: [
-    { name: 'Order Count', agg: 'COUNT' },
-    { name: 'Revenue', agg: 'SUM', column: 'amount' },
-  ],
   metrics: [
+    { name: 'Order Count', type: 'aggregation', agg: 'COUNT' },
+    { name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'amount' },
     { name: 'AOV', type: 'ratio', numerator: 'Revenue', denominator: 'Order Count' },
     { name: 'Net Revenue', type: 'sql', sql: 'SUM(primary.amount) - SUM(costs.total)' },
   ],
-  timeDimension: { column: 'created_at' },
 };
 
 const spec = (over: Partial<SemanticQuerySpec>): SemanticQuerySpec => ({
   model: 'Orders', table: 'orders', schema: 'main',
-  measures: [], dimensions: [],
+  metrics: [], dimensions: [],
   ...over,
 } as SemanticQuerySpec);
 
@@ -69,8 +66,8 @@ const sqlFor = (s: SemanticQuerySpec, dialect = 'duckdb'): string =>
   irToSqlLocal(compileSemanticQuery(s, MODEL), dialect);
 
 describe('V2 compilation — primary + to-one references', () => {
-  it('golden: measures only, no joins (unqualified, FROM schema.table)', () => {
-    const sql = sqlFor(spec({ measures: ['Revenue'] }));
+  it('golden: metrics only, no joins (unqualified, FROM schema.table)', () => {
+    const sql = sqlFor(spec({ metrics: ['Revenue'] }));
     expect(sql).toBe([
       'SELECT SUM(amount) AS revenue',
       'FROM main.orders',
@@ -80,7 +77,7 @@ describe('V2 compilation — primary + to-one references', () => {
   });
 
   it('golden: to-one join via author alias, base columns qualified', () => {
-    const sql = sqlFor(spec({ measures: ['Revenue'], dimensions: ['Buyer Name'] }));
+    const sql = sqlFor(spec({ metrics: ['Revenue'], dimensions: ['Buyer Name'] }));
     expect(sql).toBe([
       'SELECT',
       '  buyer.name AS buyer_name,',
@@ -94,7 +91,7 @@ describe('V2 compilation — primary + to-one references', () => {
   });
 
   it('a view reference joins as _views.<name> with its alias and joinType', () => {
-    const sql = sqlFor(spec({ measures: ['Order Count'], dimensions: ['Cost Bucket'] }));
+    const sql = sqlFor(spec({ metrics: ['Order Count'], dimensions: ['Cost Bucket'] }));
     expect(sql).toContain('JOIN _views.costs costs ON orders.id = costs.order_id');
     expect(sql).not.toMatch(/LEFT JOIN _views/); // INNER was declared
     expect(sql).toContain('costs.bucket AS cost_bucket');
@@ -105,9 +102,9 @@ describe('V2 compilation — primary + to-one references', () => {
       name: 'Costs', connection: 'wh',
       primary: { kind: 'model', view: 'costs' },
       dimensions: [{ name: 'Bucket', source: 'primary', column: 'bucket' }],
-      measures: [{ name: 'Spend', agg: 'SUM', column: 'total' }],
+      metrics: [{ name: 'Spend', type: 'aggregation', agg: 'SUM', column: 'total' }],
     };
-    const ir = compileSemanticQuery(spec({ model: 'Costs', measures: ['Spend'] }), viewPrimary);
+    const ir = compileSemanticQuery(spec({ model: 'Costs', metrics: ['Spend'] }), viewPrimary);
     expect(irToSqlLocal(ir, 'duckdb')).toContain('FROM _views.costs');
   });
 
@@ -123,15 +120,16 @@ describe('V2 compilation — primary + to-one references', () => {
         ],
       }],
       dimensions: MODEL.dimensions.filter((d) => d.source === 'primary' || d.source === 'buyer'),
-      metrics: [],
+      // Keep only the aggregation metrics — the ratio/SQL metrics reference the dropped `costs` alias.
+      metrics: MODEL.metrics.filter((m) => m.type === 'aggregation'),
     };
     const sql = irToSqlLocal(
-      compileSemanticQuery(spec({ measures: ['Revenue'], dimensions: ['Buyer Name'] }), composite), 'duckdb');
+      compileSemanticQuery(spec({ metrics: ['Revenue'], dimensions: ['Buyer Name'] }), composite), 'duckdb');
     expect(sql).toContain('ON orders.customer_id = buyer.id AND orders.region = buyer.region');
   });
 
   it('timeGrain uses dialect-correct DATE_TRUNC', () => {
-    const s = spec({ measures: ['Revenue'], timeGrain: 'MONTH' });
+    const s = spec({ metrics: ['Revenue'], timeGrain: 'MONTH' });
     expect(sqlFor(s, 'duckdb')).toContain("DATE_TRUNC('MONTH', created_at)");
     expect(sqlFor(s, 'bigquery')).toContain('DATE_TRUNC(created_at, MONTH)');
     expect(sqlFor(s, 'postgres')).toContain("DATE_TRUNC('MONTH', created_at)");
@@ -139,7 +137,7 @@ describe('V2 compilation — primary + to-one references', () => {
 
   it('filters on a reference dimension pull the join and qualify by alias', () => {
     const sql = sqlFor(spec({
-      measures: ['Revenue'],
+      metrics: ['Revenue'],
       filters: [{ dimension: 'Buyer Name', operator: '=', value: 'ACME' }],
     }));
     expect(sql).toContain("WHERE buyer.name = 'ACME'");
@@ -149,31 +147,31 @@ describe('V2 compilation — primary + to-one references', () => {
 
 describe('V2 SQL metrics', () => {
   it('compiles a SQL metric as a raw select column with primary rewritten', () => {
-    const sql = sqlFor(spec({ measures: ['Net Revenue'], dimensions: ['Region'] }));
+    const sql = sqlFor(spec({ metrics: ['Net Revenue'], dimensions: ['Region'] }));
     expect(sql).toContain('SUM(orders.amount) - SUM(costs.total) AS net_revenue');
   });
 
   it('metric-only join inclusion: a metric ref pulls its join with NO dimension using it', () => {
     // Only primary dimensions selected — the join must come from the metric refs.
-    const sql = sqlFor(spec({ measures: ['Net Revenue'] }));
+    const sql = sqlFor(spec({ metrics: ['Net Revenue'] }));
     expect(sql).toContain('JOIN _views.costs costs ON orders.id = costs.order_id');
   });
 
   it('ratio metrics qualify by the base when joins are in play', () => {
-    const sql = sqlFor(spec({ measures: ['AOV'], dimensions: ['Buyer Name'] }));
+    const sql = sqlFor(spec({ metrics: ['AOV'], dimensions: ['Buyer Name'] }));
     expect(sql).toContain('SUM(orders.amount) * 1.0 / NULLIF(COUNT(*), 0) AS aov');
   });
 });
 
 describe('m2m compiles (full coverage in m2m.test.ts)', () => {
   it('an m2m dimension compiles to a dedup-bridge CTE + LEFT join', () => {
-    const sql = sqlFor(spec({ measures: ['Revenue'], dimensions: ['Tag'] }));
+    const sql = sqlFor(spec({ metrics: ['Revenue'], dimensions: ['Tag'] }));
     expect(sql).toMatch(/^WITH _m2m_tag AS \(/);
     expect(sql).toContain('LEFT JOIN _m2m_tag ON orders.id = _m2m_tag._pk0');
   });
 
   it('an m2m filter compiles to a correlated EXISTS', () => {
-    const sql = sqlFor(spec({ measures: ['Revenue'], filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }] }));
+    const sql = sqlFor(spec({ metrics: ['Revenue'], filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }] }));
     expect(sql).toContain('EXISTS (SELECT 1');
     expect(sql).toContain('order_tags.order_id = orders.id');
   });
@@ -181,20 +179,20 @@ describe('m2m compiles (full coverage in m2m.test.ts)', () => {
 
 describe('validateSemanticQuery (V2)', () => {
   it('accepts SQL metrics as measurables', () => {
-    expect(validateSemanticQuery(spec({ measures: ['Net Revenue'] }), MODEL)).toEqual([]);
+    expect(validateSemanticQuery(spec({ metrics: ['Net Revenue'] }), MODEL)).toEqual([]);
   });
 
   it('keeps human-readable unknown-name errors', () => {
-    const issues = validateSemanticQuery(spec({ measures: ['Ghost'], dimensions: ['Nope'] }), MODEL);
+    const issues = validateSemanticQuery(spec({ metrics: ['Ghost'], dimensions: ['Nope'] }), MODEL);
     expect(issues.some((i) => i.includes('Ghost'))).toBe(true);
     expect(issues.some((i) => i.includes('Nope'))).toBe(true);
   });
 
   it('spec.timeColumn accepts any PRIMARY temporal dimension column', () => {
     expect(validateSemanticQuery(
-      spec({ measures: ['Revenue'], timeGrain: 'DAY', timeColumn: 'created_at' }), MODEL)).toEqual([]);
+      spec({ metrics: ['Revenue'], timeGrain: 'DAY', timeColumn: 'created_at' }), MODEL)).toEqual([]);
     const bad = validateSemanticQuery(
-      spec({ measures: ['Revenue'], timeGrain: 'DAY', timeColumn: 'name' }), MODEL);
+      spec({ metrics: ['Revenue'], timeGrain: 'DAY', timeColumn: 'name' }), MODEL);
     expect(bad.length).toBeGreaterThan(0);
   });
 });

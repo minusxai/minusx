@@ -265,8 +265,10 @@ describe('fileToMarkup / markupToContent — context (flattened agent view)', ()
       connection: 'wh',
       primary: { kind: 'table', schema: 'main', table: 'orders' },
       dimensions: [{ name: 'Region', source: 'primary', column: 'region' }],
-      measures: [{ name: 'Revenue', agg: 'SUM', column: 'amount' }],
-      metrics: [{ name: 'Net Revenue', type: 'sql', sql: 'SUM(primary.amount) - SUM(primary.refund)' }],
+      metrics: [
+        { name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'amount' },
+        { name: 'Net Revenue', type: 'sql', sql: 'SUM(primary.amount) - SUM(primary.refund)' },
+      ],
     };
     const markup = fileToMarkup('context', { docs: [], semanticModels: [model] });
     expect(markup).toContain('semanticModels');

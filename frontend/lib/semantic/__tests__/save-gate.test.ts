@@ -39,8 +39,12 @@ const model = (overrides: Partial<SemanticModelV2> = {}): SemanticModelV2 => ({
   connection: 'warehouse',
   primary: { kind: 'table', schema: 'mxfood', table: 'orders' },
   dimensions: [{ name: 'Zone', source: 'primary', column: 'zone_name' }],
-  measures: [{ name: 'Revenue', agg: 'SUM', column: 'total' }],
   ...overrides,
+  // The Revenue aggregation metric is always present; override metrics append after it.
+  metrics: [
+    { name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'total' },
+    ...(overrides.metrics ?? []),
+  ],
 });
 
 const version = (semanticModels: SemanticModelV2[], views: ViewDef[] = []): ContextVersion => ({
@@ -98,8 +102,9 @@ describe('semantic model save gate (tier 1)', () => {
 
   it('tier 2: compile-probes every metric on save (an uncompilable metric blocks)', async () => {
     // A ratio metric that survives a hypothetical weaker tier-1 but must be
-    // compile-probed: numerator names a METRIC (not a measure) — tier-1 catches
-    // this too, but the assertion locks that the save path reports it.
+    // compile-probed: numerator names a SQL metric (not an aggregation metric)
+    // — tier-1 catches this too, but the assertion locks that the save path
+    // reports it.
     const bad = model({
       metrics: [
         { name: 'Half Revenue', type: 'sql', sql: 'SUM(primary.total) / 2' },

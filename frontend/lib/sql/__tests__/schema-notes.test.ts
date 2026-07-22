@@ -86,17 +86,15 @@ describe('getDocumentationForUser — Semantic Models projection', () => {
       { name: 'Region', source: 'primary', column: 'region' },
       { name: 'Buyer Name', source: 'buyer', column: 'name' },
     ],
-    measures: [
-      { name: 'Revenue', agg: 'SUM' as const, column: 'amount' },
-      { name: 'Orders Count', agg: 'COUNT' as const },
-    ],
     metrics: [
+      { name: 'Revenue', type: 'aggregation' as const, agg: 'SUM' as const, column: 'amount' },
+      { name: 'Orders Count', type: 'aggregation' as const, agg: 'COUNT' as const },
       { name: 'AOV', type: 'ratio' as const, numerator: 'Revenue', denominator: 'Orders Count' },
       { name: 'Net Revenue', type: 'sql' as const, sql: 'SUM(primary.amount) - SUM(costs.total)' },
     ],
   };
 
-  it('renders the live version\'s authored models compactly (name, primary, refs, dims, measures, metrics)', () => {
+  it('renders the live version\'s authored models compactly (name, primary, refs, dims, metrics)', () => {
     const ctx = makeContext({ semanticModels: [ordersModel] } as never);
     const doc = getDocumentationForUser(ctx, 1)!;
     expect(doc).toContain('### Semantic Models');
@@ -104,8 +102,7 @@ describe('getDocumentationForUser — Semantic Models projection', () => {
     expect(doc).toContain('Order-grain revenue model');
     expect(doc).toContain('refs: buyer = many_to_one main.customers ON customer_id=id; tags = many_to_many main.tags THROUGH main.order_tags ON id=order_id, tag_id=id');
     expect(doc).toContain('dims: Region=region, Buyer Name=buyer.name');
-    expect(doc).toContain('measures: Revenue=SUM(amount), Orders Count=COUNT(*)');
-    expect(doc).toContain('metrics: AOV = Revenue / Orders Count, Net Revenue = SUM(primary.amount) - SUM(costs.total)');
+    expect(doc).toContain('metrics: Revenue = SUM(amount), Orders Count = COUNT(*), AOV = Revenue / Orders Count, Net Revenue = SUM(primary.amount) - SUM(costs.total)');
   });
 
   it('includes inherited models (fullSemanticModels) alongside the live version\'s own', () => {
@@ -115,11 +112,11 @@ describe('getDocumentationForUser — Semantic Models projection', () => {
       connection: 'wh',
       primary: { kind: 'model', view: 'active_users' },
       dimensions: [{ name: 'Country', source: 'primary', column: 'country' }],
-      measures: [{ name: 'Users', agg: 'COUNT_DISTINCT', column: 'user_id' }],
+      metrics: [{ name: 'Users', type: 'aggregation', agg: 'COUNT_DISTINCT', column: 'user_id' }],
     }];
     const doc = getDocumentationForUser(ctx, 1)!;
     expect(doc).toContain('Semantic model "Users" (connection wh, primary _views.active_users)');
-    expect(doc).toContain('measures: Users=COUNT_DISTINCT(user_id)');
+    expect(doc).toContain('metrics: Users = COUNT_DISTINCT(user_id)');
     expect(doc).toContain('Semantic model "Orders"');
   });
 

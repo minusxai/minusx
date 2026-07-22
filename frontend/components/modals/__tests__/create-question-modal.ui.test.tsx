@@ -51,7 +51,7 @@ vi.mock('@/lib/hooks/use-semantic-models', () => ({
           connection: 'test-db',
           primary: { kind: 'table', schema: 'public', table: 'orders' },
           dimensions: [{ name: 'Status', source: 'primary', column: 'status' }],
-          measures: [{ name: 'Count', agg: 'COUNT' }],
+          metrics: [{ name: 'Count', type: 'aggregation', agg: 'COUNT' }],
         }]
       : [],
   }),

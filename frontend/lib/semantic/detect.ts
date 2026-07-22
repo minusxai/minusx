@@ -93,9 +93,9 @@ function matchModel(ir: QueryIR, model: SemanticModelV2): SemanticQuerySpec | nu
     });
   };
 
-  // --- SELECT list → dimensions / time / measures ---------------------------
+  // --- SELECT list → dimensions / time / metrics ----------------------------
   const dimensions: string[] = [];
-  const measures: string[] = [];
+  const metrics: string[] = [];
   let timeGrain: SemanticQuerySpec['timeGrain'];
   let timeColumn: string | undefined;
 
@@ -105,42 +105,42 @@ function matchModel(ir: QueryIR, model: SemanticModelV2): SemanticQuerySpec | nu
       if (!dim) return null;
       dimensions.push(dim.name);
     } else if (col.type === 'expression' && col.function === 'DATE_TRUNC') {
-      // Any PRIMARY temporal column can be the time axis (spec.timeColumn), not
-      // just the model's default timeDimension.
-      const isDefault = !!model.timeDimension && col.column === model.timeDimension.column;
-      const isTemporalDim = !!col.column &&
-        model.dimensions.some((d) => d.column === col.column && d.temporal && d.source === 'primary');
-      if ((!isDefault && !isTemporalDim) || !col.unit) return null;
+      // Any PRIMARY temporal dimension can be the time axis (spec.timeColumn);
+      // the FIRST one is the model's default and needs no timeColumn.
+      const temporalDims = model.dimensions.filter((d) => d.temporal && d.source === 'primary');
+      const isDefault = temporalDims.length > 0 && col.column === temporalDims[0].column;
+      const isTemporalDim = !!col.column && temporalDims.some((d) => d.column === col.column);
+      if (!isTemporalDim || !col.unit) return null;
       if (col.table && col.table !== primaryName && col.table !== ir.from.alias) return null;
       if (timeGrain) return null; // one time axis max
       timeGrain = col.unit as SemanticQuerySpec['timeGrain'];
       if (!isDefault) timeColumn = col.column!;
     } else if (col.type === 'aggregate' && col.aggregate) {
-      const measure = model.measures.find((m) =>
-        m.agg === col.aggregate && (m.column ?? null) === (col.column ?? null) && !col.wrapper_function,
+      const aggMetric = model.metrics.find((m) =>
+        m.type === 'aggregation' && m.agg === col.aggregate && (m.column ?? null) === (col.column ?? null) && !col.wrapper_function,
       );
-      if (!measure) return null;
-      measures.push(measure.name);
+      if (!aggMetric) return null;
+      metrics.push(aggMetric.name);
     } else if (col.type === 'raw' && col.raw_sql) {
       // Ratio metrics compile to a fixed raw shape — match by regenerating it.
       // The compiler qualifies columns with the base name when the query has
       // joins, so accept BOTH the qualified and unqualified renderings.
-      const metric = (model.metrics ?? []).find((mt) => {
+      const metric = model.metrics.find((mt) => {
         if (mt.type !== 'ratio') return false;
-        const num = model.measures.find((m) => m.name === mt.numerator);
-        const den = model.measures.find((m) => m.name === mt.denominator);
-        if (!num || !den) return false;
+        const num = model.metrics.find((m) => m.type === 'aggregation' && m.name === mt.numerator);
+        const den = model.metrics.find((m) => m.type === 'aggregation' && m.name === mt.denominator);
+        if (num?.type !== 'aggregation' || den?.type !== 'aggregation') return false;
         const got = normalizeRaw(col.raw_sql!);
         return [undefined, primaryName].some((qual) =>
           got === normalizeRaw(`${aggSql(num, qual)} * 1.0 / NULLIF(${aggSql(den, qual)}, 0)`));
       });
       if (!metric) return null;
-      measures.push(metric.name);
+      metrics.push(metric.name);
     } else {
       return null;
     }
   }
-  if (measures.length === 0) return null;
+  if (metrics.length === 0) return null;
 
   // --- WHERE → dimension filters (flat AND only) -----------------------------
   const filters: SemanticQueryFilter[] = [];
@@ -164,7 +164,7 @@ function matchModel(ir: QueryIR, model: SemanticModelV2): SemanticQuerySpec | nu
     // Scope hints so the client can re-fetch this model on demand later.
     table: primary.table,
     ...(primary.schema ? { schema: primary.schema } : {}),
-    measures,
+    metrics,
     dimensions,
     ...(timeGrain ? { timeGrain } : {}),
     ...(timeColumn ? { timeColumn } : {}),

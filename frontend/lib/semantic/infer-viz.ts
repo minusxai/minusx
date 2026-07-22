@@ -29,7 +29,7 @@ export function inferVizType(spec: SemanticQuerySpec): InferredVizType {
  */
 export function recommendedVizTypes(spec: SemanticQuerySpec): InferredVizType[] {
   const dims = spec.dimensions.length;
-  const measures = spec.measures.length;
+  const measures = spec.metrics.length;
   const rec: InferredVizType[] = [inferVizType(spec)];
 
   if (spec.timeGrain) {

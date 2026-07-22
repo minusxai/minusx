@@ -43,7 +43,7 @@ export async function fetchScopedModels(
   return load;
 }
 
-/** Metrics-first typeahead: search measures/dimensions across the whitelist. */
+/** Metrics-first typeahead: search metrics/dimensions across the whitelist. */
 export async function searchFields(
   path: string,
   connection: string,

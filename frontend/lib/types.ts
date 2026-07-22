@@ -104,7 +104,7 @@ export type {
   SemanticAggregate, SemanticTimeGrain,
   // Authored models — TypeBox single-source in lib/validation/atlas-schemas.ts
   SemanticSource, SemanticReference, SemanticReferenceToOne, SemanticReferenceM2M,
-  SemanticDimensionV2, SemanticMeasureV2, SemanticRatioMetricV2, SemanticSqlMetric,
+  SemanticDimensionV2, SemanticAggMetricV2, SemanticRatioMetricV2, SemanticSqlMetric,
   SemanticMetricV2, SemanticModelV2,
 } from './types/semantic';
 

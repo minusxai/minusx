@@ -130,7 +130,7 @@ async function dryRunModel(
   oldModel: SemanticModelV2 | undefined,
   env: DryRunEnv,
 ): Promise<SemanticModelV2> {
-  const metrics = model.metrics ?? [];
+  const metrics = model.metrics;
   if (metrics.length === 0) return model;
 
   const probeNames = probeScope(model, oldModel);
@@ -202,15 +202,15 @@ async function runProbe(
  *  … plus every metric whose STORED `verified` is false (sticky until green).
  */
 function probeScope(model: SemanticModelV2, oldModel: SemanticModelV2 | undefined): Set<string> {
-  const metrics = model.metrics ?? [];
+  const metrics = model.metrics;
   const names = new Set<string>();
   if (!oldModel || structureOf(model) !== structureOf(oldModel)) {
     for (const m of metrics) names.add(m.name);
     return names;
   }
-  const oldEssence = new Map((oldModel.metrics ?? []).map((m) => [m.name, metricEssence(m)]));
+  const oldEssence = new Map((oldModel.metrics ?? []).map((m) => [m.name, metricEssence(m, oldModel)]));
   for (const m of metrics) {
-    if (oldEssence.get(m.name) !== metricEssence(m)) names.add(m.name); // added or changed
+    if (oldEssence.get(m.name) !== metricEssence(m, model)) names.add(m.name); // added or changed
   }
   for (const m of oldModel.metrics ?? []) {
     if (m.verified === false && metrics.some((n) => n.name === m.name)) names.add(m.name); // sticky
@@ -227,16 +227,29 @@ function structureOf(m: SemanticModelV2): string {
     primaryKey: m.primaryKey ?? null,
     references: m.references ?? [],
     dimensions: m.dimensions.map((d) => ({ name: d.name, source: d.source, column: d.column, temporal: d.temporal ?? null })),
-    measures: m.measures.map((ms) => ({ name: ms.name, agg: ms.agg, column: ms.column ?? null })),
-    timeDimension: m.timeDimension ? { column: m.timeDimension.column } : null,
   });
 }
 
-/** Metric identity minus metadata (`description`) and the server stamp. */
-function metricEssence(m: SemanticMetricV2): string {
-  return JSON.stringify(m.type === 'sql'
-    ? { name: m.name, type: m.type, sql: m.sql }
-    : { name: m.name, type: m.type, numerator: m.numerator, denominator: m.denominator });
+/**
+ * Metric identity minus metadata (`description`) and the server stamp. A ratio
+ * metric's essence RESOLVES its aggregation metrics (not just their names):
+ * changing `Revenue` from SUM(total) to SUM(delivered) must re-probe every
+ * ratio built on Revenue, and only name-identity would miss that.
+ */
+function metricEssence(m: SemanticMetricV2, model: SemanticModelV2): string {
+  if (m.type === 'sql') return JSON.stringify({ name: m.name, type: m.type, sql: m.sql });
+  if (m.type === 'aggregation') {
+    return JSON.stringify({ name: m.name, type: m.type, agg: m.agg, column: m.column ?? null });
+  }
+  const resolve = (ref: string) => {
+    const agg = model.metrics.find((x) => x.type === 'aggregation' && x.name === ref);
+    return agg && agg.type === 'aggregation' ? { agg: agg.agg, column: agg.column ?? null } : null;
+  };
+  return JSON.stringify({
+    name: m.name, type: m.type,
+    numerator: [m.numerator, resolve(m.numerator)],
+    denominator: [m.denominator, resolve(m.denominator)],
+  });
 }
 
 /**
@@ -252,7 +265,7 @@ function withPreservedStamps(
   const oldByName = new Map((oldModel?.metrics ?? []).map((m) => [m.name, m]));
   return {
     ...model,
-    metrics: (model.metrics ?? []).map((m) => {
+    metrics: model.metrics.map((m) => {
       const probed = outcomes?.get(m.name);
       const verified = probed !== undefined ? probed : oldByName.get(m.name)?.verified;
       const { verified: _clientSent, ...rest } = m;

@@ -40,14 +40,15 @@ function semanticReferenceLabel(ref: SemanticReference): string {
 }
 
 function semanticMetricLabel(m: SemanticMetricV2): string {
+  if (m.type === 'aggregation') return `${m.name} = ${m.agg}(${m.column ?? '*'})`;
   return m.type === 'ratio' ? `${m.name} = ${m.numerator} / ${m.denominator}` : `${m.name} = ${m.sql}`;
 }
 
 /**
  * Project one authored semantic model into a compact reference bullet for the
  * agent's free-SQL docs: name, primary, references (alias, cardinality, join
- * columns), dimensions (name → source.column), measures, and metric
- * definitions. UNVALIDATED documentation — helps the agent write correct joins
+ * columns), dimensions (name → source.column), and metric definitions.
+ * UNVALIDATED documentation — helps the agent write correct joins
  * and metric SQL by hand; validated execution goes through semantic queries.
  */
 function semanticModelToNote(model: SemanticModelV2): string {
@@ -58,10 +59,7 @@ function semanticModelToNote(model: SemanticModelV2): string {
   if (model.dimensions.length > 0) {
     parts.push(`dims: ${model.dimensions.map((d) => `${d.name}=${d.source === 'primary' ? '' : `${d.source}.`}${d.column}`).join(', ')}`);
   }
-  if (model.measures.length > 0) {
-    parts.push(`measures: ${model.measures.map((m) => `${m.name}=${m.agg}(${m.column ?? '*'})`).join(', ')}`);
-  }
-  if (model.metrics && model.metrics.length > 0) {
+  if (model.metrics.length > 0) {
     parts.push(`metrics: ${model.metrics.map(semanticMetricLabel).join(', ')}`);
   }
   const desc = model.description ? ` — ${model.description}` : '';

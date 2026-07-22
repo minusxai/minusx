@@ -28,7 +28,7 @@ import type { ContextContent, SemanticModelV2, SemanticMetricV2 } from '@/lib/ty
  */
 export function compileProbeIssues(model: SemanticModelV2): string[] {
   const issues: string[] = [];
-  for (const metric of model.metrics ?? []) {
+  for (const metric of model.metrics) {
     try {
       compileSemanticQuery(probeSpec(model, metric), model);
     } catch (err) {
@@ -54,7 +54,7 @@ export function probeSpec(model: SemanticModelV2, metric: SemanticMetricV2): Sem
     model: model.name,
     table: model.primary.kind === 'table' ? model.primary.table : model.primary.view,
     schema: model.primary.kind === 'table' ? model.primary.schema ?? null : null,
-    measures: [metric.name],
+    metrics: [metric.name],
     dimensions: probeDimension ? [probeDimension.name] : [],
   } as SemanticQuerySpec;
 }

@@ -91,13 +91,12 @@ export async function getScopedSemanticModels(
 }
 
 // ---------------------------------------------------------------------------
-// Metrics-first search — find metrics/measures/dimensions across every
-// authored model
+// Metrics-first search — find metrics/dimensions across every authored model
 // ---------------------------------------------------------------------------
 
 export interface SemanticFieldHit {
-  /** `metric` covers both ratio and SQL metrics — both select like a measure. */
-  kind: 'measure' | 'dimension' | 'metric';
+  /** `metric` covers every metric type (aggregation, ratio, SQL). */
+  kind: 'dimension' | 'metric';
   name: string;
   model: string;
   connection: string;
@@ -116,11 +115,8 @@ export async function searchSemanticFields(
     const table = primaryName(m);
     // Model-primaries are queried as _views.<name> — surface them there.
     const schema = m.primary.kind === 'table' ? (m.primary.schema ?? undefined) : VIEWS_SCHEMA;
-    for (const me of m.measures) {
-      fields.push({ kind: 'measure', name: me.name, model: m.name, connection, schema, table });
-    }
     // Metrics are the headline vocabulary (§2.4) — never searchable-invisible.
-    for (const me of m.metrics ?? []) {
+    for (const me of m.metrics) {
       fields.push({ kind: 'metric', name: me.name, model: m.name, connection, schema, table });
     }
     for (const d of m.dimensions) {

@@ -96,7 +96,7 @@ export function validateSemanticModel(
   model: SemanticModelV2,
   ctx: SemanticModelCtx,
 ): string[] {
-  // SHAPE GATE FIRST. The Static type makes `primary`/`dimensions`/`measures`
+  // SHAPE GATE FIRST. The Static type makes `primary`/`dimensions`/`metrics`
   // and each reference's `relationship`/`on`/`through` required, so the rules
   // below dereference them unguarded — but nothing enforces that at RUNTIME on
   // agent- or JSON-authored models. Without this, a model missing a field
@@ -197,56 +197,51 @@ export function validateSemanticModel(
     }
   }
 
-  // ── Measures (primary-column-only by construction) ────────────────────────
-  for (const m of model.measures) {
-    if (m.column != null && primaryFields && !primaryFields.has(m.column)) {
-      issues.push(`measure "${m.name}": column "${m.column}" is not an exposed field of the primary — measures aggregate the primary only; use a SQL metric for reference columns`);
+  // ── Temporal flags (type check skipped when the column type is unknown) ───
+  for (const d of model.dimensions) {
+    if (!d.temporal) continue;
+    const fields = fieldsByKey.get(d.source === 'primary' ? 'primary' : d.source);
+    const type = fields?.get(d.column) ?? '';
+    if (type && !TEMPORAL_TYPE.test(type)) {
+      issues.push(`dimension "${d.name}": flagged temporal but column "${d.column}" has type "${type}" — the time axis must be a date/time column`);
     }
   }
 
-  // ── Name-slug namespace across dimensions + measures + metrics ────────────
+  // ── Name-slug namespace across dimensions + metrics ───────────────────────
   const slugOwners = new Map<string, string>();
   for (const entry of [
     ...model.dimensions.map((d) => d.name),
-    ...model.measures.map((m) => m.name),
-    ...(model.metrics ?? []).map((m) => m.name),
+    ...model.metrics.map((m) => m.name),
   ]) {
     const slug = semanticAlias(entry);
     const owner = slugOwners.get(slug);
     if (owner !== undefined && owner !== entry) {
-      issues.push(`"${entry}" collides with "${owner}" — dimension/measure/metric names must be unique within a model (compared case-insensitively as slugs)`);
+      issues.push(`"${entry}" collides with "${owner}" — dimension/metric names must be unique within a model (compared case-insensitively as slugs)`);
     } else if (owner !== undefined) {
-      issues.push(`"${entry}" is declared more than once — dimension/measure/metric names must be unique within a model`);
+      issues.push(`"${entry}" is declared more than once — dimension/metric names must be unique within a model`);
     }
     slugOwners.set(slug, entry);
   }
 
-  // ── timeDimension (primary-only; type check skipped when unprofiled) ──────
-  if (model.timeDimension) {
-    const colName = model.timeDimension.column;
-    if (primaryFields && !primaryFields.has(colName)) {
-      issues.push(`timeDimension column "${colName}" is not an exposed field of the primary`);
-    } else if (primaryFields) {
-      const type = primaryFields.get(colName) ?? '';
-      if (type && !TEMPORAL_TYPE.test(type)) {
-        issues.push(`timeDimension column "${colName}" is not temporal (type "${type}") — the time axis must be a date/time column of the primary`);
-      }
-    }
-  }
-
   // ── Metrics ───────────────────────────────────────────────────────────────
-  const measureNames = new Set(model.measures.map((m) => m.name));
+  const aggMetricNames = new Set(model.metrics.filter((m) => m.type === 'aggregation').map((m) => m.name));
   // Bare-ref candidates come from every resolved source (incl. m2m: pointing
   // at tags.weight in the error is more useful than pretending it's unknown).
   const knownFields = new Map<string, Set<string>>();
   for (const [key, fields] of fieldsByKey) knownFields.set(key, new Set(fields.keys()));
 
-  for (const metric of model.metrics ?? []) {
+  for (const metric of model.metrics) {
     const at = `metric "${metric.name}"`;
+    if (metric.type === 'aggregation') {
+      if (metric.column != null && primaryFields && !primaryFields.has(metric.column)) {
+        issues.push(`${at}: column "${metric.column}" is not an exposed field of the primary — aggregation metrics aggregate the primary only; use a SQL metric for reference columns`);
+      }
+      continue;
+    }
     if (metric.type === 'ratio') {
       for (const refName of [metric.numerator, metric.denominator]) {
-        if (!measureNames.has(refName)) {
-          issues.push(`${at}: "${refName}" is not a declared measure`);
+        if (!aggMetricNames.has(refName)) {
+          issues.push(`${at}: "${refName}" is not a declared aggregation metric`);
         }
       }
       continue;
