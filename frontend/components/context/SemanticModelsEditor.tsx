@@ -26,6 +26,7 @@ import { LuPlus, LuTrash2, LuBoxes, LuTriangleAlert, LuPencil, LuKeyRound, LuFla
 import { exposedColumns } from '@/lib/types/views';
 import { deriveSemanticModels, humanizeName } from '@/lib/semantic/derive';
 import { validateSemanticModel } from '@/lib/semantic/validate';
+import { fieldChecksTrustworthy } from '@/lib/semantic/edit-check';
 import { testSemanticModel } from '@/lib/semantic/models-client';
 import { inferToOneOn, inferM2MThrough, inferPrimaryKey, singularize } from '@/lib/semantic/infer-join';
 import type {
@@ -362,6 +363,11 @@ export default function SemanticModelsSection({
           ...models.filter((x) => x !== m).map((x) => x.name),
         ],
       };
+      // Bounded (names-only) schema menus strip columns — field-level checks
+      // would flag every column as "not exposed". Same degrade rule as the
+      // EditFile path: skip live checks and let Test / the save gate (which
+      // recompute the schema server-side) be the authority.
+      if (!fieldChecksTrustworthy(m, ctx)) continue;
       for (const issue of validateSemanticModel(m, ctx)) {
         if (issue.includes('""') || issue === 'model name must not be empty') continue;
         const prefixed = `Semantic model "${m.name}": ${issue}`;

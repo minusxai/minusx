@@ -28,6 +28,7 @@
  *    both support composite keys, neither can fan a measure out
  */
 
+import { immutableSet } from '@/lib/utils/immutable-collections';
 import type { QueryIR, SelectColumn, GroupByItem, FilterCondition, JoinClause, OrderByClause, CTE } from '@/lib/sql/ir-types';
 import type {
   SemanticModelV2, SemanticAggMetricV2, SemanticDimensionV2, SemanticMetricV2, SemanticReference, SemanticReferenceToOne,
@@ -46,13 +47,33 @@ export class SemanticCompileError extends Error {
   }
 }
 
+// Reserved words that break as UNQUOTED column aliases somewhere we compile
+// to (BigQuery's reserved list is the superset — "AS rows" fails there, and
+// "AS order" fails on every engine). A natural business name like "Rows" must
+// never produce an invalid alias, so slugs on this list get a trailing '_'.
+const RESERVED_ALIAS = immutableSet([
+  'all', 'and', 'any', 'array', 'as', 'asc', 'assert_rows_modified', 'at',
+  'between', 'by', 'case', 'cast', 'collate', 'contains', 'create', 'cross',
+  'cube', 'current', 'default', 'define', 'desc', 'distinct', 'else', 'end',
+  'enum', 'escape', 'except', 'exclude', 'exists', 'extract', 'false', 'fetch',
+  'following', 'for', 'from', 'full', 'group', 'grouping', 'groups', 'hash',
+  'having', 'if', 'ignore', 'in', 'inner', 'intersect', 'interval', 'into',
+  'is', 'join', 'lateral', 'left', 'like', 'limit', 'lookup', 'merge',
+  'natural', 'new', 'no', 'not', 'null', 'nulls', 'of', 'on', 'or', 'order',
+  'outer', 'over', 'partition', 'preceding', 'proto', 'qualify', 'range',
+  'recursive', 'respect', 'right', 'rollup', 'rows', 'select', 'set', 'some',
+  'struct', 'tablesample', 'then', 'to', 'treat', 'true', 'unbounded', 'union',
+  'unnest', 'using', 'when', 'where', 'window', 'with', 'within',
+]);
+
 /** SQL-safe alias for a business name ("Active Buyers" → "active_buyers"). */
 export function semanticAlias(name: string): string {
-  return name
+  const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 60) || 'field';
+  return RESERVED_ALIAS.has(slug) ? `${slug}_` : slug;
 }
 
 const findMetric = (model: SemanticModelV2, name: string): SemanticMetricV2 | undefined =>

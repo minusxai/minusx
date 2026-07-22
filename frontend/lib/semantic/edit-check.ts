@@ -99,7 +99,7 @@ export function sortedJson(value: unknown): string {
  * authority. Erring toward NOT blocking is the whole point: a false block would
  * make a context uneditable.
  */
-function fieldChecksTrustworthy(model: SemanticModelV2, ctx: SemanticModelCtx): boolean {
+export function fieldChecksTrustworthy(model: SemanticModelV2, ctx: SemanticModelCtx): boolean {
   // Optional-chained: an agent-authored model can be missing `primary` entirely at
   // runtime (tier 1's shape gate is what reports that).
   const primary = model.primary;

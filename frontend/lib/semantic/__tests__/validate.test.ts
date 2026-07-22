@@ -167,6 +167,25 @@ describe('connection consistency & source resolution', () => {
   });
 });
 
+describe('names-only (bounded) schemas — columns stripped from the menu', () => {
+  it('a table with UNDEFINED columns never crashes validation', () => {
+    const ctx = {
+      fullSchema: [{
+        databaseName: 'warehouse',
+        schemas: [{ schema: 'big', tables: [{ table: 'events' }] }],
+      }],
+      views: [],
+    } as never;
+    const model: SemanticModelV2 = {
+      name: 'Events', connection: 'warehouse',
+      primary: { kind: 'table', schema: 'big', table: 'events' },
+      dimensions: [{ name: 'Kind', source: 'primary', column: 'kind' }],
+      metrics: [{ name: 'Count', type: 'aggregation', agg: 'COUNT' }],
+    };
+    expect(() => validateSemanticModel(model, ctx)).not.toThrow();
+  });
+});
+
 describe('unbalanced parentheses in metric SQL (tier 1 — no engine round-trip needed)', () => {
   it('an unclosed "(" is reported with a message about the AUTHORED SQL', () => {
     const issues = errorsFor((m) => {

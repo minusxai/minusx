@@ -5,7 +5,7 @@
  * then it throws a clear SemanticCompileError.
  */
 import { describe, it, expect } from 'vitest';
-import { compileSemanticQuery, validateSemanticQuery } from '../compile';
+import { compileSemanticQuery, validateSemanticQuery, semanticAlias } from '../compile';
 import { rewriteMetricSql } from '../metric-sql';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import type { SemanticModelV2 } from '@/lib/types/semantic';
@@ -194,6 +194,30 @@ describe('validateSemanticQuery (V2)', () => {
     const bad = validateSemanticQuery(
       spec({ metrics: ['Revenue'], timeGrain: 'DAY', timeColumn: 'name' }), MODEL);
     expect(bad.length).toBeGreaterThan(0);
+  });
+});
+
+describe('semanticAlias dodges reserved words', () => {
+  it('a slug that hits a SQL reserved word gets a trailing underscore', () => {
+    // "Rows" → AS rows breaks BigQuery (window-frame keyword); "Order" →
+    // AS order breaks everywhere. Natural business names must never compile
+    // into invalid aliases.
+    expect(semanticAlias('Rows')).toBe('rows_');
+    expect(semanticAlias('Order')).toBe('order_');
+    expect(semanticAlias('Group')).toBe('group_');
+    expect(semanticAlias('Revenue')).toBe('revenue');
+  });
+
+  it('the guarded alias flows through compiled SQL', () => {
+    const m: SemanticModelV2 = {
+      name: 'T', connection: 'wh',
+      primary: { kind: 'table', schema: 'main', table: 'orders' },
+      dimensions: [],
+      metrics: [{ name: 'Rows', type: 'aggregation', agg: 'COUNT' }],
+    };
+    const sql = irToSqlLocal(compileSemanticQuery(spec({ model: 'T', metrics: ['Rows'] }), m), 'bigquery');
+    expect(sql).toContain('COUNT(*) AS rows_');
+    expect(sql).not.toMatch(/AS rows\b/);
   });
 });
 

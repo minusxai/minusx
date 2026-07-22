@@ -48,7 +48,9 @@ function findTableFields(
   for (const s of db.schemas) {
     if (schema && s.schema !== schema) continue;
     const t = s.tables.find((tt) => tt.table === table);
-    if (t) return new Map(t.columns.map((c) => [c.name, c.type ?? '']));
+    // Bounded (names-only) schemas ship tables WITHOUT columns — the table
+    // resolves (it exists) but its fields are unknowable, not empty.
+    if (t) return new Map((t.columns ?? []).map((c) => [c.name, c.type ?? '']));
   }
   return null;
 }
