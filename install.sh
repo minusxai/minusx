@@ -357,9 +357,9 @@ print(p.get('defaults', {}).get('advanced', ''))")
     info "Suggested models:"
     compat "
 p = next(p for p in data['llm']['providers'] if p['id'] == '$LLM_PROVIDER_ID')
-rec = p.get('recommended', {})
+defaults = p.get('defaults', {})
 for grade in ('lite', 'core', 'advanced'):
-    for m in rec.get(grade, []): print(f\"    - {m}  ({grade})\")" > /dev/tty
+    if defaults.get(grade): print(f\"    - {defaults[grade]}  ({grade})\")" > /dev/tty
   fi
   ask "Lite model ${DIM}(fast + cheap — titles, summaries)${RESET}" "$lite_default"; LLM_LITE_MODEL="$REPLY_VALUE"
   ask "Core model ${DIM}(balanced default — most analysis)${RESET}" "${core_default:-$LLM_LITE_MODEL}"; LLM_CORE_MODEL="$REPLY_VALUE"
