@@ -360,3 +360,23 @@ describe('VegaVizPanel — pivot formulas in V2', () => {
     expect(screen.queryByLabelText('Collapse Formulas')).not.toBeInTheDocument()
   })
 })
+
+describe('Pivot compact mode (kit tooltip)', () => {
+  it('renders bare compact cells and surfaces values via the kit tooltip on hover', async () => {
+    const user = userEvent.setup()
+    renderViz(pivotViz({ config: { ...CONFIG, compact: true } }))
+
+    const table = document.querySelector('table.mx-pivot')!
+    expect(table.classList.contains('mx-pivot-compact')).toBe(true)
+
+    // Compact cells carry no text — the value lives in the tooltip.
+    const cell = document.querySelector('.mx-pivot tbody td.mx-cell')! as HTMLElement
+    expect(cell.textContent).toBe('')
+
+    await user.hover(cell)
+    // First data row is East (alphabetical), first column Feb or Jan per header order;
+    // assert the tooltip exposes the formatted cell value for that cell.
+    const tooltip = await screen.findByText(/East · (Jan|Feb)/)
+    expect(tooltip).toBeInTheDocument()
+  })
+})

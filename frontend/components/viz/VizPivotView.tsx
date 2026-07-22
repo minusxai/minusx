@@ -12,7 +12,6 @@
  * (`.mx-pivot th { … }`).
  */
 import { useId, useMemo, useState, useCallback } from 'react';
-import { Box } from '@chakra-ui/react';
 import { PivotTable } from '@/components/plotx/PivotTable';
 import { DrillDownCard, type DrillDownState } from '@/components/plotx/DrillDownCard';
 import { ChartError } from '@/components/plotx/ChartError';
@@ -65,7 +64,7 @@ export function VizPivotView({ envelope, rows, sql, databaseName, enableDrilldow
   }
 
   return (
-    <Box className={scopeClass} flex="1" minHeight="0" display="flex" flexDirection="column" width="100%" p={3}>
+    <div className={`${scopeClass} flex min-h-0 w-full flex-1 flex-col p-3`}>
       {css && isCssSafe(css) && (
         // Native CSS nesting scopes every user rule under this instance.
         <style>{`.${scopeClass} { ${css} }`}</style>
@@ -86,6 +85,6 @@ export function VizPivotView({ envelope, rows, sql, databaseName, enableDrilldow
         conditionalFormats={getTableConditionalFormats(envelope)}
       />
       <DrillDownCard drillDown={drillDown} onClose={closeDrillDown} sql={sql} databaseName={databaseName} />
-    </Box>
+    </div>
   );
 }

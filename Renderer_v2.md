@@ -354,37 +354,38 @@ exact thing this plan deletes — onto the story-style capture path for the inte
 first; then the surface swap carries only compiled Tailwind. The §7.2 spike used a bare grid,
 so the surface phase re-proves with the REAL (post-re-skin) chrome anyway.
 
-- [ ] FIRST: the main-document Tailwind wiring (review round 5 raised this; its premise was
-      wrong — `app/globals.css:1` already imports Tailwind v4, so PREFLIGHT×Chakra coexistence
-      is production-proven today — but the remaining gap is real): (a) add the shadcn token
-      layer + `[data-theme]` blocks to the app CSS, SCOPED under the file-content roots so
-      Chakra shell chrome never sees them; (b) confirm the kit's recipe classes generate in the
-      app build's content scan; (c) a one-page conflict check (kit components rendered next to
-      Chakra chrome, both modes) BEFORE the first re-skin — this determines the mechanics of
-      every re-skin that follows.
-- [ ] Promote the vendored kit out of `lib/story-ui/` into a shared location; add DropdownMenu,
-      Select, Switch, Checkbox, Input (standard shadcn, same vendoring rules).
-- [ ] Re-skin, in order: `SmartEmbeddedQuestionContainer` (tile chrome + menu), loading/error/empty
-      states of `QuestionVisualization`, `TextBlockCard`, `ParameterRow` + `StoryParamControl`,
-      `DashboardView` boxes. Blue→Red→Blue with the existing characterization tests.
-- [ ] `PivotTable` off Chakra `Table` onto the native-table pattern `TableV2` proves — MOVED here
-      from Phase 5 (review round 4): pivot questions are EMBEDDABLE in stories/dashboards, so a
-      Chakra PivotTable after 6a's mirror shrink would capture with its CSS stripped — broken
-      pivot embeds. Phase 3's exit claim ("embeds are story-stack") must actually be true.
-- [ ] VISUAL BAR (decided, review round 5): an UNTHEMED dashboard targets visual parity with
-      today's look — the org-default theme's neutral tokens approximate the current appearance,
-      so users see no unrequested redesign. A THEMED dashboard deliberately adopts the theme
-      aesthetic. Characterization tests pin behavior; parity is judged against before/after
-      captures of the seeded dashboards.
-- [ ] Wire dashboard surface tokens: add optional `theme` to `DashboardContent`
-      (atlas-schemas.ts, reusing `STORY_THEME_NAMES`); stamp `[data-theme]` on the dashboard root
-      from `content.theme ?? org default` (configs document). Decided — §9 Q2.
-- [ ] Update `skill_dashboards` (prompts.yaml) to document `content.theme` + the six theme names,
-      mirroring how `skill_stories` documents the story theme — otherwise the agent never sets it.
-- [ ] Land the ESLint no-`@chakra-ui` import ban on the EMBED-TREE paths in THIS phase (pulled
-      forward from 6a, review round 5): the exit claim "no Chakra in the embed render tree"
-      becomes an `npm run validate` fact instead of a component-list assertion — lists miss
-      things (PivotTable proved it).
+- [x] FIRST: the main-document Tailwind wiring — DONE: (a) generated `app/theme-tokens.css`
+      (`npm run generate-app-theme-css`, drift-tested) with `@theme inline` mapping + neutral
+      values scoped under `[data-mx-theme-host]` + all six `[data-theme]` blocks, app chart
+      palette substituted into the host blocks (visual bar); (b) `@source "../components"` +
+      `@import "tailwindcss" important` (Chakra's unlayered element resets beat plain
+      `@layer utilities`); (c) conflict check shipped as the DevTools `KitPreviewPanel`
+      (permanent tripwire) — kit renders correctly beside Chakra chrome in both modes.
+- [x] Promote the vendored kit — DONE: `git mv` → `components/kit/` (story-ui re-exports keep
+      old imports alive); added dropdown-menu, select, switch, checkbox, input (inline SVG
+      icons, no lucide-react).
+- [x] Re-skin — DONE: `SmartEmbeddedQuestionContainer` (kit DropdownMenu, 5 characterization
+      tests), `QuestionVisualization` states (error/empty/loading + data-mx-busy spinner),
+      `TextBlockCard`, `ParameterRow`/`ParameterInput` (pill chrome; child widgets are
+      Phase 5), `StoryParamControl`, `DashboardView` (tile borders, ghost grid, theme
+      stamping). Blue→Red→Blue against existing suites; browser pixel-parity checked.
+- [x] `PivotTable` off Chakra `Table` — DONE: native `<table>/<thead>/<tbody>` across
+      `PivotTable` + `PivotTableHeader` + `PivotTableBody` + `PivotTableTooltip` +
+      `VizPivotView`; base chrome (padding/borders/zebra/scrollbar) ships as a
+      low-specificity `:where()` stylesheet INSIDE the component so envelope css overrides
+      still win and the rules travel into stories/foreignObject; compact-mode tooltip moved
+      to the kit (Radix) Tooltip rendered inside the `<td>` (portal-free, story-safe; new
+      red-proven UI test); heatmap flat-domain fallback made concrete (`color-mix` teal).
+      22-test characterization suite blue; pivot files added to `EMBED_CHROME_FILES`.
+- [x] VISUAL BAR — HELD: unthemed dashboards keep the app palette (`--chart-1..5`
+      substituted in the neutral host token block, pinned by test) and neutral grays match
+      the previous look (browser-compared on the seeded dashboard before/after re-skin).
+- [x] Wire dashboard surface tokens — DONE: `DashboardContent.theme`
+      (optional/nullable, `STORY_THEME_NAMES`) in atlas-schemas; `DashboardView` stamps
+      `data-theme` on the grid root; browser-verified end-to-end with `nocturne`.
+- [x] Update `skill_dashboards` — DONE: documents `theme` + the six names in prompts.yaml.
+- [x] ESLint no-`@chakra-ui` ban — DONE (`eslint.config.mjs`): kit + all re-skinned files
+      including the five pivot files; validate-enforced.
 - [ ] Story payoff checkpoint: embeds inside stories are now story-stack components → shrink
       `mirrorAppStyles` to what's actually still needed, measure the CSS diff.
 

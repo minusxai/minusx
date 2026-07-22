@@ -1,6 +1,5 @@
 'use client'
 
-import { Box, Table as ChakraTable, Icon } from '@chakra-ui/react'
 import { LuSquareFunction } from 'react-icons/lu'
 
 interface HeaderCell {
@@ -10,9 +9,9 @@ interface HeaderCell {
   isFormula?: boolean
 }
 
-// Table header rows (column dimension headers + formula column headers),
-// extracted verbatim from PivotTable.tsx's <ChakraTable.Header> block
-// (pure code motion, no logic change).
+// Table header rows (column dimension headers + formula column headers). Native <thead>/<th>
+// on the kit/Tailwind stack (Renderer_v2 Phase 3) — same DOM + stable class contract
+// (.mx-header-row/.mx-th) as before; only the styling system changed.
 interface PivotTableHeaderProps {
   augmentedColHeaderRows: HeaderCell[][]
   numRowDims: number
@@ -20,13 +19,14 @@ interface PivotTableHeaderProps {
   rowDimNames?: string[]
   showRowTotals: boolean
   compact: boolean
-  headerBg: string
   getLeftOffset: (dimIdx: number) => number
   isLastDim: (dimIdx: number) => boolean
   ROW_DIM_COL_W: number
   COMPACT_CELL_SIZE: number
   valueLabels: string[]
 }
+
+const TH_BASE = 'mx-th font-bold uppercase text-muted-foreground'
 
 export const PivotTableHeader = ({
   augmentedColHeaderRows,
@@ -35,182 +35,102 @@ export const PivotTableHeader = ({
   rowDimNames,
   showRowTotals,
   compact,
-  headerBg,
   getLeftOffset,
   isLastDim,
   ROW_DIM_COL_W,
   COMPACT_CELL_SIZE,
   valueLabels,
 }: PivotTableHeaderProps) => {
+  const dimTh = (dimIdx: number, rowSpan?: number) => (
+    <th
+      className={`${TH_BASE} sticky z-[4] bg-muted text-left ${compact ? 'font-mono text-[10px]' : 'text-xs tracking-wider'}`}
+      key={`dim-${dimIdx}`}
+      rowSpan={rowSpan}
+      style={{
+        left: `${getLeftOffset(dimIdx)}px`,
+        width: ROW_DIM_COL_W, minWidth: ROW_DIM_COL_W, maxWidth: ROW_DIM_COL_W,
+        borderRight: isLastDim(dimIdx) ? undefined : '1px solid var(--border)',
+        ...(compact ? { padding: '1px 4px' } : {}),
+      }}
+    >
+      {rowDimNames?.[dimIdx] || ''}
+    </th>
+  )
+
+  const totalTh = (rowSpan?: number) => (
+    <th
+      className={`${TH_BASE} z-[3] min-w-[80px] text-right text-xs tracking-wider`}
+      rowSpan={rowSpan}
+      style={{ borderLeft: '2px solid var(--border)', background: 'color-mix(in srgb, #16a085 20%, transparent)' }}
+    >
+      Total
+    </th>
+  )
+
   return (
-    <ChakraTable.Header position="sticky" top={0} zIndex={5} bg={headerBg}>
+    <thead className="sticky top-0 z-[5] bg-muted">
       {/* Column header rows */}
       {augmentedColHeaderRows.map((headerRow, rowIdx) => (
-        <ChakraTable.Row key={rowIdx} className="mx-header-row" bg={headerBg}>
+        <tr key={rowIdx} className="mx-header-row bg-muted">
           {/* Row dimension name headers */}
-          {rowIdx === 0 && numRowDims > 0 && (
-            Array.from({ length: numRowDims }, (_, dimIdx) => (
-              <ChakraTable.ColumnHeader
-              className="mx-th"
-                key={`dim-${dimIdx}`}
-                rowSpan={numHeaderRows}
-                fontWeight="700"
-                fontSize={compact ? '2xs' : 'xs'}
-                fontFamily={compact ? 'mono' : undefined}
-                textTransform="uppercase"
-                letterSpacing={compact ? undefined : '0.05em'}
-                color="fg.muted"
-                borderRight={isLastDim(dimIdx) ? undefined : '1px solid'}
-                borderColor="border.muted"
-
-                position="sticky"
-                left={`${getLeftOffset(dimIdx)}px`}
-                bg={headerBg}
-                zIndex={4}
-                w={`${ROW_DIM_COL_W}px`}
-                minW={`${ROW_DIM_COL_W}px`}
-                maxW={`${ROW_DIM_COL_W}px`}
-                {...(compact ? { p: '1px 4px' } : {})}
-              >
-                {rowDimNames?.[dimIdx] || ''}
-              </ChakraTable.ColumnHeader>
-            ))
-          )}
+          {rowIdx === 0 && numRowDims > 0 &&
+            Array.from({ length: numRowDims }, (_, dimIdx) => dimTh(dimIdx, numHeaderRows))}
 
           {/* Column headers at this level */}
           {headerRow.map((hdr, colIdx) => (
-            <ChakraTable.ColumnHeader
-              className="mx-th"
+            <th
+              className={`mx-th z-[3] text-center font-bold ${compact ? 'text-[10px]' : 'text-xs tracking-wider'} ${
+                hdr.isFormula ? 'italic text-[#9b59b6]' : compact ? 'text-foreground' : 'text-muted-foreground'
+              }`}
               key={colIdx}
               colSpan={hdr.colSpan}
               rowSpan={hdr.rowSpan}
-              fontWeight="700"
-              fontSize={compact ? '2xs' : 'xs'}
-              textTransform="uppercase"
-              letterSpacing={compact ? undefined : '0.05em'}
-              color={hdr.isFormula ? 'accent.secondary' : compact ? 'fg.default' : 'fg.muted'}
-              textAlign="center"
-              minW={compact ? `${COMPACT_CELL_SIZE}px` : '80px'}
-              borderBottom={rowIdx < numHeaderRows - 1 ? '1px solid' : undefined}
-              borderColor="border.muted"
-              zIndex={3}
-              bg={hdr.isFormula ? 'accent.secondary/12' : 'bg.muted'}
-              fontStyle={hdr.isFormula ? 'italic' : undefined}
-              {...(compact ? { px: 0, py: '4px', w: `${COMPACT_CELL_SIZE}px` } : {})}
+              style={{
+                minWidth: compact ? COMPACT_CELL_SIZE : 80,
+                borderBottom: rowIdx < numHeaderRows - 1 ? '1px solid var(--border)' : undefined,
+                background: hdr.isFormula ? 'color-mix(in srgb, #9b59b6 12%, transparent)' : 'var(--muted)',
+                ...(compact ? { paddingLeft: 0, paddingRight: 0, paddingTop: 4, paddingBottom: 4, width: COMPACT_CELL_SIZE } : {}),
+              }}
             >
               {compact ? (
-                <Box display="flex" justifyContent="center" w="100%">
-                  <Box
-                    css={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
-                    transform="rotate(180deg)"
-                    fontSize="2xs"
-                    fontFamily="mono"
-                    whiteSpace="nowrap"
-                    lineHeight={1}
+                <span className="flex w-full justify-center">
+                  <span
+                    className="whitespace-nowrap font-mono text-[10px] leading-none"
+                    style={{ writingMode: 'vertical-rl', textOrientation: 'mixed', transform: 'rotate(180deg)' }}
                   >
                     {hdr.label}
-                  </Box>
-                </Box>
+                  </span>
+                </span>
               ) : hdr.isFormula ? (
-                <Box display="inline-flex" alignItems="center" gap={1} justifyContent="center">
-                  <Icon fontSize="md" color="accent.secondary">
-                    <LuSquareFunction />
-                  </Icon>
-
+                <span className="inline-flex items-center justify-center gap-1">
+                  <LuSquareFunction className="text-base text-[#9b59b6]" />
                   {hdr.label}
-                </Box>
+                </span>
               ) : hdr.label}
-            </ChakraTable.ColumnHeader>
+            </th>
           ))}
 
           {/* Row total header */}
-          {showRowTotals && rowIdx === 0 && (
-            <ChakraTable.ColumnHeader
-              className="mx-th"
-              rowSpan={numHeaderRows}
-              fontWeight="700"
-              fontSize="xs"
-              textTransform="uppercase"
-              letterSpacing="0.05em"
-              color="fg.muted"
-              textAlign="right"
-              borderLeft="2px solid"
-              borderColor="border.default"
-              minW="80px"
-              bg="accent.teal/20"
-              zIndex={3}
-            >
-              Total
-            </ChakraTable.ColumnHeader>
-          )}
-        </ChakraTable.Row>
+          {showRowTotals && rowIdx === 0 && totalTh(numHeaderRows)}
+        </tr>
       ))}
 
       {/* If no column dimensions, still show a header row with value labels */}
       {augmentedColHeaderRows.length === 0 && (
-        <ChakraTable.Row className="mx-header-row" bg={headerBg}>
-          {numRowDims > 0 && (
-            Array.from({ length: numRowDims }, (_, dimIdx) => (
-              <ChakraTable.ColumnHeader
-              className="mx-th"
-                key={`dim-${dimIdx}`}
-                fontWeight="700"
-                fontSize="xs"
-                textTransform="uppercase"
-                letterSpacing="0.05em"
-                color="fg.muted"
-                borderRight={isLastDim(dimIdx) ? undefined : '1px solid'}
-                borderColor="border.muted"
-
-                position="sticky"
-                left={`${getLeftOffset(dimIdx)}px`}
-                bg={headerBg}
-                zIndex={4}
-                w={`${ROW_DIM_COL_W}px`}
-                minW={`${ROW_DIM_COL_W}px`}
-                maxW={`${ROW_DIM_COL_W}px`}
-              >
-                {rowDimNames?.[dimIdx] || ''}
-              </ChakraTable.ColumnHeader>
-            ))
-          )}
+        <tr className="mx-header-row bg-muted">
+          {numRowDims > 0 &&
+            Array.from({ length: numRowDims }, (_, dimIdx) => dimTh(dimIdx))}
           {valueLabels.map((vl, i) => (
-            <ChakraTable.ColumnHeader
-              className="mx-th"
+            <th
+              className={`${TH_BASE} z-[3] min-w-[80px] bg-muted text-right text-xs tracking-wider`}
               key={i}
-              fontWeight="700"
-              fontSize="xs"
-              textTransform="uppercase"
-              letterSpacing="0.05em"
-              color="fg.muted"
-              textAlign="right"
-              minW="80px"
-              zIndex={3}
-              bg={headerBg}
             >
               {vl}
-            </ChakraTable.ColumnHeader>
+            </th>
           ))}
-          {showRowTotals && (
-            <ChakraTable.ColumnHeader
-              className="mx-th"
-              fontWeight="700"
-              fontSize="xs"
-              textTransform="uppercase"
-              letterSpacing="0.05em"
-              color="fg.muted"
-              textAlign="right"
-              borderLeft="2px solid"
-              borderColor="border.default"
-              minW="80px"
-              bg="accent.teal/20"
-              zIndex={3}
-            >
-              Total
-            </ChakraTable.ColumnHeader>
-          )}
-        </ChakraTable.Row>
+          {showRowTotals && totalTh()}
+        </tr>
       )}
-    </ChakraTable.Header>
+    </thead>
   )
 }

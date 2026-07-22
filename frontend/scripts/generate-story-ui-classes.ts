@@ -28,6 +28,11 @@ export const EMBED_CHROME_FILES = [
   join(ROOT, 'components', 'params', 'ParameterInput.tsx'),
   join(ROOT, 'components', 'views', 'story', 'StoryParamControl.tsx'),
   join(ROOT, 'components', 'question', 'QuestionVisualization.tsx'),
+  join(ROOT, 'components', 'plotx', 'PivotTable.tsx'),
+  join(ROOT, 'components', 'plotx', 'PivotTableHeader.tsx'),
+  join(ROOT, 'components', 'plotx', 'PivotTableBody.tsx'),
+  join(ROOT, 'components', 'plotx', 'PivotTableTooltip.tsx'),
+  join(ROOT, 'components', 'viz', 'VizPivotView.tsx'),
 ];
 const OUT_FILE = join(ROOT, 'lib', 'story-ui', 'recipe-classes.ts');
 

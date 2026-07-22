@@ -306,6 +306,11 @@ const eslintConfig = defineConfig([
       "components/views/DashboardView.tsx",
       "components/plotx/MiniHistogram.tsx",
       "components/plotx/MiniBarChart.tsx",
+      "components/plotx/PivotTable.tsx",
+      "components/plotx/PivotTableHeader.tsx",
+      "components/plotx/PivotTableBody.tsx",
+      "components/plotx/PivotTableTooltip.tsx",
+      "components/viz/VizPivotView.tsx",
     ],
     rules: {
       "no-restricted-imports": [
