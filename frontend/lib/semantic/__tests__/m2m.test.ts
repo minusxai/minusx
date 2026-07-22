@@ -193,7 +193,7 @@ describe('m2m filters — semi-join, never fans out', () => {
       filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }],
     }));
     expect(sql).toContain('EXISTS (SELECT 1');
-    expect(sql).toContain('order_tags.order_id = orders.id'); // correlated, not an IN-list
+    expect(sql).toContain('_b.order_id = orders.id'); // correlated, not an IN-list
     const rows = await run(sql);
     expect(Number(rows[0][0])).toBe(150); // orders 1 + 2, each once
   });
@@ -306,8 +306,8 @@ describe('composite-key m2m', () => {
     const sql = csql(spec({
       model: 'OrdersComposite', metrics: ['Revenue'], dimensions: ['Tag'],
     }));
-    expect(sql).toContain('ot_composite.order_id AS _pk0');
-    expect(sql).toContain('ot_composite.order_region AS _pk1');
+    expect(sql).toContain('_b.order_id AS _pk0');
+    expect(sql).toContain('_b.order_region AS _pk1');
     expect(sql).toContain('ON orders.id = _m2m_tag._pk0 AND orders.region = _m2m_tag._pk1');
   });
 
@@ -317,9 +317,92 @@ describe('composite-key m2m', () => {
         model: 'OrdersComposite', metrics: ['Revenue'],
         filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }],
       }), dialect);
-      expect(sql).toContain('ot_composite.order_id = orders.id');
-      expect(sql).toContain('ot_composite.order_region = orders.region');
+      expect(sql).toContain('_b.order_id = orders.id');
+      expect(sql).toContain('_b.order_region = orders.region');
     }
   });
 });
 
+describe('bridge table == primary table (self-bridge)', () => {
+  // The bridge CAN be the primary table itself (the fact table carries the
+  // FK). Without explicit aliases inside the compiled subqueries, the
+  // correlation `bridge.pk = base.pk` collapses into a TAUTOLOGY
+  // (`orders.id = orders.id` binds both sides to the INNER table) and the
+  // filter silently matches every primary row — wrong results, no error.
+  const SELF_BRIDGE: SemanticModelV2 = {
+    name: 'OrdersSelfBridge',
+    connection: 'wh',
+    primary: { kind: 'table', table: 'orders_sb' },
+    primaryKey: ['id'],
+    references: [{
+      source: { kind: 'table', table: 'tags' },
+      alias: 'tag',
+      relationship: 'many_to_many',
+      through: {
+        source: { kind: 'table', table: 'orders_sb' },
+        primaryOn: [{ primaryColumn: 'id', bridgeColumn: 'id' }],
+        referencedOn: [{ bridgeColumn: 'tag_id', referencedColumn: 'id' }],
+      },
+    }],
+    dimensions: [{ name: 'Tag', source: 'tag', column: 'name' }],
+    metrics: [{ name: 'Revenue', type: 'aggregation', agg: 'SUM', column: 'amount' }],
+  };
+
+  const sbSql = (s2: SemanticQuerySpec) =>
+    irToSqlLocal(compileSemanticQuery(s2, SELF_BRIDGE), 'duckdb');
+
+  beforeAll(async () => {
+    await conn.run('CREATE TABLE orders_sb (id INT, amount DOUBLE, tag_id INT)');
+    await conn.run('INSERT INTO orders_sb VALUES (1, 100, 10), (2, 50, 20)');
+  });
+
+  it('EXISTS correlation binds to the OUTER primary, never a tautology', async () => {
+    const rows = await run(sbSql(spec({
+      model: 'OrdersSelfBridge', metrics: ['Revenue'],
+      filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }],
+    })));
+    // Only order 1 carries the vip tag. A tautological correlation returns
+    // 150 (every order counts because SOME vip-tagged row exists).
+    expect(Number(rows[0][0])).toBe(100);
+  });
+
+  it('grouped dedup CTE compiles and groups correctly with the self-bridge', async () => {
+    const rows = await run(sbSql(spec({
+      model: 'OrdersSelfBridge', metrics: ['Revenue'], dimensions: ['Tag'],
+    })));
+    const byTag = new Map(rows.map((r) => [r[0], Number(r[1])]));
+    expect(byTag.get('vip')).toBe(100);
+    expect(byTag.get('promo')).toBe(50);
+  });
+
+  it('golden: bridge and far are ALWAYS aliased (_b/_f) inside compiled subqueries', () => {
+    const sql = sbSql(spec({
+      model: 'OrdersSelfBridge', metrics: ['Revenue'],
+      filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }],
+    }));
+    expect(sql).toContain('_b.id = orders_sb.id');
+    expect(sql).toContain('_b.tag_id = _f.id');
+    expect(sql).toContain("_f.name = 'vip'");
+  });
+
+  it('golden: bridge == FAR table compiles with distinct aliases (no duplicate-alias error)', () => {
+    const selfFar: SemanticModelV2 = {
+      ...SELF_BRIDGE,
+      name: 'SelfFar',
+      references: [{
+        source: { kind: 'table', table: 'orders_sb' },
+        alias: 'peer',
+        relationship: 'many_to_many',
+        through: {
+          source: { kind: 'table', table: 'orders_sb' },
+          primaryOn: [{ primaryColumn: 'id', bridgeColumn: 'id' }],
+          referencedOn: [{ bridgeColumn: 'tag_id', referencedColumn: 'tag_id' }],
+        },
+      }],
+      dimensions: [{ name: 'Peer Amount', source: 'peer', column: 'amount' }],
+    };
+    const sql = irToSqlLocal(compileSemanticQuery(
+      spec({ model: 'SelfFar', metrics: ['Revenue'], dimensions: ['Peer Amount'] }), selfFar), 'duckdb');
+    expect(sql).toContain('orders_sb _b JOIN orders_sb _f');
+  });
+});

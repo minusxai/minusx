@@ -374,26 +374,29 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
   const isNegated = (filters: FarFilter[]): boolean =>
     filters.some((f) => f.operator === '!=' || f.operator === 'IS NULL');
 
-  // Semi-joins: one `primary.pk IN (SELECT bridge.pk … WHERE …)` per
-  // filter-only m2m reference. Independent semi-joins compose (AND).
+  // Semi-joins: one correlated EXISTS per filter-only m2m reference.
+  // Independent semi-joins compose (AND). The bridge and far sources are
+  // ALWAYS aliased (`_b`/`_f`) inside the subquery: without that, a bridge
+  // that IS the primary table makes the correlation a tautology
+  // (`t.pk = t.pk` binds both sides to the inner table — silently matching
+  // every row), and a bridge that IS the far table is a duplicate-alias
+  // error on BigQuery.
   for (const [alias, filters] of semiJoinFilters) {
     const ref = m2mByAlias.get(alias)!;
-    const bridgeName = sourceTableName(ref.through.source);
-    const farName = sourceTableName(ref.source);
     // CORRELATED EXISTS rather than `pk IN (SELECT …)`. Three things fall out
     // of that one choice: composite keys work (one correlation term per key
     // column — an uncorrelated IN can only carry a single column on BigQuery),
     // negation works (`NOT EXISTS`, which is NULL-safe where `NOT IN` is not),
     // and the engine can stop at the first matching bridge row.
     const correlation = ref.through.primaryOn
-      .map((p) => `${bridgeName}.${p.bridgeColumn} = ${baseName}.${p.primaryColumn}`);
+      .map((p) => `_b.${p.bridgeColumn} = ${baseName}.${p.primaryColumn}`);
     const bridgeToFar = ref.through.referencedOn
-      .map((r) => `${bridgeName}.${r.bridgeColumn} = ${farName}.${r.referencedColumn}`)
+      .map((r) => `_b.${r.bridgeColumn} = _f.${r.referencedColumn}`)
       .join(' AND ');
-    const far = farWhere(farName, filters);
+    const far = farWhere('_f', filters);
     const where = [...correlation, ...(far ? [far] : [])].join(' AND ');
     conditions.push({
-      raw_sql: `${isNegated(filters) ? 'NOT EXISTS' : 'EXISTS'} (SELECT 1 FROM ${sourceSqlName(ref.through.source)} JOIN ${sourceSqlName(ref.source)} ON ${bridgeToFar} WHERE ${where})`,
+      raw_sql: `${isNegated(filters) ? 'NOT EXISTS' : 'EXISTS'} (SELECT 1 FROM ${sourceSqlName(ref.through.source)} _b JOIN ${sourceSqlName(ref.source)} _f ON ${bridgeToFar} WHERE ${where})`,
     } as FilterCondition);
   }
 
@@ -425,8 +428,6 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
   const ctes: CTE[] = [];
   for (const alias of groupedM2M) {
     const ref = m2mByAlias.get(alias)!;
-    const bridgeName = sourceTableName(ref.through.source);
-    const farName = sourceTableName(ref.source);
     const cteName = `_m2m_${alias}`;
     const groupedColumns = [...new Set(
       spec.dimensions
@@ -435,19 +436,21 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
         .map((d) => d.column),
     )];
     const aliasFilters = groupedM2MFilters.get(alias) ?? [];
-    const cteWhere = aliasFilters.length > 0 ? ` WHERE ${farWhere(farName, aliasFilters)}` : '';
+    const cteWhere = aliasFilters.length > 0 ? ` WHERE ${farWhere('_f', aliasFilters)}` : '';
     // EVERY key column rides along as `_pk<k>` and the join maps them ALL —
     // a prefix of a composite key is not identity, and a bridge row matching
     // on the first column alone must not leak its far value into a group.
+    // Bridge/far are aliased `_b`/`_f` for the same reason as the semi-join:
+    // either may BE the primary table (or each other) by name.
     const pkProjection = ref.through.primaryOn
-      .map((p, k) => `${bridgeName}.${p.bridgeColumn} AS _pk${k}`)
+      .map((p, k) => `_b.${p.bridgeColumn} AS _pk${k}`)
       .join(', ');
     const bridgeToFar = ref.through.referencedOn
-      .map((r) => `${bridgeName}.${r.bridgeColumn} = ${farName}.${r.referencedColumn}`)
+      .map((r) => `_b.${r.bridgeColumn} = _f.${r.referencedColumn}`)
       .join(' AND ');
     ctes.push({
       name: cteName,
-      raw_sql: `SELECT DISTINCT ${pkProjection}, ${groupedColumns.map((c) => `${farName}.${c} AS ${c}`).join(', ')} FROM ${sourceSqlName(ref.through.source)} JOIN ${sourceSqlName(ref.source)} ON ${bridgeToFar}${cteWhere}`,
+      raw_sql: `SELECT DISTINCT ${pkProjection}, ${groupedColumns.map((c) => `_f.${c} AS ${c}`).join(', ')} FROM ${sourceSqlName(ref.through.source)} _b JOIN ${sourceSqlName(ref.source)} _f ON ${bridgeToFar}${cteWhere}`,
     });
     joins.push({
       type: aliasFilters.length > 0 ? 'INNER' : 'LEFT',

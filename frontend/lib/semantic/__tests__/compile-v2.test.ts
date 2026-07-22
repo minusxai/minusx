@@ -173,7 +173,7 @@ describe('m2m compiles (full coverage in m2m.test.ts)', () => {
   it('an m2m filter compiles to a correlated EXISTS', () => {
     const sql = sqlFor(spec({ metrics: ['Revenue'], filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }] }));
     expect(sql).toContain('EXISTS (SELECT 1');
-    expect(sql).toContain('order_tags.order_id = orders.id');
+    expect(sql).toContain('_b.order_id = orders.id');
   });
 });
 
