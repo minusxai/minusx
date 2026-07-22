@@ -19,7 +19,7 @@ export function SupportedModels() {
         <tr>
           <th>Provider</th>
           <th>Recommended models</th>
-          <th>Default (Analyst / Micro)</th>
+          <th>Default (Lite / Core / Advanced)</th>
         </tr>
       </thead>
       <tbody>
@@ -30,7 +30,7 @@ export function SupportedModels() {
               {p.description ? <> — {p.description}</> : null}
             </td>
             <td>{p.recommended ? [...new Set(Object.values(p.recommended).flat())].join(', ') : p.kind === 'managed' ? 'managed by the gateway' : 'any model your endpoint serves'}</td>
-            <td>{p.defaults ? `${p.defaults.analyst} / ${p.defaults.micro}` : '—'}</td>
+            <td>{p.defaults ? `${p.defaults.lite} / ${p.defaults.core} / ${p.defaults.advanced}` : '—'}</td>
           </tr>
         ))}
       </tbody>
