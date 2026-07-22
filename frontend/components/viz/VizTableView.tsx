@@ -13,7 +13,6 @@
  * and overrides hide it with `.mx-toolbar { display: none }`.
  */
 import { useId } from 'react';
-import { Box } from '@chakra-ui/react';
 import { TableV2 } from '@/components/plotx/TableV2';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { getVizColumnFormats, getTableConditionalFormats, getVizCss, setVizColumnFormats } from '@/lib/viz/encoding-edit';
@@ -40,7 +39,7 @@ export function VizTableView({ envelope, columns, types, rows, sql, databaseName
   const columnFormats = getVizColumnFormats(envelope);
 
   return (
-    <Box className={scopeClass} flex="1" minHeight="0" display="flex" flexDirection="column" width="100%">
+    <div className={`${scopeClass} flex min-h-0 w-full flex-1 flex-col`}>
       {css && isCssSafe(css) && (
         // Native CSS nesting scopes every user rule under this instance.
         <style>{`.${scopeClass} { ${css} }`}</style>
@@ -57,6 +56,6 @@ export function VizTableView({ envelope, columns, types, rows, sql, databaseName
         conditionalFormats={getTableConditionalFormats(envelope)}
         d3Formats
       />
-    </Box>
+    </div>
   );
 }

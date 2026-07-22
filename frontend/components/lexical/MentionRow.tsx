@@ -1,5 +1,4 @@
 import React from 'react';
-import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react';
 import {
   MentionOption,
   isSlashCommand,
@@ -20,6 +19,20 @@ interface MentionRowProps {
   onSelect: (mention: MentionOption) => void;
 }
 
+/** Group header ("Your skills" / "System") above a skills section. */
+function GroupHeader({ label }: { label: string }) {
+  return (
+    <div
+      className="border-b border-border px-3 py-1.5"
+      style={{ background: 'color-mix(in srgb, var(--muted) 50%, transparent)' }}
+    >
+      <span className="block text-[10px] font-bold tracking-[0.02em] text-muted-foreground uppercase">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 /** A single row in the mentions dropdown (plus any group header above it). */
 export function MentionRow({
   mention,
@@ -31,86 +44,62 @@ export function MentionRow({
   onHover,
   onSelect,
 }: MentionRowProps) {
+  const disabled = isSlashCommand(mention) && mention.disabled;
+
   return (
     <>
-      {isUserSkillHeader && (
-        <Box px={3} py={1.5} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted">
-          <Text fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.02em">
-            Your skills
-          </Text>
-        </Box>
-      )}
-      {isSystemSkillHeader && (
-        <Box px={3} py={1.5} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted">
-          <Text fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.02em">
-            System
-          </Text>
-        </Box>
-      )}
-      <Box
+      {isUserSkillHeader && <GroupHeader label="Your skills" />}
+      {isSystemSkillHeader && <GroupHeader label="System" />}
+      <div
         ref={isSelected ? selectedItemRef : null}
-        px={3}
-        py={2.5}
-        cursor={isSlashCommand(mention) && mention.disabled ? 'not-allowed' : 'pointer'}
-        opacity={isSlashCommand(mention) && mention.disabled ? 0.4 : 1}
-        bg={isSelected ? 'bg.muted' : 'transparent'}
-        borderBottom="1px solid"
-        borderColor="border.muted"
-        _last={{ borderBottom: 'none' }}
-        _hover={isSlashCommand(mention) && mention.disabled ? {} : { bg: 'bg.muted' }}
+        className={`border-b border-border px-3 py-2.5 last:border-b-0 ${
+          disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer hover:bg-muted'
+        } ${isSelected ? 'bg-muted' : 'bg-transparent'}`}
         onMouseEnter={() => onHover(index)}
         onClick={() => onSelect(mention)}
       >
         {(() => {
           const badgeInfo = getMentionBadgeInfo(mention);
+          const BadgeIcon = badgeInfo.icon;
           const primary = getMentionPrimaryText(mention);
           const meta = getMentionMetaText(mention);
           return (
-            <HStack gap={2.5} align="start" minW={0}>
-              <Box
-                as="span"
-                display="inline-flex"
-                alignItems="center"
-                justifyContent="center"
-                minW="54px"
-                h="20px"
-                px={1.5}
-                bg={`color-mix(in srgb, ${badgeInfo.color} 12%, transparent)`}
-                color={badgeInfo.color}
-                borderRadius="full"
-                fontSize="2xs"
-                fontWeight="700"
-                flexShrink={0}
-                gap={1}
+            <div className="flex min-w-0 items-start gap-2.5">
+              <span
+                className="inline-flex h-5 min-w-[54px] shrink-0 items-center justify-center gap-1 rounded-full px-1.5 text-[10px] font-bold"
+                style={{
+                  background: `color-mix(in srgb, ${badgeInfo.color} 12%, transparent)`,
+                  color: badgeInfo.color,
+                }}
               >
-                {badgeInfo.icon && <Icon as={badgeInfo.icon} boxSize={3} />}
+                {BadgeIcon && <BadgeIcon className="size-3 shrink-0" />}
                 {badgeInfo.label}
-              </Box>
-              <VStack gap={0.5} align="stretch" minW={0} flex={1}>
-                <HStack gap={1.5} minW={0} align="baseline">
-                  <Text fontSize="sm" fontWeight="650" color="fg.default" truncate>
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col items-stretch gap-0.5">
+                <div className="flex min-w-0 items-baseline gap-1.5">
+                  <span className="truncate text-sm text-foreground [font-weight:650]">
                     {primary}
-                  </Text>
+                  </span>
                   {!isSlashCommand(mention) && mention.type === 'table' && meta && (
-                    <Text fontSize="xs" color="fg.subtle" flexShrink={0}>
+                    <span className="shrink-0 text-xs text-muted-foreground">
                       {meta}
-                    </Text>
+                    </span>
                   )}
-                </HStack>
+                </div>
                 {(isSlashCommand(mention) || (!isSlashCommand(mention) && mention.type === 'skill')) && meta && (
-                  <Text fontSize="xs" color="fg.muted" lineClamp={2}>
+                  <span className="line-clamp-2 text-xs text-muted-foreground">
                     {meta}
-                  </Text>
+                  </span>
                 )}
-              </VStack>
+              </div>
               {/* Every table can drill down into its columns (resolved on demand). */}
               {!isSlashCommand(mention) && mention.type === 'table' && (
-                <Icon as={LuChevronRight} boxSize={3.5} color="fg.subtle" flexShrink={0} alignSelf="center" />
+                <LuChevronRight className="size-3.5 shrink-0 self-center text-muted-foreground" />
               )}
-            </HStack>
+            </div>
           );
         })()}
-      </Box>
+      </div>
     </>
   );
 }

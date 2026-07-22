@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
-import { Box, HStack, VStack, Text, Switch } from '@chakra-ui/react'
 import { LuChevronDown, LuChevronRight, LuLayoutGrid, LuSettings2 } from 'react-icons/lu'
+import { Switch } from '@/components/kit/switch'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
 import type { ColumnFormatConfig, AxisConfig } from '@/lib/types'
 
@@ -13,6 +13,10 @@ export interface AxisZone {
   onDrop: (column: string) => void
   onRemove: (column: string) => void
 }
+
+// Tiny section label used throughout (Chakra 2xs/700/0.05em equivalent)
+const SECTION_LABEL = 'text-[10px] font-bold uppercase tracking-wider text-muted-foreground'
+const INPUT_CLASSES = 'w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs text-foreground outline-none'
 
 /**
  * Declares which settings panels are visible for a given chart type.
@@ -74,73 +78,48 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
   const currentMax = axisConfig[maxKey]
   const currentTitle = axis === 'y' ? axisConfig.yTitle ?? '' : ''
 
-  const inputStyle = {
-    fontSize: '12px',
-    fontFamily: 'var(--fonts-mono, monospace)',
-    padding: '4px 8px',
-    width: '100%',
-    border: '1px solid var(--chakra-colors-border-muted)',
-    borderRadius: '4px',
-    background: 'var(--chakra-colors-bg-canvas)',
-    color: 'var(--chakra-colors-fg-default)',
-    outline: 'none',
-  }
-
   return (
-    <VStack align="stretch" gap={2.5} minW={0}>
-      <HStack gap={4} align="center" justify={axis === 'y' ? 'space-between' : 'flex-end'}>
+    <div className="flex min-w-0 flex-col items-stretch gap-2.5">
+      <div className={`flex items-center gap-4 ${axis === 'y' ? 'justify-between' : 'justify-end'}`}>
         {axis === 'y' && (
-          <HStack gap={2} align="center">
-            <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+          <div className="flex items-center gap-2">
+            <span className={SECTION_LABEL}>
               Dual Y-axis
-            </Text>
-            <Switch.Root
-              size="sm"
+            </span>
+            <Switch
+              aria-label="Dual Y-axis toggle"
               checked={!!axisConfig.dualAxis}
-              onCheckedChange={(e) => { onChange({ ...axisConfig, dualAxis: e.checked || null }) }}
-              colorPalette="teal"
-            >
-              <Switch.HiddenInput aria-label="Dual Y-axis toggle" />
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
-            </Switch.Root>
-          </HStack>
+              onCheckedChange={(checked) => { onChange({ ...axisConfig, dualAxis: checked || null }) }}
+              className="data-[state=checked]:bg-[#16a085]"
+            />
+          </div>
         )}
-        <HStack gap={1} align="center">
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+        <div className="flex items-center gap-1">
+          <span className={SECTION_LABEL}>
             Scale
-          </Text>
+          </span>
           {(['linear', 'log'] as const).map(scale => (
-            <Box
+            <div
               key={scale}
-              px={2} py={0.5}
-              borderRadius="sm"
-              cursor="pointer"
-              fontSize="xs"
-              fontFamily="mono"
-              fontWeight={currentScale === scale ? '700' : '500'}
-              bg={currentScale === scale ? 'accent.teal' : 'bg.surface'}
-              color={currentScale === scale ? 'white' : 'fg.default'}
-              border="1px solid"
-              borderColor={currentScale === scale ? 'accent.teal' : 'border.muted'}
-              _hover={{ bg: currentScale === scale ? 'accent.teal' : 'bg.muted' }}
+              className={`cursor-pointer rounded-sm border px-2 py-0.5 text-center font-mono text-xs transition-all duration-150 ${
+                currentScale === scale
+                  ? 'border-[#16a085] bg-[#16a085] font-bold text-white'
+                  : 'border-border bg-card font-medium text-foreground hover:bg-muted'
+              }`}
               onClick={(e) => { e.stopPropagation(); onChange({ ...axisConfig, [scaleKey]: scale }) }}
-              transition="all 0.15s"
-              textAlign="center"
               aria-label={`${axis.toUpperCase()} axis ${scale} scale`}
             >
               {scale}
-            </Box>
+            </div>
           ))}
-        </HStack>
-      </HStack>
-      <HStack gap={2} align="flex-end">
+        </div>
+      </div>
+      <div className="flex items-end gap-2">
         {axis === 'y' && (
-          <Box flex={2}>
-            <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+          <div className="flex-[2]">
+            <div className={`${SECTION_LABEL} mb-1`}>
               Title
-            </Text>
+            </div>
             <input
               type="text"
               placeholder="auto"
@@ -150,14 +129,14 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
                 onChange({ ...axisConfig, yTitle: value || null })
               }}
               onClick={(e) => e.stopPropagation()}
-              style={inputStyle}
+              className={INPUT_CLASSES}
             />
-          </Box>
+          </div>
         )}
-        <Box flex={1}>
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+        <div className="flex-1">
+          <div className={`${SECTION_LABEL} mb-1`}>
             Min
-          </Text>
+          </div>
           <input
             type="number"
             placeholder="auto"
@@ -167,13 +146,13 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
               onChange({ ...axisConfig, [minKey]: val ?? null })
             }}
             onClick={(e) => e.stopPropagation()}
-            style={inputStyle}
+            className={INPUT_CLASSES}
           />
-        </Box>
-        <Box flex={1}>
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+        </div>
+        <div className="flex-1">
+          <div className={`${SECTION_LABEL} mb-1`}>
             Max
-          </Text>
+          </div>
           <input
             type="number"
             placeholder="auto"
@@ -183,11 +162,11 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
               onChange({ ...axisConfig, [maxKey]: val ?? null })
             }}
             onClick={(e) => e.stopPropagation()}
-            style={inputStyle}
+            className={INPUT_CLASSES}
           />
-        </Box>
-      </HStack>
-    </VStack>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -209,7 +188,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
   const pendingRemoveRef = useRef<{ column: string; zoneLabel: string } | null>(null)
   // Keep a ref to the latest zones so deferred removal can use fresh closures
   const zonesRef = useRef(zones)
-   
+
   useEffect(() => { zonesRef.current = zones }, [zones])
 
   // Compute assigned columns from all zones
@@ -282,20 +261,6 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
   const showAnnotationPanel = cfg.annotations && !!annotationPanel
   const hasSettingsTab = showXAxisSettings || showYAxisSettings || showStylePanel || showAnnotationPanel
 
-  const tabButtonStyles = {
-    px: 2.5,
-    py: 1,
-    fontSize: '2xs',
-    fontFamily: 'mono',
-    fontWeight: '700',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
-    borderBottom: '2px solid',
-    borderRadius: 0,
-    transition: 'all 0.15s',
-    cursor: 'pointer',
-  }
-
   const togglePanel = (key: 'xAxis' | 'yAxis' | 'style' | 'annotations') => {
     setCollapsedPanels(prev => ({ ...prev, [key]: !prev[key] }))
   }
@@ -303,98 +268,61 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
   const renderSettingsCard = (title: string, panelKey: 'xAxis' | 'yAxis' | 'style' | 'annotations', children: React.ReactNode) => {
     const collapsed = collapsedPanels[panelKey]
     return (
-      <VStack
-        align="stretch"
-        gap={collapsed ? 0 : 2.5}
-        p={3}
-        bg="bg.surface"
-        borderRadius="md"
-        border="1px solid"
-        borderColor="border.muted"
-        minW={0}
+      <div
+        className={`flex min-w-0 flex-col items-stretch rounded-md border border-border bg-card p-3 ${collapsed ? 'gap-0' : 'gap-2.5'}`}
       >
-        <HStack
-          justify="space-between"
-          align="center"
-          cursor="pointer"
+        <div
+          className="flex cursor-pointer select-none items-center justify-between"
           onClick={() => togglePanel(panelKey)}
           role="button"
           aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
-          userSelect="none"
         >
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+          <span className={SECTION_LABEL}>
             {title}
-          </Text>
-          <Box color="fg.subtle">
+          </span>
+          <span className="text-muted-foreground">
             {collapsed ? <LuChevronRight size={14} /> : <LuChevronDown size={14} />}
-          </Box>
-        </HStack>
+          </span>
+        </div>
         {!collapsed && children}
-      </VStack>
+      </div>
     )
   }
 
   return (
-    <Box display="flex" flexDirection="column" gap={0} width="100%" p={borderless ? 0 : 3} bg={borderless ? 'transparent' : 'bg.canvas'} border={borderless ? 'none' : '1px solid'} borderColor={borderless ? undefined : 'border.muted'} borderRadius={borderless ? undefined : 'md'}>
+    <div
+      className={`flex w-full flex-col gap-0 ${borderless ? 'border-none bg-transparent p-0' : 'rounded-md border border-border bg-background p-3'}`}
+    >
       {/* Full-width 50/50 tab bar */}
       {hasSettingsTab && (
-        <HStack
-          gap={0}
-          bg="bg.muted"
-          borderRadius="md"
-          p={0.5}
-          mb={3}
-          maxW="240px"
-        >
+        <div className="mb-3 flex max-w-[240px] items-center gap-0 rounded-md bg-muted p-0.5">
           {([{ key: 'fields', icon: LuLayoutGrid, label: 'Fields' }, { key: 'settings', icon: LuSettings2, label: 'Settings' }] as const).map(({ key, icon: Icon, label }) => (
-            <HStack
+            <button
               key={key}
-              as="button"
-              flex={1}
-              gap={1.5}
-              justify="center"
-              py={1.5}
-              cursor="pointer"
-              bg={activeTab === key ? 'accent.teal/90' : 'transparent'}
-              color={activeTab === key ? 'white' : 'fg.subtle'}
-              borderRadius="sm"
-              _hover={{ color: activeTab === key ? 'white' : 'fg.muted' }}
-              transition="all 0.15s"
+              type="button"
+              className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-sm py-1.5 transition-all duration-150 ${
+                activeTab === key
+                  ? 'bg-[#16a085]/90 text-white'
+                  : 'bg-transparent text-muted-foreground hover:text-foreground'
+              }`}
               onClick={() => setActiveTab(key)}
             >
-              <Box as={Icon} fontSize="sm" />
-              <Text fontSize="xs" fontFamily="mono" fontWeight="600">
+              <Icon className="text-sm" />
+              <span className="font-mono text-xs font-semibold">
                 {label}
-              </Text>
-            </HStack>
+              </span>
+            </button>
           ))}
-        </HStack>
+        </div>
       )}
 
       {(!hasSettingsTab || activeTab === 'fields') && (
-        <VStack gap={3} align="stretch">
-        <Box
-          bg="bg.muted"
-          borderRadius="md"
-          p={2}
-          pt={3}
-          position="relative"
-        >
-          <Text
-            position="absolute"
-            top={-2}
-            fontSize="2xs"
-            fontWeight="700"
-            color="fg.subtle"
-            textTransform="uppercase"
-            letterSpacing="0.05em"
-            bg="bg.muted"
-            px={1.5}
-            borderRadius="sm"
-          >
+        <div className="flex flex-col items-stretch gap-3">
+        <div className="relative rounded-md bg-muted p-2 pt-3">
+          <span className={`${SECTION_LABEL} absolute -top-2 rounded-sm bg-muted px-1.5`}>
             Columns
-          </Text>
-        <HStack gap={2} flexWrap="wrap">
+          </span>
+        <div className="flex flex-wrap items-center gap-2">
           {columns.map(col => (
             <ColumnChip
               key={col}
@@ -410,31 +338,26 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
             />
           ))}
           {children}
-        </HStack>
-        </Box>
+        </div>
+        </div>
 
         {isTouchDevice && selectedColumnForMobile && (
-          <Box p={2} bg="accent.teal/10" borderRadius="md" textAlign="center">
-            <Text fontSize="xs" fontWeight="600" color="accent.teal">
+          <div className="rounded-md bg-[#16a085]/10 p-2 text-center">
+            <p className="text-xs font-semibold text-[#16a085]">
               Tap a zone below to add &quot;{selectedColumnForMobile}&quot;
-            </Text>
-          </Box>
+            </p>
+          </div>
         )}
 
-        <Box
-          display="grid"
-          gridTemplateColumns="repeat(2, 1fr)"
-          gap={2}
-          minWidth={0}
-        >
+        <div className="grid min-w-0 grid-cols-2 gap-2">
           {zones.map(zone => (
-              <Box key={zone.label} minW={0} display="flex" alignItems="stretch">
+              <div key={zone.label} className="flex min-w-0 items-stretch">
                 <DropZone
                   label={zone.label}
                   onDrop={() => handleZoneDrop(zone)}
                   isTouchDevice={isTouchDevice}
                 >
-                  <HStack gap={1.5} flexWrap="wrap" minW={0} width="100%">
+                  <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5">
                     {zone.items.map(item => (
                       <ZoneChip
                         key={item.column}
@@ -449,29 +372,21 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
                         onDragEnd={handleDragEnd}
                       />
                     ))}
-                  </HStack>
+                  </div>
                   {zone.items.length === 0 && (
-                    <Text
-                      fontSize="xs"
-                      color="fg.subtle"
-                      fontStyle="italic"
-                      maxWidth="100%"
-                      overflow="hidden"
-                      textOverflow="ellipsis"
-                      whiteSpace="nowrap"
-                    >
+                    <p className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-xs italic text-muted-foreground">
                       {zone.emptyText || 'Drop columns here'}
-                    </Text>
+                    </p>
                   )}
                 </DropZone>
-              </Box>
+              </div>
           ))}
-        </Box>
-        </VStack>
+        </div>
+        </div>
       )}
 
       {hasSettingsTab && activeTab === 'settings' && (
-        <VStack align="stretch" gap={3} minW={0}>
+        <div className="flex min-w-0 flex-col items-stretch gap-3">
           {showXAxisSettings && onAxisConfigChange && (
             renderSettingsCard('X Axis', 'xAxis',
               <AxisSettingsPanel axis="x" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
@@ -492,8 +407,8 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
               annotationPanel
             )
           ) : null}
-        </VStack>
+        </div>
       )}
-    </Box>
+    </div>
   )
 }

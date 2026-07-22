@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Box, HStack, Text, VStack } from '@chakra-ui/react'
 import { LuPalette, LuPipette } from 'react-icons/lu'
 import { CHART_COLORS, COLOR_PALETTE, resolveSeriesColor } from '@/lib/chart/chart-theme'
 import { useConfigs } from '@/lib/hooks/useConfigs'
@@ -25,20 +24,16 @@ const MARKER_SIZE_OPTIONS = [
   { label: 'xl', value: 30 },
 ] as const
 
+// Tiny section label (Chakra 2xs/700/0.05em equivalent)
+const SECTION_LABEL = 'text-[10px] font-bold uppercase tracking-wider text-muted-foreground'
+
 const Circle = ({ color, size, selected, onClick, label }: { color: string; size: string; selected: boolean; onClick: () => void; label?: string }) => (
-  <Box
+  <div
     aria-label={label}
-    w={size}
-    h={size}
-    borderRadius="full"
-    bg={color}
-    cursor="pointer"
-    border="2px solid"
-    borderColor={selected ? 'fg.default' : 'transparent'}
-    opacity={selected ? 1 : 0.75}
-    _hover={{ opacity: 1 }}
-    transition="all 0.15s"
-    flexShrink={0}
+    className={`shrink-0 cursor-pointer rounded-full border-2 transition-all duration-150 hover:opacity-100 ${
+      selected ? 'border-foreground opacity-100' : 'border-transparent opacity-75'
+    }`}
+    style={{ width: size, height: size, background: color }}
     onClick={onClick}
   />
 )
@@ -56,20 +51,10 @@ export const SeriesColorInput = ({ value, onCommit, label }: { value: string; on
   }
 
   return (
-    <Box
-      as="label"
+    <label
       aria-label={label}
-      position="relative"
-      w="20px"
-      h="20px"
-      borderRadius="full"
-      bg={value}
-      border="2px solid"
-      borderColor="border.emphasized"
-      cursor="pointer"
-      flexShrink={0}
-      _hover={{ borderColor: 'fg.default' }}
-      transition="all 0.15s"
+      className="relative block h-5 w-5 shrink-0 cursor-pointer rounded-full border-2 border-border transition-all duration-150 hover:border-foreground"
+      style={{ background: value }}
       title="Custom color"
     >
       <LuPipette size={11} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'white', fill: 'white', filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.85))' }} />
@@ -80,29 +65,21 @@ export const SeriesColorInput = ({ value, onCommit, label }: { value: string; on
         onChange={(e) => handleChange(e.target.value)}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', padding: 0, border: 'none' }}
       />
-    </Box>
+    </label>
   )
 }
 
 const ChoicePill = ({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) => (
-  <Box
-    px={2}
-    py={0.5}
-    borderRadius="sm"
-    cursor="pointer"
-    fontSize="xs"
-    fontFamily="mono"
-    fontWeight={selected ? '700' : '500'}
-    bg={selected ? 'accent.teal' : 'bg.surface'}
-    color={selected ? 'white' : 'fg.default'}
-    border="1px solid"
-    borderColor={selected ? 'accent.teal' : 'border.muted'}
-    _hover={{ bg: selected ? 'accent.teal' : 'bg.muted' }}
+  <div
+    className={`cursor-pointer rounded-sm border px-2 py-0.5 font-mono text-xs transition-all duration-150 ${
+      selected
+        ? 'border-[#16a085] bg-[#16a085] font-bold text-white'
+        : 'border-border bg-card font-medium text-foreground hover:bg-muted'
+    }`}
     onClick={onClick}
-    transition="all 0.15s"
   >
     {children}
-  </Box>
+  </div>
 )
 
 const hasStyleConfig = (config?: VisualizationStyleConfig) =>
@@ -119,7 +96,7 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
   const [activeSeriesIndex, setActiveSeriesIndex] = useState<number | null>(null)
   const [containerWidth, setContainerWidth] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
-  const buttonRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const { config } = useConfigs()
   const palette = useMemo(() => {
@@ -192,24 +169,18 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
   }
 
   const renderContent = (inline: boolean) => (
-    <VStack
-      align="stretch"
-      p={inline ? 0 : 3}
-      width={inline ? '100%' : '280px'}
-      maxHeight={inline ? undefined : '320px'}
-      overflowY={inline ? 'visible' : 'auto'}
-      gap={inline ? 2 : 3}
-      bg={inline ? 'transparent' : 'bg.panel'}
-      border={inline ? 'none' : '1px solid'}
-      borderColor="border.muted"
-      borderRadius={inline ? 'none' : 'md'}
-      boxShadow={inline ? 'none' : 'md'}
+    <div
+      className={`flex flex-col items-stretch ${
+        inline
+          ? 'w-full gap-2 overflow-visible border-none bg-transparent p-0'
+          : 'max-h-[320px] w-[280px] gap-3 overflow-y-auto rounded-md border border-border bg-popover p-3 shadow-md'
+      }`}
     >
-      <Box>
-        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+      <div>
+        <div className={`${SECTION_LABEL} mb-1`}>
           Colors
-        </Text>
-        <HStack gap={1.5} mb={activeSeriesIndex !== null ? 1.5 : 0} flexWrap="wrap">
+        </div>
+        <div className={`flex flex-wrap items-center gap-1.5 ${activeSeriesIndex !== null ? 'mb-1.5' : 'mb-0'}`}>
           {Array.from({ length: seriesCount }, (_, i) => (
             <Circle
               key={i}
@@ -220,12 +191,12 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
               onClick={() => setActiveSeriesIndex(activeSeriesIndex === i ? null : i)}
             />
           ))}
-        </HStack>
+        </div>
         {activeSeriesIndex !== null && (
-          <VStack align="stretch" gap={1.5}>
-            <HStack justify="space-between">
-              <Text fontSize="xs" fontFamily="mono" color="fg.subtle">{`Series ${activeSeriesIndex + 1}`}</Text>
-              <HStack gap={1.5}>
+          <div className="flex flex-col items-stretch gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs text-muted-foreground">{`Series ${activeSeriesIndex + 1}`}</span>
+              <div className="flex items-center gap-1.5">
                 <SeriesColorInput
                   key={`series-${activeSeriesIndex}`}
                   label={`Series ${activeSeriesIndex + 1} custom color`}
@@ -235,9 +206,9 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
                 <ChoicePill selected={!styleConfig?.colors?.[String(activeSeriesIndex)]} onClick={() => handleColorChange(activeSeriesIndex, undefined)}>
                   auto
                 </ChoicePill>
-              </HStack>
-            </HStack>
-            <HStack gap={1.5} flexWrap="wrap">
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
               {palette.map(hex => (
                 <Circle
                   key={`${activeSeriesIndex}-${hex}`}
@@ -247,60 +218,60 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
                   onClick={() => handleColorChange(activeSeriesIndex, hex)}
                 />
               ))}
-            </HStack>
-          </VStack>
+            </div>
+          </div>
         )}
-      </Box>
+      </div>
 
-      <Box>
-        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+      <div>
+        <div className={`${SECTION_LABEL} mb-1`}>
           Opacity
-        </Text>
-        <HStack gap={1} flexWrap="wrap">
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
           {OPACITY_OPTIONS.map(value => (
             <ChoicePill key={value} selected={selectedOpacity === value} onClick={() => emitConfig({ ...(styleConfig ?? {}), opacity: value })}>
               {Math.round(value * 100)}%
             </ChoicePill>
           ))}
-        </HStack>
-      </Box>
+        </div>
+      </div>
 
       {supportsMarkerSize && (
-        <Box>
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+        <div>
+          <div className={`${SECTION_LABEL} mb-1`}>
             Marker
-          </Text>
-          <HStack gap={1} flexWrap="wrap">
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
             {MARKER_SIZE_OPTIONS.map(({ label, value }) => (
               <ChoicePill key={label} selected={(styleConfig?.markerSize ?? (chartType === 'scatter' ? 8 : chartType === 'combo' ? 6 : 5)) === value} onClick={() => emitConfig({ ...(styleConfig ?? {}), markerSize: value })}>
                 {label}
               </ChoicePill>
             ))}
-          </HStack>
-        </Box>
+          </div>
+        </div>
       )}
 
       {supportsStacking && (
-        <Box>
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+        <div>
+          <div className={`${SECTION_LABEL} mb-1`}>
             Stacking
-          </Text>
-          <HStack gap={1} flexWrap="wrap">
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
             <ChoicePill selected={isStacked} onClick={() => emitConfig({ ...(styleConfig ?? {}), stacked: true })}>
               Stacked
             </ChoicePill>
             <ChoicePill selected={!isStacked} onClick={() => emitConfig({ ...(styleConfig ?? {}), stacked: false })}>
               Separate
             </ChoicePill>
-          </HStack>
-        </Box>
+          </div>
+        </div>
       )}
 
-      <Box>
-        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+      <div>
+        <div className={`${SECTION_LABEL} mb-1`}>
           Data Labels
-        </Text>
-        <HStack gap={1} flexWrap="wrap">
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
           <ChoicePill selected={!styleConfig?.showDataLabels} onClick={() => emitConfig({ ...(styleConfig ?? {}), showDataLabels: false })}>
             Off
           </ChoicePill>
@@ -314,54 +285,45 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
               onCommit={(hex) => emitConfig({ ...(styleConfig ?? {}), dataLabelColor: hex })}
             />
           )}
-        </HStack>
-      </Box>
-    </VStack>
+        </div>
+      </div>
+    </div>
   )
 
   const showInline = displayMode === 'inline' || (displayMode === 'auto' && containerWidth >= 220)
 
   return (
-    <Box position="relative" ref={containerRef} width="100%" display="flex" alignItems="center" justifyContent="center">
+    <div className="relative flex w-full items-center justify-center" ref={containerRef}>
       {showInline ? (
         renderContent(true)
       ) : (
         <>
-          <HStack
+          <button
             ref={buttonRef}
-            as="button"
-            gap={1}
-            px={2}
-            py={1}
-            borderRadius="md"
-            border="1px solid"
-            borderColor={hasStyleConfig(styleConfig) ? 'accent.teal' : 'border.muted'}
-            bg={hasStyleConfig(styleConfig) ? 'accent.teal/10' : 'bg.surface'}
-            color={hasStyleConfig(styleConfig) ? 'accent.teal' : 'fg.subtle'}
-            _hover={{ borderColor: 'accent.teal', color: 'accent.teal' }}
-            transition="all 0.15s"
+            type="button"
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 transition-all duration-150 hover:border-[#16a085] hover:text-[#16a085] ${
+              hasStyleConfig(styleConfig)
+                ? 'border-[#16a085] bg-[#16a085]/10 text-[#16a085]'
+                : 'border-border bg-card text-muted-foreground'
+            }`}
             onClick={() => setShowPopover(prev => !prev)}
           >
             <LuPalette size={12} />
-            <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">
+            <span className="text-[10px] font-bold uppercase tracking-wider">
               Options
-            </Text>
-          </HStack>
+            </span>
+          </button>
 
           {showPopover && (
-            <Box
+            <div
               ref={popoverRef}
-              position="absolute"
-              top="100%"
-              right={0}
-              mt={1}
-              zIndex={20}
+              className="absolute right-0 top-full z-20 mt-1"
             >
               {renderContent(false)}
-            </Box>
+            </div>
           )}
         </>
       )}
-    </Box>
+    </div>
   )
 }

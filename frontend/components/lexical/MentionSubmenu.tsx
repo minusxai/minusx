@@ -1,5 +1,4 @@
 import React from 'react';
-import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react';
 import { MentionItem } from '@/lib/data/completions/types';
 import { COLUMN_MENTION_METADATA } from '@/lib/ui/file-metadata';
 import { ColumnInfo } from './mentions-plugin-utils';
@@ -13,61 +12,50 @@ interface MentionSubmenuProps {
   onSelectItem: (column: ColumnInfo) => void;
 }
 
+// Amethyst purple — the column-mention accent (ACCENT_HEX.secondary).
+const ColumnIcon = COLUMN_MENTION_METADATA.icon;
+
 /** Column drill-down submenu for the highlighted table. */
 export function MentionSubmenu({ table, items, inSubmenu, columnIndex, onHoverItem, onSelectItem }: MentionSubmenuProps) {
   return (
-    <Box
-      minW="210px"
-      maxW="300px"
-      bg="bg.panel"
-      border="1px solid"
-      borderColor={inSubmenu ? 'accent.secondary' : 'border.default'}
-      borderRadius="lg"
-      boxShadow="lg"
-      maxH="360px"
-      overflow="hidden"
-      fontFamily="mono"
+    <div
+      className="max-h-[360px] max-w-[300px] min-w-[210px] overflow-hidden rounded-lg border bg-popover shadow-lg"
+      style={{
+        borderColor: inSubmenu ? COLUMN_MENTION_METADATA.color : 'var(--border)',
+        fontFamily: 'var(--font-jetbrains-mono), monospace',
+      }}
     >
-      <Box px={3} py={2} borderBottom="1px solid" borderColor="border.muted" bg="bg.subtle">
-        <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0" truncate>
+      <div
+        className="border-b border-border px-3 py-2"
+        style={{ background: 'color-mix(in srgb, var(--muted) 50%, transparent)' }}
+      >
+        <div className="truncate text-xs font-bold tracking-[0] text-muted-foreground uppercase">
           {table.name}
-        </Text>
-      </Box>
-      <Box maxH="312px" overflowY="auto">
-        <VStack align="stretch" gap={0}>
+        </div>
+      </div>
+      <div className="max-h-[312px] overflow-y-auto">
+        <div className="flex flex-col items-stretch">
           {items.map((column, i) => (
-            <HStack
+            <div
               key={`${column.name}-${i}`}
               aria-label={`Insert column ${column.name}`}
-              px={3}
-              py={2}
-              gap={2}
-              justify="space-between"
-              cursor="pointer"
-              bg={inSubmenu && i === columnIndex ? 'bg.muted' : 'transparent'}
-              _hover={{ bg: 'bg.muted' }}
-              borderBottom="1px solid"
-              borderColor="border.muted"
-              _last={{ borderBottom: 'none' }}
+              className={`flex cursor-pointer items-center justify-between gap-2 border-b border-border px-3 py-2 last:border-b-0 hover:bg-muted ${
+                inSubmenu && i === columnIndex ? 'bg-muted' : 'bg-transparent'
+              }`}
               onMouseEnter={() => onHoverItem(i)}
               onClick={() => onSelectItem(column)}
             >
-              <HStack gap={1.5} minW={0}>
-                <Icon
-                  as={COLUMN_MENTION_METADATA.icon}
-                  boxSize={3}
-                  color={COLUMN_MENTION_METADATA.color}
-                  flexShrink={0}
-                />
-                <Text fontSize="sm" fontWeight="600" color="fg.default" truncate>{column.name}</Text>
-              </HStack>
-              <Text fontSize="2xs" color="fg.subtle" flexShrink={0}>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <ColumnIcon className="size-3 shrink-0" style={{ color: COLUMN_MENTION_METADATA.color }} />
+                <span className="truncate text-sm font-semibold text-foreground">{column.name}</span>
+              </div>
+              <span className="shrink-0 text-[10px] text-muted-foreground">
                 {column.type}
-              </Text>
-            </HStack>
+              </span>
+            </div>
           ))}
-        </VStack>
-      </Box>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }

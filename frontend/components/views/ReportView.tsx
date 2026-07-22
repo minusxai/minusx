@@ -1,6 +1,5 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Badge } from '@chakra-ui/react';
 import { PageMarkerDevOverlay } from '@/components/views/story/PageMarkerDevOverlay';
 import { ReportContent, ReportOutput, RunFileContent, JobRun, DatabaseWithSchema } from '@/lib/types';
 import LexicalTextEditor, { LexicalTextViewer } from '@/components/lexical/LexicalTextEditor';
@@ -13,6 +12,8 @@ import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
 import Markdown from '@/components/Markdown';
+import { Badge } from '@/components/kit/badge';
+import { cn } from '@/components/kit/cn';
 
 interface ReportViewProps {
   report: ReportContent;
@@ -37,6 +38,12 @@ interface ReportViewProps {
   colorMode?: 'light' | 'dark';
 }
 
+/** Status badge tint (Chakra colorPalette subtle-badge equivalent): accent at low opacity + accent text. */
+const STATUS_BADGE_CLASS: Record<string, string> = {
+  success: 'border-transparent bg-[color-mix(in_srgb,#2ecc71_18%,transparent)] text-[#27ae60]',
+  failure: 'border-transparent bg-[color-mix(in_srgb,#c0392b_15%,transparent)] text-[#c0392b]',
+  other: 'border-transparent bg-[color-mix(in_srgb,#f39c12_18%,transparent)] text-[#f39c12]',
+};
 
 export default function ReportView({
   report,
@@ -140,9 +147,9 @@ export default function ReportView({
   return (
     // data-file-id → standard FileView capture (useScreenshot / Dev Tools "Download Image").
     // Overlay OUTSIDE the captured [data-file-id] subtree (StoryView contract).
-    <Box display="flex" flexDirection="column" flex="1" minH="0" position="relative">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <PageMarkerDevOverlay enabled={!!showDevMarkers} colorMode={colorMode ?? 'light'} />
-    <Box data-file-id={fileId} display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
+    <div data-file-id={fileId} className="flex min-h-0 flex-1 flex-col overflow-hidden font-mono">
       {/* Status bar: Live/Draft toggle */}
       <StatusBanner
         status={report.status ?? 'draft'}
@@ -156,30 +163,22 @@ export default function ReportView({
 
       {/* Visual View - Two Column Layout (the Code view is rendered upstream by FileView) */}
       {(
-        <Box
+        <div
           ref={mainContentRef}
-          display="flex"
-          flexDirection={!useCompactLayout ? 'row' : 'column'}
-          flex={1}
-          overflow="hidden"
-          minHeight="0"
+          className={cn(
+            'flex min-h-0 flex-1 overflow-hidden',
+            !useCompactLayout ? 'flex-row' : 'flex-col',
+          )}
         >
           {/* Left Panel: Form */}
-          <Box
-            display="flex"
-            flexDirection="column"
-            flexShrink={0}
-            width={!useCompactLayout ? `calc(${leftPanelWidth}% - 8px)` : '100%'}
-            minWidth={!useCompactLayout ? '300px' : undefined}
-            overflow="auto"
-            bg="bg.surface"
-            borderRadius={!useCompactLayout ? 'lg' : undefined}
-            my={!useCompactLayout ? 2 : 0}
-            ml={!useCompactLayout ? 2 : 0}
-            border={!useCompactLayout ? '1px solid' : undefined}
-            borderColor="border.muted"
+          <div
+            className={cn(
+              'flex shrink-0 flex-col overflow-auto bg-card',
+              !useCompactLayout && 'my-2 ml-2 min-w-[300px] rounded-lg border border-border/60',
+            )}
+            style={{ width: !useCompactLayout ? `calc(${leftPanelWidth}% - 8px)` : '100%' }}
           >
-            <VStack gap={3} align="stretch" p={4}>
+            <div className="flex flex-col gap-3 p-4">
               {/* Schedule Card */}
               <SchedulePicker
                 schedule={{ cron: report.schedule?.cron || '0 9 * * 1', timezone: report.schedule?.timezone || 'America/New_York' }}
@@ -189,28 +188,17 @@ export default function ReportView({
 
               {/* Report Instructions Card — single freeform prompt. The agent
                   finds the relevant questions/data itself from this text. */}
-              <Box
-                bg="bg.muted"
-                borderRadius="md"
-                border="1px solid"
-                borderColor="border.muted"
-                p={3}
-              >
-                <HStack mb={1} gap={1.5}>
-                  <LuFileText size={14} color="var(--chakra-colors-accent-warning)" />
-                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Instructions</Text>
-                </HStack>
-                <Text fontSize="xs" color="fg.subtle" mb={2}>
-                </Text>
+              <div className="rounded-md border border-border/60 bg-muted p-3">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <LuFileText size={14} color="#f39c12" />
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Instructions</p>
+                </div>
+                <p className="mb-2 text-xs text-muted-foreground">
+                </p>
 
-                <Box
+                <div
                   aria-label="Report instructions"
-                  height="240px"
-                  bg="bg.surface"
-                  borderRadius="md"
-                  border="1px solid"
-                  borderColor="border.default"
-                  overflow="hidden"
+                  className="h-[240px] overflow-hidden rounded-md border border-border bg-card"
                 >
                   {editMode ? (
                     <LexicalTextEditor
@@ -222,8 +210,8 @@ export default function ReportView({
                   ) : (
                     <LexicalTextViewer markdown={report.reportPrompt || ''} padding="12px 16px" />
                   )}
-                </Box>
-              </Box>
+                </div>
+              </div>
 
               {/* Delivery Card */}
               <DeliveryCard
@@ -231,75 +219,47 @@ export default function ReportView({
                 onChange={(recipients) => onChange({ recipients })}
                 disabled={!editMode}
               />
-            </VStack>
-          </Box>
+            </div>
+          </div>
 
           {/* Resize Handle */}
           {!useCompactLayout && (
-            <Box
+            <div
               role="group"
-              width="16px"
-              cursor="col-resize"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              position="relative"
+              className="group relative z-10 flex w-4 shrink-0 cursor-col-resize select-none items-center justify-center"
               onMouseDown={handleResizeStart}
-              flexShrink={0}
-              zIndex={10}
-              userSelect="none"
             >
               {/* Vertical line */}
-              <Box
-                position="absolute"
-                top="0"
-                bottom="0"
-                width="2px"
-                bg={isResizing ? 'accent.teal' : 'border.muted'}
-                _groupHover={{ bg: 'accent.teal' }}
-                transition="all 0.15s ease"
-                borderRadius="full"
+              <div
+                className={cn(
+                  'absolute inset-y-0 w-[2px] rounded-full transition-all duration-150 ease-in-out group-hover:bg-[#16a085]',
+                  isResizing ? 'bg-[#16a085]' : 'bg-border/60',
+                )}
               />
               {/* Center grip indicator */}
-              <Box
-                position="absolute"
-                top="50%"
-                transform="translateY(-50%)"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                width="20px"
-                height="40px"
-                bg={isResizing ? 'accent.teal' : 'bg.emphasized'}
-                _groupHover={{ bg: 'accent.teal' }}
-                borderRadius="md"
-                transition="all 0.15s ease"
-                boxShadow="sm"
+              <div
+                className={cn(
+                  'absolute top-1/2 flex h-10 w-5 -translate-y-1/2 items-center justify-center rounded-md shadow-sm transition-all duration-150 ease-in-out group-hover:bg-[#16a085]',
+                  isResizing ? 'bg-[#16a085]' : 'bg-muted',
+                )}
               >
-                <Box
-                  as={LuGripVertical}
-                  fontSize="sm"
-                  color={isResizing ? 'white' : 'fg.muted'}
-                  _groupHover={{ color: 'white' }}
-                  transition="color 0.15s ease"
+                <LuGripVertical
+                  size={14}
+                  className={cn(
+                    'transition-colors duration-150 ease-in-out group-hover:text-white',
+                    isResizing ? 'text-white' : 'text-muted-foreground',
+                  )}
                 />
-              </Box>
-            </Box>
+              </div>
+            </div>
           )}
 
           {/* Right Panel: Report Runs */}
-          <Box
-            flex={1}
-            display="flex"
-            flexDirection="column"
-            minHeight="75vh"
-            overflow="hidden"
-            bg="bg.surface"
-            borderRadius={!useCompactLayout ? 'lg' : undefined}
-            my={!useCompactLayout ? 2 : 0}
-            mr={!useCompactLayout ? 2 : 0}
-            border={!useCompactLayout ? '1px solid' : undefined}
-            borderColor="border.muted"
+          <div
+            className={cn(
+              'flex min-h-[75vh] flex-1 flex-col overflow-hidden bg-card',
+              !useCompactLayout && 'my-2 mr-2 rounded-lg border border-border/60',
+            )}
           >
             {/* Run Header */}
             <RunNowHeader
@@ -314,71 +274,69 @@ export default function ReportView({
             />
 
             {/* Run Content */}
-            <Box flex={1} overflow="auto" p={4}>
+            <div className="flex-1 overflow-auto p-4">
               {isRunning ? (
-                <VStack gap={4} align="center" justify="center" h="100%">
-                  <Text color="fg.muted">Running report...</Text>
-                </VStack>
+                <div className="flex h-full flex-col items-center justify-center gap-4">
+                  <p className="text-muted-foreground">Running report...</p>
+                </div>
               ) : runFileContent ? (
-                <VStack align="stretch" gap={3}>
-                  <HStack justify="space-between">
-                    <HStack gap={2}>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
                       <Badge
-                        colorPalette={runFileContent.status === 'success' ? 'green' : runFileContent.status === 'failure' ? 'red' : 'yellow'}
+                        className={
+                          STATUS_BADGE_CLASS[
+                            runFileContent.status === 'success' ? 'success' : runFileContent.status === 'failure' ? 'failure' : 'other'
+                          ]
+                        }
                       >
                         {runFileContent.status}
                       </Badge>
-                      <Text fontSize="xs" color="fg.muted">
+                      <p className="text-xs text-muted-foreground">
                         {new Date(runFileContent.startedAt).toLocaleString()}
-                      </Text>
-                    </HStack>
+                      </p>
+                    </div>
                     {runFileId && (
                       <Link href={preserveParams(`/f/${runFileId}`)} style={{ opacity: 0.5 }}>
                         <LuExternalLink size={14} />
                       </Link>
                     )}
-                  </HStack>
+                  </div>
                   {reportOutput?.generatedReport && (
-                    <Box
-                      p={4}
-                      bg="bg.muted"
-                      borderRadius="md"
-                      overflow="auto"
-                      maxH="none"
-                    >
+                    <div className="max-h-none overflow-auto rounded-md bg-muted p-4">
                       <Markdown queries={reportOutput.queries}>
                         {reportOutput.generatedReport}
                       </Markdown>
-                    </Box>
+                    </div>
                   )}
                   {runFileContent.error && (
-                    <Box p={3} bg="red.subtle" borderRadius="md" color="red.fg">
-                      <Text fontSize="sm">{runFileContent.error}</Text>
-                    </Box>
+                    <div className="rounded-md bg-[color-mix(in_srgb,#c0392b_10%,transparent)] p-3 text-[#c0392b]">
+                      <p className="text-sm">{runFileContent.error}</p>
+                    </div>
                   )}
-                </VStack>
+                </div>
               ) : runs.length === 0 ? (
-                <VStack aria-label="No report runs" gap={4} align="center" justify="center" h="100%" color="fg.muted">
+                <div aria-label="No report runs" className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
                   <LuHistory size={48} opacity={0.3} />
-                  <Text fontSize="sm">
+                  <p className="text-sm">
                     {isDirty
                       ? 'Save your changes before running'
                       : !hasPrompt
                         ? 'Add report instructions to run the report'
                         : 'No runs yet. Click "Run Now" to test your report'
                     }
-                  </Text>
-                </VStack>
+                  </p>
+                </div>
               ) : (
-                <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
-                  <Text fontSize="sm">Select a run to view details</Text>
-                </VStack>
+                <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
+                  <p className="text-sm">Select a run to view details</p>
+                </div>
               )}
-            </Box>
-          </Box>
-        </Box>
+            </div>
+          </div>
+        </div>
       )}
-    </Box>
-    </Box>
+    </div>
+    </div>
   );
 }

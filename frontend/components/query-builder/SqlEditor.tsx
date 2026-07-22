@@ -2,8 +2,8 @@
 
 import dynamic from 'next/dynamic';
 import { useAppSelector } from '@/store/hooks';
-import { Box, HStack } from '@chakra-ui/react';
 import { format } from 'sql-formatter';
+import { cn } from '@/components/kit/cn';
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { DatabaseWithSchema } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -443,26 +443,14 @@ export default function SqlEditor({
     <>
       {/* Inject Monaco suggest widget styles */}
       <style>{monacoSuggestStyles}</style>
-      <Box
-        border="1px solid"
-        borderColor="border.default"
-        borderRadius="md"
-        overflow="hidden"
-        bg="bg.subtle"
-        pr={2}
-        position="relative"
-        height={fillHeight ? '100%' : undefined}
-        display={fillHeight ? 'flex' : undefined}
-        flexDirection={fillHeight ? 'column' : undefined}
+      <div
+        className={cn(
+          'relative overflow-hidden rounded-md border border-border bg-muted pr-2',
+          fillHeight && 'flex h-full flex-col',
+        )}
       >
-      <HStack align="stretch" gap={2} flex={fillHeight ? 1 : undefined} height={fillHeight ? '100%' : undefined}>
-        <Box
-          flex={1}
-          borderColor="border.default"
-          overflow="hidden"
-          height={fillHeight ? '100%' : undefined}
-          bg="bg.canvas"
-        >
+      <div className={cn('flex items-stretch gap-2', fillHeight && 'h-full flex-1')}>
+        <div className={cn('flex-1 overflow-hidden bg-background', fillHeight && 'h-full')}>
           {proposedValue ? (
             // Diff mode: show current vs proposed
             <SqlDiffEditor
@@ -481,7 +469,7 @@ export default function SqlEditor({
               value={value}
               onChange={handleChange}
               theme={editorTheme}
-              loading={<Box p={4} color="fg.muted" fontFamily="mono" fontSize="sm">Loading editor...</Box>}
+              loading={<div className="p-4 font-mono text-sm text-muted-foreground">Loading editor...</div>}
               onMount={(editor, monaco) => {
                 editorRef.current = editor;
                 monacoRef.current = monaco;
@@ -703,7 +691,7 @@ export default function SqlEditor({
               onClose={() => setEditSel(null)}
             />
           )}
-        </Box>
+        </div>
 
         <SqlEditorToolbar
           readOnly={readOnly}
@@ -713,7 +701,7 @@ export default function SqlEditor({
           onRun={onRun}
           isRunning={isRunning}
         />
-      </HStack>
+      </div>
 
       {/* Resize handle - only show when not in fillHeight mode */}
       <SqlEditorResizeHandle
@@ -721,7 +709,7 @@ export default function SqlEditor({
         isResizing={isResizing}
         onResizeStart={handleResizeStart}
       />
-    </Box>
+    </div>
     </>
   );
 }

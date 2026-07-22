@@ -16,8 +16,10 @@
  * read-only without a fileId, editable with one (full-content edits).
  */
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { PageMarkerDevOverlay } from '@/components/views/story/PageMarkerDevOverlay';
-import { Box, VStack, HStack, Button, Center, Text } from '@chakra-ui/react';
+import { Button } from '@/components/kit/button';
+import { cn } from '@/components/kit/cn';
 import { LuDatabase, LuFileText, LuPlay, LuChevronsDownUp, LuChevronsUpDown, LuPlus } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import NotebookSqlCell, { type Executed } from './notebook/NotebookSqlCell';
@@ -59,30 +61,27 @@ const newId = (): string => crypto.randomUUID();
 /**
  * A friendly "add a cell" CTA for the empty notebook: a dashed "open slot" button with a leading
  * plus, the cell-type glyph, and an explicit label. Hovering tints it to the cell type's accent.
+ * `accent` is a hex color, threaded through a CSS var so the hover tint stays a static class.
  */
 function AddCellButton({ icon: Icon, label, accent, ariaLabel, onClick }: {
   icon: IconType; label: string; accent: string; ariaLabel: string; onClick: () => void;
 }) {
-  const accentVar = `var(--chakra-colors-${accent.replace(/\./g, '-')})`;
   return (
     <Button
       aria-label={ariaLabel}
       onClick={onClick}
       variant="outline"
       size="sm"
-      h="auto"
-      py={2}
-      px={3.5}
-      gap={2}
-      fontSize="xs"
-      borderColor="border.emphasized"
-      color="fg.muted"
-      fontWeight={600}
-      transition="border-color 0.15s, color 0.15s, background 0.15s"
-      _hover={{ borderColor: accent, color: 'fg.default', bg: `color-mix(in srgb, ${accentVar} 7%, transparent)` }}
+      style={{ '--mx-accent': accent } as CSSProperties}
+      className={cn(
+        'h-auto gap-2 border-border px-3.5 py-2 text-xs font-semibold text-muted-foreground',
+        'transition-[border-color,color,background] duration-150 dark:border-border dark:bg-transparent',
+        'hover:border-(--mx-accent) hover:bg-[color-mix(in_srgb,var(--mx-accent)_7%,transparent)] hover:text-foreground',
+        'dark:hover:border-(--mx-accent) dark:hover:bg-[color-mix(in_srgb,var(--mx-accent)_7%,transparent)]',
+      )}
     >
-      <Box color={accent} display="flex"><LuPlus size={13} strokeWidth={2.75} /></Box>
-      <Box display="flex"><Icon size={13} strokeWidth={2} /></Box>
+      <span className="flex text-(--mx-accent)"><LuPlus size={13} strokeWidth={2.75} /></span>
+      <span className="flex"><Icon size={13} strokeWidth={2} /></span>
       {label}
     </Button>
   );
@@ -194,12 +193,12 @@ export default function NotebookView({
     return (
       // No own scroll container — the shared FileLayout column owns page scroll,
       // so the horizontal gutters scroll too (a nested scroller leaves them dead).
-      <Box p={{ base: 4, md: 8 }}>
-        <Box maxW="860px" mx="auto">
+      <div className="p-4 md:p-8">
+        <div className="mx-auto max-w-[860px]">
           {cells.length === 0 ? (
-            <Center color="fg.muted" py={16}><Text fontSize="sm">Nothing to present yet.</Text></Center>
+            <div className="flex items-center justify-center py-16 text-muted-foreground"><p className="text-sm">Nothing to present yet.</p></div>
           ) : (
-            <VStack align="stretch" gap={8}>
+            <div className="flex flex-col gap-8">
               {cells.map(cell => cell.type === 'sql' ? (
                 <NotebookSqlCell
                   key={cell.id}
@@ -223,42 +222,42 @@ export default function NotebookView({
                   onRemove={removeCell}
                 />
               ))}
-            </VStack>
+            </div>
           )}
-        </Box>
-      </Box>
+        </div>
+      </div>
     );
   }
 
   return (
     // No own scroll container — the shared FileLayout column owns page scroll,
     // so the horizontal gutters scroll too (a nested scroller leaves them dead).
-    <Box p={4}>
+    <div className="p-4">
       {/* data-file-id → standard FileView capture (useScreenshot / Dev Tools "Download Image"). */}
       {/* Overlay OUTSIDE the captured [data-file-id] subtree (StoryView contract). */}
-      <Box maxW="900px" mx="auto" position="relative">
+      <div className="relative mx-auto max-w-[900px]">
         <PageMarkerDevOverlay enabled={!!showDevMarkers} colorMode={colorMode ?? 'light'} />
-      <Box {...(fileId !== undefined ? { 'data-file-id': fileId } : {})}>
-      <VStack align="stretch" gap={0} pl={{ base: 0, md: '40px' }}>
+      <div {...(fileId !== undefined ? { 'data-file-id': fileId } : {})}>
+      <div className="flex flex-col pl-0 md:pl-[40px]">
         {cells.length === 0 ? (
           <NotebookEmptyState
             actions={!readOnly && (
-              <HStack justify="center" gap={3}>
+              <div className="flex items-center justify-center gap-3">
                 <AddCellButton
                   icon={LuDatabase}
                   label="Add SQL cell"
-                  accent="accent.primary"
+                  accent="#2980b9"
                   ariaLabel="Add SQL cell"
                   onClick={() => insertAt(0, 'sql')}
                 />
                 <AddCellButton
                   icon={LuFileText}
                   label="Add text cell"
-                  accent="accent.sun"
+                  accent="#d35400"
                   ariaLabel="Add text cell"
                   onClick={() => insertAt(0, 'text')}
                 />
-              </HStack>
+              </div>
             )}
           />
         ) : (
@@ -268,23 +267,17 @@ export default function NotebookView({
               const active = cell.id === activeCellId;
               return (
                 <Fragment key={cell.id}>
-                  <Box position="relative">
+                  <div className="relative">
                     {/* Jupyter-style cell number in the left gutter */}
-                    <Text
+                    <span
                       aria-hidden
-                      position="absolute"
-                      left={{ base: '4px', md: '-34px' }}
-                      top="10px"
-                      width={{ base: 'auto', md: '28px' }}
-                      textAlign="right"
-                      fontFamily="mono"
-                      fontSize="11px"
-                      fontWeight="600"
-                      color={active ? 'accent.teal' : 'fg.subtle'}
-                      pointerEvents="none"
+                      className={cn(
+                        'pointer-events-none absolute top-[10px] left-[4px] w-auto text-right font-mono text-[11px] font-semibold md:left-[-34px] md:w-[28px]',
+                        active ? 'text-[#16a085]' : 'text-muted-foreground',
+                      )}
                     >
                       [{i + 1}]
-                    </Text>
+                    </span>
                     {cell.type === 'sql' ? (
                       <NotebookSqlCell
                         cell={cell}
@@ -314,16 +307,16 @@ export default function NotebookView({
                         onRemove={removeCell}
                       />
                     )}
-                  </Box>
+                  </div>
                   <CellInsertZone onInsert={(t) => insertAt(i + 1, t)} readOnly={readOnly} />
                 </Fragment>
               );
             })}
           </>
         )}
-      </VStack>
-      </Box>
-      </Box>
-    </Box>
+      </div>
+      </div>
+      </div>
+    </div>
   );
 }

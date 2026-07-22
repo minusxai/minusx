@@ -1,4 +1,5 @@
-import { Box, HStack, VStack, Text, Portal, Icon, Spinner, Input } from '@chakra-ui/react'
+import { createElement } from 'react'
+import { createPortal } from 'react-dom'
 import { LuCheck, LuArrowUp, LuArrowDown, LuFilter, LuX, LuArrowUpDown, LuSettings2 } from 'react-icons/lu'
 import type { Header } from '@tanstack/react-table'
 import type { ColumnStats } from '@/lib/database/duckdb'
@@ -16,6 +17,16 @@ import {
   FACET_PICKER_MAX_UNIQUE,
   FACET_PICKER_RATIO,
 } from './table-v2-utils'
+
+// Accent constants (the app palette — same values the converted pivot uses).
+const TEAL = '#16a085'
+const mix = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`
+
+// Small 16px icon-button used for the sort/filter/format toggles.
+const toggleBtnClass = (active: boolean) =>
+  `flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm transition-all duration-150 ${
+    active ? 'opacity-100' : 'opacity-50 hover:opacity-100 hover:bg-muted'
+  }`
 
 interface TableHeaderCellProps {
   header: Header<Record<string, any>, any>
@@ -73,162 +84,102 @@ export const TableHeaderCell = ({
     ? rawFilter
     : { search: '', selected: [] }
   const hasActiveFilter = facetedFilter.search !== '' || facetedFilter.selected.length > 0
+  const isAccented = hasActiveFilter || !!isSorted
 
   return (
-    <Box
-      as="th"
+    <th
       // Stable class contract for css overrides (Viz V2 table / story styling)
-      className={`mx-th ${cssColumnClass(header.id)}`}
-      textAlign="left"
-      py={3}
-      px={4}
-      fontFamily="heading"
-      fontWeight="700"
-      fontSize="xs"
-      color="fg.default"
-      borderRight="1px solid"
-      borderRightColor="border.default"
-      borderBottom={(hasActiveFilter || isSorted) ? '2px solid' : '1px solid'}
-      borderBottomColor={(hasActiveFilter || isSorted) ? 'accent.teal' : 'border.default'}
-      bg={(hasActiveFilter || isSorted) ? 'accent.teal/5' : undefined}
-      width={header.getSize()}
-      minW="100px"
-      _last={{ borderRight: 'none' }}
-      position="relative"
-      verticalAlign="top"
+      className={`mx-th ${cssColumnClass(header.id)} relative min-w-[100px] px-4 py-3 text-left align-top text-xs font-bold text-foreground`}
+      style={{
+        width: header.getSize(),
+        borderRight: displayIndex < totalHeaders - 1 ? '1px solid var(--border)' : undefined,
+        borderBottom: isAccented ? `2px solid ${TEAL}` : '1px solid var(--border)',
+        ...(isAccented ? { background: mix(TEAL, 5) } : {}),
+      }}
     >
       {/* Resize handle */}
-      <Box
-        position="absolute"
-        right={0}
-        top={0}
-        bottom={0}
-        w="4px"
-        cursor="col-resize"
-        userSelect="none"
-        touchAction="none"
-        opacity={header.column.getIsResizing() ? 1 : 0}
-        _hover={{ opacity: 1 }}
-        bg="accent.teal"
-        zIndex={3}
+      <div
+        className={`absolute inset-y-0 right-0 z-[3] w-[4px] cursor-col-resize touch-none select-none hover:opacity-100 ${
+          header.column.getIsResizing() ? 'opacity-100' : 'opacity-0'
+        }`}
+        style={{ background: TEAL }}
         onMouseDown={header.getResizeHandler()}
         onTouchStart={header.getResizeHandler()}
       />
-      <VStack align="start" gap={1}>
+      <div className="flex flex-col items-start gap-1">
         {/* Column name + sort + filter controls */}
-        <HStack gap={1} justify="start" overflow="hidden" w="100%">
-          <Box
-            as={getTypeIcon(colType)}
-            fontSize="11px"
-            color={getTypeColor(colType)}
-            flexShrink={0}
-          />
-          <Text
+        <div className="flex w-full items-center justify-start gap-1 overflow-hidden">
+          {/* Existing icon component reference (react-icons/lu) — rendered via
+              createElement, matching the old `as={getTypeIcon(colType)}` shape. */}
+          {createElement(getTypeIcon(colType), {
+            className: 'shrink-0 text-[11px]',
+            style: { color: getTypeColor(colType) },
+          })}
+          <span
             aria-label={`Column header ${getDisplayName(header.id)}`}
-            textTransform="uppercase"
-            letterSpacing="0.05em"
-            truncate
-            flex="1"
-            cursor="pointer"
+            className="min-w-0 flex-1 cursor-pointer truncate uppercase tracking-[0.05em] hover:text-[#16a085]"
             onClick={header.column.getToggleSortingHandler()}
-            _hover={{ color: 'accent.teal' }}
           >
             {getDisplayName(header.id)}
-          </Text>
-          <HStack gap={0.5} flexShrink={0}>
+          </span>
+          <div className="flex shrink-0 items-center gap-0.5">
             {/* Sort indicator / toggle */}
-            <Box
-              as="button"
+            <button
               onClick={header.column.getToggleSortingHandler()}
-              cursor="pointer"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              w={4} h={4}
-              borderRadius="sm"
-              bg={isSorted ? 'accent.teal' : undefined}
-              opacity={isSorted ? 1 : 0.5}
-              _hover={{ opacity: 1, bg: isSorted ? 'accent.teal' : 'bg.subtle' }}
-              transition="all 0.15s"
+              className={toggleBtnClass(!!isSorted)}
+              style={isSorted ? { background: TEAL } : undefined}
             >
               {isSorted === 'asc' ? (
-                <Icon as={LuArrowUp} boxSize={2.5} color="white" />
+                <LuArrowUp className="size-2.5 text-white" />
               ) : isSorted === 'desc' ? (
-                <Icon as={LuArrowDown} boxSize={2.5} color="white" />
+                <LuArrowDown className="size-2.5 text-white" />
               ) : (
-                <Icon as={LuArrowUpDown} boxSize={2.5} color="fg.muted" />
+                <LuArrowUpDown className="size-2.5 text-muted-foreground" />
               )}
-            </Box>
+            </button>
             {/* Filter toggle */}
             {colType !== 'json' && (
-              <Box
-                as="button"
+              <button
                 data-filter-anchor={header.id}
                 onClick={() => setActiveFilterCol(prev => prev === header.id ? null : header.id)}
-                cursor="pointer"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                w={4} h={4}
-                borderRadius="sm"
-                bg={hasActiveFilter ? 'accent.teal' : undefined}
-                opacity={hasActiveFilter ? 1 : 0.5}
-                _hover={{ opacity: 1, bg: hasActiveFilter ? 'accent.teal' : 'bg.subtle' }}
-                transition="all 0.15s"
+                className={toggleBtnClass(hasActiveFilter)}
+                style={hasActiveFilter ? { background: TEAL } : undefined}
               >
-                <Icon as={LuFilter} boxSize={2.5} color={hasActiveFilter ? 'white' : 'fg.muted'} />
-              </Box>
+                <LuFilter className={`size-2.5 ${hasActiveFilter ? 'text-white' : 'text-muted-foreground'}`} />
+              </button>
             )}
             {/* Rename / format toggle — only when editable */}
             {onColumnFormatsChange && (() => {
               const hasFormat = !!columnFormats?.[header.id]
               return (
-                <Box
-                  as="button"
+                <button
                   data-format-anchor={header.id}
                   aria-label={`Format column ${header.id}`}
                   onClick={() => setActiveFormatCol(prev => prev === header.id ? null : header.id)}
-                  cursor="pointer"
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="center"
-                  w={4} h={4}
-                  borderRadius="sm"
-                  bg={hasFormat ? 'accent.teal' : undefined}
-                  opacity={hasFormat ? 1 : 0.5}
-                  _hover={{ opacity: 1, bg: hasFormat ? 'accent.teal' : 'bg.subtle' }}
-                  transition="all 0.15s"
+                  className={toggleBtnClass(hasFormat)}
+                  style={hasFormat ? { background: TEAL } : undefined}
                 >
-                  <Icon as={LuSettings2} boxSize={2.5} color={hasFormat ? 'white' : 'fg.muted'} />
-                </Box>
+                  <LuSettings2 className={`size-2.5 ${hasFormat ? 'text-white' : 'text-muted-foreground'}`} />
+                </button>
               )
             })()}
-          </HStack>
-        </HStack>
+          </div>
+        </div>
 
-        {/* Faceted filter popover — rendered via Portal */}
-        {activeFilterCol === header.id && (
-          <Portal>
-            <Box
-              position="fixed"
-              top={0} left={0} right={0} bottom={0}
-              zIndex={99}
+        {/* Faceted filter popover — portaled to body (fixed-position; carries its own
+            theme host so shadcn tokens resolve outside the app-shell host). */}
+        {activeFilterCol === header.id && createPortal(
+          <div data-mx-theme-host="">
+            <div
+              className="fixed inset-0 z-[99]"
               onClick={() => setActiveFilterCol(null)}
             />
-            <Box
-              position="absolute"
-              zIndex={100}
-              bg="bg.surface"
-              border="1px solid"
-              borderColor="border.default"
-              borderRadius="md"
-              shadow="lg"
-              p={2}
-              w="220px"
+            <div
+              className="z-[100] w-[220px] rounded-md border border-border bg-popover p-2 shadow-lg"
               ref={(el: HTMLDivElement | null) => {
                 if (!el) return
                 // Position below the filter icon
-                const th = el.closest('body')?.querySelector(`th [data-filter-anchor="${header.id}"]`)
+                const th = document.querySelector(`th [data-filter-anchor="${header.id}"]`)
                 if (!th) return
                 const rect = (th as HTMLElement).getBoundingClientRect()
                 el.style.top = `${rect.bottom + 4}px`
@@ -237,10 +188,9 @@ export const TableHeaderCell = ({
               }}
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
-              <VStack gap={1.5} align="stretch">
-                <HStack gap={1}>
-                  <Input
-                    size="xs"
+              <div className="flex flex-col items-stretch gap-1.5">
+                <div className="flex items-center gap-1">
+                  <input
                     placeholder="Search values..."
                     value={facetedFilter.search}
                     onChange={(e) => {
@@ -251,34 +201,23 @@ export const TableHeaderCell = ({
                           : undefined
                       )
                     }}
-                    fontFamily="mono"
-                    fontSize="xs"
                     autoFocus
-                    bg="bg.surface"
-                    borderColor="border.default"
-                    _focus={{ borderColor: 'accent.teal', boxShadow: 'none' }}
+                    className="h-6 w-full min-w-0 rounded-sm border border-border bg-popover px-1.5 font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-[#16a085]"
                   />
                   {hasActiveFilter && (
-                    <Box
-                      as="button"
+                    <button
                       onClick={() => {
                         header.column.setFilterValue(undefined)
                         setActiveFilterCol(null)
                       }}
-                      cursor="pointer"
-                      display="flex"
-                      alignItems="center"
-                      flexShrink={0}
+                      className="flex shrink-0 cursor-pointer items-center"
                     >
-                      <Icon as={LuX} boxSize={3} color="fg.subtle" />
-                    </Box>
+                      <LuX className="size-3 text-muted-foreground" />
+                    </button>
                   )}
-                </HStack>
+                </div>
                 {columnUniqueValues[header.id] && columnUniqueValues[header.id].length <= Math.max(FACET_PICKER_MAX_UNIQUE, rowsLength * FACET_PICKER_RATIO) && (
-                  <Box maxH="200px" overflowY="auto" css={{
-                    '&::-webkit-scrollbar': { width: '4px' },
-                    '&::-webkit-scrollbar-thumb': { background: '#16a085', borderRadius: '2px' },
-                  }}>
+                  <div className="mx-facet-list max-h-[200px] overflow-y-auto">
                     {columnUniqueValues[header.id]
                       .filter(({ value }) =>
                         !facetedFilter.search || value.toLowerCase().includes(facetedFilter.search.toLowerCase())
@@ -287,15 +226,10 @@ export const TableHeaderCell = ({
                       .map(({ value, count }) => {
                         const isSelected = facetedFilter.selected.includes(value)
                         return (
-                          <HStack
+                          <div
                             key={value}
-                            gap={1.5}
-                            px={1.5}
-                            py={1}
-                            cursor="pointer"
-                            borderRadius="sm"
-                            bg={isSelected ? 'accent.teal/10' : undefined}
-                            _hover={{ bg: isSelected ? 'accent.teal/15' : 'bg.subtle' }}
+                            className={`flex cursor-pointer items-center gap-1.5 rounded-sm px-1.5 py-1 ${isSelected ? '' : 'hover:bg-muted'}`}
+                            style={isSelected ? { background: mix(TEAL, 10) } : undefined}
                             onClick={() => {
                               const next = isSelected
                                 ? facetedFilter.selected.filter(v => v !== value)
@@ -307,56 +241,49 @@ export const TableHeaderCell = ({
                               )
                             }}
                           >
-                            <Box
-                              w={3} h={3} borderRadius="sm" flexShrink={0}
-                              border="1px solid"
-                              borderColor={isSelected ? 'accent.teal' : 'border.default'}
-                              bg={isSelected ? 'accent.teal' : 'transparent'}
-                              display="flex" alignItems="center" justifyContent="center"
+                            <div
+                              className="flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border"
+                              style={{
+                                borderColor: isSelected ? TEAL : 'var(--border)',
+                                background: isSelected ? TEAL : 'transparent',
+                              }}
                             >
-                              {isSelected && <Icon as={LuCheck} boxSize={2} color="white" />}
-                            </Box>
-                            <Text fontSize="xs" fontFamily="mono" truncate flex="1" color="fg.default">
+                              {isSelected && <LuCheck className="size-2 text-white" />}
+                            </div>
+                            <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">
                               {value}
-                            </Text>
-                            <Text fontSize="xs" fontFamily="mono" color="fg.subtle" flexShrink={0}>
+                            </span>
+                            <span className="shrink-0 font-mono text-xs text-muted-foreground">
                               {count}
-                            </Text>
-                          </HStack>
+                            </span>
+                          </div>
                         )
                       })}
-                  </Box>
+                  </div>
                 )}
                 {facetedFilter.selected.length > 0 && (
-                  <Text fontSize="2xs" color="accent.teal" fontFamily="mono" textAlign="center">
+                  <span className="text-center font-mono text-[10px]" style={{ color: TEAL }}>
                     {facetedFilter.selected.length} selected
-                  </Text>
+                  </span>
                 )}
-              </VStack>
-            </Box>
-          </Portal>
+              </div>
+            </div>
+          </div>,
+          document.body
         )}
 
-        {/* Rename / format popover — rendered via Portal */}
-        {activeFormatCol === header.id && onColumnFormatsChange && (
-          <Portal>
-            <Box
-              position="fixed"
-              top={0} left={0} right={0} bottom={0}
-              zIndex={99}
+        {/* Rename / format popover — portaled to body */}
+        {activeFormatCol === header.id && onColumnFormatsChange && createPortal(
+          <div data-mx-theme-host="">
+            <div
+              className="fixed inset-0 z-[99]"
               onClick={() => setActiveFormatCol(null)}
             />
-            <Box
-              position="absolute"
-              zIndex={100}
-              bg="bg.panel"
-              border="1px solid"
-              borderColor="border.muted"
-              borderRadius="md"
-              shadow="lg"
+            <div
+              className="z-[100] rounded-md border border-border bg-popover shadow-lg"
               ref={(el: HTMLDivElement | null) => {
                 if (!el) return
-                const anchor = el.closest('body')?.querySelector(`th [data-format-anchor="${header.id}"]`)
+                const anchor = document.querySelector(`th [data-format-anchor="${header.id}"]`)
                 if (!anchor) return
                 const rect = (anchor as HTMLElement).getBoundingClientRect()
                 el.style.top = `${rect.bottom + 4}px`
@@ -372,30 +299,31 @@ export const TableHeaderCell = ({
                 onChange={(cfg) => handleFormatChange(header.id, cfg)}
                 d3Formats={d3Formats}
               />
-            </Box>
-          </Portal>
+            </div>
+          </div>,
+          document.body
         )}
 
         {/* Stats area — only rendered when toggled on */}
         {showStats && (
-          <Box h="100px" w="100%" overflow="hidden">
+          <div className="h-[100px] w-full overflow-hidden">
             {colType === 'json' ? (
-              <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" fontWeight="400">
+              <span className="font-mono text-[10px] font-normal text-muted-foreground">
                 stats n/a
-              </Text>
+              </span>
             ) : (
               <>
                 {loadingStats && !stats && (
-                  <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center">
-                    <Spinner size="sm" color="fg.subtle" />
-                  </Box>
+                  <div className="flex h-full w-full items-center justify-center">
+                    <div className="size-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
+                  </div>
                 )}
                 {(() => {
                   const colStats = stats?.[header.id]
                   if (!colStats) return null
                   return (
                     <>
-                      <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" fontWeight="400">
+                      <span className="block font-mono text-[10px] font-normal text-muted-foreground">
                         {colStats.type === 'number' && (
                           <>avg: {colStats.avg.toLocaleString('en-US', { maximumFractionDigits: 0 })}</>
                         )}
@@ -405,19 +333,19 @@ export const TableHeaderCell = ({
                         {colStats.type === 'text' && (
                           <>{colStats.unique} unique</>
                         )}
-                      </Text>
+                      </span>
                       {colStats.type === 'text' && colStats.topValues.length > 0 && (
-                        <Box mt={1} w="100%">
+                        <div className="mt-1 w-full">
                           <MiniBarChart
                             data={colStats.topValues}
                             totalUnique={colStats.unique}
                             color={getTypeColor(colType)}
                             height={75}
                           />
-                        </Box>
+                        </div>
                       )}
                       {(colStats.type === 'number' || colStats.type === 'date') && histograms[header.id] && (
-                        <Box mt={1} w="100%">
+                        <div className="mt-1 w-full">
                           <MiniHistogram
                             data={histograms[header.id]}
                             color={getTypeColor(colType)}
@@ -426,16 +354,16 @@ export const TableHeaderCell = ({
                             isFirstColumn={displayIndex === 0}
                             isLastColumn={displayIndex === totalHeaders - 1}
                           />
-                        </Box>
+                        </div>
                       )}
                     </>
                   )
                 })()}
               </>
             )}
-          </Box>
+          </div>
         )}
-      </VStack>
-    </Box>
+      </div>
+    </th>
   )
 }

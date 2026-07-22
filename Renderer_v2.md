@@ -436,11 +436,30 @@ It is the largest block of hours (~5–6 KLoC of chrome re-skin) with LOW techni
 is style-agnostic, the panels are ordinary React, every needed primitive is standard shadcn. Not
 ZERO risk (review nit, accepted): `AxisBuilder`'s drag-drop and the `PivotTable`→native-table
 move are behavior-heavy — both get characterization tests before the re-skin (Blue→Red→Blue).
-- [ ] `QuestionViewV2` layout shell (keep the hand-rolled splitter logic, restyle the chrome).
-- [ ] `SqlEditor` chrome (Monaco itself is unaffected), `VizTypeSelector`, then the config-panel
-      long tail (`VizConfigPanel`, `AxisBuilder`/`AxisComponents`, pivot/geo/table panels, Vega
-      panels) — panel-by-panel.
-- [ ] Notebook checkpoint: `NotebookSqlCell` should need zero work beyond what its shared parts got.
+- [x] DONE — the full workbench + rendered-document tree is Chakra-free (~60 files converted,
+      each Blue→Red→Blue against the existing characterization suites, prop contracts and
+      aria-labels preserved): `QuestionViewV2` shell (splitter logic untouched),
+      `components/query-builder/` (SqlEditor chrome — Monaco untouched — SemanticExplorer,
+      QueryModeSelector, pickers, toolbar), `VizTypeSelector` + the whole config-panel long tail
+      (VizConfigPanel, AxisBuilder/AxisComponents, pivot/geo/trend builders, FormulaBuilder,
+      conditional formats, color pickers, annotations), the Vega panels
+      (VegaVizPanel/EncodingPanel/FieldPopover/SpecInspector/ChartDownloadMenu + VegaChart
+      chrome), the flat-table stack (TableV2/Body/HeaderCell/BottomBar, DrillDownCard,
+      ChartError, VizTableView), param widgets (Source/InlineSql dropdowns, SourceConfigPopover;
+      `getTypeColor` now returns concrete hexes — red-first fix for invalid-CSS token
+      interpolation), notebook (View + Sql/Text cells + CellHeader + CellInsertZone), Report/
+      Alert views + their four containers (incl. run outputs), CodeView, empty-states, the
+      lexical text-block tree (MetricNode/MentionNode render in captured documents; floating
+      menus portal with `data-mx-theme-host`), and the shared widgets in rendered trees
+      (DatePicker, TabSwitcher, FileSearchSelect, DeliveryPicker, RunNowHeader, SchedulePicker,
+      StatusBanner). All of it is under the ESLint `@chakra-ui` ban (directory globs — new files
+      are born banned). Kept-Chakra remainder is exactly the §8.3 scope boundary: app shell,
+      chat/explore, file browser, admin/connection forms, settings, modals, plus the app-global
+      `toaster` service (imperative API used by NotebookTextCell's error path — no DOM in the
+      embed tree). `TransformationView` from §8.2 does not exist in the tree (stale doc
+      reference).
+- [x] Notebook checkpoint held: `NotebookSqlCell` needed only its own chrome — all shared parts
+      arrived converted.
 
 ### Phase 6 — Deletions + guards (SPLIT by prerequisite — review finding)
 

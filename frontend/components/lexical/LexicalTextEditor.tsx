@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Box, HStack, IconButton, Icon, Text } from '@chakra-ui/react';
 import {
   LuBold,
   LuItalic,
@@ -112,148 +111,116 @@ const editorTheme = {
   tableCellHeader: 'lexical-table-cell-header',
 };
 
-/** Shared CSS for the Lexical editor content — used in both edit and read-only modes. */
-const LEXICAL_CONTENT_CSS = {
-  // Paragraphs
-  '& p': { marginBottom: '1em', lineHeight: 1.8 },
-  '& p:last-child': { marginBottom: 0 },
+/**
+ * Shared CSS for the Lexical editor content — used in both edit and read-only
+ * modes. Scoped under `.mx-lexical-content` and injected via a `<style>` tag
+ * (the Chakra `css` prop is gone — Renderer_v2 Phase 5 Chakra exit). Colors
+ * come from the Tailwind theme tokens (`--muted`, `--border`, ...).
+ */
+const LEXICAL_CONTENT_CSS = `
+.mx-lexical-content p { margin-bottom: 1em; line-height: 1.8; }
+.mx-lexical-content p:last-child { margin-bottom: 0; }
 
-  // Headings
-  '& .lexical-h1': { fontSize: '1.5em', fontWeight: 700, lineHeight: 1.3, marginTop: '1.2em', marginBottom: '0.6em' },
-  '& .lexical-h2': { fontSize: '1.25em', fontWeight: 600, lineHeight: 1.4, marginTop: '1em', marginBottom: '0.5em' },
-  '& .lexical-h3': { fontSize: '1.1em', fontWeight: 600, lineHeight: 1.4, marginTop: '0.8em', marginBottom: '0.4em' },
-  '& .lexical-h1:first-child, & .lexical-h2:first-child, & .lexical-h3:first-child': { marginTop: 0 },
+.mx-lexical-content .lexical-h1 { font-size: 1.5em; font-weight: 700; line-height: 1.3; margin-top: 1.2em; margin-bottom: 0.6em; }
+.mx-lexical-content .lexical-h2 { font-size: 1.25em; font-weight: 600; line-height: 1.4; margin-top: 1em; margin-bottom: 0.5em; }
+.mx-lexical-content .lexical-h3 { font-size: 1.1em; font-weight: 600; line-height: 1.4; margin-top: 0.8em; margin-bottom: 0.4em; }
+.mx-lexical-content .lexical-h1:first-child, .mx-lexical-content .lexical-h2:first-child, .mx-lexical-content .lexical-h3:first-child { margin-top: 0; }
 
-  // Inline formatting
-  '& .lexical-bold': { fontWeight: 700 },
-  '& .lexical-italic': { fontStyle: 'italic' },
-  '& .lexical-strikethrough': { textDecoration: 'line-through' },
-  '& .lexical-inline-code': {
-    fontFamily: 'var(--font-jetbrains-mono), monospace',
-    fontSize: '0.85em',
-    padding: '2px 5px',
-    borderRadius: '4px',
-    backgroundColor: 'var(--chakra-colors-bg-emphasized)',
-  },
+.mx-lexical-content .lexical-bold { font-weight: 700; }
+.mx-lexical-content .lexical-italic { font-style: italic; }
+.mx-lexical-content .lexical-strikethrough { text-decoration: line-through; }
+.mx-lexical-content .lexical-inline-code {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.85em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background-color: var(--accent);
+}
 
-  // Lists
-  '& .lexical-ul': { listStyleType: 'disc', paddingLeft: '1.5em', margin: '0.5em 0', lineHeight: 1.7 },
-  '& .lexical-ol': { listStyleType: 'decimal', paddingLeft: '1.5em', margin: '0.5em 0', lineHeight: 1.7 },
-  '& .lexical-li': { marginBottom: '0.25em' },
-  '& .lexical-li-checked, & .lexical-li-unchecked': {
-    listStyleType: 'none',
-    position: 'relative',
-    paddingLeft: '1.5em',
-    marginLeft: '-1.5em',
-  },
-  '& .lexical-li-checked::before': {
-    content: '"☑"',
-    position: 'absolute',
-    left: 0,
-  },
-  '& .lexical-li-unchecked::before': {
-    content: '"☐"',
-    position: 'absolute',
-    left: 0,
-  },
+.mx-lexical-content .lexical-ul { list-style-type: disc; padding-left: 1.5em; margin: 0.5em 0; line-height: 1.7; }
+.mx-lexical-content .lexical-ol { list-style-type: decimal; padding-left: 1.5em; margin: 0.5em 0; line-height: 1.7; }
+.mx-lexical-content .lexical-li { margin-bottom: 0.25em; }
+.mx-lexical-content .lexical-li-checked, .mx-lexical-content .lexical-li-unchecked {
+  list-style-type: none;
+  position: relative;
+  padding-left: 1.5em;
+  margin-left: -1.5em;
+}
+.mx-lexical-content .lexical-li-checked::before { content: "☑"; position: absolute; left: 0; }
+.mx-lexical-content .lexical-li-unchecked::before { content: "☐"; position: absolute; left: 0; }
 
-  // Block quote
-  '& .lexical-quote': {
-    borderLeft: '3px solid var(--chakra-colors-border-default)',
-    paddingLeft: '1em',
-    margin: '0.6em 0',
-    color: 'var(--chakra-colors-fg-muted)',
-    fontStyle: 'italic',
-  },
+.mx-lexical-content .lexical-quote {
+  border-left: 3px solid var(--border);
+  padding-left: 1em;
+  margin: 0.6em 0;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
 
-  // Code block
-  '& .lexical-code-block': {
-    fontFamily: 'var(--font-jetbrains-mono), monospace',
-    fontSize: '0.85em',
-    padding: '0.75em 1em',
-    borderRadius: '6px',
-    backgroundColor: 'var(--chakra-colors-bg-emphasized)',
-    margin: '0.6em 0',
-    whiteSpace: 'pre-wrap',
-    overflowX: 'auto',
-  },
+.mx-lexical-content .lexical-code-block {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.85em;
+  padding: 0.75em 1em;
+  border-radius: 6px;
+  background-color: var(--accent);
+  margin: 0.6em 0;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
 
-  // Link
-  '& .lexical-link': {
-    color: 'var(--chakra-colors-accent-primary)',
-    textDecoration: 'underline',
-  },
+.mx-lexical-content .lexical-link { color: #2980b9; text-decoration: underline; }
 
-  // Horizontal rule
-  '& .lexical-hr': {
-    border: 'none',
-    borderTop: '1px solid var(--chakra-colors-border-default)',
-    margin: '1em 0',
-  },
+.mx-lexical-content .lexical-hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
 
-  // Image
-  '& .lexical-image': {
-    display: 'inline-block',
-    maxWidth: '100%',
-    margin: '0.5em 0',
-  },
+.mx-lexical-content .lexical-image { display: inline-block; max-width: 100%; margin: 0.5em 0; }
 
-  // Table — matches Markdown.tsx table styles. `display: block` + `overflowX: auto`
-  // makes a wide table scroll horizontally instead of being clipped (a plain
-  // `<table>` doesn't form a reliable scroll container); `width: max-content` keeps
-  // short tables compact, `maxWidth: 100%` caps wide ones to the container so they scroll.
-  '& .lexical-table': {
-    display: 'block',
-    width: 'max-content',
-    maxWidth: '100%',
-    overflowX: 'auto',
-    borderCollapse: 'collapse',
-    border: '1px solid var(--chakra-colors-border-default)',
-    borderRadius: '6px',
-    margin: '0.5em 0',
-    fontSize: 'inherit',
-  },
-  '& .lexical-table-row': {},
-  '& .lexical-table-cell, & .lexical-table-cell-header': {
-    padding: '0.5rem 0.75rem',
-    textAlign: 'left',
-    verticalAlign: 'top',
-    lineHeight: 1.6,
-    // Let a column grow to fit its content up to a cap, then wrap on spaces.
-    // `wordBreak: normal` never splits inside a word; `overflowWrap: break-word`
-    // breaks a single over-long word only as a last resort (so it can't force a
-    // mid-word wrap like "BusinessNameCo / mpany" just because the column is
-    // slightly narrow). The table itself scrolls horizontally (overflow-x above)
-    // when the sum of columns exceeds the container.
-    minWidth: '72px',
-    maxWidth: '320px',
-    whiteSpace: 'normal',
-    wordBreak: 'normal',
-    overflowWrap: 'break-word',
-    borderBottom: '1px solid var(--chakra-colors-border-emphasized)',
-    borderRight: '1px solid var(--chakra-colors-border-emphasized)',
-  },
-  '& .lexical-table-cell:last-child, & .lexical-table-cell-header:last-child': {
-    borderRight: 'none',
-  },
-  '& .lexical-table-cell-header': {
-    fontWeight: 700,
-    color: 'var(--chakra-colors-fg-emphasized)',
-    backgroundColor: 'var(--chakra-colors-bg-muted)',
-    borderBottom: '1px solid var(--chakra-colors-border-emphasized)',
-    lineHeight: 1.5,
-  },
-  '& .lexical-table-row:last-child .lexical-table-cell': {
-    borderBottom: 'none',
-  },
-  '& .lexical-table-row:hover .lexical-table-cell': {
-    backgroundColor: 'var(--chakra-colors-bg-subtle)',
-  },
-  // Remove default paragraph margins inside table cells for compact layout
-  '& .lexical-table-cell p, & .lexical-table-cell-header p': {
-    margin: 0,
-  },
-} as const;
+/* Table — matches Markdown.tsx table styles. \`display: block\` + \`overflow-x: auto\`
+   makes a wide table scroll horizontally instead of being clipped (a plain
+   <table> doesn't form a reliable scroll container); \`width: max-content\` keeps
+   short tables compact, \`max-width: 100%\` caps wide ones to the container so they scroll. */
+.mx-lexical-content .lexical-table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 0.5em 0;
+  font-size: inherit;
+}
+.mx-lexical-content .lexical-table-cell, .mx-lexical-content .lexical-table-cell-header {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.6;
+  /* Let a column grow to fit its content up to a cap, then wrap on spaces.
+     \`word-break: normal\` never splits inside a word; \`overflow-wrap: break-word\`
+     breaks a single over-long word only as a last resort (so it can't force a
+     mid-word wrap like "BusinessNameCo / mpany" just because the column is
+     slightly narrow). The table itself scrolls horizontally (overflow-x above)
+     when the sum of columns exceeds the container. */
+  min-width: 72px;
+  max-width: 320px;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+.mx-lexical-content .lexical-table-cell:last-child, .mx-lexical-content .lexical-table-cell-header:last-child { border-right: none; }
+.mx-lexical-content .lexical-table-cell-header {
+  font-weight: 700;
+  color: var(--foreground);
+  background-color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  line-height: 1.5;
+}
+.mx-lexical-content .lexical-table-row:last-child .lexical-table-cell { border-bottom: none; }
+.mx-lexical-content .lexical-table-row:hover .lexical-table-cell { background-color: color-mix(in srgb, var(--muted) 50%, transparent); }
+/* Remove default paragraph margins inside table cells for compact layout */
+.mx-lexical-content .lexical-table-cell p, .mx-lexical-content .lexical-table-cell-header p { margin: 0; }
+`;
 
 /**
  * Shared, tight content padding for the editor + viewer. Both modes use this so
@@ -341,22 +308,15 @@ function FloatingSelectionToolbar({ children }: { children: React.ReactNode }) {
   if (!pos) return null;
 
   return createPortal(
-    <Box
-      position="fixed"
-      top={`${pos.top - 10}px`}
-      left={`${pos.left}px`}
-      transform="translate(-50%, -100%)"
-      zIndex={1500}
-      bg="bg.panel"
-      borderWidth="1px"
-      borderColor="border.emphasized"
-      borderRadius="lg"
-      boxShadow="lg"
+    <div
+      data-mx-theme-host=""
+      className="fixed z-[1500] rounded-lg border border-border bg-popover shadow-lg"
+      style={{ top: `${pos.top - 10}px`, left: `${pos.left}px`, transform: 'translate(-50%, -100%)' }}
       // Keep the selection alive when clicking a button (don't steal focus).
       onMouseDown={(e) => e.preventDefault()}
     >
       {children}
-    </Box>,
+    </div>,
     document.body,
   );
 }
@@ -394,42 +354,36 @@ function ToolbarPlugin({ onImageUpload, enableMetric }: { onImageUpload?: (file:
     });
   }, [editor, onImageUpload]);
 
+  const btnClass = 'inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground';
+
   const btn = (label: string, icon: React.ReactElement, onClick: () => void) => (
-    <IconButton
-      aria-label={label}
-      size="2xs"
-      variant="ghost"
-      onClick={onClick}
-      cursor="pointer"
-      color="fg.muted"
-      _hover={{ color: 'fg.default', bg: 'bg.emphasized' }}
-      minW="24px"
-      h="24px"
-    >
+    <button type="button" aria-label={label} onClick={onClick} className={btnClass}>
       {icon}
-    </IconButton>
+    </button>
   );
 
+  const divider = <div className="mx-0.5 h-4 w-px shrink-0 bg-border" />;
+
   return (
-    <HStack gap={0} flexWrap="wrap" px={1} py={0.5}>
+    <div className="flex flex-wrap items-center px-1 py-0.5">
       {btn('Bold', <LuBold size={13} />, () => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold'))}
       {btn('Italic', <LuItalic size={13} />, () => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic'))}
       {btn('Strikethrough', <LuStrikethrough size={13} />, () => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'strikethrough'))}
       {btn('Inline code', <LuCode size={13} />, () => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code'))}
 
-      <Box w="1px" h="16px" bg="border.muted" mx={0.5} />
+      {divider}
 
       {btn('Heading 1', <LuHeading1 size={13} />, () => formatHeading('h1'))}
       {btn('Heading 2', <LuHeading2 size={13} />, () => formatHeading('h2'))}
       {btn('Heading 3', <LuHeading3 size={13} />, () => formatHeading('h3'))}
 
-      <Box w="1px" h="16px" bg="border.muted" mx={0.5} />
+      {divider}
 
       {btn('Bullet list', <LuList size={13} />, () => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined))}
       {btn('Numbered list', <LuListOrdered size={13} />, () => editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined))}
       {btn('Checklist', <LuListChecks size={13} />, () => editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined))}
 
-      <Box w="1px" h="16px" bg="border.muted" mx={0.5} />
+      {divider}
 
       {btn('Quote', <LuQuote size={13} />, () => {
         editor.update(() => {
@@ -441,25 +395,15 @@ function ToolbarPlugin({ onImageUpload, enableMetric }: { onImageUpload?: (file:
       })}
       {btn('Horizontal rule', <LuMinus size={13} />, () => editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined))}
 
-      {(onImageUpload || enableMetric) && <Box w="1px" h="16px" bg="border.muted" mx={0.5} />}
+      {(onImageUpload || enableMetric) && divider}
 
       {enableMetric && btn('Insert metric', <LuSquareFunction size={13} />, insertMetric)}
 
       {onImageUpload && (
         <>
-          <IconButton
-            aria-label="Insert image"
-            size="2xs"
-            variant="ghost"
-            onClick={openImagePicker}
-            cursor="pointer"
-            color="fg.muted"
-            _hover={{ color: 'fg.default', bg: 'bg.emphasized' }}
-            minW="24px"
-            h="24px"
-          >
+          <button type="button" aria-label="Insert image" onClick={openImagePicker} className={btnClass}>
             <LuImage size={13} />
-          </IconButton>
+          </button>
           <input
             aria-label="Upload image to insert"
             type="file"
@@ -470,7 +414,7 @@ function ToolbarPlugin({ onImageUpload, enableMetric }: { onImageUpload?: (file:
           />
         </>
       )}
-    </HStack>
+    </div>
   );
 }
 
@@ -490,24 +434,17 @@ function makeEditorStateInit(markdown: string) {
  * `renderToolbar` (e.g. the context docs Diff wrapper) can keep it visible. */
 export function EditorProTip({ mentions, insertMetric }: { mentions?: boolean; insertMetric?: boolean }) {
   return (
-    <HStack
+    <div
       aria-label="Editor pro tip"
-      gap={1.5}
-      px={4}
-      py={1}
-      flexShrink={0}
-      color="fg.subtle"
-      fontSize="xs"
-      borderBottomWidth="1px"
-      borderColor="border.muted"
-      bg="bg.subtle"
+      className="flex shrink-0 items-center gap-1.5 border-b border-border px-4 py-1 text-xs text-muted-foreground"
+      style={{ background: 'color-mix(in srgb, var(--muted) 50%, transparent)' }}
     >
-      <Icon as={LuLightbulb} boxSize={3} />
-      <Text>
-        Pro tip: type <Box as="span" fontWeight="700" fontFamily="mono">+</Box> to insert images{insertMetric && ' or metrics'}
-        {mentions && <> · <Box as="span" fontWeight="700" fontFamily="mono">@</Box> for tables, columns or saved questions</>}
-      </Text>
-    </HStack>
+      <LuLightbulb size={12} className="shrink-0" />
+      <span>
+        Pro tip: type <span className="font-bold" style={{ fontFamily: 'var(--font-jetbrains-mono), monospace' }}>+</span> to insert images{insertMetric && ' or metrics'}
+        {mentions && <> · <span className="font-bold" style={{ fontFamily: 'var(--font-jetbrains-mono), monospace' }}>@</span> for tables, columns or saved questions</>}
+      </span>
+    </div>
   );
 }
 
@@ -566,13 +503,8 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
   };
 
   return (
-    <Box
-      height="100%"
-      display="flex"
-      flexDirection="column"
-      className={colorMode === 'dark' ? 'lexical-dark' : 'lexical-light'}
-      css={LEXICAL_CONTENT_CSS}
-    >
+    <div className={`mx-lexical-content flex h-full flex-col ${colorMode === 'dark' ? 'lexical-dark' : 'lexical-light'}`}>
+      <style>{LEXICAL_CONTENT_CSS}</style>
       <LexicalComposer initialConfig={initialConfig}>
         {floatingToolbar ? (
           <FloatingSelectionToolbar>
@@ -581,14 +513,9 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
         ) : renderToolbar ? (
           renderToolbar(<ToolbarPlugin onImageUpload={onImageUpload} />)
         ) : (
-          <Box
-            borderBottomWidth="1px"
-            borderColor="border.default"
-            bg="bg.muted"
-            flexShrink={0}
-          >
+          <div className="shrink-0 border-b border-border bg-muted">
             <ToolbarPlugin onImageUpload={onImageUpload} />
-          </Box>
+          </div>
         )}
 
         {/* The inline hint only renders for the DEFAULT inline toolbar. A caller that
@@ -600,17 +527,12 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
           <EditorProTip mentions={!!mentions} insertMetric={insertMetric} />
         )}
 
-        <Box
-          flex={1}
-          minH={0}
-          overflow="auto"
-          position="relative"
-          display={verticalCenter ? 'flex' : undefined}
-          flexDirection={verticalCenter ? 'column' : undefined}
+        <div
+          className="relative min-h-0 flex-1 overflow-auto"
           // `safe center` vertically centers short content (equal top/bottom
           // space — great for one-line headings) but falls back to top-aligned
           // when content overflows, so scrolling/read-more still work.
-          justifyContent={verticalCenter ? 'safe center' : undefined}
+          style={verticalCenter ? { display: 'flex', flexDirection: 'column', justifyContent: 'safe center' } : undefined}
         >
           <RichTextPlugin
             contentEditable={
@@ -626,20 +548,13 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
               />
             }
             placeholder={
-              <Box
-                position="absolute"
-                top="24px"
-                left="24px"
-                color="fg.muted"
-                fontSize="sm"
-                pointerEvents="none"
-              >
+              <div className="pointer-events-none absolute top-[24px] left-[24px] text-sm text-muted-foreground">
                 Start writing...
-              </Box>
+              </div>
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
-        </Box>
+        </div>
 
         <HistoryPlugin />
         <ListPlugin />
@@ -662,7 +577,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
         {editWithAgent && <EditSelectionPlugin source={editWithAgent} />}
         {onEditorReady && <EditorRefPlugin onReady={onEditorReady} />}
       </LexicalComposer>
-    </Box>
+    </div>
   );
 }
 
@@ -690,14 +605,11 @@ export function LexicalTextViewer({ markdown, padding = '40px 32px', fontSize = 
   };
 
   return (
-    <Box
-      height="100%"
-      className={colorMode === 'dark' ? 'lexical-dark' : 'lexical-light'}
-      css={LEXICAL_CONTENT_CSS}
-      display={verticalCenter ? 'flex' : undefined}
-      flexDirection={verticalCenter ? 'column' : undefined}
-      justifyContent={verticalCenter ? 'safe center' : undefined}
+    <div
+      className={`mx-lexical-content h-full ${colorMode === 'dark' ? 'lexical-dark' : 'lexical-light'}`}
+      style={verticalCenter ? { display: 'flex', flexDirection: 'column', justifyContent: 'safe center' } : undefined}
     >
+      <style>{LEXICAL_CONTENT_CSS}</style>
       <LexicalComposer initialConfig={initialConfig}>
         <RichTextPlugin
           contentEditable={
@@ -719,6 +631,6 @@ export function LexicalTextViewer({ markdown, padding = '40px 32px', fontSize = 
         <TablePlugin />
         <HorizontalRulePlugin />
       </LexicalComposer>
-    </Box>
+    </div>
   );
 }

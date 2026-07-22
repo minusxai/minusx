@@ -16,12 +16,16 @@ export function getTypeIcon(type: ParameterType): IconType {
   }
 }
 
-/** Semantic color token for a parameter type (matches the Table component's scheme). */
+/**
+ * Concrete CSS color for a parameter type (matches the Table component's scheme). MUST stay a
+ * raw hex: consumers interpolate it into plain CSS (`border-left`, `color-mix(...)`), where a
+ * token name is invalid and silently drops the style.
+ */
 export function getTypeColor(type: ParameterType): string {
   switch (type) {
-    case 'number': return 'accent.primary';   // blue
-    case 'date': return 'accent.secondary';    // purple
+    case 'number': return '#2980b9';  // blue (accent.primary)
+    case 'date': return '#9b59b6';    // purple (accent.secondary)
     case 'text':
-    default: return 'accent.warning';          // orange
+    default: return '#f39c12';        // orange (accent.warning)
   }
 }

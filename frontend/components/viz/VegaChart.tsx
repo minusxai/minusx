@@ -9,7 +9,6 @@
  * resizes update the width/height signals; every view is finalized on unmount.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Box, Text, IconButton, VStack } from '@chakra-ui/react';
 import { ChartError } from '@/components/plotx/ChartError';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
@@ -427,33 +426,32 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
   // every envelope change. Unmounting it on error made error states permanent (the
   // effect bailed on a null ref forever). Errors overlay instead.
   return (
-    <Box position="relative" flex="1" width="full" minHeight="0" overflow="hidden">
+    <div className="relative min-h-0 w-full flex-1 overflow-hidden">
       {error && (
-        <Box position="absolute" inset={0} zIndex={1} bg="bg.subtle" overflow="auto" aria-label="Vega chart error">
+        <div className="absolute inset-0 z-[1] overflow-auto bg-muted" aria-label="Vega chart error">
           {/* Same friendly card as the classic charts (V1 parity); the full stack is
               already on the console from the build effect's catch. */}
           <ChartError message={error} />
-        </Box>
+        </div>
       )}
-      <Box
+      <div
         ref={containerRef}
         aria-label="Vega chart"
-        width="full"
-        height="100%"
-        overflow="hidden"
-        css={{ '& .vega-embed, & svg': { display: 'block' } }}
+        className="h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block"
       />
       {showZoomButtons && !error && (
-        <VStack position="absolute" bottom={2} right={2} zIndex={2} gap="1px" borderRadius="md" overflow="hidden" boxShadow="sm">
-          <IconButton aria-label="Zoom in" size="xs" variant="solid" bg="bg.panel" color="fg.default" borderRadius={0} onClick={() => zoomBy(1.5)}>
-            <Text fontSize="md" lineHeight="1">+</Text>
-          </IconButton>
-          <IconButton aria-label="Zoom out" size="xs" variant="solid" bg="bg.panel" color="fg.default" borderRadius={0} onClick={() => zoomBy(1 / 1.5)}>
-            <Text fontSize="md" lineHeight="1">−</Text>
-          </IconButton>
-        </VStack>
+        <div className="absolute bottom-2 right-2 z-[2] flex flex-col gap-px overflow-hidden rounded-md shadow-sm">
+          <button type="button" aria-label="Zoom in" onClick={() => zoomBy(1.5)}
+            className="flex size-6 items-center justify-center bg-popover text-foreground hover:bg-accent">
+            <span className="text-base leading-none">+</span>
+          </button>
+          <button type="button" aria-label="Zoom out" onClick={() => zoomBy(1 / 1.5)}
+            className="flex size-6 items-center justify-center bg-popover text-foreground hover:bg-accent">
+            <span className="text-base leading-none">−</span>
+          </button>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
 

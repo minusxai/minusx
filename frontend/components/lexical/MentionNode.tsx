@@ -1,6 +1,5 @@
 import React from 'react';
 import { DecoratorNode, LexicalNode, NodeKey, SerializedLexicalNode, Spread } from 'lexical';
-import { Box, Icon } from '@chakra-ui/react';
 import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, COLUMN_MENTION_METADATA, METRIC_MENTION_METADATA, ACCENT_HEX, getMentionColors } from '@/lib/ui/file-metadata';
 import type { ChatMentionData } from '@/lib/types';
 
@@ -122,40 +121,31 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
 
     const metadata = getMentionChipMetadata(data, colorMap);
 
-    // Map mention type to Chakra semantic color token for the icon
-    const iconColorToken = isSkill ? 'accent.teal'
-      : data.type === 'table' ? 'accent.cyan'
-      : data.type === 'column' ? 'accent.secondary'
-      : data.type === 'metric' ? 'accent.teal'
-      : data.type === 'question' ? 'accent.primary'
-      : data.type === 'dashboard' ? 'accent.danger'
-      : 'fg.muted';
+    // Map mention type to the accent hex for the icon (fg.muted → theme token)
+    const iconColor = isSkill ? ACCENT_HEX.teal
+      : data.type === 'table' ? ACCENT_HEX.cyan
+      : data.type === 'column' ? ACCENT_HEX.secondary
+      : data.type === 'metric' ? ACCENT_HEX.teal
+      : data.type === 'question' ? ACCENT_HEX.primary
+      : data.type === 'dashboard' ? ACCENT_HEX.danger
+      : 'var(--muted-foreground)';
+
+    const IconCmp = metadata.icon;
 
     return (
-      <Box
-        as="span"
-        display="inline"
-        px="4px"
-        py="2px"
-        mx="1px"
-        bg="bg.muted"
-        borderRadius="sm"
-        fontSize="0.85em"
-        fontFamily="mono"
-        lineHeight="inherit"
-        color="fg.default"
-        fontWeight="600"
-        whiteSpace="nowrap"
+      <span
+        className="mx-[1px] inline rounded-sm bg-muted px-[4px] py-[2px] text-[0.85em] font-semibold whitespace-nowrap text-foreground"
+        style={{ fontFamily: 'var(--font-jetbrains-mono), monospace', lineHeight: 'inherit' }}
       >
-        <Box as="span" color={iconColorToken}>
-          {isSkill ? '#' : metadata.icon ? <Icon as={metadata.icon} boxSize="0.85em" verticalAlign="-0.1em" /> : null}
-        </Box>
+        <span style={{ color: iconColor }}>
+          {isSkill ? '#' : IconCmp ? <IconCmp style={{ display: 'inline', width: '0.85em', height: '0.85em', verticalAlign: '-0.1em' }} /> : null}
+        </span>
         {' '}
         {metaText && (
-          <Box as="span" color="fg.muted" fontWeight="500">{metaText}.</Box>
+          <span className="font-medium text-muted-foreground">{metaText}.</span>
         )}
         {displayText}
-      </Box>
+      </span>
     );
   }
 

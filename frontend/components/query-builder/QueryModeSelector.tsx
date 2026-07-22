@@ -9,9 +9,9 @@
 
 'use client';
 
-import { HStack, Text } from '@chakra-ui/react';
 import { LuCode, LuChartColumn, LuSparkles } from 'react-icons/lu';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/kit/tooltip';
+import { cn } from '@/components/kit/cn';
 
 export type QueryTab = 'semantic' | 'sql' | 'viz';
 
@@ -58,50 +58,51 @@ export function QueryModeSelector({
   const sm = size === 'sm';
 
   return (
-    <HStack gap={0} bg="bg.muted" borderRadius="md" p="2px">
-      {tabs.map(({ key, label, gated, Icon }) => {
-        const isActive = active && mode === key;
-        const isDisabled =
-          (gated === 'semantic' && !canUseSemantic) || (gated === 'viz' && !canUseViz);
-        const tooltip =
-          gated === 'semantic'
-            ? (canUseSemantic ? 'Query curated metrics and dimensions' : (semanticError || 'This SQL is not expressible with the semantic model'))
-          : gated === 'viz' ? (vizError || (canUseViz ? 'Configure chart' : 'Run the query to configure a chart'))
-          : undefined;
+    <TooltipProvider delayDuration={200}>
+      <div className="flex items-center rounded-md bg-muted p-[2px]">
+        {tabs.map(({ key, label, gated, Icon }) => {
+          const isActive = active && mode === key;
+          const isDisabled =
+            (gated === 'semantic' && !canUseSemantic) || (gated === 'viz' && !canUseViz);
+          const tooltip =
+            gated === 'semantic'
+              ? (canUseSemantic ? 'Query curated metrics and dimensions' : (semanticError || 'This SQL is not expressible with the semantic model'))
+            : gated === 'viz' ? (vizError || (canUseViz ? 'Configure chart' : 'Run the query to configure a chart'))
+            : undefined;
 
-        return (
-          <Tooltip
-            key={key}
-            content={tooltip}
-            disabled={!tooltip}
-            showArrow
-            positioning={{ placement: 'top' }}
-            openDelay={200}
-          >
-            <HStack
-              as="button"
+          const button = (
+            <button
+              key={tooltip ? undefined : key}
+              type="button"
               aria-label={label}
               aria-disabled={isDisabled}
-              flex={1}
-              justify="center"
-              gap={1}
-              px={sm ? 2 : 3}
-              py={sm ? 0.5 : 1.5}
-              borderRadius="sm"
-              bg={isActive ? 'accent.teal/90' : 'transparent'}
-              color={isActive ? 'white' : 'fg.subtle'}
-              cursor={isDisabled ? 'not-allowed' : 'pointer'}
-              opacity={isDisabled ? 0.5 : 1}
-              transition="all 0.15s ease"
-              _hover={{ color: isDisabled ? undefined : (isActive ? 'white' : 'fg.muted') }}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-1 rounded-sm transition-all duration-150',
+                sm ? 'px-2 py-0.5' : 'px-3 py-1.5',
+                isActive
+                  ? 'bg-[#16a085]/90 text-white'
+                  : 'bg-transparent text-muted-foreground',
+                isDisabled
+                  ? 'cursor-not-allowed opacity-50'
+                  : cn('cursor-pointer', isActive ? 'hover:text-white' : 'hover:text-foreground'),
+              )}
               onClick={() => !isDisabled && onModeChange(key)}
             >
               <Icon size={sm ? 11 : 13} />
-              <Text fontSize={sm ? '11px' : 'xs'} fontFamily="mono" fontWeight="600">{label}</Text>
-            </HStack>
-          </Tooltip>
-        );
-      })}
-    </HStack>
+              <span className={cn('font-mono font-semibold', sm ? 'text-[11px]' : 'text-xs')}>{label}</span>
+            </button>
+          );
+
+          if (!tooltip) return button;
+
+          return (
+            <Tooltip key={key}>
+              <TooltipTrigger asChild>{button}</TooltipTrigger>
+              <TooltipContent side="top">{tooltip}</TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </TooltipProvider>
   );
 }

@@ -1,6 +1,5 @@
 'use client'
 
-import { Box, HStack, Text } from '@chakra-ui/react'
 import { COLOR_SCALES, type ColorScaleKey } from '@/lib/chart/geo-color-scale'
 
 interface ColorScalePickerProps {
@@ -17,25 +16,20 @@ export function ColorScalePicker({ value, onChange, defaultScale = 'green' }: Co
   const activeKey = value ?? defaultScale
 
   return (
-    <HStack gap={1}>
-      <Text fontSize="xs" color="fg.muted">Scale:</Text>
+    <div className="flex items-center gap-1">
+      <span className="text-xs text-muted-foreground">Scale:</span>
       {COLOR_SCALES.map(({ key, colors }) => (
-        <Box
+        <div
           key={key}
-          w="56px"
-          h="16px"
-          borderRadius="sm"
-          cursor="pointer"
-          border="2px solid"
-          borderColor={activeKey === key ? 'accent.teal' : 'transparent'}
-          _hover={{ borderColor: 'accent.teal/50' }}
-          transition="all 0.15s"
+          className={`h-4 w-[56px] cursor-pointer rounded-sm border-2 transition-all duration-150 ${
+            activeKey === key ? 'border-[#16a085]' : 'border-transparent hover:border-[#16a085]/50'
+          }`}
           onClick={() => onChange(key)}
           style={{
             background: `linear-gradient(to right, ${colors.join(', ')})`,
           }}
         />
       ))}
-    </HStack>
+    </div>
   )
 }

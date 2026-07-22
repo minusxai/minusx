@@ -17,7 +17,7 @@
  * visible while typing.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text } from '@chakra-ui/react';
+import { cn } from '@/components/kit/cn';
 import NotebookCellHeader from './NotebookCellHeader';
 import SqlEditor from '@/components/query-builder/SqlEditor';
 import ParameterRow from '@/components/params/ParameterRow';
@@ -159,9 +159,9 @@ export default function NotebookSqlCell({
   if (presentMode) {
     if (!cell.query?.trim() || !executed) return null;
     return (
-      <Box>
-        {cell.name && <Text fontSize="sm" fontWeight="600" color="fg.muted" mb={2}>{cell.name}</Text>}
-        <Box h="420px" display="flex" flexDirection="column">
+      <div>
+        {cell.name && <p className="mb-2 text-sm font-semibold text-muted-foreground">{cell.name}</p>}
+        <div className="flex h-[420px] flex-col">
           <QuestionVisualization
             currentState={cell as unknown as QuestionContent}
             config={{ showHeader: false, showJsonToggle: false, editable: false, viz: { showTypeButtons: false, showChartBuilder: false, typesButtonsOrientation: 'horizontal', showTitle: false }, fixError: true }}
@@ -172,21 +172,19 @@ export default function NotebookSqlCell({
             onVizTypeChange={() => {}}
             onAxisChange={() => {}}
           />
-        </Box>
-      </Box>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Box
-      borderWidth="1px"
-      borderColor={active ? 'accent.teal' : 'border.muted'}
-      borderRadius="md"
-      bg="bg.canvas"
-      overflow="hidden"
-      transition="border-color 0.15s, box-shadow 0.15s"
-      boxShadow={active ? '0 0 0 2px var(--chakra-colors-accent-teal)' : undefined}
-      _hover={{ borderColor: active ? 'accent.teal' : 'border.default' }}
+    <div
+      className={cn(
+        'overflow-hidden rounded-md border bg-background transition-[border-color,box-shadow] duration-150',
+        active
+          ? 'border-[#16a085] shadow-[0_0_0_2px_#16a085] hover:border-[#16a085]'
+          : 'border-border/60 hover:border-border',
+      )}
       onMouseDownCapture={activate}
       onFocusCapture={activate}
     >
@@ -216,10 +214,10 @@ export default function NotebookSqlCell({
       />
 
       {!collapsed && (
-      <Box>
+      <div>
       {/* Mode content */}
       {queryMode === 'sql' && (
-        <Box minH="120px">
+        <div className="min-h-[120px]">
           <SqlEditor
             value={cell.query}
             onChange={handleQueryChange}
@@ -232,11 +230,11 @@ export default function NotebookSqlCell({
             databaseName={cell.connection_name}
             connectionType={connectionType}
           />
-        </Box>
+        </div>
       )}
 
       {queryMode === 'viz' && (
-        <Box p={3} display="flex" flexDirection="column" gap={2} maxH="420px" overflow="auto">
+        <div className="flex max-h-[420px] flex-col gap-2 overflow-auto p-3">
           <VizTypeSelector value={vizType} onChange={(type) => { if (isClassicVizType(type)) setViz({ type }) }} orientation="grouped" />
           {vizType !== 'table' && data && (
             <VizConfigPanel
@@ -267,7 +265,7 @@ export default function NotebookSqlCell({
               seriesCount={chartSeriesCount}
             />
           )}
-        </Box>
+        </div>
       )}
 
       {/* Parameters (current + referenced) */}
@@ -290,7 +288,7 @@ export default function NotebookSqlCell({
           the inner table/chart bounds to this area and scrolls (TableV2 scrolls
           internally) instead of the cell growing infinitely with the row count. */}
       {executed && (
-        <Box h="380px" minH={0} display="flex" flexDirection="column" p={2}>
+        <div className="flex h-[380px] min-h-0 flex-col p-2">
           <QuestionVisualization
             currentState={cell as unknown as QuestionContent}
             config={config}
@@ -314,10 +312,10 @@ export default function NotebookSqlCell({
             onHideVizTab={() => setQueryMode('sql')}
             vizTabOpen={queryMode === 'viz'}
           />
-        </Box>
+        </div>
       )}
-      </Box>
+      </div>
       )}
-    </Box>
+    </div>
   );
 }

@@ -1,12 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Button, Flex, HStack, Portal, Switch, Text } from '@chakra-ui/react';
-import type { CheckedChangeDetails } from '@zag-js/switch';
 import Link from 'next/link';
 import { LuExternalLink, LuHistory, LuPlay } from 'react-icons/lu';
-import { createListCollection } from '@chakra-ui/react';
-import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
+import { Button } from '@/components/kit/button';
+import { Switch } from '@/components/kit/switch';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/kit/select';
 import { preserveParams } from '@/lib/navigation/url-utils';
 import type { JobRun } from '@/lib/types';
 
@@ -55,91 +54,63 @@ export function RunNowHeader({
 
   const runOptions: RunOptions = { force: forceRun, send: sendNotifications };
 
-  const runsCollection = createListCollection({
-    items: runs.filter(r => r.id != null).map(r => ({
-      value: String(r.id),
-      label: new Date(r.created_at).toLocaleString(),
-    })),
-  });
+  const runItems = runs.filter(r => r.id != null).map(r => ({
+    value: String(r.id),
+    label: new Date(r.created_at).toLocaleString(),
+  }));
 
   return (
-    <Flex
-      justify="space-between"
-      align="center"
-      px={4}
-      py={3}
-      borderBottomWidth="1px"
-      borderColor="border.muted"
-      gap={2}
-    >
-      <HStack flex={1} gap={2}>
+    <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+      <div className="flex flex-1 items-center gap-2">
         <LuHistory size={16} />
-        <Text fontWeight="600" fontSize="sm">{title}</Text>
+        <span className="text-sm font-semibold">{title}</span>
         {runs.length > 0 && (
-          <Box flex={1} maxW="200px">
-            <SelectRoot
-              collection={runsCollection}
-              value={selectedRunId ? [selectedRunId.toString()] : []}
-              onValueChange={(e) => onSelectRun?.(e.value[0] ? parseInt(e.value[0], 10) : null)}
-              size="sm"
+          <div className="max-w-[200px] flex-1">
+            <Select
+              value={selectedRunId ? String(selectedRunId) : ''}
+              onValueChange={(v) => onSelectRun?.(v ? parseInt(v, 10) : null)}
             >
-              <SelectTrigger>
-                <SelectValueText placeholder="Select run..." />
+              <SelectTrigger size="sm" className="w-full">
+                <SelectValue placeholder="Select run..." />
               </SelectTrigger>
-              <Portal>
-                <SelectPositioner>
-                  <SelectContent>
-                    {runsCollection.items.map((item) => (
-                      <SelectItem key={item.value} item={item}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </SelectPositioner>
-              </Portal>
-            </SelectRoot>
-          </Box>
+              <SelectContent>
+                {runItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         )}
-      </HStack>
+      </div>
 
-      <HStack gap={3}>
-        <HStack gap={1.5}>
-          <Switch.Root
-            size="sm"
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          <Switch
             checked={forceRun}
-            onCheckedChange={(e: CheckedChangeDetails) => setForceRun(e.checked)}
-            colorPalette="orange"
-          >
-            <Switch.HiddenInput />
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-          </Switch.Root>
-          <Text fontSize="xs" color="fg.muted">Force</Text>
-        </HStack>
+            onCheckedChange={(checked: boolean) => setForceRun(checked)}
+            className="data-[state=checked]:bg-[#f39c12]"
+          />
+          <span className="text-xs text-muted-foreground">Force</span>
+        </div>
 
-        <HStack gap={1.5}>
-          <Switch.Root
-            size="sm"
+        <div className="flex items-center gap-1.5">
+          <Switch
             checked={sendNotifications}
-            onCheckedChange={(e: CheckedChangeDetails) => setSendNotifications(e.checked)}
-            colorPalette="teal"
-          >
-            <Switch.HiddenInput />
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-          </Switch.Root>
-          <Text fontSize="xs" color="fg.muted">Send</Text>
-        </HStack>
+            onCheckedChange={(checked: boolean) => setSendNotifications(checked)}
+            className="data-[state=checked]:bg-[#16a085]"
+          />
+          <span className="text-xs text-muted-foreground">Send</span>
+        </div>
 
         {schemaRefreshing && (
-          <Text fontSize="xs" color="fg.muted" fontStyle="italic">Refreshing schema...</Text>
+          <span className="text-xs text-muted-foreground italic">Refreshing schema...</span>
         )}
 
         {externalLinkId && (
           <Link href={preserveParams(`/f/${externalLinkId}`)}>
-            <Button size="sm" variant="ghost" colorPalette="gray">
+            <Button size="sm" variant="ghost">
               <LuExternalLink size={14} />
             </Button>
           </Link>
@@ -151,7 +122,6 @@ export function RunNowHeader({
             disabled={disabled}
             size="sm"
             variant="outline"
-            colorPalette="gray"
           >
             <LuPlay size={14} />
             {isRunning ? runningLabel : 'Test Only'}
@@ -162,12 +132,12 @@ export function RunNowHeader({
           onClick={() => onRunNow(runOptions)}
           disabled={disabled && !forceRun}
           size="sm"
-          colorPalette="teal"
+          className="bg-[#16a085] text-white hover:bg-[#16a085]/90"
         >
           <LuPlay size={14} />
           {isRunning ? runningLabel : buttonLabel}
         </Button>
-      </HStack>
-    </Flex>
+      </div>
+    </div>
   );
 }

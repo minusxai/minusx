@@ -33,6 +33,16 @@ export const EMBED_CHROME_FILES = [
   join(ROOT, 'components', 'plotx', 'PivotTableBody.tsx'),
   join(ROOT, 'components', 'plotx', 'PivotTableTooltip.tsx'),
   join(ROOT, 'components', 'viz', 'VizPivotView.tsx'),
+  join(ROOT, 'components', 'viz', 'VizTableView.tsx'),
+  join(ROOT, 'components', 'viz', 'VegaChart.tsx'),
+  join(ROOT, 'components', 'plotx', 'TableV2.tsx'),
+  join(ROOT, 'components', 'plotx', 'TableBody.tsx'),
+  join(ROOT, 'components', 'plotx', 'TableHeaderCell.tsx'),
+  join(ROOT, 'components', 'plotx', 'TableBottomBar.tsx'),
+  join(ROOT, 'components', 'plotx', 'DrillDownCard.tsx'),
+  join(ROOT, 'components', 'plotx', 'ChartError.tsx'),
+  join(ROOT, 'components', 'params', 'SourceDropdownWidget.tsx'),
+  join(ROOT, 'components', 'params', 'InlineSqlDropdownWidget.tsx'),
 ];
 const OUT_FILE = join(ROOT, 'lib', 'story-ui', 'recipe-classes.ts');
 

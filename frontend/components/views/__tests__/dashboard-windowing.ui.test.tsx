@@ -12,10 +12,9 @@
  * mock to exercise the ghost path explicitly.
  */
 import React from 'react';
-import { screen, waitFor, act } from '@testing-library/react';
+import { screen, act } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
-import { setFileEditMode } from '@/store/uiSlice';
 import DashboardContainerV2 from '@/components/containers/DashboardContainerV2';
 import { setFile } from '@/store/filesSlice';
 import { waitForFileViewReady, FORCE_MOUNT_TILES_EVENT } from '@/lib/screenshot/readiness';

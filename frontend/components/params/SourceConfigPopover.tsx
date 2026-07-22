@@ -4,11 +4,13 @@
 // Settings gear that opens a popover to configure parameter.source.
 
 import React, { useState, useMemo } from 'react';
-import {
-  Input, HStack, Text, MenuRoot, MenuTrigger, MenuContent, MenuItem,
-  Portal, MenuPositioner, Box, IconButton, VStack, Popover, Button,
-} from '@chakra-ui/react';
 import { LuChevronDown, LuSettings2 } from 'react-icons/lu';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/kit/popover';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/kit/dropdown-menu';
+import { Button } from '@/components/kit/button';
+import { Input } from '@/components/kit/input';
 import { QuestionParameter } from '@/lib/types';
 import type { SqlParameterSource } from '@/lib/validation/atlas-schemas';
 import { getTypeColor, getTypeIcon } from '@/lib/sql/param-type-display';
@@ -24,6 +26,14 @@ const NUMERIC_TYPE_RE = /^(int|integer|bigint|smallint|tinyint|float|double|deci
 function isNumericType(type: string): boolean {
   return NUMERIC_TYPE_RE.test(type.trim());
 }
+
+// getTypeColor returns concrete hexes (kit/Tailwind stack).
+const typeHex = (type: 'text' | 'number' | 'date'): string => getTypeColor(type);
+const TEAL = '#16a085';
+const mix = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+
+const SECTION_TITLE = 'mb-1.5 text-[10px] font-bold uppercase tracking-[0.05em] text-muted-foreground';
+const PILL_BASE = 'flex items-center rounded-sm border px-2.5 py-1 font-mono text-xs font-semibold transition-colors duration-100';
 
 interface SourceConfigPopoverProps {
   parameter: QuestionParameter;
@@ -120,270 +130,179 @@ export function SourceConfigPopover({ parameter, onParameterChange, onTypeChange
   };
 
   return (
-    // autoFocus={false}: zag re-runs the popover's initial-focus on controlled re-renders, so
-    // WITHOUT this, every keystroke in the Display-name input (which lifts state to the parent
-    // and re-renders this subtree) yanks focus back to the content div — typing loses every
-    // character after the first.
-    <Popover.Root open={open} onOpenChange={(d) => setOpen(d.open)} positioning={{ placement: 'bottom-end' }} autoFocus={false}>
-      <Popover.Trigger asChild>
-        <IconButton
-          aria-label="Configure source"
-          title="Configure parameter source"
-          variant="ghost"
-          h={ROW_H}
-          w={ROW_H}
-          minW={ROW_H}
-          color={isFromQuestion || isFromSql ? 'accent.teal' : 'fg.subtle'}
-          _hover={{ color: 'accent.teal', bg: 'bg.emphasized' }}
-        >
-          <LuSettings2 style={{ width: 13, height: 13 }} />
-        </IconButton>
-      </Popover.Trigger>
-      <Portal>
-        <Popover.Positioner>
-          <Popover.Content
-            width="280px"
-            bg="bg.surface"
-            p={0}
-            overflow="visible"
-            borderRadius="md"
-            border="1px solid"
-            borderColor="border.muted"
-            boxShadow="lg"
-          >
-            <Popover.Body p={3} overflow="visible">
-              <VStack gap={3} align="stretch">
-                {/* Display name */}
-                <Box>
-                  <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
-                    Display name
-                  </Text>
-                  <Input
-                    aria-label={`Display name for ${parameter.name}`}
-                    size="sm"
-                    h={ROW_H}
-                    fontSize="xs"
-                    bg="bg.muted"
-                    borderColor="border.muted"
-                    placeholder={generateLabel(parameter.name)}
-                    value={parameter.label ?? ''}
-                    onChange={(e) => onParameterChange({ ...parameter, label: e.target.value || null })}
-                    _focus={{ borderColor: 'accent.teal', boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)' }}
-                  />
-                </Box>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        aria-label="Configure source"
+        title="Configure parameter source"
+        className={`inline-flex shrink-0 items-center justify-center rounded-md outline-none transition-colors hover:bg-accent hover:text-[#16a085] ${
+          isFromQuestion || isFromSql ? 'text-[#16a085]' : 'text-muted-foreground'
+        }`}
+        style={{ height: ROW_H, width: ROW_H, minWidth: ROW_H }}
+      >
+        <LuSettings2 style={{ width: 13, height: 13 }} />
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-[280px] overflow-visible p-3"
+        // Don't yank focus into the panel on open — the Display-name input lifts state
+        // to the parent on every keystroke, and a re-run of initial focus mid-type was
+        // the historic lose-every-character bug this popover carries a scar from.
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <div className="flex flex-col items-stretch gap-3">
+          {/* Display name */}
+          <div>
+            <p className={SECTION_TITLE}>
+              Display name
+            </p>
+            <Input
+              aria-label={`Display name for ${parameter.name}`}
+              className="bg-muted border-border px-2 text-xs md:text-xs focus-visible:border-[#16a085] focus-visible:ring-[#16a085]/40"
+              style={{ height: ROW_H }}
+              placeholder={generateLabel(parameter.name)}
+              value={parameter.label ?? ''}
+              onChange={(e) => onParameterChange({ ...parameter, label: e.target.value || null })}
+            />
+          </div>
 
-                {/* Type selector */}
-                {onTypeChange && !disableTypeChange && (
-                  <Box>
-                    <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
-                      Type
-                    </Text>
-                    <HStack gap={1}>
-                      {([
-                        { value: 'text', label: 'Text' },
-                        { value: 'number', label: 'Number' },
-                        { value: 'date', label: 'Date' },
-                      ] as const).map((opt) => (
-                        <Box
-                          key={opt.value}
-                          as="button"
-                          px={2.5}
-                          py={1}
-                          borderRadius="sm"
-                          border="1px solid"
-                          borderColor={parameter.type === opt.value ? getTypeColor(opt.value) : 'border.muted'}
-                          bg={parameter.type === opt.value ? getTypeColor(opt.value) + '/10' : 'bg.muted'}
-                          color={parameter.type === opt.value ? getTypeColor(opt.value) : 'fg.default'}
-                          fontSize="xs"
-                          fontWeight="600"
-                          fontFamily="mono"
-                          cursor="pointer"
-                          _hover={{
-                            borderColor: getTypeColor(opt.value),
-                            color: getTypeColor(opt.value),
-                          }}
-                          transition="all 0.1s"
-                          onClick={() => onTypeChange(opt.value)}
-                        >
-                          <HStack gap={1}>
-                            {React.createElement(getTypeIcon(opt.value), { size: 14 })}
-                            <span>{opt.label}</span>
-                          </HStack>
-                        </Box>
-                      ))}
-                    </HStack>
-                  </Box>
-                )}
-
-                <Box>
-                  <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
-                    Source
-                  </Text>
-                  <HStack gap={1} flexWrap="wrap">
-                    {([
-                      { value: 'manual', label: 'Free input' },
-                      { value: 'question', label: 'Saved question' },
-                      { value: 'sql', label: 'Inline SQL' },
-                    ] as const).map((opt) => (
-                      <Box
-                        key={opt.value}
-                        as="button"
-                        px={2.5}
-                        py={1}
-                        borderRadius="sm"
-                        border="1px solid"
-                        borderColor={mode === opt.value ? 'accent.teal' : 'border.muted'}
-                        bg={mode === opt.value ? 'accent.teal/10' : 'bg.muted'}
-                        color={mode === opt.value ? 'accent.teal' : 'fg.default'}
-                        fontSize="xs"
-                        fontWeight="600"
-                        fontFamily="mono"
-                        cursor="pointer"
-                        _hover={{
-                          borderColor: 'accent.teal',
-                          color: 'accent.teal',
-                        }}
-                        transition="all 0.1s"
-                        onClick={() => handleModeChange(opt.value)}
-                      >
-                        {opt.label}
-                      </Box>
-                    ))}
-                  </HStack>
-                </Box>
-
-                {mode === 'sql' && (
-                  <Box>
-                    <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
-                      Query
-                    </Text>
-                    <textarea
+          {/* Type selector */}
+          {onTypeChange && !disableTypeChange && (
+            <div>
+              <p className={SECTION_TITLE}>
+                Type
+              </p>
+              <div className="flex items-center gap-1">
+                {([
+                  { value: 'text', label: 'Text' },
+                  { value: 'number', label: 'Number' },
+                  { value: 'date', label: 'Date' },
+                ] as const).map((opt) => {
+                  const hex = typeHex(opt.value);
+                  const active = parameter.type === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`${PILL_BASE} gap-1 ${active ? '' : 'border-border bg-muted text-foreground hover:border-[var(--pt)] hover:text-[var(--pt)]'}`}
                       style={{
-                        width: '100%',
-                        minHeight: '60px',
-                        padding: '6px 10px',
-                        background: 'var(--chakra-colors-bg-muted)',
-                        borderRadius: '4px',
-                        border: '1px solid var(--chakra-colors-border-muted)',
-                        fontSize: '12px',
-                        fontFamily: 'var(--chakra-fonts-mono)',
-                        color: 'var(--chakra-colors-fg-default)',
-                        resize: 'vertical',
-                        outline: 'none',
+                        ['--pt' as never]: hex,
+                        ...(active ? { borderColor: hex, background: mix(hex, 10), color: hex } : {}),
                       }}
-                      onFocus={(e) => { e.target.style.borderColor = 'var(--chakra-colors-accent-teal)'; }}
-                      onBlur={(e) => { e.target.style.borderColor = 'var(--chakra-colors-border-muted)'; }}
-                      placeholder="SELECT DISTINCT year FROM sales"
-                      value={sqlQuery}
-                      onChange={(e) => setSqlQuery(e.target.value)}
-                    />
-                  </Box>
-                )}
+                      onClick={() => onTypeChange(opt.value)}
+                    >
+                      {React.createElement(getTypeIcon(opt.value), { size: 14 })}
+                      <span>{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-                {mode === 'question' && (
-                  <>
-                    <Box>
-                      <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
-                        Question
-                      </Text>
-                      <FileSearchSelect
-                        files={questionList}
-                        selectedId={draftQuestionId}
-                        onSelect={handleQuestionSelect}
-                        placeholder="Search questions…"
-                      />
-                    </Box>
-
-                    {draftQuestionId && (
-                      <Box>
-                        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
-                          Column
-                          {parameter.type === 'number' && (
-                            <Text as="span" fontSize="2xs" color="fg.subtle" ml={1}>(numeric only)</Text>
-                          )}
-                        </Text>
-                        <MenuRoot positioning={{ placement: 'bottom-start' }}>
-                          <MenuTrigger asChild>
-                            <HStack
-                              as="button"
-                              w="full"
-                              px={2.5}
-                              py={1.5}
-                              bg="bg.muted"
-                              borderRadius="sm"
-                              border="1px solid"
-                              borderColor="border.muted"
-                              cursor="pointer"
-                              fontSize="xs"
-                              fontFamily="mono"
-                              _hover={{ borderColor: 'accent.teal' }}
-                              justify="space-between"
-                            >
-                              <Text lineClamp={1} color={draftColumn ? 'fg.default' : 'fg.subtle'}>
-                                {loadingCols ? 'Loading…' : draftColumn || '— select column —'}
-                              </Text>
-                              <LuChevronDown size={12} />
-                            </HStack>
-                          </MenuTrigger>
-                          <Portal>
-                            <MenuPositioner>
-                              <MenuContent
-                                minW="200px"
-                                maxH="200px"
-                                overflowY="auto"
-                                bg="bg.surface"
-                                borderColor="border.default"
-                                shadow="lg"
-                                p={1}
-                              >
-                                {filteredColumns.length === 0 ? (
-                                  <Box px={3} py={2}>
-                                    <Text fontSize="xs" color="fg.subtle">{loadingCols ? 'Loading…' : 'No columns found'}</Text>
-                                  </Box>
-                                ) : filteredColumns.map(c => (
-                                  <MenuItem
-                                    key={c.name}
-                                    value={c.name}
-                                    onClick={() => handleColumnSelect(c.name)}
-                                    px={3}
-                                    py={1.5}
-                                    borderRadius="sm"
-                                    _hover={{ bg: 'bg.muted' }}
-                                    cursor="pointer"
-                                  >
-                                    <Text fontSize="xs" fontFamily="mono">{c.name}</Text>
-                                  </MenuItem>
-                                ))}
-                              </MenuContent>
-                            </MenuPositioner>
-                          </Portal>
-                        </MenuRoot>
-                      </Box>
-                    )}
-                  </>
-                )}
-                {/* Apply button */}
-                {(mode === 'question' || mode === 'sql') && (
-                  <Button
-                    size="xs"
-                    bg="accent.teal"
-                    color="white"
-                    fontFamily="mono"
-                    fontWeight="600"
-                    fontSize="xs"
-                    w="full"
-                    _hover={{ opacity: 0.9 }}
-                    disabled={!canApply || !isDirty}
-                    onClick={handleApply}
+          <div>
+            <p className={SECTION_TITLE}>
+              Source
+            </p>
+            <div className="flex flex-wrap items-center gap-1">
+              {([
+                { value: 'manual', label: 'Free input' },
+                { value: 'question', label: 'Saved question' },
+                { value: 'sql', label: 'Inline SQL' },
+              ] as const).map((opt) => {
+                const active = mode === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`${PILL_BASE} ${active ? '' : 'border-border bg-muted text-foreground hover:border-[#16a085] hover:text-[#16a085]'}`}
+                    style={active ? { borderColor: TEAL, background: mix(TEAL, 10), color: TEAL } : undefined}
+                    onClick={() => handleModeChange(opt.value)}
                   >
-                    Apply
-                  </Button>
-                )}
-              </VStack>
-            </Popover.Body>
-          </Popover.Content>
-        </Popover.Positioner>
-      </Portal>
-    </Popover.Root>
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {mode === 'sql' && (
+            <div>
+              <p className={SECTION_TITLE}>
+                Query
+              </p>
+              <textarea
+                className="min-h-[60px] w-full resize-y rounded border border-border bg-muted px-2.5 py-1.5 font-mono text-xs text-foreground outline-none focus:border-[#16a085]"
+                placeholder="SELECT DISTINCT year FROM sales"
+                value={sqlQuery}
+                onChange={(e) => setSqlQuery(e.target.value)}
+              />
+            </div>
+          )}
+
+          {mode === 'question' && (
+            <>
+              <div>
+                <p className={SECTION_TITLE}>
+                  Question
+                </p>
+                <FileSearchSelect
+                  files={questionList}
+                  selectedId={draftQuestionId}
+                  onSelect={handleQuestionSelect}
+                  placeholder="Search questions…"
+                />
+              </div>
+
+              {draftQuestionId && (
+                <div>
+                  <p className={SECTION_TITLE}>
+                    Column
+                    {parameter.type === 'number' && (
+                      <span className="ml-1">(numeric only)</span>
+                    )}
+                  </p>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm border border-border bg-muted px-2.5 py-1.5 font-mono text-xs outline-none hover:border-[#16a085]"
+                    >
+                      <span className={`line-clamp-1 text-left ${draftColumn ? 'text-foreground' : 'text-muted-foreground'}`}>
+                        {loadingCols ? 'Loading…' : draftColumn || '— select column —'}
+                      </span>
+                      <LuChevronDown size={12} className="shrink-0" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="max-h-[200px] min-w-[200px] overflow-y-auto">
+                      {filteredColumns.length === 0 ? (
+                        <div className="px-3 py-2">
+                          <p className="text-xs text-muted-foreground">{loadingCols ? 'Loading…' : 'No columns found'}</p>
+                        </div>
+                      ) : filteredColumns.map(c => (
+                        <DropdownMenuItem
+                          key={c.name}
+                          className="cursor-pointer px-3 py-1.5"
+                          onClick={() => handleColumnSelect(c.name)}
+                        >
+                          <span className="font-mono text-xs">{c.name}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              )}
+            </>
+          )}
+          {/* Apply button */}
+          {(mode === 'question' || mode === 'sql') && (
+            <Button
+              size="xs"
+              className="w-full bg-[#16a085] font-mono text-xs font-semibold text-white hover:bg-[#16a085]/90"
+              disabled={!canApply || !isDirty}
+              onClick={handleApply}
+            >
+              Apply
+            </Button>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

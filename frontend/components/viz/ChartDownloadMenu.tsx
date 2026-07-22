@@ -9,8 +9,10 @@
  * - Data (.csv): the raw query result (every column, every row).
  */
 import { useCallback } from 'react';
-import { IconButton, MenuRoot, MenuTrigger, MenuContent, MenuItem, MenuPositioner, Portal, Text } from '@chakra-ui/react';
 import { LuDownload, LuImage, LuSheet } from 'react-icons/lu';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/kit/dropdown-menu';
 import { renderEnvelopeImageDataUrl } from '@/lib/chart/VizImageRenderer.client';
 import { queryResultToCsv, downloadCsvString } from '@/components/plotx/build-chart-download';
 import { getTimestamp } from '@/lib/chart/chart-format';
@@ -44,26 +46,23 @@ export function ChartDownloadMenu({ envelope, rows, columns, colorMode, logoSrc,
   }, [columns, rows, filename]);
 
   return (
-    <MenuRoot positioning={{ placement: 'bottom-end' }}>
-      <MenuTrigger asChild>
-        <IconButton aria-label="Download chart" size="xs" variant="ghost" color="fg.subtle" _hover={{ color: 'fg.default', bg: 'bg.muted' }}>
-          <LuDownload size={14} />
-        </IconButton>
-      </MenuTrigger>
-      <Portal>
-        <MenuPositioner>
-          <MenuContent minW="180px" bg="bg.surface" borderColor="border.default" shadow="lg" p={1}>
-            <MenuItem value="image" aria-label="Download chart as image" onClick={() => void downloadImage()} px={3} py={1.5} borderRadius="sm" _hover={{ bg: 'bg.muted' }} cursor="pointer">
-              <LuImage size={14} />
-              <Text fontSize="xs">Image (.jpg)</Text>
-            </MenuItem>
-            <MenuItem value="csv" aria-label="Download chart data as CSV" onClick={downloadCsv} px={3} py={1.5} borderRadius="sm" _hover={{ bg: 'bg.muted' }} cursor="pointer">
-              <LuSheet size={14} />
-              <Text fontSize="xs">Data (.csv)</Text>
-            </MenuItem>
-          </MenuContent>
-        </MenuPositioner>
-      </Portal>
-    </MenuRoot>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Download chart"
+        className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <LuDownload size={14} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[180px]">
+        <DropdownMenuItem aria-label="Download chart as image" className="cursor-pointer px-3 py-1.5" onClick={() => void downloadImage()}>
+          <LuImage size={14} />
+          <span className="text-xs">Image (.jpg)</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem aria-label="Download chart data as CSV" className="cursor-pointer px-3 py-1.5" onClick={downloadCsv}>
+          <LuSheet size={14} />
+          <span className="text-xs">Data (.csv)</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

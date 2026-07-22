@@ -1,17 +1,22 @@
 'use client';
 
-import { Box, VStack, Text, HStack, Input, IconButton, Button } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/kit/tooltip';
+import { Button } from '@/components/kit/button';
+import { Input } from '@/components/kit/input';
+import { cn } from '@/components/kit/cn';
 import { QuestionContent } from '@/lib/types';
 import { LuScanSearch, LuSearch, LuPlus, LuType } from 'react-icons/lu';
 import { useMemo, useState, useEffect } from 'react';
-import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
 import { setFile } from '@/store/filesSlice';
 import { FilesAPI } from '@/lib/data/files';
 import { pushView } from '@/store/uiSlice';
 import { createDraftFile } from '@/lib/file-state/file-state';
+
+// FILE_TYPE_METADATA.question.color is 'accent.primary' (#2980b9) — the hover
+// glow below already hardcoded that rgba, so the icon/border use the same hex.
+const QUESTION_ACCENT = '#2980b9';
 
 interface QuestionBrowserPanelProps {
   folderPath: string;
@@ -126,30 +131,23 @@ export const QuestionBrowserPanel = ({
   }, [questionsMap, excludedIds, searchQuery]);
 
   return (
-    <VStack
-      bg="bg.surface"
-      align="stretch"
-      gap={0}
-      overflowY="auto"
-      borderRadius={5}
-      fontFamily="mono"
-    >
+    <div className="flex flex-col items-stretch gap-0 overflow-y-auto rounded-[5px] bg-card font-mono">
       {/* Title */}
       {title && (
-        <Box p={3} borderBottom="1px solid" borderColor="border.default">
-          <Text fontSize="sm" fontWeight="700" color="fg.default">
+        <div className="border-b border-border p-3">
+          <p className="text-sm font-bold text-foreground">
             {title}
-          </Text>
-        </Box>
+          </p>
+        </div>
       )}
 
       {/* Create Question / Text Block Buttons */}
-      <Box p={3} borderBottom="1px solid" borderColor="border.default">
-        <VStack gap={2} align="stretch">
+      <div className="border-b border-border p-3">
+        <div className="flex flex-col items-stretch gap-2">
           <Button
             type="button"
             size="sm"
-            width="100%"
+            className="w-full gap-2 bg-[#16a085] text-white hover:bg-[#16a085]/90"
             onClick={async (e) => {
               e.stopPropagation();
               if (dashboardId !== undefined) {
@@ -157,8 +155,6 @@ export const QuestionBrowserPanel = ({
                 dispatch(pushView({ type: 'create-question', folderPath, dashboardId, fileId: draftFileId }));
               }
             }}
-            colorPalette="teal"
-            gap={2}
             aria-label="Create New Question"
           >
             <LuPlus /> Create New Question
@@ -167,71 +163,45 @@ export const QuestionBrowserPanel = ({
             <Button
               type="button"
               size="sm"
-              width="100%"
               variant="outline"
+              className="w-full gap-2"
               onClick={(e) => {
                 e.stopPropagation();
                 onAddTextBlock();
               }}
-              gap={2}
               aria-label="Add text block"
             >
               <LuType size={14} /> Add Text Block
             </Button>
           )}
-        </VStack>
-      </Box>
+        </div>
+      </div>
 
       {/* Header */}
       {availableQuestions.length > 0 ? (
-        <Box>
-            <Box
-                p={4}
-                borderBottom="1px solid"
-                borderColor="border.default"
-                bg="bg.muted"
-            >
-                <Text
-                fontSize="xs"
-                fontWeight="700"
-                color="fg.subtle"
-                textTransform="uppercase"
-                letterSpacing="0.1em"
-                mb={3}
-                               >
+        <div>
+            <div className="border-b border-border bg-muted p-4">
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Available Questions ({availableQuestions.length})
-                </Text>
+                </p>
 
                 {/* Search Bar */}
-                <Box position="relative">
-                <Box
-                    position="absolute"
-                    left={3}
-                    top="50%"
-                    transform="translateY(-50%)"
-                    color="fg.muted"
-                    pointerEvents="none"
-                >
+                <div className="relative">
+                <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                     <LuSearch size={14} />
-                </Box>
+                </div>
                 <Input
                     placeholder="Search questions..."
-                    size="sm"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    pl={2}
-                    bg="bg.surface"
-                                       borderColor="border.default"
-                    _hover={{ borderColor: 'border.emphasized' }}
-                    _focus={{ borderColor: 'accent.primary', boxShadow: '0 0 0 1px var(--chakra-colors-accent-primary)' }}
-                    fontSize="xs"
+                    className="h-8 bg-card pl-2 text-xs md:text-xs"
                 />
-                </Box>
-            </Box>
+                </div>
+            </div>
 
-            <Box p={3} maxHeight={compact ? '200px' : '320px'} overflowY="auto">
+            <div className={cn('overflow-y-auto p-3', compact ? 'max-h-[200px]' : 'max-h-[320px]')}>
                 {availableQuestions.length > 0 ? (
-                <VStack align="stretch" gap={2}>
+                <div className="flex flex-col items-stretch gap-2">
                     {availableQuestions.map(question => (
                     <QuestionItem
                         key={question.id}
@@ -239,31 +209,25 @@ export const QuestionBrowserPanel = ({
                         onAddQuestion={onAddQuestion}
                     />
                     ))}
-                </VStack>
+                </div>
                 ) : (
-                <Box
-                    p={4}
-                    borderRadius="md"
-                    border="1px dashed"
-                    borderColor="border.muted"
-                    textAlign="center"
-                >
-                    <Text fontSize="xs" color="fg.muted">
+                <div className="rounded-md border border-dashed border-border p-4 text-center">
+                    <p className="text-xs text-muted-foreground">
                     {searchQuery.trim() ? 'No questions match your search' : 'All questions have been added'}
-                    </Text>
-                </Box>
+                    </p>
+                </div>
                 )}
-            </Box>
-        </Box>)
+            </div>
+        </div>)
         : (
-            <Box>
-                <Text fontSize="xs" color="fg.muted" textAlign={"center"} p={3}>
+            <div>
+                <p className="p-3 text-center text-xs text-muted-foreground">
                     No new existing question in this folder.
-                </Text>
-            </Box>
+                </p>
+            </div>
         )}
 
-    </VStack>
+    </div>
   );
 };
 
@@ -273,69 +237,51 @@ interface QuestionItemProps {
 }
 
 const QuestionItem = ({ question, onAddQuestion }: QuestionItemProps) => {
-  const questionColor = FILE_TYPE_METADATA.question.color;
-
   return (
-    <Box
+    <div
       role="article"
       aria-label={question.name || 'Untitled Question'}
-      p={3}
-      bg="bg.surface"
-      borderRadius="md"
-      border="1px solid"
-      borderColor="border.default"
-      _hover={{
-        bg: 'bg.muted',
-        borderColor: questionColor,
-        boxShadow: '0 0 12px rgba(41, 128, 185, 0.15)'
-      }}
-      transition="all 0.15s ease"
+      className="rounded-md border border-border bg-card p-3 transition-all duration-150 hover:border-[#2980b9] hover:bg-muted hover:shadow-[0_0_12px_rgba(41,128,185,0.15)]"
     >
-      <HStack gap={2.5} align="flex-start">
-        <Box
-          as={LuScanSearch}
-          fontSize="md"
-          color={questionColor}
-          flexShrink={0}
-          mt={0.5}
+      <div className="flex items-start gap-2.5">
+        <LuScanSearch
+          size={16}
+          className="mt-0.5 shrink-0"
+          style={{ color: QUESTION_ACCENT }}
         />
-        <VStack align="stretch" gap={1} flex="1" minWidth={0}>
-          <Tooltip content={question.name || 'Untitled Question'}>
-            <Text
-              fontSize="sm"
-              fontWeight="600"
-              color="fg.default"
-              lineClamp={1}
-
-            >
-              {question.name || 'Untitled Question'}
-            </Text>
-          </Tooltip>
-          {question.description && (
-            <Tooltip content={question.description}>
-              <Text
-                fontSize="xs"
-                color="fg.muted"
-                lineClamp={2}
-                lineHeight="1.4"
-              >
-                {question.description}
-              </Text>
+        <div className="flex min-w-0 flex-1 flex-col items-stretch gap-1">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="line-clamp-1 text-sm font-semibold text-foreground">
+                  {question.name || 'Untitled Question'}
+                </p>
+              </TooltipTrigger>
+              <TooltipContent>{question.name || 'Untitled Question'}</TooltipContent>
             </Tooltip>
-          )}
-        </VStack>
-        <IconButton
+            {question.description && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="line-clamp-2 text-xs leading-[1.4] text-muted-foreground">
+                    {question.description}
+                  </p>
+                </TooltipTrigger>
+                <TooltipContent>{question.description}</TooltipContent>
+              </Tooltip>
+            )}
+          </TooltipProvider>
+        </div>
+        <Button
           onClick={() => onAddQuestion(question.id)}
           aria-label="Add to dashboard"
           size="xs"
           variant="ghost"
-          colorPalette="teal"
-          px={2}
+          className="px-2 text-[#16a085] hover:bg-[#16a085]/10 hover:text-[#16a085]"
         >
           <LuPlus />
           Add
-        </IconButton>
-      </HStack>
-    </Box>
+        </Button>
+      </div>
+    </div>
   );
 };

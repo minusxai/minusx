@@ -1,7 +1,21 @@
-import { HStack, Button, Text, Box, Menu, Portal, Icon } from '@chakra-ui/react'
+import { createElement } from 'react'
 import { LuChevronDown, LuColumns3, LuCheck, LuDownload, LuX, LuChartColumn } from 'react-icons/lu'
 import type { ColumnFiltersState, VisibilityState } from '@tanstack/react-table'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/kit/dropdown-menu'
 import { getTypeIcon, getTypeColor, type ColumnType } from './table-v2-utils'
+
+// Accent constants (the app palette — same values the converted pivot uses).
+const TEAL = '#16a085'
+
+// Small toolbar button chrome (Chakra size 2xs outline equivalent: 24px tall, xs text).
+const TOOLBAR_BTN =
+  'inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md border border-border bg-muted px-2 text-xs font-medium whitespace-nowrap text-foreground transition-all hover:bg-accent hover:border-muted-foreground/40 [&_svg]:shrink-0'
 
 interface TableBottomBarProps {
   /** Columns for the visibility menu. Omit (with the setters) for grids without per-column ops (pivot). */
@@ -37,159 +51,122 @@ export const TableBottomBar = ({
   downloadCsv,
 }: TableBottomBarProps) => {
   const visibleColumnCount = colNames.filter(c => columnVisibility[c] !== false).length
+  const allVisible = colNames.every(c => columnVisibility[c] !== false)
 
   return (
     // mx-toolbar: stable class contract — surfaces/css overrides hide chrome with
     // `.mx-toolbar { display: none }` instead of a prop (no toggles by design).
-    <HStack className="mx-toolbar" justify="space-between" align="center" mt={2} px={2} flexShrink={0}>
+    <div className="mx-toolbar mt-2 flex shrink-0 items-center justify-between px-2">
       {/* Left: Stats, Columns, Filters */}
-      <HStack gap={3}>
+      <div className="flex items-center gap-3">
         {setShowStats && (
-        <Button
-          size="2xs"
-          variant={showStats ? 'solid' : 'outline'}
-          bg={showStats ? 'accent.teal' : 'bg.muted'}
-          color={showStats ? 'white' : undefined}
-          borderColor={showStats ? 'accent.teal' : 'border.default'}
-          _hover={{ bg: showStats ? 'accent.teal/80' : 'bg.subtle', borderColor: 'border.emphasized' }}
+        <button
+          className={TOOLBAR_BTN}
+          style={showStats ? { background: TEAL, borderColor: TEAL, color: 'white' } : undefined}
           onClick={() => setShowStats(prev => !prev)}
         >
-          <Icon as={LuChartColumn} boxSize={3} />
+          <LuChartColumn className="size-3" />
           Stats
-        </Button>
+        </button>
         )}
         {setColumnVisibility && colNames.length > 0 && (
-        <Menu.Root closeOnSelect={false}>
-          <Menu.Trigger asChild>
-            <Button
-              size="2xs"
-              variant="outline"
-              bg="bg.muted"
-              borderColor="border.default"
-              _hover={{ bg: 'bg.subtle', borderColor: 'border.emphasized' }}
+        <DropdownMenu>
+          <DropdownMenuTrigger className={TOOLBAR_BTN}>
+            <LuColumns3 className="size-3" />
+            {visibleColumnCount}/{colNames.length} Columns
+            <LuChevronDown className="size-3 text-muted-foreground" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="max-h-[300px] min-w-[200px] overflow-y-auto">
+            <DropdownMenuItem
+              className="cursor-pointer"
+              // closeOnSelect={false} equivalent: keep the menu open on toggle
+              onSelect={(e) => e.preventDefault()}
+              onClick={() => {
+                if (allVisible) {
+                  const hidden: VisibilityState = {}
+                  colNames.forEach(c => { hidden[c] = false })
+                  setColumnVisibility(hidden)
+                } else {
+                  setColumnVisibility({})
+                }
+              }}
             >
-              <Icon as={LuColumns3} boxSize={3} />
-              {visibleColumnCount}/{colNames.length} Columns
-              <Icon as={LuChevronDown} boxSize={3} color="fg.muted" />
-            </Button>
-          </Menu.Trigger>
-          <Portal>
-            <Menu.Positioner>
-              <Menu.Content
-                minW="200px"
-                maxH="300px"
-                overflowY="auto"
-                bg="bg.surface"
-                borderColor="border.default"
-                shadow="lg"
-                p={1}
-              >
-                <Menu.Item
-                  value="toggle-all"
-                  cursor="pointer"
-                  borderRadius="sm"
-                  px={3}
-                  py={2}
-                  _hover={{ bg: 'bg.muted' }}
+              <div className="flex w-full items-center gap-2">
+                <div className="flex h-4 w-4 items-center justify-center">
+                  {allVisible && <LuCheck className="size-4" style={{ color: TEAL }} />}
+                </div>
+                <span className="text-xs font-semibold">
+                  {allVisible ? 'Hide All' : 'Show All'}
+                </span>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {colNames.map((column, index) => {
+              return (
+                <DropdownMenuItem
+                  key={column}
+                  className="cursor-pointer"
+                  onSelect={(e) => e.preventDefault()}
                   onClick={() => {
-                    const allVisible = colNames.every(c => columnVisibility[c] !== false)
-                    if (allVisible) {
-                      const hidden: VisibilityState = {}
-                      colNames.forEach(c => { hidden[c] = false })
-                      setColumnVisibility(hidden)
-                    } else {
-                      setColumnVisibility({})
-                    }
+                    setColumnVisibility(prev => ({
+                      ...prev,
+                      [column]: prev[column] === false ? true : false,
+                    }))
                   }}
                 >
-                  <HStack gap={2} w="100%">
-                    <Box w={4} h={4} display="flex" alignItems="center" justifyContent="center">
-                      {colNames.every(c => columnVisibility[c] !== false) && (
-                        <Icon as={LuCheck} boxSize={4} color="accent.teal" />
+                  <div className="flex w-full items-center gap-2">
+                    <div className="flex h-4 w-4 items-center justify-center">
+                      {columnVisibility[column] !== false && (
+                        <LuCheck className="size-4" style={{ color: TEAL }} />
                       )}
-                    </Box>
-                    <Text fontSize="xs" fontWeight="600">
-                      {colNames.every(c => columnVisibility[c] !== false) ? 'Hide All' : 'Show All'}
-                    </Text>
-                  </HStack>
-                </Menu.Item>
-                <Box h="1px" bg="border.default" my={1} />
-                {colNames.map((column, index) => (
-                  <Menu.Item
-                    key={column}
-                    value={column}
-                    cursor="pointer"
-                    borderRadius="sm"
-                    px={3}
-                    py={1.5}
-                    _hover={{ bg: 'bg.muted' }}
-                    onClick={() => {
-                      setColumnVisibility(prev => ({
-                        ...prev,
-                        [column]: prev[column] === false ? true : false,
-                      }))
-                    }}
-                  >
-                    <HStack gap={2} w="100%">
-                      <Box w={4} h={4} display="flex" alignItems="center" justifyContent="center">
-                        {columnVisibility[column] !== false && (
-                          <Icon as={LuCheck} boxSize={4} color="accent.teal" />
-                        )}
-                      </Box>
-                      <Box
-                        as={getTypeIcon(columnTypes[index])}
-                        fontSize="11px"
-                        color={getTypeColor(columnTypes[index])}
-                      />
-                      <Text fontSize="xs" fontFamily="mono" truncate>
-                        {column}
-                      </Text>
-                    </HStack>
-                  </Menu.Item>
-                ))}
-              </Menu.Content>
-            </Menu.Positioner>
-          </Portal>
-        </Menu.Root>
+                    </div>
+                    {createElement(getTypeIcon(columnTypes[index]), {
+                      className: 'shrink-0 text-[11px]',
+                      style: { color: getTypeColor(columnTypes[index]) },
+                    })}
+                    <span className="min-w-0 truncate font-mono text-xs">
+                      {column}
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              )
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
         )}
         {setColumnFilters && columnFilters.length > 0 && (
-          <Button
-            size="xs"
-            variant="ghost"
-            color="accent.teal"
+          <button
+            className="inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md px-2 text-xs font-medium whitespace-nowrap transition-all hover:bg-accent [&_svg]:shrink-0"
+            style={{ color: TEAL }}
             onClick={() => {
               setColumnFilters([])
               setActiveFilterCol?.(null)
             }}
           >
-            <Icon as={LuX} boxSize={3} />
+            <LuX className="size-3" />
             Clear {columnFilters.length} filter{columnFilters.length > 1 ? 's' : ''}
-          </Button>
+          </button>
         )}
-      </HStack>
+      </div>
 
       {/* Right: Row count, CSV */}
-      <HStack gap={3}>
-        <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+      <div className="flex items-center gap-3">
+        <span className="font-mono text-xs text-muted-foreground">
           {filteredRowCount !== totalRowCount
             ? `${filteredRowCount} filtered of ${totalRowCount} rows`
             : `${totalRowCount} rows`
           }
-        </Text>
-        <Button
-          size="2xs"
-          variant="outline"
-          bg="bg.muted"
-          borderColor="border.default"
-          _hover={{ bg: 'bg.subtle', borderColor: 'border.emphasized' }}
+        </span>
+        <button
+          className={TOOLBAR_BTN}
           onClick={downloadCsv}
           aria-label="Download CSV"
           data-dev-hide-in-capture="true"
         >
-          <Icon as={LuDownload} boxSize={3} />
+          <LuDownload className="size-3" />
           CSV
-        </Button>
-      </HStack>
-    </HStack>
+        </button>
+      </div>
+    </div>
   )
 }

@@ -10,7 +10,6 @@
  * Pure view: envelope + columns in, onVizChange(newEnvelope) out. No Redux.
  */
 import { useRef, useState } from 'react';
-import { Box, HStack, Text, Wrap } from '@chakra-ui/react';
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from '@/components/plotx/AxisComponents';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import {
@@ -96,8 +95,8 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange, custo
   };
 
   return (
-    <Box aria-label={editable ? 'Vega encoding drop zones' : 'Query result columns'} pb={2}>
-      <Wrap gap={1.5} pb={4}>
+    <div aria-label={editable ? 'Vega encoding drop zones' : 'Query result columns'} className="pb-2">
+      <div className="flex flex-wrap gap-1.5 pb-4">
         {columns.map(col => (
           <ColumnChip
             key={col}
@@ -113,18 +112,18 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange, custo
             onMobileSelect={() => setMobileSelected(sel => (sel === col ? null : col))}
           />
         ))}
-      </Wrap>
+      </div>
       {!editable ? (
-        <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
+        <p className="py-1 text-xs leading-[1.6] text-muted-foreground">
           {customPreview
             ? 'Custom is where agent-authored charts live — layers, facets, annotations, anything beyond the quick types. Ask the agent to build one, or edit the JSON in Spec. Pick a chart type above to go back.'
             : 'Query columns are shown for reference. This custom spec has no editable drop zones; use Spec or ask the agent to change its fields.'}
-        </Text>
-      ) : <HStack gap={2} align="stretch" flexWrap="wrap">
+        </p>
+      ) : <div className="flex flex-wrap items-stretch gap-2">
         {zones.map(({ channel, label }) => {
           const fields = getZoneFields(envelope, channel).filter(f => f !== '__mx_key');
           return (
-            <Box key={channel} flex="1" minW="120px">
+            <div key={channel} className="min-w-[120px] flex-1">
               <DropZone
                 label={label}
                 isTouchDevice={isTouchDevice}
@@ -173,13 +172,13 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange, custo
                   ))
                 ) : (
                   // chip-height placeholder so empty zones align with filled ones
-                  <Box h="27px" width="full" />
+                  <div className="h-[27px] w-full" />
                 )}
               </DropZone>
-            </Box>
+            </div>
           );
         })}
-      </HStack>}
-    </Box>
+      </div>}
+    </div>
   );
 }

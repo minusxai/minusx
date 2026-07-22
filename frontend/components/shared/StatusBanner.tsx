@@ -11,9 +11,8 @@
  * Clearing uses '' (empty string) rather than undefined so deepMerge in
  * editFile doesn't silently skip the update (it skips undefined, not '').
  */
-import { HStack, Text, Switch, Box } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
-import type { CheckedChangeDetails } from '@zag-js/switch';
+import { Switch } from '@/components/kit/switch';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/kit/tooltip';
 import { LuInfo, LuCirclePause } from 'react-icons/lu';
 
 interface StatusBannerProps {
@@ -37,6 +36,14 @@ function isSuppressActive(suppressUntil: string | undefined): boolean {
   return end >= new Date();
 }
 
+const mix = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+
+// House tint scheme (ReportView/AlertView): green #2ecc71/#27ae60, yellow #f39c12, orange #e67e22
+const GREEN = '#2ecc71';
+const GREEN_FG = '#27ae60';
+const YELLOW = '#f39c12';
+const ORANGE = '#e67e22';
+
 export function StatusBanner({
   status, label, runLabel = 'Run Now', editMode, onChange,
   suppressUntil, onSuppressChange,
@@ -44,12 +51,11 @@ export function StatusBanner({
   const isLive = status === 'live';
   const suppressed = isSuppressActive(suppressUntil);
 
-  const bannerBg = suppressed && isLive ? 'orange.subtle' : isLive ? 'green.subtle' : 'yellow.subtle';
-  const bannerBorder = suppressed && isLive ? 'orange.muted' : isLive ? 'green.muted' : 'yellow.muted';
-  const infoColor = suppressed && isLive
-    ? 'var(--chakra-colors-orange-fg)'
-    : isLive ? 'var(--chakra-colors-green-fg)' : 'var(--chakra-colors-yellow-fg)';
-  const textColor = suppressed && isLive ? 'orange.fg' : isLive ? 'green.fg' : 'yellow.fg';
+  const accent = suppressed && isLive ? ORANGE : isLive ? GREEN : YELLOW;
+  const textColor = suppressed && isLive ? ORANGE : isLive ? GREEN_FG : YELLOW;
+  const bannerBg = mix(accent, 18);
+  const bannerBorder = mix(accent, 30);
+  const infoColor = textColor;
 
   // Parse as local date (not UTC) to avoid timezone-shifting the display by one day.
   // new Date('YYYY-MM-DD') is UTC midnight; new Date(y, m, d) is local midnight.
@@ -60,66 +66,61 @@ export function StatusBanner({
   })();
 
   return (
-    <HStack
-      gap={3}
-      px={4}
-      py={2}
-      bg={bannerBg}
-      borderBottomWidth="1px"
-      borderColor={bannerBorder}
-      borderRadius="md"
+    <div
+      className="flex items-center gap-3 rounded-md border-b px-4 py-2"
+      style={{ background: bannerBg, borderColor: bannerBorder }}
     >
       <LuInfo size={14} color={infoColor} />
 
-      <Text fontSize="xs" color={textColor} flex={1}>
+      <p className="flex-1 text-xs" style={{ color: textColor }}>
         {suppressed && isLive
           ? `Suppressed until ${suppressedDisplay} — scheduled runs are paused.`
           : isLive
             ? `This ${label} is live. Scheduled runs will execute when the cron endpoint is triggered.`
             : `Draft mode — scheduled runs are disabled. Use ${runLabel} to test.`}
-      </Text>
+      </p>
 
       {/* Live/Draft toggle */}
-      <HStack gap={2} flexShrink={0}>
-        <Box w="1px" h="3.5" bg={bannerBorder} />
-        <Text fontSize="xs" fontWeight="600" color={textColor}>
+      <div className="flex shrink-0 items-center gap-2">
+        <div className="h-3.5 w-px" style={{ background: bannerBorder }} />
+        <span className="text-xs font-semibold" style={{ color: textColor }}>
           {isLive ? 'Live' : 'Draft'}
-        </Text>
-        <Switch.Root
-          size="sm"
+        </span>
+        <Switch
           checked={isLive}
           disabled={!editMode}
-          onCheckedChange={(e: CheckedChangeDetails) => onChange(e.checked ? 'live' : 'draft')}
-          colorPalette="green"
-        >
-          <Switch.HiddenInput />
-          <Switch.Control>
-            <Switch.Thumb />
-          </Switch.Control>
-        </Switch.Root>
-      </HStack>
+          onCheckedChange={(checked: boolean) => onChange(checked ? 'live' : 'draft')}
+          className="data-[state=checked]:bg-[#2ecc71]"
+        />
+      </div>
 
       {/* Suppress control — always interactive, no editMode gate */}
       {onSuppressChange && (
-        <HStack gap={1.5} flexShrink={0}>
-          <Box w="1px" h="3.5" bg={bannerBorder} />
-          <LuCirclePause size={13} color={suppressed ? 'var(--chakra-colors-orange-fg)' : infoColor} />
-          <Text fontSize="xs" color={suppressed ? 'orange.fg' : textColor} opacity={suppressed ? 1 : 0.8}>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <div className="h-3.5 w-px" style={{ background: bannerBorder }} />
+          <LuCirclePause size={13} color={suppressed ? ORANGE : infoColor} />
+          <span
+            className="text-xs"
+            style={{ color: suppressed ? ORANGE : textColor, opacity: suppressed ? 1 : 0.8 }}
+          >
             Suppress until
-          </Text>
+          </span>
           {suppressed ? (
-            <HStack gap={1}>
-              <Text fontSize="xs" color="orange.fg" fontWeight="600">{suppressedDisplay}</Text>
-              <Tooltip content="Clear suppression">
-                <button
-                  aria-label="Clear suppression"
-                  onClick={() => onSuppressChange('')}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--chakra-colors-orange-fg)', fontSize: '14px', lineHeight: 1 }}
-                >
-                  ×
-                </button>
-              </Tooltip>
-            </HStack>
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-semibold" style={{ color: ORANGE }}>{suppressedDisplay}</span>
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger
+                    aria-label="Clear suppression"
+                    onClick={() => onSuppressChange('')}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: ORANGE, fontSize: '14px', lineHeight: 1 }}
+                  >
+                    ×
+                  </TooltipTrigger>
+                  <TooltipContent>Clear suppression</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           ) : (
             <input
               type="date"
@@ -139,8 +140,8 @@ export function StatusBanner({
               }}
             />
           )}
-        </HStack>
+        </div>
       )}
-    </HStack>
+    </div>
   );
 }

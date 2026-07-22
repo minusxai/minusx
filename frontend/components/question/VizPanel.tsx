@@ -15,7 +15,6 @@
  */
 
 import React from 'react';
-import { Box, HStack, Text } from '@chakra-ui/react';
 import { LuChartColumn, LuChevronRight } from 'react-icons/lu';
 
 interface VizPanelProps {
@@ -29,35 +28,27 @@ interface VizPanelProps {
 
 export function VizPanel({ headerExtra, onCollapse, children }: VizPanelProps) {
   return (
-    <Box aria-label="Viz panel" h="100%" display="flex" flexDirection="column" minH={0}>
-      <HStack px={3} py={1.5} gap={1.5} flexShrink={0} borderBottom="1px solid" borderColor="border.muted" bg="bg.muted">
-        <LuChartColumn size={12} color="var(--chakra-colors-accent-teal)" />
-        <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">
+    <div aria-label="Viz panel" className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-border bg-muted px-3 py-1.5">
+        <LuChartColumn size={12} color="#16a085" />
+        <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
           Viz Settings
-        </Text>
-        {headerExtra && <Box ml="auto">{headerExtra}</Box>}
+        </span>
+        {headerExtra && <div className="ml-auto">{headerExtra}</div>}
         {onCollapse && (
-          <Box
-            as="button"
-            ml={headerExtra ? 0 : 'auto'}
-            display="flex"
-            alignItems="center"
-            justifyContent="center"
-            p={0.5}
-            borderRadius="sm"
-            color="fg.muted"
-            cursor="pointer"
+          <button
+            type="button"
+            className={`flex cursor-pointer items-center justify-center rounded-sm p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground ${headerExtra ? 'ml-0' : 'ml-auto'}`}
             aria-label="Collapse viz panel"
             onClick={onCollapse}
-            _hover={{ bg: 'bg.emphasized', color: 'fg.default' }}
           >
             <LuChevronRight size={14} />
-          </Box>
+          </button>
         )}
-      </HStack>
-      <Box flex={1} overflowY="auto" minH={0}>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {children}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

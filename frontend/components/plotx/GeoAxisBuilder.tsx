@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import { Box, HStack, VStack, Text, Portal, createListCollection } from '@chakra-ui/react'
-import { Checkbox } from '@/components/ui/checkbox'
-import { SelectRoot, SelectTrigger, SelectValueText, SelectPositioner, SelectContent, SelectItem } from '@/components/ui/select'
+import { Checkbox } from '@/components/kit/checkbox'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/kit/select'
 import {
   LuMap, LuMapPin, LuRoute, LuFlame,
   LuLayoutGrid, LuSettings2, LuChevronDown, LuChevronRight,
@@ -23,9 +22,8 @@ const SUB_TYPES: Array<{ value: GeoSubType; icon: React.ElementType; label: stri
   { value: 'heatmap', icon: LuFlame, label: 'Heatmap' },
 ]
 
-const mapCollection = createListCollection({
-  items: MAP_OPTIONS.map(opt => ({ label: opt.label, value: opt.value })),
-})
+// Tiny section label (Chakra 2xs/700/0.05em equivalent)
+const SECTION_LABEL = 'text-[10px] font-bold uppercase tracking-wider text-muted-foreground'
 
 interface GeoAxisBuilderProps {
   columns: string[]
@@ -40,17 +38,6 @@ interface GeoAxisBuilderProps {
 }
 
 const DEFAULT_CONFIG: ChoroplethConfig = { subType: 'choropleth', showTiles: false, mapName: 'us-states' }
-
-const NUM_INPUT_STYLE = {
-  width: '60px',
-  padding: '2px 6px',
-  fontSize: '12px',
-  fontFamily: 'var(--font-jetbrains-mono)',
-  background: 'var(--chakra-colors-bg-subtle)',
-  color: 'var(--chakra-colors-fg-default)',
-  border: '1px solid var(--chakra-colors-border-muted)',
-  borderRadius: '4px',
-}
 
 /** Number input that uses local string state so the field is freely editable. Commits on blur. */
 function NumInput({ value, placeholder, ariaLabel, onCommit }: {
@@ -87,33 +74,33 @@ function NumInput({ value, placeholder, ariaLabel, onCommit }: {
       }}
       onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
       onClick={(e) => e.stopPropagation()}
-      style={NUM_INPUT_STYLE}
+      className="w-[60px] rounded border border-border bg-muted/50 px-1.5 py-0.5 font-mono text-xs text-foreground outline-none"
     />
   )
 }
 
 function PointsSizeInputs({ config, onUpdate }: { config: PointsConfig; onUpdate: (partial: Record<string, unknown>) => void }) {
   return (
-    <HStack gap={4} align="center" flexWrap="wrap">
-      <HStack gap={2} align="center">
-        <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Min Radius</Text>
+    <div className="flex flex-wrap items-center gap-4">
+      <div className="flex items-center gap-2">
+        <span className="whitespace-nowrap text-xs text-muted-foreground">Min Radius</span>
         <NumInput
           value={config.minRadius}
           placeholder="5"
           ariaLabel="Min radius"
           onCommit={(v) => onUpdate({ minRadius: v })}
         />
-      </HStack>
-      <HStack gap={2} align="center">
-        <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Scale</Text>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="whitespace-nowrap text-xs text-muted-foreground">Scale</span>
         <NumInput
           value={config.radiusScale}
           placeholder="1"
           ariaLabel="Radius scale"
           onCommit={(v) => onUpdate({ radiusScale: v })}
         />
-      </HStack>
-    </HStack>
+      </div>
+    </div>
   )
 }
 
@@ -175,38 +162,24 @@ export function GeoAxisBuilder({
   const renderSettingsCard = (title: string, panelKey: string, children: React.ReactNode) => {
     const collapsed = collapsedPanels[panelKey]
     return (
-      <VStack
-        align="stretch"
-        gap={collapsed ? 0 : 2.5}
-        p={3}
-        bg="bg.surface"
-        borderRadius="md"
-        border="2px dashed"
-        borderColor="border.muted"
-        minW={0}
+      <div
+        className={`flex min-w-0 flex-col items-stretch rounded-md border-2 border-dashed border-border bg-card p-3 ${collapsed ? 'gap-0' : 'gap-2.5'}`}
       >
-        <HStack justify="space-between" align="center">
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+        <div className="flex items-center justify-between">
+          <span className={SECTION_LABEL}>
             {title}
-          </Text>
+          </span>
           <button
+            type="button"
             onClick={() => togglePanel(panelKey)}
             aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
-            style={{
-              color: 'var(--chakra-colors-fg-subtle)',
-              background: 'transparent',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-            }}
+            className="inline-flex cursor-pointer items-center border-none bg-transparent p-0 text-muted-foreground"
           >
             {collapsed ? <LuChevronRight size={14} /> : <LuChevronDown size={14} />}
           </button>
-        </HStack>
+        </div>
         {!collapsed && children}
-      </VStack>
+      </div>
     )
   }
 
@@ -286,87 +259,61 @@ export function GeoAxisBuilder({
   )
 
   return (
-    <VStack align="stretch" gap={3}>
+    <div className="flex flex-col items-stretch gap-3">
       {/* Map sub-type selector — grid matching viz type selector */}
-      <Box>
-        <Text fontSize="2xs" fontFamily="mono" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle" mb={1.5}>
+      <div>
+        <div className={`${SECTION_LABEL} mb-1.5 font-mono`}>
           Geo Subtypes
-        </Text>
-      <Box
-        display="grid"
-        gridTemplateColumns={`repeat(${SUB_TYPES.length}, 1fr)`}
-        gap={1}
-        width="100%"
-        bg="bg.subtle"
-        borderRadius="md"
-        p={2}
+        </div>
+      <div
+        className="grid w-full gap-1 rounded-md bg-muted/50 p-2"
+        style={{ gridTemplateColumns: `repeat(${SUB_TYPES.length}, 1fr)` }}
       >
         {SUB_TYPES.map(({ value, icon: Icon, label }) => {
           const isActive = config.subType === value
           return (
-            <Box
+            <button
               key={value}
-              as="button"
+              type="button"
               aria-label={`Geo sub-type ${label}`}
-              display="flex"
-              flexDirection="column"
-              alignItems="center"
-              justifyContent="center"
-              gap={0.5}
-              py={1.5}
-              borderRadius="md"
-              bg={isActive ? 'accent.teal/15' : 'transparent'}
-              color={isActive ? 'accent.teal' : 'fg.muted'}
-              cursor="pointer"
-              transition="all 0.12s ease"
-              _hover={{
-                bg: isActive ? 'accent.teal/20' : 'bg.muted',
-                color: isActive ? 'accent.teal' : 'fg.default',
-              }}
+              className={`flex cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md py-1.5 transition-all duration-[120ms] ease-in-out ${
+                isActive
+                  ? 'bg-[#16a085]/15 text-[#16a085] hover:bg-[#16a085]/20'
+                  : 'bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
               onClick={() => handleSubTypeChange(value)}
             >
               <Icon size={16} />
-              <Text fontSize="2xs" fontFamily="mono" fontWeight={isActive ? '700' : '500'} lineHeight="1">
+              <span className={`font-mono text-[10px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>
                 {label}
-              </Text>
-            </Box>
+              </span>
+            </button>
           )
         })}
-      </Box>
-      </Box>
+      </div>
+      </div>
 
       {/* Tab bar — segmented control */}
-      <HStack
-        gap={0}
-        bg="bg.muted"
-        borderRadius="md"
-        p={0.5}
-        maxW="240px"
-      >
+      <div className="flex max-w-[240px] items-center gap-0 rounded-md bg-muted p-0.5">
         {([{ key: 'fields', icon: LuLayoutGrid, label: 'Fields' }, { key: 'settings', icon: LuSettings2, label: 'Settings' }] as const).map(({ key, icon: Icon, label }) => (
-          <HStack
+          <button
             key={key}
-            as="button"
+            type="button"
             aria-label={`Geo ${label} tab`}
-            flex={1}
-            gap={1.5}
-            justify="center"
-            py={1.5}
-            cursor="pointer"
-            bg={activeTab === key ? 'accent.teal/90' : 'transparent'}
-            color={activeTab === key ? 'white' : 'fg.subtle'}
-            borderRadius="sm"
-            _hover={{ color: activeTab === key ? 'white' : 'fg.muted' }}
-            transition="all 0.15s"
+            className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-sm py-1.5 transition-all duration-150 ${
+              activeTab === key
+                ? 'bg-[#16a085]/90 text-white'
+                : 'bg-transparent text-muted-foreground hover:text-foreground'
+            }`}
             onClick={() => setActiveTab(key)}
           >
-            <Box as={Icon} fontSize="sm" />
-            <Text fontSize="xs" fontFamily="mono" fontWeight="600">
+            <Icon className="text-sm" />
+            <span className="font-mono text-xs font-semibold">
               {label}
-            </Text>
-          </HStack>
+            </span>
+          </button>
         ))}
-      </HStack>
+      </div>
 
       {/* Fields tab — column drop zones */}
       {activeTab === 'fields' && (
@@ -375,97 +322,72 @@ export function GeoAxisBuilder({
 
       {/* Settings tab — base map, tiles, color scale */}
       {activeTab === 'settings' && (
-        <Box display="flex" flexDirection="column" gap={3} position="relative" zIndex={500}>
+        <div className="relative z-[500] flex flex-col gap-3">
           {renderSettingsCard('Geo Settings', 'geo',
-            <VStack align="stretch" gap={3}>
-              <HStack gap={4} flexWrap="wrap" align="center">
+            <div className="flex flex-col items-stretch gap-3">
+              <div className="flex flex-wrap items-center gap-4">
                 {/* Base Map checkbox + dropdown */}
-                <HStack gap={2} align="center">
-                  <Checkbox
-                    checked={!!config.mapName}
-                    onCheckedChange={(e) => {
-                      update({ mapName: e.checked ? (config.mapName || 'us-states') : null })
-                    }}
-                    size="sm"
-                  >
-                    <Text fontSize="xs" color="fg.muted">GeoJSON Map</Text>
-                  </Checkbox>
+                <div className="flex items-center gap-2">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <Checkbox
+                      checked={!!config.mapName}
+                      onCheckedChange={(checked) => {
+                        update({ mapName: checked === true ? (config.mapName || 'us-states') : null })
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground">GeoJSON Map</span>
+                  </label>
                   {!!config.mapName && (
-                    <SelectRoot
-                      collection={mapCollection}
-                      value={[config.mapName]}
-                      onValueChange={(e) => update({ mapName: e.value[0] || null })}
-                      size="sm"
-                      width="180px"
+                    <Select
+                      value={config.mapName}
+                      onValueChange={(v) => update({ mapName: v || null })}
                     >
-                      <SelectTrigger aria-label="Base map selector">
-                        <SelectValueText placeholder="Select map..." />
+                      <SelectTrigger size="sm" aria-label="Base map selector" className="w-[180px] text-xs">
+                        <SelectValue placeholder="Select map..." />
                       </SelectTrigger>
-                      <Portal>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {MAP_OPTIONS.map((opt) => (
-                              <SelectItem key={opt.value} item={opt.value}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
-                      </Portal>
-                    </SelectRoot>
+                      <SelectContent>
+                        {MAP_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
-                </HStack>
+                </div>
 
                 {/* Tiles toggle */}
-                <Checkbox
-                  checked={config.showTiles ?? false}
-                  onCheckedChange={(e) => update({ showTiles: !!e.checked })}
-                  size="sm"
-                >
-                  <Text fontSize="xs" color="fg.muted">OpenStreetMap Tiles</Text>
-                </Checkbox>
-              </HStack>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <Checkbox
+                    checked={config.showTiles ?? false}
+                    onCheckedChange={(checked) => update({ showTiles: checked === true })}
+                  />
+                  <span className="text-xs text-muted-foreground">OpenStreetMap Tiles</span>
+                </label>
+              </div>
 
               {/* Pin / Unpin view */}
-              <HStack gap={2} align="center">
+              <div className="flex items-center gap-2">
                 {config.pinnedCenter ? (
                   <>
-                    <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+                    <span className="font-mono text-xs text-muted-foreground">
                       Pinned: {config.pinnedCenter[0].toFixed(2)}, {config.pinnedCenter[1].toFixed(2)} z{config.pinnedZoom ?? '?'}
-                    </Text>
-                    <HStack
-                      as="button"
+                    </span>
+                    <button
+                      type="button"
                       aria-label="Unpin map view"
-                      gap={1}
-                      px={2}
-                      py={1}
-                      borderRadius="md"
-                      cursor="pointer"
-                      fontSize="xs"
-                      fontWeight="600"
-                      color="accent.danger"
-                      bg="accent.danger/10"
-                      _hover={{ bg: 'accent.danger/20' }}
+                      className="flex cursor-pointer items-center gap-1 rounded-md bg-[#c0392b]/10 px-2 py-1 text-xs font-semibold text-[#c0392b] hover:bg-[#c0392b]/20"
                       onClick={() => update({ pinnedCenter: undefined, pinnedZoom: undefined })}
                     >
                       <LuX size={12} />
-                      <Text fontSize="xs">Unpin</Text>
-                    </HStack>
+                      <span className="text-xs">Unpin</span>
+                    </button>
                   </>
                 ) : (
-                  <HStack
-                    as="button"
+                  <button
+                    type="button"
                     aria-label="Pin current map view"
-                    gap={1}
-                    px={2}
-                    py={1}
-                    borderRadius="md"
-                    cursor="pointer"
-                    fontSize="xs"
-                    fontWeight="600"
-                    color="accent.teal"
-                    bg="accent.teal/10"
-                    _hover={{ bg: 'accent.teal/20' }}
+                    className="flex cursor-pointer items-center gap-1 rounded-md bg-[#16a085]/10 px-2 py-1 text-xs font-semibold text-[#16a085] hover:bg-[#16a085]/20"
                     onClick={() => {
                       const view = getMapView?.()
                       if (view) {
@@ -474,10 +396,10 @@ export function GeoAxisBuilder({
                     }}
                   >
                     <LuCrosshair size={12} />
-                    <Text fontSize="xs">Pin Current View</Text>
-                  </HStack>
+                    <span className="text-xs">Pin Current View</span>
+                  </button>
                 )}
-              </HStack>
+              </div>
 
               {/* Color scale (choropleth, heatmap, or points with numeric colorCol) */}
               {(config.subType === 'choropleth' || config.subType === 'heatmap' || (config.subType === 'points' && !!(config as PointsConfig).colorCol && resolveColumnType((config as PointsConfig).colorCol!, columns, types) === 'number')) && (
@@ -495,18 +417,18 @@ export function GeoAxisBuilder({
 
               {/* Marker color (points without colorCol, & lines) */}
               {(((config.subType === 'points' && !(config as PointsConfig).colorCol) || config.subType === 'lines') && onColorOverridesChange) && (
-                <Box alignSelf="flex-start">
+                <div className="self-start">
                   <ColorPicker
                     colorOverrides={colorOverrides}
                     numSeries={1}
                     onChange={onColorOverridesChange}
                   />
-                </Box>
+                </div>
               )}
-            </VStack>
+            </div>
           )}
-        </Box>
+        </div>
       )}
-    </VStack>
+    </div>
   )
 }

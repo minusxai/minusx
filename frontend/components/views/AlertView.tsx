@@ -1,15 +1,14 @@
 'use client';
 
-import { Box, Text, VStack, HStack } from '@chakra-ui/react';
 import { AlertContent, JobRun, Test } from '@/lib/types';
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { LuFlaskConical, LuGripVertical } from 'react-icons/lu';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
 import { AlertHistoryEmptyState } from '@/components/views/shared/empty-states';
-import { createListCollection } from '@chakra-ui/react';
+import { cn } from '@/components/kit/cn';
 import AlertRunContainerV2 from '@/components/containers/AlertRunContainerV2';
 import TestList from '@/components/evals/TestList';
 import SimpleSelect from '@/components/evals/SimpleSelect';
@@ -101,18 +100,10 @@ export default function AlertView({
     };
   }, [isResizing, handleResizeMove, handleResizeEnd]);
 
-  // Runs dropdown collection
-  const runsCollection = useMemo(() => createListCollection({
-    items: runs.filter(r => r.id != null).map(r => ({
-      value: String(r.id),
-      label: new Date(r.created_at).toLocaleString()
-    }))
-  }), [runs]);
-
   const selectedRun = runs.find(r => r.id === selectedRunId) ?? runs[0] ?? null;
 
   return (
-    <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden font-mono">
       {/* Status bar: Live/Draft toggle + cron info */}
       <StatusBanner
         status={alert.status ?? 'draft'}
@@ -126,52 +117,33 @@ export default function AlertView({
 
       {/* Visual View - Two Column Layout (the Code view is rendered upstream by FileView) */}
       {(
-        <Box
+        <div
           ref={mainContentRef}
-          display="flex"
-          flexDirection={!useCompactLayout ? 'row' : 'column'}
-          flex={1}
-          overflow="hidden"
-          minHeight="0"
+          className={cn(
+            'flex min-h-0 flex-1 overflow-hidden',
+            !useCompactLayout ? 'flex-row' : 'flex-col',
+          )}
         >
           {/* Left Panel: Form */}
-          <Box
-            display="flex"
-            flexDirection="column"
-            flexShrink={0}
-            width={!useCompactLayout ? `calc(${leftPanelWidth}% - 8px)` : '100%'}
-            minWidth={!useCompactLayout ? '300px' : undefined}
-            overflow="auto"
-            bg="bg.surface"
-            borderRadius={!useCompactLayout ? 'lg' : undefined}
-            my={!useCompactLayout ? 2 : 0}
-            ml={!useCompactLayout ? 2 : 0}
-            border={!useCompactLayout ? '1px solid' : undefined}
-            borderColor="border.muted"
+          <div
+            className={cn(
+              'flex shrink-0 flex-col overflow-auto bg-card',
+              !useCompactLayout && 'my-2 ml-2 min-w-[300px] rounded-lg border border-border/60',
+            )}
+            style={{ width: !useCompactLayout ? `calc(${leftPanelWidth}% - 8px)` : '100%' }}
           >
-            <VStack gap={3} align="stretch" p={4}>
+            <div className="flex flex-col gap-3 p-4">
               {/* Tests Card */}
-              <Box
-                position="relative"
-                bg="bg.muted"
-                borderRadius="md"
-                border="1px solid"
-                borderColor="border.muted"
-                pt={3}
-                pb={2}
-                pr={3}
-                pl={5}
-                overflow="hidden"
-              >
-                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.warning" borderLeftRadius="md" />
-                <HStack mb={2} gap={1.5} justify="space-between">
-                  <HStack gap={1.5}>
-                    <LuFlaskConical size={14} color="var(--chakra-colors-accent-warning)" />
-                    <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Tests</Text>
-                  </HStack>
-                  <HStack gap={2}>
-                    <Text fontSize="xs" color="fg.muted">Notify when</Text>
-                    <Box w="180px">
+              <div className="relative overflow-hidden rounded-md border border-border/60 bg-muted pt-3 pr-3 pb-2 pl-5">
+                <div className="absolute top-0 bottom-0 left-0 w-[3px] rounded-l-md bg-[#f39c12]" />
+                <div className="mb-2 flex items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <LuFlaskConical size={14} color="#f39c12" />
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Tests</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-muted-foreground">Notify when</p>
+                    <div className="w-[180px]">
                       <SimpleSelect
                         value={alert.notifyOn ?? 'any_fail'}
                         onChange={v => onChange({ notifyOn: v as 'any_fail' | 'all_fail' })}
@@ -182,15 +154,15 @@ export default function AlertView({
                         disabled={!editMode}
                         size="sm"
                       />
-                    </Box>
-                  </HStack>
-                </HStack>
+                    </div>
+                  </div>
+                </div>
                 <TestList
                   tests={alert.tests || []}
                   onChange={(tests: Test[]) => onChange({ tests })}
                   editMode={editMode}
                 />
-              </Box>
+              </div>
 
               {/* Schedule Card */}
               <SchedulePicker
@@ -205,73 +177,45 @@ export default function AlertView({
                 onChange={(recipients) => onChange({ recipients })}
                 disabled={!editMode}
               />
-            </VStack>
-          </Box>
+            </div>
+          </div>
 
           {/* Resize Handle */}
           {!useCompactLayout && (
-            <Box
+            <div
               role="group"
-              width="16px"
-              cursor="col-resize"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              position="relative"
+              className="group relative z-10 flex w-4 shrink-0 cursor-col-resize select-none items-center justify-center"
               onMouseDown={handleResizeStart}
-              flexShrink={0}
-              zIndex={10}
-              userSelect="none"
             >
-              <Box
-                position="absolute"
-                top="0"
-                bottom="0"
-                width="2px"
-                bg={isResizing ? 'accent.teal' : 'border.muted'}
-                _groupHover={{ bg: 'accent.teal' }}
-                transition="all 0.15s ease"
-                borderRadius="full"
+              <div
+                className={cn(
+                  'absolute inset-y-0 w-[2px] rounded-full transition-all duration-150 ease-in-out group-hover:bg-[#16a085]',
+                  isResizing ? 'bg-[#16a085]' : 'bg-border/60',
+                )}
               />
-              <Box
-                position="absolute"
-                top="50%"
-                transform="translateY(-50%)"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                width="20px"
-                height="40px"
-                bg={isResizing ? 'accent.teal' : 'bg.emphasized'}
-                _groupHover={{ bg: 'accent.teal' }}
-                borderRadius="md"
-                transition="all 0.15s ease"
-                boxShadow="sm"
+              <div
+                className={cn(
+                  'absolute top-1/2 flex h-10 w-5 -translate-y-1/2 items-center justify-center rounded-md shadow-sm transition-all duration-150 ease-in-out group-hover:bg-[#16a085]',
+                  isResizing ? 'bg-[#16a085]' : 'bg-muted',
+                )}
               >
-                <Box
-                  as={LuGripVertical}
-                  fontSize="sm"
-                  color={isResizing ? 'white' : 'fg.muted'}
-                  _groupHover={{ color: 'white' }}
-                  transition="color 0.15s ease"
+                <LuGripVertical
+                  size={14}
+                  className={cn(
+                    'transition-colors duration-150 ease-in-out group-hover:text-white',
+                    isResizing ? 'text-white' : 'text-muted-foreground',
+                  )}
                 />
-              </Box>
-            </Box>
+              </div>
+            </div>
           )}
 
           {/* Right Panel: Alert Runs */}
-          <Box
-            flex={1}
-            display="flex"
-            flexDirection="column"
-            minHeight="75vh"
-            overflow="hidden"
-            bg="bg.surface"
-            borderRadius={!useCompactLayout ? 'lg' : undefined}
-            my={!useCompactLayout ? 2 : 0}
-            mr={!useCompactLayout ? 2 : 0}
-            border={!useCompactLayout ? '1px solid' : undefined}
-            borderColor="border.muted"
+          <div
+            className={cn(
+              'flex min-h-[75vh] flex-1 flex-col overflow-hidden bg-card',
+              !useCompactLayout && 'my-2 mr-2 rounded-lg border border-border/60',
+            )}
           >
             {/* Run Header */}
             <RunNowHeader
@@ -287,18 +231,18 @@ export default function AlertView({
             />
 
             {/* Run Content */}
-            <Box flex={1} overflow="auto" p={4}>
+            <div className="flex-1 overflow-auto p-4">
               {isRunning ? (
-                <VStack gap={4} align="center" justify="center" h="100%">
-                  <Text color="fg.muted">Running alert check...</Text>
-                </VStack>
+                <div className="flex h-full flex-col items-center justify-center gap-4">
+                  <p className="text-muted-foreground">Running alert check...</p>
+                </div>
               ) : selectedRun ? (
                 selectedRun.output_file_id ? (
                   <AlertRunContainerV2 fileId={selectedRun.output_file_id} inline />
                 ) : (
-                  <VStack gap={2} align="center" justify="center" h="100%" color="fg.muted">
-                    <Text fontSize="sm">Run in progress...</Text>
-                  </VStack>
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <p className="text-sm">Run in progress...</p>
+                  </div>
                 )
               ) : runs.length === 0 ? (
                 <AlertHistoryEmptyState
@@ -311,14 +255,14 @@ export default function AlertView({
                   }
                 />
               ) : (
-                <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
-                  <Text fontSize="sm">Select a run to view details</Text>
-                </VStack>
+                <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
+                  <p className="text-sm">Select a run to view details</p>
+                </div>
               )}
-            </Box>
-          </Box>
-        </Box>
+            </div>
+          </div>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }

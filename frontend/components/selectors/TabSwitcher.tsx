@@ -1,6 +1,6 @@
-import { HStack, IconButton } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
 import { IconType } from 'react-icons';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/kit/tooltip';
+import { ACCENT_HEX } from '@/lib/ui/file-metadata';
 
 interface Tab {
   value: string;
@@ -15,32 +15,41 @@ interface TabSwitcherProps {
   accentColor?: string;
 }
 
+// Callers pass Chakra-era semantic tokens (e.g. 'accent.teal', metadata.color);
+// resolve them to concrete colors for the kit/Tailwind stack.
+function resolveAccent(color: string): string {
+  if (color.startsWith('accent.')) {
+    const hex = ACCENT_HEX[color.slice('accent.'.length) as keyof typeof ACCENT_HEX];
+    if (hex) return hex;
+  }
+  if (color === 'fg.muted') return 'var(--muted-foreground)';
+  return color;
+}
+
 export default function TabSwitcher({ tabs, activeTab, onTabChange, accentColor = 'accent.teal' }: TabSwitcherProps) {
+  const accent = resolveAccent(accentColor);
   return (
-    <HStack
-      gap={0.5}
-      bg="bg.surface"
-      borderRadius="md"
-      p={0.5}
-      border="1px solid"
-      borderColor="border.default"
-    >
-      {tabs.map((tab) => (
-        <Tooltip key={tab.value} content={tab.label} positioning={{ placement: 'bottom' }}>
-          <IconButton
-            variant="ghost"
-            size="xs"
-            aria-label={tab.label}
-            onClick={() => onTabChange(tab.value)}
-            bg={activeTab === tab.value ? accentColor : 'transparent'}
-            color={activeTab === tab.value ? 'white' : 'fg.default'}
-            _hover={{ bg: activeTab === tab.value ? accentColor : 'bg.muted' }}
-            borderRadius="sm"
-          >
-            <tab.icon />
-          </IconButton>
-        </Tooltip>
-      ))}
-    </HStack>
+    <TooltipProvider delayDuration={200}>
+      <div className="flex items-center gap-0.5 rounded-md border border-border bg-card p-0.5">
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.value;
+          return (
+            <Tooltip key={tab.value}>
+              <TooltipTrigger
+                aria-label={tab.label}
+                onClick={() => onTabChange(tab.value)}
+                className={`inline-flex size-6 shrink-0 items-center justify-center rounded-sm transition-colors ${
+                  isActive ? 'text-white' : 'text-foreground hover:bg-muted'
+                }`}
+                style={isActive ? { background: accent } : undefined}
+              >
+                <tab.icon />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{tab.label}</TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </TooltipProvider>
   );
 }

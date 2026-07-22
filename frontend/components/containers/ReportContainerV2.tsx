@@ -5,7 +5,6 @@
  * Smart component for report pages.
  * Uses the unified job runs system (useJobRuns) for execution and run history.
  */
-import { Box } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName, selectIsDirty, type FileId } from '@/store/filesSlice';
 import { selectFileEditMode } from '@/store/uiSlice';
@@ -61,7 +60,7 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
   }, [selectRun]);
 
   if (fileLoading || !file || !mergedContent) {
-    return <Box p={4}>Loading report...</Box>;
+    return <div className="p-4">Loading report...</div>;
   }
 
   if (typeof fileId !== 'number') return null;

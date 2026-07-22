@@ -16,6 +16,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   DecoratorNode,
   $getNodeByKey,
@@ -27,8 +28,9 @@ import {
   type Spread,
 } from 'lexical';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { Box, HStack, VStack, Icon, Button, Input, Textarea, Field, Popover, Portal } from '@chakra-ui/react';
 import { LuCode, LuPencil, LuSquareFunction } from 'react-icons/lu';
+import { Button } from '@/components/kit/button';
+import { Input } from '@/components/kit/input';
 
 export interface MetricData {
   name: string;
@@ -38,8 +40,20 @@ export interface MetricData {
 
 export type SerializedMetricNode = Spread<{ metricData: MetricData }, SerializedLexicalNode>;
 
+// The metric accent (Green Sea teal — same value as ACCENT_HEX.teal).
+const TEAL = '#16a085';
+const MONO = 'var(--font-jetbrains-mono), monospace';
+
+/** Inline icon sizing that matches the old Chakra `boxSize="0.85em"` chips. */
+const inlineIconStyle = (size: string, valign: string): React.CSSProperties => ({
+  display: 'inline',
+  width: size,
+  height: size,
+  verticalAlign: valign,
+});
+
 /**
- * Inline chip, styled exactly like the @ mention chips (bg.muted pill, mono,
+ * Inline chip, styled exactly like the @ mention chips (muted pill, mono,
  * colored icon) so a metric reads as a peer of a table/column mention and
  * flows inside the sentence. Description and SQL stay visible but truncated;
  * full values are one hover (title) or click (editor) away.
@@ -48,72 +62,62 @@ function MetricSummary({ data, editable = false, active = false }: { data: Metri
   const hasDetails = Boolean(data.description || data.sql);
   const compactSql = data.sql?.replace(/\s+/g, ' ').trim();
 
-  const truncateCss = {
+  const truncateStyle: React.CSSProperties = {
     overflow: 'hidden',
     whiteSpace: 'nowrap',
     textOverflow: 'ellipsis',
     display: 'inline-block',
     verticalAlign: 'bottom',
-  } as const;
+    maxWidth: '18em',
+  };
 
   return (
-    <Box
-      as="span"
+    <span
       aria-label={`Metric ${data.name || 'untitled'}`}
-      display="inline"
-      px="4px"
-      py="2px"
-      mx="1px"
-      bg={active ? 'accent.teal/15' : 'bg.muted'}
-      borderRadius="sm"
-      fontSize="0.85em"
-      fontFamily="mono"
-      lineHeight="inherit"
-      color="fg.default"
-      fontWeight="600"
-      cursor={editable ? 'pointer' : 'default'}
-      transition="background-color 120ms ease"
-      _hover={editable ? { bg: 'accent.teal/15' } : undefined}
+      className={`mx-[1px] inline rounded-sm px-[4px] py-[2px] text-[0.85em] font-semibold text-foreground transition-colors duration-100 ${
+        active ? 'bg-[color-mix(in_srgb,#16a085_15%,transparent)]' : 'bg-muted'
+      } ${editable ? 'cursor-pointer hover:bg-[color-mix(in_srgb,#16a085_15%,transparent)]' : 'cursor-default'}`}
+      style={{ fontFamily: MONO, lineHeight: 'inherit' }}
     >
-      <Box as="span" color="accent.teal">
-        <Icon as={LuSquareFunction} boxSize="0.85em" verticalAlign="-0.1em" />
-      </Box>
+      <span style={{ color: TEAL }}>
+        <LuSquareFunction style={inlineIconStyle('0.85em', '-0.1em')} />
+      </span>
       {' '}
-      <Box as="span" fontWeight="700">
+      <span className="font-bold">
         {data.name || 'Untitled metric'}
-      </Box>
+      </span>
       {/* Full description — it's the human meaning of the metric; only the SQL truncates. */}
       {data.description && (
-        <Box as="span" color="fg.muted" fontWeight="500">
-          {' '}· {data.description}
-        </Box>
+        <span className="font-medium text-muted-foreground">
+          {' '}· {data.description}
+        </span>
       )}
       {!hasDetails && editable && (
-        <Box as="span" color="fg.subtle" fontWeight="500">
-          {' '}· add a definition or SQL
-        </Box>
+        <span className="font-medium text-muted-foreground">
+          {' '}· add a definition or SQL
+        </span>
       )}
       {/* SQL bracketed off from the prose, truncated with the full query on hover. */}
       {compactSql && (
         <>
           {' '}
-          <Box as="span" color="fg.subtle" fontWeight="600">(</Box>
-          <Box as="span" color="accent.teal" fontWeight="700" fontSize="0.85em" letterSpacing="0.05em">
-            <Icon as={LuCode} boxSize="0.9em" verticalAlign="-0.1em" /> SQL
-          </Box>
+          <span className="font-semibold text-muted-foreground">(</span>
+          <span className="text-[0.85em] font-bold tracking-[0.05em]" style={{ color: TEAL }}>
+            <LuCode style={inlineIconStyle('0.9em', '-0.1em')} /> SQL
+          </span>
           {' '}
-          <Box as="span" color="fg.muted" fontWeight="500" maxW="18em" title={data.sql} css={truncateCss}>
+          <span className="font-medium text-muted-foreground" title={data.sql} style={truncateStyle}>
             {compactSql}
-          </Box>
-          <Box as="span" color="fg.subtle" fontWeight="600">)</Box>
+          </span>
+          <span className="font-semibold text-muted-foreground">)</span>
         </>
       )}
       {editable && (
-        <Box as="span" color="fg.subtle">
-          {' '}<Icon aria-label="Edit metric" as={LuPencil} boxSize="0.75em" verticalAlign="-0.05em" />
-        </Box>
+        <span className="text-muted-foreground">
+          {' '}<LuPencil aria-label="Edit metric" style={inlineIconStyle('0.75em', '-0.05em')} />
+        </span>
       )}
-    </Box>
+    </span>
   );
 }
 
@@ -124,6 +128,7 @@ function MetricCard({ nodeKey, data, editable }: { nodeKey: NodeKey; data: Metri
   const [description, setDescription] = useState(data.description ?? '');
   const [sql, setSql] = useState(data.sql ?? '');
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLSpanElement>(null);
 
   // A freshly inserted (unnamed) metric opens its editor immediately.
   const didMount = useRef(false);
@@ -189,56 +194,67 @@ function MetricCard({ nodeKey, data, editable }: { nodeKey: NodeKey; data: Metri
   if (!editable) return <MetricSummary data={data} />;
 
   return (
-    <Popover.Root
-      open={open}
-      onOpenChange={(e: { open: boolean }) => { if (e.open) openEditor(); else cancel(); }}
-      positioning={{ placement: 'bottom-start' }}
-      initialFocusEl={() => nameInputRef.current}
-    >
-      <Popover.Trigger asChild>
-        <Box
-          as="span"
-          display="inline"
-          _focusVisible={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '2px', borderRadius: 'sm' }}
-        >
-          <MetricSummary data={data} editable active={open} />
-        </Box>
-      </Popover.Trigger>
-      <Portal>
-        <Popover.Positioner>
-          <Popover.Content width="440px" maxW="calc(100vw - 24px)" bg="bg.surface" borderRadius="lg" border="1px solid" borderColor="accent.teal/35" boxShadow="lg">
-            <Popover.Body p={3}>
-              <VStack gap={3} align="stretch">
-                <Field.Root required>
-                  <Field.Label>Name</Field.Label>
-                  <Input ref={nameInputRef} aria-label="Metric name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Monthly Revenue" autoFocus size="sm" />
-                </Field.Root>
-                <Field.Root>
-                  <Field.Label>Description</Field.Label>
-                  <Input aria-label="Metric description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="One-line summary (optional)" size="sm" />
-                </Field.Root>
-                <Field.Root>
-                  <Field.Label>SQL (optional)</Field.Label>
-                  <Textarea
+    <>
+      <span
+        ref={triggerRef}
+        className="inline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#16a085]"
+        onClick={() => { if (!open) openEditor(); }}
+      >
+        <MetricSummary data={data} editable active={open} />
+      </span>
+      {/* Inline popover editor — portaled to <body> (fixed-position; carries its
+          own theme host so the Tailwind tokens resolve outside the app shell),
+          anchored bottom-start to the chip. Outside click / Escape cancels. */}
+      {open && createPortal(
+        <div data-mx-theme-host="">
+          <div className="fixed inset-0 z-[1400]" onClick={cancel} />
+          <div
+            className="z-[1401] w-[440px] max-w-[calc(100vw-24px)] rounded-lg bg-popover shadow-lg"
+            style={{ border: `1px solid color-mix(in srgb, ${TEAL} 35%, transparent)` }}
+            ref={(el: HTMLDivElement | null) => {
+              if (!el) return;
+              const anchor = triggerRef.current;
+              if (!anchor) return;
+              const rect = anchor.getBoundingClientRect();
+              el.style.position = 'fixed';
+              el.style.top = `${rect.bottom + 4}px`;
+              el.style.left = `${Math.max(8, rect.left)}px`;
+            }}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); cancel(); } }}
+          >
+            <div className="p-3">
+              <div className="flex flex-col items-stretch gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-foreground">Name <span className="text-destructive">*</span></label>
+                  <Input ref={nameInputRef} aria-label="Metric name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Monthly Revenue" autoFocus className="h-8" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-foreground">Description</label>
+                  <Input aria-label="Metric description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="One-line summary (optional)" className="h-8" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-foreground">SQL (optional)</label>
+                  <textarea
                     aria-label="Metric SQL"
                     value={sql}
                     onChange={(e) => setSql(e.target.value)}
                     placeholder="SELECT ..."
                     rows={5}
-                    fontFamily="var(--font-jetbrains-mono), monospace"
-                    fontSize="xs"
+                    className="w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    style={{ fontFamily: MONO }}
                   />
-                </Field.Root>
-                <HStack justify="flex-end" gap={2}>
+                </div>
+                <div className="flex justify-end gap-2">
                   <Button size="xs" variant="outline" onClick={cancel}>Cancel</Button>
-                  <Button size="xs" bg="accent.teal" color="white" _hover={{ opacity: 0.9 }} onClick={save} disabled={!name.trim()}>Save metric</Button>
-                </HStack>
-              </VStack>
-            </Popover.Body>
-          </Popover.Content>
-        </Popover.Positioner>
-      </Portal>
-    </Popover.Root>
+                  <Button size="xs" className="text-white hover:opacity-90" style={{ background: TEAL }} onClick={save} disabled={!name.trim()}>Save metric</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 

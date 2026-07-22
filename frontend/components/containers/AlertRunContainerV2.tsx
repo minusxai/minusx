@@ -6,8 +6,7 @@
  * AlertRunView is the reusable presentation component for alert run data.
  * AlertRunContainerV2 is the smart container that loads file data and delegates to AlertRunView.
  */
-import { Box, Text, VStack, HStack, Badge, Separator, Button } from '@chakra-ui/react';
-import { useState, useCallback } from 'react';
+import { Fragment, useState, useCallback } from 'react';
 import { LuChevronDown, LuChevronRight, LuClock, LuTimer, LuHash } from 'react-icons/lu';
 import { FaSlack } from 'react-icons/fa';
 import { useFile } from '@/lib/hooks/file-state-hooks';
@@ -20,15 +19,35 @@ import { LuBell, LuCirclePause, LuExternalLink, LuMail, LuMessageCircle, LuSetti
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
 import DatePicker from '@/components/selectors/DatePicker';
+import { Badge } from '@/components/kit/badge';
+import { Button } from '@/components/kit/button';
+import { Separator } from '@/components/kit/separator';
+import { cn } from '@/components/kit/cn';
 
 /* ------------------------------------------------------------------ */
 /*  Shared sub-components                                              */
 /* ------------------------------------------------------------------ */
 
+const mix = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+
+// Theme accents (lib/ui/theme.ts): primary #2980b9, teal #16a085, warning/orange #f39c12,
+// success #2ecc71, danger #c0392b.
+const GREEN = '#2ecc71';
+const RED = '#c0392b';
+const YELLOW = '#f39c12';
+
+/** Status badge tint (Chakra colorPalette subtle-badge equivalent) — matches ReportView's scheme. */
+const BADGE_TINT: Record<'green' | 'red' | 'yellow' | 'gray', string> = {
+  green: 'border-transparent bg-[color-mix(in_srgb,#2ecc71_18%,transparent)] text-[#27ae60]',
+  red: 'border-transparent bg-[color-mix(in_srgb,#c0392b_15%,transparent)] text-[#c0392b]',
+  yellow: 'border-transparent bg-[color-mix(in_srgb,#f39c12_18%,transparent)] text-[#f39c12]',
+  gray: 'border-transparent bg-muted text-muted-foreground',
+};
+
 type ExecutionStatus = 'running' | 'success' | 'failure' | 'triggered' | 'not_triggered' | 'failed' | 'error';
 
 function StatusBadge({ status }: { status: ExecutionStatus | undefined }) {
-  const colorPalette =
+  const tint =
     status === 'triggered' || status === 'failure' || status === 'failed' ? 'red' :
     status === 'not_triggered' || status === 'success' ? 'green' :
     'yellow';
@@ -36,41 +55,41 @@ function StatusBadge({ status }: { status: ExecutionStatus | undefined }) {
     status === 'triggered' ? 'TRIGGERED' :
     status === 'not_triggered' ? 'OK' :
     status ? status.toUpperCase() : 'UNKNOWN';
-  return <Badge colorPalette={colorPalette} size="lg" fontWeight="700">{label}</Badge>;
+  return <Badge className={cn(BADGE_TINT[tint], 'px-2.5 text-sm font-bold')}>{label}</Badge>;
 }
 
 function MessageStatusBadge({ status }: { status: RunMessageRecord['status'] | undefined }) {
-  const colorPalette = status === 'sent' ? 'green' : status === 'failed' ? 'red' : status === 'skipped' ? 'gray' : 'yellow';
-  return <Badge colorPalette={colorPalette} size="sm">{status ? status.toUpperCase() : 'UNKNOWN'}</Badge>;
+  const tint = status === 'sent' ? 'green' : status === 'failed' ? 'red' : status === 'skipped' ? 'gray' : 'yellow';
+  return <Badge className={BADGE_TINT[tint]}>{status ? status.toUpperCase() : 'UNKNOWN'}</Badge>;
 }
 
 function AttemptLogRow({ log }: { log: MessageAttemptLog }) {
   const time = new Date(log.attemptedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   return (
-    <VStack align="stretch" gap={0.5}>
-      <HStack gap={2}>
-        <Text fontSize="xs" color="fg.muted" minW="55px">{time}</Text>
-        <Text fontSize="xs" color={log.success ? 'green.fg' : 'red.fg'}>{log.success ? 'OK' : 'FAILED'}</Text>
-        {log.statusCode !== undefined && <Text fontSize="xs">{log.statusCode}</Text>}
-        {log.error && <Text fontSize="xs" color="red.fg">{log.error}</Text>}
-      </HStack>
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center gap-2">
+        <p className="min-w-[55px] text-xs text-muted-foreground">{time}</p>
+        <p className={cn('text-xs', log.success ? 'text-[#27ae60]' : 'text-[#c0392b]')}>{log.success ? 'OK' : 'FAILED'}</p>
+        {log.statusCode !== undefined && <p className="text-xs">{log.statusCode}</p>}
+        {log.error && <p className="text-xs text-[#c0392b]">{log.error}</p>}
+      </div>
       {log.requestBody && (
-        <Box ml="55px">
-          <Text fontSize="xs" color="fg.muted" fontWeight="600" mb={0.5}>Request</Text>
-          <Box p={1.5} bg="bg.surface" borderRadius="sm" border="1px solid" borderColor="border.muted" maxH="120px" overflow="auto">
-            <Text fontSize="xs" whiteSpace="pre-wrap" color="fg.muted">{log.requestBody}</Text>
-          </Box>
-        </Box>
+        <div className="ml-[55px]">
+          <p className="mb-0.5 text-xs font-semibold text-muted-foreground">Request</p>
+          <div className="max-h-[120px] overflow-auto rounded-sm border border-border/60 bg-card p-1.5">
+            <p className="whitespace-pre-wrap text-xs text-muted-foreground">{log.requestBody}</p>
+          </div>
+        </div>
       )}
       {log.responseBody && (
-        <Box ml="55px">
-          <Text fontSize="xs" color="fg.muted" fontWeight="600" mb={0.5}>Response</Text>
-          <Box p={1.5} bg="bg.surface" borderRadius="sm" border="1px solid" borderColor="border.muted" maxH="120px" overflow="auto">
-            <Text fontSize="xs" whiteSpace="pre-wrap" color="fg.muted">{log.responseBody}</Text>
-          </Box>
-        </Box>
+        <div className="ml-[55px]">
+          <p className="mb-0.5 text-xs font-semibold text-muted-foreground">Response</p>
+          <div className="max-h-[120px] overflow-auto rounded-sm border border-border/60 bg-card p-1.5">
+            <p className="whitespace-pre-wrap text-xs text-muted-foreground">{log.responseBody}</p>
+          </div>
+        </div>
       )}
-    </VStack>
+    </div>
   );
 }
 
@@ -84,119 +103,96 @@ function MessageRow({ msg }: { msg: RunMessageRecord }) {
     ? `#${msg.metadata.channel_name}`
     : isSlack ? msg.metadata.channel : (msg.metadata as { to: string }).to;
   return (
-    <Box borderRadius="md" border="1px solid" borderColor="border.muted" overflow="hidden">
-      <HStack
-        px={3}
-        py={2}
-        justify="space-between"
-        cursor="pointer"
+    <div className="overflow-hidden rounded-md border border-border/60">
+      <div
+        className="flex cursor-pointer items-center justify-between px-3 py-2 hover:bg-accent"
         onClick={() => setOpen(o => !o)}
-        _hover={{ bg: 'bg.subtle' }}
       >
-        <HStack gap={1.5} flex={1} minW={0}>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {open ? <LuChevronDown size={13} /> : <LuChevronRight size={13} />}
           {isEmail ? <LuMail size={13} /> : isSlackApp ? <FaSlack size={13} /> : isSlack ? <LuHash size={13} /> : <LuMessageCircle size={13} />}
-          <Text fontSize="sm" truncate>{address}</Text>
-        </HStack>
+          <p className="truncate text-sm">{address}</p>
+        </div>
         <MessageStatusBadge status={msg.status} />
-      </HStack>
+      </div>
       {open && (
-        <Box px={3} py={2} bg="bg.muted" borderTopWidth="1px" borderColor="border.muted">
-          <VStack align="stretch" gap={2}>
+        <div className="border-t border-border/60 bg-muted px-3 py-2">
+          <div className="flex flex-col gap-2">
             {isEmail && (
-              <HStack gap={2}>
-                <Text fontSize="xs" color="fg.muted" minW="55px" fontWeight="600">Subject</Text>
-                <Text fontSize="xs">{(msg.metadata as { to: string; subject: string }).subject}</Text>
-              </HStack>
+              <div className="flex items-center gap-2">
+                <p className="min-w-[55px] text-xs font-semibold text-muted-foreground">Subject</p>
+                <p className="text-xs">{(msg.metadata as { to: string; subject: string }).subject}</p>
+              </div>
             )}
-            <Box>
-              <Text fontSize="xs" color="fg.muted" fontWeight="600" mb={1}>Body</Text>
+            <div>
+              <p className="mb-1 text-xs font-semibold text-muted-foreground">Body</p>
               {msg.content.trimStart().startsWith('<!DOCTYPE') || msg.content.trimStart().startsWith('<html') ? (
-                <Box
-                  borderRadius="sm"
-                  border="1px solid"
-                  borderColor="border.muted"
-                  overflow="hidden"
-                >
+                <div className="overflow-hidden rounded-sm border border-border/60">
                   <iframe
                     srcDoc={msg.content}
                     style={{ width: '100%', height: '500px', border: 'none', background: '#fff' }}
                     sandbox=""
                     title="Email preview"
                   />
-                </Box>
+                </div>
               ) : (
-                <Box
-                  p={2}
-                  bg="bg.surface"
-                  borderRadius="sm"
-                  border="1px solid"
-                  borderColor="border.muted"
-                  maxH="200px"
-                  overflow="auto"
-                >
-                  <Text fontSize="xs" whiteSpace="pre-wrap">{msg.content}</Text>
-                </Box>
+                <div className="max-h-[200px] overflow-auto rounded-sm border border-border/60 bg-card p-2">
+                  <p className="whitespace-pre-wrap text-xs">{msg.content}</p>
+                </div>
               )}
-            </Box>
+            </div>
             {msg.deliveryError && (
-              <HStack gap={2}>
-                <Text fontSize="xs" color="fg.muted" minW="55px" fontWeight="600">Error</Text>
-                <Text fontSize="xs" color="red.fg">{msg.deliveryError}</Text>
-              </HStack>
+              <div className="flex items-center gap-2">
+                <p className="min-w-[55px] text-xs font-semibold text-muted-foreground">Error</p>
+                <p className="text-xs text-[#c0392b]">{msg.deliveryError}</p>
+              </div>
             )}
             {msg.sentAt && (
-              <HStack gap={2}>
-                <Text fontSize="xs" color="fg.muted" minW="55px" fontWeight="600">Sent at</Text>
-                <Text fontSize="xs">{new Date(msg.sentAt).toLocaleString()}</Text>
-              </HStack>
+              <div className="flex items-center gap-2">
+                <p className="min-w-[55px] text-xs font-semibold text-muted-foreground">Sent at</p>
+                <p className="text-xs">{new Date(msg.sentAt).toLocaleString()}</p>
+              </div>
             )}
             {msg.logs && msg.logs.length > 0 && (
-              <Box>
-                <HStack gap={2} cursor="pointer" onClick={() => setLogsOpen(o => !o)}>
-                  <Text fontSize="xs" color="fg.muted" minW="55px" fontWeight="600">Logs</Text>
+              <div>
+                <div className="flex cursor-pointer items-center gap-2" onClick={() => setLogsOpen(o => !o)}>
+                  <p className="min-w-[55px] text-xs font-semibold text-muted-foreground">Logs</p>
                   {logsOpen ? <LuChevronDown size={11} /> : <LuChevronRight size={11} />}
-                  {!logsOpen && <Text fontSize="xs" color="fg.muted">{msg.logs.length} attempt{msg.logs.length !== 1 ? 's' : ''}</Text>}
-                </HStack>
+                  {!logsOpen && <p className="text-xs text-muted-foreground">{msg.logs.length} attempt{msg.logs.length !== 1 ? 's' : ''}</p>}
+                </div>
                 {logsOpen && (
-                  <VStack align="stretch" gap={0.5} mt={1} pl={1}>
+                  <div className="mt-1 flex flex-col gap-0.5 pl-1">
                     {msg.logs.map((log, i) => <AttemptLogRow key={i} log={log} />)}
-                  </VStack>
+                  </div>
                 )}
-              </Box>
+              </div>
             )}
-          </VStack>
-        </Box>
+          </div>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <HStack justify="space-between" py={2}>
-      <Text fontSize="sm" color="fg.muted">{label}</Text>
-      {typeof value === 'string' ? <Text fontSize="sm" fontWeight="500">{value}</Text> : value}
-    </HStack>
+    <div className="flex items-center justify-between py-2">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      {typeof value === 'string' ? <p className="text-sm font-medium">{value}</p> : value}
+    </div>
   );
 }
 
 function TimingChip({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
   return (
-    <HStack
-      gap={1.5}
-      px={2.5}
-      py={1.5}
-      bg={`${color}/8`}
-      borderRadius="md"
-      border="1px solid"
-      borderColor={`${color}/20`}
-      fontSize="xs"
+    <div
+      className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs"
+      style={{ background: mix(color, 8), border: `1px solid ${mix(color, 20)}` }}
     >
-      <Box color={color}>{icon}</Box>
-      <Text fontWeight="700" color={color}>{label}</Text>
-      <Text color="fg.default" fontWeight="500">{value}</Text>
-    </HStack>
+      <span style={{ color }}>{icon}</span>
+      <p className="font-bold" style={{ color }}>{label}</p>
+      <p className="font-medium text-foreground">{value}</p>
+    </div>
   );
 }
 
@@ -251,149 +247,126 @@ function AlertRunView({
 
   const isTriggered = status === 'triggered' || status === 'failure' || status === 'failed';
 
+  // Legacy detail rows (rendered with separators between visible rows,
+  // mirroring Chakra VStack's `separator` prop).
+  const detailRows: React.ReactNode[] = [];
+  if (actualValue != null) {
+    detailRows.push(
+      <DetailRow label="Actual value" value={
+        <Badge className={cn(BADGE_TINT[isTriggered ? 'red' : 'green'], 'font-mono text-sm font-bold')}>
+          {String(actualValue)}
+        </Badge>
+      } />
+    );
+  }
+  if (condition) {
+    detailRows.push(
+      <DetailRow label="Condition" value={
+        <p className="font-mono text-sm font-semibold">{condition}</p>
+      } />
+    );
+  }
+  detailRows.push(
+    <DetailRow label="Status" value={
+      <Badge className={cn(BADGE_TINT[isTriggered ? 'red' : status === 'not_triggered' || status === 'success' ? 'green' : 'yellow'], 'font-bold')}>
+        {status === 'triggered' ? 'Triggered' :
+         status === 'not_triggered' ? 'Not Triggered' :
+         status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown'}
+      </Badge>
+    } />
+  );
+
   return (
-    <Box
-      p={inline ? 0 : 8}
-      maxW={inline ? undefined : '560px'}
-      mx={inline ? undefined : 'auto'}
-      mt={inline ? 0 : 6}
-    >
-      <VStack align="stretch" gap={5}>
+    <div className={cn(!inline && 'mx-auto mt-6 max-w-[560px] p-8', inline && 'p-0')}>
+      <div className="flex flex-col gap-5">
         {/* Header: icon + title + badge */}
-        <HStack gap={3} align="center">
-          <Box
-            p={2}
-            borderRadius="lg"
-            bg={isTriggered ? 'red.subtle' : status === 'not_triggered' || status === 'success' ? 'green.subtle' : 'yellow.subtle'}
+        <div className="flex items-center gap-3">
+          <div
+            className="rounded-lg p-2"
+            style={{ background: mix(isTriggered ? RED : status === 'not_triggered' || status === 'success' ? GREEN : YELLOW, 15) }}
           >
             <LuBell size={22} />
-          </Box>
-          <VStack align="start" gap={0}>
-            <Text fontWeight="800" fontSize="xl" fontFamily="mono" letterSpacing="-0.02em">Alert Run</Text>
-          </VStack>
-          <Box ml="auto">
+          </div>
+          <div className="flex flex-col items-start">
+            <p className="font-mono text-xl font-extrabold tracking-[-0.02em]">Alert Run</p>
+          </div>
+          <div className="ml-auto">
             <StatusBadge status={status} />
-          </Box>
+          </div>
           {inline && (
             <Link href={preserveParams(`/f/${fileId}`)} style={{ opacity: 0.5 }}>
               <LuExternalLink size={14} />
             </Link>
           )}
-        </HStack>
+        </div>
 
         {/* Alert config link button */}
         {!inline && alertId && (
           <Link href={preserveParams(`/f/${alertId}`)} style={{ textDecoration: 'none' }}>
-            <HStack
-              gap={2}
-              px={3}
-              py={2.5}
-              borderRadius="lg"
-              bg="accent.secondary/10"
-              border="1px solid"
-              borderColor="accent.secondary/25"
-              cursor="pointer"
-              _hover={{ bg: 'accent.secondary/15', borderColor: 'accent.secondary/40' }}
-              transition="all 0.15s"
-            >
-              <LuSettings size={14} color="var(--chakra-colors-accent-secondary)" />
-              <Text fontSize="sm" fontWeight="600" color="accent.secondary">View Alert Config</Text>
-              <Text fontSize="sm" color="fg.muted">{alertName || `Alert #${alertId}`}</Text>
-            </HStack>
+            <div className="flex cursor-pointer items-center gap-2 rounded-lg border border-[color-mix(in_srgb,#9b59b6_25%,transparent)] bg-[color-mix(in_srgb,#9b59b6_10%,transparent)] px-3 py-2.5 transition-all duration-150 hover:border-[color-mix(in_srgb,#9b59b6_40%,transparent)] hover:bg-[color-mix(in_srgb,#9b59b6_15%,transparent)]">
+              <LuSettings size={14} color="#9b59b6" />
+              <p className="text-sm font-semibold text-[#9b59b6]">View Alert Config</p>
+              <p className="text-sm text-muted-foreground">{alertName || `Alert #${alertId}`}</p>
+            </div>
           </Link>
         )}
 
         {/* Run details card */}
-        <Box
-          p={5}
-          bg="bg.muted"
-          borderRadius="lg"
-          border="1px solid"
-          borderColor="border.muted"
-        >
-          <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={3}>
+        <div className="rounded-lg border border-border/60 bg-muted p-5">
+          <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Result
-          </Text>
+          </p>
 
           {testResults && testResults.length > 0 ? (
             <TestRunResultsList results={testResults} variant="colored" />
           ) : (
-            <VStack align="stretch" gap={0} separator={<Separator />}>
-              {actualValue != null && (
-                <DetailRow label="Actual value" value={
-                  <Badge
-                    colorPalette={isTriggered ? 'red' : 'green'}
-                    variant="subtle"
-                    fontFamily="mono"
-                    fontSize="sm"
-                    fontWeight="700"
-                  >
-                    {String(actualValue)}
-                  </Badge>
-                } />
-              )}
-              {condition && (
-                <DetailRow label="Condition" value={
-                  <Text fontSize="sm" fontWeight="600" fontFamily="mono">{condition}</Text>
-                } />
-              )}
-              <DetailRow label="Status" value={
-                <Badge
-                  colorPalette={isTriggered ? 'red' : status === 'not_triggered' || status === 'success' ? 'green' : 'yellow'}
-                  variant="subtle"
-                  fontWeight="700"
-                >
-                  {status === 'triggered' ? 'Triggered' :
-                   status === 'not_triggered' ? 'Not Triggered' :
-                   status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown'}
-                </Badge>
-              } />
-            </VStack>
+            <div className="flex flex-col">
+              {detailRows.map((row, i) => (
+                <Fragment key={i}>
+                  {i > 0 && <Separator />}
+                  {row}
+                </Fragment>
+              ))}
+            </div>
           )}
-        </Box>
+        </div>
 
         {/* Error */}
         {error && (
-          <Box p={4} bg="red.subtle" borderRadius="lg" color="red.fg" border="1px solid" borderColor="red.muted">
-            <Text fontSize="sm" fontWeight="700" mb={1}>Error</Text>
-            <Text fontSize="sm">{error}</Text>
-          </Box>
+          <div className="rounded-lg border border-[color-mix(in_srgb,#c0392b_30%,transparent)] bg-[color-mix(in_srgb,#c0392b_10%,transparent)] p-4 text-[#c0392b]">
+            <p className="mb-1 text-sm font-bold">Error</p>
+            <p className="text-sm">{error}</p>
+          </div>
         )}
 
         {/* Notifications */}
         {messages && messages.length > 0 && (
-          <Box
-            p={5}
-            bg="bg.muted"
-            borderRadius="lg"
-            border="1px solid"
-            borderColor="border.muted"
-          >
-            <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={3}>
+          <div className="rounded-lg border border-border/60 bg-muted p-5">
+            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Notifications
-            </Text>
-            <VStack align="stretch" gap={2}>
+            </p>
+            <div className="flex flex-col gap-2">
               {messages.map((msg, i) => (
                 <MessageRow key={i} msg={msg} />
               ))}
-            </VStack>
-          </Box>
+            </div>
+          </div>
         )}
 
         {/* Timing chips */}
-        <HStack gap={2} flexWrap="wrap">
+        <div className="flex flex-wrap items-center gap-2">
           <TimingChip
             icon={<LuClock size={12} />}
             label="Started"
             value={new Date(startedAt).toLocaleString()}
-            color="accent.primary"
+            color="#2980b9"
           />
           {completedAt && (
             <TimingChip
               icon={<LuClock size={12} />}
               label="Completed"
               value={new Date(completedAt).toLocaleString()}
-              color="accent.teal"
+              color="#16a085"
             />
           )}
           {durationMs !== null && (
@@ -401,17 +374,17 @@ function AlertRunView({
               icon={<LuTimer size={12} />}
               label="Duration"
               value={`${Math.round(durationMs / 1000)}s`}
-              color="accent.warning"
+              color="#f39c12"
             />
           )}
-        </HStack>
+        </div>
 
         {/* Snooze section — only shown on standalone (non-inline) alert runs with a parent alert */}
         {!inline && onSnooze && (
           <SnoozeSection suppressUntil={suppressUntil} onSnooze={onSnooze} />
         )}
-      </VStack>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -438,31 +411,25 @@ function SnoozeSection({ suppressUntil, onSnooze }: { suppressUntil?: string; on
   })();
 
   return (
-    <Box
-      p={5}
-      bg="bg.muted"
-      borderRadius="lg"
-      border="1px solid"
-      borderColor="border.muted"
-    >
-      <VStack align="stretch" gap={3}>
-        <HStack gap={2}>
-          <LuCirclePause size={14} color={suppressed ? 'var(--chakra-colors-orange-fg)' : 'var(--chakra-colors-fg-muted)'} />
-          <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+    <div className="rounded-lg border border-border/60 bg-muted p-5">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <LuCirclePause size={14} color={suppressed ? '#e67e22' : 'var(--muted-foreground)'} />
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             {suppressed ? `Snoozed until ${suppressedDisplay}` : 'Snooze this alert'}
-          </Text>
-        </HStack>
-        <Text fontSize="xs" color="fg.muted">
+          </p>
+        </div>
+        <p className="text-xs text-muted-foreground">
           {suppressed
             ? 'Scheduled runs will be skipped until this date. Manual runs are not affected.'
             : 'Pause scheduled runs for this alert until a specific date.'}
-        </Text>
-        <HStack gap={2}>
+        </p>
+        <div className="flex items-center gap-2">
           {suppressed ? (
             <Button
               aria-label="Clear snooze"
               size="sm"
-              colorPalette="orange"
+              className="bg-[#f39c12] text-white hover:bg-[#e67e22]"
               onClick={() => onSnooze('')}
             >
               Clear Snooze
@@ -478,7 +445,7 @@ function SnoozeSection({ suppressUntil, onSnooze }: { suppressUntil?: string; on
               <Button
                 aria-label="Confirm snooze"
                 size="sm"
-                colorPalette="orange"
+                className="bg-[#f39c12] text-white hover:bg-[#e67e22]"
                 disabled={!pendingDate}
                 onClick={() => { if (pendingDate) { onSnooze(pendingDate); setPendingDate(''); } }}
               >
@@ -486,9 +453,9 @@ function SnoozeSection({ suppressUntil, onSnooze }: { suppressUntil?: string; on
               </Button>
             </>
           )}
-        </HStack>
-      </VStack>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -525,11 +492,11 @@ export default function AlertRunContainerV2({ fileId, inline }: AlertRunContaine
   }, [parentAlertId]);
 
   if (!file || file.loading) {
-    return <Box p={4} color="fg.muted">Loading run details...</Box>;
+    return <div className="p-4 text-muted-foreground">Loading run details...</div>;
   }
 
   if (!file.content) {
-    return <Box p={4} color="fg.muted">Run details not available.</Box>;
+    return <div className="p-4 text-muted-foreground">Run details not available.</div>;
   }
 
   const snoozeProps = parentAlertId ? {

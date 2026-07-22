@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { Box, HStack, VStack, Text } from '@chakra-ui/react'
-import { Checkbox } from '@/components/ui/checkbox'
 import { LuChevronDown, LuChevronRight, LuLayoutGrid, LuSettings2 } from 'react-icons/lu'
+import { Checkbox } from '@/components/kit/checkbox'
 import { resolveColumnType } from './AxisComponents'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { FormulaBuilder, type DimensionInfo } from './FormulaBuilder'
@@ -11,6 +10,9 @@ import { ColorScalePicker } from './ColorScalePicker'
 import type { PivotConfig, PivotValueConfig, PivotFormula, AggregationFunction, ColumnFormatConfig } from '@/lib/types'
 
 const AGG_FUNCTIONS: AggregationFunction[] = ['SUM', 'AVG', 'COUNT', 'MIN', 'MAX']
+
+// Tiny section label (Chakra 2xs/700/0.05em equivalent)
+const SECTION_LABEL = 'text-[10px] font-bold uppercase tracking-wider text-muted-foreground'
 
 interface PivotAxisBuilderProps {
   columns: string[]
@@ -152,58 +154,34 @@ export const PivotAxisBuilder = ({
     const [showMenu, setShowMenu] = useState(false)
 
     return (
-      <Box position="relative">
-        <HStack
-          gap={0.5}
-          px={1.5}
-          py={0.5}
-          bg="accent.teal/15"
-          borderRadius="sm"
-          cursor="pointer"
+      <div className="relative">
+        <div
+          className="flex cursor-pointer items-center gap-0.5 rounded-sm bg-[#16a085]/15 px-1.5 py-0.5 transition-all duration-150 hover:bg-[#16a085]/25"
           onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
-          _hover={{ bg: 'accent.teal/25' }}
-          transition="all 0.15s"
         >
-          <Text fontSize="2xs" fontWeight="700" color="accent.teal">
+          <span className="text-[10px] font-bold text-[#16a085]">
             {aggFunction}
-          </Text>
-          <Box as={LuChevronDown} fontSize="2xs" color="accent.teal" />
-        </HStack>
+          </span>
+          <LuChevronDown className="text-[10px] text-[#16a085]" />
+        </div>
         {showMenu && (
-          <VStack
-            position="absolute"
-            top="100%"
-            left={0}
-            mt={1}
-            bg="bg.panel"
-            border="1px solid"
-            borderColor="border.muted"
-            borderRadius="md"
-            boxShadow="md"
-            zIndex={10}
-            p={1}
-            gap={0}
-            minW="70px"
-          >
+          <div className="absolute left-0 top-full z-10 mt-1 flex min-w-[70px] flex-col items-center gap-0 rounded-md border border-border bg-popover p-1 shadow-md">
             {AGG_FUNCTIONS.map(fn => (
-              <Box
+              <div
                 key={fn}
-                px={2}
-                py={1}
-                cursor="pointer"
-                borderRadius="sm"
-                bg={fn === aggFunction ? 'accent.teal/15' : 'transparent'}
-                _hover={{ bg: 'accent.teal/10' }}
+                className={`w-full cursor-pointer rounded-sm px-2 py-1 hover:bg-[#16a085]/10 ${
+                  fn === aggFunction ? 'bg-[#16a085]/15' : 'bg-transparent'
+                }`}
                 onClick={(e) => { e.stopPropagation(); changeAggFunction(column, fn); setShowMenu(false) }}
               >
-                <Text fontSize="xs" fontWeight={fn === aggFunction ? '700' : '500'} color={fn === aggFunction ? 'accent.teal' : 'fg.default'}>
+                <span className={`text-xs ${fn === aggFunction ? 'font-bold text-[#16a085]' : 'font-medium text-foreground'}`}>
                   {fn}
-                </Text>
-              </Box>
+                </span>
+              </div>
             ))}
-          </VStack>
+          </div>
         )}
-      </Box>
+      </div>
     )
   }
 
@@ -254,78 +232,52 @@ export const PivotAxisBuilder = ({
   const renderSettingsCard = (title: string, panelKey: string, children: React.ReactNode) => {
     const collapsed = collapsedPanels[panelKey]
     return (
-      <VStack
-        align="stretch"
-        gap={collapsed ? 0 : 2.5}
-        p={3}
-        bg="bg.surface"
-        borderRadius="md"
-        border="1px solid"
-        borderColor="border.muted"
-        minW={0}
+      <div
+        className={`flex min-w-0 flex-col items-stretch rounded-md border border-border bg-card p-3 ${collapsed ? 'gap-0' : 'gap-2.5'}`}
       >
-        <HStack justify="space-between" align="center">
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+        <div className="flex items-center justify-between">
+          <span className={SECTION_LABEL}>
             {title}
-          </Text>
+          </span>
           <button
+            type="button"
             onClick={() => togglePanel(panelKey)}
             aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
-            style={{
-              color: 'var(--chakra-colors-fg-subtle)',
-              background: 'transparent',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-            }}
+            className="inline-flex cursor-pointer items-center border-none bg-transparent p-0 text-muted-foreground"
           >
             {collapsed ? <LuChevronRight size={14} /> : <LuChevronDown size={14} />}
           </button>
-        </HStack>
+        </div>
         {!collapsed && children}
-      </VStack>
+      </div>
     )
   }
 
   return (
-    <VStack align="stretch" gap={0}>
+    <div className="flex flex-col items-stretch gap-0">
       {/* Tab bar — segmented control matching AxisBuilder (classic only; hidden
           when a host panel supplies `section`) */}
       {section == null && (
-      <HStack
-        gap={0}
-        bg="bg.muted"
-        borderRadius="md"
-        p={0.5}
-        mb={3}
-        maxW="240px"
-      >
+      <div className="mb-3 flex max-w-[240px] items-center gap-0 rounded-md bg-muted p-0.5">
         {([{ key: 'fields', icon: LuLayoutGrid, label: 'Fields' }, { key: 'settings', icon: LuSettings2, label: 'Settings' }] as const).map(({ key, icon: Icon, label }) => (
-          <HStack
+          <button
             key={key}
-            as="button"
+            type="button"
             aria-label={`Pivot ${key} section`}
-            flex={1}
-            gap={1.5}
-            justify="center"
-            py={1.5}
-            cursor="pointer"
-            bg={activeTab === key ? 'accent.teal/90' : 'transparent'}
-            color={activeTab === key ? 'white' : 'fg.subtle'}
-            borderRadius="sm"
-            _hover={{ color: activeTab === key ? 'white' : 'fg.muted' }}
-            transition="all 0.15s"
+            className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-sm py-1.5 transition-all duration-150 ${
+              activeTab === key
+                ? 'bg-[#16a085]/90 text-white'
+                : 'bg-transparent text-muted-foreground hover:text-foreground'
+            }`}
             onClick={() => setActiveTab(key)}
           >
-            <Box as={Icon} fontSize="sm" />
-            <Text fontSize="xs" fontFamily="mono" fontWeight="600">
+            <Icon className="text-sm" />
+            <span className="font-mono text-xs font-semibold">
               {label}
-            </Text>
-          </HStack>
+            </span>
+          </button>
         ))}
-      </HStack>
+      </div>
       )}
 
       {/* Fields tab — AxisBuilder renders its own styled container */}
@@ -335,43 +287,43 @@ export const PivotAxisBuilder = ({
 
       {/* Settings tab */}
       {active === 'settings' && (
-        <Box display="flex" flexDirection="column" gap={3}>
+        <div className="flex flex-col gap-3">
           {renderSettingsCard('Options', 'options',
-            <HStack gap={4} flexWrap="wrap">
-              <Checkbox
-                aria-label="Toggle row totals"
-                checked={config.showRowTotals !== false}
-                onCheckedChange={(e) => onPivotConfigChange({ ...config, showRowTotals: e.checked })}
-                size="sm"
-              >
-                <Text fontSize="xs" color="fg.muted">Row Totals</Text>
-              </Checkbox>
-              <Checkbox
-                aria-label="Toggle column totals"
-                checked={config.showColumnTotals !== false}
-                onCheckedChange={(e) => onPivotConfigChange({ ...config, showColumnTotals: e.checked })}
-                size="sm"
-              >
-                <Text fontSize="xs" color="fg.muted">Column Totals</Text>
-              </Checkbox>
-              <Checkbox
-                aria-label="Toggle heatmap"
-                checked={config.showHeatmap !== false}
-                onCheckedChange={(e) => onPivotConfigChange({ ...config, showHeatmap: e.checked })}
-                size="sm"
-              >
-                <Text fontSize="xs" color="fg.muted">Heatmap</Text>
-              </Checkbox>
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="flex cursor-pointer items-center gap-2">
+                <Checkbox
+                  aria-label="Toggle row totals"
+                  checked={config.showRowTotals !== false}
+                  onCheckedChange={(checked) => onPivotConfigChange({ ...config, showRowTotals: checked === true })}
+                />
+                <span className="text-xs text-muted-foreground">Row Totals</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <Checkbox
+                  aria-label="Toggle column totals"
+                  checked={config.showColumnTotals !== false}
+                  onCheckedChange={(checked) => onPivotConfigChange({ ...config, showColumnTotals: checked === true })}
+                />
+                <span className="text-xs text-muted-foreground">Column Totals</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <Checkbox
+                  aria-label="Toggle heatmap"
+                  checked={config.showHeatmap !== false}
+                  onCheckedChange={(checked) => onPivotConfigChange({ ...config, showHeatmap: checked === true })}
+                />
+                <span className="text-xs text-muted-foreground">Heatmap</span>
+              </label>
               {/* Compact (GitHub-graph) mode is legacy-only: on V2 (d3Formats) the
                   dedicated heatmap viz type replaces it. */}
               {!d3Formats && (
-              <Checkbox
-                checked={config.compact === true}
-                onCheckedChange={(e) => onPivotConfigChange({ ...config, compact: e.checked })}
-                size="sm"
-              >
-                <Text fontSize="xs" color="fg.muted">Compact (GitHub Style)</Text>
-              </Checkbox>
+              <label className="flex cursor-pointer items-center gap-2">
+                <Checkbox
+                  checked={config.compact === true}
+                  onCheckedChange={(checked) => onPivotConfigChange({ ...config, compact: checked === true })}
+                />
+                <span className="text-xs text-muted-foreground">Compact (GitHub Style)</span>
+              </label>
               )}
               {config.showHeatmap !== false && (
                 <ColorScalePicker
@@ -380,10 +332,10 @@ export const PivotAxisBuilder = ({
                   onChange={(scale) => onPivotConfigChange({ ...config, heatmapScale: scale })}
                 />
               )}
-            </HStack>
+            </div>
           )}
           {(showRowFormulas || showColFormulas) && renderSettingsCard('Formulas', 'formulas',
-            <VStack gap={3} align="stretch">
+            <div className="flex flex-col items-stretch gap-3">
               {showRowFormulas ? (
                 <FormulaBuilder
                   axis="row"
@@ -395,12 +347,12 @@ export const PivotAxisBuilder = ({
                   getValuesAtLevel={getRowValuesAtLevel}
                 />
               ) : (
-                <VStack align="start" gap={0}>
-                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
+                <div className="flex flex-col items-start gap-0">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                     Row Formulas
-                  </Text>
-                  <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add row dimensions first</Text>
-                </VStack>
+                  </span>
+                  <span className="text-xs italic text-muted-foreground">Add row dimensions first</span>
+                </div>
               )}
               {showColFormulas ? (
                 <FormulaBuilder
@@ -411,17 +363,17 @@ export const PivotAxisBuilder = ({
                   onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, columnFormulas: formulas })}
                 />
               ) : (
-                <VStack align="start" gap={0}>
-                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
+                <div className="flex flex-col items-start gap-0">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                     Column Formulas
-                  </Text>
-                  <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add column dimensions first</Text>
-                </VStack>
+                  </span>
+                  <span className="text-xs italic text-muted-foreground">Add column dimensions first</span>
+                </div>
               )}
-            </VStack>
+            </div>
           )}
-        </Box>
+        </div>
       )}
-    </VStack>
+    </div>
   )
 }

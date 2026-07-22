@@ -21,8 +21,8 @@ import {
   KEY_ENTER_COMMAND,
   KEY_ESCAPE_COMMAND,
 } from 'lexical';
+import { createPortal } from 'react-dom';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { Box, HStack, VStack, Text, Icon, Portal } from '@chakra-ui/react';
 import { LuImage, LuSquareFunction } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import { $createMetricNode } from './MetricNode';
@@ -167,47 +167,37 @@ export function InsertMenuPlugin({ onImageUpload, enableMetric }: InsertMenuPlug
         />
       )}
 
-      {open && options.length > 0 && (
-        <Portal>
-          <Box
-            position="fixed"
-            top={`${caret.top}px`}
-            left={`${caret.left}px`}
-            zIndex={1500}
-            minW="240px"
-            bg="bg.surface"
-            border="1px solid"
-            borderColor="border.emphasized"
-            borderRadius="md"
-            boxShadow="lg"
-            py={1}
-            role="listbox"
-            aria-label="Insert menu"
-          >
-            {options.map((opt, i) => (
-              <HStack
+      {open && options.length > 0 && createPortal(
+        <div
+          data-mx-theme-host=""
+          role="listbox"
+          aria-label="Insert menu"
+          className="fixed z-[1500] min-w-[240px] rounded-md border border-border bg-popover py-1 shadow-lg"
+          style={{ top: `${caret.top}px`, left: `${caret.left}px` }}
+        >
+          {options.map((opt, i) => {
+            const OptIcon = opt.icon;
+            return (
+              <div
                 key={opt.key}
                 aria-label={`Insert ${opt.label}`}
                 role="option"
                 aria-selected={i === activeIndex}
-                px={3}
-                py={2}
-                gap={2.5}
-                cursor="pointer"
-                bg={i === activeIndex ? 'bg.emphasized' : 'transparent'}
-                _hover={{ bg: 'bg.emphasized' }}
+                className={`flex cursor-pointer items-center gap-2.5 px-3 py-2 hover:bg-accent ${i === activeIndex ? 'bg-accent' : 'bg-transparent'}`}
                 onMouseDown={(e) => { e.preventDefault(); selectOption(opt); }}
                 onMouseEnter={() => setActiveIndex(i)}
               >
-                <Icon as={opt.icon} boxSize={4} color="accent.cyan" flexShrink={0} />
-                <VStack gap={0} align="stretch" minW={0}>
-                  <Text fontSize="sm" fontWeight="600">{opt.label}</Text>
-                  <Text fontSize="xs" color="fg.muted" truncate>{opt.description}</Text>
-                </VStack>
-              </HStack>
-            ))}
-          </Box>
-        </Portal>
+                {/* Turquoise cyan — the insert-menu accent (ACCENT_HEX.cyan). */}
+                <OptIcon className="size-4 shrink-0" style={{ color: '#1abc9c' }} />
+                <div className="flex min-w-0 flex-col items-stretch">
+                  <span className="text-sm font-semibold">{opt.label}</span>
+                  <span className="truncate text-xs text-muted-foreground">{opt.description}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>,
+        document.body,
       )}
     </>
   );

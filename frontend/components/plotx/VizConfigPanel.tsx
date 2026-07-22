@@ -7,7 +7,6 @@
  */
 
 import { useCallback, useMemo } from 'react'
-import { Box } from '@chakra-ui/react'
 import { PivotAxisBuilder } from './PivotAxisBuilder'
 import { GeoAxisBuilder } from './GeoAxisBuilder'
 import { TrendAxisBuilder } from './TrendAxisBuilder'
@@ -332,7 +331,7 @@ export const VizConfigPanel = ({
 
   // Default: standard AxisBuilder (bar, line, area, scatter, pie, funnel, etc.)
   return (
-    <Box display="flex" flexDirection="column" gap={0} width="100%">
+    <div className="flex w-full flex-col gap-0">
       <AxisBuilder
         columns={columns}
         types={types}
@@ -362,6 +361,6 @@ export const VizConfigPanel = ({
           />
         ) : undefined}
       />
-    </Box>
+    </div>
   )
 }

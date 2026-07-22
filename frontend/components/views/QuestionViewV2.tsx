@@ -13,11 +13,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { debounce } from 'lodash';
 import {
-  Box,
-  Text,
-  HStack,
-} from '@chakra-ui/react';
-import {
   LuChevronLeft,
   LuChevronRight,
   LuGripVertical,
@@ -47,7 +42,8 @@ import { useSemanticCompat } from '@/lib/hooks/use-semantic-compat';
 import { inferVizType, recommendedVizTypes } from '@/lib/semantic/infer-viz';
 import SpreadsheetSourceEditor from '@/components/spreadsheet/SpreadsheetSourceEditor';
 import { QUESTION_SPREADSHEET_LIMITS } from '@/lib/spreadsheet/materialize';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/kit/tooltip';
+import { cn } from '@/components/kit/cn';
 
 // Which side of the split view is collapsed (or neither). Page mode persists this
 // globally in Redux (state.ui.questionCollapsedPanel); toolcall mode keeps it local
@@ -560,28 +556,27 @@ export default function QuestionViewV2({
   // The Auto chart-type badge — lives in the Viz Settings header (wide
   // layout) or above the config block (compact Viz tab, which has no header).
   const autoTypeBadge = semanticSpec ? (
-    <HStack
-      as="button"
+    <button
+      type="button"
       aria-label="Toggle auto chart type"
       onClick={handleToggleAutoType}
-      gap={1} px={2} py={0.5}
-      borderRadius="md" border="1px solid"
-      borderColor={vizTypeLocked ? 'border.muted' : 'accent.teal'}
-      bg={vizTypeLocked ? 'transparent' : 'accent.teal/10'}
-      color={vizTypeLocked ? 'fg.subtle' : 'accent.teal'}
-      cursor="pointer"
-      _hover={{ bg: vizTypeLocked ? 'bg.muted' : 'accent.teal/15' }}
+      className={cn(
+        'flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5',
+        vizTypeLocked
+          ? 'border-border bg-transparent text-muted-foreground hover:bg-muted'
+          : 'border-[#16a085] bg-[#16a085]/10 text-[#16a085] hover:bg-[#16a085]/15',
+      )}
       title={vizTypeLocked
         ? 'Chart type is pinned to your pick. Click to let exploration choose it again.'
         : 'Chart type follows your selection automatically. Click to pin the current type.'}
     >
       <LuRefreshCw size={10} />
-      <Text fontSize="2xs" fontFamily="mono" fontWeight="600">Auto</Text>
-    </HStack>
+      <span className="font-mono text-[10px] font-semibold">Auto</span>
+    </button>
   ) : undefined;
 
   const vizConfigBody = queryData ? (
-    <Box px={3} py={2} display="flex" flexDirection="column" gap={0}>
+    <div className="flex flex-col gap-0 px-3 py-2">
       <VizTypeSelector
         value={content.vizSettings?.type || 'table'}
         onChange={(type) => { if (isClassicVizType(type)) handleVizTypeChange(type) }}
@@ -625,99 +620,70 @@ export default function QuestionViewV2({
           getMapView={getMapView}
         />
       )}
-    </Box>
+    </div>
   ) : (
-    <Box px={3} py={4}>
-      <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
+    <div className="px-3 py-4">
+      <p className="font-mono text-xs text-muted-foreground">
         Run the query to configure the viz.
-      </Text>
-    </Box>
+      </p>
+    </div>
   );
 
   return (
-    <Box
-      display="flex"
-      flexDirection="column"
-      overflow="hidden"
-      flex="1"
-      minH="0"
+    <div
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
       data-file-id={questionId}
     >
       {/* Main Content */}
-      <Box ref={mainContentRef} flex={1} overflow="hidden" minHeight="0">
+      <div ref={mainContentRef} className="min-h-0 flex-1 overflow-hidden">
         {/* Visual View (the Code view is rendered upstream by FileView) */}
         {(
-        <Box
-          display="flex"
-          flexDirection={!useCompactLayout ? 'row' : 'column'}
-          alignItems={!useCompactLayout ? 'stretch' : undefined}
-          gap={2}
-          h="100%"
-          flex={1}
-          overflow="hidden"
-          minHeight="0"
+        <div
+          className={cn(
+            'flex h-full min-h-0 flex-1 gap-2 overflow-hidden',
+            !useCompactLayout ? 'flex-row items-stretch' : 'flex-col',
+          )}
         >
 
           {/* Collapsed Left Panel Strip */}
           {!useCompactLayout && collapsedPanel === 'left' && (
-            <Box
-              bg="accent.teal/30"
-              border="1px solid"
-              borderColor="accent.teal"
-              width="36px"
-              flexShrink={0}
-              display="flex"
-              flexDirection="column"
-              alignItems="center"
-              justifyContent="center"
-              cursor="pointer"
+            <div
+              className="my-2 flex w-[36px] shrink-0 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-[#16a085] bg-[#16a085]/30 hover:bg-[#16a085]/50"
               onClick={() => toggleCollapsedPanel('none')}
               aria-label="Expand query panel"
               role="button"
-              _hover={{ bg: 'accent.teal/50' }}
-              my={2}
-              borderRadius="lg"
-              gap={2}
             >
-              <Text
-                fontSize="xs"
-                color="fg.default"
-                fontWeight="600"
+              <span
+                className="text-xs font-semibold text-foreground"
                 style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
               >
                 Query
-              </Text>
-              <Box color="fg.default"><LuChevronRight size={14} /></Box>
-            </Box>
+              </span>
+              <span className="text-foreground"><LuChevronRight size={14} /></span>
+            </div>
           )}
 
           {/* Left Panel: SQL Editor + Parameters */}
-          <Box
-            display={collapsedPanel === 'left' && !useCompactLayout ? 'none' : 'flex'}
-            flexDirection="column"
-            flexShrink={0}
-            flex={!useCompactLayout && collapsedPanel === 'right' ? 1 : undefined}
-            width={!useCompactLayout ? (collapsedPanel === 'none' ? `calc(${leftPanelWidth}% - 8px)` : undefined) : '100%'}
-            minWidth={!useCompactLayout && collapsedPanel === 'none' ? '300px' : undefined}
-            position="relative"
-            borderRadius={!useCompactLayout ? 'lg' : undefined}
-            border={!useCompactLayout ? '1px solid' : undefined}
-            borderColor={!useCompactLayout ? 'border.muted' : undefined}
-            bg={!useCompactLayout ? 'bg.canvas' : undefined}
-            overflow="hidden"
-            my={!useCompactLayout ? 2 : 0}
-            ml={0}
+          <div
+            className={cn(
+              collapsedPanel === 'left' && !useCompactLayout ? 'hidden' : 'flex',
+              'relative ml-0 shrink-0 flex-col overflow-hidden',
+              !useCompactLayout && collapsedPanel === 'right' && 'flex-1',
+              !useCompactLayout ? 'my-2 rounded-lg border border-border bg-background' : 'my-0 w-full',
+              !useCompactLayout && collapsedPanel === 'none' && 'min-w-[300px]',
+            )}
+            style={!useCompactLayout && collapsedPanel === 'none'
+              ? { width: `calc(${leftPanelWidth}% - 8px)` }
+              : undefined}
           >
             {/* SQL Editor Section */}
-            <Box
-              borderColor="border.muted"
-              flex={!useCompactLayout ? 1 : undefined}
-              display="flex"
-              flexDirection="column"
-              minHeight={0}
-              overflow="hidden"
+            <div
+              className={cn(
+                'flex min-h-0 flex-col overflow-hidden',
+                !useCompactLayout && 'flex-1',
+              )}
             >
-            {<Box flexShrink={0}>
+            {<div className="shrink-0">
               {/* Query-mode tabs, then the database selector right beside them so
                   the active connection reads as part of the query surface. The DB
                   collapses to an icon+check only when there's a single connection;
@@ -725,9 +691,9 @@ export default function QuestionViewV2({
                   which one a query runs against). The Spreadsheet toggle hugs the
                   right edge while the query block is present, and drops to the left
                   once that block vanishes (spreadsheet is the active source). */}
-              <HStack px={3} py={2} gap={1.5} align="center">
+              <div className="flex items-center gap-1.5 px-3 py-2">
                 {!spreadsheetHasData && (
-                  <Box flexShrink={0}>
+                  <div className="shrink-0">
                     <QueryModeSelector
                       mode={effectiveQueryMode}
                       active={effectiveSourceFamily === 'query'}
@@ -737,61 +703,59 @@ export default function QuestionViewV2({
                       showVizTab={showVizControls && useCompactLayout}
                       canUseViz={!!queryData}
                     />
-                  </Box>
+                  </div>
                 )}
                 {!spreadsheetHasData && (
-                  <Box flexShrink={1} minWidth={0}>
+                  <div className="min-w-0 shrink">
                     <DatabaseSelector
                       value={content.connection_name || ''}
                       onChange={handleDatabaseChange}
                       compact
                     />
-                  </Box>
+                  </div>
                 )}
                 {/* Spacer only while the query block is shown — pushes the
                     spreadsheet toggle to the right; absent, it sits on the left. */}
-                {!spreadsheetHasData && <Box flex={1} minWidth={0} />}
+                {!spreadsheetHasData && <div className="min-w-0 flex-1" />}
                 {!queryHasData && (
-                  <Tooltip content="Build from a pasted or typed spreadsheet" showArrow openDelay={300} positioning={{ placement: 'top' }}>
-                    <HStack
-                      as="button"
-                      role="group"
-                      gap={0}
-                      flexShrink={0}
-                      px={1.5}
-                      py={1}
-                      borderRadius="md"
-                      bg={effectiveSourceFamily === 'spreadsheet' ? 'accent.teal' : 'transparent'}
-                      color={effectiveSourceFamily === 'spreadsheet' ? 'white' : 'fg.subtle'}
-                      cursor="pointer"
-                      aria-label="Spreadsheet"
-                      onClick={activateSpreadsheet}
-                      transition="all 0.15s ease"
-                      _hover={{
-                        bg: effectiveSourceFamily === 'spreadsheet' ? 'accent.teal' : 'bg.muted',
-                        color: effectiveSourceFamily === 'spreadsheet' ? 'white' : 'fg.muted',
-                      }}
-                    >
-                      <Box flexShrink={0} display="flex"><LuTable2 size={14} /></Box>
-                      {/* Label collapsed to 0-width at rest; expands on hover or while active */}
-                      <Box
-                        maxW={effectiveSourceFamily === 'spreadsheet' ? '120px' : '0px'}
-                        opacity={effectiveSourceFamily === 'spreadsheet' ? 1 : 0}
-                        overflow="hidden"
-                        whiteSpace="nowrap"
-                        transition="max-width 0.2s ease, opacity 0.15s ease"
-                        css={{ '[role=group]:hover &': { maxWidth: '120px', opacity: 1 } }}
-                      >
-                        <Text fontSize="xs" fontFamily="mono" fontWeight="600" pl={1}>Spreadsheet</Text>
-                      </Box>
-                    </HStack>
-                  </Tooltip>
+                  <TooltipProvider delayDuration={300}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          role="group"
+                          className={cn(
+                            'group flex shrink-0 cursor-pointer items-center gap-0 rounded-md px-1.5 py-1 transition-all duration-150',
+                            effectiveSourceFamily === 'spreadsheet'
+                              ? 'bg-[#16a085] text-white hover:bg-[#16a085] hover:text-white'
+                              : 'bg-transparent text-muted-foreground hover:bg-muted hover:text-muted-foreground',
+                          )}
+                          aria-label="Spreadsheet"
+                          onClick={activateSpreadsheet}
+                        >
+                          <span className="flex shrink-0"><LuTable2 size={14} /></span>
+                          {/* Label collapsed to 0-width at rest; expands on hover or while active */}
+                          <span
+                            className={cn(
+                              'overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200',
+                              effectiveSourceFamily === 'spreadsheet'
+                                ? 'max-w-[120px] opacity-100'
+                                : 'max-w-0 opacity-0 group-hover:max-w-[120px] group-hover:opacity-100',
+                            )}
+                          >
+                            <span className="pl-1 font-mono text-xs font-semibold">Spreadsheet</span>
+                          </span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Build from a pasted or typed spreadsheet</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
-              </HStack>
+              </div>
 
-            </Box>}
+            </div>}
 
-              <Box flex={1} minHeight={0} display="flex" flexDirection="column" overflow="hidden">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 {/* SQL Mode: Monaco Editor */}
                 {effectiveSourceFamily === 'query' && effectiveQueryMode === 'sql' && (
                   <SqlEditor
@@ -821,7 +785,7 @@ export default function QuestionViewV2({
                     UNLOCKED — any manual pick (vizSettings.typeLocked) is
                     respected until the Auto badge hands control back. */}
                 {effectiveSourceFamily === 'query' && effectiveQueryMode === 'semantic' && showSemanticTab && (
-                  <Box flex={1} overflow="hidden" display="flex" flexDirection="column" minHeight={0}>
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <SemanticExplorer
                       models={semanticModels}
                       dialect={dialect}
@@ -845,7 +809,7 @@ export default function QuestionViewV2({
                       autoRun={semanticAutoRun}
                       onToggleAutoRun={() => setSemanticAutoRun((a) => !a)}
                     />
-                  </Box>
+                  </div>
                 )}
 
                 {effectiveSourceFamily === 'spreadsheet' && content.spreadsheet && (
@@ -864,7 +828,7 @@ export default function QuestionViewV2({
                     envelope through the same panel — the first edit writes a real `viz` onto
                     the content, so the file upgrades on Save. Table/pivot keep the V1 panel. */}
                 {queryMode === 'viz' && effectiveViz != null && (
-                  <Box flex={1} overflow="auto" px={3} py={2} display="flex" flexDirection="column" gap={0}>
+                  <div className="flex flex-1 flex-col gap-0 overflow-auto px-3 py-2">
                     <VegaVizPanel
                       envelope={effectiveViz}
                       columns={queryData?.columns ?? []}
@@ -872,158 +836,108 @@ export default function QuestionViewV2({
                       rows={queryData?.rows}
                       onVizChange={(viz) => onChange({ viz })}
                     />
-                  </Box>
+                  </div>
                 )}
 
                 {/* Viz Mode (compact layout only): the same config block the
                     wide layout shows in the right-hand VizPanel column (which
                     carries the Auto badge in its header — here it sits on top) */}
                 {effectiveQueryMode === 'viz' && effectiveViz == null && (
-                  <Box flex={1} overflow="auto">
+                  <div className="flex-1 overflow-auto">
                     {autoTypeBadge && (
-                      <HStack justify="flex-end" px={3} pt={2}>
+                      <div className="flex items-center justify-end px-3 pt-2">
                         {autoTypeBadge}
-                      </HStack>
+                      </div>
                     )}
                     {vizConfigBody}
-                  </Box>
+                  </div>
                 )}
-              </Box>
-          </Box>
-          </Box>
+              </div>
+          </div>
+          </div>
           {/* End Left Panel */}
 
           {/* Resize Handle - Only in side-by-side mode */}
           {!useCompactLayout && collapsedPanel === 'none' && (
-            <Box
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              width="8px"
-              cursor="col-resize"
+            <div
+              className="group relative flex w-[8px] shrink-0 cursor-col-resize select-none items-center justify-center"
               onMouseDown={handleResizeStart}
-              userSelect="none"
-              flexShrink={0}
-              position="relative"
               role="group"
             >
               {/* Vertical line */}
-              <Box
-                position="absolute"
-                top="0"
-                bottom="0"
-                width="2px"
-                bg={isResizing ? 'accent.teal' : 'border.muted'}
-                _groupHover={{ bg: 'accent.teal' }}
-                transition="all 0.15s ease"
-                borderRadius="full"
+              <div
+                className={cn(
+                  'absolute inset-y-0 w-[2px] rounded-full transition-all duration-150 group-hover:bg-[#16a085]',
+                  isResizing ? 'bg-[#16a085]' : 'bg-border',
+                )}
               />
               {/* Center grip indicator with collapse arrows */}
-              <Box
-                position="absolute"
-                top="50%"
-                transform="translateY(-50%)"
-                display="flex"
-                flexDirection="column"
-                alignItems="center"
-                justifyContent="center"
-                width="20px"
-                height="72px"
-                bg={isResizing ? 'accent.teal' : 'bg.emphasized'}
-                _groupHover={{ bg: 'accent.teal' }}
-                borderRadius="md"
-                transition="all 0.15s ease"
-                boxShadow="sm"
-                gap={0}
+              <div
+                className={cn(
+                  'absolute top-1/2 flex h-[72px] w-[20px] -translate-y-1/2 flex-col items-center justify-center gap-0 rounded-md shadow-sm transition-all duration-150 group-hover:bg-[#16a085]',
+                  isResizing ? 'bg-[#16a085]' : 'bg-muted',
+                )}
               >
-                <Box
-                  cursor="pointer"
-                  p={1}
-                  borderRadius="sm"
+                <div
+                  className="cursor-pointer rounded-sm p-1 hover:opacity-70"
                   onClick={() => toggleCollapsedPanel('left')}
                   onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
                   aria-label="Collapse query panel"
                   role="button"
-                  _hover={{ opacity: 0.7 }}
                 >
-                  <Box
-                    as={LuChevronLeft}
-                    fontSize="xs"
-                    color={isResizing ? 'white' : 'fg.muted'}
-                    _groupHover={{ color: 'white' }}
+                  <LuChevronLeft
+                    size={12}
+                    className={cn(isResizing ? 'text-white' : 'text-muted-foreground group-hover:text-white')}
                   />
-                </Box>
-                <Box
-                  as={LuGripVertical}
-                  fontSize="sm"
-                  color={isResizing ? 'white' : 'fg.muted'}
-                  _groupHover={{ color: 'white' }}
-                  transition="color 0.15s ease"
+                </div>
+                <LuGripVertical
+                  size={14}
+                  className={cn(
+                    'transition-colors duration-150',
+                    isResizing ? 'text-white' : 'text-muted-foreground group-hover:text-white',
+                  )}
                 />
-                <Box
-                  cursor="pointer"
-                  p={1}
-                  borderRadius="sm"
+                <div
+                  className="cursor-pointer rounded-sm p-1 hover:opacity-70"
                   onClick={() => toggleCollapsedPanel('right')}
                   onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
                   aria-label="Collapse results panel"
                   role="button"
-                  _hover={{ opacity: 0.7 }}
                 >
-                  <Box
-                    as={LuChevronRight}
-                    fontSize="xs"
-                    color={isResizing ? 'white' : 'fg.muted'}
-                    _groupHover={{ color: 'white' }}
+                  <LuChevronRight
+                    size={12}
+                    className={cn(isResizing ? 'text-white' : 'text-muted-foreground group-hover:text-white')}
                   />
-                </Box>
-              </Box>
-            </Box>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Collapsed Right Panel Strip */}
           {!useCompactLayout && collapsedPanel === 'right' && (
-            <Box
-              bg="accent.teal/30"
-              border="1px solid"
-              borderColor="accent.teal"
-              width="36px"
-              flexShrink={0}
-              display="flex"
-              flexDirection="column"
-              alignItems="center"
-              justifyContent="center"
-              cursor="pointer"
+            <div
+              className="my-2 flex w-[36px] shrink-0 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-[#16a085] bg-[#16a085]/30 hover:bg-[#16a085]/50"
               onClick={() => toggleCollapsedPanel('none')}
               aria-label="Expand results panel"
               role="button"
-              _hover={{ bg: 'accent.teal/50' }}
-              my={2}
-              borderRadius="lg"
-              gap={2}
             >
-              <Box color="fg.default"><LuChevronLeft size={14} /></Box>
-              <Text
-                fontSize="xs"
-                color="fg.default"
-                fontWeight="600"
+              <span className="text-foreground"><LuChevronLeft size={14} /></span>
+              <span
+                className="text-xs font-semibold text-foreground"
                 style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
               >
                 Results
-              </Text>
-            </Box>
+              </span>
+            </div>
           )}
 
           {/* Right Panel: Results Section */}
-          <Box
+          <div
             ref={resultsContainerRef}
-            flex={1}
-            display={collapsedPanel === 'right' && !useCompactLayout ? 'none' : 'flex'}
-            flexDirection="column"
-            minHeight="0"
-            overflow="hidden"
-            // my={!useCompactLayout ? 2 : 0}
-            mr={0}
+            className={cn(
+              collapsedPanel === 'right' && !useCompactLayout ? 'hidden' : 'flex',
+              'mr-0 min-h-0 flex-1 flex-col overflow-hidden',
+            )}
           >
             {effectiveSourceFamily !== 'spreadsheet' && parameters.length > 0 && (
               <ParameterRow
@@ -1038,9 +952,9 @@ export default function QuestionViewV2({
             )}
             {!content.query?.trim() && !content.spreadsheet && !queryData ? (
               /* Empty state when no query written yet */
-              <Box flex="1" display="flex" bg="bg.canvas" borderRadius="lg" overflow="hidden">
+              <div className="flex flex-1 overflow-hidden rounded-lg bg-background">
                 <QuestionEmptyState />
-              </Box>
+              </div>
             ) : (
               <QuestionVisualization
                 currentState={content}
@@ -1089,7 +1003,7 @@ export default function QuestionViewV2({
                 vizTabOpen={showVizPanel ? vizPanelOpen : (queryMode === 'viz' && collapsedPanel !== 'left')}
               />
             )}
-          </Box>
+          </div>
           {/* End Center Panel */}
 
           {/* Collapse rail — a slim, NON-draggable divider between the data and
@@ -1097,73 +1011,38 @@ export default function QuestionViewV2({
               border (where the old resize grip sat). No drag: the viz column is
               a fixed width (see PANEL_LAYOUT.viz). */}
           {showVizColumn && vizPanelOpen && (
-            <Box
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              width="8px"
-              flexShrink={0}
-              position="relative"
+            <div
+              className="group relative flex w-[8px] shrink-0 items-center justify-center"
               role="group"
             >
               {/* Vertical edge line */}
-              <Box
-                position="absolute"
-                top="0"
-                bottom="0"
-                width="2px"
-                bg="border.muted"
-                _groupHover={{ bg: 'accent.teal' }}
-                transition="all 0.15s ease"
-                borderRadius="full"
-              />
+              <div className="absolute inset-y-0 w-[2px] rounded-full bg-border transition-all duration-150 group-hover:bg-[#16a085]" />
               {/* Collapse chevron pill, centered on the edge */}
-              <Box
-                as="button"
-                position="absolute"
-                top="50%"
-                transform="translateY(-50%)"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                width="20px"
-                height="36px"
-                bg="bg.emphasized"
-                color="fg.muted"
-                _groupHover={{ bg: 'accent.teal', color: 'white' }}
-                borderRadius="md"
-                boxShadow="sm"
-                cursor="pointer"
-                transition="all 0.15s ease"
+              <button
+                type="button"
+                className="absolute top-1/2 flex h-[36px] w-[20px] -translate-y-1/2 cursor-pointer items-center justify-center rounded-md bg-muted text-muted-foreground shadow-sm transition-all duration-150 group-hover:bg-[#16a085] group-hover:text-white"
                 aria-label="Collapse viz panel"
                 onClick={() => setVizPanelOpen(false)}
               >
                 <LuChevronRight size={14} />
-              </Box>
-            </Box>
+              </button>
+            </div>
           )}
 
           {/* Right Column: the viz panel — chart config for ALL questions.
               Fixed pixel width, not draggable (see PANEL_LAYOUT.viz); collapse
               lives on the edge rail's chevron and the panel header's chevron. */}
           {showVizColumn && vizPanelOpen && (
-            <Box
-              width={`${PANEL_LAYOUT.viz.width}px`}
-              flexShrink={0}
-              my={2}
-              mr={2}
-              borderRadius="lg"
-              border="1px solid"
-              borderColor="border.muted"
-              bg="bg.canvas"
-              overflow="hidden"
+            <div
+              className="my-2 mr-2 shrink-0 overflow-hidden rounded-lg border border-border bg-background"
+              style={{ width: `${PANEL_LAYOUT.viz.width}px` }}
             >
               <VizPanel headerExtra={autoTypeBadge} onCollapse={() => setVizPanelOpen(false)}>
                 {/* The right column follows the vizV2 flag like the compact Viz
                     tab: V2 panel (own type grid + Fields/Settings/Spec) edits
                     the saved or converted envelope; classic config otherwise. */}
                 {effectiveViz != null ? (
-                  <Box px={3} py={2} display="flex" flexDirection="column" gap={0}>
+                  <div className="flex flex-col gap-0 px-3 py-2">
                     <VegaVizPanel
                       envelope={effectiveViz}
                       columns={queryData?.columns ?? []}
@@ -1171,50 +1050,34 @@ export default function QuestionViewV2({
                       rows={queryData?.rows}
                       onVizChange={(viz) => onChange({ viz })}
                     />
-                  </Box>
+                  </div>
                 ) : (
                   vizConfigBody
                 )}
               </VizPanel>
-            </Box>
+            </div>
           )}
 
           {/* Collapsed Viz Panel Strip */}
           {showVizColumn && !vizPanelOpen && (
-            <Box
-              bg="accent.teal/30"
-              border="1px solid"
-              borderColor="accent.teal"
-              width="36px"
-              flexShrink={0}
-              display="flex"
-              flexDirection="column"
-              alignItems="center"
-              justifyContent="center"
-              cursor="pointer"
+            <div
+              className="my-2 mr-2 flex w-[36px] shrink-0 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-[#16a085] bg-[#16a085]/30 hover:bg-[#16a085]/50"
               onClick={() => setVizPanelOpen(true)}
               aria-label="Expand viz panel"
               role="button"
-              _hover={{ bg: 'accent.teal/50' }}
-              my={2}
-              mr={2}
-              borderRadius="lg"
-              gap={2}
             >
-              <Box color="fg.default"><LuChevronLeft size={14} /></Box>
-              <Text
-                fontSize="xs"
-                color="fg.default"
-                fontWeight="600"
+              <span className="text-foreground"><LuChevronLeft size={14} /></span>
+              <span
+                className="text-xs font-semibold text-foreground"
                 style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
               >
                 Viz Settings
-              </Text>
-            </Box>
+              </span>
+            </div>
           )}
-        </Box>
+        </div>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
