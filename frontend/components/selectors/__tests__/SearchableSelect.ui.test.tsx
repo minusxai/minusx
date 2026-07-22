@@ -73,6 +73,26 @@ describe('SearchableSelect', () => {
     focusSpy.mockRestore();
   });
 
+  it('renders an option description on its own line under the label', async () => {
+    renderWithProviders(
+      <SearchableSelect
+        value=""
+        onChange={() => {}}
+        options={[
+          { value: 'core', label: 'Core', description: 'Optimized for everyday analysis.' },
+          { value: 'lite', label: 'Lite' },
+        ]}
+        label="Grade picker"
+      />,
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getByLabelText('Grade picker'));
+    const option = await screen.findByLabelText('Core');
+    expect(option).toHaveTextContent('Optimized for everyday analysis.');
+    expect(screen.getByLabelText('Lite')).not.toHaveTextContent('Optimized');
+  });
+
   it('matches against the subtitle (model id) too, and shows an empty message on no hit', async () => {
     renderWithProviders(
       <SearchableSelect value="" onChange={() => {}} options={OPTIONS} label="Model picker" />,

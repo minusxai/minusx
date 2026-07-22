@@ -10,13 +10,17 @@ import {
   Portal,
   Text,
 } from '@chakra-ui/react';
+import type { IconType } from 'react-icons';
 import {
   LuBookOpen,
   LuBot,
   LuBrainCircuit,
   LuChevronDown,
   LuDatabase,
+  LuGauge,
   LuSettings2,
+  LuSparkles,
+  LuZap,
 } from 'react-icons/lu';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContexts } from '@/lib/hooks/useContexts';
@@ -40,7 +44,26 @@ import {
 
 const DEFAULT_GRADE = '__default_grade__';
 
-/** Display names for the grade picker (grade ids stay lowercase in config/wire). */
+/** Display metadata for the grade picker (grade ids stay lowercase in
+ *  config/wire). GRADES ONLY — never provider/model identity: which model a
+ *  grade resolves to is a behind-the-scenes workspace concern. */
+const GRADE_META: Record<LlmGrade, { label: string; icon: IconType; description: string }> = {
+  lite: {
+    label: 'Lite',
+    icon: LuZap,
+    description: 'Fastest and lightest — quick lookups and small edits.',
+  },
+  core: {
+    label: 'Core',
+    icon: LuGauge,
+    description: 'Optimized for most tasks — fast, dependable analysis.',
+  },
+  advanced: {
+    label: 'Advanced',
+    icon: LuSparkles,
+    description: 'A more powerful model for the hardest questions — slower and uses ~2x more tokens.',
+  },
+};
 const GRADE_LABELS: Record<LlmGrade, string> = { lite: 'Lite', core: 'Core', advanced: 'Advanced' };
 
 export interface ChatSettingsPopoverProps {
@@ -179,23 +202,24 @@ export default function ChatSettingsPopover({
   }, [homeSelectableContext, selectedContextPath, stableOnContextChange]);
 
   const modelOptions = useMemo(() => {
-    const defaultOption = catalog?.grades.find((g) => g.grade === catalog.defaultGrade);
+    const defaultMeta = catalog ? GRADE_META[catalog.defaultGrade] : undefined;
     const options: ComboboxOption[] = [{
       value: DEFAULT_GRADE,
-      label: catalog ? GRADE_LABELS[catalog.defaultGrade] : 'Default',
-      subtitle: defaultOption
-        ? [defaultOption.providerLabel, defaultOption.modelLabel].filter(Boolean).join(' · ')
-        : 'Follows Settings → Models',
+      label: defaultMeta?.label ?? 'Default',
+      icon: defaultMeta?.icon,
+      description: defaultMeta?.description ?? 'Follows Settings → Models',
       badge: 'recommended',
       group: 'Workspace default',
     }];
 
     for (const option of catalog?.grades ?? []) {
       if (option.grade === catalog?.defaultGrade) continue;
+      const meta = GRADE_META[option.grade];
       options.push({
         value: option.grade,
-        label: GRADE_LABELS[option.grade],
-        subtitle: [option.providerLabel, option.modelLabel].filter(Boolean).join(' · ') || undefined,
+        label: meta.label,
+        icon: meta.icon,
+        description: option.configured ? meta.description : 'Not configured for this workspace.',
         disabled: !option.configured,
       });
     }
@@ -439,7 +463,7 @@ export default function ChatSettingsPopover({
                     </Text>
                     <Text aria-hidden="true" fontSize="2xs" color="fg.subtle" lineHeight="1" flexShrink={0}>·</Text>
                     <Text truncate minW={0} fontSize="2xs" color="fg.muted" lineHeight="1">
-                      Agent's primary LLM
+                      Agent's primary LLM grade
                     </Text>
                   </HStack>
                   <SettingsCombobox

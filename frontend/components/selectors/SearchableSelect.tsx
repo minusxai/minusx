@@ -27,6 +27,9 @@ export interface SearchableOption extends SelectorOption {
   group?: string;
   /** Visible but unavailable option, for capabilities that are not selectable yet. */
   disabled?: boolean;
+  /** Optional when-to-use line rendered UNDER the label (wraps up to two
+   *  lines) — unlike `subtitle`, which sits inline beside it. */
+  description?: string;
 }
 
 interface SearchableSelectBaseProps {
@@ -86,6 +89,8 @@ function SearchablePicker({
     () => (query ? options.filter(o => matches(o, query)) : options),
     [options, query],
   );
+  // Two-line descriptions need more room than plain label rows.
+  const hasDescriptions = options.some(o => o.description);
   const selected = new Set(selectedValues);
 
   const pick = (value: string) => {
@@ -169,7 +174,7 @@ function SearchablePicker({
       <Portal>
         <Popover.Positioner zIndex={positionerZIndex}>
           <Popover.Content
-            minW="260px"
+            minW={hasDescriptions ? '340px' : '260px'}
             maxW="400px"
             bg="bg.surface"
             borderColor="border.default"
@@ -251,25 +256,34 @@ function SearchablePicker({
                         if (!option.disabled) pick(option.value);
                       }}
                     >
-                      <HStack gap={s.gap} justify="space-between">
-                        <HStack gap={s.gap} minW={0} flex={1}>
+                      <HStack gap={s.gap} justify="space-between" align="flex-start">
+                        <HStack gap={s.gap} minW={0} flex={1} align="flex-start">
                           {option.icon && (
-                            <Icon as={option.icon} boxSize={s.iconSize} color={isSelected ? 'fg' : 'fg.muted'} flexShrink={0} />
+                            <Icon as={option.icon} boxSize={s.iconSize} color={isSelected ? 'fg' : 'fg.muted'} flexShrink={0} mt="1px" />
                           )}
-                          <Text
-                            fontSize="xs"
-                            fontWeight={isSelected ? '600' : '400'}
-                            whiteSpace="nowrap"
-                            overflow="hidden"
-                            textOverflow="ellipsis"
-                          >
-                            {option.label}
-                          </Text>
-                          {option.subtitle && (
-                            <Text fontSize="2xs" color="fg.muted" fontFamily="mono" whiteSpace="nowrap">
-                              {option.subtitle}
-                            </Text>
-                          )}
+                          <Box minW={0} flex={1}>
+                            <HStack gap={s.gap} minW={0}>
+                              <Text
+                                fontSize="xs"
+                                fontWeight={isSelected ? '600' : '400'}
+                                whiteSpace="nowrap"
+                                overflow="hidden"
+                                textOverflow="ellipsis"
+                              >
+                                {option.label}
+                              </Text>
+                              {option.subtitle && (
+                                <Text fontSize="2xs" color="fg.muted" fontFamily="mono" whiteSpace="nowrap">
+                                  {option.subtitle}
+                                </Text>
+                              )}
+                            </HStack>
+                            {option.description && (
+                              <Text fontSize="2xs" color="fg.muted" lineHeight="1.5" mt="1px" lineClamp={2}>
+                                {option.description}
+                              </Text>
+                            )}
+                          </Box>
                         </HStack>
                         <HStack gap={1.5} flexShrink={0}>
                           {option.badge && (

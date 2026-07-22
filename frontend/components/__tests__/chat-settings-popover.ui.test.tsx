@@ -58,9 +58,9 @@ describe('ChatSettingsPopover', () => {
         data: {
           defaultGrade: 'core',
           grades: [
-            { grade: 'lite', providerLabel: 'Anthropic', modelLabel: 'Claude Haiku 4.5', configured: true },
-            { grade: 'core', providerLabel: 'Anthropic', modelLabel: 'Claude Sonnet 4.6', configured: true },
-            { grade: 'advanced', modelLabel: 'Not configured', configured: false },
+            { grade: 'lite', configured: false },
+            { grade: 'core', configured: true },
+            { grade: 'advanced', configured: true },
           ],
         },
       }),
@@ -141,23 +141,25 @@ describe('ChatSettingsPopover', () => {
     await user.click(await screen.findByRole('option', { name: 'analytics' }));
 
     await user.click(model);
-    // Default entry fronts the workspace default grade; grade entries carry the
-    // resolved model as a subtitle so users still see what actually runs.
+    // GRADES ONLY: the picker shows grade names + when-to-use descriptions —
+    // no provider names or model ids ever (behind-the-scenes concerns).
     expect(screen.getByText('Workspace default')).toBeInTheDocument();
     expect(screen.getByText('recommended')).toBeInTheDocument();
-    expect(screen.getByText(/Claude Sonnet 4\.6/)).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Core/ })).toHaveTextContent(/optimized for most tasks/i);
+    expect(screen.getByRole('option', { name: /Advanced/ })).toHaveTextContent(/more powerful/i);
+    expect(screen.queryByText(/claude/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/anthropic/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/gpt/i)).not.toBeInTheDocument();
     // An unconfigured grade is visible but not selectable.
-    const advancedOption = screen.getByRole('option', { name: /Advanced/ });
-    expect(advancedOption).toHaveAttribute('aria-disabled', 'true');
-    // Grade options are grades, never raw model ids.
-    expect(screen.queryByRole('option', { name: 'claude-haiku-4-5' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('option', { name: /Lite/ }));
+    const liteOption = screen.getByRole('option', { name: /Lite/ });
+    expect(liteOption).toHaveAttribute('aria-disabled', 'true');
+    await user.click(screen.getByRole('option', { name: /Advanced/ }));
 
     expect(onContextChange).toHaveBeenCalledWith('/tutorial/context.json', 1);
     expect(onDatabaseChange).toHaveBeenCalledWith('analytics');
-    expect(onGradeChange).toHaveBeenCalledWith('lite');
-    expect(model).toHaveTextContent('Lite');
-    expect(trigger).toHaveTextContent('Lite');
+    expect(onGradeChange).toHaveBeenCalledWith('advanced');
+    expect(model).toHaveTextContent('Advanced');
+    expect(trigger).toHaveTextContent('Advanced');
 
     // Re-selecting the workspace default clears the override (null).
     await user.click(model);

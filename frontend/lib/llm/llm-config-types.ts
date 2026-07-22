@@ -126,13 +126,10 @@ export function resolveAgentPolicy(config: LlmConfig | undefined, agent: LlmAgen
   };
 }
 
-/** One grade entry in the chat picker. */
+/** One grade entry in the chat picker. GRADES ONLY — which provider/model a
+ *  grade resolves to is a behind-the-scenes concern end users never see. */
 export interface ChatGradeOption {
   grade: LlmGrade;
-  /** e.g. 'Anthropic', 'MinusX' — the provider the grade currently resolves to. */
-  providerLabel?: string;
-  /** e.g. 'Claude Sonnet 4.6', 'Auto', or 'Not configured'. */
-  modelLabel: string;
   /** False when picking this grade would error (no mapping, no minusx provider). */
   configured: boolean;
 }
