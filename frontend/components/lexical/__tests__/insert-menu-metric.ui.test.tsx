@@ -52,7 +52,41 @@ beforeEach(() => {
 });
 
 describe('LexicalTextEditor insertMetric', () => {
-  it('offers Metric in the + insert menu when insertMetric is set, and inserts a chip', async () => {
+  it('shows a saved metric definition and its SQL in the document', async () => {
+    renderWithProviders(
+      <LexicalTextEditor
+        initialMarkdown={':::metric{name="Monthly Revenue" description="Revenue recognized in each calendar month"}\nSELECT sum(amount) AS revenue\nFROM invoices\n:::'}
+        onChange={() => {}}
+        insertMetric
+      />,
+    );
+
+    const metric = await screen.findByLabelText('Metric Monthly Revenue');
+    expect(metric).toHaveTextContent('Monthly Revenue');
+    expect(metric).toHaveTextContent('Definition');
+    expect(metric).toHaveTextContent('Revenue recognized in each calendar month');
+    expect(metric).toHaveTextContent('SQL definition');
+    expect(metric).toHaveTextContent('SELECT sum(amount) AS revenue');
+
+    await userEvent.click(metric);
+    expect(await screen.findByLabelText('Metric name')).toHaveValue('Monthly Revenue');
+  });
+
+  it('does not render an empty SQL section when a metric has no SQL', async () => {
+    renderWithProviders(
+      <LexicalTextEditor
+        initialMarkdown={':::metric{name="Active Users" description="Unique users active in the selected period"}\n:::'}
+        onChange={() => {}}
+        insertMetric
+      />,
+    );
+
+    const metric = await screen.findByLabelText('Metric Active Users');
+    expect(metric).toHaveTextContent('Unique users active in the selected period');
+    expect(metric).not.toHaveTextContent('SQL definition');
+  });
+
+  it('offers Metric in the + insert menu when insertMetric is set, and inserts a definition block', async () => {
     const getEditor = mountEditor({ insertMetric: true });
     await waitFor(() => expect(getEditor()).toBeTruthy());
 
@@ -61,7 +95,7 @@ describe('LexicalTextEditor insertMetric', () => {
     const option = await screen.findByLabelText('Insert Metric');
     await userEvent.click(option);
 
-    // The inserted (unnamed) metric renders as a chip.
+    // The inserted (unnamed) metric renders as a definition block.
     expect(await screen.findByLabelText('Metric untitled')).toBeInTheDocument();
   });
 

@@ -485,6 +485,32 @@ function makeEditorStateInit(markdown: string) {
   };
 }
 
+/** The "+ to insert images … @ for tables…" hint line. Rendered by the default
+ * inline toolbar; exported so callers that take over the toolbar chrome via
+ * `renderToolbar` (e.g. the context docs Diff wrapper) can keep it visible. */
+export function EditorProTip({ mentions, insertMetric }: { mentions?: boolean; insertMetric?: boolean }) {
+  return (
+    <HStack
+      aria-label="Editor pro tip"
+      gap={1.5}
+      px={4}
+      py={1}
+      flexShrink={0}
+      color="fg.subtle"
+      fontSize="xs"
+      borderBottomWidth="1px"
+      borderColor="border.muted"
+      bg="bg.subtle"
+    >
+      <Icon as={LuLightbulb} boxSize={3} />
+      <Text>
+        Pro tip: type <Box as="span" fontWeight="700" fontFamily="mono">+</Box> to insert images{insertMetric && ' or metrics'}
+        {mentions && <> · <Box as="span" fontWeight="700" fontFamily="mono">@</Box> for tables, columns or saved questions</>}
+      </Text>
+    </HStack>
+  );
+}
+
 // --- Editable Editor ---
 interface LexicalTextEditorProps {
   initialMarkdown: string;
@@ -565,28 +591,13 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
           </Box>
         )}
 
-        {/* The inline hint only renders for the DEFAULT inline toolbar (notebook/context
-            docs). When the caller supplies its own `renderToolbar` or uses the floating
-            selection toolbar (dashboard text blocks), it owns all chrome — a permanent
-            hint line would break WYSIWYG. */}
+        {/* The inline hint only renders for the DEFAULT inline toolbar. A caller that
+            supplies its own `renderToolbar` owns all chrome — it can opt back in by
+            rendering <EditorProTip> itself (the context docs Diff wrapper does). The
+            floating selection toolbar (dashboard text blocks) never shows it — a
+            permanent hint line would break WYSIWYG. */}
         {!renderToolbar && !floatingToolbar && (insertMenu || mentions) && (
-          <HStack
-            gap={1.5}
-            px={4}
-            py={1}
-            flexShrink={0}
-            color="fg.subtle"
-            fontSize="xs"
-            borderBottomWidth="1px"
-            borderColor="border.muted"
-            bg="bg.subtle"
-          >
-            <Icon as={LuLightbulb} boxSize={3} />
-            <Text>
-              Pro tip: type <Box as="span" fontWeight="700" fontFamily="mono">+</Box> to insert images{insertMetric && ' or metrics'}
-              {mentions && <> · <Box as="span" fontWeight="700" fontFamily="mono">@</Box> for tables, columns or saved questions</>}
-            </Text>
-          </HStack>
+          <EditorProTip mentions={!!mentions} insertMetric={insertMetric} />
         )}
 
         <Box

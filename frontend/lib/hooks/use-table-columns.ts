@@ -1,23 +1,26 @@
 'use client';
 
 /**
- * Columns for the table highlighted in the @ mention dropdown.
+ * Columns for one table, resolved lazily.
  *
- * The whitelisted schemas shipped to the client are memory-bounded
+ * The schemas shipped to the client are memory-bounded
  * (`lib/context/schema-bounding.ts` strips columns once a schema exceeds its
- * char budget), so the local lookup is only a fast path. When it comes back
- * empty, the columns are fetched on demand from the connection's full schema
- * via `/api/column-suggestions` (one table at a time, cached per table for the
- * session) — keeping the drill-down working at any schema size without
- * re-inflating the bounded payloads.
+ * char budget), so the caller's local columns are only a fast path. When they
+ * are empty, the columns are fetched on demand from the connection's full
+ * schema via `/api/column-suggestions` (one table at a time, cached per table
+ * for the session) — keeping column UIs (mention drill-down, whitelist tree)
+ * working at any schema size without re-inflating the bounded payloads.
  */
 
 import { useEffect, useState } from 'react';
-import type { DatabaseWithSchema } from '@/lib/types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
-import { getTableColumns, type ColumnInfo } from './mentions-plugin-utils';
 
-/** The subset of a table mention needed to resolve its columns. */
+export interface ColumnInfo {
+  name: string;
+  type: string;
+}
+
+/** The subset of a table reference needed to resolve its columns. */
 export interface TableRef {
   name: string;
   schema?: string;
@@ -34,12 +37,11 @@ const cacheKey = (table: TableRef, databaseName?: string): string =>
 
 export function useTableColumns(
   table: TableRef | null,
-  whitelistedSchemas: DatabaseWithSchema[] | undefined,
+  localColumns: ColumnInfo[],
   databaseName?: string,
 ): ColumnInfo[] {
-  const local = table ? getTableColumns(whitelistedSchemas, table.schema, table.name) : [];
   const key = table ? cacheKey(table, databaseName) : '';
-  const needsFetch = !!table && local.length === 0 && !fetchedColumns.has(key);
+  const needsFetch = !!table && localColumns.length === 0 && !fetchedColumns.has(key);
   // Bumped when a fetch lands, so the render below re-reads the cache.
   const [, setFetchCount] = useState(0);
 
@@ -58,14 +60,14 @@ export function useTableColumns(
           if (!cancelled) setFetchCount((n) => n + 1);
         }
       } catch {
-        // Leave uncached so a later highlight retries.
+        // Leave uncached so a later mount retries.
       }
     })();
     return () => { cancelled = true; };
   }, [key, needsFetch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!table) return [];
-  if (local.length > 0) return local;
+  if (localColumns.length > 0) return localColumns;
   return fetchedColumns.get(key) ?? [];
 }
 

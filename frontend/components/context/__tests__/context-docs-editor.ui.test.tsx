@@ -10,16 +10,27 @@
 // driven in jsdom (real markdown round-trip is covered by the headless transformer
 // tests). Mock it with a textarea so this component-level test can assert the
 // controlled wiring: edits flow up through onChange → onDocsChange.
-vi.mock('@/components/lexical/LexicalTextEditor', () => {
+vi.mock('@/components/lexical/LexicalTextEditor', async (importOriginal) => {
   const React = require('react');
+  // Keep the real EditorProTip — the saved-doc toolbar wrapper renders it.
+  const actual = await importOriginal<typeof import('@/components/lexical/LexicalTextEditor')>();
   return {
     __esModule: true,
-    default: ({ initialMarkdown, onChange }: { initialMarkdown: string; onChange: (md: string) => void }) =>
-      React.createElement('textarea', {
-        'aria-label': 'Documentation editor',
-        defaultValue: initialMarkdown,
-        onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => onChange(e.target.value),
-      }),
+    EditorProTip: actual.EditorProTip,
+    default: ({ initialMarkdown, onChange, renderToolbar }: {
+      initialMarkdown: string;
+      onChange: (md: string) => void;
+      renderToolbar?: (toolbar: React.ReactNode) => React.ReactNode;
+    }) =>
+      React.createElement(React.Fragment, {}, [
+        renderToolbar ? React.createElement('div', { key: 't' }, renderToolbar(null)) : null,
+        React.createElement('textarea', {
+          key: 'e',
+          'aria-label': 'Documentation editor',
+          defaultValue: initialMarkdown,
+          onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => onChange(e.target.value),
+        }),
+      ]),
     LexicalTextViewer: ({ markdown }: { markdown: string }) =>
       React.createElement('div', { 'aria-label': 'Documentation preview' }, markdown),
   };
@@ -100,6 +111,21 @@ describe('ContextDocsEditor', () => {
     await waitFor(() => {
       expect(onChange).toHaveBeenCalledWith([{ content: 'Alpha edited' }]);
     }, { timeout: 1000 });
+  });
+
+  it('keeps the pro-tip hint visible for SAVED docs (Diff toolbar wrapper)', async () => {
+    // A saved doc (originalDocs provided) routes the toolbar through the Diff
+    // wrapper — the +/@ pro tip must survive that, not just show for new docs.
+    renderWithProviders(
+      <ContextDocsEditor
+        docs={[{ content: 'Alpha' }]}
+        originalDocs={[{ content: 'Alpha' }]}
+        onDocsChange={() => {}}
+        showChildPaths={false}
+        showDraftToggle={false}
+      />,
+    );
+    expect(await screen.findByLabelText('Editor pro tip')).toBeInTheDocument();
   });
 
   it('commits a title edit on blur', async () => {

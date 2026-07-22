@@ -27,7 +27,7 @@ import { PER_DOC_CONTENT_CHARS, isDocContentOverLimit } from '@/lib/context/cont
 import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
 import { useAppSelector } from '@/store/hooks';
-import LexicalTextEditor, { LexicalTextViewer, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
+import LexicalTextEditor, { LexicalTextViewer, EditorProTip, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
 import ChildPathSelector from '../selectors/ChildPathSelector';
 import { GenerateButton } from '@/components/ui/GenerateButton';
 import { runMicroTaskClient } from '@/lib/tools/micro-task';
@@ -595,10 +595,13 @@ export default function ContextDocsEditor({
                         insertMetric
                         editWithAgent={{ editorKind: 'richtext', fileName: docEntry.title?.trim() || `doc ${index + 1}`, blockId: `doc-${index}` }}
                         renderToolbar={originalDocs?.[index] != null ? (toolbar) => (
-                          <HStack justify="space-between" borderBottomWidth="1px" borderColor="border.default" bg="bg.muted" flexShrink={0} pr={2}>
-                            <Box flex={1} minW={0}>{toolbar}</Box>
-                            <Button size="xs" variant="ghost" onClick={() => toggleDiff(index)} disabled={!hasDiff}>Diff</Button>
-                          </HStack>
+                          <>
+                            <HStack justify="space-between" borderBottomWidth="1px" borderColor="border.default" bg="bg.muted" flexShrink={0} pr={2}>
+                              <Box flex={1} minW={0}>{toolbar}</Box>
+                              <Button size="xs" variant="ghost" onClick={() => toggleDiff(index)} disabled={!hasDiff}>Diff</Button>
+                            </HStack>
+                            <EditorProTip mentions={!!mentions} insertMetric />
+                          </>
                         ) : undefined}
                       />
                     </Box>

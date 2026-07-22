@@ -1,6 +1,7 @@
 import { MentionItem } from '@/lib/data/completions/types';
 import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, ACCENT_HEX } from '@/lib/ui/file-metadata';
 import type { DatabaseWithSchema, SkillMention, SlashCommand } from '@/lib/types';
+import type { ColumnInfo } from '@/lib/hooks/use-table-columns';
 import { LuTerminal } from 'react-icons/lu';
 
 export type MentionOption = MentionItem | SkillMention | SlashCommand;
@@ -79,7 +80,7 @@ export function getDropdownTitle(mentionType: MentionTrigger) {
   return 'Tables, Questions & Dashboards';
 }
 
-export interface ColumnInfo { name: string; type: string }
+export type { ColumnInfo } from '@/lib/hooks/use-table-columns';
 
 /** Look up a table's columns from the whitelisted schemas (client-side, no API). */
 export function getTableColumns(

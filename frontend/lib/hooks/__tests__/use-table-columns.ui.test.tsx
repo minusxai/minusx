@@ -1,13 +1,12 @@
 /**
- * useTableColumns — columns for the table highlighted in the @ mention
- * dropdown. Local (whitelisted-schema) columns are the fast path; when the
- * bounded schema arrives without columns, they are fetched on demand via
- * CompletionsAPI.getColumnSuggestions and cached per table for the session.
+ * useTableColumns — lazily resolved columns for one table. Local columns (from
+ * the caller's bounded schema) are the fast path; when empty, columns are
+ * fetched on demand via CompletionsAPI.getColumnSuggestions and cached per
+ * table for the session.
  */
 
 import { renderHook, waitFor } from '@testing-library/react';
-import type { DatabaseWithSchema } from '@/lib/types';
-import { useTableColumns, clearTableColumnsCache } from '@/components/lexical/use-table-columns';
+import { useTableColumns, clearTableColumnsCache } from '@/lib/hooks/use-table-columns';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 
 vi.mock('@/lib/data/completions/completions', () => ({
@@ -16,26 +15,9 @@ vi.mock('@/lib/data/completions/completions', () => ({
 
 const getColumnSuggestions = vi.mocked(CompletionsAPI.getColumnSuggestions);
 
-const SCHEMAS_WITH_COLUMNS: DatabaseWithSchema[] = [
-  {
-    databaseName: 'mxfood',
-    schemas: [
-      {
-        schema: 'main',
-        tables: [
-          { table: 'orders', columns: [{ name: 'id', type: 'integer' }, { name: 'total', type: 'double' }] },
-        ],
-      },
-    ],
-  } as unknown as DatabaseWithSchema,
-];
-
-/** The bounded (names-only) shape: same table, no columns. */
-const SCHEMAS_NAMES_ONLY: DatabaseWithSchema[] = [
-  {
-    databaseName: 'mxfood',
-    schemas: [{ schema: 'main', tables: [{ table: 'orders' }] }],
-  } as unknown as DatabaseWithSchema,
+const LOCAL_COLUMNS = [
+  { name: 'id', type: 'integer' },
+  { name: 'total', type: 'double' },
 ];
 
 beforeEach(() => {
@@ -46,22 +28,19 @@ beforeEach(() => {
 describe('useTableColumns', () => {
   it('returns local columns synchronously without fetching', () => {
     const { result } = renderHook(() =>
-      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, SCHEMAS_WITH_COLUMNS),
+      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, LOCAL_COLUMNS),
     );
-    expect(result.current).toEqual([
-      { name: 'id', type: 'integer' },
-      { name: 'total', type: 'double' },
-    ]);
+    expect(result.current).toEqual(LOCAL_COLUMNS);
     expect(getColumnSuggestions).not.toHaveBeenCalled();
   });
 
   it('returns [] and does not fetch when there is no table', () => {
-    const { result } = renderHook(() => useTableColumns(null, SCHEMAS_WITH_COLUMNS));
+    const { result } = renderHook(() => useTableColumns(null, []));
     expect(result.current).toEqual([]);
     expect(getColumnSuggestions).not.toHaveBeenCalled();
   });
 
-  it('fetches on demand when the bounded schema has no columns', async () => {
+  it('fetches on demand when local columns are empty', async () => {
     getColumnSuggestions.mockResolvedValue({
       success: true,
       columns: [
@@ -71,7 +50,7 @@ describe('useTableColumns', () => {
     });
 
     const { result } = renderHook(() =>
-      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, SCHEMAS_NAMES_ONLY),
+      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, []),
     );
 
     await waitFor(() =>
@@ -94,27 +73,27 @@ describe('useTableColumns', () => {
     });
 
     const first = renderHook(() =>
-      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, SCHEMAS_NAMES_ONLY),
+      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, []),
     );
     await waitFor(() => expect(first.result.current).toHaveLength(1));
     first.unmount();
 
     const second = renderHook(() =>
-      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, SCHEMAS_NAMES_ONLY),
+      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, []),
     );
     // Cached: available synchronously, no second request.
     expect(second.result.current).toEqual([{ name: 'id', type: 'integer' }]);
     expect(getColumnSuggestions).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to the databaseName argument when the mention has no connection', async () => {
+  it('falls back to the databaseName argument when the table has no connection', async () => {
     getColumnSuggestions.mockResolvedValue({
       success: true,
       columns: [{ name: 'id', type: 'integer', displayName: 'id' }],
     });
 
     const { result } = renderHook(() =>
-      useTableColumns({ name: 'orders', schema: 'main' }, SCHEMAS_NAMES_ONLY, 'fallback_db'),
+      useTableColumns({ name: 'orders', schema: 'main' }, [], 'fallback_db'),
     );
 
     await waitFor(() => expect(result.current).toHaveLength(1));
@@ -129,7 +108,7 @@ describe('useTableColumns', () => {
     getColumnSuggestions.mockRejectedValueOnce(new Error('boom'));
 
     const { result, unmount } = renderHook(() =>
-      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, SCHEMAS_NAMES_ONLY),
+      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, []),
     );
     await waitFor(() => expect(getColumnSuggestions).toHaveBeenCalledTimes(1));
     expect(result.current).toEqual([]);
@@ -141,7 +120,7 @@ describe('useTableColumns', () => {
       columns: [{ name: 'id', type: 'integer', displayName: 'id' }],
     });
     const retry = renderHook(() =>
-      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, SCHEMAS_NAMES_ONLY),
+      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, []),
     );
     await waitFor(() => expect(retry.result.current).toEqual([{ name: 'id', type: 'integer' }]));
   });

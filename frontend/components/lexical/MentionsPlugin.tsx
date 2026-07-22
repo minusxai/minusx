@@ -27,8 +27,9 @@ import {
   isSlashCommand,
   getFilteredMentions,
   getDropdownTitle,
+  getTableColumns,
 } from './mentions-plugin-utils';
-import { useTableColumns } from './use-table-columns';
+import { useTableColumns } from '@/lib/hooks/use-table-columns';
 import { MentionRow } from './MentionRow';
 import { MentionSubmenu } from './MentionSubmenu';
 
@@ -239,7 +240,11 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
   const activeOption = filteredMentions[selectedIndex];
   const activeTable = activeOption && !isSlashCommand(activeOption) && activeOption.type === 'table'
     ? (activeOption as MentionItem) : null;
-  const activeColumns = useTableColumns(showDropdown ? activeTable : null, whitelistedSchemas, databaseName);
+  const activeColumns = useTableColumns(
+    showDropdown ? activeTable : null,
+    activeTable ? getTableColumns(whitelistedSchemas, activeTable.schema, activeTable.name) : [],
+    databaseName,
+  );
 
   useEffect(() => {
     const getActive = () => ({ fm: filteredMentions, table: activeTable, items: activeColumns });
