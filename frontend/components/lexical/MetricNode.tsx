@@ -9,10 +9,10 @@
  * visible. Clicking the chip (in edit mode) opens an inline popover editor
  * anchored to it. A freshly inserted (unnamed) metric auto-opens its editor.
  *
- * Docs are stored as markdown, so a metric round-trips through a single-line
- * inline directive (see metric-transformer.ts; newlines in SQL escaped as \n):
+ * Docs are stored as markdown, so a metric round-trips as `:metric` + flat
+ * JSON — the same chip grammar as mentions (see metric-transformer.ts):
  *
- *     :metric{name="Monthly Revenue" description="Revenue per month" sql="SELECT ..."}
+ *     :metric{"name":"Monthly Revenue","description":"Revenue per month","sql":"SELECT ..."}
  */
 
 import React, { useState, useEffect, useRef } from 'react';

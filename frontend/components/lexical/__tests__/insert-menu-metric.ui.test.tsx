@@ -55,7 +55,7 @@ describe('LexicalTextEditor insertMetric', () => {
   it('shows a saved metric definition and its SQL in the document', async () => {
     renderWithProviders(
       <LexicalTextEditor
-        initialMarkdown={':::metric{name="Monthly Revenue" description="Revenue recognized in each calendar month"}\nSELECT sum(amount) AS revenue\nFROM invoices\n:::'}
+        initialMarkdown={':metric{"name":"Monthly Revenue","description":"Revenue recognized in each calendar month","sql":"SELECT sum(amount) AS revenue\\nFROM invoices"}'}
         onChange={() => {}}
         insertMetric
       />,
@@ -74,7 +74,7 @@ describe('LexicalTextEditor insertMetric', () => {
   it('does not render an empty SQL section when a metric has no SQL', async () => {
     renderWithProviders(
       <LexicalTextEditor
-        initialMarkdown={':::metric{name="Active Users" description="Unique users active in the selected period"}\n:::'}
+        initialMarkdown={':metric{"name":"Active Users","description":"Unique users active in the selected period"}'}
         onChange={() => {}}
         insertMetric
       />,
