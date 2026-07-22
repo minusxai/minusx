@@ -15,7 +15,7 @@
  * option row carries its own label as aria-label.
  */
 
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import { Badge, Box, HStack, Icon, Input, Popover, Portal, Text, VStack } from '@chakra-ui/react';
 import { LuCheck, LuChevronDown, LuSearch } from 'react-icons/lu';
 import type { SelectorOption } from './GenericSelector';
@@ -94,6 +94,14 @@ function SearchablePicker({
     if (closeOnPick) setOpen(false);
   };
 
+  // NOT `autoFocus`: the portal'd popover sits at the document origin for a
+  // frame before floating-ui positions it, and autoFocus (which can't opt out
+  // of scroll-into-view) scrolls the page there — opening a picker near the
+  // bottom of a long page jumped the page to the top. Instead the popover
+  // machine focuses this element itself, after positioning and with
+  // { preventScroll: true } (see zag-js popover `initialFocusEl`).
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -113,6 +121,7 @@ function SearchablePicker({
       open={open}
       onOpenChange={(d) => { setOpen(d.open); setQuery(''); setHighlight(0); }}
       positioning={{ gutter: 4 }}
+      initialFocusEl={() => searchInputRef.current}
       lazyMount
       unmountOnExit
     >
@@ -190,7 +199,7 @@ function SearchablePicker({
                 value={query}
                 onChange={(e) => { setQuery(e.target.value); setHighlight(0); }}
                 onKeyDown={onKeyDown}
-                autoFocus
+                ref={searchInputRef}
                 bg="transparent"
                 border="none"
                 fontSize="xs"

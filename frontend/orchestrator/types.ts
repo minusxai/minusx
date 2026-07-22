@@ -27,13 +27,17 @@ export interface ToolResponse<TDetails = Record<string, unknown>> {
 export type ToolMessage = AssistantMessage | ToolResultMessage;
 
 /**
- * Which model assignment an agent's LLM calls consume. Mirrors the (pure)
- * union in `lib/llm/llm-config-types.ts` — kept as a literal here so the
- * engine has no dependency on app config modules.
+ * What the app-installed plan resolver keys on. `agent` mirrors the app's
+ * `LlmAgentKey` union as a plain string (the engine has no dependency on app
+ * config modules); `grade` is an optional per-call grade override (e.g. a
+ * micro-task that wants a beefier model class).
  */
-export type LlmUseCase = 'analyst' | 'micro';
+export interface LlmPlanSelector {
+  agent: string;
+  grade?: string;
+}
 
-/** A resolved LLM call plan: the model + options a use case runs on. */
+/** A resolved LLM call plan: the model + options a selector runs on. */
 export interface LlmPlanStep {
   model: Model<Api>;
   /** Call-time stream options (apiKey, reasoning, headers, …).
@@ -165,10 +169,10 @@ export class MXAgent<
    *  `maxRetryDelayMs`, …). Subclasses set this from env config; the
    *  orchestrator never inspects individual keys. */
   static readonly callOptions: Record<string, unknown> | undefined = undefined;
-  /** Which model assignment this agent's LLM calls consume when the app has
-   *  DB-backed model config (see `Orchestrator.resolveLlmPlan`). Micro-task
-   *  agents override to 'micro'; everything else rides the analyst assignment. */
-  static readonly modelUseCase: LlmUseCase = 'analyst';
+  /** Which agent's grade policy this class's LLM calls consume when the app
+   *  has DB-backed model config (see `Orchestrator.resolveLlmPlan`). Mirrors
+   *  the app's `LlmAgentKey` values; unmapped classes ride 'analyst'. */
+  static readonly llmAgent: string = 'analyst';
 
   threadHistory: Message[];
   toolThread: ToolMessage[];
@@ -235,7 +239,7 @@ export class MXAgent<
 
   protected async llm(): Promise<AssistantMessage> {
     const ctor = this.constructor as typeof MXAgent;
-    const msg = await this.orchestrator.callLLM(ctor.model, this.buildLLMContext(), this.id, this.resolveCallOptions(), ctor.modelUseCase);
+    const msg = await this.orchestrator.callLLM(ctor.model, this.buildLLMContext(), this.id, this.resolveCallOptions(), { agent: ctor.llmAgent });
     // A 'length' stop is a truncated response. Re-calling with the same context fails
     // identically while paying the full input cost each time (a production conversation
     // once burned $20 looping on 16-token stubs), so fail the run on the first one.

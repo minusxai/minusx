@@ -37,11 +37,12 @@ export function getAgentModelOrTestFallback(testFallback: Model<Api>): Model<Api
 }
 
 /**
- * Static call options for analyst-family agents: the MinusX use-case routing
- * header in production, nothing in tests. Per-workspace options (reasoning,
- * apiKey, …) come from the DB plan and merge over these at call time.
+ * Static call options for analyst-family agents: the MinusX grade routing
+ * header (analyst default grade) in production, nothing in tests.
+ * Per-workspace options (reasoning, apiKey, …) come from the DB plan and
+ * merge over these at call time.
  */
 export function getAnalystModelOptions(): Record<string, unknown> | undefined {
   if (isTestEnv() || E2E_MODE) return undefined;
-  return minusxCallOptions('analyst');
+  return minusxCallOptions('core');
 }

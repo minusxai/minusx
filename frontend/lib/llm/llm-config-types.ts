@@ -4,25 +4,30 @@
  * (no env-var tier): DB config > managed MinusX gateway default, resolved per
  * call in `lib/llm/llm-plan.server.ts`.
  *
+ * The model abstraction is GRADES: admins map each grade (lite/core/advanced) to
+ * one (provider, model, options); agents carry a grade policy (allowed grades
+ * + default) resolved from config over built-in defaults; end users pick a
+ * grade, never a raw model.
+ *
  * Pure types + pure helpers only — imported by both server resolution and the
  * settings UI. `apiKey` values are `@SECRETS/…` refs at rest (see
  * `lib/secrets/config-secret-specs.ts`); the client never sees a raw key.
  */
 
-/** Which model assignment an agent consumes. */
-export type LlmUseCase = 'analyst' | 'micro';
-export const LLM_USE_CASES: readonly LlmUseCase[] = ['analyst', 'micro'];
+/** Model capability grade — the only user-facing model abstraction. */
+export type LlmGrade = 'lite' | 'core' | 'advanced';
+export const LLM_GRADES: readonly LlmGrade[] = ['lite', 'core', 'advanced'];
 
 /**
  * Provider slug for the managed MinusX provider: routed through the MinusX
- * gateway (OpenAI-compatible), which owns model choice + routing per use case.
- * Selecting it requires no model/assignment/fallback configuration.
+ * gateway (OpenAI-compatible), which owns model choice + routing per grade.
+ * Selecting it requires no grade mapping configuration.
  */
 export const MINUSX_PROVIDER = 'minusx';
 /** Provider slug for a self-managed OpenAI-compatible endpoint (Ollama, vLLM, …). */
 export const CUSTOM_PROVIDER = 'custom';
 
-/** Header carrying the use case to the MinusX gateway for routing. */
+/** Header carrying the requested grade to the MinusX gateway for routing. */
 export const MX_USE_CASE_HEADER = 'X-MX-Use-Case';
 
 /**
@@ -43,23 +48,15 @@ export interface LlmProviderEntry {
   baseUrl?: string;
   /** custom only: extra HTTP headers merged into requests. */
   headers?: Record<string, string>;
-  /**
-   * Registry providers only: model ids admins allow for assignments. The
-   * assignment model picker shows ONLY these (plus a currently-assigned model,
-   * so an existing pick never disappears). Absent/empty = all registry models;
-   * 'auto' = the provider's recommended set from compatibility.json, resolved
-   * live (see `lib/llm/compat-models.ts`). A UI-level allowlist — resolution
-   * honors whatever the assignment stores.
-   */
-  allowedModels?: string[] | 'auto';
 }
 
-/** One model pick in an assignment chain. */
+/** One grade's model pick. */
 export interface LlmModelChoice {
   /** References `LlmProviderEntry.name`. */
   providerName: string;
   /** Model id — a pi-ai registry id for registry providers, the endpoint's
-   *  model id for custom, ignored for minusx (the gateway routes). */
+   *  model id for custom, ignored for minusx (the gateway routes). Absent for
+   *  a registry provider = "Auto": the grade default from compatibility.json. */
   model?: string;
   /** Call-time stream options (e.g. `reasoning`), spread into the LLM call. */
   options?: Record<string, unknown>;
@@ -68,49 +65,83 @@ export interface LlmModelChoice {
   customModel?: Record<string, unknown>;
 }
 
+/** Admin grade→model mapping: one choice per grade. */
+export type LlmGradeAssignments = Partial<Record<LlmGrade, LlmModelChoice>>;
+
 /**
- * A user-selected model override for an individual chat. Deliberately smaller
- * than `LlmModelChoice`: call options and custom endpoint metadata remain
- * server-owned configuration and can never be injected by the browser.
+ * Agents that consume workspace model config. Benchmark/eval agents are
+ * deliberately absent — they ride the analyst policy.
  */
-export interface ChatModelSelection {
-  /** References `LlmProviderEntry.name`. */
-  providerName: string;
-  /** Concrete model id. Omitted only for a managed MinusX provider. */
-  model?: string;
-}
+export type LlmAgentKey = 'analyst' | 'web-analyst' | 'slack' | 'report' | 'micro';
+export const LLM_AGENT_KEYS: readonly LlmAgentKey[] = ['analyst', 'web-analyst', 'slack', 'report', 'micro'];
 
-/** Picker-safe model metadata returned to authenticated chat clients. */
-export interface ChatModelOption extends ChatModelSelection {
-  providerLabel: string;
-  modelLabel: string;
-}
-
-/** Model-picker payload. Omitting an override remains the source of truth for
- * using the live Settings → Models assignment represented by `defaultModel`. */
-export interface ChatModelCatalog {
-  defaultModel: ChatModelOption;
-  models: ChatModelOption[];
+/** An agent's grade policy: what the user may pick + what runs by default. */
+export interface LlmAgentPolicy {
+  allowedGrades: LlmGrade[];
+  defaultGrade: LlmGrade;
 }
 
 /**
- * One use case's model pick. The `chain` array is a stable storage shape;
- * only the FIRST entry is used (fallbacks were deliberately removed — one
- * model per use case; extra entries in hand-edited configs are ignored).
+ * Built-in agent policies — the single source of truth under sparse config
+ * overrides (`LlmConfig.agents`). Shared by server resolution, validation,
+ * the grade catalog, and the settings UI.
  */
-export interface LlmUseCaseAssignment {
-  chain: LlmModelChoice[];
-}
+export const DEFAULT_AGENT_POLICIES: Record<LlmAgentKey, LlmAgentPolicy> = {
+  // Lite is micro-only by default: the analyst-family agents run real
+  // analysis, where a haiku-class model underperforms. Admins can widen this
+  // per agent in Settings → Models.
+  analyst: { allowedGrades: ['core', 'advanced'], defaultGrade: 'core' },
+  'web-analyst': { allowedGrades: ['core', 'advanced'], defaultGrade: 'core' },
+  slack: { allowedGrades: ['core', 'advanced'], defaultGrade: 'core' },
+  report: { allowedGrades: ['core', 'advanced'], defaultGrade: 'core' },
+  micro: { allowedGrades: ['lite'], defaultGrade: 'lite' },
+};
 
 /** The `llm` section of the org config. */
 export interface LlmConfig {
   providers?: LlmProviderEntry[];
   /**
-   * Per-use-case chains. A use case with no assignment falls back to: the
-   * minusx provider if one is configured (fully managed — no assignment
-   * needed), else env config, else the built-in default.
+   * Grade→model mapping. A grade with no mapping falls back to the minusx
+   * provider if one is configured (fully managed — the gateway routes the
+   * grade); otherwise resolving that grade is an error.
    */
-  assignments?: Partial<Record<LlmUseCase, LlmUseCaseAssignment>>;
+  grades?: LlmGradeAssignments;
+  /** Sparse per-agent policy overrides, merged over `DEFAULT_AGENT_POLICIES`. */
+  agents?: Partial<Record<LlmAgentKey, Partial<LlmAgentPolicy>>>;
+}
+
+/**
+ * The effective grade policy for an agent: config override merged over the
+ * built-in default. Always coherent — `defaultGrade` is forced into
+ * `allowedGrades` when a hand-edited config disagrees.
+ */
+export function resolveAgentPolicy(config: LlmConfig | undefined, agent: LlmAgentKey): LlmAgentPolicy {
+  const base = DEFAULT_AGENT_POLICIES[agent];
+  const override = config?.agents?.[agent];
+  const defaultGrade = override?.defaultGrade ?? base.defaultGrade;
+  const allowedGrades = override?.allowedGrades?.length ? override.allowedGrades : base.allowedGrades;
+  return {
+    defaultGrade,
+    allowedGrades: allowedGrades.includes(defaultGrade) ? allowedGrades : [...allowedGrades, defaultGrade],
+  };
+}
+
+/** One grade entry in the chat picker. */
+export interface ChatGradeOption {
+  grade: LlmGrade;
+  /** e.g. 'Anthropic', 'MinusX' — the provider the grade currently resolves to. */
+  providerLabel?: string;
+  /** e.g. 'Claude Sonnet 4.6', 'Auto', or 'Not configured'. */
+  modelLabel: string;
+  /** False when picking this grade would error (no mapping, no minusx provider). */
+  configured: boolean;
+}
+
+/** Grade-picker payload. Omitting an override remains the source of truth for
+ *  running on the agent's default grade (`defaultGrade`). */
+export interface ChatGradeCatalog {
+  defaultGrade: LlmGrade;
+  grades: ChatGradeOption[];
 }
 
 /** Find a provider entry by name. */

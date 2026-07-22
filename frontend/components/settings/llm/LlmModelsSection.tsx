@@ -3,16 +3,18 @@
 /**
  * LLM Models settings — in-app provider + model configuration (admin-only).
  *
- * Two-level editor over the org config's `llm` section:
+ * Three-level editor over the org config's `llm` section:
  *   1. Providers — credentialed endpoints (MinusX managed / registry providers /
  *      custom OpenAI-compatible), each testable via POST /api/llm/test.
- *   2. Assignments — per use case (analyst / micro): one model each, with
- *      searchable model pickers fed by GET /api/llm/registry.
+ *   2. Model grades — lite / core / advanced: one (provider, model, options) per
+ *      grade, with searchable model pickers fed by GET /api/llm/registry.
+ *   3. Agents — per-agent grade policy (allowed grades + default), sparse
+ *      overrides on top of the built-in DEFAULT_AGENT_POLICIES.
  *
  * MinusX special-casing: the MinusX provider is pinned first in the picker and
- * needs only an API key — with no explicit assignments, the gateway handles
- * model routing for every use case, so the assignments editor collapses to an
- * informational banner.
+ * needs only an API key — with no explicit grade mappings, the gateway routes
+ * every grade itself, so the grades editor collapses to an informational
+ * banner.
  *
  * Secrets: saved keys arrive as `@SECRETS/…` refs (never raw). A ref value
  * round-trips unchanged on save; typing a new key replaces it server-side.
@@ -20,20 +22,19 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, Box, Button, Dialog, Flex, HStack, Input, Text, VStack } from '@chakra-ui/react';
-import { LuCheck, LuCirclePlus, LuPlug, LuSettings2, LuTrash2, LuX } from 'react-icons/lu';
+import { Badge, Box, Button, Flex, HStack, Input, Text, VStack } from '@chakra-ui/react';
+import { LuCheck, LuCirclePlus, LuPlug, LuTrash2, LuX } from 'react-icons/lu';
 import { SearchableSelect, SearchableMultiSelect } from '@/components/selectors/SearchableSelect';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { useAppSelector } from '@/store/hooks';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { toaster } from '@/components/ui/toaster';
 import { isSecretRef } from '@/lib/secrets/config-secret-specs';
+import { COMPAT_PROVIDERS, compatDefaultModel } from '@/lib/llm/compat-models';
 import {
-  COMPAT_PROVIDERS, compatDefaultModel, filterAllowedModels, recommendedModelIds, resolveAllowedModels,
-} from '@/lib/llm/compat-models';
-import {
-  CUSTOM_PROVIDER, LLM_USE_CASES, MINUSX_PROVIDER, findMinusxProvider,
-  type LlmConfig, type LlmModelChoice, type LlmProviderEntry, type LlmUseCase,
+  CUSTOM_PROVIDER, DEFAULT_AGENT_POLICIES, LLM_AGENT_KEYS, LLM_GRADES, MINUSX_PROVIDER,
+  findMinusxProvider, resolveAgentPolicy,
+  type LlmAgentKey, type LlmConfig, type LlmGrade, type LlmModelChoice, type LlmProviderEntry,
 } from '@/lib/llm/llm-config-types';
 
 interface RegistryProvider { slug: string; models: { id: string; name: string }[] }
@@ -49,31 +50,45 @@ const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
   COMPAT_PROVIDERS.map(p => [p.id, p.name]),
 );
 
-/** Picker options for a provider's registry models: recommended-first (for the use case; union when none), id as subtitle. */
-function toModelOptions(slug: string, models: { id: string; name: string }[], useCase?: LlmUseCase) {
-  const recommended = recommendedModelIds(slug, useCase);
+/** Picker options for a provider's registry models: the grade default badged + first, id as subtitle. */
+function toModelOptions(slug: string, models: { id: string; name: string }[], grade: LlmGrade) {
+  const gradeDefault = compatDefaultModel(slug, grade);
   return models
     .map(m => ({
       value: m.id,
       label: m.name === m.id ? m.id : m.name,
       subtitle: m.name === m.id ? undefined : m.id,
-      badge: recommended.has(m.id) ? 'recommended' : undefined,
+      badge: m.id === gradeDefault ? 'default' : undefined,
     }))
     .sort((a, b) => Number(!!b.badge) - Number(!!a.badge));
 }
 
-// No ambiguous 'default' entry — the default level is LOW and shows as the
-// pre-selected option, so what's selected is always what runs.
-const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'] as const;
+// Reasoning effort is currently fixed (no UI): every new grade mapping stores
+// LOW explicitly. Hand-edited configs can still set other levels via
+// `grades.<grade>.options.reasoning`; re-add a picker here if that's ever a
+// common need.
 const DEFAULT_REASONING = 'low';
 
-const USE_CASE_TITLES: Record<LlmUseCase, { title: string; description: string }> = {
-  analyst: { title: 'Analyst', description: 'The main chat/analysis agent (Explore, Question, Dashboard, Slack, reports).' },
-  micro: { title: 'Micro tasks', description: 'Low-stakes single-turn helpers (titles, classification, quick summaries).' },
+const GRADE_TITLES: Record<LlmGrade, { title: string; description: string }> = {
+  lite: { title: 'Lite', description: 'Fast + cheap (haiku-class) — titles, summaries, micro tasks.' },
+  core: { title: 'Core', description: 'Balanced default (sonnet-class) — most analysis runs here.' },
+  advanced: { title: 'Advanced', description: 'Strongest (opus-class) — the hardest analysis, slower and pricier.' },
+};
+
+const AGENT_TITLES: Record<LlmAgentKey, string> = {
+  analyst: 'Analyst',
+  'web-analyst': 'Web analyst',
+  slack: 'Slack',
+  report: 'Reports',
+  micro: 'Micro tasks',
 };
 
 function providerLabel(slug: string): string {
   return PROVIDER_LABELS[slug] ?? slug;
+}
+
+function gradeLabel(grade: LlmGrade): string {
+  return GRADE_TITLES[grade].title;
 }
 
 function keyStatus(entry: LlmProviderEntry): 'saved' | 'new' | 'none' {
@@ -108,7 +123,7 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
   const dirty = JSON.stringify(draft) !== storedLlmJson;
   const providers = draft.providers ?? [];
   const minusx = findMinusxProvider(draft);
-  const hasExplicitAssignments = Object.values(draft.assignments ?? {}).some(a => (a?.chain?.length ?? 0) > 0);
+  const hasExplicitGrades = Object.keys(draft.grades ?? {}).length > 0;
 
   // The name is an internal identity (auto = the provider type). The field
   // only surfaces when it's actually needed: duplicate provider types, or an
@@ -146,24 +161,18 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
       if (patch.provider !== undefined && prev && (prev.name === '' || prev.name === prev.provider || prev.name === autoName(prev.provider, next.providers, index))) {
         patch = { ...patch, name: autoName(patch.provider, next.providers, index) };
       }
-      // An allowlist names models of the OLD provider's registry — a type
-      // switch invalidates it wholesale.
-      if (patch.provider !== undefined && prev && patch.provider !== prev.provider) {
-        patch = { ...patch, allowedModels: undefined };
-      }
       const updated = { ...prev, ...patch };
       next.providers[index] = updated;
       // Cascade the EFFECTIVE name (blank name = the auto name) into every
-      // assignment chain that referenced the old one — a dangling reference
+      // grade mapping that referenced the old one — a dangling reference
       // would fail validation on save. Covers renames, clears, and type switches.
-      if (prev && next.assignments) {
+      if (prev && next.grades) {
         const oldEffective = prev.name || autoName(prev.provider, next.providers, index);
         const newEffective = updated.name || autoName(updated.provider, next.providers, index);
         if (oldEffective !== newEffective) {
-          for (const useCase of LLM_USE_CASES) {
-            for (const step of next.assignments[useCase]?.chain ?? []) {
-              if (step.providerName === oldEffective) step.providerName = newEffective;
-            }
+          for (const grade of LLM_GRADES) {
+            const choice = next.grades[grade];
+            if (choice?.providerName === oldEffective) choice.providerName = newEffective;
           }
         }
       }
@@ -187,26 +196,40 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
       const entry = next.providers?.[index];
       const removed = entry ? (entry.name || entry.provider) : undefined;
       next.providers = (next.providers ?? []).filter((_, i) => i !== index);
-      // Drop chain steps that referenced the removed provider.
-      if (removed && next.assignments) {
-        for (const useCase of LLM_USE_CASES) {
-          const chain = next.assignments[useCase]?.chain?.filter(c => c.providerName !== removed);
-          if (chain) {
-            if (chain.length > 0) next.assignments[useCase] = { chain };
-            else delete next.assignments[useCase];
-          }
+      // Drop grade mappings that referenced the removed provider.
+      if (removed && next.grades) {
+        for (const grade of LLM_GRADES) {
+          if (next.grades[grade]?.providerName === removed) delete next.grades[grade];
         }
       }
       return next;
     });
   };
 
-  const setChain = (useCase: LlmUseCase, chain: LlmModelChoice[]) => {
+  const setGrade = (grade: LlmGrade, choice: LlmModelChoice | undefined) => {
     setDraft(d => {
       const next = structuredClone(d);
-      next.assignments = next.assignments ?? {};
-      if (chain.length > 0) next.assignments[useCase] = { chain };
-      else delete next.assignments[useCase];
+      next.grades = next.grades ?? {};
+      if (choice) next.grades[grade] = choice;
+      else delete next.grades[grade];
+      if (Object.keys(next.grades).length === 0) delete next.grades;
+      return next;
+    });
+  };
+
+  const setAgentPolicy = (agent: LlmAgentKey, patch: { allowedGrades?: LlmGrade[]; defaultGrade?: LlmGrade }) => {
+    setDraft(d => {
+      const next = structuredClone(d);
+      const merged = { ...resolveAgentPolicy(next, agent), ...patch };
+      const base = DEFAULT_AGENT_POLICIES[agent];
+      const isBuiltIn = merged.defaultGrade === base.defaultGrade
+        && merged.allowedGrades.length === base.allowedGrades.length
+        && merged.allowedGrades.every(g => base.allowedGrades.includes(g));
+      next.agents = next.agents ?? {};
+      // Sparse storage: an override equal to the built-in is dropped, not stored.
+      if (isBuiltIn) delete next.agents[agent];
+      else next.agents[agent] = merged;
+      if (Object.keys(next.agents).length === 0) delete next.agents;
       return next;
     });
   };
@@ -233,13 +256,13 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
     }
   };
 
-  /** Model used for a provider's connectivity test: its first chain use, else the first allowed model, else the registry's first. */
+  /** Model used for a provider's connectivity test: its first grade use, else the compat core default, else the registry's first. */
   const testModelFor = (entry: LlmProviderEntry): string | undefined => {
-    for (const useCase of LLM_USE_CASES) {
-      const hit = draft.assignments?.[useCase]?.chain?.find(c => c.providerName === (entry.name || entry.provider) && c.model);
-      if (hit?.model) return hit.model;
+    for (const grade of LLM_GRADES) {
+      const choice = draft.grades?.[grade];
+      if (choice?.providerName === (entry.name || entry.provider) && choice.model) return choice.model;
     }
-    return filterAllowedModels(entry, modelsFor(entry.provider))[0]?.id;
+    return compatDefaultModel(entry.provider, 'core') ?? modelsFor(entry.provider)[0]?.id;
   };
 
   const testProvider = async (entry: LlmProviderEntry) => {
@@ -311,7 +334,6 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
             const isBedrock = entry.provider === 'amazon-bedrock';
             const result = testResults[entry.name || entry.provider];
             const label = entry.name || entry.provider || `provider ${index + 1}`;
-            const entryModels = modelsFor(entry.provider);
             return (
               <Box key={index} borderWidth="1px" borderColor="border.muted" borderRadius="md" p={4} aria-label={`LLM provider ${label}`}>
                 <Flex gap={3} wrap="wrap" align="flex-end">
@@ -365,17 +387,6 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
                       />
                     </Box>
                   )}
-                  {!isMinusx && entryModels.length > 0 && (
-                    <Box minW="200px">
-                      <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Allowed models</Text>
-                      <AllowedModelsPicker
-                        entry={entry}
-                        models={entryModels}
-                        label={`LLM provider ${label} allowed models`}
-                        onChange={(allowedModels) => setProvider(index, { allowedModels })}
-                      />
-                    </Box>
-                  )}
                   {isCustom && (
                     <Box minW="240px">
                       <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Base URL</Text>
@@ -409,7 +420,7 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
                 </Flex>
                 {isMinusx && (
                   <Text fontSize="xs" color="fg.muted" fontFamily="mono" mt={2}>
-                    Fully managed: MinusX routes models, prompts and fallbacks per use case — no further setup needed.
+                    Fully managed: MinusX routes models, prompts and fallbacks per grade — no further setup needed.
                   </Text>
                 )}
                 {result && (
@@ -428,25 +439,42 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
       </Box>
 
       <Box>
-        <Text fontSize="sm" fontWeight="semibold" fontFamily="mono" mb={1}>Model assignments</Text>
-        {minusx && !hasExplicitAssignments ? (
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono" aria-label="Assignments managed by MinusX">
-            Managed by MinusX — every use case routes through the MinusX gateway. Add an explicit assignment below to override.
+        <Text fontSize="sm" fontWeight="semibold" fontFamily="mono" mb={1}>Model grades</Text>
+        {minusx && !hasExplicitGrades ? (
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono" aria-label="Grades managed by MinusX">
+            Managed by MinusX — every grade routes through the MinusX gateway. Map a grade below to override.
           </Text>
         ) : (
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-            Pick the model each use case runs on.
+            Map each grade to the model it runs on. Agents and chat users pick grades, never raw models.
           </Text>
         )}
         <VStack align="stretch" gap={4} mt={3}>
-          {LLM_USE_CASES.map((useCase) => (
-            <UseCaseChainEditor
-              key={useCase}
-              useCase={useCase}
-              chain={draft.assignments?.[useCase]?.chain ?? []}
+          {LLM_GRADES.map((grade) => (
+            <GradeSlotEditor
+              key={grade}
+              grade={grade}
+              choice={draft.grades?.[grade]}
               providers={providers}
               modelsFor={modelsFor}
-              onChange={(chain) => setChain(useCase, chain)}
+              onChange={(choice) => setGrade(grade, choice)}
+            />
+          ))}
+        </VStack>
+      </Box>
+
+      <Box>
+        <Text fontSize="sm" fontWeight="semibold" fontFamily="mono" mb={1}>Agents</Text>
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>
+          Which grades each agent may use, and which it runs on by default.
+        </Text>
+        <VStack align="stretch" gap={3}>
+          {LLM_AGENT_KEYS.map((agent) => (
+            <AgentPolicyRow
+              key={agent}
+              agent={agent}
+              policy={resolveAgentPolicy(draft, agent)}
+              onChange={(patch) => setAgentPolicy(agent, patch)}
             />
           ))}
         </VStack>
@@ -490,57 +518,14 @@ function AutoButton({ active, onClick, label, title }: {
   );
 }
 
-/**
- * Provider-level allowed-models picker. Three states for `allowedModels`:
- * undefined (all models), 'auto' (the recommended set from compatibility.json,
- * resolved live so curation updates propagate), or an explicit id list. The
- * Auto button beside the picker toggles 'auto' ↔ unrestricted; while auto,
- * the recommended models show checked, and toggling one materializes the set
- * into an explicit list with the change applied.
- */
-function AllowedModelsPicker({ entry, models, label, onChange }: {
-  entry: LlmProviderEntry;
-  models: { id: string; name: string }[];
-  label: string;
-  onChange: (allowedModels: string[] | 'auto' | undefined) => void;
-}) {
-  const stored = entry.allowedModels;
-  const isAuto = stored === 'auto';
-  const values = isAuto ? (resolveAllowedModels(entry) ?? []) : (Array.isArray(stored) ? stored : []);
-  // No recommendations for this provider in compatibility.json = no Auto to offer.
-  const hasRecommendations = recommendedModelIds(entry.provider).size > 0;
-  return (
-    <HStack gap={1.5}>
-      <Box flex="1" minW="160px">
-        <SearchableMultiSelect
-          values={values}
-          options={toModelOptions(entry.provider, models)}
-          placeholder="All models"
-          summary={(v) => (isAuto ? 'Auto (recommended)' : `${v.length} allowed`)}
-          label={label}
-          onChange={(next) => onChange(next.length > 0 ? next : undefined)}
-        />
-      </Box>
-      {hasRecommendations && (
-        <AutoButton
-          active={isAuto}
-          onClick={() => onChange(isAuto ? undefined : 'auto')}
-          label={`${label} auto`}
-          title="Allow exactly the recommended models"
-        />
-      )}
-    </HStack>
-  );
-}
-
-function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: {
-  useCase: LlmUseCase;
-  chain: LlmModelChoice[];
+function GradeSlotEditor({ grade, choice, providers, modelsFor, onChange }: {
+  grade: LlmGrade;
+  choice: LlmModelChoice | undefined;
   providers: LlmProviderEntry[];
   modelsFor: (slug: string) => { id: string; name: string }[];
-  onChange: (chain: LlmModelChoice[]) => void;
+  onChange: (choice: LlmModelChoice | undefined) => void;
 }) {
-  const meta = USE_CASE_TITLES[useCase];
+  const meta = GRADE_TITLES[grade];
   // Options key on the EFFECTIVE name (blank = the provider type). The custom
   // name only appears in the label when it exists or the type is ambiguous.
   const typeCounts = providers.reduce<Record<string, number>>((acc, p) => {
@@ -553,41 +538,29 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
     return { value: effective, label: needsName ? `${effective} (${providerLabel(p.provider)})` : providerLabel(p.provider) };
   });
 
-  // One model per use case: the stored `chain` array is a stable shape whose
-  // FIRST entry is the assignment (extra legacy entries are ignored).
-  const step = chain[0];
-  const setStep = (patch: Partial<LlmModelChoice>) => {
-    onChange([{ ...step, ...patch }]);
+  const setChoice = (patch: Partial<LlmModelChoice>) => {
+    onChange({ ...(choice as LlmModelChoice), ...patch });
   };
 
-  const [optionsOpen, setOptionsOpen] = useState(false);
-
-  const entry = step ? providers.find(p => (p.name || p.provider) === step.providerName) : undefined;
+  const entry = choice ? providers.find(p => (p.name || p.provider) === choice.providerName) : undefined;
   const slug = entry?.provider ?? '';
-  // The provider's allowlist bounds the picker; a currently-assigned model
-  // always stays visible so an existing pick never silently disappears.
-  const registryModels = slug ? filterAllowedModels(entry, modelsFor(slug), step?.model) : [];
-  const reasoning = (step?.options?.['reasoning'] as string | undefined) ?? DEFAULT_REASONING;
+  const registryModels = slug ? modelsFor(slug) : [];
 
-  // "Auto" (no stored model) resolves to the compatibility default for this
-  // use case — flag it when the provider's allowlist excludes that default.
-  const autoDefault = slug ? compatDefaultModel(slug, useCase) : undefined;
-  const allowed = resolveAllowedModels(entry);
-  const autoConflict = !!step && !step.model && !!autoDefault && !!allowed && !allowed.includes(autoDefault);
+  // "Auto" (no stored model) resolves to the compatibility default for this grade.
+  const autoDefault = slug ? compatDefaultModel(slug, grade) : undefined;
 
   return (
-    <Box borderWidth="1px" borderColor="border.muted" borderRadius="md" p={4} aria-label={`Model assignment ${meta.title}`}>
+    <Box borderWidth="1px" borderColor="border.muted" borderRadius="md" p={4} aria-label={`Model grade ${meta.title}`}>
       <Text fontSize="sm" fontWeight="medium" fontFamily="mono">{meta.title}</Text>
       <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>{meta.description}</Text>
       <VStack align="stretch" gap={2}>
-        {step ? (
-          <>
+        {choice ? (
           <Flex gap={3} wrap="wrap" align="flex-end">
             <Box minW="200px">
               <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Provider</Text>
               <SearchableSelect
-                value={step.providerName}
-                onChange={(providerName) => setStep({ providerName })}
+                value={choice.providerName}
+                onChange={(providerName) => setChoice({ providerName })}
                 options={providerOptions}
                 placeholder="Provider…"
                 label={`${meta.title} provider`}
@@ -602,26 +575,26 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
                   <Box flex="1" minW="180px">
                     {registryModels.length > 0 ? (
                       <SearchableSelect
-                        value={step.model ?? ''}
-                        onChange={(model) => setStep({ model })}
-                        options={toModelOptions(slug, registryModels, useCase)}
+                        value={choice.model ?? ''}
+                        onChange={(model) => setChoice({ model })}
+                        options={toModelOptions(slug, registryModels, grade)}
                         placeholder={autoDefault ? `Auto (${autoDefault})` : 'Pick a model…'}
                         label={`${meta.title} model`}
                       />
                     ) : (
                       <Input
                         size="sm" fontSize="xs" fontFamily="mono"
-                        value={step.model ?? ''}
+                        value={choice.model ?? ''}
                         placeholder="model id (e.g. qwen3:32b)"
-                        onChange={(e) => setStep({ model: e.target.value || undefined })}
+                        onChange={(e) => setChoice({ model: e.target.value || undefined })}
                         aria-label={`${meta.title} model`}
                       />
                     )}
                   </Box>
                   {autoDefault && (
                     <AutoButton
-                      active={!step.model}
-                      onClick={() => setStep({ model: undefined })}
+                      active={!choice.model}
+                      onClick={() => setChoice({ model: undefined })}
                       label={`${meta.title} model auto`}
                       title={`Automatically use ${autoDefault}`}
                     />
@@ -629,36 +602,14 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
                 </HStack>
               </Box>
             )}
-            {slug !== MINUSX_PROVIDER && (
-              <Button size="xs" variant="ghost" mb={1} onClick={() => setOptionsOpen(true)} aria-label={`${meta.title} options`} title="Model options">
-                <LuSettings2 />
-              </Button>
-            )}
-            <Button size="xs" variant="ghost" colorPalette="red" mb={1} onClick={() => onChange([])} aria-label={`Remove ${meta.title} model`}>
+            <Button size="xs" variant="ghost" colorPalette="red" mb={1} onClick={() => onChange(undefined)} aria-label={`Remove ${meta.title} model`}>
               <LuTrash2 />
             </Button>
-            {optionsOpen && (
-              <StepOptionsModal
-                stepLabel={meta.title}
-                reasoning={reasoning}
-                onReasoningChange={(value) => setStep({ options: { ...step.options, reasoning: value } })}
-                onClose={() => setOptionsOpen(false)}
-              />
-            )}
           </Flex>
-          {autoConflict && (
-            <HStack gap={1} aria-label={`${meta.title} auto model conflict`}>
-              <LuX size={12} color="var(--chakra-colors-red-500)" />
-              <Text fontSize="xs" fontFamily="mono" color="red.500">
-                Auto picks {autoDefault}, which is not in this provider&apos;s allowed models. Allow it or pick a model explicitly.
-              </Text>
-            </HStack>
-          )}
-          </>
         ) : (
           <Button
             size="xs" variant="outline" fontFamily="mono" alignSelf="flex-start"
-            onClick={() => onChange([{ providerName: providerOptions[0]?.value ?? '', options: { reasoning: DEFAULT_REASONING } }])}
+            onClick={() => onChange({ providerName: providerOptions[0]?.value ?? '', options: { reasoning: DEFAULT_REASONING } })}
             disabled={providerOptions.length === 0}
             aria-label={`Add ${meta.title} model`}
           >
@@ -670,56 +621,52 @@ function UseCaseChainEditor({ useCase, chain, providers, modelsFor, onChange }: 
   );
 }
 
-/**
- * Per-step model options. Only reasoning effort for now; future per-model
- * options (temperature, max tokens, …) get rows here instead of new columns
- * in the chain row.
- */
-function StepOptionsModal({ stepLabel, reasoning, onReasoningChange, onClose }: {
-  stepLabel: string;
-  reasoning: string;
-  onReasoningChange: (value: string) => void;
-  onClose: () => void;
+function AgentPolicyRow({ agent, policy, onChange }: {
+  agent: LlmAgentKey;
+  policy: { allowedGrades: LlmGrade[]; defaultGrade: LlmGrade };
+  onChange: (patch: { allowedGrades?: LlmGrade[]; defaultGrade?: LlmGrade }) => void;
 }) {
+  const gradeOptions = LLM_GRADES.map(grade => ({ value: grade, label: gradeLabel(grade) }));
+  // The default must stay pickable: bound the default picker to the allowed
+  // set, badging the built-in default (micro → Lite, analyst → Core, …) the
+  // same way the model pickers badge compatibility recommendations.
+  const recommendedDefault = DEFAULT_AGENT_POLICIES[agent].defaultGrade;
+  const defaultOptions = gradeOptions
+    .filter(o => policy.allowedGrades.includes(o.value))
+    .map(o => (o.value === recommendedDefault ? { ...o, badge: 'recommended' } : o));
   return (
-    <Dialog.Root open onOpenChange={(d) => { if (!d.open) onClose(); }}>
-      <Dialog.Backdrop />
-      <Dialog.Positioner>
-        <Dialog.Content maxW="420px" aria-label={`Model options for ${stepLabel}`}>
-          <Dialog.Header>
-            <Dialog.Title fontSize="md" fontFamily="mono">Model options — {stepLabel}</Dialog.Title>
-          </Dialog.Header>
-          <Dialog.Body>
-            <Text fontSize="xs" fontWeight="medium" fontFamily="mono" mb={1}>Reasoning effort</Text>
-            <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={2}>
-              How much the model thinks before answering. Higher = better on hard questions, slower and pricier.
-            </Text>
-            <HStack gap={1} wrap="wrap">
-              {REASONING_LEVELS.map(level => {
-                const selected = reasoning === level;
-                return (
-                  <Button
-                    key={level}
-                    size="xs" fontFamily="mono"
-                    variant={selected ? 'solid' : 'outline'}
-                    bg={selected ? 'accent.teal' : undefined}
-                    color={selected ? 'white' : undefined}
-                    onClick={() => onReasoningChange(level)}
-                    aria-label={selected ? `Reasoning effort ${level} selected` : `Set reasoning effort ${level}`}
-                  >
-                    {level}
-                  </Button>
-                );
-              })}
-            </HStack>
-          </Dialog.Body>
-          <Dialog.Footer>
-            <Button size="sm" fontFamily="mono" onClick={onClose} aria-label="Close model options">
-              Done
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog.Positioner>
-    </Dialog.Root>
+    <Flex
+      gap={3} wrap="wrap" align="flex-end"
+      borderWidth="1px" borderColor="border.muted" borderRadius="md" p={3}
+      aria-label={`Agent ${agent} grades`}
+    >
+      <Box minW="130px" flex="1">
+        <Text fontSize="sm" fontWeight="medium" fontFamily="mono">{AGENT_TITLES[agent]}</Text>
+      </Box>
+      <Box minW="200px">
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Allowed grades</Text>
+        <SearchableMultiSelect
+          values={policy.allowedGrades}
+          options={gradeOptions}
+          placeholder="Pick grades…"
+          summary={(v) => v.map(g => gradeLabel(g as LlmGrade)).join(', ')}
+          label={`Agent ${agent} allowed grades`}
+          onChange={(next) => {
+            if (next.length === 0) return; // an agent always has at least one grade
+            onChange({ allowedGrades: next as LlmGrade[] });
+          }}
+        />
+      </Box>
+      <Box minW="140px">
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Default grade</Text>
+        <SearchableSelect
+          value={policy.defaultGrade}
+          onChange={(grade) => onChange({ defaultGrade: grade as LlmGrade })}
+          options={defaultOptions}
+          placeholder="Default…"
+          label={`Agent ${agent} default grade`}
+        />
+      </Box>
+    </Flex>
   );
 }

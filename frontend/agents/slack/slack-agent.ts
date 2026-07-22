@@ -28,6 +28,7 @@ export class SlackAgent extends RemoteAnalystAgent {
   };
   // Inherits tool set (DB tools + file tools) from RemoteAnalystAgent.
   static model = getAgentModelOrTestFallback(FAUX_MODEL);
+  static override readonly llmAgent = 'slack';
 
   protected getSystemPrompt(): string {
     // Impersonate the invoking user: their allowed viz types, role, whitelisted

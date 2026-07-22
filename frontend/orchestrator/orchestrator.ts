@@ -10,7 +10,7 @@ import {
   type AgentInvocation,
   type ConversationLog,
   type LlmPlanStep,
-  type LlmUseCase,
+  type LlmPlanSelector,
   type ConversationLogEntry,
   type MXAgentDetails,
   type PendingToolCall,
@@ -73,11 +73,12 @@ export class Orchestrator {
   /**
    * Optional per-call model-plan resolver (DB-backed model config). Installed
    * by the app (orchestration-core); the engine stays config-agnostic. Returns
-   * the model + call options for a use case; `null` means "nothing configured"
-   * and the agent's static model is used unchanged. Headless/benchmark/test
-   * runs that don't set this behave exactly as before.
+   * the model + call options for a selector (agent + optional grade override);
+   * `null` means "nothing configured" and the agent's static model is used
+   * unchanged. Headless/benchmark/test runs that don't set this behave
+   * exactly as before.
    */
-  resolveLlmPlan: ((useCase: LlmUseCase) => Promise<LlmPlanStep | null>) | null = null;
+  resolveLlmPlan: ((selector: LlmPlanSelector) => Promise<LlmPlanStep | null>) | null = null;
   protected stream: EventStream<StreamEvent, AssistantMessage | null> | null = null;
   protected controller: AbortController | null = null;
   protected readonly registrables: RegistrableClass[];
@@ -141,7 +142,7 @@ export class Orchestrator {
     context: Context,
     agentId: string,
     callOptions?: Record<string, unknown>,
-    useCase: LlmUseCase = 'analyst',
+    selector: LlmPlanSelector = { agent: 'analyst' },
   ): Promise<AssistantMessage> {
     const callId = randomUUID();
     const t0 = Date.now();
@@ -151,11 +152,11 @@ export class Orchestrator {
     // Throwing aborts this call and the run (surfaced as a run error event).
     if (this.beforeLlmCall) await this.beforeLlmCall();
 
-    // DB-backed model plan for this use case. Plan options merge OVER the
+    // DB-backed model plan for this selector. Plan options merge OVER the
     // agent's own callOptions (per-turn options like web-search location
     // survive; conflicting keys follow the DB config). No resolver / no plan
     // → the agent's static model, exactly as before.
-    const plan = this.resolveLlmPlan ? await this.resolveLlmPlan(useCase) : null;
+    const plan = this.resolveLlmPlan ? await this.resolveLlmPlan(selector) : null;
     const effectiveModel = plan?.model ?? model;
     const effectiveOptions = plan ? { ...(callOptions ?? {}), ...(plan.callOptions ?? {}) } : callOptions;
 

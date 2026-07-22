@@ -3,14 +3,14 @@
 import { useState, useCallback } from 'react';
 import { Box, Portal } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setRightSidebarCollapsed, setSidebarPendingMessage, setChatModelSelection, setSidebarPendingSlashCommand, setActiveSidebarSection, addChatAttachment } from '@/store/uiSlice';
+import { setRightSidebarCollapsed, setSidebarPendingMessage, setChatGradeSelection, setSidebarPendingSlashCommand, setActiveSidebarSection, addChatAttachment } from '@/store/uiSlice';
 import { useContext } from '@/lib/hooks/useContext';
 import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from '../explore/slash-commands';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import ChatInput from '../explore/ChatInput';
 import type { Attachment, SlashCommand } from '@/lib/types';
 import type { AppState } from '@/lib/appState';
-import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
+import type { LlmGrade } from '@/lib/llm/llm-config-types';
 
 // Sidebar width constants (must match Sidebar.tsx)
 const SIDEBAR_WIDTH_EXPANDED = '260px';
@@ -39,7 +39,7 @@ export default function FloatingChatWrapper({
   const leftSidebarCollapsed = useAppSelector(state => state.ui.leftSidebarCollapsed);
   const rightSidebarCollapsed = useAppSelector(state => state.ui.rightSidebarCollapsed);
   const rightSidebarWidth = useAppSelector(state => state.ui.rightSidebarWidth);
-  const selectedModel = useAppSelector(state => state.ui.chatModelSelection);
+  const selectedGrade = useAppSelector(state => state.ui.chatGradeSelection);
 
   // Load context databases using the shared context path from the parent
   const effectiveContextPath = selectedContextPath || filePath || '/';
@@ -79,8 +79,8 @@ export default function FloatingChatWrapper({
     setLocalDatabase(name);
   }, []);
 
-  const handleModelChange = useCallback((model: ChatModelSelection | null) => {
-    dispatch(setChatModelSelection(model));
+  const handleGradeChange = useCallback((grade: LlmGrade | null) => {
+    dispatch(setChatGradeSelection(grade));
   }, [dispatch]);
 
   const noop = useCallback(() => {}, []);
@@ -106,8 +106,8 @@ export default function FloatingChatWrapper({
         disabled={false}
         databaseName={databaseName}
         onDatabaseChange={handleDatabaseChange}
-        selectedModel={selectedModel}
-        onModelChange={handleModelChange}
+        selectedGrade={selectedGrade}
+        onGradeChange={handleGradeChange}
         container="floating"
         isCompact={true}
         whitelistedSchemas={contextInfo.databases}

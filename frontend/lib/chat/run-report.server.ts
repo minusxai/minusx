@@ -38,10 +38,13 @@ const REPORT_REGISTRABLES: RegistrableClass[] = [
  */
 export async function runReportV2(ctx: ReportAgentContext): Promise<ReportRunContent> {
   const orch = new Orchestrator(REPORT_REGISTRABLES, []);
-  // DB-backed model config (Settings → Models): resolve the per-use-case plan on
-  // every call — same wiring as chat turns (see orchestration-core). Without it,
-  // report runs use the agents' static MinusX-gateway model, which has no key.
-  orch.resolveLlmPlan = buildLlmPlanResolver();
+  // DB-backed model config (Settings → Models): resolve the plan on every call —
+  // same wiring as chat turns (see orchestration-core). Without it, report runs
+  // use the agents' static MinusX-gateway model, which has no key. The report's
+  // LLM calls come from its dispatched analyst sub-agent, so every call in the
+  // run is pinned to the `report` agent grade policy.
+  const resolve = buildLlmPlanResolver();
+  orch.resolveLlmPlan = (selector) => resolve({ ...selector, agent: 'report' });
   const agent = new ReportAgent(orch, { userMessage: `Execute report: ${ctx.reportName}` }, ctx);
 
   const stream = orch.run(agent);

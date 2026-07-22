@@ -78,7 +78,7 @@ import type {
   ChatRequest,
   CompletedToolCallResult,
 } from '@/lib/chat/chat-types';
-import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
+import { LLM_GRADES, type LlmGrade } from '@/lib/llm/llm-config-types';
 
 
 import { immutableSet, immutableMap } from '@/lib/utils/immutable-collections';
@@ -354,18 +354,10 @@ export async function setupOrchestration(
     typeof (agentArgs as { connection_id?: unknown }).connection_id === 'string'
       ? (agentArgs as { connection_id: string }).connection_id
       : undefined;
-  const rawModelOverride = (agentArgs as { model_override?: unknown }).model_override;
-  const modelOverride: ChatModelSelection | undefined = rawModelOverride
-    && typeof rawModelOverride === 'object'
-    && typeof (rawModelOverride as { providerName?: unknown }).providerName === 'string'
-    && ((rawModelOverride as { model?: unknown }).model === undefined
-      || typeof (rawModelOverride as { model?: unknown }).model === 'string')
-      ? {
-          providerName: (rawModelOverride as { providerName: string }).providerName,
-          ...((rawModelOverride as { model?: string }).model
-            ? { model: (rawModelOverride as { model: string }).model }
-            : {}),
-        }
+  const rawGradeOverride = (agentArgs as { grade_override?: unknown }).grade_override;
+  const gradeOverride: LlmGrade | undefined =
+    typeof rawGradeOverride === 'string' && (LLM_GRADES as readonly string[]).includes(rawGradeOverride)
+      ? rawGradeOverride as LlmGrade
       : undefined;
 
   // The client sends only POINTERS (context_file_id, context_version,
@@ -461,9 +453,9 @@ export async function setupOrchestration(
   // ENFORCE_CREDIT_LIMITS). Covers every agent/sub-agent/resume hop in this run.
   orch.beforeLlmCall = creditEnforcer(user);
   // DB-backed model config (workspace-level — every mode shares the org
-  // config's `llm` providers): resolve the per-use-case model chain on every
+  // config's `llm` providers): resolve the agent's grade → model plan on every
   // call; unconfigured workspaces default to the MinusX gateway.
-  orch.resolveLlmPlan = buildLlmPlanResolver(modelOverride);
+  orch.resolveLlmPlan = buildLlmPlanResolver(gradeOverride);
 
   // Resume path: frontend sends back [ToolCall, ToolMessage][] tuples.
   // ToolMessage (from Redux/executeToolCall) lacks .function — patch it from

@@ -20,8 +20,8 @@ export function getMicroModelOrTestFallback(testFallback: Model<Api>): Model<Api
   return buildMinusxModel();
 }
 
-/** Static call options: the `micro` use-case routing header in production. */
+/** Static call options: the `lite` grade routing header in production. */
 export function getMicroModelOptions(): Record<string, unknown> | undefined {
   if (isTestEnv() || E2E_MODE) return undefined;
-  return minusxCallOptions('micro');
+  return minusxCallOptions('lite');
 }
