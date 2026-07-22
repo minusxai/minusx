@@ -386,8 +386,14 @@ so the surface phase re-proves with the REAL (post-re-skin) chrome anyway.
 - [x] Update `skill_dashboards` — DONE: documents `theme` + the six names in prompts.yaml.
 - [x] ESLint no-`@chakra-ui` ban — DONE (`eslint.config.mjs`): kit + all re-skinned files
       including the five pivot files; validate-enforced.
-- [ ] Story payoff checkpoint: embeds inside stories are now story-stack components → shrink
-      `mirrorAppStyles` to what's actually still needed, measure the CSS diff.
+- [x] Story payoff checkpoint — MEASURED (dev build, seeded story with embeds): the mirror
+      carries ~455KB into each story iframe — 237KB compiled app CSS bundle (Chakra static
+      theme + Tailwind + tokens; dev-unminified), **195KB emotion runtime rules (43%)**, 20KB
+      `@font-face` (72 rules), 18KB misc. Verdict: the mirror CANNOT shrink yet — embeds still
+      reach Chakra through the flat `TableV2`, `TableBottomBar`, `DrillDownCard`, `ChartError`,
+      and the param child widgets (all Phase 5 scope). Post-Phase-5 the emotion runtime block
+      and the Chakra share of the bundle drop out; the surviving duties are fonts + the
+      `APP_STYLES_BASE_CSS` guards, which move to a static injection in 6a. Re-measure at 6a.
 
 ### Phase 4 — Main-document SVG surface for the dashboard grid (Option B2)
 - [x] ~~Core spike~~ **DE-RISKED (§7.2): real react-grid-layout inside `<svg><foreignObject>` in
