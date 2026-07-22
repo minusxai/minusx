@@ -227,11 +227,20 @@ const checkboxStyle: React.CSSProperties = { display: 'flex', alignItems: 'cente
 export function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; appState: AppState | null | undefined }) {
   const [webLink, setWebLink] = useState(false);
   const [limit512, setLimit512] = useState(false);  // cap output to 512px wide
+  // Draw the agent's numbered position-marker gutter into the capture. Markers + 512px together
+  // reproduce the agent's app-state screenshot option-for-option (app-state-screenshot.ts), so a
+  // dev can preview the exact image the agent receives.
+  const [markers, setMarkers] = useState(false);
   const [busy, setBusy] = useState(false);
   const [agentBusy, setAgentBusy] = useState(false);
   const [result, setResult] = useState<ImageResult | null>(null);
   // Memoized so captureElement's useCallback deps don't change on every render
-  const screenshotOptions = useMemo(() => limit512 ? { maxWidth: 512 } : undefined, [limit512]);
+  const screenshotOptions = useMemo(
+    () => (limit512 || markers)
+      ? { ...(limit512 ? { maxWidth: 512 } : {}), ...(markers ? { markers: true } : {}) }
+      : undefined,
+    [limit512, markers],
+  );
   const { captureFileView, blobToDataURL } = useScreenshot(screenshotOptions);
   const colorMode = useAppSelector(state => state.ui.colorMode);
   const queryResultsMap = useAppSelector(state => state.queryResults.results);
@@ -341,6 +350,10 @@ export function ImageToolsPanel({ fileId, appState }: { fileId: number | undefin
           <label style={checkboxStyle}>
             <input type="checkbox" checked={limit512} onChange={e => setLimit512(e.target.checked)} aria-label="Limit width to 512px" />
             <Text fontSize="2xs" color="fg.muted">512px</Text>
+          </label>
+          <label style={checkboxStyle}>
+            <input type="checkbox" checked={markers} onChange={e => setMarkers(e.target.checked)} aria-label="Draw agent position markers" />
+            <Text fontSize="2xs" color="fg.muted">Markers</Text>
           </label>
         </HStack>
 
