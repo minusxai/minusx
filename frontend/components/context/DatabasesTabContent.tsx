@@ -337,9 +337,6 @@ export function DatabasesTabContent({
                               annotations={content.annotations || []}
                               onAnnotationsChange={editMode ? (next) => onChange({ annotations: next }) : undefined}
                               inheritedAnnotations={content.fullAnnotations}
-                              metrics={content.metrics || []}
-                              onMetricsChange={editMode ? (next) => onChange({ metrics: next }) : undefined}
-                              inheritedMetrics={content.fullMetrics}
                             />
                           </Box>
                         </Collapsible.Content>

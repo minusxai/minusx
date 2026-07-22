@@ -1,14 +1,11 @@
 import React from 'react';
 import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react';
-import { MentionItem } from '@/lib/data/completions/types';
-import type { DatabaseWithSchema, MetricDef } from '@/lib/types';
 import {
   MentionOption,
   isSlashCommand,
   getMentionBadgeInfo,
   getMentionPrimaryText,
   getMentionMetaText,
-  getSubmenuItems,
 } from './mentions-plugin-utils';
 import { LuChevronRight } from 'react-icons/lu';
 
@@ -19,8 +16,6 @@ interface MentionRowProps {
   selectedItemRef: React.RefObject<HTMLDivElement | null>;
   isUserSkillHeader: boolean;
   isSystemSkillHeader: boolean | null;
-  whitelistedSchemas?: DatabaseWithSchema[];
-  metrics?: MetricDef[];
   onHover: (index: number) => void;
   onSelect: (mention: MentionOption) => void;
 }
@@ -33,8 +28,6 @@ export function MentionRow({
   selectedItemRef,
   isUserSkillHeader,
   isSystemSkillHeader,
-  whitelistedSchemas,
-  metrics,
   onHover,
   onSelect,
 }: MentionRowProps) {
@@ -110,8 +103,8 @@ export function MentionRow({
                   </Text>
                 )}
               </VStack>
-              {!isSlashCommand(mention) && mention.type === 'table'
-                && getSubmenuItems(mention as MentionItem, whitelistedSchemas, metrics).length > 0 && (
+              {/* Every table can drill down into its columns (resolved on demand). */}
+              {!isSlashCommand(mention) && mention.type === 'table' && (
                 <Icon as={LuChevronRight} boxSize={3.5} color="fg.subtle" flexShrink={0} alignSelf="center" />
               )}
             </HStack>

@@ -6,9 +6,9 @@ import { LuTable, LuChevronRight, LuChevronDown, LuDatabase, LuEye } from 'react
 import { Checkbox } from '@/components/ui/checkbox';
 import SchemaColumnRow from './SchemaColumnRow';
 import ChildPathSelector from '../selectors/ChildPathSelector';
-import TableMetricsEditor from '../context/TableMetricsEditor';
-import type { TableAnnotation, MetricDef } from '@/lib/types';
+import type { TableAnnotation } from '@/lib/types';
 import type { SchemaTreeItem, WhitelistItem } from './SchemaTreeView';
+import { useTableColumns } from '@/lib/hooks/use-table-columns';
 
 const TABLES_PER_PAGE = 25;
 const COLUMNS_PER_PAGE = 5;
@@ -56,12 +56,6 @@ interface SchemaTreeSchemaRowProps {
   annotations: TableAnnotation[];
   inheritedAnnotations: TableAnnotation[];
 
-  metrics: MetricDef[];
-  onMetricsChange?: (next: MetricDef[]) => void;
-  inheritedMetrics: MetricDef[];
-
-  /** All tables in this connection (join target candidates). */
-
   expandedSchemas: Set<string>;
   expandedTables: Set<string>;
 
@@ -106,9 +100,6 @@ export default function SchemaTreeSchemaRow({
   annotationsEditable,
   annotations,
   inheritedAnnotations,
-  metrics,
-  onMetricsChange,
-  inheritedMetrics,
   expandedSchemas,
   expandedTables,
   isSchemaWhitelisted,
@@ -266,6 +257,7 @@ export default function SchemaTreeSchemaRow({
                 <Box key={tableKey}>
                   {/* Table Header — indented flat row */}
                   <HStack
+                    aria-label={`Toggle table ${schemaItem.schema}.${table.table}`}
                     pl={3}
                     pr={3}
                     py={1.5}
@@ -396,7 +388,9 @@ export default function SchemaTreeSchemaRow({
                           />
                         </Box>
                       )}
-                      {showColumns && (
+                      {/* Hidden when 0: a bounded (names-only) schema reports no
+                          columns; they resolve on demand when the table expands. */}
+                      {showColumns && columnCount > 0 && (
                         <Text
                           fontSize="10px"
                           fontWeight="600"
@@ -409,80 +403,23 @@ export default function SchemaTreeSchemaRow({
                     </HStack>
                   </HStack>
 
-                  {/* Columns List */}
+                  {/* Columns List — columns resolve on demand when the bounded
+                      schema shipped names-only (see useTableColumns). */}
                   {showColumns && isTableExpanded && (
-                    <Collapsible.Root open={isTableExpanded}>
-                      <Collapsible.Content>
-                        <VStack
-                          gap={0}
-                          align="stretch"
-                          ml={5}
-                          borderLeft="1px solid"
-                          borderColor="border.muted"
-                        >
-                          {/* Per-table metrics (edited inline) */}
-                          {(onMetricsChange || metrics.length > 0 || inheritedMetrics.length > 0) && (
-                            <Box borderBottom="1px solid" borderColor="border.muted">
-                              <TableMetricsEditor
-                                connection={connectionName}
-                                schema={schemaItem.schema}
-                                table={table.table}
-                                metrics={metrics}
-                                onMetricsChange={onMetricsChange}
-                                inheritedMetrics={inheritedMetrics}
-                              />
-                            </Box>
-                          )}
-                          {filteredColumns.slice(0, getVisibleColumnCount(tableKey, filteredColumns.length)).map((column) => {
-                            const profiledDesc = (column as { meta?: { description?: string } }).meta?.description;
-                            const colDesc = effectiveColumnDescription(schemaItem.schema, table.table, column.name, profiledDesc);
-                            return (
-                              <SchemaColumnRow
-                                key={column.name}
-                                name={column.name}
-                                type={column.type}
-                                description={annotationsEditable ? (
-                                  <AnnInput
-                                    ariaLabel={`${schemaItem.schema}.${table.table}.${column.name} description`}
-                                    value={findTableAnn(annotations, schemaItem.schema, table.table)?.columns?.find(c => c.name === column.name)?.description ?? ''}
-                                    placeholder={profiledDesc || 'Describe column…'}
-                                    onCommit={(v) => setColumnDescription(schemaItem.schema, table.table, column.name, v)}
-                                  />
-                                ) : (
-                                  <Text fontSize="2xs" color="fg.muted" truncate title={colDesc}>
-                                    {colDesc || ''}
-                                  </Text>
-                                )}
-                                footer={annotationsEditable && profiledDesc ? (
-                                  <Text pl="172px" pr={3} pb={1} fontSize="2xs" color="fg.subtle" truncate title={profiledDesc}>
-                                    source: {profiledDesc}
-                                  </Text>
-                                ) : undefined}
-                              />
-                            );
-                          })}
-
-                          {/* Show More Columns Button */}
-                          {filteredColumns.length > getVisibleColumnCount(tableKey, filteredColumns.length) && (
-                            <Box
-                              pl={3}
-                              pr={3}
-                              py={1.5}
-                              borderBottom="1px solid"
-                              borderColor="border.muted"
-                              cursor="pointer"
-                              onClick={() => showMoreColumns(tableKey)}
-                              _hover={{ bg: 'bg.muted' }}
-                              transition="background 0.1s"
-                            >
-                              <Text fontSize="10px" color="accent.teal" fontFamily="mono" fontWeight="600">
-                                + {Math.min(COLUMNS_PER_PAGE, filteredColumns.length - getVisibleColumnCount(tableKey, filteredColumns.length))} more columns
-                              </Text>
-                            </Box>
-                          )}
-                        </VStack>
-                      </Collapsible.Content>
-                    </Collapsible.Root>
+                    <ExpandedTableColumns
+                      schemaName={schemaItem.schema}
+                      table={table}
+                      tableKey={tableKey}
+                      connectionName={connectionName}
+                      getFilteredColumns={getFilteredColumns}
+                      getVisibleColumnCount={getVisibleColumnCount}
+                      showMoreColumns={showMoreColumns}
+                      annotationsEditable={annotationsEditable}
+                      annotations={annotations}
+                      findTableAnn={findTableAnn}
+                      effectiveColumnDescription={effectiveColumnDescription}
+                      setColumnDescription={setColumnDescription}
+                    />
                   )}
                 </Box>
               );
@@ -510,5 +447,113 @@ export default function SchemaTreeSchemaRow({
         </Collapsible.Content>
       </Collapsible.Root>
     </Box>
+  );
+}
+
+interface ExpandedTableColumnsProps {
+  schemaName: string;
+  table: SchemaTreeItem['tables'][number];
+  tableKey: string;
+  connectionName?: string;
+
+  getFilteredColumns: SchemaTreeSchemaRowProps['getFilteredColumns'];
+  getVisibleColumnCount: SchemaTreeSchemaRowProps['getVisibleColumnCount'];
+  showMoreColumns: (tableKey: string) => void;
+
+  annotationsEditable: boolean;
+  annotations: TableAnnotation[];
+  findTableAnn: SchemaTreeSchemaRowProps['findTableAnn'];
+  effectiveColumnDescription: SchemaTreeSchemaRowProps['effectiveColumnDescription'];
+  setColumnDescription: SchemaTreeSchemaRowProps['setColumnDescription'];
+}
+
+/**
+ * The expanded table's column list. Split out of the table map so it can call
+ * useTableColumns: the schema shipped to the client may be names-only
+ * (memory-bounded), in which case the columns are fetched on demand — same API
+ * and cache as the @ mention drill-down.
+ */
+function ExpandedTableColumns({
+  schemaName,
+  table,
+  tableKey,
+  connectionName,
+  getFilteredColumns,
+  getVisibleColumnCount,
+  showMoreColumns,
+  annotationsEditable,
+  annotations,
+  findTableAnn,
+  effectiveColumnDescription,
+  setColumnDescription,
+}: ExpandedTableColumnsProps) {
+  const effectiveColumns = useTableColumns(
+    { name: table.table, schema: schemaName, connection: connectionName },
+    table.columns ?? [],
+    connectionName,
+  );
+  const filteredColumns = getFilteredColumns(schemaName, { ...table, columns: effectiveColumns });
+
+  return (
+    <Collapsible.Root open>
+      <Collapsible.Content>
+        <VStack
+          gap={0}
+          align="stretch"
+          ml={5}
+          borderLeft="1px solid"
+          borderColor="border.muted"
+        >
+          {filteredColumns.slice(0, getVisibleColumnCount(tableKey, filteredColumns.length)).map((column) => {
+            const profiledDesc = (column as { meta?: { description?: string } }).meta?.description;
+            const colDesc = effectiveColumnDescription(schemaName, table.table, column.name, profiledDesc);
+            return (
+              <SchemaColumnRow
+                key={column.name}
+                name={column.name}
+                type={column.type}
+                ariaLabel={`Column ${schemaName}.${table.table}.${column.name}`}
+                description={annotationsEditable ? (
+                  <AnnInput
+                    ariaLabel={`${schemaName}.${table.table}.${column.name} description`}
+                    value={findTableAnn(annotations, schemaName, table.table)?.columns?.find(c => c.name === column.name)?.description ?? ''}
+                    placeholder={profiledDesc || 'Describe column…'}
+                    onCommit={(v) => setColumnDescription(schemaName, table.table, column.name, v)}
+                  />
+                ) : (
+                  <Text fontSize="2xs" color="fg.muted" truncate title={colDesc}>
+                    {colDesc || ''}
+                  </Text>
+                )}
+                footer={annotationsEditable && profiledDesc ? (
+                  <Text pl="172px" pr={3} pb={1} fontSize="2xs" color="fg.subtle" truncate title={profiledDesc}>
+                    source: {profiledDesc}
+                  </Text>
+                ) : undefined}
+              />
+            );
+          })}
+
+          {/* Show More Columns Button */}
+          {filteredColumns.length > getVisibleColumnCount(tableKey, filteredColumns.length) && (
+            <Box
+              pl={3}
+              pr={3}
+              py={1.5}
+              borderBottom="1px solid"
+              borderColor="border.muted"
+              cursor="pointer"
+              onClick={() => showMoreColumns(tableKey)}
+              _hover={{ bg: 'bg.muted' }}
+              transition="background 0.1s"
+            >
+              <Text fontSize="10px" color="accent.teal" fontFamily="mono" fontWeight="600">
+                + {Math.min(COLUMNS_PER_PAGE, filteredColumns.length - getVisibleColumnCount(tableKey, filteredColumns.length))} more columns
+              </Text>
+            </Box>
+          )}
+        </VStack>
+      </Collapsible.Content>
+    </Collapsible.Root>
   );
 }

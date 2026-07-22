@@ -1,86 +1,56 @@
 /**
  * Metric markdown transformer for the docs Lexical editor.
  *
- * A metric is stored as a fenced directive block so it stays readable in raw
- * markdown and is easy for the AI agent to author/read:
+ * A metric is INLINE — it flows inside a sentence like a mention chip — and is
+ * stored as `:metric` followed by flat JSON, the same grammar as mention chips
+ * (`@{json}`), so every doc chip is "a token + flat JSON":
  *
- *     :::metric{name="Monthly Revenue" description="Revenue per month"}
- *     SELECT date_trunc('month', created_at) AS month, sum(amount) AS revenue
- *     FROM orders GROUP BY 1
- *     :::
+ *     We track :metric{"name":"Monthly Revenue","sql":"SELECT sum(amount)\nFROM orders"} weekly.
  *
- * `name` is required, `description` optional, and the body (SQL) optional.
+ * `name` is required; `description` and `sql` optional. JSON.stringify/parse
+ * handle all escaping (quotes, newlines in SQL), so multi-line SQL stays on
+ * one markdown line with no bespoke escaping scheme.
  */
 
-import type { MultilineElementTransformer } from '@lexical/markdown';
-import type { ElementNode, LexicalNode } from 'lexical';
-import { MetricNode, $createMetricNode, $isMetricNode } from './MetricNode';
+import type { TextMatchTransformer } from '@lexical/markdown';
+import type { LexicalNode, TextNode } from 'lexical';
+import { MetricNode, $createMetricNode, $isMetricNode, type MetricData } from './MetricNode';
 
-const METRIC_START_REGEX = /^:::metric\{(.*)\}\s*$/;
-const METRIC_END_REGEX = /^:::\s*$/;
-
-function escapeAttr(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-}
-
-function unescapeAttr(value: string): string {
-  return value.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-}
-
-/** Parse `key="value" key2="value2"` (with escaped quotes) into a map. */
-function parseAttrs(input: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  const re = /(\w+)="((?:[^"\\]|\\.)*)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(input)) !== null) {
-    out[match[1]] = unescapeAttr(match[2]);
-  }
-  return out;
-}
+// The JSON body: no raw braces outside quoted strings (MetricData is flat),
+// while quoted strings may contain braces and escaped quotes — so this stops
+// exactly at the object's closing brace even for SQL like `WHERE y = '{}'`.
+const JSON_BODY = '(\\{(?:[^{}"]|"(?:[^"\\\\]|\\\\.)*")*\\})';
+const METRIC_IMPORT_REGEX = new RegExp(`:metric${JSON_BODY}`);
+const METRIC_REGEX = new RegExp(`:metric${JSON_BODY}$`);
 
 function serializeMetric(node: MetricNode): string {
   const { name, description, sql } = node.getMetricData();
-  let attrs = `name="${escapeAttr(name || '')}"`;
-  if (description?.trim()) attrs += ` description="${escapeAttr(description)}"`;
-  const header = `:::metric{${attrs}}`;
-  const body = sql?.trim() ? `\n${sql.trim()}` : '';
-  return `${header}${body}\n:::`;
+  const data: MetricData = { name: name || '' };
+  if (description?.trim()) data.description = description;
+  if (sql?.trim()) data.sql = sql.trim();
+  return `:metric${JSON.stringify(data)}`;
 }
 
-export const METRIC: MultilineElementTransformer = {
+export const METRIC: TextMatchTransformer = {
   dependencies: [MetricNode],
   export: (node: LexicalNode) => {
     if (!$isMetricNode(node)) return null;
     return serializeMetric(node);
   },
-  regExpStart: METRIC_START_REGEX,
-  regExpEnd: METRIC_END_REGEX,
-  handleImportAfterStartMatch: ({ lines, rootNode, startLineIndex, startMatch }) => {
-    const attrs = parseAttrs(startMatch[1]);
-    const sqlLines: string[] = [];
-    let endIndex = startLineIndex;
-    let foundEnd = false;
-    for (let i = startLineIndex + 1; i < lines.length; i++) {
-      if (METRIC_END_REGEX.test(lines[i])) { endIndex = i; foundEnd = true; break; }
-      sqlLines.push(lines[i]);
+  importRegExp: METRIC_IMPORT_REGEX,
+  regExp: METRIC_REGEX,
+  replace: (textNode: TextNode, match: RegExpMatchArray) => {
+    try {
+      const parsed = JSON.parse(match[1]) as Partial<MetricData>;
+      textNode.replace($createMetricNode({
+        name: typeof parsed.name === 'string' && parsed.name ? parsed.name : 'Untitled metric',
+        description: typeof parsed.description === 'string' && parsed.description.trim() ? parsed.description : undefined,
+        sql: typeof parsed.sql === 'string' && parsed.sql.trim() ? parsed.sql : undefined,
+      }));
+    } catch {
+      // Malformed JSON — leave the text as-is rather than throw.
     }
-    // Without a closing fence it isn't a metric block — let other transformers try.
-    if (!foundEnd) return null;
-
-    rootNode.append($createMetricNode({
-      name: attrs.name || 'Untitled metric',
-      description: attrs.description?.trim() || undefined,
-      sql: sqlLines.join('\n').trim() || undefined,
-    }));
-    return [true, endIndex];
   },
-  replace: (rootNode: ElementNode, _children, startMatch, _endMatch, linesInBetween) => {
-    const attrs = parseAttrs(startMatch[1]);
-    rootNode.append($createMetricNode({
-      name: attrs.name || 'Untitled metric',
-      description: attrs.description?.trim() || undefined,
-      sql: (linesInBetween || []).join('\n').trim() || undefined,
-    }));
-  },
-  type: 'multiline-element',
+  trigger: '}',
+  type: 'text-match',
 };
