@@ -1,20 +1,18 @@
 'use client';
 
 /**
- * MetricNode — a block-level Lexical DecoratorNode representing a named metric:
+ * MetricNode — an INLINE Lexical DecoratorNode representing a named metric:
  * a `name`, an optional one-line `description`, and an optional `sql` definition.
  *
- * It renders as a compact definition block with the description and SQL visible.
- * Clicking the block (in edit mode) opens an inline popover editor anchored to it. A
- * freshly inserted (unnamed) metric auto-opens its editor.
+ * It renders as a compact chip in the same visual language as the @ mention
+ * chips, flowing inside the sentence, with the description and truncated SQL
+ * visible. Clicking the chip (in edit mode) opens an inline popover editor
+ * anchored to it. A freshly inserted (unnamed) metric auto-opens its editor.
  *
- * Docs are stored as markdown, so a metric round-trips through a fenced directive
- * block (see metric-transformer.ts):
+ * Docs are stored as markdown, so a metric round-trips through a single-line
+ * inline directive (see metric-transformer.ts; newlines in SQL escaped as \n):
  *
- *     :::metric{name="Monthly Revenue" description="Revenue per month"}
- *     SELECT date_trunc('month', created_at) AS month, sum(amount) AS revenue
- *     FROM orders GROUP BY 1
- *     :::
+ *     :metric{name="Monthly Revenue" description="Revenue per month" sql="SELECT ..."}
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -29,7 +27,7 @@ import {
   type Spread,
 } from 'lexical';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { Box, HStack, VStack, Icon, Button, Input, Text, Textarea, Field, Popover, Portal } from '@chakra-ui/react';
+import { Box, HStack, VStack, Icon, Button, Input, Textarea, Field, Popover, Portal } from '@chakra-ui/react';
 import { LuCode, LuPencil, LuSquareFunction } from 'react-icons/lu';
 
 export interface MetricData {
@@ -40,110 +38,79 @@ export interface MetricData {
 
 export type SerializedMetricNode = Spread<{ metricData: MetricData }, SerializedLexicalNode>;
 
+/**
+ * Inline chip, styled exactly like the @ mention chips (bg.muted pill, mono,
+ * colored icon) so a metric reads as a peer of a table/column mention and
+ * flows inside the sentence. Description and SQL stay visible but truncated;
+ * full values are one hover (title) or click (editor) away.
+ */
 function MetricSummary({ data, editable = false, active = false }: { data: MetricData; editable?: boolean; active?: boolean }) {
   const hasDetails = Boolean(data.description || data.sql);
+  const compactSql = data.sql?.replace(/\s+/g, ' ').trim();
+
+  const truncateCss = {
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
+    textOverflow: 'ellipsis',
+    display: 'inline-block',
+    verticalAlign: 'bottom',
+  } as const;
 
   return (
     <Box
-      as="section"
+      as="span"
       aria-label={`Metric ${data.name || 'untitled'}`}
-      width="100%"
-      maxW="720px"
-      px={3}
-      py={2.5}
-      bg={active ? 'accent.teal/15' : 'accent.teal/10'}
-      border="1px solid"
-      borderColor={active ? 'accent.teal' : 'accent.teal/40'}
-      borderLeftWidth="3px"
-      borderLeftColor="accent.teal"
-      borderRadius="lg"
+      display="inline"
+      px="4px"
+      py="2px"
+      mx="1px"
+      bg={active ? 'accent.teal/15' : 'bg.muted'}
+      borderRadius="sm"
+      fontSize="0.85em"
+      fontFamily="mono"
+      lineHeight="inherit"
       color="fg.default"
-      textAlign="left"
+      fontWeight="600"
       cursor={editable ? 'pointer' : 'default'}
-      boxShadow={active ? 'sm' : 'none'}
-      transition="background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease"
-      _hover={editable ? { bg: 'accent.teal/15', borderColor: 'accent.teal', boxShadow: 'sm', transform: 'translateY(-1px)' } : undefined}
+      transition="background-color 120ms ease"
+      _hover={editable ? { bg: 'accent.teal/15' } : undefined}
     >
-      <HStack justify="space-between" align="center" gap={3}>
-        <HStack gap={2.5} minW={0}>
-          <Box
-            display="flex"
-            alignItems="center"
-            justifyContent="center"
-            boxSize="30px"
-            flexShrink={0}
-            bg="accent.teal"
-            borderRadius="md"
-            color="white"
-          >
-            <Icon as={LuSquareFunction} boxSize={4} />
-          </Box>
-          <Box minW={0}>
-            <Text
-              fontSize="2xs"
-              fontWeight="700"
-              lineHeight="1.2"
-              letterSpacing="0.1em"
-              textTransform="uppercase"
-              color="accent.teal"
-            >
-              Metric
-            </Text>
-            <Text fontSize="sm" fontWeight="700" lineHeight="1.4" truncate>
-              {data.name || 'Untitled metric'}
-            </Text>
-          </Box>
-        </HStack>
-
-        {editable && (
-          <HStack gap={1} flexShrink={0} color="fg.subtle" fontSize="xs" fontWeight="600">
-            <Icon as={LuPencil} boxSize={3} />
-            <Text>Edit</Text>
-          </HStack>
-        )}
-      </HStack>
-
+      <Box as="span" color="accent.teal">
+        <Icon as={LuSquareFunction} boxSize="0.85em" verticalAlign="-0.1em" />
+      </Box>
+      {' '}
+      <Box as="span" fontWeight="700">
+        {data.name || 'Untitled metric'}
+      </Box>
+      {/* Full description — it's the human meaning of the metric; only the SQL truncates. */}
       {data.description && (
-        <Box mt={2}>
-          <Text fontSize="2xs" fontWeight="700" lineHeight="1.3" letterSpacing="0.08em" textTransform="uppercase" color="accent.teal">
-            Definition
-          </Text>
-          <Text mt={0.5} fontSize="sm" lineHeight="1.55" color="fg.muted">
-            {data.description}
-          </Text>
+        <Box as="span" color="fg.muted" fontWeight="500">
+          {' '}· {data.description}
         </Box>
       )}
-
       {!hasDetails && editable && (
-        <Text mt={2} fontSize="xs" lineHeight="1.5" color="fg.subtle">
-          Add a definition or SQL so this metric is unambiguous.
-        </Text>
+        <Box as="span" color="fg.subtle" fontWeight="500">
+          {' '}· add a definition or SQL
+        </Box>
       )}
-
-      {data.sql && (
-        <Box mt={2.5} bg="bg.surface" border="1px solid" borderColor="accent.teal/25" borderRadius="md" overflow="hidden">
-          <HStack gap={1.5} px={2.5} py={1.5} bg="accent.teal/10" borderBottom="1px solid" borderColor="accent.teal/20">
-            <Icon as={LuCode} boxSize={3} color="accent.teal" />
-            <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="accent.teal">
-              SQL definition
-            </Text>
-          </HStack>
-          <Box
-            as="pre"
-            m={0}
-            px={2.5}
-            py={2}
-            maxH="120px"
-            overflow="auto"
-            whiteSpace="pre-wrap"
-            overflowWrap="anywhere"
-            fontFamily="mono"
-            fontSize="xs"
-            lineHeight="1.55"
-            color="fg.default"
-          >
-            {data.sql}
+      {/* SQL bracketed off from the prose, truncated with the full query on hover. */}
+      {compactSql && (
+        <>
+          {' '}
+          <Box as="span" color="fg.subtle" fontWeight="600">(</Box>
+          <Box as="span" color="accent.teal" fontWeight="700" fontSize="0.85em" letterSpacing="0.05em">
+            <Icon as={LuCode} boxSize="0.9em" verticalAlign="-0.1em" /> SQL
           </Box>
+          {' '}
+          <Box as="span" color="fg.muted" fontWeight="500" maxW="18em" title={data.sql} css={truncateCss}>
+            {compactSql}
+          </Box>
+          <Box as="span" color="fg.subtle" fontWeight="600">)</Box>
+        </>
+      )}
+      {editable && (
+        <Box as="span" color="fg.subtle">
+          {' '}<Icon aria-label="Edit metric" as={LuPencil} boxSize="0.75em" verticalAlign="-0.05em" />
         </Box>
       )}
     </Box>
@@ -156,6 +123,7 @@ function MetricCard({ nodeKey, data, editable }: { nodeKey: NodeKey; data: Metri
   const [name, setName] = useState(data.name);
   const [description, setDescription] = useState(data.description ?? '');
   const [sql, setSql] = useState(data.sql ?? '');
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   // A freshly inserted (unnamed) metric opens its editor immediately.
   const didMount = useRef(false);
@@ -167,6 +135,25 @@ function MetricCard({ nodeKey, data, editable }: { nodeKey: NodeKey; data: Metri
       setOpen(true);
     }
   }, [editable, data.name]);
+
+  // Hand focus to the Name input whenever the editor opens. Both Lexical
+  // (after $insertNodes) and the popover's own focus management can grab focus
+  // late — without this, typing silently lands in the document behind the
+  // popover. Retry briefly until the input actually holds focus.
+  useEffect(() => {
+    if (!open) return;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const claim = () => {
+      const el = nameInputRef.current;
+      if (el && document.activeElement !== el) el.focus();
+      if (nameInputRef.current && document.activeElement !== nameInputRef.current && ++tries < 8) {
+        timer = setTimeout(claim, 40);
+      }
+    };
+    timer = setTimeout(claim, 0);
+    return () => clearTimeout(timer);
+  }, [open]);
 
   const openEditor = () => {
     setName(data.name);
@@ -206,12 +193,13 @@ function MetricCard({ nodeKey, data, editable }: { nodeKey: NodeKey; data: Metri
       open={open}
       onOpenChange={(e: { open: boolean }) => { if (e.open) openEditor(); else cancel(); }}
       positioning={{ placement: 'bottom-start' }}
+      initialFocusEl={() => nameInputRef.current}
     >
       <Popover.Trigger asChild>
         <Box
-          width="100%"
-          maxW="720px"
-          _focusVisible={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '2px', borderRadius: 'lg' }}
+          as="span"
+          display="inline"
+          _focusVisible={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '2px', borderRadius: 'sm' }}
         >
           <MetricSummary data={data} editable active={open} />
         </Box>
@@ -223,7 +211,7 @@ function MetricCard({ nodeKey, data, editable }: { nodeKey: NodeKey; data: Metri
               <VStack gap={3} align="stretch">
                 <Field.Root required>
                   <Field.Label>Name</Field.Label>
-                  <Input aria-label="Metric name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Monthly Revenue" autoFocus size="sm" />
+                  <Input ref={nameInputRef} aria-label="Metric name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Monthly Revenue" autoFocus size="sm" />
                 </Field.Root>
                 <Field.Root>
                   <Field.Label>Description</Field.Label>
@@ -283,6 +271,17 @@ export class MetricNode extends DecoratorNode<React.ReactElement> {
     };
   }
 
+  /**
+   * INLINE, like a mention chip — the metric flows inside a sentence and text
+   * can be written around it. Safe for persistence because the text-match
+   * METRIC_INLINE transformer serializes inline nodes (a block-form-only
+   * transformer would drop an inline node on export — the historical
+   * vanishing-metric bug).
+   */
+  isInline(): true {
+    return true;
+  }
+
   getMetricData(): MetricData {
     return this.__metricData;
   }
@@ -293,10 +292,11 @@ export class MetricNode extends DecoratorNode<React.ReactElement> {
   }
 
   createDOM(config: EditorConfig): HTMLElement {
-    const div = document.createElement('div');
+    // Span, not div — the node is inline and lives inside <p> paragraphs.
+    const span = document.createElement('span');
     const className = config.theme.metric;
-    if (className) div.className = className;
-    return div;
+    if (className) span.className = className;
+    return span;
   }
 
   updateDOM(): false {

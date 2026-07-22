@@ -63,9 +63,8 @@ describe('LexicalTextEditor insertMetric', () => {
 
     const metric = await screen.findByLabelText('Metric Monthly Revenue');
     expect(metric).toHaveTextContent('Monthly Revenue');
-    expect(metric).toHaveTextContent('Definition');
     expect(metric).toHaveTextContent('Revenue recognized in each calendar month');
-    expect(metric).toHaveTextContent('SQL definition');
+    expect(metric).toHaveTextContent('SQL');
     expect(metric).toHaveTextContent('SELECT sum(amount) AS revenue');
 
     await userEvent.click(metric);
@@ -83,7 +82,7 @@ describe('LexicalTextEditor insertMetric', () => {
 
     const metric = await screen.findByLabelText('Metric Active Users');
     expect(metric).toHaveTextContent('Unique users active in the selected period');
-    expect(metric).not.toHaveTextContent('SQL definition');
+    expect(metric).not.toHaveTextContent('SQL');
   });
 
   it('offers Metric in the + insert menu when insertMetric is set, and inserts a definition block', async () => {
@@ -95,8 +94,12 @@ describe('LexicalTextEditor insertMetric', () => {
     const option = await screen.findByLabelText('Insert Metric');
     await userEvent.click(option);
 
-    // The inserted (unnamed) metric renders as a definition block.
+    // The inserted (unnamed) metric renders as a definition block…
     expect(await screen.findByLabelText('Metric untitled')).toBeInTheDocument();
+    // …with its editor open and the Name field focused — typing must land in
+    // the popover, not leak into the document (Lexical grabs focus after
+    // $insertNodes unless the editor explicitly hands it to the input).
+    await waitFor(() => expect(screen.getByLabelText('Metric name')).toHaveFocus());
   });
 
   it('does not offer Metric without the opt-in', async () => {

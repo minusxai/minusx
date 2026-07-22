@@ -21,10 +21,11 @@ import { MetricNode } from './MetricNode';
 import { MentionNode } from './MentionNode';
 import { ALL_TRANSFORMERS } from './markdown-transformers';
 import { MENTION } from './mention-transformer';
-import { METRIC } from './metric-transformer';
+import { METRIC, METRIC_INLINE } from './metric-transformer';
 
-/** All transformers for the docs editor + viewer. */
-export const DOCS_TRANSFORMERS: Transformer[] = [METRIC, MENTION, ...ALL_TRANSFORMERS];
+/** All transformers for the docs editor + viewer. METRIC is legacy import of
+ * the fenced block form; METRIC_INLINE owns the current inline round-trip. */
+export const DOCS_TRANSFORMERS: Transformer[] = [METRIC, METRIC_INLINE, MENTION, ...ALL_TRANSFORMERS];
 
 /** All node classes the docs editor + viewer must register. */
 export const DOCS_NODES: Array<Klass<LexicalNode>> = [

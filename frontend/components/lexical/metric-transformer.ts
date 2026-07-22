@@ -1,33 +1,38 @@
 /**
- * Metric markdown transformer for the docs Lexical editor.
+ * Metric markdown transformers for the docs Lexical editor.
  *
- * A metric is stored as a fenced directive block so it stays readable in raw
- * markdown and is easy for the AI agent to author/read:
+ * A metric is INLINE — it flows inside a sentence like a mention chip — and is
+ * stored as a single-line directive (newlines in the SQL are escaped as \n):
  *
- *     :::metric{name="Monthly Revenue" description="Revenue per month"}
- *     SELECT date_trunc('month', created_at) AS month, sum(amount) AS revenue
- *     FROM orders GROUP BY 1
- *     :::
+ *     We track :metric{name="Monthly Revenue" sql="SELECT sum(amount)\nFROM orders"} weekly.
  *
- * `name` is required, `description` optional, and the body (SQL) optional.
+ * `name` is required, `description` and `sql` optional. The older FENCED block
+ * form (`:::metric{...}` … `:::`) is still imported for backward compatibility
+ * — it lands wrapped in a paragraph and re-exports in the inline form.
  */
 
-import type { MultilineElementTransformer } from '@lexical/markdown';
-import type { ElementNode, LexicalNode } from 'lexical';
-import { MetricNode, $createMetricNode, $isMetricNode } from './MetricNode';
+import type { MultilineElementTransformer, TextMatchTransformer } from '@lexical/markdown';
+import { $createParagraphNode, type LexicalNode, type TextNode } from 'lexical';
+import { MetricNode, $createMetricNode, $isMetricNode, type MetricData } from './MetricNode';
 
 const METRIC_START_REGEX = /^:::metric\{(.*)\}\s*$/;
 const METRIC_END_REGEX = /^:::\s*$/;
 
+// Attr body: anything except a closing brace, unless it's inside a quoted
+// string (which may contain braces and escaped quotes).
+const INLINE_ATTRS = '((?:[^}"]|"(?:[^"\\\\]|\\\\.)*")*)';
+const METRIC_INLINE_IMPORT_REGEX = new RegExp(`:metric\\{${INLINE_ATTRS}\\}`);
+const METRIC_INLINE_REGEX = new RegExp(`:metric\\{${INLINE_ATTRS}\\}$`);
+
 function escapeAttr(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
 }
 
 function unescapeAttr(value: string): string {
-  return value.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  return value.replace(/\\(n|"|\\)/g, (_, c: string) => (c === 'n' ? '\n' : c));
 }
 
-/** Parse `key="value" key2="value2"` (with escaped quotes) into a map. */
+/** Parse `key="value" key2="value2"` (with escaped quotes/newlines) into a map. */
 function parseAttrs(input: string): Record<string, string> {
   const out: Record<string, string> = {};
   const re = /(\w+)="((?:[^"\\]|\\.)*)"/g;
@@ -38,25 +43,48 @@ function parseAttrs(input: string): Record<string, string> {
   return out;
 }
 
+function attrsToMetricData(attrs: Record<string, string>, sqlOverride?: string): MetricData {
+  return {
+    name: attrs.name || 'Untitled metric',
+    description: attrs.description?.trim() || undefined,
+    sql: (sqlOverride ?? attrs.sql)?.trim() || undefined,
+  };
+}
+
 function serializeMetric(node: MetricNode): string {
   const { name, description, sql } = node.getMetricData();
   let attrs = `name="${escapeAttr(name || '')}"`;
   if (description?.trim()) attrs += ` description="${escapeAttr(description)}"`;
-  const header = `:::metric{${attrs}}`;
-  const body = sql?.trim() ? `\n${sql.trim()}` : '';
-  return `${header}${body}\n:::`;
+  if (sql?.trim()) attrs += ` sql="${escapeAttr(sql.trim())}"`;
+  return `:metric{${attrs}}`;
 }
 
-export const METRIC: MultilineElementTransformer = {
+/** The one true (inline) metric form — owns both export and import. */
+export const METRIC_INLINE: TextMatchTransformer = {
   dependencies: [MetricNode],
   export: (node: LexicalNode) => {
     if (!$isMetricNode(node)) return null;
     return serializeMetric(node);
   },
+  importRegExp: METRIC_INLINE_IMPORT_REGEX,
+  regExp: METRIC_INLINE_REGEX,
+  replace: (textNode: TextNode, match: RegExpMatchArray) => {
+    textNode.replace($createMetricNode(attrsToMetricData(parseAttrs(match[1]))));
+  },
+  trigger: '}',
+  type: 'text-match',
+};
+
+/**
+ * LEGACY IMPORT ONLY — the old fenced block form. The (inline) node is wrapped
+ * in a paragraph; export always goes through METRIC_INLINE.
+ */
+export const METRIC: MultilineElementTransformer = {
+  dependencies: [MetricNode],
+  export: () => null,
   regExpStart: METRIC_START_REGEX,
   regExpEnd: METRIC_END_REGEX,
   handleImportAfterStartMatch: ({ lines, rootNode, startLineIndex, startMatch }) => {
-    const attrs = parseAttrs(startMatch[1]);
     const sqlLines: string[] = [];
     let endIndex = startLineIndex;
     let foundEnd = false;
@@ -67,20 +95,15 @@ export const METRIC: MultilineElementTransformer = {
     // Without a closing fence it isn't a metric block — let other transformers try.
     if (!foundEnd) return null;
 
-    rootNode.append($createMetricNode({
-      name: attrs.name || 'Untitled metric',
-      description: attrs.description?.trim() || undefined,
-      sql: sqlLines.join('\n').trim() || undefined,
-    }));
+    const paragraph = $createParagraphNode();
+    paragraph.append($createMetricNode(attrsToMetricData(parseAttrs(startMatch[1]), sqlLines.join('\n'))));
+    rootNode.append(paragraph);
     return [true, endIndex];
   },
-  replace: (rootNode: ElementNode, _children, startMatch, _endMatch, linesInBetween) => {
-    const attrs = parseAttrs(startMatch[1]);
-    rootNode.append($createMetricNode({
-      name: attrs.name || 'Untitled metric',
-      description: attrs.description?.trim() || undefined,
-      sql: (linesInBetween || []).join('\n').trim() || undefined,
-    }));
+  replace: (rootNode, _children, startMatch, _endMatch, linesInBetween) => {
+    const paragraph = $createParagraphNode();
+    paragraph.append($createMetricNode(attrsToMetricData(parseAttrs(startMatch[1]), (linesInBetween || []).join('\n'))));
+    rootNode.append(paragraph);
   },
   type: 'multiline-element',
 };
