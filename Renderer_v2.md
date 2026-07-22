@@ -454,10 +454,14 @@ this reason — see its checkbox):**
       full migrated view/container path set (the `RESTRICT_VIEW_REDUX` mechanism).
 
 **6b — unlocked by Phase 4:**
-- [ ] Extend capture-matrix + width-matrix with dashboard-surface fixtures; QA flow for a themed
-      dashboard.
-- [ ] CLAUDE.md sweep: surface/capture/theming sections reflect the end state (one kit, one
-      chart engine, dashboard themes + markers).
+- [x] Capture-matrix dashboard-surface fixtures — DONE in Phase 4 (the `b2-*` suite). QA flow for
+      a themed dashboard — DONE (`test/qa/dashboard-theme.spec.ts`): click-driven create/add/save,
+      `content.theme` set via the files API (no click path exists for it by design), then the
+      RENDERER verified — `data-theme` stamped, theme `--chart-1` departs from the app palette,
+      region inside the live-svg surface. Runs in PR CI (qa.yml).
+- [x] CLAUDE.md sweep — DONE: "Rendered-document surfaces & styling" section documents one kit,
+      one chart engine (no toggle), the B2 surface + serializers + theme hosts, dashboard
+      `content.theme`, tile windowing × capture, and the capture-matrix guarantee.
 
 **6c — unlocked by Phase 5:**
 - [ ] Delete the `components/ui/*` Chakra wrappers (question config panels are their last users).
@@ -469,16 +473,17 @@ this reason — see its checkbox):**
 The sluggishness §1.3 diagnosed is the user's actual complaint, so its levers are phase-level
 checkboxes, not a side note. Independent of every other phase; can start any time after Phase 1.
 
-- [ ] Tile windowing: render only visible tiles + overscan (layout ghosts for the rest) — the
-      single biggest lever (§1.3). The ghosts are LOAD-BEARING for more than layout: Phase 1's
-      marker math and `<Viewport>` pointer need full content height, so ghosts must preserve it —
-      do not "optimize" them away without seeing that dependency.
-- [ ] WINDOWING × CAPTURE interaction (review finding — the one real regression risk): a send-time
-      capture of a windowed dashboard would faithfully serialize GHOSTS. The capture path must
-      force-mount all tiles (ghosts stamp `data-mx-busy` while hydrating) and re-await readiness
-      before serializing — or windowing must disengage for the capture. Red-first test REQUIRED
-      and gates the windowing merge itself, because Phase 7 can land before Phase 4's capture
-      fixtures exist to catch it.
+- [x] Tile windowing — DONE (`components/views/dashboard/WindowedTile.tsx`): question tiles
+      render as layout ghosts until within 600px of the viewport (IntersectionObserver;
+      mount-once, no unmount thrash). Ghosts fill their grid item (`h-full`) so full content
+      height — the marker math dependency — is preserved; text blocks stay always-mounted
+      (cheap). No-IO environments (jsdom) mount everything, which is why the existing dashboard
+      suites pass unchanged.
+- [x] WINDOWING × CAPTURE — DONE red-first (`dashboard-windowing.ui.test.tsx`, 4 tests written
+      failing against the pre-windowing tree): ghosts stamp `data-mx-busy="true"` ALWAYS (a
+      capture can never settle on ghosts — stronger than "while hydrating", and race-free), and
+      `waitForFileViewReady` broadcasts `mx-force-mount-tiles` on every poll (re-broadcast covers
+      mid-wait view remounts), hydrating every ghost before the settle can complete.
 - [ ] ResizeObserver consolidation to one per tile.
 - [ ] Per-tile Vega profiling + spec/data memoization (§1.3 lever 2).
 - [ ] Before/after measurements on the largest seeded dashboards — mount time, scroll jank,

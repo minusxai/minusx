@@ -7,6 +7,7 @@ import TextBlockCard from '../TextBlockCard';
 import ParameterRow from '../params/ParameterRow';
 import { PageMarkerDevOverlay } from '@/components/views/story/PageMarkerDevOverlay';
 import { SvgPageSurface } from '@/components/views/shared/SvgPageSurface';
+import { WindowedTile } from '@/components/views/dashboard/WindowedTile';
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -388,17 +389,21 @@ export default function DashboardView({
             aria-label={`Dashboard tile ${questionId}${publishMark ? ` (${publishMark})` : ''}`}
             className={`flex flex-col overflow-hidden rounded-md bg-muted/40 transition-all duration-200 ${publishMark ? 'border-2' : 'border'} ${borderClass} ${opacityClass}`}
           >
-            <SmartEmbeddedQuestionContainer
-              questionId={questionId}
-              externalParameters={parameterValuesForDisplay}
-              externalParamValues={effectiveSubmittedValues}
-              showTitle={true}
-              editMode={editMode}
-              index={index}
-              dashboardId={fileId}
-              onEdit={() => onQuestionEdit(questionId, effectiveSubmittedValues)}
-              onRemove={() => handleRemoveAsset(questionId.toString())}
-            />
+            {/* Windowed (Renderer_v2 Phase 7): off-viewport tiles are BUSY layout ghosts;
+                the capture readiness gate force-mounts them (see WindowedTile). */}
+            <WindowedTile>
+              <SmartEmbeddedQuestionContainer
+                questionId={questionId}
+                externalParameters={parameterValuesForDisplay}
+                externalParamValues={effectiveSubmittedValues}
+                showTitle={true}
+                editMode={editMode}
+                index={index}
+                dashboardId={fileId}
+                onEdit={() => onQuestionEdit(questionId, effectiveSubmittedValues)}
+                onRemove={() => handleRemoveAsset(questionId.toString())}
+              />
+            </WindowedTile>
           </div>
         );
       }

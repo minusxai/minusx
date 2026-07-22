@@ -29,6 +29,14 @@ export interface ReadinessOptions {
 
 const BUSY_SELECTOR = '[data-mx-busy="true"]';
 
+/**
+ * Windowed-tile force-mount request (Renderer_v2 Phase 7). Dashboards window their question
+ * tiles: off-viewport tiles are BUSY layout ghosts. A capture must never serialize ghosts, so the
+ * readiness wait broadcasts this event — every ghost mounts its real tile, whose own busy markers
+ * then gate the settle. Dispatched on `document`; ghosts listen there.
+ */
+export const FORCE_MOUNT_TILES_EVENT = 'mx-force-mount-tiles';
+
 function iframeDocs(root: ParentNode): Document[] {
   const docs: Document[] = [];
   for (const iframe of Array.from(root.querySelectorAll('iframe'))) {
@@ -77,6 +85,9 @@ export async function waitForFileViewReady(
   const deadline = Date.now() + timeoutMs;
   let calmSince: number | null = null;
   while (Date.now() < deadline) {
+    // Re-broadcast every poll (cheap no-op when nothing is windowed): the view can REMOUNT while
+    // settling (EditFile rebuild), and freshly remounted ghosts must also be force-mounted.
+    document.dispatchEvent(new CustomEvent(FORCE_MOUNT_TILES_EVENT));
     const view = document.querySelector(`[data-file-id="${fileId}"]`);
     if (!view || isFileViewBusy(view)) {
       calmSince = null;
