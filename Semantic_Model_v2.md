@@ -34,9 +34,12 @@ may use metric definitions as *reference documentation* (unvalidated); semantic
 queries against level 3 are fully validated because the compiler — not the LLM —
 generates the SQL.
 
-## 1. What already exists (verified in-repo)
+## 1. What already existed (verified in-repo — the pre-PR baseline)
 
-Much of the machinery is built. V2 is a **restructure + extension**, not greenfield.
+Much of the machinery was built. V2 is a **restructure + extension**, not
+greenfield. *(Historical: this section describes `main` as found before the PR;
+every "old shape" named here — the old `SemanticModel` with `measures`/`joins`,
+`TableRelationship` — has since been removed by M6.)*
 
 - `lib/types/semantic.ts` — `SemanticModel` (base table, `dimensions`,
   `measures`, `joins`, ratio `metrics`), `SemanticJoin` (alias, LEFT/INNER,
@@ -73,7 +76,8 @@ Much of the machinery is built. V2 is a **restructure + extension**, not greenfi
   (`app/api/semantic-models/route.ts`) and calls `compileSemanticQuery`
   client-side. The same family includes the **detection path** —
   `lib/semantic/detect.ts` / `detect-sql.ts` (recompile-and-compare: does
-  existing SQL match a semantic spec, enabling the Semantic tab), which
+  existing SQL match a semantic spec, enabling the question editor's Semantic
+  mode tab — distinct from any context-editor tab; see §2.0 item 5), which
   consumes the old shape (`model.joins`, `dimension.join`) and feeds
   `use-semantic-compat.ts` / `QueryModeSelector.tsx` / `SqlEditor.tsx`.
   UI tests: `semantic-autorun.ui.test.tsx`, `viz-type-lock.ui.test.tsx`,
@@ -86,6 +90,42 @@ Much of the machinery is built. V2 is a **restructure + extension**, not greenfi
   milestone boundary — its staged handover is §2.7.
 
 ## 2. V2 changes
+
+### 2.0 V2.1 — simplification (landed post-M6: `8e77e10b`, plus `fa0f4458`)
+
+After M6 the shipped shape was simplified in place. The doc below is written to
+the **V2.1 state**; where a milestone checklist recorded the pre-simplification
+behavior, the item carries a "(superseded in V2.1: …)" note. The changes:
+
+1. **Measures are gone as a concept.** `SemanticModelV2.measures` and
+   `SemanticModelV2.timeDimension` no longer exist. `metrics` is a REQUIRED
+   array of `SemanticMetricV2` — a union discriminated on `type` with three
+   members: `aggregation` (COUNT/SUM/AVG/MIN/MAX/COUNT_DISTINCT over a
+   primary-source column; `column` omitted for COUNT(*)), `ratio`
+   (numerator/denominator naming aggregation metrics of the same model), and
+   `sql` (unchanged rules). Rationale: ONE user-facing quantitative concept —
+   what other semantic layers (MetricFlow, LookML) call a "measure" is simply
+   the aggregation metric type here.
+2. **The time axis is implicit.** A dimension with `temporal: true` is a time
+   dimension; the FIRST primary temporal dimension is the model's default axis
+   (`spec.timeColumn` may name any primary temporal dimension's column). Tier 1
+   validates a temporal-flagged dimension's column type when the type is known.
+3. **`SemanticQuerySpec.measures` renamed to `metrics`.**
+4. **Probe scope (tier 3) refined:** a changed/added metric probes itself,
+   where a ratio metric's essence EMBEDS the resolved definitions of its
+   aggregation metrics — so changing an aggregation metric re-probes it plus
+   its dependent ratios, but NOT unrelated metrics (§2.5 has the full rules).
+5. **UI moved and unified:** no "Semantic" tab in the context editor and no
+   separate catalog mode — semantic models render PER-CONNECTION inside the
+   Databases tab, above Data Models, as ONE card layout serving both read and
+   edit modes (§6 M5b has the details).
+6. **Join inference:** new pure module `lib/semantic/infer-join.ts` proposes
+   join columns when the author picks a reference source or m2m bridge; joins
+   are displayed as real column equalities, never "bridge/primary/referenced"
+   jargon.
+7. **Composite-key m2m is fully supported**, including the grouped
+   dedup-bridge CTE, which projects one `_pk<k>` per primaryKey column and
+   joins on ALL of them (`fa0f4458` fixed a prefix-match leak).
 
 ### 2.1 Semantic models become authored + stored
 
@@ -119,8 +159,8 @@ a new file type.
   (operator-confirmed, 2026-07-21; the seed template also contains zero —
   verified), so inert data is vacuously absent and a fallback/suggester read
   path would be dead code. The draft-suggestion engine proposes a single-table
-  draft (dimensions / measures / time axis) from profiled schema, not from
-  stored relationships; **references are always authored explicitly** — nothing
+  draft (temporal-first dimensions, aggregation metrics, inferred grain) from
+  profiled schema, not from stored relationships; **references are always authored explicitly** — nothing
   infers them.
 - **Real removal surface (verified by grep, 21 files = 16 source + 5 test):**
   source — `lib/types/semantic.ts` + `lib/types/context.ts` + `lib/types.ts`,
@@ -165,18 +205,24 @@ interface SemanticModelV2 {
    *  Always allowed; REQUIRED when any reference is many_to_many. */
   primaryKey?: string[];
   references?: SemanticReference[];
-  dimensions: SemanticDimension[]; // { name, source: 'primary' | <ref alias>, column, … }
-                                   // (restructures the existing `join?` field into `source`)
-  measures: SemanticMeasure[];
-  metrics?: SemanticMetric[];
-  /** Default time axis. PRIMARY-only: `column` must be a temporal exposed
-   *  field of the primary source (mirrors the existing resolveTimeColumn
-   *  behavior; joined-table time axes are not supported). Tier-1 validated. */
-  timeDimension?: { column: string; label?: string };
+  dimensions: SemanticDimensionV2[]; // { name, source: 'primary' | <ref alias>, column,
+                                     //   temporal?, … } — `temporal: true` marks a time
+                                     //   dimension; the FIRST primary temporal dimension
+                                     //   is the model's default time axis (no separate
+                                     //   timeDimension field — V2.1)
+  metrics: SemanticMetricV2[];       // REQUIRED — the one quantitative concept
 }
 
-type SemanticMetric = SemanticRatioMetric   // existing numerator/denominator
-                    | SemanticSqlMetric;    // new free-form SQL (§2.5)
+// Discriminated on `type` (V2.1 — no separate "measures"):
+type SemanticMetricV2 =
+  | { name; type: 'aggregation';     // COUNT|SUM|AVG|MIN|MAX|COUNT_DISTINCT
+      agg; column?;                  // primary-source only; column omitted for COUNT(*)
+      description?; verified? }
+  | { name; type: 'ratio';           // numerator/denominator name AGGREGATION
+      numerator; denominator;        // metrics of the same model
+      description?; verified? }
+  | { name; type: 'sql'; sql;        // free-form aggregate SQL (§2.5)
+      description?; verified? };
 
 type SemanticSource =
   | { kind: 'table'; schema?: string; table: string }
@@ -199,17 +245,25 @@ Rules (save-time validated):
 - Every reference MUST declare its `relationship` and its join columns (`on`
   for to-one, `through` for m2m — §5). No reference without a declared
   relationship — this replaces the removed table-level FKs.
-- `many_to_one` / `one_to_one` are lookup joins — measures aggregate the
-  primary, so they can never fan out. `many_to_many` is compiled
+- `many_to_one` / `one_to_one` are lookup joins — aggregation metrics
+  aggregate the primary, so they can never fan out. `many_to_many` is compiled
   grain-preservingly (§5), never as a naive fan-out join. Pre-aggregating the
   many side into a data model remains a valid alternative authoring pattern.
 - `dimensions[].source` must be `'primary'` or a declared reference alias, and
   `column` must be an **exposed field** of that source (whitelist for tables,
   probed output columns for views).
-- **Measures stay primary-column-only** (the existing `{name, agg, column}`
-  shape, no `source` field) — that's what makes "measures aggregate the
-  primary, so they can never fan out" true by construction. Aggregating a
-  to-one reference column is what SQL metrics are for (`SUM(costs.total)`).
+- **Aggregation metrics stay primary-column-only** (`{name, type:
+  'aggregation', agg, column?}` — no `source` field) — that's what makes
+  "aggregation metrics aggregate the primary, so they can never fan out" true
+  by construction. Aggregating a to-one reference column is what SQL metrics
+  are for (`SUM(costs.total)`).
+- **Time axis is implicit (V2.1):** dimensions flagged `temporal: true` are
+  the model's time dimensions; the FIRST primary temporal dimension is the
+  default axis, and `spec.timeColumn` may select any primary temporal
+  dimension's column instead. Tier 1 validates a temporal flag against the
+  column's type when the type is known (unprofiled → check skipped); a bad
+  axis then surfaces when a query first requests a `timeGrain` and the
+  compiled `DATE_TRUNC` fails in the engine — accepted behavior.
 - A view used as primary/reference must exist in the context tree (name
   resolution via existing view lookup); levels stay acyclic by construction
   (semantic models are not referenceable).
@@ -229,9 +283,11 @@ Rules (save-time validated):
   tier-3 engine failure. `connection` here follows the exact
   `ViewDef.connection` pattern (flat field on the artifact; the UI groups
   models under their connection, same as views under `_views`): in the editor
-  it's fixed by choosing the primary, and the primary/reference pickers only
-  offer sources from that connection — so the validator is a server-side
-  backstop for hand-/agent-authored model JSON, not a path UI users hit.
+  the connection is implied by the per-database Databases-tab section the
+  model lives in (V2.1 — there is no connection picker), and the
+  primary/reference pickers only offer sources from that connection — so the
+  validator is a server-side backstop for hand-/agent-authored model JSON,
+  not a path UI users hit.
 
 Compiler change is mechanical: `compileSemanticQuery` already emits
 `JoinClause`s from `joins`; it re-points at `references` and gains
@@ -240,12 +296,12 @@ addressable tables at query time).
 
 ### 2.4 UI/agent surface: metrics + dimensions only
 
-- The semantic browse/query UI lists each model's **dimensions and metrics
-  (incl. measures)** — never raw tables or SQL.
-- The agent's semantic tool (`RunSemanticQuery(model, measures[], dimensions[],
-  filters[], timeGrain, ...)` — extend the existing `SemanticQuerySpec` path)
-  takes business names; the compiler resolves them. The agent cannot write an
-  invalid join by construction.
+- The semantic browse/query UI lists each model's **dimensions and metrics** —
+  never raw tables or SQL.
+- The agent's semantic tool (`RunSemanticQuery(model, metrics[], dimensions[],
+  filters[], timeGrain, ...)` — the `SemanticQuerySpec` path; its `measures`
+  field was renamed `metrics` in V2.1) takes business names; the compiler
+  resolves them. The agent cannot write an invalid join by construction.
 - Free-SQL contexts get metric definitions injected as documentation ("metric
   `revenue` on model `Orders` = `SUM(orders.amount) - SUM(orders.refund)`") —
   unvalidated reference material, alongside the reference/join-docs projection
@@ -254,7 +310,8 @@ addressable tables at query time).
 
 ### 2.5 SQL metrics + validation
 
-Add free-form SQL metrics alongside existing agg measures and ratio metrics:
+Free-form SQL metrics are the third member of the `SemanticMetricV2` union,
+alongside aggregation and ratio metrics (§2.3):
 
 ```ts
 interface SemanticSqlMetric {
@@ -262,6 +319,7 @@ interface SemanticSqlMetric {
   type: 'sql';
   sql: string;        // aggregate expression, e.g. "SUM(primary.amount) - SUM(ref_costs.total)"
   description?: string;
+  verified?: boolean; // tier-3 stamp, server-managed (all three metric types carry it)
 }
 ```
 
@@ -275,7 +333,7 @@ compiler's alias rewrite trivial (`primary` → the primary table/view name).
 editor UI and the agent's EditFile path):
 
 1. **Static (sync):** name uniqueness (one namespace per model across
-   dimensions+measures+metrics; enforced case-insensitively on
+   dimensions+metrics; enforced case-insensitively on
    `semanticAlias(name)` slugs so display names can't collide post-slug);
    reference aliases valid; every qualified column ref resolves to an exposed
    field of primary or a declared **to-one** reference — refs to a
@@ -321,14 +379,19 @@ and to the agent tool result. **Blocking policy (decided):**
   (1) **metric-text-only** — the save adds/edits/deletes entries in `metrics`
   and touches nothing else: probe just the added/changed metrics (a pure
   deletion probes nothing) — so one pre-existing broken metric can never
-  hold the whole model hostage while you fix something else;
+  hold the whole model hostage while you fix something else. Change is
+  judged on each metric's **essence** (definition minus `description` and
+  the server `verified` stamp), and a ratio metric's essence EMBEDS the
+  resolved definitions of the aggregation metrics it names — so changing
+  `Revenue` from `SUM(total)` to `SUM(delivered)` re-probes Revenue AND
+  every ratio built on it, but NOT unrelated metrics;
   (2) **metadata-only** — see the carve-out below: probe nothing;
   (3) **everything else is structural** — `primary`, `primaryKey`,
-  `references`, `measures`, `dimensions`, `timeDimension`, `connection` —
-  and probes ALL metrics: structural edits can break textually-unchanged metrics that tier 1
-  still resolves (swapping a reference's source view type-breaks
-  `SUM(costs.total)`; editing a measure's column breaks a ratio metric that
-  names it).
+  `references`, `dimensions` (incl. `temporal` flags), `name`,
+  `connection` — and probes ALL metrics: structural edits can break
+  textually-unchanged metrics that tier 1 still resolves (swapping a
+  reference's source view type-breaks `SUM(costs.total)`; a dimension
+  rename breaks specs that name it).
 - Tier 3 distinguishes **validation errors** (the engine rejected the SQL —
   blocks the save) from **infrastructure errors** (connection unreachable,
   timeout — save proceeds, the metric is stamped `verified: false` with the
@@ -355,16 +418,17 @@ and to the agent tool result. **Blocking policy (decided):**
   DuckDB+Postgres-verified; unverified on BigQuery, deliberately: that edge
   is unreachable on BQ, whose schemas always load from
   `INFORMATION_SCHEMA`, so an exposed column always exists there).
-- Metadata-only carve-out: edits touching ONLY `description`/`label` fields
-  (model, dimension, measure, or metric descriptions; `timeDimension.label`)
-  cannot affect compiled SQL and probe NOTHING.
-- Renames, precisely (they'd otherwise straddle two cases): **measure,
-  dimension, and reference-alias renames are structural** — other
-  definitions reference them by name (ratio metrics name measures; metric
-  SQL names aliases; specs name dimensions), so a rename can break a
-  textually-unchanged metric. **A METRIC rename stays case (1)** — nothing
-  compiled references a metric by name — and probes the renamed metric as an
-  edited entry.
+- Metadata-only carve-out: edits touching ONLY `description` fields (model,
+  dimension, or metric descriptions) cannot affect compiled SQL and probe
+  NOTHING.
+- Renames, precisely (they'd otherwise straddle two cases): **dimension and
+  reference-alias renames are structural** — other definitions reference
+  them by name (metric SQL names aliases; specs name dimensions), so a
+  rename can break a textually-unchanged metric. **A METRIC rename stays
+  case (1)** and probes the renamed metric under its new name only — an
+  aggregation-metric rename included: a ratio metric still naming the OLD
+  name fails tier 1 first ("not a declared aggregation metric"), so tier 3
+  never sees the dangling reference.
 - Probe execution policy (decided, so M4 doesn't improvise): probes for one
   save run in **parallel, capped at 4 concurrent**, each bounded by the
   existing `QUERY_SERVER_TIMEOUT_MS`; a per-probe timeout or connector error
@@ -380,7 +444,7 @@ against the real engine. Verified feasible with existing infra.
 
 - **Definition-time (metric SQL):** qualified refs mandatory (`primary.x`,
   `alias.x`); unqualified → error with candidates.
-- **Model-time (names):** dimensions/measures/metrics share ONE namespace per
+- **Model-time (names):** dimensions and metrics share ONE namespace per
   model, unique on slug; reference aliases unique per model; model names
   unique per context tree AND sharing one namespace with view names (§2.3 —
   rejected in both save directions). Referenced fields are exposed *as
@@ -388,7 +452,7 @@ against the real engine. Verified feasible with existing infra.
   `customer_name` (or whatever the author picks), never a bare collision-prone
   `name`.
 - **Query/UI-time:** the semantic model is the namespace. The tool takes the
-  model name; measures/dimensions resolve within it. No global uniqueness
+  model name; metrics/dimensions resolve within it. No global uniqueness
   needed across models.
 
 ### 2.7 SemanticExplorer handover (the live derived-model surface)
@@ -409,8 +473,8 @@ boundary:
   node tests) — the existing tests act as the characterization suite.
 - **M5 (switch):** `/api/semantic-models` and `SemanticExplorer` serve/consume
   **authored** models (`fullSemanticModels`) only — and the detection path
-  detects against authored models only (no authored models → Semantic tab
-  simply doesn't light up); derived models stop feeding
+  detects against authored models only (no authored models → the question
+  editor's Semantic mode tab simply doesn't light up); derived models stop feeding
   live querying and become draft suggestions in the model editor. With no
   authored models yet, the explorer shows an empty state pointing at "create a
   semantic model" — acceptable: no existing workspace has models or
@@ -422,7 +486,8 @@ boundary:
 spec's `model` resolves against authored models only. No stored content
 back-compat needed — the field is gated and no workspace has semantic content.
 
-**QA-safe (verified):** no `test/qa/*.spec.ts` references the Semantic tab,
+**QA-safe (verified):** no `test/qa/*.spec.ts` references the question
+editor's Semantic mode tab,
 detection, or semantic models — the M5 switch to authored-only cannot break
 the QA flows gate. Between M5a and M6 the context docs briefly carry both the
 old relationship hints channel and the new references projection — deliberate
@@ -456,7 +521,7 @@ data; 8/8 green, 2026-07-21) plus code reading:
 | Metric-SQL ref extraction | ✅ decided: lexer | **Executed:** parser returns opaque `raw` even for `SUM(a)-SUM(b)` — lexer is the sole mechanism (§2.5) |
 | Metric-SQL compilation via `raw` select columns | ✅ executed | CASE-expression metric round-tripped IR→SQL and returned correct result on DuckDB |
 | many_to_many compilation | ✅ **no IR change needed** | **Executed:** existing `ctes[{name, raw_sql}]` + `JoinClause` render in all 3 dialects AND return correct per-group numbers on DuckDB where the naive join double-counts (§5) |
-| Filter-only m2m semi-join | ✅ executed | `raw_column` + `IN` + `raw_value` FilterCondition emits `pk IN (SELECT …)`; correct result on DuckDB |
+| Filter-only m2m semi-join | ✅ executed | `raw_column` + `IN` + `raw_value` FilterCondition emits `pk IN (SELECT …)`; correct result on DuckDB (derisk-era form — shipped as a correlated `EXISTS`, §5) |
 | `irToSqlLocal` is our own pure-TS generator | ✅ read | `lib/sql/ir-to-sql.ts` — not the polyglot WASM `generate()`; fully extendable if ever needed |
 | Storage/versioning/inheritance for authored models | ✅ pattern exists | `ContextVersion.views`/`metrics`; add `semanticModels` |
 | Removing table-level relationships | ⚠️ wide but mapped | 21 files: 16 source + 5 test (verified by grep — full list in §2.2), incl. `app/api/relationships/verify`, schema-browser/whitelist UI, context loaders, and `context-agent-view.ts` (free-SQL join hints — replaced by projecting semantic-model references into context docs, §2.2) |
@@ -526,21 +591,25 @@ columns, in order.
 naive `primary JOIN bridge JOIN far` duplicates primary rows and inflates every
 `SUM`/`COUNT` (verified: 250 vs the correct 150 on the fixture below).
 Symmetric aggregates (Looker-style distinct-hash tricks) and forced-DISTINCT
-measures were considered and rejected — dialect-fragile / semantics-changing.
+aggregations were considered and rejected — dialect-fragile / semantics-changing.
 **Chosen and verified:** compile through the IR's **existing CTE support**
 (`ctes: [{name, raw_sql}]` — no IR change; `irToSqlLocal` is our own pure-TS
 generator, `lib/sql/ir-to-sql.ts`):
 
-- **m2m filters** (the common case, "orders tagged vip") → semi-join:
-  `WHERE primary.pk IN (SELECT bridgeCol FROM bridge JOIN far WHERE …)`, via
-  the existing `FilterCondition` `raw_column`/`raw_value` passthrough. Never
-  fans out. **Executed on DuckDB: correct.**
+- **m2m filters** (the common case, "orders tagged vip") → semi-join: a
+  CORRELATED `EXISTS (SELECT 1 FROM bridge JOIN far ON … WHERE bridge.k =
+  primary.k AND …)` — one correlation term per key column — emitted via the
+  existing `FilterCondition` raw-SQL passthrough. (The original
+  `pk IN (SELECT …)` form was lifted to `EXISTS` for composite keys and
+  NULL-safe negation — see the composite-keys paragraph above.) Never fans
+  out. **Executed on DuckDB: correct.**
 - **m2m dimensions** (GROUP BY a many-side field — fan-out across groups is
   semantically intended: a 2-tag order appears in both tag groups, but each
-  measure counts it once per group) → compile a deduplicated bridge CTE
-  `_m2m_<alias> AS (SELECT DISTINCT <bridgeCol> AS pk, <GROUPED dim cols only> …)`,
-  join the primary to it on the model's `primaryKey`, aggregate measures in
-  the outer query grouped by the m2m dim. One row per (pk, dim value) by
+  metric counts it once per group) → compile a deduplicated bridge CTE
+  `_m2m_<alias> AS (SELECT DISTINCT <one _pk<k> per primaryKey column>, <GROUPED dim cols only> …)`,
+  join the primary to it on ALL the `_pk<k>` columns (the model's
+  `primaryKey` — a composite grain never matches on a prefix), aggregate
+  metrics in the outer query grouped by the m2m dim. One row per (pk, dim value) by
   construction — no within-group double counting, all aggregate types
   (`SUM`/`AVG`/`COUNT_DISTINCT`/…) work unchanged. **Executed on DuckDB with
   the CTE+join form: per-tag revenue exactly right (promo=100, vip=150) where
@@ -568,7 +637,7 @@ generator, `lib/sql/ir-to-sql.ts`):
 **Constraint (validated rule, enforced at query time):** a semantic query may
 GROUP BY dimensions from at most **one** m2m reference (filters from any
 number are fine — semi-joins compose). Two m2m dimension sources in one query
-cross-multiply bridges and re-inflate measures within groups; the validator
+cross-multiply bridges and re-inflate metrics within groups; the validator
 rejects it with a pointing error ("split into two queries or model a combined
 bridge view"). `many_to_one`/`one_to_one` dimensions combine freely with the
 one m2m dimension source.
@@ -582,11 +651,13 @@ verified).
 
 > **Status (2026-07-22):** all six milestones landed on `feature/semantic-models-v2`
 > (PR #638, CI green incl. QA Flows) — M1 `4afd7fc6`, M2 `e45a79d4`, M3 `6b50dbce`,
-> M4 `7c6a8b13`, M5 `a13d5a6b`, M6 `9e902ffc`, plus follow-ups `4a12ce96` / `ed21cfac`.
-> Boxes below are ticked against **committed HEAD**, per line; the three that stay
-> unticked carry an inline parenthetical saying what is outstanding — those residual
-> gaps, and nothing else, are the open work (§4 has the derisk findings; the PR body
-> is empty by repo rule, so it is NOT the place to look).
+> M4 `7c6a8b13`, M5 `a13d5a6b`, M6 `9e902ffc`, plus follow-ups `4a12ce96` / `ed21cfac`,
+> the composite-m2m CTE fix `fa0f4458`, and the **V2.1 simplification `8e77e10b`**
+> (§2.0). Every box is ticked against committed HEAD. Checklist items whose original
+> wording described pre-V2.1 behavior keep their tick (the work happened) but carry a
+> "(superseded in V2.1: …)" note stating the current behavior — read those notes, not
+> the original wording, as the truth (§4 has the derisk findings; the PR body is empty
+> by repo rule, so it is NOT the place to look).
 
 ### Global rules (read before every milestone)
 
@@ -623,7 +694,9 @@ changes yet.
 - [x] Contracts — **TypeBox is the single source of truth** (repo rule):
       define the §2.3/§5 shapes (`SemanticModelV2`, `SemanticSource`,
       `SemanticReference` union, `SemanticReferenceM2M`,
-      `SemanticMetric = ratio | sql`) as TypeBox schemas in
+      `SemanticMetric = ratio | sql` — superseded in V2.1:
+      `SemanticMetricV2 = aggregation | ratio | sql`, with `measures` and
+      `timeDimension` folded away per §2.0) as TypeBox schemas in
       `lib/validation/atlas-schemas.ts` (following the `CtxMetricDef`
       precedent), with `Static<typeof …>` types; `lib/types/semantic.ts`
       RE-EXPORTS those Static types — no hand-written duplicate interfaces
@@ -644,28 +717,35 @@ changes yet.
       couldn't author models safely anyway.)
 - [x] Red tests, then implement `lib/semantic/validate.ts` — tier-1
       `validateSemanticModel(model, ctx): string[]` covering, each with its
-      own test: name-slug uniqueness across dims+measures+metrics
-      (`semanticAlias`, case-insensitive); reference aliases unique; reserved
+      own test: name-slug uniqueness across dims+metrics (superseded in
+      V2.1: was dims+measures+metrics) (`semanticAlias`, case-insensitive);
+      reference aliases unique; reserved
       aliases rejected (`primary`, `_m2m_*`, `_grain`, `_views`, `_probe`);
       connection consistency (§2.3); model name not colliding with any view
       name, both directions (§2.3); dimension `source`/`column` resolve to
-      exposed fields; `timeDimension.column` is a temporal exposed field of
-      the primary; `primaryKey` required when any m2m ref exists (allowed
-      always); m2m single-column keys only (§5); metric-SQL qualified-ref
+      exposed fields; temporal-flagged dimensions have a date/time column
+      type when the type is known (superseded in V2.1: was a
+      `timeDimension.column` check — the field no longer exists, §2.0);
+      `primaryKey` required when any m2m ref exists (allowed
+      always); m2m `through.primaryOn` names exactly the model's
+      `primaryKey` columns, in order (superseded: the original
+      "single-column keys only" restriction was lifted — composite keys
+      fully supported, §5); metric-SQL qualified-ref
       lexer (comment/string-aware; unqualified ref → error listing candidates;
       quoted identifier → rejection with §2.5's message; m2m alias ref →
       rejection); ratio metrics' `numerator`/`denominator` resolve to
-      declared measures. No aggregate-token check — aggregate-ness is
+      declared aggregation metrics of the same model (superseded in V2.1:
+      was "declared measures"). No aggregate-token check — aggregate-ness is
       tier 3's job via the always-GROUP-BY probe (§2.5). The `ctx` argument
       of `validateSemanticModel(model, ctx)` = the context's `fullSchema` +
       `fullViews` (exposed fields + column types); when a table is
-      unprofiled and a column's type is unknown, the `timeDimension`
-      temporal-type check is SKIPPED. The safety net for a bad time axis is
+      unprofiled and a column's type is unknown, the temporal-type check is
+      SKIPPED. The safety net for a bad time axis is
       then QUERY time, not the save gate: the tier-3 probe (metric + first
-      dimension) never exercises `timeDimension`, so a non-temporal axis
+      dimension) never exercises the time axis, so a non-temporal axis
       surfaces when a semantic query first requests a `timeGrain` and the
-      compiled `DATE_TRUNC` fails in the engine. Do NOT add `timeDimension`
-      to the save probe to change this — accepted behavior.
+      compiled `DATE_TRUNC` fails in the engine. Do NOT add a time-axis
+      probe to the save gate to change this — accepted behavior.
 - [x] Reverse namespace check: the VIEW save path also rejects a view name
       that collides with a semantic model name (§2.3 — both directions).
       This lands in the views name-uniqueness seam
@@ -706,9 +786,11 @@ compiled" error).
       dimensions) must still pull that reference's JoinClause into the
       compiled query — join usage is computed from dimensions/filters PLUS
       the tier-1 lexer's extracted metric refs. Dedicated golden test.
-- [x] Extend `validateSemanticQuery` for V2 (unknown measure/dimension/join
+- [x] Extend `validateSemanticQuery` for V2 (unknown metric/dimension/join
       errors keep their existing human-readable format;
-      `SemanticCompileError.issues` shape unchanged).
+      `SemanticCompileError.issues` shape unchanged; in V2.1 the spec field
+      the tool and UI fill is `SemanticQuerySpec.metrics` — renamed from
+      `measures`, §2.0).
 - [x] Wire the tier-2 compile check into the SAME save gate tier 1 uses
       (M1's seam): every metric compile-probes on save from this milestone
       on; failures block the save (§2.5 — tier 2 is save-blocking, not just
@@ -749,12 +831,19 @@ Goal: §5 exactly — semi-join filters + dedup-bridge-CTE dimensions.
       the CTE exists); (c) filter-only semi-join total correct; (d) LEFT
       NULL-group row present for untagged primary rows; (e) golden SQL for
       all three dialects.
-- [x] Implement in `compile.ts`: m2m filter → `raw_column`/`raw_value`
-      `pk IN (SELECT …)` FilterCondition; m2m dimension → `_m2m_<alias>`
-      dedup CTE (`ctes: [{ name, raw_sql }]`) + LEFT join on `primaryKey`.
+- [x] Implement in `compile.ts`: m2m filter → semi-join FilterCondition
+      (superseded: initially `raw_column`/`raw_value` `pk IN (SELECT …)`,
+      later lifted to a correlated `EXISTS` raw-SQL condition for composite
+      keys + NULL-safe negation, §5); m2m dimension → `_m2m_<alias>`
+      dedup CTE (`ctes: [{ name, raw_sql }]`) + LEFT join on `primaryKey`
+      (since `fa0f4458` the CTE projects one `_pk<k>` per primaryKey column
+      and the join maps them ALL — composite grains never match on a
+      prefix, §5).
 - [x] Query-time validator rules (in `validateSemanticQuery`): ≤1 m2m
-      dimension source per query; m2m filter negation rejected — both with
-      §5's pointing errors, both tested.
+      dimension source per query, with §5's pointing error, tested.
+      (Superseded: the initial "m2m filter negation rejected" rule was
+      lifted — negation now compiles to a NULL-safe correlated `NOT EXISTS`,
+      and `IS NULL`/`IS NOT NULL` mean has-no-related-row / has-one, per §5.)
 
 Done-when: same as M1 (incl. the DuckDB execution tests) · commit + push.
 
@@ -767,12 +856,19 @@ Goal: §2.5 blocking policy live end-to-end.
       with structured issues; infra failure saves with `verified: false`;
       metric-text-only edit probes only changed metrics; a PURE metric
       deletion probes nothing (the easy-to-get-wrong case — a naive
-      "diff the metrics array" probes on deletion); ANY other edit
-      (incl. a measure or dimension edit) probes all; a `verified: false`
+      "diff the metrics array" probes on deletion); ANY structural edit
+      (incl. a dimension edit) probes all — superseded in V2.1: with
+      measures folded into `metrics`, editing an aggregation metric is a
+      metric-text-only change that re-probes it plus its dependent ratio
+      metrics via essence-embedding, NOT all metrics (§2.5 case 1);
+      a `verified: false`
       metric is included in every subsequent save's probe set until it
-      verifies (§2.5 — saves are the ONLY probe trigger); a measure rename
-      probes all while a metric rename probes only itself (§2.5 rename
-      rules); parallel probing (cap 4) with one timing-out metric marked
+      verifies (§2.5 — saves are the ONLY probe trigger); a dimension rename
+      probes all while a metric rename probes only itself under its new
+      name (§2.5 rename rules — superseded in V2.1: the original "measure
+      rename probes all" case no longer exists; an aggregation-metric
+      rename probes it under the new name only, a ratio naming the old name
+      failing tier 1 first); parallel probing (cap 4) with one timing-out metric marked
       `verified: false` while the rest complete (§2.5 execution policy).
       *(All in `lib/semantic/__tests__/tier3.test.ts`. The last two — rename
       scope and probe concurrency/isolation — were missed by the M4 commit and
@@ -786,7 +882,8 @@ Goal: §2.5 blocking policy live end-to-end.
       `SELECT * FROM (…) AS _probe LIMIT 0`, executed via
       `runQuery` (copy `lib/views/prepare.server.ts`); classify
       validation-vs-infrastructure errors; stamp `verified` per §2.5.
-- [x] Metadata-only edits (`description`/`label` fields only) probe nothing
+- [x] Metadata-only edits (`description` fields only; V2.1 removed the
+      `timeDimension.label` case with the field itself) probe nothing
       (§2.5 carve-out) — tested.
 - [x] Zero-dimension probe per §2.5's decided shape: first exposed primary
       column (constant grouping only as the no-known-columns last resort —
@@ -828,9 +925,11 @@ ordering). Split so the well-specified pipes aren't hostage to UI iteration.
       add `skill_semantic_models` to `orchestrator/prompts/prompts.yaml`
       (the per-type skill pattern — `skill_questions`, `skill_dashboards`,
       …) documenting the `SemanticModelV2` format: primary/references
-      (incl. m2m `through`), dimensions/measures/metrics, qualified-ref
+      (incl. m2m `through`), dimensions & metrics, qualified-ref
       metric SQL rules, and the tier-1/2/3 error feedback loop. Without the
-      skill, agents would guess JSON against a TypeBox gate.
+      skill, agents would guess JSON against a TypeBox gate. (Rewritten in
+      V2.1 to match §2.0: dimensions-&-metrics section, temporal-first
+      implicit time axis, composite m2m supported.)
 - [x] **SemanticExplorer switch (§2.7):** `/api/semantic-models` and
       `SemanticExplorer` serve/consume authored models
       (`fullSemanticModels`) only; empty state points at model creation;
@@ -847,26 +946,41 @@ ordering). Split so the well-specified pipes aren't hostage to UI iteration.
       projection the agent actually reads — not literally in
       `context-agent-view.ts`; unit-tested in `lib/sql/__tests__/schema-notes.test.ts`.)*
 
-**M5b — editor + catalog UI (minimal contract, decided):**
+**M5b — editor UI (minimal contract; reshaped by V2.1 — §2.0 items 5–6):**
 
-- [x] Semantic-model editor in the context editor (new tab/section beside
-      views), **form-based** (not raw JSON): connection fixed by picking the
-      primary; source pickers (primary/reference/bridge) scoped to that
-      connection listing tables + views; per-reference relationship selector
-      + join-column pickers; m2m authoring INCLUDED (bridge + `through`
-      columns per §5 — m2m is a headline feature of this PR, it gets UI);
-      dimensions/measures/metrics as editable lists (metric SQL in a plain
-      code textarea); tier-1/2/3 errors inline per §2.5; a "prefill from
-      table" action using the draft-suggestion engine. Explicitly NEED-NOT:
-      drag-drop, live previews, diagram views — lists and pickers suffice.
-      *(Left unticked for ONE clause: everything else shipped in
-      `components/context/SemanticModelsEditor.tsx` (form, source pickers,
-      relationship + join-column pickers, m2m `through` authoring, metric-SQL
-      textarea, prefill), but **tier-1/2/3 errors inline** is not at HEAD — it
-      is being implemented separately right now. A checkbox is atomic, so the
-      whole bullet waits on it.)*
-- [x] Catalog/browse surface listing each model's dimensions + metrics only
-      (no tables/SQL), grouped under the model's connection (§2.3).
+- [x] Semantic-model editor, **form-based** (not raw JSON), shipped in
+      `components/context/SemanticModelsEditor.tsx`. (Superseded in V2.1:
+      originally specced as a new tab/section beside views with a connection
+      fixed by picking the primary — there is now NO "Semantic" tab; models
+      render PER-CONNECTION inside the **Databases tab**, in a section ABOVE
+      Data Models (views) in each database's collapsible, so the model's
+      connection is implied by its section and there is no connection
+      picker.) ONE card layout serves read and edit modes: read mode shows
+      full definitions as text (`Revenue = SUM(total)`,
+      `AOV = Revenue ÷ Order Count`, dimension `Customer Name ←
+      customer.name`, joins as real equalities
+      `orders.customer_id = customers.id`); edit mode swaps the same cells
+      for inputs. Sections per card: References / Time Dimensions /
+      Dimensions / Metrics, each heading with a compact `+`. Source pickers
+      (primary/reference/bridge) list the section's connection's tables +
+      views; m2m authoring INCLUDED (the editor speaks "via <table>" plus a
+      join line of real column equalities — the old
+      "bridge/primary/referenced" pickers appear only when inference fails
+      or the author expands them). Join columns are PROPOSED on
+      source/via pick by the pure module `lib/semantic/infer-join.ts`
+      (`inferToOneOn`, `inferM2MThrough`, `inferPrimaryKey`, `singularize`);
+      a reference's alias auto-fills as the singularized table name. Metric
+      SQL edits in a plain code input; tier-1/2/3 errors render inline per
+      §2.5 (recovered from the save error and attributed to the model /
+      metric row each names); a new model PREPENDS at the top, and picking a
+      primary on an empty model auto-prefills draft vocabulary via
+      `deriveSemanticModels` (temporal dims first, Count/Total/Avg
+      aggregation metrics, inferred grain, name from the table). Explicitly
+      NEED-NOT: drag-drop, live previews, diagram views.
+- [x] Browse surface: each model's dimensions + metrics only (no
+      tables/SQL), grouped under the model's connection. (Superseded in
+      V2.1: no separate catalog mode — the read-mode cards in the Databases
+      tab ARE the browse surface.)
 - [x] UI tests as `*.ui.test.tsx` (jsdom, `getByLabelText` only — add
       `aria-label` to every interactive element).
 - [x] Browser-verify on the dev server: author a model over tutorial data
