@@ -24,6 +24,9 @@ const COMPONENTS_DIR = join(ROOT, 'components', 'kit');
 // longer carries them once Chakra leaves the embed tree. Add each re-skinned embed file here.
 export const EMBED_CHROME_FILES = [
   join(ROOT, 'components', 'containers', 'SmartEmbeddedQuestionContainer.tsx'),
+  join(ROOT, 'components', 'params', 'ParameterRow.tsx'),
+  join(ROOT, 'components', 'params', 'ParameterInput.tsx'),
+  join(ROOT, 'components', 'views', 'story', 'StoryParamControl.tsx'),
 ];
 const OUT_FILE = join(ROOT, 'lib', 'story-ui', 'recipe-classes.ts');
 

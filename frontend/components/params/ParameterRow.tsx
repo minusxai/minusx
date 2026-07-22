@@ -1,8 +1,7 @@
 'use client';
 
-import { HStack, IconButton } from '@chakra-ui/react';
 import { LuPlay } from 'react-icons/lu';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/kit/tooltip';
 import { QuestionParameter } from '@/lib/types';
 import ParameterInput from './ParameterInput';
 
@@ -90,7 +89,7 @@ export default function ParameterRow({
   };
 
   return (
-    <HStack gap={3} flexWrap="wrap" align="center" mt={4} mb={2}>
+    <div className="mt-4 mb-2 flex flex-wrap items-center gap-3">
       {parameters.map((param) => (
         <ParameterInput
           key={param.name}
@@ -107,20 +106,20 @@ export default function ParameterRow({
         />
       ))}
       {isDirty && (
-        <Tooltip content="Run with updated values (⌘+Enter)">
-          <IconButton
+        <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger
             aria-label="Run query"
-            size="xs"
-            variant="solid"
-            colorPalette="teal"
-            px={2}
             onClick={() => handleSubmit()}
+            className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
           >
-            <LuPlay />
+            <LuPlay size={12} />
             Rerun
-          </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>Run with updated values (⌘+Enter)</TooltipContent>
         </Tooltip>
+        </TooltipProvider>
       )}
-    </HStack>
+    </div>
   );
 }

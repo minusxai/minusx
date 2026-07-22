@@ -9,7 +9,6 @@
  * (one that imports a question column) instead renders the shared SourceDropdownWidget for
  * autocomplete from that column's distinct values.
  */
-import { Box, Text, Input } from '@chakra-ui/react';
 import type { CSSProperties } from 'react';
 import type { StoryParam } from '@/lib/data/story/story-params';
 import { SourceDropdownWidget } from '@/components/params/ParameterInput';
@@ -27,20 +26,20 @@ export default function StoryParamControl({ param, value, onChange }: Props) {
   // <Param widget="slider"> on a number param renders a range slider with the declared bounds.
   const useSlider = param.widget === 'slider' && param.type === 'number';
   return (
-    <Box display="inline-flex" flexDirection="column" gap={1} minW="160px">
+    <div className="inline-flex min-w-[160px] flex-col gap-1">
       {/* Inherit the story's own text color (with slight muting) so the label stays legible on
           any story surface — an app `fg.muted` token would resolve to the host app's color mode
           across the shadow boundary and can vanish on a contrasting story background. */}
       {/* The agent can override the label's look via <Param labelStyle={{…}}> — literal CSS wins
           over the inherited default. */}
-      <Text fontSize="xs" fontWeight={600} color="inherit" opacity={0.7} textTransform="capitalize" style={param.labelStyle as CSSProperties | undefined}>
+      <span className="text-xs font-semibold capitalize opacity-70" style={{ color: 'inherit', ...(param.labelStyle as CSSProperties | undefined) }}>
         {param.name}
-      </Text>
+      </span>
       {useSlider ? (
         // A native range input — shadow-boundary-safe (Chakra's Slider resolves theme tokens
         // against the host app's color mode across the shadow root, same hazard the source
         // dropdown's native <datalist> avoids). Themeable via <Param style={{accentColor:…}}>.
-        <Box display="inline-flex" alignItems="center" gap={2}>
+        <div className="inline-flex items-center gap-2">
           <input
             type="range"
             aria-label={`param ${param.name}`}
@@ -51,10 +50,10 @@ export default function StoryParamControl({ param, value, onChange }: Props) {
             onChange={(e) => onChange(e.target.value)}
             style={{ accentColor: '#c8781a', cursor: 'pointer', ...(param.style as CSSProperties | undefined) }}
           />
-          <Text fontSize="xs" color="inherit" opacity={0.8} minW="2ch" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <span className="min-w-[2ch] text-xs opacity-80" style={{ color: 'inherit', fontVariantNumeric: 'tabular-nums' }}>
             {value == null ? (param.min ?? 0) : String(value)}
-          </Text>
-        </Box>
+          </span>
+        </div>
       ) : useDropdown && param.source ? (
         // NOTE: do NOT key this on `value`. Each keystroke commits the value (so embeds re-run
         // live), which would change the key and REMOUNT the input mid-type — the field loses
@@ -69,24 +68,19 @@ export default function StoryParamControl({ param, value, onChange }: Props) {
           onChange={(v) => onChange(v === '' || v == null ? null : String(v))}
         />
       ) : (
-        <Input
-          size="sm"
+        <input
           type={param.type === 'number' ? 'number' : param.type === 'date' ? 'date' : 'text'}
           aria-label={`param ${param.name}`}
           value={value == null ? '' : String(value)}
           placeholder={param.nullable ? 'Any' : `Enter ${param.name}`}
           onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
-          // Explicit light colors: Chakra surface/fg tokens resolve against the host app's color
-          // mode across the story shadow boundary, painting this black on a light story. A
-          // self-contained light form control stays legible on any story surface (see SourceDropdownWidget).
-          bg="white"
-          color="gray.900"
-          borderColor="gray.300"
-          _placeholder={{ color: 'gray.500' }}
-          // Agent override (<Param style={{…}}>) — literal CSS, wins over the defaults above.
-          style={param.style as CSSProperties | undefined}
+          // Explicit light colors (not tokens): a self-contained light form control stays legible
+          // on any story surface regardless of the surrounding theme/color mode.
+          className="h-8 rounded-md border px-2 text-sm outline-none"
+          // Agent override (<Param style={{…}}>) — literal CSS, wins over the defaults below.
+          style={{ background: 'white', color: '#111827', borderColor: '#d1d5db', ...(param.style as CSSProperties | undefined) }}
         />
       )}
-    </Box>
+    </div>
   );
 }
