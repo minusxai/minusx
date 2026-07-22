@@ -36,8 +36,11 @@ export interface ScopedModelsParams {
   tables?: string[];
 }
 
-/** Load the nearest context (by serving folder) for `basePath` — the same resolution chat uses. */
-export async function loadNearestContext(user: EffectiveUser, basePath: string): Promise<ContextContent | null> {
+/** Load the nearest context (by serving folder) for `basePath`, with its path. */
+export async function loadNearestContextEntry(
+  user: EffectiveUser,
+  basePath: string,
+): Promise<{ path: string; content: ContextContent } | null> {
   const modePath = resolvePath(user.mode, '/');
   const { data: contextFiles } = await FilesAPI.getFiles(
     { type: 'context', paths: [modePath], depth: -1 },
@@ -46,7 +49,13 @@ export async function loadNearestContext(user: EffectiveUser, basePath: string):
   const nearest = findNearestContextPath(contextFiles.map((f) => f.path), basePath);
   if (!nearest) return null;
   const { data } = await FilesAPI.loadFileByPath(nearest, user);
-  return (data?.content as ContextContent) ?? null;
+  const content = data?.content as ContextContent | undefined;
+  return content ? { path: nearest, content } : null;
+}
+
+/** Load the nearest context (by serving folder) for `basePath` — the same resolution chat uses. */
+export async function loadNearestContext(user: EffectiveUser, basePath: string): Promise<ContextContent | null> {
+  return (await loadNearestContextEntry(user, basePath))?.content ?? null;
 }
 
 /**

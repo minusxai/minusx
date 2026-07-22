@@ -333,6 +333,7 @@ export function DatabasesTabContent({
                               <SemanticModelsSection
                                 connection={database.databaseName}
                                 database={database}
+                                contextPath={contextPath}
                                 views={[...(content.fullViews || []), ...(content.views || [])]}
                                 models={(content.semanticModels || []).filter((m) => m.connection === database.databaseName)}
                                 inheritedModels={(content.fullSemanticModels || []).filter((m) => m.connection === database.databaseName)}

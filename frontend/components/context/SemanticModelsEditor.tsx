@@ -22,9 +22,11 @@
 
 import React, { useMemo, useState } from 'react';
 import { Box, VStack, HStack, Text, Input, Icon } from '@chakra-ui/react';
-import { LuPlus, LuTrash2, LuBoxes, LuTriangleAlert, LuPencil, LuKeyRound } from 'react-icons/lu';
+import { LuPlus, LuTrash2, LuBoxes, LuTriangleAlert, LuPencil, LuKeyRound, LuFlaskConical, LuCircleCheck } from 'react-icons/lu';
 import { exposedColumns } from '@/lib/types/views';
 import { deriveSemanticModels, humanizeName } from '@/lib/semantic/derive';
+import { validateSemanticModel } from '@/lib/semantic/validate';
+import { testSemanticModel } from '@/lib/semantic/models-client';
 import { inferToOneOn, inferM2MThrough, inferPrimaryKey, singularize } from '@/lib/semantic/infer-join';
 import type {
   DatabaseWithSchema, ViewDef,
@@ -47,6 +49,8 @@ interface SemanticModelsSectionProps {
   onChange: (next: SemanticModelV2[]) => void;
   /** Save-gate issues (all of them — this section attributes its own). */
   issues?: string[];
+  /** Path of the context file — the Test button validates against it. */
+  contextPath?: string;
 }
 
 type Column = { name: string; type: string };
@@ -110,6 +114,23 @@ const sourceName = (s: SemanticSource | undefined): string =>
   !s ? '' : s.kind === 'table' ? s.table : s.view;
 
 const isM2M = (r: SemanticReference): r is SemanticReferenceM2M => r.relationship === 'many_to_many';
+
+// ---------------------------------------------------------------------------
+// Auto-naming — a picked column proposes a business name; the proposal stays
+// "auto" (following later column changes) until the author types their own,
+// which is then never clobbered. Same rule as reference-alias auto-fill.
+// ---------------------------------------------------------------------------
+
+/** `current` if hand-typed; `nextAuto` if empty or still the previous auto. */
+const followAutoName = (current: string, prevAuto: string, nextAuto: string): string =>
+  current === '' || current === prevAuto ? nextAuto : current;
+
+const AGG_NAME_PREFIX: Record<string, string> = {
+  SUM: 'Total', AVG: 'Avg', COUNT_DISTINCT: 'Unique', MIN: 'Min', MAX: 'Max', COUNT: 'Count of',
+};
+
+const aggAutoName = (agg: string, column: string): string =>
+  column ? `${AGG_NAME_PREFIX[agg] ?? ''} ${humanizeName(column)}`.trim() : '';
 
 // ---------------------------------------------------------------------------
 // Save-gate issues — recovering the LIST, then attributing each issue to a row.
@@ -239,8 +260,12 @@ function IssueList({ label, issues }: { label: string; issues: string[] }) {
       bg="accent.danger/8" border="1px solid" borderColor="accent.danger/20" borderRadius="md">
       {issues.map((text, i) => (
         <HStack key={i} gap={1.5} align="start">
-          <Box pt="2px" flexShrink={0}><Icon as={LuTriangleAlert} boxSize={3} color="accent.danger" /></Box>
-          <Text fontSize="xs" fontFamily="mono" color="accent.danger" whiteSpace="pre-wrap">{text}</Text>
+          {/* The icon centers on the FIRST text line (18px = xs line height),
+              so single-line issues read balanced and multi-line ones anchor top. */}
+          <Box h="18px" display="flex" alignItems="center" flexShrink={0}>
+            <Icon as={LuTriangleAlert} boxSize={3} color="accent.danger" />
+          </Box>
+          <Text fontSize="xs" lineHeight="18px" fontFamily="mono" color="accent.danger" whiteSpace="pre-wrap">{text}</Text>
         </HStack>
       ))}
     </VStack>
@@ -308,15 +333,72 @@ const refComplete = (ref: SemanticReference): boolean =>
 // ---------------------------------------------------------------------------
 
 export default function SemanticModelsSection({
-  connection, database, views, models, inheritedModels = [], editMode, onChange, issues = [],
+  connection, database, views, models, inheritedModels = [], editMode, onChange, issues = [], contextPath,
 }: SemanticModelsSectionProps) {
   const options = useMemo(() => sourceOptionsFor(database, connection, views), [database, connection, views]);
-  const attributed = useMemo(() => attributeIssues(issues, models), [issues, models]);
+
+  // The Test button (save-gate tiers 1–3 for the STAGED model, no save):
+  // per-model verdict + returned issues, both cleared by ANY edit — a stale
+  // "verified" chip on a since-edited model would be a lie.
+  const [testState, setTestState] = useState<Map<string, 'running' | 'ok'>>(new Map());
+  const [testIssues, setTestIssues] = useState<Map<string, string[]>>(new Map());
+
+  // LIVE tier-1 validation (pure, per keystroke): real violations — duplicate
+  // names, dangling refs, bad columns — surface in the same inline slots the
+  // save gate uses, without a save round-trip. Issues that merely describe an
+  // INCOMPLETE row (empty names/columns render as "") are suppressed: a row
+  // the author is still typing is not a violation yet.
+  const liveIssues = useMemo(() => {
+    if (!editMode) return [];
+    const out: string[] = [];
+    const seen = new Set(issues);
+    for (const m of models) {
+      if (!sourceName(m.primary)) continue; // no primary picked yet
+      const ctx = {
+        fullSchema: database ? [database] : [],
+        views,
+        otherModelNames: [
+          ...inheritedModels.map((x) => x.name),
+          ...models.filter((x) => x !== m).map((x) => x.name),
+        ],
+      };
+      for (const issue of validateSemanticModel(m, ctx)) {
+        if (issue.includes('""') || issue === 'model name must not be empty') continue;
+        const prefixed = `Semantic model "${m.name}": ${issue}`;
+        if (!seen.has(prefixed)) { seen.add(prefixed); out.push(prefixed); }
+      }
+    }
+    return out;
+  }, [editMode, models, inheritedModels, database, views, issues]);
+
+  const attributed = useMemo(
+    () => attributeIssues([...issues, ...liveIssues, ...[...testIssues.values()].flat()], models),
+    [issues, liveIssues, testIssues, models],
+  );
   /** Join-pair pickers are hidden behind the join line; this opens them per reference. */
   const [openJoins, setOpenJoins] = useState<Set<string>>(new Set());
 
+  /** Every internal mutation goes through here so test verdicts never go stale. */
+  const emit = (next: SemanticModelV2[]) => {
+    if (testState.size > 0) setTestState(new Map());
+    if (testIssues.size > 0) setTestIssues(new Map());
+    onChange(next);
+  };
+
+  const runTest = async (m: SemanticModelV2) => {
+    if (!contextPath) return;
+    setTestState((prev) => new Map(prev).set(m.name, 'running'));
+    const result = await testSemanticModel(contextPath, m);
+    setTestState((prev) => {
+      const next = new Map(prev);
+      if (result.issues.length === 0) next.set(m.name, 'ok'); else next.delete(m.name);
+      return next;
+    });
+    setTestIssues((prev) => new Map(prev).set(m.name, result.issues));
+  };
+
   const patchModel = (i: number, changes: Partial<SemanticModelV2>) =>
-    onChange(models.map((m, idx) => (idx === i ? { ...m, ...changes } : m)));
+    emit(models.map((m, idx) => (idx === i ? { ...m, ...changes } : m)));
 
   const allNames = () => new Set([...models, ...inheritedModels].map((m) => m.name));
 
@@ -326,7 +408,7 @@ export default function SemanticModelsSection({
     let suffix = 2;
     while (existing.has(name)) name = `new_model_${suffix++}`;
     // PREPENDED — the new card must be visible without scrolling.
-    onChange([{
+    emit([{
       name,
       connection,
       primary: { kind: 'table', table: '' },
@@ -604,7 +686,10 @@ export default function SemanticModelsSection({
             <ColumnSelect label={`semantic-model-${i}-dimension-${j}-column`}
               columns={temporalColumns.length > 0 ? temporalColumns : primaryColumns}
               value={d.column}
-              onChange={(v) => patchDim(j, { ...d, column: v })} />
+              onChange={(v) => patchDim(j, {
+                ...d, column: v,
+                name: followAutoName(d.name, humanizeName(d.column), humanizeName(v)),
+              })} />
             <Box flex={1} />
             <DeleteRowButton label={`semantic-model-${i}-dimension-${j}-delete`}
               onClick={() => patchModel(i, { dimensions: m.dimensions.filter((_, k) => k !== j) })} />
@@ -639,7 +724,12 @@ export default function SemanticModelsSection({
               value={fieldValue(d)}
               onChange={(e) => {
                 const [source, column] = e.target.value.split('|');
-                if (column) patchDim(j, { ...d, source, column });
+                if (column) {
+                  patchDim(j, {
+                    ...d, source, column,
+                    name: followAutoName(d.name, humanizeName(d.column), humanizeName(column)),
+                  });
+                }
               }}>
               <option value="">column…</option>
               {fieldOptions().map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -690,7 +780,10 @@ export default function SemanticModelsSection({
                   </select>
                   <ColumnSelect label={`semantic-model-${i}-metric-${j}-column`} columns={primaryColumns}
                     value={mt.column ?? ''} emptyLabel="(* — COUNT rows)"
-                    onChange={(v) => patchMetric(j, { ...mt, column: v || undefined })} />
+                    onChange={(v) => patchMetric(j, {
+                      ...mt, column: v || undefined,
+                      name: followAutoName(mt.name, aggAutoName(mt.agg, mt.column ?? ''), aggAutoName(mt.agg, v)),
+                    })} />
                 </>
               )}
               {mt.type === 'ratio' && (
@@ -768,9 +861,31 @@ export default function SemanticModelsSection({
                 {m.description && <Text fontSize="xs" color="fg.muted" truncate flex={1}>{m.description}</Text>}
               </>
             )}
+            {canEdit && contextPath && (
+              <>
+                {testState.get(m.name) === 'ok' && (
+                  <HStack aria-label={`semantic-model-${i}-test-ok`} gap={1} px={1.5} py={0.5}
+                    bg="accent.success/10" borderRadius="sm" flexShrink={0}>
+                    <Icon as={LuCircleCheck} boxSize={3} color="accent.success" />
+                    <Text fontSize="10px" fontWeight="600" color="accent.success" fontFamily="mono">metrics verified</Text>
+                  </HStack>
+                )}
+                <HStack as="button" aria-label={`semantic-model-${i}-test`} gap={1} px={2} py={0.5}
+                  border="1px solid" borderColor="border.muted" borderRadius="md" flexShrink={0}
+                  cursor={testState.get(m.name) === 'running' ? 'wait' : 'pointer'}
+                  color="fg.muted" _hover={{ color: 'accent.teal', borderColor: 'accent.teal/40' }}
+                  onClick={() => testState.get(m.name) !== 'running' && runTest(m)}
+                  title="Run the save-gate checks (including metric SQL against the warehouse) without saving">
+                  <Icon as={LuFlaskConical} boxSize={3} />
+                  <Text fontSize="xs" fontFamily="mono" fontWeight="600">
+                    {testState.get(m.name) === 'running' ? 'Testing…' : 'Test'}
+                  </Text>
+                </HStack>
+              </>
+            )}
             {canEdit && (
               <DeleteRowButton label={`delete-semantic-model-${m.name}`}
-                onClick={() => onChange(models.filter((_, idx) => idx !== i))} />
+                onClick={() => emit(models.filter((_, idx) => idx !== i))} />
             )}
           </HStack>
           <HStack gap={2} align="center" flexWrap="wrap">

@@ -115,6 +115,63 @@ export async function validateSemanticModelsGate(
 // Tiers 1–2 (`semanticModelIssues`) and the probe spec they share with tier 3
 // live in ./edit-check — the pure module the browser-side EditFile path imports.
 
+// ── The editor's Test button: tiers 1–3 for ONE staged model, NO save ────────
+
+export interface SemanticModelTestResult {
+  /** Gate-style prefixed problems; empty = the model passed every tier. */
+  issues: string[];
+  /** metric name → probe outcome (false = infrastructure fail-open), when tiers 1–2 passed. */
+  verified: Record<string, boolean>;
+}
+
+/**
+ * Run the SAME three validation tiers the save gate runs, for one STAGED model
+ * against the STORED context (`content` — whitelist, views, inherited models),
+ * without writing anything. Powers the editor's Test button, so an author can
+ * validate metric SQL against the live warehouse before ever saving. Every
+ * metric is probed (there is no old model to diff against — a test means
+ * "check all of it").
+ */
+export async function testSemanticModel(
+  model: SemanticModelV2,
+  content: ContextContent | null,
+  contextPath: string,
+  user: EffectiveUser,
+): Promise<SemanticModelTestResult> {
+  const versions = content?.versions ?? [];
+  const live = versions.find((v) => v.version === getPublishedVersionForUser(content ?? {} as ContextContent, user.userId)) ?? versions[0];
+  let fullSchema: DatabaseWithSchema[] = [];
+  let inheritedViews: ViewDef[] = content?.fullViews ?? [];
+  let inheritedModels: SemanticModelV2[] = content?.fullSemanticModels ?? [];
+  try {
+    const computed = await computeSchemaFromWhitelist(resolveVersionWhitelist(live), contextPath, user);
+    fullSchema = computed.fullSchema;
+    inheritedViews = computed.fullViews;
+    inheritedModels = computed.fullSemanticModels;
+  } catch {
+    // keep fallbacks — source-resolution failures then surface as "not exposed"
+  }
+  const views = [...inheritedViews, ...(live?.views ?? [])];
+  const ctx = {
+    fullSchema,
+    views,
+    otherModelNames: [
+      ...inheritedModels.map((m) => m.name),
+      ...(live?.semanticModels ?? []).filter((m) => m.name !== model.name).map((m) => m.name),
+    ],
+  };
+  const issues = semanticModelIssues(model, ctx);
+  if (issues.length > 0) {
+    return { issues: issues.map((i) => `Semantic model "${model.name}": ${i}`), verified: {} };
+  }
+  const problems: string[] = [];
+  const stamped = await dryRunModel(model, undefined, { views, ctx, user, problems });
+  return {
+    issues: problems,
+    verified: Object.fromEntries(stamped.metrics.map((m) => [m.name, m.verified !== false])),
+  };
+}
+
 // ── Tier 3: dry-run against the engine ───────────────────────────────────────
 
 interface DryRunEnv {

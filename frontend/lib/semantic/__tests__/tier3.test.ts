@@ -10,6 +10,7 @@
  * sticky in every probe set.
  */
 import { DocumentDB } from '@/lib/database/documents-db';
+import { testSemanticModel } from '@/lib/semantic/save-gate.server';
 import { FilesAPI } from '@/lib/data/files.server';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -272,5 +273,53 @@ describe('tier-3 dry-run save gate', () => {
     expect(sqls).toHaveLength(1);
     expect(sqls[0]).toContain('- 1'); // Net A
     expect((await savedMetric(contextId, 'Net A')).verified).toBe(true); // now verified
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The editor's Test button — tiers 1–3 for ONE staged model, NO save.
+// ---------------------------------------------------------------------------
+
+describe('testSemanticModel (Test button)', () => {
+  setupTestDb(TEST_DB_PATH);
+  let contextId: number;
+
+  beforeEach(async () => {
+    mockQuery.mockReset();
+    mockQuery.mockResolvedValue({ columns: ['_probe_dim', 'm'], types: ['VARCHAR', 'DOUBLE'], rows: [] });
+    await getModules().db.exec('DELETE FROM files', []);
+    const conn: ConnectionContent = { type: 'duckdb', config: { file_path: '../x.duckdb' }, schema: SCHEMA };
+    await mkPublished('warehouse', '/org/database/warehouse', 'connection', conn);
+    contextId = await mkPublished('context', '/org/context', 'context', content(model([M_A])));
+  });
+
+  it('a broken staged metric returns the engine issue WITHOUT saving anything', async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('- 99')) throw new Error('Parser Error: syntax error at or near "AS"');
+      return { columns: ['_probe_dim', 'm'], types: ['VARCHAR', 'DOUBLE'], rows: [] };
+    });
+    const staged = model([{ name: 'Broken', type: 'sql', sql: 'SUM(primary.total) - 99' }]);
+    const stored = (await DocumentDB.getById(contextId))!.content as ContextContent;
+    const result = await testSemanticModel(staged, stored, '/org/context', admin);
+    expect(result.issues.some((i) => i.includes('Parser Error'))).toBe(true);
+    // the stored context is untouched — Test never writes
+    const after = (await DocumentDB.getById(contextId))!.content as ContextContent;
+    expect(after.versions![0].semanticModels![0].metrics.some((m) => m.name === 'Broken')).toBe(false);
+  });
+
+  it('a valid staged model returns an empty issue list and a per-metric verified map', async () => {
+    const staged = model([M_A, M_B]);
+    const stored = (await DocumentDB.getById(contextId))!.content as ContextContent;
+    const result = await testSemanticModel(staged, stored, '/org/context', admin);
+    expect(result.issues).toEqual([]);
+    expect(result.verified).toEqual({ Revenue: true, 'Net A': true, 'Net B': true });
+  });
+
+  it('tier-1 problems come back prefixed, without any probe running', async () => {
+    const staged = model([{ name: 'Bad', type: 'sql', sql: 'SUM(nope)' }]);
+    const stored = (await DocumentDB.getById(contextId))!.content as ContextContent;
+    const result = await testSemanticModel(staged, stored, '/org/context', admin);
+    expect(result.issues.some((i) => i.startsWith('Semantic model "Orders": '))).toBe(true);
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 });

@@ -63,3 +63,31 @@ export async function searchFields(
     return [];
   }
 }
+
+export interface SemanticModelTestResult {
+  issues: string[];
+  verified: Record<string, boolean>;
+}
+
+/**
+ * The editor's Test button: run save-gate tiers 1–3 for one STAGED model
+ * (metric SQL probes execute against the live warehouse) without saving.
+ * Transport failures come back as a single issue rather than throwing.
+ */
+export async function testSemanticModel(
+  path: string,
+  model: SemanticModelV2,
+): Promise<SemanticModelTestResult> {
+  try {
+    const r = await fetch('/api/semantic-models', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, connection: model.connection, testModel: model }),
+    });
+    if (!r.ok) return { issues: [`Semantic model "${model.name}": test failed (HTTP ${r.status})`], verified: {} };
+    const body = await r.json();
+    return (body?.data?.test as SemanticModelTestResult) ?? { issues: [`Semantic model "${model.name}": test failed (malformed response)`], verified: {} };
+  } catch {
+    return { issues: [`Semantic model "${model.name}": test failed — could not reach the server`], verified: {} };
+  }
+}
