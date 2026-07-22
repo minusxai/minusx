@@ -18,6 +18,9 @@ export interface ConfigsState {
   // Server-side runtime env (CREDITS_ENABLED), hydrated from SSR preloadedState.
   // When false, the credits usage module is hidden throughout the UI.
   creditsEnabled: boolean;
+  // Server-side runtime env (SHOW_MODEL_SETTINGS), hydrated from SSR preloadedState.
+  // When false, the chat settings popover and the Settings Models tab are hidden.
+  showModelSettings: boolean;
 }
 
 const initialState: ConfigsState = {
@@ -27,6 +30,7 @@ const initialState: ConfigsState = {
   maxConcurrentQueries: 10,
   queryTimeoutMs: 120_000,
   creditsEnabled: false,
+  showModelSettings: false,
 };
 
 const configsSlice = createSlice({
@@ -51,3 +55,4 @@ export const selectDisableAppStateImages = (state: RootState) => state.configs.d
 export const selectMaxConcurrentQueries = (state: RootState) => state.configs.maxConcurrentQueries;
 export const selectQueryTimeoutMs = (state: RootState) => state.configs.queryTimeoutMs;
 export const selectCreditsEnabled = (state: RootState) => state.configs.creditsEnabled;
+export const selectShowModelSettings = (state: RootState) => state.configs.showModelSettings;

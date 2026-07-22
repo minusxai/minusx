@@ -30,7 +30,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
-import { selectCreditsEnabled } from '@/store/configsSlice';
+import { selectCreditsEnabled, selectShowModelSettings } from '@/store/configsSlice';
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
 import { STORY_RENDERERS, resolveStoryRenderer, type StoryRenderer } from '@/lib/branding/whitelabel';
 
@@ -61,6 +61,8 @@ interface TabEntry {
   id: TabId;
   label: string;
   visible?: boolean;
+  /** Hide the nav trigger but keep the tab reachable via ?tab=<id> */
+  hiddenFromNav?: boolean;
   /** Custom content instead of rendering settings rows */
   custom?: ReactNode;
 }
@@ -383,6 +385,7 @@ function SettingsContent() {
   const showExpandedMessages = useAppSelector((state) => state.ui.showExpandedMessages ?? false);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
   const creditsEnabled = useAppSelector(selectCreditsEnabled);
+  const showModelSettings = useAppSelector(selectShowModelSettings);
   const { config } = useConfigs();
   // Single source of truth for the active renderer, incl. the legacy useCanvasRenderer fallback.
   const activeStoryRenderer = resolveStoryRenderer(config);
@@ -744,6 +747,7 @@ function SettingsContent() {
       id: 'models',
       label: 'Models',
       visible: isAdmin,
+      hiddenFromNav: !showModelSettings,
       custom: (
         <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" p={6}>
           <LlmModelsSection />
@@ -820,7 +824,7 @@ function SettingsContent() {
       ),
     },
     { id: 'homepage', label: 'Home Page', visible: isAdvancedAdmin, custom: <HomePageSettings /> },
-  ], [isAdmin, isAdvancedAdmin, mode, creditsEnabled]);
+  ], [isAdmin, isAdvancedAdmin, mode, creditsEnabled, showModelSettings]);
 
   const breadcrumbItems = [
     { label: 'Home', href: '/' },
@@ -832,6 +836,7 @@ function SettingsContent() {
   }
 
   const visibleTabs = tabs.filter((t) => t.visible !== false);
+  const navTabs = visibleTabs.filter((t) => !t.hiddenFromNav);
   const needsWideLayout = activeTab === 'users';
 
   const renderTabContent = (tab: TabEntry) => {
@@ -919,7 +924,7 @@ function SettingsContent() {
           unmountOnExit
         >
           <Tabs.List mb={6} overflowX="auto" flexWrap="nowrap" css={{ '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}>
-            {visibleTabs.map((tab) => (
+            {navTabs.map((tab) => (
               <Tabs.Trigger key={tab.id} value={tab.id} fontFamily="mono" fontSize="sm" flexShrink={0} aria-label={`Settings tab: ${tab.label}`}>
                 {tab.label}
               </Tabs.Trigger>

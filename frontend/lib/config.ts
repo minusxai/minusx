@@ -49,6 +49,7 @@ interface EnvironmentConfig {
   USE_BASE64_UPLOADS: boolean;
   DISABLE_APP_STATE_IMAGES: boolean;
   CREDITS_ENABLED: boolean;
+  SHOW_MODEL_SETTINGS: boolean;
   SHARE_GUEST_CHAT_ENABLED: boolean;
   LOCAL_UPLOAD_PATH: string;
   MXFOOD_DUCKDB_URL: string;
@@ -150,6 +151,9 @@ const config: EnvironmentConfig = {
   // Whether the credits usage module (Settings card + sidebar donuts) is shown.
   // Off unless explicitly enabled per deploy.
   CREDITS_ENABLED: process.env.CREDITS_ENABLED === 'true',
+  // Whether model configuration UI (chat settings popover + Settings Models tab)
+  // is shown. Off unless explicitly enabled per deploy.
+  SHOW_MODEL_SETTINGS: process.env.SHOW_MODEL_SETTINGS === 'true',
   // Anonymous guest chat on public shares is OFF by default — an open link drives real
   // LLM spend, so it's opt-in per deploy and acts as an instant kill-switch.
   SHARE_GUEST_CHAT_ENABLED: process.env.SHARE_GUEST_CHAT_ENABLED === 'true',
@@ -349,6 +353,7 @@ export const OBJECT_STORE_PUBLIC_URL = config.OBJECT_STORE_PUBLIC_URL;
 export const USE_BASE64_UPLOADS = config.USE_BASE64_UPLOADS;
 export const DISABLE_APP_STATE_IMAGES = config.DISABLE_APP_STATE_IMAGES;
 export const CREDITS_ENABLED = config.CREDITS_ENABLED;
+export const SHOW_MODEL_SETTINGS = config.SHOW_MODEL_SETTINGS;
 export const SHARE_GUEST_CHAT_ENABLED = config.SHARE_GUEST_CHAT_ENABLED;
 export const MAX_CONCURRENT_QUERIES = config.MAX_CONCURRENT_QUERIES;
 export const QUERY_SERVER_TIMEOUT_MS = config.QUERY_SERVER_TIMEOUT_MS;

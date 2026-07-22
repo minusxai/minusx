@@ -80,6 +80,7 @@ import { setFile, setFiles } from '@/store/filesSlice';
 import { pushView } from '@/store/uiSlice';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { encodeFileStr } from '@/lib/chat/file-encoding';
+import { DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
 import type { DbFile, ToolCall, ToolMessage, CompletedToolCall, EditFileDetails } from '@/lib/types';
 
 import EditFileDisplay from '@/components/explore/tools/EditFileDisplay';
@@ -451,7 +452,8 @@ describe('Explore page: chat settings default to first connection', () => {
   beforeEach(() => {
     mockPathname = '/explore';
     mockRouterPush.mockClear();
-    testStore = storeModule.makeStore();
+    // These tests assert on the Chat settings control — opt into SHOW_MODEL_SETTINGS.
+    testStore = storeModule.makeStore({ configs: { config: DEFAULT_CONFIG, showModelSettings: true } } as never);
     getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
     window.HTMLElement.prototype.scrollTo = vi.fn();
 

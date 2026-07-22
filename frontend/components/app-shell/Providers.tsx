@@ -28,6 +28,7 @@ interface ProvidersProps {
     maxConcurrentQueries?: number;    // Server runtime env (MAX_CONCURRENT_QUERIES)
     queryTimeoutMs?: number;          // Server runtime env (QUERY_TIMEOUT_MS)
     creditsEnabled?: boolean;         // Server runtime env (CREDITS_ENABLED)
+    showModelSettings?: boolean;      // Server runtime env (SHOW_MODEL_SETTINGS)
     e2eEnabled?: boolean;             // QA runtime E2E opt-in (?e2e=<secret>)
   };
 }
@@ -45,6 +46,7 @@ export function Providers({ children, initialData }: ProvidersProps) {
       maxConcurrentQueries: initialData?.maxConcurrentQueries ?? 10,
       queryTimeoutMs: initialData?.queryTimeoutMs ?? 120_000,
       creditsEnabled: initialData?.creditsEnabled ?? false,
+      showModelSettings: initialData?.showModelSettings ?? false,
     },
 
     // Auth (if user present)

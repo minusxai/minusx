@@ -11,7 +11,7 @@ import { E2E_HEADER } from '@/lib/auth/e2e-runtime';
 import { getConfigs, getConfigsForMode, getOrgStyles, getStylesForMode } from '@/lib/data/configs.server';
 import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, getBrandTagline } from '@/lib/branding/whitelabel';
 import { redactRawConfigSecrets } from '@/lib/secrets/config-secret-specs';
-import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES, QUERY_TIMEOUT_MS, CREDITS_ENABLED, TELEMETRY_LEVEL } from '@/lib/config';
+import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES, QUERY_TIMEOUT_MS, CREDITS_ENABLED, SHOW_MODEL_SETTINGS, TELEMETRY_LEVEL } from '@/lib/config';
 import { parseAnalyticsConfig } from '@/lib/constants';
 import { TELEMETRY_LEVEL_ATTR } from '@/lib/telemetry';
 import type { AnalyticsConfig } from '@/lib/analytics/types';
@@ -75,6 +75,7 @@ async function loadInitialState(): Promise<{
   maxConcurrentQueries: number;
   queryTimeoutMs: number;
   creditsEnabled: boolean;
+  showModelSettings: boolean;
   e2eEnabled: boolean;
 }> {
   const user = await getEffectiveUserCached();
@@ -104,6 +105,7 @@ async function loadInitialState(): Promise<{
     maxConcurrentQueries: MAX_CONCURRENT_QUERIES,
     queryTimeoutMs: QUERY_TIMEOUT_MS,
     creditsEnabled: CREDITS_ENABLED,
+    showModelSettings: SHOW_MODEL_SETTINGS,
     // QA runtime E2E opt-in: middleware stamps this header when `?e2e=<secret>`
     // (or its persisted cookie) matches. Exposes the store on the client.
     e2eEnabled: (await headers()).get(E2E_HEADER) === '1',

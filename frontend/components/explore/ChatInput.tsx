@@ -10,6 +10,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
 import { addInputHistoryEntry, selectChatInputHistory } from '@/store/chatSlice';
 import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, removeChatAttachment, updateChatAttachment, clearChatAttachments, selectPendingUploads, removePendingUpload } from '@/store/uiSlice';
+import { selectShowModelSettings } from '@/store/configsSlice';
 import RegionCaptureButton from '@/components/screenshot/RegionCaptureButton';
 import ImageAnnotatorDialog from '@/components/screenshot/ImageAnnotatorDialog';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
@@ -105,6 +106,7 @@ function ChatInputInner({
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const [annotatingIdx, setAnnotatingIdx] = useState<number | null>(null);
   const attachments = useAppSelector(selectChatAttachments);
+  const showModelSettings = useAppSelector(selectShowModelSettings);
   const pendingUploads = useAppSelector(selectPendingUploads);
   // Block send while any image/file is still capturing/uploading (so a quick Enter doesn't
   // fire the message without the in-flight attachment).
@@ -729,18 +731,22 @@ function ChatInputInner({
                     data-testid="chat-control-bar"
                     style={{ flexDirection: 'row', alignItems: 'center' }}
                   >
-                    <ChatSettingsPopover
-                      databaseName={databaseName}
-                      onDatabaseChange={onDatabaseChange}
-                      selectedModel={selectedModel}
-                      onModelChange={onModelChange || (() => {})}
-                      modelDisabled={isAgentRunning || remoteSessionActive}
-                      selectedContextPath={selectedContextPath || null}
-                      selectedVersion={selectedVersion}
-                      onContextChange={onContextChange || (() => {})}
-                      onOpenChange={handleChatSettingsOpenChange}
-                      compactSummary={container === 'sidebar'}
-                    />
+                    {showModelSettings ? (
+                      <ChatSettingsPopover
+                        databaseName={databaseName}
+                        onDatabaseChange={onDatabaseChange}
+                        selectedModel={selectedModel}
+                        onModelChange={onModelChange || (() => {})}
+                        modelDisabled={isAgentRunning || remoteSessionActive}
+                        selectedContextPath={selectedContextPath || null}
+                        selectedVersion={selectedVersion}
+                        onContextChange={onContextChange || (() => {})}
+                        onOpenChange={handleChatSettingsOpenChange}
+                        compactSummary={container === 'sidebar'}
+                      />
+                    ) : (
+                      <Box flex="1" minW={0} />
+                    )}
 
                     <HStack
                       gap={1}

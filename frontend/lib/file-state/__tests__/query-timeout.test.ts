@@ -19,7 +19,7 @@ const testStore = configureStore({
   reducer: { queryResults: queryResultsReducer, configs: configsReducer },
   preloadedState: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    configs: { config: {} as any, loadedAt: null, disableAppStateImages: false, maxConcurrentQueries: 10, queryTimeoutMs: TIMEOUT_MS, creditsEnabled: false },
+    configs: { config: {} as any, loadedAt: null, disableAppStateImages: false, maxConcurrentQueries: 10, queryTimeoutMs: TIMEOUT_MS, creditsEnabled: false, showModelSettings: false },
   },
 });
 vi.mock('@/store/store', () => ({

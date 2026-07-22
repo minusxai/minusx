@@ -97,12 +97,17 @@ import { uploadFile } from '@/lib/object-store/client';
 import { extractTextFromDocument } from '@/lib/utils/attachment-extract';
 
 import ChatInput from '@/components/explore/ChatInput';
+import { DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
+
+// Store with the SHOW_MODEL_SETTINGS runtime flag on (chat settings visible).
+const makeFlagOnStore = () =>
+  storeModule.makeStore({ configs: { config: DEFAULT_CONFIG, showModelSettings: true } } as never);
 
 // ─── ChatInput: sidebar control layout ───
 
 describe('ChatInput: sidebar control layout', () => {
   it('keeps one stable footer row with settings on the left and actions on the right', () => {
-    const store = storeModule.makeStore();
+    const store = makeFlagOnStore();
     renderWithProviders(
       <ChatInput
         onSend={vi.fn()}
@@ -131,9 +136,28 @@ describe('ChatInput: sidebar control layout', () => {
     });
   });
 
+  it('hides the Chat settings control when SHOW_MODEL_SETTINGS is off (default)', () => {
+    const store = storeModule.makeStore();
+    renderWithProviders(
+      <ChatInput
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        isAgentRunning={false}
+        databaseName="test_db"
+        onDatabaseChange={vi.fn()}
+        container="sidebar"
+        isCompact={true}
+      />,
+      { store },
+    );
+
+    expect(screen.queryByLabelText('Chat settings')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chat-input-actions')).toBeInTheDocument();
+  });
+
   it('keeps the floating composer expanded while settings owns focus, then collapses after one outside click', async () => {
     const user = userEvent.setup();
-    const store = storeModule.makeStore();
+    const store = makeFlagOnStore();
     renderWithProviders(
       <ChatInput
         onSend={vi.fn()}
