@@ -246,7 +246,7 @@ export function ImageToolsPanel({ fileId, appState }: { fileId: number | undefin
     setCaptureStatus('capturing');
     captureCache.current = null;
     try {
-      const blob = await captureFileView(fileId); // viewport-only — no fullHeight, no 100ms wait
+      const blob = await captureFileView(fileId); // readiness-gated inside captureFileViewBlob
       if (captureGenRef.current !== gen) return;  // discard if superseded
       captureCache.current = blob;
       setCaptureStatus('ready');

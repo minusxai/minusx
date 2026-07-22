@@ -98,6 +98,29 @@ describe('captureFileViewBlob', () => {
     node.remove();
   });
 
+  // Embeds hydrate ASYNCHRONOUSLY (chart queries, inline numbers, metric tiles): a capture fired
+  // while the view still shows busy markers rasterizes blank tiles and missing charts — the
+  // "Get image gives me a story without the numbers and the lines" bug. The readiness gate
+  // (data-mx-busy, incl. inside the story iframe) must be part of the capture itself so EVERY
+  // caller (dev panel pre-capture, file health, chat attachments) is correct by default.
+  it('waits for the view\'s busy markers to clear before capturing', async () => {
+    const view = el();
+    view.setAttribute('data-file-id', '9');
+    const busy = document.createElement('div');
+    busy.setAttribute('data-mx-busy', 'true');
+    view.appendChild(busy);
+    document.body.appendChild(view);
+    let resolved = false;
+    const p = captureFileViewBlob(9, { colorMode: 'light' }).then((b) => { resolved = true; return b; });
+    // Longer than the settle window: while busy, nothing may have been serialized.
+    await new Promise((r) => setTimeout(r, 450));
+    expect(h.serializeElementToSvg).not.toHaveBeenCalled();
+    expect(resolved).toBe(false);
+    busy.remove(); // embed finished hydrating
+    expect(await p).toBeInstanceOf(Blob);
+    expect(h.serializeElementToSvg).toHaveBeenCalledTimes(1);
+  });
+
   it('throws a clear error when no element has that data-file-id', async () => {
     await expect(captureFileViewBlob(999, { colorMode: 'light' })).rejects.toThrow(/not found/);
   });

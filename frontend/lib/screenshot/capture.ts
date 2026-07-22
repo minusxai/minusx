@@ -16,6 +16,7 @@
  */
 import { findStorySvg, serializeStorySvg, svgToImage } from '@/lib/story-surface/serialize';
 import { serializeElementToSvg } from './serialize-element';
+import { waitForFileViewReady } from './readiness';
 import { AGENT_IMAGE_MAX_PX, AGENT_IMAGE_PIXEL_RATIO, AGENT_IMAGE_JPEG_QUALITY } from './constants';
 import { drawMarkerGutter } from './draw-markers';
 import type { ScreenshotOptions } from './types';
@@ -250,14 +251,25 @@ export async function captureRegionBlob(
   return canvasToBlob(canvas, mimeFor(opts.format), opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
 }
 
-/** Capture a FileView (question/dashboard/story/notebook/report) by its `data-file-id`. */
+/**
+ * Capture a FileView (question/dashboard/story/notebook/report) by its `data-file-id`.
+ *
+ * Readiness-gated: embeds hydrate asynchronously (chart queries, inline numbers, metric tiles),
+ * and a capture fired mid-hydration rasterizes blank tiles and missing charts. The wait lives
+ * HERE, not in callers, so every capture site (dev panel pre-capture, file health, chat
+ * attachments, agent review) is correct by default. Best-effort: resolves by its timeout, so a
+ * stuck query degrades to a capture of its spinner rather than hanging the caller.
+ */
 export async function captureFileViewBlob(
   fileId: number,
   opts: CaptureOptions & { fullHeight?: boolean },
 ): Promise<Blob> {
   const element = document.querySelector(`[data-file-id="${fileId}"]`);
   if (!element) throw new Error(`FileView with id ${fileId} not found`);
+  await waitForFileViewReady(fileId, { timeoutMs: 10000 });
+  // The view can REMOUNT while settling (EditFile rebuilds the story iframe) — re-resolve it.
+  const live = document.querySelector(`[data-file-id="${fileId}"]`) ?? element;
   return opts.fullHeight
-    ? captureElementFullHeightBlob(element as HTMLElement, opts)
-    : captureElementBlob(element as HTMLElement, opts);
+    ? captureElementFullHeightBlob(live as HTMLElement, opts)
+    : captureElementBlob(live as HTMLElement, opts);
 }
