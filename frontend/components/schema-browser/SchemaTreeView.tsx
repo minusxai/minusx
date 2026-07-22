@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { Box, VStack, Text } from '@chakra-ui/react';
-import type { TableAnnotation, MetricDef, TableRelationship } from '@/lib/types';
+import type { TableAnnotation, TableRelationship } from '@/lib/types';
 import SchemaTreeSearchBar from './SchemaTreeSearchBar';
 import SchemaTreeSummaryBar from './SchemaTreeSummaryBar';
 import SchemaTreeSchemaRow from './SchemaTreeSchemaRow';
@@ -64,14 +64,6 @@ interface SchemaTreeViewProps {
   /** Inherited descriptions (read-only) used as a fallback for the effective value. */
   inheritedAnnotations?: TableAnnotation[];
 
-  // Metrics (per-table, edited inline in the tree)
-  /** All context metrics. */
-  metrics?: MetricDef[];
-  /** When provided, metrics become editable and edits are emitted here. */
-  onMetricsChange?: (next: MetricDef[]) => void;
-  /** Inherited metrics (read-only). */
-  inheritedMetrics?: MetricDef[];
-
   // Relationships (per-table FK lookups, edited inline in the tree)
   /** All context relationships. */
   relationships?: TableRelationship[];
@@ -102,9 +94,6 @@ export default function SchemaTreeView({
   annotations = [],
   onAnnotationsChange,
   inheritedAnnotations = [],
-  metrics = [],
-  onMetricsChange,
-  inheritedMetrics = [],
   relationships = [],
   onRelationshipsChange,
   inheritedRelationships = [],
@@ -532,9 +521,6 @@ export default function SchemaTreeView({
                 annotationsEditable={annotationsEditable}
                 annotations={annotations}
                 inheritedAnnotations={inheritedAnnotations}
-                metrics={metrics}
-                onMetricsChange={onMetricsChange}
-                inheritedMetrics={inheritedMetrics}
                 relationships={relationships}
                 onRelationshipsChange={onRelationshipsChange}
                 inheritedRelationships={inheritedRelationships}

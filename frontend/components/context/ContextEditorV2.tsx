@@ -165,6 +165,14 @@ export default function ContextEditorV2({
   // whitelist exposes nothing. Fall back to fullSchema for backward compatibility.
   const availableDatabases = (content.parentSchema || content.fullSchema || []).filter(db => db.schemas.length > 0);
 
+  // The docs @ mention typeahead must offer ONLY what this context exposes
+  // (fullSchema = whitelist applied by the loader) — NEVER availableDatabases,
+  // which is the pre-whitelist menu above.
+  const mentionSchemas = useMemo(
+    () => (content.fullSchema || []).filter(db => db.schemas.length > 0),
+    [content.fullSchema],
+  );
+
   // Compute immediate child paths for path filtering UI
   const availableChildPaths = useMemo(() => {
     if (!file?.path) return [];
@@ -546,7 +554,7 @@ export default function ContextEditorV2({
             inheritedDocs={content.fullDocs}
             originalDocs={originalDocs}
             availableChildPaths={availableChildPaths}
-            mentions={{ whitelistedSchemas: availableDatabases, metrics: [...(content.fullMetrics || []), ...(content.metrics || [])] }}
+            mentions={{ whitelistedSchemas: mentionSchemas }}
             editMode={editMode}
           />
           ) : (

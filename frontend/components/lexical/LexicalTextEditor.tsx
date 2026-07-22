@@ -62,7 +62,7 @@ import {
 import { $setBlocksType } from '@lexical/selection';
 
 import { useAppSelector } from '@/store/hooks';
-import type { DatabaseWithSchema, MetricDef } from '@/lib/types';
+import type { DatabaseWithSchema } from '@/lib/types';
 import { $createImageNode } from './ImageNode';
 import { $createMetricNode } from './MetricNode';
 import { MentionsPlugin } from './MentionsPlugin';
@@ -75,8 +75,6 @@ import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 export interface MentionsConfig {
   databaseName?: string;
   whitelistedSchemas?: DatabaseWithSchema[];
-  /** Context metrics, surfaced in a table's @ drill-down. */
-  metrics?: MetricDef[];
 }
 
 // --- Theme ---
@@ -487,6 +485,32 @@ function makeEditorStateInit(markdown: string) {
   };
 }
 
+/** The "+ to insert images … @ for tables…" hint line. Rendered by the default
+ * inline toolbar; exported so callers that take over the toolbar chrome via
+ * `renderToolbar` (e.g. the context docs Diff wrapper) can keep it visible. */
+export function EditorProTip({ mentions, insertMetric }: { mentions?: boolean; insertMetric?: boolean }) {
+  return (
+    <HStack
+      aria-label="Editor pro tip"
+      gap={1.5}
+      px={4}
+      py={1}
+      flexShrink={0}
+      color="fg.subtle"
+      fontSize="xs"
+      borderBottomWidth="1px"
+      borderColor="border.muted"
+      bg="bg.subtle"
+    >
+      <Icon as={LuLightbulb} boxSize={3} />
+      <Text>
+        Pro tip: type <Box as="span" fontWeight="700" fontFamily="mono">+</Box> to insert images{insertMetric && ' or metrics'}
+        {mentions && <> · <Box as="span" fontWeight="700" fontFamily="mono">@</Box> for tables, columns or saved questions</>}
+      </Text>
+    </HStack>
+  );
+}
+
 // --- Editable Editor ---
 interface LexicalTextEditorProps {
   initialMarkdown: string;
@@ -497,8 +521,10 @@ interface LexicalTextEditorProps {
   onImageUpload?: (file: File) => Promise<string>;
   /** If provided, enables the @ / @@ mention typeahead (tables, questions, dashboards). */
   mentions?: MentionsConfig;
-  /** Enables the "+" insert menu (image + metric block). */
+  /** Enables the "+" insert menu (image block). */
   insertMenu?: boolean;
+  /** Adds a Metric option (chip with name/description/SQL) to the "+" insert menu. */
+  insertMetric?: boolean;
   /** If provided, selecting text shows an "Interact with {agentName}" pill that sends the selection to chat. */
   editWithAgent?: EditWithAgentSource;
   /** Hands back the editor instance so the parent can imperatively focus it (click-to-edit). */
@@ -511,7 +537,7 @@ interface LexicalTextEditorProps {
   verticalCenter?: boolean;
 }
 
-export default function LexicalTextEditor({ initialMarkdown, onChange, renderToolbar, onImageUpload, mentions, insertMenu, editWithAgent, onEditorReady, contentPadding = '32px 32px', floatingToolbar, verticalCenter }: LexicalTextEditorProps) {
+export default function LexicalTextEditor({ initialMarkdown, onChange, renderToolbar, onImageUpload, mentions, insertMenu, insertMetric, editWithAgent, onEditorReady, contentPadding = '32px 32px', floatingToolbar, verticalCenter }: LexicalTextEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
 
   // Debounce onChange to avoid dispatching on every keystroke
@@ -565,28 +591,13 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
           </Box>
         )}
 
-        {/* The inline hint only renders for the DEFAULT inline toolbar (notebook/context
-            docs). When the caller supplies its own `renderToolbar` or uses the floating
-            selection toolbar (dashboard text blocks), it owns all chrome — a permanent
-            hint line would break WYSIWYG. */}
+        {/* The inline hint only renders for the DEFAULT inline toolbar. A caller that
+            supplies its own `renderToolbar` owns all chrome — it can opt back in by
+            rendering <EditorProTip> itself (the context docs Diff wrapper does). The
+            floating selection toolbar (dashboard text blocks) never shows it — a
+            permanent hint line would break WYSIWYG. */}
         {!renderToolbar && !floatingToolbar && (insertMenu || mentions) && (
-          <HStack
-            gap={1.5}
-            px={4}
-            py={1}
-            flexShrink={0}
-            color="fg.subtle"
-            fontSize="xs"
-            borderBottomWidth="1px"
-            borderColor="border.muted"
-            bg="bg.subtle"
-          >
-            <Icon as={LuLightbulb} boxSize={3} />
-            <Text>
-              Pro tip: type <Box as="span" fontWeight="700" fontFamily="mono">+</Box> to insert images
-              {mentions && <> · <Box as="span" fontWeight="700" fontFamily="mono">@</Box> for tables, columns, metrics or saved questions</>}
-            </Text>
-          </HStack>
+          <EditorProTip mentions={!!mentions} insertMetric={insertMetric} />
         )}
 
         <Box
@@ -642,13 +653,12 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
           <MentionsPlugin
             databaseName={mentions.databaseName}
             whitelistedSchemas={mentions.whitelistedSchemas}
-            metrics={mentions.metrics}
             availableSkills={[]}
             availableCommands={[]}
             anchorToCaret
           />
         )}
-        {insertMenu && <InsertMenuPlugin onImageUpload={onImageUpload} />}
+        {insertMenu && <InsertMenuPlugin onImageUpload={onImageUpload} enableMetric={insertMetric} />}
         {editWithAgent && <EditSelectionPlugin source={editWithAgent} />}
         {onEditorReady && <EditorRefPlugin onReady={onEditorReady} />}
       </LexicalComposer>
