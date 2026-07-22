@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getVegaLiteConfig, getVegaParserConfig } from '@/lib/viz/theme';
-import { COLOR_PALETTE, DARK_THEME, LIGHT_THEME } from '@/lib/chart/echarts-theme';
+import { COLOR_PALETTE, DARK_THEME, LIGHT_THEME } from '@/lib/chart/chart-theme';
 
 describe('getVegaLiteConfig', () => {
   it('uses JetBrains Mono across text roles in both modes', () => {

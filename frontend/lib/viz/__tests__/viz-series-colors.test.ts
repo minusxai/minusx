@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { getSeriesColors, setSeriesColor } from '../encoding-edit';
-import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
+import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 const envelope = (spec: Record<string, unknown>): VizEnvelope => ({

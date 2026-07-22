@@ -11,7 +11,7 @@ import type { VizEnvelope, ColumnFormatConfig, ConditionalFormatRule, PivotConfi
 import type { VizColumnKind } from './types';
 import { getTemplate, VIZ_TEMPLATES } from './viz-templates';
 import { immutableSet } from '@/lib/utils/immutable-collections';
-import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
+import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 
 export const EDITABLE_CHANNELS = ['x', 'y', 'color', 'theta'] as const;
 export type EditableChannel = (typeof EDITABLE_CHANNELS)[number];

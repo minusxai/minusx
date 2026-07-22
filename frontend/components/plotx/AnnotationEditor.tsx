@@ -4,7 +4,17 @@ import { useEffect, useMemo } from 'react'
 import { Box, HStack, Text, VStack } from '@chakra-ui/react'
 import { LuPlus, LuTrash2 } from 'react-icons/lu'
 import type { ChartAnnotation } from '@/lib/types'
-import { findMatchingXIndex } from '@/lib/chart/chart-annotations'
+// Pure matcher (formerly lib/chart/chart-annotations, deleted with the ECharts stack):
+// exact match first, then date-prefix matching (date-only vs full ISO).
+const findMatchingXIndex = (xAxisData: string[], annotationX: string | number): number => {
+  const needle = String(annotationX)
+  const exactIndex = xAxisData.findIndex(item => String(item) === needle)
+  if (exactIndex !== -1) return exactIndex
+  return xAxisData.findIndex(item => {
+    const hay = String(item)
+    return hay.startsWith(needle) || needle.startsWith(hay)
+  })
+}
 
 interface AnnotationEditorProps {
   annotations?: ChartAnnotation[] | null

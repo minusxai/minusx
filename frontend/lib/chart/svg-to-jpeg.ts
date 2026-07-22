@@ -1,27 +1,22 @@
 /**
- * Server-side chart rendering to JPEG.
- *
- * Uses ECharts SSR → SVG (via render-chart-svg.ts) then
- * Resvg (font-aware SVG→PNG) + Sharp (JPEG compression + logo footer).
- *
- * Node.js only — not safe for browser bundles.
- * For browser-side rendering, use chart-image-client.ts.
+ * SVG → JPEG composer for server-side chart images (Resvg rasterize → Sharp encode, with
+ * optional padding + logo overlay). Engine-free — the input is ANY SVG string (today: Vega
+ * output via lib/chart/render-viz-image). Survivor of the deleted ECharts SSR renderer
+ * (Renderer_v2 Phase 2).
  */
 import 'server-only';
-
 import { Resvg } from '@resvg/resvg-js';
 import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
-import { renderChartToSvg, BG_COLORS } from './render-chart-svg';
 import { AGENT_IMAGE_JPEG_QUALITY, CHART_WATERMARK_PADDING_PX, CHART_WATERMARK_LOGO_SCALE } from '@/lib/screenshot/constants';
-import type { QueryResult } from '@/lib/types';
-import type { VizSettings } from '@/lib/validation/atlas-schemas';
 
-export { renderChartToSvg } from './render-chart-svg';
+const BG_COLORS = {
+  dark: '#161b22',
+  light: '#ffffff',
+}
 
-// ── Font-aware SVG → PNG conversion ──────────────────────────────────────────
-
+// eslint-disable-next-line no-restricted-syntax -- process-lifetime font cache
 let fontFilesCache: string[] | null = null;
 
 function getFontFiles(): string[] {
@@ -110,37 +105,3 @@ export async function composeSvgToJpeg(svg: string, options: ComposeJpegOptions 
     .jpeg({ quality: Math.round(AGENT_IMAGE_JPEG_QUALITY * 100) })
     .toBuffer();
 }
-
-// ── Public API ───────────────────────────────────────────────────────────────
-
-/**
- * Render a chart to a JPEG buffer (q=85) with logo in the footer.
- *
- * Always includes:
- * - Auto-generated chart title from xCols/yCols
- * - Solid background (dark theme by default)
- * - Logo in bottom-right corner
- * - JetBrains Mono font (embedded, renders correctly in Docker)
- *
- * Returns null for unsupported types (table, pivot) or empty data.
- *
- * Used by: Slack integration, any server-side chart export.
- * For browser-side JPEG upload to S3, use chart-image-client.ts instead.
- */
-export async function renderChartToJpeg(
-  queryResult: QueryResult,
-  vizSettings: VizSettings,
-  options: import('./render-chart-svg').RenderChartOptions = {},
-): Promise<Buffer | null> {
-  const svg = renderChartToSvg(queryResult, vizSettings, options);
-  if (!svg) return null;
-
-  return composeSvgToJpeg(svg, {
-    width: options.width ?? 512,
-    height: options.height ?? 256,
-    colorMode: options.colorMode ?? 'dark',
-    padding: options.padding,
-    logoPath: options.logoPath,
-  });
-}
-

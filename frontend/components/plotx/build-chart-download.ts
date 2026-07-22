@@ -1,4 +1,4 @@
-import { getTimestamp } from '@/lib/chart/chart-utils'
+import { getTimestamp } from '@/lib/chart/chart-format'
 
 const escapeCsvValue = (val: string | number) => {
   const str = String(val)

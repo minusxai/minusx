@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { Box, HStack, Text } from '@chakra-ui/react'
-import { CHART_COLORS, COLOR_PALETTE, resolveSeriesColor } from '@/lib/chart/echarts-theme'
+import { CHART_COLORS, COLOR_PALETTE, resolveSeriesColor } from '@/lib/chart/chart-theme'
 import { useConfigs } from '@/lib/hooks/useConfigs'
 
 interface ColorPickerProps {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, HStack, Text, VStack } from '@chakra-ui/react'
 import { LuPalette, LuPipette } from 'react-icons/lu'
-import { CHART_COLORS, COLOR_PALETTE, resolveSeriesColor } from '@/lib/chart/echarts-theme'
+import { CHART_COLORS, COLOR_PALETTE, resolveSeriesColor } from '@/lib/chart/chart-theme'
 import { useConfigs } from '@/lib/hooks/useConfigs'
 import type { VisualizationStyleConfig, VisualizationType } from '@/lib/types'
 

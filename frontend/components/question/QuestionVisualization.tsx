@@ -12,18 +12,17 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { TableV2 } from '@/components/plotx/TableV2';
 import { VizTableView } from '@/components/viz/VizTableView';
 import { VizPivotView } from '@/components/viz/VizPivotView';
-import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/components/question/error-parser';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { memo, useState, useEffect, useRef } from 'react';
 import isEqual from 'lodash/isEqual';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection, selectVizV2Active, selectVizRenderer } from '@/store/uiSlice';
+import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection, selectVizV2Active } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 import { setRecipeParam } from '@/lib/viz/encoding-edit';
-import { resolveLegacyRenderEnvelope } from '@/lib/viz/from-vizsettings';
+import { resolveLegacyRenderEnvelope, vizSettingsToEnvelopeStatic } from '@/lib/viz/from-vizsettings';
 import { toVizColumns } from '@/lib/viz/query-data';
 import { ChartDownloadMenu } from '@/components/viz/ChartDownloadMenu';
 import { getBrandLogoUrl } from '@/lib/branding/whitelabel';
@@ -180,7 +179,6 @@ function QuestionVisualizationInner({
   const dispatch = useAppDispatch();
   const showJson = useAppSelector(state => state.ui.devMode);
   const colorMode = useAppSelector(state => state.ui.colorMode);
-  const vegaDraws = useAppSelector(selectVizRenderer) === 'vega';
   const vizV2Enabled = useAppSelector(selectVizV2Active);
   const { config: appConfig } = useConfigs();
   const agentName = appConfig.branding.agentName;
@@ -223,11 +221,11 @@ function QuestionVisualizationInner({
   const legacyVizType = currentState?.vizSettings?.type ?? 'table';
   const isChartType = hasVizV2 || legacyVizType !== 'table';
 
-  // V1→V2 render bridge (Viz Arch V2 §21 item 1): on EVERY surface, a chart whose
-  // truth is `vizSettings` renders through <VegaChart> via just-in-time conversion —
-  // render-only, nothing is ever written back to the file; table/pivot keep their
-  // DOM renderers. Pure — recomputed from vizSettings each render.
-  const legacyRenderViz = vegaDraws && data
+  // V1→V2 render bridge (Viz Arch V2 §21 item 1): a chart whose truth is `vizSettings` renders
+  // through <VegaChart> via just-in-time conversion — render-only, nothing is ever written back;
+  // table/pivot keep their DOM renderers. Vega is the ONLY engine (Renderer_v2 Phase 2 — the
+  // ECharts rollback path is deleted). Pure — recomputed from vizSettings each render.
+  const legacyRenderViz = data
     ? resolveLegacyRenderEnvelope({
         hasVizEnvelope: hasVizV2,
         vizSettings: currentState?.vizSettings,
@@ -547,58 +545,17 @@ function QuestionVisualizationInner({
                     {chartDownloadOverlay(legacyRenderViz)}
                   </Box>
                 )}
-                {!hasVizV2 && !legacyRenderViz && (currentState?.vizSettings?.type === 'line' ||
-                  currentState?.vizSettings?.type === 'bar' ||
-                  currentState?.vizSettings?.type === 'area' ||
-                  currentState?.vizSettings?.type === 'scatter' ||
-                  currentState?.vizSettings?.type === 'funnel' ||
-                  currentState?.vizSettings?.type === 'pie' ||
-                  currentState?.vizSettings?.type === 'pivot' ||
-                  currentState?.vizSettings?.type === 'trend' ||
-                  currentState?.vizSettings?.type === 'waterfall' ||
-                  currentState?.vizSettings?.type === 'combo' ||
-                  currentState?.vizSettings?.type === 'radar' ||
-                  currentState?.vizSettings?.type === 'geo' ||
-                  currentState?.vizSettings?.type === 'single_value' ||
-                  currentState?.vizSettings?.type === 'row') && (
-                  <Box flex="1" width="100%" overflow="hidden" minHeight="0" display="flex">
-                    <ChartBuilder
-                      columns={data.columns}
-                      types={data.types}
-                      rows={data.rows}
-                      chartType={currentState.vizSettings.type}
-                      initialXCols={currentState.vizSettings?.xCols ?? undefined}
-                      initialYCols={currentState.vizSettings?.yCols ?? undefined}
-                      initialYRightCols={currentState.vizSettings?.yRightCols ?? undefined}
-                      onAxisChange={onAxisChange}
-                      onYRightColsChange={onYRightColsChange}
-                      initialTooltipCols={currentState.vizSettings?.tooltipCols ?? undefined}
-                      onTooltipColsChange={onTooltipColsChange}
-                      fillHeight={true}
-                      initialPivotConfig={currentState.vizSettings?.pivotConfig ?? undefined}
-                      onPivotConfigChange={onPivotConfigChange}
-                      initialGeoConfig={currentState.vizSettings?.geoConfig ?? undefined}
-                      onGeoConfigChange={onGeoConfigChange}
-                      sql={currentState?.query}
-                      databaseName={currentState?.connection_name}
-                      initialColumnFormats={currentState.vizSettings?.columnFormats ?? undefined}
-                      onColumnFormatsChange={onColumnFormatsChange}
-                      showChartTitle={showChartTitle}
-                      styleConfig={currentState.vizSettings?.styleConfig ?? undefined}
-                      onStyleConfigChange={onStyleConfigChange}
-                      axisConfig={currentState.vizSettings?.axisConfig ?? undefined}
-                      onAxisConfigChange={onAxisConfigChange}
-                      annotations={currentState.vizSettings?.annotations ?? undefined}
-                      onAnnotationsChange={onAnnotationsChange}
-                      trendConfig={currentState.vizSettings?.trendConfig ?? undefined}
-                      onTrendConfigChange={onTrendConfigChange}
-                      singleValueConfig={currentState.vizSettings?.singleValueConfig ?? undefined}
-                      exportBranding={appConfig.branding}
-                      enableDrilldown={config.enableDrilldown !== false}
-                      onMapReady={onMapReady}
-                      onSeriesCountChange={onSeriesCountChange}
-                    />
-                  </Box>
+                {/* V1 pivot: the bridge deliberately returns null for pivot — it renders on the
+                    DOM tier through the SAME view V2 pivots use, via a JIT-bridged envelope
+                    (Renderer_v2 Phase 2: ChartBuilder + the ECharts stack are deleted). */}
+                {!hasVizV2 && !legacyRenderViz && currentState?.vizSettings?.type === 'pivot' && (
+                  <VizPivotView
+                    envelope={vizSettingsToEnvelopeStatic(currentState.vizSettings, currentState?.query)}
+                    rows={data.rows}
+                    sql={currentState?.query}
+                    databaseName={currentState?.connection_name}
+                    enableDrilldown={config.enableDrilldown !== false}
+                  />
                 )}
               </>
             ) : null}

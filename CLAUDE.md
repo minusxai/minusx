@@ -342,7 +342,7 @@ Server-side, `applyNoneParams` (`app/api/query/route.ts`) treats **only `null`**
 
 ### Charting / Visualization Library
 
-**Vega is the production chart engine.** `vizRenderer` defaults to `'vega'` (`store/uiSlice.ts`): every chart on questions, dashboards, and stories draws through `components/viz/VegaChart.tsx`, which hard-forces Vega's **SVG renderer** (captures serialize live DOM — canvas content serializes empty) and reads the design-theme `--chart-1..5` tokens. Legacy charts whose truth is still `vizSettings` render via the just-in-time V1→Vega bridge (`lib/viz/from-vizsettings.ts` — render-only, never written back; its switch is exhaustiveness-guarded). `table`/`pivot` deliberately render on the DOM tier (native `<table>` + tanstack-virtual `TableV2`, `PivotTable`), not through Vega. The old ECharts pipeline (`components/plotx/` `ChartHost`/`EChart`/`BaseChart` + per-type Plots, canvas renderer) survives only behind the `vizRenderer:'echarts'` rollback toggle and is slated for deletion (see `Renderer_v2.md` Phase 2).
+**Vega is the production chart engine.** `vizRenderer` defaults to `'vega'` (`store/uiSlice.ts`): every chart on questions, dashboards, and stories draws through `components/viz/VegaChart.tsx`, which hard-forces Vega's **SVG renderer** (captures serialize live DOM — canvas content serializes empty) and reads the design-theme `--chart-1..5` tokens. Legacy charts whose truth is still `vizSettings` render via the just-in-time V1→Vega bridge (`lib/viz/from-vizsettings.ts` — render-only, never written back; its switch is exhaustiveness-guarded). `table`/`pivot` deliberately render on the DOM tier (native `<table>` + tanstack-virtual `TableV2`, `PivotTable`), not through Vega. **ECharts is fully deleted** (Renderer_v2 Phase 2): no rollback toggle, no plotx render stack, no `echarts` dependency. `components/plotx/` retains only the DOM-tier and config components (TableV2, PivotTable, VizConfigPanel, axis builders, download helpers, the plain-SVG column-stat minis). Server images (Slack, benchmark) render Vega-only via `lib/chart/render-viz-image.ts` (+ `svg-to-jpeg.ts`); geo boundaries resolve headlessly via `lib/viz/geo-assets.server.ts`.
 
 **Viz Types** (`lib/types.ts` → `VizSettings.type`): `table`, `line`, `bar`, `area`, `scatter`, `row`, `pie`, `funnel`, `waterfall`, `radar`, `trend`, `combo`, `single_value`, `pivot`, and the geo types (`choropleth`, `point_map`, `geo`). `VizSettings` carries `type`, `xCols`/`yCols`, `pivotConfig` (pivot), `geoConfig` (geo: `lat = xCols[0]`, `lng = xCols[1]` or explicit `latCol`/`lngCol`).
 
@@ -355,9 +355,9 @@ Server-side, `applyNoneParams` (`app/api/query/route.ts`) treats **only `null`**
 - `components/question/QuestionVisualization.tsx` - The render dispatcher (Vega vs DOM tier vs legacy toggle)
 
 **File-view → LLM Image Pipeline** (`lib/screenshot/app-state-screenshot.ts`):
-The old per-chart `buildChartAttachments()` pipeline is DELETED. On message send from a file page, ONE screenshot of the whole rendered view is captured **lazily at send time** through the serialization pipeline (`captureFileViewBlob` → serialize → data-URL SVG → canvas → 512px JPEG), readiness-gated on `data-mx-busy` (never captures half-hydrated embeds) and cached in a one-slot cache keyed by content+results+color-mode. Stories additionally get numbered position markers baked into the image plus a `<Viewport>` scroll pointer (`lib/screenshot/page-markers.ts`; story-only gate `isStoryAppState` — being generalized per `Renderer_v2.md` Phase 1).
+The old per-chart `buildChartAttachments()` pipeline is DELETED. On message send from a file page, ONE screenshot of the whole rendered view is captured **lazily at send time** through the serialization pipeline (`captureFileViewBlob` → serialize → data-URL SVG → canvas → 512px JPEG), readiness-gated on `data-mx-busy` (never captures half-hydrated embeds) and cached in a one-slot cache keyed by content+results+color-mode. Marker-flagged types (`FILE_TYPE_METADATA[type].markers` — story, dashboard, notebook, report, alert, run outputs) get numbered position markers baked into the image plus a `<Viewport>` scroll pointer (`lib/screenshot/page-markers.ts`, gate `markersEnabledForAppState`).
 
-**Adding a New Viz Type** — touch-points: add to the `VizSettings.type` union (`lib/types.ts`); extend the `vizSettingsToEnvelope` switch in `lib/viz/from-vizsettings.ts` (the `never` guard forces this); wire `VizTypeSelector.tsx`. Only extend the plotx ECharts path if the rollback toggle must support the new type (it is scheduled for deletion — usually skip).
+**Adding a New Viz Type** — touch-points: add to the `VizSettings.type` union (`lib/types.ts`); extend the `vizSettingsToEnvelope` switch in `lib/viz/from-vizsettings.ts` (the `never` guard forces this); wire `VizTypeSelector.tsx`. There is no other render path — the plotx ECharts stack is deleted.
 
 ## Development Workflow
 
@@ -401,7 +401,7 @@ Browser-side complement to `handleApiError`:
 - **Redux Toolkit** for state management
 - **@electric-sql/pglite** for embedded Postgres (open-source); `pg` for external Postgres (hosted)
 - **Monaco Editor** for SQL editing
-- **Vega / vega-lite** for visualizations (SVG-forced, design-theme chart tokens; ECharts 6 remains only behind the `vizRenderer:'echarts'` rollback toggle, slated for deletion)
+- **Vega / vega-lite** for visualizations (SVG-forced, design-theme chart tokens; ECharts is fully removed)
 - **NextAuth v5** for authentication
 
 ### AI Orchestration (in-process)

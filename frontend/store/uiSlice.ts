@@ -19,13 +19,7 @@ interface UIState {
   activeSidebarSection: string | null;
   askForConfirmation: boolean;
   showAdvanced: boolean;
-  /** Chart renderer (docs/Visualization Arch V2.md §21): 'vega' (default) draws
-   * every chart with the V2 engine; 'echarts' is the classic escape hatch — the
-   * exact pre-V2 pipeline, where only V1 is possible (saved `viz` envelopes are
-   * ignored and the `vizV2` format flag has no effect). */
-  vizRenderer: 'echarts' | 'vega';
-  /** Viz V2 format switch (docs/Visualization Arch V2.md §21) — only meaningful
-   * when vizRenderer is 'vega'. Off (V1, default until the prompts/tools flip):
+    /** Viz V2 format switch (docs/Visualization Arch V2.md §21). Off (V1):
    * `vizSettings` is the truth — charts are just-in-time converted for rendering,
    * saved `viz` envelopes are ignored, and editing stays on the classic panel
    * (nothing ever writes an envelope). On (V2): a saved envelope is the truth —
@@ -71,7 +65,6 @@ const initialState: UIState = {
   activeSidebarSection: null,
   askForConfirmation: false,
   showAdvanced: false,
-  vizRenderer: 'vega',
   vizV2: true, // V2 (saved envelopes) is authoritative; flip back to false to restore classic-format behavior workspace-wide
   fileEditMode: {},
   fileViewMode: {},
@@ -161,12 +154,6 @@ const uiSlice = createSlice({
         // '_v2' key suffix: retired the pre-flip 'vizV2'/'vizRenderer' keys so every
         // browser picks up the new vega+V2 defaults once (same pattern as allowChatQueue_v2)
         try { localStorage.setItem('vizV2_v2', String(action.payload)); } catch { /* ignore */ }
-      }
-    },
-    setVizRenderer: (state, action: PayloadAction<'echarts' | 'vega'>) => {
-      state.vizRenderer = action.payload;
-      if (typeof window !== 'undefined') {
-        try { localStorage.setItem('vizRenderer_v2', action.payload); } catch { /* ignore */ }
       }
     },
     setShowSuggestedQuestions: (state, action: PayloadAction<boolean>) => {
@@ -261,13 +248,12 @@ const uiSlice = createSlice({
         try { localStorage.setItem('homePage', JSON.stringify(state.homePage)); } catch { /* ignore */ }
       }
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; vizRenderer?: 'echarts' | 'vega'; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
-      const { devMode, askForConfirmation, showAdvanced, vizV2, vizRenderer, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, homePage } = action.payload;
+    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
+      const { devMode, askForConfirmation, showAdvanced, vizV2, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, homePage } = action.payload;
       if (devMode !== undefined) state.devMode = devMode;
       if (askForConfirmation !== undefined) state.askForConfirmation = askForConfirmation;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
       if (vizV2 !== undefined) state.vizV2 = vizV2;
-      if (vizRenderer !== undefined) state.vizRenderer = vizRenderer;
       if (allowChatQueue !== undefined) state.allowChatQueue = allowChatQueue;
       if (queueStrategy !== undefined) state.queueStrategy = queueStrategy;
       if (showSuggestedQuestions !== undefined) state.showSuggestedQuestions = showSuggestedQuestions;
@@ -294,7 +280,6 @@ export const {
   setAskForConfirmation,
   setShowAdvanced,
   setVizV2,
-  setVizRenderer,
   setFileEditMode,
   setFileViewMode,
   setNotebookActiveCell,
@@ -343,10 +328,9 @@ export const selectRightSidebarUIState = createSelector(
 export const selectDevMode = (state: RootState) => state.ui.devMode;
 export const selectShowAdvanced = (state: RootState) => state.ui.showAdvanced;
 export const selectVizV2 = (state: RootState) => state.ui.vizV2;
-export const selectVizRenderer = (state: RootState) => state.ui.vizRenderer;
 /** True only when the vega renderer is active AND the V2 format is authoritative —
  * the single predicate render/edit surfaces should gate V2-envelope behavior on. */
-export const selectVizV2Active = (state: RootState) => state.ui.vizRenderer === 'vega' && state.ui.vizV2;
+export const selectVizV2Active = (state: RootState) => state.ui.vizV2;
 export const selectAllowChatQueue = (state: RootState) => state.ui.allowChatQueue ?? true;
 export const selectQueueStrategy = (state: RootState) => state.ui.queueStrategy ?? 'end-of-turn';
 export const selectFileEditMode = (state: RootState, fileId: number) => state.ui.fileEditMode[fileId] ?? false;

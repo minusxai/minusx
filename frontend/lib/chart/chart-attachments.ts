@@ -10,7 +10,7 @@
  * Browser-only — safe to import only from 'use client' components / frontend-bridged tools.
  */
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
-import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
+import { RENDERABLE_CHART_TYPES } from '@/lib/chart/renderable-types';
 import type { AppState } from '@/lib/appState';
 import type { QueryResult as ReduxQueryResult } from '@/store/queryResultsSlice';
 import type { VizSettings } from '@/lib/validation/atlas-schemas';

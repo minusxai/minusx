@@ -14,8 +14,6 @@ import type { ToolCall } from '@/lib/types';
 import type { FileAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import { uploadFile } from '@/lib/object-store/client';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
-import { extractChartEntries } from '@/lib/chart/chart-attachments';
-import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
 
 interface DevToolsPanelProps {
   appState: AppState | null | undefined;
@@ -232,7 +230,6 @@ export function ImageToolsPanel({ fileId, appState }: { fileId: number | undefin
   // dev can preview the exact image the agent receives.
   const [markers, setMarkers] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [agentBusy, setAgentBusy] = useState(false);
   const [result, setResult] = useState<ImageResult | null>(null);
   // Memoized so captureElement's useCallback deps don't change on every render
   const screenshotOptions = useMemo(
@@ -242,8 +239,6 @@ export function ImageToolsPanel({ fileId, appState }: { fileId: number | undefin
     [limit512, markers],
   );
   const { captureFileView, blobToDataURL } = useScreenshot(screenshotOptions);
-  const colorMode = useAppSelector(state => state.ui.colorMode);
-  const queryResultsMap = useAppSelector(state => state.queryResults.results);
 
   // Pre-capture state — all hooks must be above the early return
   const captureCache = useRef<Blob | null>(null);
@@ -278,30 +273,6 @@ export function ImageToolsPanel({ fileId, appState }: { fileId: number | undefin
 
   if (fileId === undefined) return null;
 
-  const handleAgentImage = async () => {
-    setAgentBusy(true);
-    setResult(null);
-    try {
-      const entries = extractChartEntries(appState, queryResultsMap);
-      if (entries.length === 0) {
-        setResult({ kind: 'error', error: 'No renderable charts found for this file', label: 'Agent Image' });
-        return;
-      }
-      const rendered = await clientChartImageRenderer.renderCharts(
-        entries,
-        { width: 512, colorMode, addWatermark: false, padding: false },
-      );
-      if (rendered.length === 0) {
-        setResult({ kind: 'error', error: 'Renderer returned no images', label: 'Agent Image' });
-        return;
-      }
-      setResult({ kind: 'items', items: rendered.map(r => ({ label: r.label, dataUrl: r.dataUrl })) });
-    } catch (err: any) {
-      setResult({ kind: 'error', error: err.message ?? String(err), label: 'Agent Image' });
-    } finally {
-      setAgentBusy(false);
-    }
-  };
 
   // Display-only: fetch the capture and show it inline — never trigger a browser download.
   const handleGetImage = async () => {
@@ -376,10 +347,6 @@ export function ImageToolsPanel({ fileId, appState }: { fileId: number | undefin
           >
             <LuRefreshCw />
           </IconButton>
-          <Button size="2xs" variant="outline" onClick={handleAgentImage} loading={agentBusy}
-            aria-label="Agent image">
-            Agent image
-          </Button>
         </HStack>
 
         {result && (

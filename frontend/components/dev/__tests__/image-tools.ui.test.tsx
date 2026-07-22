@@ -36,6 +36,15 @@ describe('ImageToolsPanel — Get image', () => {
     expect(queryByLabelText('Download image')).toBeNull();
   });
 
+  // The old "Agent image" button previewed the DELETED per-chart pipeline
+  // (buildChartAttachments). The agent's real image is the file-view capture — which
+  // "Get image" + the Markers/512px checkboxes preview exactly — so the button is gone
+  // (Renderer_v2 Phase 2).
+  it('has no "Agent image" button (per-chart preview pipeline is deleted)', () => {
+    const { queryByLabelText } = renderWithProviders(<ImageToolsPanel fileId={7} appState={null} />);
+    expect(queryByLabelText('Agent image')).toBeNull();
+  });
+
   it('clicking it displays the captured image inline and does NOT download it', async () => {
     const { getByLabelText, findByLabelText } = renderWithProviders(
       <ImageToolsPanel fileId={7} appState={null} />,

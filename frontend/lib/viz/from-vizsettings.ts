@@ -33,7 +33,7 @@ import type { VizSettings, VizEnvelope, ColumnFormatConfig } from '@/lib/validat
 import { VIZ_GRAMMAR_VEGA_LITE } from '@/lib/validation/atlas-schemas';
 import type { VizColumnKind, VizResultColumn } from './types';
 import { addYField, setChannelField, setVizType, isEnvelopeImageViz, setStacked, setYLogScale, setYBounds, addReferenceLine, type SpecVizType } from './encoding-edit';
-import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme';
+import { getEffectiveColorPalette } from '@/lib/chart/chart-theme';
 import { toVizColumns } from './query-data';
 
 const KIND_TO_VL_TYPE: Record<VizColumnKind, string> = {

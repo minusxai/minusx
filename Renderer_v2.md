@@ -313,34 +313,38 @@ out of scope, exactly like Story V2 scoped it).
 - [x] Browser-verified on the dev server: live overlay chips on the tutorial dashboard; DevTools
       Markers capture of the dashboard shows the numbered gutter baked in, overlay NOT captured.
 
-### Phase 2 — Retire the ECharts rollback path (Vega everywhere, finished)
-- [x] ~~Coverage risk~~ **DE-RISKED (§7.1): all 15 V1 chart types render real SVG through the
-      `from-vizsettings` bridge headlessly**, 7–116ms each; 5k-point scatter renders in 52ms.
-- [ ] Remaining bake check: VISUAL grading of the bridge output vs the ECharts look on the seeded
-      dashboards — a scratchpad side-by-side gallery generated via the capture matrix, binary
-      keep/fix per chart type, one afternoon; no process built around it.
-- [ ] Bake MEASUREMENT: emit an app-event (`appEventRegistry`, the standard analytics pattern)
-      whenever the `'echarts'` path actually renders — the toggle is localStorage-persisted, so
-      without this "unused" is a guess. HONESTY CAVEAT: `MX_TELEMETRY` defaults to errors-only,
-      so the event measures hosted / telemetry-full deployments ONLY — self-hosted echarts usage
-      is invisible, and §7.1's coverage proof is the backstop for them. Given that, a SHORT bake
-      then delete; rollback risk is near zero.
-- [ ] Geo assets in no-origin contexts: the topojson root-relative fetch exists in TWO places —
-      the Vega path (`lib/viz/geo-assets`) and the ECharts path (`lib/chart/geo-data.ts:7`). Only
-      the Vega site needs fixing (absolute base or injected assets) — the ECharts one dies with
-      this phase. Add a regression test on the surviving path.
-- [ ] Move the DevTools "Agent image" preview off `ChartImageRenderer.client` onto the capture path.
-- [ ] Update CLAUDE.md alongside the deletions: the "Chart → LLM Image Pipeline" section still
-      documents the DELETED `buildChartAttachments()` per-send pipeline (stale TODAY, before this
-      campaign even starts), "ECharts 6 for visualizations" and the plotx-routed "Adding a New
-      Viz Type" both die with this phase. Agents treat CLAUDE.md as authoritative — stale doctrine
-      fights the migration.
-- [ ] Delete: the `vizRenderer` toggle (+ its localStorage key — exactly `vizRenderer_v2`,
-      `store/uiSlice.ts:169`), the plotx ECharts stack
-      (`ChartHost`/`EChart`/`BaseChart`, per-type Plot components), `ChartImageRenderer.client`,
-      and the ECharts package deps once nothing imports them.
-- [ ] Keep the capture-side canvas stamping as generic defense (any residual canvas content), but
-      charts no longer rely on it.
+### Phase 2 — Retire the ECharts rollback path — ✅ DONE
+- [x] Coverage de-risked (§7.1: 15/15 types; 5k scatter 52ms) + VISUAL grading executed: gallery
+      of all 15 types, ECharts vs Vega side-by-side — **15/15 keep, 0 fix**. Vega strictly better
+      on line/area/scatter (sorted date axes; ECharts drew a CATEGORICAL scatter x-axis) and
+      waterfall (+delta labels); single_value/point_map/geo rendered ONLY on Vega (ECharts SSR
+      returned null). Minor notes: vega pie lacks slice % labels, legend can wrap-truncate —
+      shipped baseline, unchanged by the deletion.
+- [x] Bake telemetry SKIPPED AS MOOT — the user ordered full no-deferral execution, so the toggle
+      was deleted outright; an event on a deleted path measures nothing. Rollback = git revert.
+- [x] Geo assets in no-origin contexts FIXED on the Vega path: `setGeoAssetFetcher` seam +
+      `installFsGeoAssetFetcher` (`lib/viz/geo-assets.server.ts`, installed by render-viz-image),
+      red-first tests incl. a full headless choropleth render. The ECharts fetch site died with
+      the stack.
+- [x] DevTools "Agent image" button DELETED (it previewed the removed per-chart pipeline; Get
+      image + Markers/512px IS the agent preview) — red-first test.
+- [x] V1 pivot rerouted: renders `VizPivotView` via the same JIT bridge V2 uses (ChartBuilder was
+      its last renderer) — red-first test.
+- [x] Column-stat minis (`MiniHistogram`/`MiniBarChart`) rewritten as plain hand-rendered SVG —
+      they were the last live ECharts consumers — red-first tests.
+- [x] DELETED: `vizRenderer` toggle (uiSlice field/action/selector, settings UI, DataLoader
+      hydration + `vizRenderer_v2` localStorage key now actively removed), plotx ECharts stack
+      (ChartBuilder, ChartHost/EChart/BaseChart, 13 Plot components, GeoPlot/LeafletMap,
+      useChartContainer), `ChartImageRenderer.client`, `render-chart.ts`/`render-chart-svg.ts`/
+      `echarts-init.ts`/`chart-utils.ts`/`chart-annotations.ts`/`chart-builders/`, the server
+      renderer's ECharts crash-fallback, and the `echarts` package dependency.
+- [x] Engine-free survivors extracted: `chart-theme.ts` (palettes/fonts/light-dark tokens),
+      `renderable-types.ts` (RENDERABLE_CHART_TYPES + getChartHeight), `svg-to-jpeg.ts`
+      (Resvg/Sharp composer, new characterization test), `getTimestamp` → chart-format.
+      Benchmark tool migrated to the bridge + `renderVizEnvelopeToJpeg`.
+- [x] CLAUDE.md updated to the post-deletion reality. Browser-verified: dashboard (all Vega
+      tiles + markers), question workbench (Vega chart, viz selector) — only the pre-existing
+      hydration-mismatch console noise, nothing new.
 
 ### Phase 3 — Dashboard + embed chrome to Tailwind/shadcn (the Chakra exit, part 1)
 

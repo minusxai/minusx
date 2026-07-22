@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CHART_COLORS, COLOR_PALETTE, getEffectiveColorPalette, resolveSeriesColor } from '@/lib/chart/echarts-theme'
+import { CHART_COLORS, COLOR_PALETTE, getEffectiveColorPalette, resolveSeriesColor } from '@/lib/chart/chart-theme'
 
 describe('resolveSeriesColor', () => {
   it('resolves a known color key to its hex', () => {

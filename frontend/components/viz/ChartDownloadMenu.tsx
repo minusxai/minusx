@@ -13,7 +13,7 @@ import { IconButton, MenuRoot, MenuTrigger, MenuContent, MenuItem, MenuPositione
 import { LuDownload, LuImage, LuSheet } from 'react-icons/lu';
 import { renderEnvelopeImageDataUrl } from '@/lib/chart/VizImageRenderer.client';
 import { queryResultToCsv, downloadCsvString } from '@/components/plotx/build-chart-download';
-import { getTimestamp } from '@/lib/chart/chart-utils';
+import { getTimestamp } from '@/lib/chart/chart-format';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 interface ChartDownloadMenuProps {
