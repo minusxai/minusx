@@ -27,6 +27,7 @@ export const EMBED_CHROME_FILES = [
   join(ROOT, 'components', 'params', 'ParameterRow.tsx'),
   join(ROOT, 'components', 'params', 'ParameterInput.tsx'),
   join(ROOT, 'components', 'views', 'story', 'StoryParamControl.tsx'),
+  join(ROOT, 'components', 'question', 'QuestionVisualization.tsx'),
 ];
 const OUT_FILE = join(ROOT, 'lib', 'story-ui', 'recipe-classes.ts');
 
