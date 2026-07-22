@@ -16,6 +16,7 @@
  * read-only without a fileId, editable with one (full-content edits).
  */
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PageMarkerDevOverlay } from '@/components/views/story/PageMarkerDevOverlay';
 import { Box, VStack, HStack, Button, Center, Text } from '@chakra-ui/react';
 import { LuDatabase, LuFileText, LuPlay, LuChevronsDownUp, LuChevronsUpDown, LuPlus } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
@@ -48,6 +49,9 @@ interface NotebookViewProps {
   /** Persist a cell's executed snapshot to Redux (setNotebookCellExecuted), called by the
    *  container. Only invoked when fileId is defined. */
   onReduxExecutedChange?: (cellId: string, executed: Executed) => void;
+  /** Dev-only page-marker preview (Renderer_v2 Phase 1): this type is marker-flagged. */
+  showDevMarkers?: boolean;
+  colorMode?: 'light' | 'dark';
 }
 
 const newId = (): string => crypto.randomUUID();
@@ -88,7 +92,7 @@ function AddCellButton({ icon: Icon, label, accent, ariaLabel, onClick }: {
 const EMPTY_EXECUTED: Record<string, Executed> = {};
 
 export default function NotebookView({
-  content, onChange, readOnly = false, filePath, fileId, activeCellId, onActivateCell,
+  content, onChange, readOnly = false, filePath, fileId, activeCellId, onActivateCell, showDevMarkers, colorMode,
   reduxExecuted, onReduxExecutedChange,
 }: NotebookViewProps) {
   const cells = content.cells ?? [];
@@ -231,7 +235,10 @@ export default function NotebookView({
     // so the horizontal gutters scroll too (a nested scroller leaves them dead).
     <Box p={4}>
       {/* data-file-id → standard FileView capture (useScreenshot / Dev Tools "Download Image"). */}
-      <Box maxW="900px" mx="auto" {...(fileId !== undefined ? { 'data-file-id': fileId } : {})}>
+      {/* Overlay OUTSIDE the captured [data-file-id] subtree (StoryView contract). */}
+      <Box maxW="900px" mx="auto" position="relative">
+        <PageMarkerDevOverlay enabled={!!showDevMarkers} colorMode={colorMode ?? 'light'} />
+      <Box {...(fileId !== undefined ? { 'data-file-id': fileId } : {})}>
       <VStack align="stretch" gap={0} pl={{ base: 0, md: '40px' }}>
         {cells.length === 0 ? (
           <NotebookEmptyState
@@ -315,6 +322,7 @@ export default function NotebookView({
           </>
         )}
       </VStack>
+      </Box>
       </Box>
     </Box>
   );

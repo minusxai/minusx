@@ -32,7 +32,7 @@ import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
 import { setFile, setEdit, setEphemeral, clearEdits } from '@/store/filesSlice';
-import { setFileEditMode } from '@/store/uiSlice';
+import { setFileEditMode, setDevMode } from '@/store/uiSlice';
 import DashboardContainerV2 from '@/components/containers/DashboardContainerV2';
 import type { DbFile, DocumentContent, QuestionContent } from '@/lib/types';
 
@@ -399,6 +399,24 @@ describe('DashboardView via DashboardContainerV2', () => {
 
       const assets = (store.getState().files.files[DASH_ID].persistableChanges as any).assets;
       expect(assets.map((a: any) => a.id)).toEqual([Q1_ID, 999]);
+    });
+  });
+
+  // Dashboards are marker-flagged (Renderer_v2 Phase 1): under dev mode the same numbered
+  // position-marker preview stories get (PageMarkerDevOverlay) must mount on the dashboard root,
+  // so the DevTools Markers checkbox previews exactly what the agent capture bakes in.
+  describe('page-marker dev overlay', () => {
+    it('mounts when ui.devMode is on', () => {
+      const store = setup(makeDashboardFile());
+      store.dispatch(setDevMode(true));
+      renderWithProviders(<DashboardContainerV2 fileId={DASH_ID} mode="view" />, { store });
+      expect(screen.getByLabelText('Page marker dev overlay')).toBeInTheDocument();
+    });
+
+    it('does not mount without dev mode', () => {
+      const store = setup(makeDashboardFile());
+      renderWithProviders(<DashboardContainerV2 fileId={DASH_ID} mode="view" />, { store });
+      expect(screen.queryByLabelText('Page marker dev overlay')).not.toBeInTheDocument();
     });
   });
 });

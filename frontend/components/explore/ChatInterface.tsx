@@ -22,7 +22,7 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { toaster } from '@/components/ui/toaster';
 import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setChatGradeSelection, setSidebarPendingSlashCommand } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
-import { appStateWithFileScreenshot, isStoryAppState } from '@/lib/screenshot/app-state-screenshot';
+import { appStateWithFileScreenshot, markersEnabledForAppState } from '@/lib/screenshot/app-state-screenshot';
 import { readViewportPointer } from '@/lib/screenshot/read-viewport';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../file-browser/FileNotFound';
@@ -790,9 +790,9 @@ export default function ChatInterface({
     agentArgs.app_state = appStateForSend;
     // Scroll pointer (client-only): which numbered sections of the app-state screenshot the user is
     // looking at right now. Rendered as <Viewport> in the tail so scrolling never busts the image
-    // cache. STORY-ONLY (isStoryAppState) — matches where the marker gutter is baked; other file
-    // views can have internal scroll that would peg the pointer at section 1.
-    const viewFileId = isStoryAppState(appStateForSend)
+    // cache. Gated by FILE_TYPE_METADATA.markers (Renderer_v2 §2b) — exactly the types whose
+    // captures get the marker gutter baked in, so pointer and gutter never disagree.
+    const viewFileId = markersEnabledForAppState(appStateForSend)
       ? (appStateForSend as { state?: { fileState?: { id?: number } } }).state?.fileState?.id
       : undefined;
     const viewportPointer = typeof viewFileId === 'number' ? readViewportPointer(viewFileId) : null;

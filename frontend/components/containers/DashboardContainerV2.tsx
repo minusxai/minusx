@@ -96,6 +96,9 @@ export default function DashboardContainerV2({ fileId, mode }: DashboardContaine
 
   // Publish/edit highlight source data: fileState (persistableChanges diff) + dirtyFiles (child edits).
   const fileState = useAppSelector(state => state.files.files[fileId]);
+  // Dev-only page-marker preview (Renderer_v2 Phase 1) — dashboards are marker-flagged.
+  const devMode = useAppSelector(state => state.ui.devMode);
+  const colorMode = useAppSelector(state => state.ui.colorMode);
   const dirtyFiles = useAppSelector(selectDirtyFiles, shallowEqual);
 
   const handleChange = useCallback((updates: Partial<DocumentContent>) => {
@@ -161,6 +164,8 @@ export default function DashboardContainerV2({ fileId, mode }: DashboardContaine
       onParamSubmit={onParamSubmit}
       onAddQuestion={onAddQuestion}
       onAddTextBlock={onAddTextBlock}
+      showDevMarkers={devMode}
+      colorMode={colorMode}
     />
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Text, VStack, HStack, Badge } from '@chakra-ui/react';
+import { PageMarkerDevOverlay } from '@/components/views/story/PageMarkerDevOverlay';
 import { ReportContent, ReportOutput, RunFileContent, JobRun, DatabaseWithSchema } from '@/lib/types';
 import LexicalTextEditor, { LexicalTextViewer } from '@/components/lexical/LexicalTextEditor';
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -31,12 +32,17 @@ interface ReportViewProps {
   onChange: (updates: Partial<ReportContent>) => void;
   onRunNow: (opts: RunOptions) => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
+  /** Dev-only page-marker preview (Renderer_v2 Phase 1): this type is marker-flagged. */
+  showDevMarkers?: boolean;
+  colorMode?: 'light' | 'dark';
 }
 
 
 export default function ReportView({
   report,
   fileId,
+  showDevMarkers,
+  colorMode,
   isRunning,
   runs = [],
   selectedRunId,
@@ -133,6 +139,9 @@ export default function ReportView({
 
   return (
     // data-file-id → standard FileView capture (useScreenshot / Dev Tools "Download Image").
+    // Overlay OUTSIDE the captured [data-file-id] subtree (StoryView contract).
+    <Box display="flex" flexDirection="column" flex="1" minH="0" position="relative">
+      <PageMarkerDevOverlay enabled={!!showDevMarkers} colorMode={colorMode ?? 'light'} />
     <Box data-file-id={fileId} display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
       {/* Status bar: Live/Draft toggle */}
       <StatusBanner
@@ -369,6 +378,7 @@ export default function ReportView({
           </Box>
         </Box>
       )}
+    </Box>
     </Box>
   );
 }

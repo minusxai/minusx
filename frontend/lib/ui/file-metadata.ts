@@ -17,6 +17,13 @@ export interface FileTypeMetadata {
   supported: boolean;  // Whether this type is currently supported
   h: string;          // Optional: default height for file type views
   systemCreatedOnly?: boolean;  // If true, hidden from create menu (created by system, not users)
+  /**
+   * Agent app-state images: bake the numbered position-marker gutter into this type's screenshot
+   * and send the `<Viewport>` scroll pointer (lib/screenshot/page-markers.ts). Only meaningful for
+   * full-content-height page flow — every flagged type MUST also be `h: 'none'` (test-enforced);
+   * markers on an internally-scrolled view (question) would number only the visible slice.
+   */
+  markers?: boolean;
 }
 
 /**
@@ -40,6 +47,7 @@ export const FILE_TYPE_METADATA = {
     category: 'analytics',
     supported: true,
     h: 'none',
+    markers: true,
   },
   story: {
     label: 'Story',
@@ -48,6 +56,7 @@ export const FILE_TYPE_METADATA = {
     category: 'analytics',
     supported: true,
     h: 'none',
+    markers: true,
   },
   notebook: {
     label: 'Notebook',
@@ -56,6 +65,7 @@ export const FILE_TYPE_METADATA = {
     category: 'analytics',
     supported: false,
     h: 'none',
+    markers: true,
   },
   connection: {
     label: 'Databases',
@@ -89,6 +99,7 @@ export const FILE_TYPE_METADATA = {
     category: 'analytics',
     supported: false,
     h: 'none',
+    markers: true,
   },
   config: {
     label: 'Configs',
@@ -115,7 +126,11 @@ export const FILE_TYPE_METADATA = {
     category: 'analytics',
     supported: true,
     h: 'none',
+    markers: true,
   },
+  // context_run: NO markers flag — nothing renders context_run today (zero component
+  // references; it is not even in FileView's READ_ONLY_FILE_TYPES). Flag it when it gets
+  // a rendered view (Renderer_v2 §2b).
   context_run: {
     label: 'Eval Run',
     icon: LuNotebookText,
@@ -132,6 +147,7 @@ export const FILE_TYPE_METADATA = {
     category: 'engineering',
     supported: true,
     h: 'none',
+    markers: true,
     systemCreatedOnly: true,
   },
   report_run: {
@@ -141,15 +157,7 @@ export const FILE_TYPE_METADATA = {
     category: 'engineering',
     supported: true,
     h: 'none',
-    systemCreatedOnly: true,
-  },
-  conversation: {
-    label: 'Logs',
-    icon: LuFileText,
-    color: 'accent.muted',        // Muted gray
-    category: 'engineering',
-    supported: true,
-    h: 'none',
+    markers: true,
     systemCreatedOnly: true,
   },
   session: {

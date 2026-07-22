@@ -106,7 +106,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     const refStart = Date.now();
     const refIds = await extractReferenceIds(file, resolveChildIds);
-    const isConversation = file.type === 'conversation';
+    // Legacy rows only: 'conversation' left the FileType union (v3 chat migration moved
+    // conversations to their own storage), but un-migrated self-hosted DBs can still hold
+    // such rows — this analytics fetch keeps working for them until migration runs.
+    const isConversation = (file.type as string) === 'conversation';
     const [references, analytics, conversationAnalytics] = await Promise.all([
       refIds.length > 0 ? DocumentDB.getByIds(refIds) : Promise.resolve([]),
       getFileAnalyticsSummary(id).catch(() => null),

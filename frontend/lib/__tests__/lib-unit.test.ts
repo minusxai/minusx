@@ -690,7 +690,9 @@ describe('handleApiError', () => {
 
 // ─── permissions.test.ts ───
 
-function makeFile(path: string, type: DbFile['type'] = 'conversation'): DbFile {
+// Default type is a LEGACY 'conversation' row (no longer in FileType — v3 migration):
+// these permission rules are path-based and must keep working for un-migrated rows.
+function makeFile(path: string, type: DbFile['type'] = 'conversation' as DbFile['type']): DbFile {
   return {
     id: 1,
     name: 'test',

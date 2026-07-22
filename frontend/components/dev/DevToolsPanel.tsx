@@ -10,8 +10,8 @@ import { getRegisteredToolNames, executeToolCall } from '@/lib/tools/tool-handle
 import { UserInputException, type UserInputProps, type UserInput } from '@/lib/tools/user-input-exception';
 import { getStore } from '@/store/store';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import type { ToolCall, FileType } from '@/lib/types';
-import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
+import type { ToolCall } from '@/lib/types';
+import type { FileAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import { uploadFile } from '@/lib/object-store/client';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { extractChartEntries } from '@/lib/chart/chart-attachments';
@@ -446,15 +446,11 @@ function fmtCost(c: number): string {
   return c < 0.01 ? `$${c.toFixed(4)}` : `$${c.toFixed(3)}`;
 }
 
-function FileAnalyticsPanel({ fileId, fileType }: { fileId: number; fileType: FileType }) {
+function FileAnalyticsPanel({ fileId }: { fileId: number }) {
   const analytics = useAppSelector((state): FileAnalyticsSummary | null | undefined =>
     state.files.files[fileId]?.analytics
   );
-  const convAnalytics = useAppSelector((state): ConversationAnalyticsSummary | null | undefined =>
-    state.files.files[fileId]?.conversationAnalytics
-  );
-
-  if (!analytics && !convAnalytics) {
+  if (!analytics) {
     return <Text fontSize="2xs" color="fg.muted" fontStyle="italic">No analytics data yet.</Text>;
   }
 
@@ -484,33 +480,6 @@ function FileAnalyticsPanel({ fileId, fileType }: { fileId: number; fileType: Fi
         </>
       )}
 
-      {/* Conversation LLM breakdown */}
-      {fileType === 'conversation' && convAnalytics && (
-        <>
-          <Box borderTopWidth="1px" borderColor="border.default" pt={2}>
-            <Text fontSize="2xs" fontWeight="600" color="fg.muted" mb={2} textTransform="uppercase" letterSpacing="wide">LLM Usage</Text>
-            <HStack gap={2} flexWrap="wrap" mb={2}>
-              <StatTile label="Total calls" value={fmtNum(convAnalytics.totalCalls)} />
-              <StatTile label="Total tokens" value={fmtNum(convAnalytics.totalTokens)} />
-              <StatTile label="Est. cost" value={fmtCost(convAnalytics.totalCost)} />
-            </HStack>
-            {Object.keys(convAnalytics.byModel).length > 0 && (
-              <VStack align="stretch" gap="1">
-                {Object.entries(convAnalytics.byModel).map(([model, stats]) => (
-                  <HStack key={model} justify="space-between" px={2} py={1} borderRadius="sm" bg="bg.subtle" borderWidth="1px" borderColor="border.default">
-                    <Text fontSize="2xs" fontFamily="mono" color="fg.default" flex="1" minW="0" truncate>{model}</Text>
-                    <HStack gap={3}>
-                      <Text fontSize="2xs" color="fg.muted">{fmtNum(stats.tokens)} tok</Text>
-                      <Text fontSize="2xs" color="fg.muted">{fmtNum(stats.calls)} calls</Text>
-                      <Text fontSize="2xs" color="accent.secondary" fontFamily="mono">{fmtCost(stats.cost)}</Text>
-                    </HStack>
-                  </HStack>
-                ))}
-              </VStack>
-            )}
-          </Box>
-        </>
-      )}
 
     </VStack>
   );
@@ -564,10 +533,7 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
             </HStack>
             {analyticsOpen && (
               <Box px={3} pb={3}>
-                <FileAnalyticsPanel
-                  fileId={appState.state.fileState.id}
-                  fileType={appState.state.fileState.type}
-                />
+                <FileAnalyticsPanel fileId={appState.state.fileState.id} />
               </Box>
             )}
           </Box>

@@ -38,7 +38,7 @@ export function PageMarkerDevOverlay({ enabled, colorMode }: { enabled: boolean;
   const badgeFg = dark ? '#E6EDF3' : '#1F2328';
 
   return (
-    <div ref={ref} aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}>
+    <div ref={ref} aria-hidden aria-label="Page marker dev overlay" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}>
       {pageMarkers(height).map((m) => (
         <div key={m.label} style={{ position: 'absolute', top: m.y, left: 0, right: 0 }}>
           {m.y > 0 && <div style={{ borderTop: `1px dashed ${line}`, width: '100%' }} />}

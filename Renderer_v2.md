@@ -284,32 +284,34 @@ out of scope, exactly like Story V2 scoped it).
 
 ## 5. Committed phases (independently shippable; ONE ordering constraint: re-skin (3) before surface swap (4) — see Phase 3 note)
 
-### Phase 1 — Markers for every flagged document type (no design migration needed)
-- [ ] Add `markers: true` to `FILE_TYPE_METADATA` for story, dashboard, notebook, report, alert,
-      alert_run, report_run (§2b); verify how `context_run` renders and then flag or explicitly
-      exclude it (its rendering path is unestablished — review round 4); replace `isStoryAppState` with reading that flag; assert (test) every flagged type is
-      `h:'none'` — markers on an internally-scrolled view would be wrong by construction.
-- [ ] Teach the viewport pointer to read the `FileLayout` scroll container's `scrollTop` for
-      non-story flow types (story math unchanged).
-- [ ] Red-first tests: the flag gate (incl. NO markers for connection/context, which are
-      `h:'none'` but unflagged — the over-match review finding); a marker-band pointer test with
-      the `FileLayout` scroll model.
-- [ ] Remove `conversation` as a file type COMPLETELY (it stopped being one in the v3 chat
-      migration; what's left is leftover garbage). Exact scope, verified:
-      REMOVE — the `FILE_TYPE_METADATA` entry (`lib/ui/file-metadata.ts`), the
-      `READ_ONLY_FILE_TYPES` entry (`FileView.tsx:139`), the '/logs' mapping entry
-      (`lib/mode/path-resolver.ts:131`), and the conversation-analytics branch in
-      `DevToolsPanel.tsx:488`. All four go together in one commit — deleting only one breaks the
-      others.
-      KEEP ON PURPOSE — `migrate-conversations-v3.server.ts` and the legacy handling in
-      `documents-db.ts:45` / `files.server.ts:108`: old self-hosted databases still contain
-      un-migrated conversation ROWS, and this code is what upgrades them. It is migration
-      plumbing, not the file type.
-- [ ] Dev overlay (`PageMarkerDevOverlay`) mounts on all flagged types under dev mode, so the
-      panel's Markers checkbox previews each identically.
-- [ ] Agent-facing wording: the marker/`<Viewport>` prompt language currently assumes stories —
-      update it to cover every flagged type (review point: unprompted capability is unused
-      capability).
+### Phase 1 — Markers for every flagged document type — ✅ DONE (commit pending on this branch)
+- [x] `markers: true` flag in `FILE_TYPE_METADATA` (story, dashboard, notebook, report, alert,
+      alert_run, report_run); `isStoryAppState` DELETED, replaced by `markersEnabledForAppState`
+      reading the flag; invariant test: every flagged type is `h:'none'`.
+- [x] `context_run` explicitly EXCLUDED with an in-code comment: verified zero component
+      references — nothing renders it today; flag it when it gains a view.
+- [x] Viewport pointer: verified ALREADY container-agnostic (`-getBoundingClientRect().top` is
+      viewport-relative whichever ancestor scrolls — stories scroll in the same FileLayout VStack
+      dashboards do); pinned by a new characterization test (band 3 at scrollTop 900 with
+      window.scrollY 0).
+- [x] Red-first tests: flag gate (incl. NO markers for connection/context — the over-match
+      finding), conversation-gone assertion, gutter-request-per-type test, dashboard overlay
+      mount/absence ui tests. All green; full suite 5,899 passed.
+- [x] Dev overlay mounts on dashboard/notebook/report views (the flagged types WITH `data-file-id`
+      roots), OUTSIDE the captured subtree — a first capture showed the overlay leaking into the
+      image (mounted inside the subtree); re-wrapped to the StoryView contract and re-verified:
+      capture carries ONLY the baked gutter. `alert` is flagged but its view has no
+      `data-file-id` stamp yet — overlay + capture activate when it gains one.
+- [x] Agent-facing wording: verified the marker/`<Viewport>` prompt text is ALREADY generic
+      ("the app-state screenshot has faint numbered markers…") — no story-specific language, no
+      change needed.
+- [x] `conversation` removed as a file type: metadata entry (⇒ out of the `FileType` union),
+      `FileView` READ_ONLY entry, '/logs' path mapping, Sidebar nav metadata reference,
+      DevToolsPanel analytics branch, `ConversationContainerV2` + its `fileComponents` mapping
+      DELETED. KEPT on purpose: `migrate-conversations-v3` + `documents-db`/`files.server` legacy
+      handling (typed casts + comments) for un-migrated rows.
+- [x] Browser-verified on the dev server: live overlay chips on the tutorial dashboard; DevTools
+      Markers capture of the dashboard shows the numbered gutter baked in, overlay NOT captured.
 
 ### Phase 2 — Retire the ECharts rollback path (Vega everywhere, finished)
 - [x] ~~Coverage risk~~ **DE-RISKED (§7.1): all 15 V1 chart types render real SVG through the

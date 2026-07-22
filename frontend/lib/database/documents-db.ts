@@ -59,7 +59,9 @@ function rowToDbFile(row: DbRow, includeContent: boolean = true): DbFile {
     id: row.id,
     name: row.name,
     path: row.path,
-    type: row.type,
+    // Legacy 'conversation' rows (pre-v3-migration DBs) don't fit the FileType union —
+    // they exist only until migrate-conversations-v3 converts them.
+    type: row.type as DbFile['type'],
     references: row.file_references || [],
     content: includeContent ? row.content : null,
     created_at: row.created_at,

@@ -74,3 +74,24 @@ describe('readViewportPointer — includes per-element scroll offsets', () => {
     expect(readViewportPointer(12)).toBeNull();
   });
 });
+
+// Renderer_v2 Phase 1: markers now apply to every flagged full-flow type (dashboard, notebook,
+// report, …), which all scroll inside FileLayout's overflow:auto VStack — NOT the window. This
+// pins the contract that makes that work with zero new code: the pointer derives scrollTop from
+// the view's OWN getBoundingClientRect().top (viewport-relative, identical whichever ancestor
+// scrolls), never from window.scrollY.
+describe('readViewportPointer — scroll-container agnostic (dashboard/FileLayout model)', () => {
+  it('reports the correct band when an ANCESTOR container is scrolled (rect.top < 0, window unscrolled)', () => {
+    const el = document.createElement('div');
+    el.setAttribute('data-file-id', '11');
+    Object.defineProperty(el, 'offsetHeight', { value: 4000, configurable: true });
+    // Container scrolled 900px: the view's top sits 900px ABOVE the viewport top. window.scrollY
+    // stays 0 (jsdom default) — exactly the FileLayout VStack situation.
+    el.getBoundingClientRect = () => ({ top: -900, left: 0, width: 800, height: 4000, right: 800, bottom: 3100, x: 0, y: -900, toJSON: () => ({}) }) as DOMRect;
+    document.body.appendChild(el);
+    const out = readViewportPointer(11)!;
+    // 4000px doc = 10 bands of 400px; scrolled to y=900 → top band is 3 (2 full bands above).
+    expect(out).toContain('3');
+    expect(out).toMatch(/section/i);
+  });
+});

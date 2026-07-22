@@ -6,6 +6,7 @@ import { getAssetLayoutKey, getLayoutableAssets, getLayoutSignature, computeDash
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
 import ParameterRow from '../params/ParameterRow';
+import { PageMarkerDevOverlay } from '@/components/views/story/PageMarkerDevOverlay';
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -52,6 +53,11 @@ interface DashboardViewProps {
   onParamSubmit: (newParamValues: Record<string, any>) => void;
   onAddQuestion: (questionId: number) => void;
   onAddTextBlock: () => void;
+
+  // Dev-only page-marker preview (Renderer_v2 Phase 1): dashboards are marker-flagged, so the
+  // container passes devMode + colorMode and the same overlay stories use mounts on this root.
+  showDevMarkers?: boolean;
+  colorMode?: 'light' | 'dark';
 }
 
 export default function DashboardView({
@@ -71,6 +77,8 @@ export default function DashboardView({
   onParamSubmit,
   onAddQuestion,
   onAddTextBlock,
+  showDevMarkers,
+  colorMode,
 }: DashboardViewProps) {
   // Ref to always have the latest document for callbacks that may fire with stale closures
   const documentRef = useRef(document);
@@ -479,7 +487,11 @@ export default function DashboardView({
   };
 
   return (
-    <Box flex="1" data-file-id={fileId} role="region" aria-label="Dashboard">
+    // Overlay sits OUTSIDE the captured [data-file-id] subtree (same contract as StoryView):
+    // it is a live-DOM dev preview and must never leak into serialized/rasterized captures.
+    <Box flex="1" position="relative">
+      <PageMarkerDevOverlay enabled={!!showDevMarkers} colorMode={colorMode ?? 'light'} />
+    <Box data-file-id={fileId} role="region" aria-label="Dashboard">
 
       {/* Visual View (the Code view is rendered upstream by FileView) */}
       {(
@@ -574,6 +586,7 @@ export default function DashboardView({
         </>
       )}
 
+    </Box>
     </Box>
   );
 }

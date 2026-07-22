@@ -155,7 +155,7 @@ export default function Sidebar() {
         category: 'Debug',
         items: [
           { href: '/recordings', icon: <FILE_TYPE_METADATA.session.icon />, label: FILE_TYPE_METADATA.session.label, adminOnly: true },
-          { href: `/p/${mode}/logs`, icon: <FILE_TYPE_METADATA.conversation.icon />, label: FILE_TYPE_METADATA.conversation.label, adminOnly: true },
+          { href: `/p/${mode}/logs`, icon: <LuFileText />, label: 'Logs', adminOnly: true },
         ]
       }
     ];

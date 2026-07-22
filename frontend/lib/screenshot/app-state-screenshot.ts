@@ -17,6 +17,7 @@
  * action shown with the existing "preparing" indicator — never speculatively.
  */
 import type { AppState } from '@/lib/appState';
+import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { captureFileViewBlob } from './capture';
 import { AGENT_IMAGE_MAX_PX } from './constants';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
@@ -45,16 +46,19 @@ export const _internal = {
 };
 
 /**
- * Whether the app-state file view gets position markers + a `<Viewport>` pointer. STORY-ONLY for now:
- * a story renders at its full height in the page, so `offsetHeight` is the whole document and the
- * scroll pointer is meaningful. Questions/dashboards/notebooks can have internal scroll or a fixed
- * height (offsetHeight = visible slice), which would peg the pointer at "section 1" and number only
- * the visible part — so they're excluded until their scroll model is handled. Shared by the capture
- * (markers) and the send path (pointer) so both gate identically.
+ * Whether the app-state file view gets position markers + a `<Viewport>` pointer — gated by ONE
+ * declared property, `FILE_TYPE_METADATA[type].markers` (Renderer_v2 §2b). Flagged types are
+ * full-flow rendered documents (story, dashboard, notebook, report, alert, run outputs): they
+ * render at full content height in the page, so `offsetHeight` is the whole document and the
+ * scroll pointer is meaningful. Internally-scrolled types (question, `h:'100vh'`) and admin/form
+ * surfaces stay unflagged — markers there would number only the visible slice. Shared by the
+ * capture (gutter) and the send path (pointer) so both gate identically.
  */
-export function isStoryAppState(appState: AppState | null | undefined): boolean {
-  return appState?.type === 'file'
-    && (appState.state as { fileState?: { type?: string } } | undefined)?.fileState?.type === 'story';
+export function markersEnabledForAppState(appState: AppState | null | undefined): boolean {
+  if (appState?.type !== 'file') return false;
+  const type = (appState.state as { fileState?: { type?: string } } | undefined)?.fileState?.type;
+  if (!type) return false;
+  return (FILE_TYPE_METADATA as Record<string, { markers?: boolean }>)[type]?.markers === true;
 }
 
 /**
@@ -97,7 +101,7 @@ async function captureNow(appState: AppState, colorMode: ColorMode): Promise<str
   const info = appStateShotKey(appState, colorMode);
   if (!info) return null;
   if (lastShot?.key === info.key) return lastShot.url;
-  const blob = await _internal.capture(info.id, colorMode, isStoryAppState(appState));
+  const blob = await _internal.capture(info.id, colorMode, markersEnabledForAppState(appState));
   const url = await _internal.upload(blob);
   lastShot = { key: info.key, url };
   return url;

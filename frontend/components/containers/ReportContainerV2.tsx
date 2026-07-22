@@ -32,6 +32,8 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as ReportContent | undefined;
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
+  const devMode = useAppSelector(state => state.ui.devMode);
+  const colorMode = useAppSelector(state => state.ui.colorMode);
 
   // Context databases for the report's path — powers @-mention of tables/columns
   // in the instructions editor (questions/dashboards come from the server).
@@ -66,6 +68,8 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
 
   return (
     <ReportView
+      showDevMarkers={devMode}
+      colorMode={colorMode}
       report={mergedContent}
       fileId={fileId}
       isRunning={isRunning}
