@@ -89,7 +89,9 @@ describe('runReportV2 (real registrables)', () => {
       emails: [],
     });
 
-    expect(resolver).toHaveBeenCalledWith('analyst');
+    // Every LLM call in a report run (the dispatched analyst sub-agent) is
+    // pinned to the `report` agent grade policy.
+    expect(resolver).toHaveBeenCalledWith({ agent: 'report' });
     expect(run.status).toBe('success');
     expect(run.generatedReport).toContain('From the configured model');
     expect(run.generatedReport).not.toContain('From the static fallback model');

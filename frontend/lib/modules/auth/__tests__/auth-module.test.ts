@@ -117,9 +117,10 @@ describe('AuthModule.register', () => {
       adminPassword: 'password123',
       llm: {
         providers: [{ name: 'openai', provider: 'openai', apiKey: 'sk-raw-key' }],
-        assignments: {
-          analyst: { chain: [{ providerName: 'openai', model: 'gpt-5.4' }] },
-          micro: { chain: [{ providerName: 'openai', model: 'gpt-5.4-nano' }] },
+        grades: {
+          lite: { providerName: 'openai', model: 'gpt-5.4-nano' },
+          core: { providerName: 'openai', model: 'gpt-5.4' },
+          advanced: { providerName: 'openai', model: 'gpt-5.4' },
         },
       },
     });
@@ -127,7 +128,7 @@ describe('AuthModule.register', () => {
     const raw = await getRawConfig('org');
     const llm = raw.llm as LlmConfig;
     expect(llm.providers?.[0].name).toBe('openai');
-    expect(llm.assignments?.analyst?.chain[0].model).toBe('gpt-5.4');
+    expect(llm.grades?.core?.model).toBe('gpt-5.4');
     // Extract-on-write: the raw key must NOT be stored in the config document…
     expect(llm.providers?.[0].apiKey).toMatch(/^@SECRETS\//);
     // …but must resolve back to the raw value server-side.

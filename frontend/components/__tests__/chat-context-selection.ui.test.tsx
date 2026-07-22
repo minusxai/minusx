@@ -45,22 +45,22 @@ vi.mock('@/lib/hooks/useContext', () => ({
 // Send button that invokes the real onSend the way ChatInput would.
 vi.mock('@/components/explore/ChatInput', () => ({
   __esModule: true,
-  default: ({ onSend, onModelChange, selectedModel }: {
+  default: ({ onSend, onGradeChange, selectedGrade }: {
     onSend: (msg: string, atts: unknown[]) => void;
-    onModelChange: (model: { providerName: string; model: string }) => void;
-    selectedModel: { providerName: string; model?: string } | null;
+    onGradeChange: (grade: string) => void;
+    selectedGrade: string | null;
   }) => React.createElement(React.Fragment, null,
-    React.createElement('span', { 'data-testid': 'chat-model' }, selectedModel?.model ?? 'default'),
+    React.createElement('span', { 'data-testid': 'chat-grade' }, selectedGrade ?? 'default'),
     React.createElement('button', {
-      'aria-label': 'Select chat model',
-      onClick: () => onModelChange({ providerName: 'openai-team', model: 'gpt-5.4' }),
+      'aria-label': 'Select chat grade',
+      onClick: () => onGradeChange('advanced'),
     }),
     React.createElement('button', { 'aria-label': 'Send message', onClick: () => onSend('hello', []) }),
   ),
 }));
 
 import ChatInterface from '@/components/explore/ChatInterface';
-import { setChatModelSelection } from '@/store/uiSlice';
+import { setChatGradeSelection } from '@/store/uiSlice';
 
 describe('Chat honors the selected context file', () => {
   beforeEach(() => {
@@ -87,7 +87,7 @@ describe('Chat honors the selected context file', () => {
     });
   });
 
-  it('sends the selected chat model as an analyst override', async () => {
+  it('sends the selected grade as a grade override', async () => {
     const store = makeStore();
     store.dispatch(createConversation({ conversationID: 1, agent: 'AnalystAgent' }));
 
@@ -96,33 +96,29 @@ describe('Chat honors the selected context file', () => {
       { store },
     );
 
-    fireEvent.click(await screen.findByLabelText('Select chat model'));
+    fireEvent.click(await screen.findByLabelText('Select chat grade'));
     fireEvent.click(screen.getByLabelText('Send message'));
 
     await waitFor(() => {
-      expect(store.getState().chat.conversations[1].agent_args?.model_override).toEqual({
-        providerName: 'openai-team', model: 'gpt-5.4',
-      });
+      expect(store.getState().chat.conversations[1].agent_args?.grade_override).toBe('advanced');
     });
   });
 
-  it('shares model selection bidirectionally with the sidebar chat', async () => {
+  it('shares the grade selection bidirectionally with the sidebar chat', async () => {
     const store = makeStore();
-    store.dispatch(setChatModelSelection({ providerName: 'openai-team', model: 'gpt-5.6' }));
+    store.dispatch(setChatGradeSelection('lite'));
 
     renderWithProviders(
       <ChatInterface contextPath="/org/selected-context" container="sidebar" appState={null} />,
       { store },
     );
 
-    expect(await screen.findByTestId('chat-model')).toHaveTextContent('gpt-5.6');
+    expect(await screen.findByTestId('chat-grade')).toHaveTextContent('lite');
 
-    fireEvent.click(screen.getByLabelText('Select chat model'));
+    fireEvent.click(screen.getByLabelText('Select chat grade'));
     await waitFor(() => {
-      expect(store.getState().ui.chatModelSelection).toEqual({
-        providerName: 'openai-team', model: 'gpt-5.4',
-      });
-      expect(screen.getByTestId('chat-model')).toHaveTextContent('gpt-5.4');
+      expect(store.getState().ui.chatGradeSelection).toBe('advanced');
+      expect(screen.getByTestId('chat-grade')).toHaveTextContent('advanced');
     });
   });
 });

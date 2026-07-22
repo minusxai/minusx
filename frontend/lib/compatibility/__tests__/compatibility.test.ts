@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import compatibility from '@/compatibility.json';
 import { CONNECTION_TYPES } from '@/lib/ui/connection-type-options';
-import { LLM_USE_CASES, MINUSX_PROVIDER, CUSTOM_PROVIDER } from '@/lib/llm/llm-config-types';
+import { LLM_GRADES, MINUSX_PROVIDER, CUSTOM_PROVIDER } from '@/lib/llm/llm-config-types';
 import { listProviders, listModels } from '@/orchestrator/llm';
 
 type CompatField = {
@@ -20,7 +20,6 @@ type CompatProvider = {
   id: string; name: string; kind: 'managed' | 'registry' | 'custom';
   credentials: CompatField[];
   defaults?: Record<string, string>;
-  recommended?: Record<string, string[]>;
 };
 
 const llmProviders = compatibility.llm.providers as CompatProvider[];
@@ -40,23 +39,24 @@ describe('compatibility.json — LLM providers', () => {
     }
   });
 
-  it('registry providers declare per-use-case recommended models (incl. the default), resolvable in the baked registry', () => {
+  it('registry providers declare one default model per grade, resolvable in the baked registry', () => {
     for (const p of llmProviders.filter(p => p.kind === 'registry')) {
       const baked = new Set(listModels(p.id).map(m => m.id));
-      expect(p.recommended, `${p.id} missing recommended map`).toBeTruthy();
-      for (const useCase of LLM_USE_CASES) {
-        const rec = p.recommended![useCase];
-        expect(rec?.length, `${p.id} missing ${useCase} recommended models`).toBeGreaterThan(0);
-        for (const id of rec!) {
-          expect(baked.has(id), `${p.id}/${id} not in baked registry`).toBe(true);
-        }
-        const def = p.defaults?.[useCase];
-        expect(def, `${p.id} missing ${useCase} default`).toBeTruthy();
-        expect(rec, `${p.id} ${useCase} default must be recommended`).toContain(def);
+      expect(p.defaults, `${p.id} missing defaults map`).toBeTruthy();
+      for (const grade of LLM_GRADES) {
+        const def = p.defaults![grade];
+        expect(def, `${p.id} missing ${grade} default`).toBeTruthy();
+        expect(baked.has(def!), `${p.id}/${def} not in baked registry`).toBe(true);
       }
-      // `models` was retired in favor of `recommended` — a reappearing key
-      // means a consumer (install.sh / docs) is reading stale curation.
+      // Retired keys — a reappearing key means a consumer (install.sh / docs)
+      // is reading stale curation. `models` and `recommended` collapsed into
+      // one default per grade; the analyst/micro use-case keys were replaced
+      // by grades; 'max' was renamed 'advanced'.
       expect((p as { models?: unknown }).models, `${p.id} still carries the retired models key`).toBeUndefined();
+      expect((p as { recommended?: unknown }).recommended, `${p.id} still carries the retired recommended key`).toBeUndefined();
+      for (const retired of ['analyst', 'micro', 'max']) {
+        expect(p.defaults?.[retired], `${p.id} still carries the retired '${retired}' default`).toBeUndefined();
+      }
     }
   });
 

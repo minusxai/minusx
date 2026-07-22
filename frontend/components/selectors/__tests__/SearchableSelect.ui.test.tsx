@@ -47,6 +47,32 @@ describe('SearchableSelect', () => {
     });
   });
 
+  // Regression: the popover renders in a Portal that sits at the document
+  // origin for a frame before floating-ui positions it. React's `autoFocus`
+  // fires in that frame and cannot opt out of scroll-into-view, so opening a
+  // picker near the bottom of a long page scrolled the page to the top. The
+  // input must be focused manually with { preventScroll: true } instead.
+  it('focuses the search input on open without scrolling the page', async () => {
+    const focusSpy = vi.spyOn(HTMLInputElement.prototype, 'focus');
+    renderWithProviders(
+      <SearchableSelect value="" onChange={() => {}} options={OPTIONS} label="Model picker" />,
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getByLabelText('Model picker'));
+    const search = await screen.findByLabelText('Model picker search');
+    await waitFor(() => expect(search).toHaveFocus());
+    // Every programmatic focus of the search input must carry preventScroll.
+    const inputFocusCalls = focusSpy.mock.instances
+      .map((instance, i) => ({ instance, args: focusSpy.mock.calls[i] }))
+      .filter(({ instance }) => instance === search);
+    expect(inputFocusCalls.length).toBeGreaterThan(0);
+    for (const { args } of inputFocusCalls) {
+      expect(args[0]).toMatchObject({ preventScroll: true });
+    }
+    focusSpy.mockRestore();
+  });
+
   it('matches against the subtitle (model id) too, and shows an empty message on no hit', async () => {
     renderWithProviders(
       <SearchableSelect value="" onChange={() => {}} options={OPTIONS} label="Model picker" />,

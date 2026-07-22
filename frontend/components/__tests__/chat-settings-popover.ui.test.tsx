@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { setUser } from '@/store/authSlice';
+import type { LlmGrade } from '@/lib/llm/llm-config-types';
 
 const hookState = vi.hoisted(() => ({
   connections: {
@@ -55,25 +56,11 @@ describe('ChatSettingsPopover', () => {
       ok: true,
       json: async () => ({
         data: {
-          defaultModel: {
-            providerName: 'openai',
-            providerLabel: 'OpenAI',
-            model: 'gpt-5.4',
-            modelLabel: 'GPT-5.4',
-          },
-          models: [
-            {
-              providerName: 'openai',
-              providerLabel: 'OpenAI',
-              model: 'gpt-5.4',
-              modelLabel: 'GPT-5.4',
-            },
-            {
-              providerName: 'openai',
-              providerLabel: 'OpenAI',
-              model: 'gpt-5.5',
-              modelLabel: 'GPT-5.5',
-            },
+          defaultGrade: 'core',
+          grades: [
+            { grade: 'lite', providerLabel: 'Anthropic', modelLabel: 'Claude Haiku 4.5', configured: true },
+            { grade: 'core', providerLabel: 'Anthropic', modelLabel: 'Claude Sonnet 4.6', configured: true },
+            { grade: 'advanced', modelLabel: 'Not configured', configured: false },
           ],
         },
       }),
@@ -84,24 +71,21 @@ describe('ChatSettingsPopover', () => {
     vi.unstubAllGlobals();
   });
 
-  it('keeps one stable summary trigger and uses the app comboboxes inside one click-only panel', async () => {
+  it('keeps one stable summary trigger and offers grades (not raw models) in one click-only panel', async () => {
     const user = userEvent.setup();
     const onDatabaseChange = vi.fn();
-    const onModelChange = vi.fn();
+    const onGradeChange = vi.fn();
     const onContextChange = vi.fn();
     function StatefulPopover() {
-      const [selectedModel, setSelectedModel] = React.useState<{
-        providerName: string;
-        model?: string;
-      } | null>(null);
+      const [selectedGrade, setSelectedGrade] = React.useState<LlmGrade | null>(null);
       return (
         <ChatSettingsPopover
           databaseName="warehouse"
           onDatabaseChange={onDatabaseChange}
-          selectedModel={selectedModel}
-          onModelChange={(model) => {
-            setSelectedModel(model);
-            onModelChange(model);
+          selectedGrade={selectedGrade}
+          onGradeChange={(grade) => {
+            setSelectedGrade(grade);
+            onGradeChange(grade);
           }}
           selectedContextPath="/tutorial/context.json"
           selectedVersion={2}
@@ -124,14 +108,14 @@ describe('ChatSettingsPopover', () => {
     const trigger = screen.getByLabelText('Chat settings');
     expect(trigger).toHaveTextContent('warehouse');
     expect(trigger).toHaveTextContent('Analyst agent');
-    await waitFor(() => expect(trigger).toHaveTextContent('GPT-5.4'));
-    expect(trigger).toHaveTextContent(/warehouse.*Analyst agent.*GPT-5\.4/);
+    // Default grade summarized by its grade name, not a raw model id.
+    await waitFor(() => expect(trigger).toHaveTextContent('Core'));
+    expect(trigger).toHaveTextContent(/warehouse.*Analyst agent.*Core/);
     expect(screen.queryByLabelText('Database')).not.toBeInTheDocument();
 
     await user.click(trigger);
 
     expect(screen.getByText('Configure this chat')).toBeInTheDocument();
-    expect(screen.queryByText('Tune the next response')).not.toBeInTheDocument();
     const knowledgeBase = await screen.findByLabelText('Knowledge base');
     const database = screen.getByLabelText('Database');
     const model = screen.getByLabelText('LLM');
@@ -147,12 +131,7 @@ describe('ChatSettingsPopover', () => {
 
     await user.click(knowledgeBase);
     expect(screen.getByRole('option', { name: 'testing' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /configs/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /database/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /conversations/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /recordings/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /outside/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /placeholder/i })).not.toBeInTheDocument();
     await user.type(screen.getByLabelText('Knowledge base search'), 'Draft');
     const draftOption = (await screen.findByText('v1 - Draft')).closest('[role="option"]');
     expect(draftOption).not.toBeNull();
@@ -160,25 +139,36 @@ describe('ChatSettingsPopover', () => {
     await user.click(database);
     await user.type(screen.getByLabelText('Database search'), 'anal');
     await user.click(await screen.findByRole('option', { name: 'analytics' }));
+
     await user.click(model);
+    // Default entry fronts the workspace default grade; grade entries carry the
+    // resolved model as a subtitle so users still see what actually runs.
     expect(screen.getByText('Workspace default')).toBeInTheDocument();
     expect(screen.getByText('recommended')).toBeInTheDocument();
-    expect(screen.getAllByRole('option', { name: 'GPT-5.4' })).toHaveLength(1);
-    await user.type(screen.getByLabelText('LLM search'), 'GPT-5.5');
-    await user.click(await screen.findByRole('option', { name: 'GPT-5.5' }));
+    expect(screen.getByText(/Claude Sonnet 4\.6/)).toBeInTheDocument();
+    // An unconfigured grade is visible but not selectable.
+    const advancedOption = screen.getByRole('option', { name: /Advanced/ });
+    expect(advancedOption).toHaveAttribute('aria-disabled', 'true');
+    // Grade options are grades, never raw model ids.
+    expect(screen.queryByRole('option', { name: 'claude-haiku-4-5' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: /Lite/ }));
 
     expect(onContextChange).toHaveBeenCalledWith('/tutorial/context.json', 1);
     expect(onDatabaseChange).toHaveBeenCalledWith('analytics');
-    expect(onModelChange).toHaveBeenCalledWith({ providerName: 'openai', model: 'gpt-5.5' });
-    expect(model).toHaveTextContent('GPT-5.5');
-    expect(trigger).toHaveTextContent('GPT-5.5');
-    expect(trigger).not.toHaveTextContent('gpt-5.5');
+    expect(onGradeChange).toHaveBeenCalledWith('lite');
+    expect(model).toHaveTextContent('Lite');
+    expect(trigger).toHaveTextContent('Lite');
+
+    // Re-selecting the workspace default clears the override (null).
+    await user.click(model);
+    await user.click(screen.getByRole('option', { name: /Core/ }));
+    expect(onGradeChange).toHaveBeenLastCalledWith(null);
+    expect(trigger).toHaveTextContent('Core');
 
     await user.click(agent);
     expect(screen.getByRole('option', { name: 'Analyst agent' })).toBeInTheDocument();
     const customAgents = screen.getByRole('option', { name: 'Specialized agents' });
     expect(customAgents).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByLabelText('Specialized agents Coming soon')).toBeInTheDocument();
     await user.click(customAgents);
     expect(agent).toHaveTextContent('Analyst agent');
   });

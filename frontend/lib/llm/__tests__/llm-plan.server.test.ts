@@ -1,7 +1,8 @@
 // DB-backed plan resolution: reads the org config's `llm` section, resolves
-// @SECRETS refs to raw keys, and maps the provider entry + model choice onto
-// an executable plan step (registry / bedrock / custom / minusx). One model
-// per use case — legacy multi-entry chains resolve to their first entry.
+// @SECRETS refs to raw keys, and maps agent → grade → (provider, model,
+// options) onto an executable plan step (registry / bedrock / custom /
+// minusx). One model per grade; an unmapped grade with no minusx provider is
+// a hard, clearly-worded error.
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { saveRawConfig, getRawConfig } from '@/lib/data/configs.server';
@@ -15,7 +16,7 @@ const dbPath = getTestDbPath('llm_plan_server');
 beforeAll(async () => { await initTestDatabase(dbPath); });
 afterAll(async () => { await cleanupTestDatabase(dbPath); });
 
-async function setLlmConfig(llm: LlmConfig | undefined) {
+async function setLlmConfig(llm: unknown) {
   const raw = await getRawConfig('org');
   await saveRawConfig('org', { ...raw, llm } as never);
 }
@@ -23,187 +24,220 @@ async function setLlmConfig(llm: LlmConfig | undefined) {
 describe('resolveLlmPlan', () => {
   it('returns null for an unconfigured workspace in TEST envs (agents keep faux models)', async () => {
     await setLlmConfig(undefined);
-    expect(await resolveLlmPlan('analyst')).toBeNull();
+    expect(await resolveLlmPlan({ agent: 'analyst' })).toBeNull();
   });
 
-  it('defaults an unconfigured workspace to the MinusX gateway in production (no env tier, no vendor default)', async () => {
+  it('defaults an unconfigured workspace to the MinusX gateway in production, with the grade in the routing header', async () => {
     await setLlmConfig(undefined);
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('VITEST', '');
     try {
-      const plan = (await resolveLlmPlan('micro'))!;
-      const model = plan.model as { provider: string; id: string };
+      // micro's default grade is lite; analyst's is core.
+      const microPlan = (await resolveLlmPlan({ agent: 'micro' }))!;
+      const model = microPlan.model as { provider: string; id: string };
       expect(model.provider).toBe('minusx');
       expect(model.id).toBe(MINUSX_AUTO_MODEL);
-      expect((plan.callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('micro');
+      expect((microPlan.callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('lite');
       // Deterministic sentinel key — the request reaches the gateway (whose
       // auth policy answers), instead of dying client-side env-dependently.
-      expect(plan.callOptions?.apiKey).toBe(MINUSX_UNCONFIGURED_KEY);
+      expect(microPlan.callOptions?.apiKey).toBe(MINUSX_UNCONFIGURED_KEY);
+
+      const analystPlan = (await resolveLlmPlan({ agent: 'analyst' }))!;
+      expect((analystPlan.callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('core');
     } finally {
       vi.unstubAllEnvs();
     }
   });
 
-  it('resolves a model-less registry assignment (Auto) to the compatibility default per use case', async () => {
+  it('routes each agent through its default grade (analyst → core, micro → lite)', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      grades: {
+        lite: { providerName: 'a', model: 'claude-haiku-4-5' },
+        core: { providerName: 'a', model: 'claude-sonnet-4-6' },
+      },
+    } satisfies LlmConfig);
+    expect(((await resolveLlmPlan({ agent: 'analyst' }))!.model as { id: string }).id).toBe('claude-sonnet-4-6');
+    expect(((await resolveLlmPlan({ agent: 'micro' }))!.model as { id: string }).id).toBe('claude-haiku-4-5');
+    // report/slack/web-analyst ride the same built-in core default.
+    expect(((await resolveLlmPlan({ agent: 'report' }))!.model as { id: string }).id).toBe('claude-sonnet-4-6');
+  });
+
+  it('honors a config agent-policy override for the default grade', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      grades: {
+        core: { providerName: 'a', model: 'claude-sonnet-4-6' },
+        advanced: { providerName: 'a', model: 'claude-opus-4-8' },
+      },
+      agents: { slack: { defaultGrade: 'advanced' } },
+    } satisfies LlmConfig);
+    expect(((await resolveLlmPlan({ agent: 'slack' }))!.model as { id: string }).id).toBe('claude-opus-4-8');
+  });
+
+  it('a code-owned selector grade (micro-task override) bypasses the agent allowlist', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      grades: {
+        lite: { providerName: 'a', model: 'claude-haiku-4-5' },
+        core: { providerName: 'a', model: 'claude-sonnet-4-6' },
+      },
+    } satisfies LlmConfig);
+    // micro's policy allows only lite, but the task-declared grade is code-owned.
+    const plan = (await resolveLlmPlan({ agent: 'micro', grade: 'core' }))!;
+    expect((plan.model as { id: string }).id).toBe('claude-sonnet-4-6');
+  });
+
+  it('an unmapped grade with no minusx provider throws a clear settings-pointing error', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      grades: { core: { providerName: 'a', model: 'claude-sonnet-4-6' } },
+    } satisfies LlmConfig);
+    await expect(resolveLlmPlan({ agent: 'micro' })).rejects.toThrow(
+      /No model is mapped to grade 'lite' \(agent 'micro'\)\. Map it in Settings → Models\./,
+    );
+  });
+
+  it('an unmapped grade routes to the minusx provider when configured, grade in the header', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'mx', provider: 'minusx', apiKey: 'mx-key' }],
+    } satisfies LlmConfig);
+    const plan = (await resolveLlmPlan({ agent: 'micro' }))!;
+    const model = plan.model as { provider: string; baseUrl: string };
+    expect(model.provider).toBe('minusx');
+    expect(model.baseUrl).toBeTruthy();
+    expect(plan.callOptions?.apiKey).toBe('mx-key');
+    expect((plan.callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('lite');
+  });
+
+  it('an explicit grade mapping beats the minusx catch-all for that grade only', async () => {
+    await setLlmConfig({
+      providers: [
+        { name: 'mx', provider: 'minusx', apiKey: 'mx-key' },
+        { name: 'a', provider: 'anthropic', apiKey: 'k' },
+      ],
+      grades: { advanced: { providerName: 'a', model: 'claude-opus-4-8' } },
+    } satisfies LlmConfig);
+    const advancedPlan = (await resolveLlmPlan({ agent: 'analyst' }, 'advanced'))!;
+    expect((advancedPlan.model as { provider: string }).provider).toBe('anthropic');
+    const corePlan = (await resolveLlmPlan({ agent: 'analyst' }))!;
+    expect((corePlan.model as { provider: string }).provider).toBe('minusx');
+    expect((corePlan.callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('core');
+  });
+
+  it('resolves a model-less registry mapping (Auto) to the compatibility default per grade', async () => {
     // Expected ids come from compatibility.json itself (curation edits move
     // with the data; the contract test guards the data's validity).
     const anthropicDefaults = (compatibility.llm.providers as { id: string; defaults?: Record<string, string> }[])
       .find(p => p.id === 'anthropic')!.defaults!;
     await setLlmConfig({
       providers: [{ name: 'main-anthropic', provider: 'anthropic', apiKey: 'sk-ant-raw-key' }],
-      assignments: {
-        analyst: { chain: [{ providerName: 'main-anthropic' }] },
-        micro: { chain: [{ providerName: 'main-anthropic' }] },
+      grades: {
+        lite: { providerName: 'main-anthropic' },
+        core: { providerName: 'main-anthropic' },
       },
-    });
-    expect(((await resolveLlmPlan('analyst'))!.model as { id: string }).id).toBe(anthropicDefaults['analyst']);
-    expect(((await resolveLlmPlan('micro'))!.model as { id: string }).id).toBe(anthropicDefaults['micro']);
+    } satisfies LlmConfig);
+    expect(((await resolveLlmPlan({ agent: 'analyst' }))!.model as { id: string }).id).toBe(anthropicDefaults['core']);
+    expect(((await resolveLlmPlan({ agent: 'micro' }))!.model as { id: string }).id).toBe(anthropicDefaults['lite']);
   });
 
   it('still requires a model id for registry providers without compatibility defaults', () => {
-    expect(() => buildPlanStep({ name: 'm', provider: 'mistral' }, { providerName: 'm' }, 'analyst'))
+    expect(() => buildPlanStep({ name: 'm', provider: 'mistral' }, { providerName: 'm' }, 'core'))
       .toThrow(/model id/);
   });
 
-  it('resolves an assignment chain with secret-resolved API keys', async () => {
+  it('resolves a grade mapping with secret-resolved API keys and options passthrough', async () => {
     await setLlmConfig({
       providers: [{ name: 'main-anthropic', provider: 'anthropic', apiKey: 'sk-ant-raw-key' }],
-      assignments: {
-        analyst: { chain: [{ providerName: 'main-anthropic', model: 'claude-sonnet-4-6', options: { reasoning: 'low' } }] },
+      grades: {
+        core: { providerName: 'main-anthropic', model: 'claude-sonnet-4-6', options: { reasoning: 'low' } },
       },
-    });
+    } satisfies LlmConfig);
 
     // The stored doc holds a ref, not the raw key (extraction ran on save).
     const stored = (await getRawConfig('org')).llm as LlmConfig;
     expect(isSecretRef(stored.providers![0].apiKey)).toBe(true);
 
-    const plan = (await resolveLlmPlan('analyst'))!;
+    const plan = (await resolveLlmPlan({ agent: 'analyst' }))!;
     expect((plan.model as { id: string }).id).toBe('claude-sonnet-4-6');
     expect(plan.callOptions?.apiKey).toBe('sk-ant-raw-key');   // resolved at plan time
     expect(plan.callOptions?.reasoning).toBe('low');
   });
 
-  it('a legacy multi-entry chain resolves to its FIRST entry (fallbacks removed)', async () => {
-    await setLlmConfig({
-      providers: [
-        { name: 'a', provider: 'anthropic', apiKey: 'k-a' },
-        { name: 'o', provider: 'openai', apiKey: 'k-o' },
-      ],
-      assignments: {
-        analyst: { chain: [
-          { providerName: 'a', model: 'claude-sonnet-4-6' },
-          { providerName: 'o', model: 'gpt-4.1' },
-        ] },
-      },
-    });
-    const plan = (await resolveLlmPlan('analyst'))!;
-    expect((plan.model as { provider: string }).provider).toBe('anthropic');
-  });
-
-  it('a use case without an assignment routes to the minusx provider when configured', async () => {
-    await setLlmConfig({
-      providers: [{ name: 'mx', provider: 'minusx', apiKey: 'mx-key' }],
-    });
-    const plan = (await resolveLlmPlan('micro'))!;
-    const model = plan.model as { provider: string; baseUrl: string };
-    expect(model.provider).toBe('minusx');
-    expect(model.baseUrl).toBeTruthy();
-    expect(plan.callOptions?.apiKey).toBe('mx-key');
-    expect((plan.callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('micro');
-  });
-
-  // A workspace that configured only chat (analyst) has no `micro` model. Rather than 500 on the
-  // unconfigured MinusX gateway, `micro` reuses the analyst model so the low-stakes helpers (feed
-  // summary, auto-title, description) keep working with a single configured provider.
-  it('micro falls back to the analyst model when it has no assignment and no minusx provider', async () => {
-    await setLlmConfig({
-      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
-      assignments: { analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] } },
-    });
-    const plan = (await resolveLlmPlan('micro'))!;
-    expect(plan).not.toBeNull();
-    expect((plan.model as { id: string }).id).toBe('claude-sonnet-4-6');
-    expect(plan.callOptions?.apiKey).toBe('k');
-    // Still tagged as a micro call for usage attribution.
-    expect((plan.callOptions?.headers as Record<string, string> | undefined)?.[MX_USE_CASE_HEADER] ?? 'micro').toBe('micro');
-  });
-
-  it('a use case (non-micro) without an assignment and no minusx provider returns null (test env)', async () => {
-    await setLlmConfig({
-      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
-      assignments: { micro: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] } },
-    });
-    expect(await resolveLlmPlan('analyst')).toBeNull();
-  });
-
-  it('micro keeps its OWN assignment when present (no fallback)', async () => {
-    await setLlmConfig({
-      providers: [
-        { name: 'a', provider: 'anthropic', apiKey: 'k1' },
-        { name: 'o', provider: 'openai', apiKey: 'k2' },
-      ],
-      assignments: {
-        analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] },
-        micro: { chain: [{ providerName: 'o', model: 'gpt-5' }] },
-      },
-    });
-    const plan = (await resolveLlmPlan('micro'))!;
-    expect((plan.model as { id: string }).id).toBe('gpt-5');
-    expect(plan.callOptions?.apiKey).toBe('k2');
-  });
-
-  it('throws a clear error for an assignment referencing an unknown provider', async () => {
+  it('throws a clear error for a grade mapping referencing an unknown provider', async () => {
     await setLlmConfig({
       providers: [],
-      assignments: { analyst: { chain: [{ providerName: 'ghost', model: 'x' }] } },
-    });
-    await expect(resolveLlmPlan('analyst')).rejects.toThrow(/unknown provider 'ghost'/);
+      grades: { core: { providerName: 'ghost', model: 'x' } },
+    } satisfies LlmConfig);
+    await expect(resolveLlmPlan({ agent: 'analyst' })).rejects.toThrow(/unknown provider 'ghost'/);
   });
 
-  it('uses an allowed per-chat analyst model override without changing the configured default', async () => {
+  it('uses an allowed per-chat grade override without changing the configured default', async () => {
     await setLlmConfig({
-      providers: [{
-        name: 'main-anthropic', provider: 'anthropic', apiKey: 'k',
-        allowedModels: ['claude-sonnet-4-6', 'claude-opus-4-8'],
-      }],
-      assignments: {
-        analyst: { chain: [{ providerName: 'main-anthropic', model: 'claude-sonnet-4-6' }] },
+      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      grades: {
+        core: { providerName: 'a', model: 'claude-sonnet-4-6' },
+        advanced: { providerName: 'a', model: 'claude-opus-4-8' },
       },
-    });
+    } satisfies LlmConfig);
 
-    const override = await resolveLlmPlan('analyst', {
-      providerName: 'main-anthropic', model: 'claude-opus-4-8',
-    });
-    const configured = await resolveLlmPlan('analyst');
+    const override = await resolveLlmPlan({ agent: 'analyst' }, 'advanced');
+    const configured = await resolveLlmPlan({ agent: 'analyst' });
 
     expect((override!.model as { id: string }).id).toBe('claude-opus-4-8');
     expect((configured!.model as { id: string }).id).toBe('claude-sonnet-4-6');
   });
 
-  it('rejects per-chat models outside the provider allowlist', async () => {
+  it("rejects a per-chat grade outside the agent's allowed grades", async () => {
     await setLlmConfig({
-      providers: [{ name: 'main-anthropic', provider: 'anthropic', apiKey: 'k', allowedModels: ['claude-sonnet-4-6'] }],
+      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      grades: {
+        lite: { providerName: 'a', model: 'claude-haiku-4-5' },
+        core: { providerName: 'a', model: 'claude-sonnet-4-6' },
+      },
+      agents: { analyst: { allowedGrades: ['core'] } },
+    } satisfies LlmConfig);
+    await expect(resolveLlmPlan({ agent: 'analyst' }, 'lite')).rejects.toThrow(
+      /Grade 'lite' is not allowed for agent 'analyst'/,
+    );
+  });
+
+  it('an allowed but unmapped per-chat grade hits the unmapped-grade error', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      grades: { core: { providerName: 'a', model: 'claude-sonnet-4-6' } },
+    } satisfies LlmConfig);
+    await expect(resolveLlmPlan({ agent: 'analyst' }, 'advanced')).rejects.toThrow(
+      /No model is mapped to grade 'advanced' \(agent 'analyst'\)/,
+    );
+  });
+
+  it('an unknown selector agent rides the analyst policy (benchmark/eval agents)', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      grades: { core: { providerName: 'a', model: 'claude-sonnet-4-6' } },
+    } satisfies LlmConfig);
+    const plan = (await resolveLlmPlan({ agent: 'some-benchmark-agent' }))!;
+    expect((plan.model as { id: string }).id).toBe('claude-sonnet-4-6');
+  });
+
+  it('a legacy assignments-only config behaves as unconfigured (fresh start)', async () => {
+    // Pre-grades shape, stored before the redesign: ignored, not migrated.
+    await setLlmConfig({
+      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      assignments: { analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] } },
     });
-    await expect(resolveLlmPlan('analyst', {
-      providerName: 'main-anthropic', model: 'claude-opus-4-8',
-    })).rejects.toThrow(/not allowed/);
+    await expect(resolveLlmPlan({ agent: 'analyst' })).rejects.toThrow(/No model is mapped to grade 'core'/);
   });
 
-  it('rejects a per-chat override for an unconfigured provider', async () => {
-    await setLlmConfig({ providers: [] });
-    await expect(resolveLlmPlan('analyst', {
-      providerName: 'ghost', model: 'claude-sonnet-4-6',
-    })).rejects.toThrow(/not configured/);
-  });
-
-  it('uses server-owned metadata when the configured custom model is selected', async () => {
+  it('uses server-owned metadata for a custom-provider grade mapping', async () => {
     await setLlmConfig({
       providers: [{ name: 'local', provider: 'custom', baseUrl: 'http://localhost:11434/v1' }],
-      assignments: {
-        analyst: { chain: [{ providerName: 'local', model: 'qwen3:32b', customModel: { contextWindow: 32_000 } }] },
+      grades: {
+        core: { providerName: 'local', model: 'qwen3:32b', customModel: { contextWindow: 32_000 } },
       },
-    });
-    const plan = await resolveLlmPlan('analyst', { providerName: 'local', model: 'qwen3:32b' });
+    } satisfies LlmConfig);
+    const plan = await resolveLlmPlan({ agent: 'analyst' });
     expect((plan!.model as { contextWindow: number }).contextWindow).toBe(32_000);
   });
 });
@@ -213,7 +247,7 @@ describe('buildPlanStep — provider mapping', () => {
     const step = buildPlanStep(
       { name: 'bd', provider: 'amazon-bedrock', apiKey: 'bedrock-api-key', awsRegion: 'us-east-1' },
       { providerName: 'bd', model: 'amazon.nova-pro-v1:0' },
-      'analyst',
+      'core',
     );
     expect(step.callOptions?.bearerToken).toBe('bedrock-api-key');
     expect(step.callOptions?.apiKey).toBeUndefined();
@@ -224,7 +258,7 @@ describe('buildPlanStep — provider mapping', () => {
     const step = buildPlanStep(
       { name: 'ollama', provider: 'custom', baseUrl: 'http://localhost:11434/v1' },
       { providerName: 'ollama', model: 'qwen3:32b', customModel: { contextWindow: 32000 } },
-      'analyst',
+      'core',
     );
     const model = step.model as { id: string; baseUrl: string; contextWindow: number };
     expect(model.id).toBe('qwen3:32b');
@@ -234,16 +268,16 @@ describe('buildPlanStep — provider mapping', () => {
 
   it('custom without baseUrl or model throws', () => {
     expect(() => buildPlanStep(
-      { name: 'c', provider: 'custom' }, { providerName: 'c', model: 'm' }, 'analyst',
+      { name: 'c', provider: 'custom' }, { providerName: 'c', model: 'm' }, 'core',
     )).toThrow(/baseUrl/);
     expect(() => buildPlanStep(
-      { name: 'c', provider: 'custom', baseUrl: 'http://x/v1' }, { providerName: 'c' }, 'analyst',
+      { name: 'c', provider: 'custom', baseUrl: 'http://x/v1' }, { providerName: 'c' }, 'core',
     )).toThrow(/model id/);
   });
 
   it('registry provider with unknown model throws the registry error', () => {
     expect(() => buildPlanStep(
-      { name: 'a', provider: 'anthropic' }, { providerName: 'a', model: 'not-a-real-model' }, 'analyst',
+      { name: 'a', provider: 'anthropic' }, { providerName: 'a', model: 'not-a-real-model' }, 'core',
     )).toThrow(/not in the model registry/);
   });
 });

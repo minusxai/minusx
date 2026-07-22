@@ -107,7 +107,7 @@ describe('llm section round-trip', () => {
       branding: VALID_BRANDING,
       llm: {
         providers: [{ name: 'rt-anthropic', provider: 'anthropic', apiKey: 'sk-ant-roundtrip' }],
-        assignments: { analyst: { chain: [{ providerName: 'rt-anthropic', model: 'claude-sonnet-4-6' }] } },
+        grades: { core: { providerName: 'rt-anthropic', model: 'claude-sonnet-4-6' } },
       },
     });
     expect(res.status).toBe(200);
@@ -117,7 +117,7 @@ describe('llm section round-trip', () => {
     expect(llm).toBeTruthy();
     expect(llm.providers[0].name).toBe('rt-anthropic');
     expect(isSecretRef(llm.providers[0].apiKey)).toBe(true);
-    expect(llm.assignments.analyst.chain[0].model).toBe('claude-sonnet-4-6');
+    expect(llm.grades.core.model).toBe('claude-sonnet-4-6');
     expect(JSON.stringify(getBody)).not.toContain('sk-ant-roundtrip');
   });
 });
