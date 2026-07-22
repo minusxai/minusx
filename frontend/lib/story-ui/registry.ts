@@ -8,10 +8,10 @@ import {
   CardAction,
   CardDescription,
   CardContent,
-} from './components/card';
-import { Badge } from './components/badge';
-import { Button } from './components/button';
-import { Alert, AlertTitle, AlertDescription } from './components/alert';
+} from '@/components/kit/card';
+import { Badge } from '@/components/kit/badge';
+import { Button } from '@/components/kit/button';
+import { Alert, AlertTitle, AlertDescription } from '@/components/kit/alert';
 import {
   Table,
   TableHeader,
@@ -21,10 +21,10 @@ import {
   TableRow,
   TableCell,
   TableCaption,
-} from './components/table';
-import { Separator } from './components/separator';
-import { Skeleton } from './components/skeleton';
-import { Progress } from './components/progress';
+} from '@/components/kit/table';
+import { Separator } from '@/components/kit/separator';
+import { Skeleton } from '@/components/kit/skeleton';
+import { Progress } from '@/components/kit/progress';
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -33,7 +33,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
   BreadcrumbEllipsis,
-} from './components/breadcrumb';
+} from '@/components/kit/breadcrumb';
 import {
   Avatar,
   AvatarImage,
@@ -41,25 +41,25 @@ import {
   AvatarBadge,
   AvatarGroup,
   AvatarGroupCount,
-} from './components/avatar';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from './components/tabs';
+} from '@/components/kit/avatar';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/kit/tabs';
 import {
   Accordion,
   AccordionItem,
   AccordionTrigger,
   AccordionContent,
-} from './components/accordion';
+} from '@/components/kit/accordion';
 import {
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
-} from './components/collapsible';
+} from '@/components/kit/collapsible';
 import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
   TooltipProvider,
-} from './components/tooltip';
+} from '@/components/kit/tooltip';
 import {
   Popover,
   PopoverTrigger,
@@ -68,7 +68,7 @@ import {
   PopoverHeader,
   PopoverTitle,
   PopoverDescription,
-} from './components/popover';
+} from '@/components/kit/popover';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {

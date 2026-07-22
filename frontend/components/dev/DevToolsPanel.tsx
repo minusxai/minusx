@@ -14,6 +14,13 @@ import type { ToolCall } from '@/lib/types';
 import type { FileAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import { uploadFile } from '@/lib/object-store/client';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
+import { Button as KitButton } from '@/components/kit/button';
+import { Badge as KitBadge } from '@/components/kit/badge';
+import { Card as KitCard, CardContent as KitCardContent, CardHeader as KitCardHeader, CardTitle as KitCardTitle } from '@/components/kit/card';
+import { Input as KitInput } from '@/components/kit/input';
+import { Switch as KitSwitch } from '@/components/kit/switch';
+import { Checkbox as KitCheckbox } from '@/components/kit/checkbox';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/kit/dropdown-menu';
 
 interface DevToolsPanelProps {
   appState: AppState | null | undefined;
@@ -208,6 +215,46 @@ function ToolTester() {
             {result}
           </Box>
         )}
+      </VStack>
+    </Box>
+  );
+}
+
+// ── Kit preview (Renderer_v2 Phase 3 conflict check) ─────────────────────────
+// Renders the shadcn kit next to live Chakra chrome, inside its own `data-mx-theme-host`
+// token scope — the permanent eyeball-check that main-document Tailwind tokens resolve and
+// neither system bleeds into the other. Dev-only by construction (this whole panel is).
+
+function KitPreviewPanel() {
+  return (
+    <Box borderWidth="1px" borderColor="border.default" borderRadius="md" p={3} bg="bg.surface">
+      <VStack align="stretch" gap={2}>
+        <Text fontSize="xs" fontWeight="600" color="fg.muted">Kit Preview (shadcn tokens)</Text>
+        <div data-mx-theme-host="" aria-label="Kit preview host">
+          <KitCard>
+            <KitCardHeader>
+              <KitCardTitle>Kit card</KitCardTitle>
+            </KitCardHeader>
+            <KitCardContent className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <KitButton size="sm">Button</KitButton>
+                <KitBadge>Badge</KitBadge>
+                <KitSwitch aria-label="Kit switch" defaultChecked />
+                <KitCheckbox aria-label="Kit checkbox" defaultChecked />
+              </div>
+              <KitInput placeholder="Kit input" aria-label="Kit input" />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <KitButton variant="outline" size="sm" aria-label="Kit menu trigger">Menu</KitButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem>First action</DropdownMenuItem>
+                  <DropdownMenuItem>Second action</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </KitCardContent>
+          </KitCard>
+        </div>
       </VStack>
     </Box>
   );
@@ -467,6 +514,7 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
 
         {/* Image Tools */}
         <ImageToolsPanel fileId={fileId} appState={appState} />
+        <KitPreviewPanel />
 
         {/* App State (collapsible) */}
         <Box borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface" overflow="hidden">

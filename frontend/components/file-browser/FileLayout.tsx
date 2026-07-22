@@ -134,7 +134,10 @@ export default function FileLayout(props: FileLayoutProps) {
           transition="opacity 0.2s ease"
           pointerEvents={viewStackDepth > 0 ? 'none' : 'auto'}
         >
-          <VStack maxW="100%" flex="1" mx="0"
+          {/* data-mx-theme-host: scopes the shadcn token VALUES (app/theme-tokens.css) to file
+              content — kit components (components/kit) resolve their tokens here while the
+              Chakra shell outside never sees them (Renderer_v2 Phase 3). */}
+          <VStack maxW="100%" flex="1" mx="0" data-mx-theme-host=""
               px={{ base: 4, md: 8, lg: 12 }}
               pt={{ base: 3, md: 4, lg: 5 }}
               pb={shouldShowFloatingChat ? { base: '60px', md: '60px' } : { base: 4, md: 6, lg: 8 }}

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { cn } from "../cn"
+import { cn } from "./cn"
 
 // Inline SVG replacements for lucide-react's ChevronRight / MoreHorizontal
 // (lucide-react is not installed in this repo). Same paths and className

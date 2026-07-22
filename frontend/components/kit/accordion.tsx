@@ -3,7 +3,7 @@
 import * as React from "react"
 import * as AccordionPrimitive from "@radix-ui/react-accordion"
 
-import { cn } from "../cn"
+import { cn } from "./cn"
 
 // Inline SVG replacement for lucide-react's ChevronDownIcon (lucide-react is
 // not installed in this repo). Same className wiring as the lucide icon so the
