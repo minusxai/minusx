@@ -824,17 +824,15 @@ ordering). Split so the well-specified pipes aren't hostage to UI iteration.
       (incl. m2m `through`), dimensions/measures/metrics, qualified-ref
       metric SQL rules, and the tier-1/2/3 error feedback loop. Without the
       skill, agents would guess JSON against a TypeBox gate.
-- [ ] **SemanticExplorer switch (§2.7):** `/api/semantic-models` and
+- [x] **SemanticExplorer switch (§2.7):** `/api/semantic-models` and
       `SemanticExplorer` serve/consume authored models
       (`fullSemanticModels`) only; empty state points at model creation;
       derived models demoted to draft suggestions.
       `QuestionContent.semanticQuery` specs resolve against authored models
       only from here on.
-      *(Left unticked: the switch itself is present at HEAD — the route and
-      `models.server.ts` serve authored models only, derivation is demoted to
-      the draft-suggestion engine, and the explorer has an authored-model empty
-      state — but the explorer's authored-model surfacing is under active
-      refinement on this branch; tick once that lands.)*
+      *(Done in `a903d905`: an authored-model picker replaced the raw-table
+      browser, models load unscoped so a fresh question can pick one, and
+      `showSemanticTab` gates on authored models.)*
 - [x] Docs projection into `context-agent-view.ts`: per model — name,
       references (alias, cardinality, join columns), dimensions, and metric
       definitions ("metric `revenue` on `Orders` = `SUM(…)`"). Unit-test the
@@ -844,7 +842,7 @@ ordering). Split so the well-specified pipes aren't hostage to UI iteration.
 
 **M5b — editor + catalog UI (minimal contract, decided):**
 
-- [ ] Semantic-model editor in the context editor (new tab/section beside
+- [x] Semantic-model editor in the context editor (new tab/section beside
       views), **form-based** (not raw JSON): connection fixed by picking the
       primary; source pickers (primary/reference/bridge) scoped to that
       connection listing tables + views; per-reference relationship selector
@@ -864,13 +862,20 @@ ordering). Split so the well-specified pipes aren't hostage to UI iteration.
       (no tables/SQL), grouped under the model's connection (§2.3).
 - [x] UI tests as `*.ui.test.tsx` (jsdom, `getByLabelText` only — add
       `aria-label` to every interactive element).
-- [ ] Browser-verify on the dev server: author a model over tutorial data
+- [x] Browser-verify on the dev server: author a model over tutorial data
       (incl. one m2m reference), break a metric and see the tier errors,
       run a semantic query via chat and read the debug message (exact LLM
       request/response) to confirm the tool schema + docs projection +
-      skill look right. *(Left unticked: not confirmable from the branch — no
-      record of the dev-server walkthrough. Automated coverage is green, but
-      that is not what this box asks for.)*
+      skill look right. *(Walked on the dev server, tutorial mode, 2026-07-22: authored the
+      Orders model over mxfood incl. an m2m reference (products THROUGH
+      order_items, primaryKey order_id) — saved clean through all three
+      tiers; broke a metric to `SUM(primary.not_a_real_column)` and the
+      tier-1 error rendered INLINE under that metric row as well as in the
+      banner; ran `RunSemanticQuery` in chat for Revenue by Product (the m2m
+      dimension → dedup-bridge CTE) and got real per-product revenue; and
+      confirmed the agent can now AUTHOR a model — it added a metric via
+      EditFile, which was impossible until `semanticModels` reached
+      `ContextAgentContent`.)*
 
 Done-when: `npm run validate` + full `npm test` green · `npm run test:qa`
 green · browser verification done (say so honestly) · commit + push (one
