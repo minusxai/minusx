@@ -50,6 +50,29 @@ const MODEL: SemanticModelV2 = {
   ],
 };
 
+/** Composite-key m2m: the primary's grain is (id, region). */
+const COMPOSITE: SemanticModelV2 = {
+  name: 'OrdersComposite',
+  connection: 'wh',
+  primary: { kind: 'table', table: 'orders' },
+  primaryKey: ['id', 'region'],
+  references: [{
+    source: { kind: 'table', table: 'tags' },
+    alias: 'tag',
+    relationship: 'many_to_many',
+    through: {
+      source: { kind: 'table', table: 'ot_composite' },
+      primaryOn: [
+        { primaryColumn: 'id', bridgeColumn: 'order_id' },
+        { primaryColumn: 'region', bridgeColumn: 'order_region' },
+      ],
+      referencedOn: [{ bridgeColumn: 'tag_id', referencedColumn: 'id' }],
+    },
+  }],
+  dimensions: [{ name: 'Tag', source: 'tag', column: 'name' }],
+  measures: [{ name: 'Revenue', agg: 'SUM', column: 'amount' }],
+};
+
 const spec = (over: Partial<SemanticQuerySpec>): SemanticQuerySpec => ({
   model: 'Orders', table: 'orders', schema: null,
   measures: [], dimensions: [],
@@ -69,6 +92,9 @@ const FIXTURES = [
   "INSERT INTO tags VALUES (10, 'vip', 'manual'), (20, 'promo', 'manual'), (21, 'promo', 'auto')",
   'CREATE TABLE order_tags (order_id INT, tag_id INT)',
   'INSERT INTO order_tags VALUES (1, 10), (1, 20), (1, 21), (2, 10), (1, 10)', // + a DUPLICATE bridge row
+  // composite-key bridge: (order_id, order_region) -> tag
+  'CREATE TABLE ot_composite (order_id INT, order_region TEXT, tag_id INT)',
+  "INSERT INTO ot_composite VALUES (1, 'east', 10), (2, 'west', 10), (1, 'west', 20)", // last row: WRONG region, must not match
   'CREATE TABLE categories (id INT, name TEXT)',
   "INSERT INTO categories VALUES (7, 'food')",
   'CREATE TABLE order_categories (order_id INT, category_id INT)',
@@ -161,12 +187,13 @@ describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
 });
 
 describe('m2m filters — semi-join, never fans out', () => {
-  it('filter-only m2m compiles to pk IN (bridge subquery) and returns the right total', async () => {
+  it('filter-only m2m compiles to a correlated EXISTS and returns the right total', async () => {
     const sql = sqlFor(spec({
       measures: ['Revenue'],
       filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }],
     }));
-    expect(sql).toContain('orders.id IN (SELECT');
+    expect(sql).toContain('EXISTS (SELECT 1');
+    expect(sql).toContain('order_tags.order_id = orders.id'); // correlated, not an IN-list
     const rows = await run(sql);
     expect(Number(rows[0][0])).toBe(150); // orders 1 + 2, each once
   });
@@ -200,13 +227,12 @@ describe('m2m validator rules', () => {
       .toThrow(SemanticCompileError);
   });
 
-  it('rejects negated m2m filters with a pointing error', () => {
+  it('accepts negated m2m filters (compiled as NOT EXISTS)', () => {
     for (const operator of ['!=', 'IS NOT NULL', 'IS NULL'] as const) {
-      const issues = validateSemanticQuery(spec({
+      expect(validateSemanticQuery(spec({
         measures: ['Revenue'],
         filters: [{ dimension: 'Tag', operator, value: 'vip' }],
-      }), MODEL);
-      expect(issues.some((i) => /positive membership|negat/i.test(i))).toBe(true);
+      }), MODEL)).toEqual([]);
     }
   });
 
@@ -218,3 +244,69 @@ describe('m2m validator rules', () => {
     expect(issues).toEqual([]);
   });
 });
+
+describe('m2m negation — NOT EXISTS, NULL-safe', () => {
+  it('"not tagged vip" excludes tagged orders and keeps untagged ones', async () => {
+    const sql = sqlFor(spec({
+      measures: ['Revenue'],
+      filters: [{ dimension: 'Tag', operator: '!=', value: 'vip' }],
+    }));
+    expect(sql).toContain('NOT EXISTS (SELECT 1');
+    const rows = await run(sql);
+    // orders 1 and 2 carry vip; only order 3 (25) survives — and it survives
+    // BECAUSE NOT EXISTS is null-safe, unlike NOT IN over a nullable column.
+    expect(Number(rows[0][0])).toBe(25);
+  });
+
+  it('IS NULL means "has no related row at all"', async () => {
+    const rows = await run(sqlFor(spec({
+      measures: ['Revenue'],
+      filters: [{ dimension: 'Tag', operator: 'IS NULL' }],
+    })));
+    expect(Number(rows[0][0])).toBe(25); // only the untagged order
+  });
+
+  it('IS NOT NULL means "has at least one related row"', async () => {
+    const rows = await run(sqlFor(spec({
+      measures: ['Revenue'],
+      filters: [{ dimension: 'Tag', operator: 'IS NOT NULL' }],
+    })));
+    expect(Number(rows[0][0])).toBe(150); // orders 1 + 2, each once
+  });
+});
+
+describe('composite-key m2m', () => {
+  const csql = (s2: SemanticQuerySpec, dialect = 'duckdb') =>
+    irToSqlLocal(compileSemanticQuery(s2, COMPOSITE), dialect);
+
+  it('filter correlates on EVERY key column (a partial match must not count)', async () => {
+    const sql = csql(spec({
+      model: 'OrdersComposite', measures: ['Revenue'],
+      filters: [{ dimension: 'Tag', operator: '=', value: 'promo' }],
+    }));
+    const rows = await run(sql);
+    // Only (1,'west') is tagged promo, but order 1 IS 'east' — the bridge row
+    // matches on order_id alone and must be rejected by the region condition.
+    expect(rows[0][0]).toBe(null);
+  });
+
+  it('groups by an m2m dimension at the composite grain without fan-out', async () => {
+    const rows = await run(csql(spec({
+      model: 'OrdersComposite', measures: ['Revenue'], dimensions: ['Tag'],
+    })));
+    const byTag = new Map(rows.map((r) => [r[0], Number(r[1])]));
+    expect(byTag.get('vip')).toBe(150); // (1,east) + (2,west)
+  });
+
+  it('golden: correlated EXISTS names every key pair, in all three dialects', () => {
+    for (const dialect of ['duckdb', 'bigquery', 'postgres']) {
+      const sql = csql(spec({
+        model: 'OrdersComposite', measures: ['Revenue'],
+        filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }],
+      }), dialect);
+      expect(sql).toContain('ot_composite.order_id = orders.id');
+      expect(sql).toContain('ot_composite.order_region = orders.region');
+    }
+  });
+});
+

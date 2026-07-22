@@ -172,9 +172,10 @@ describe('m2m compiles (full coverage in m2m.test.ts)', () => {
     expect(sql).toContain('LEFT JOIN _m2m_tag ON orders.id = _m2m_tag._pk');
   });
 
-  it('an m2m filter compiles to a semi-join', () => {
+  it('an m2m filter compiles to a correlated EXISTS', () => {
     const sql = sqlFor(spec({ measures: ['Revenue'], filters: [{ dimension: 'Tag', operator: '=', value: 'vip' }] }));
-    expect(sql).toContain('orders.id IN (SELECT');
+    expect(sql).toContain('EXISTS (SELECT 1');
+    expect(sql).toContain('order_tags.order_id = orders.id');
   });
 });
 

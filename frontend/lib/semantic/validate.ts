@@ -156,14 +156,16 @@ export function validateSemanticModel(
     if (isM2M(ref)) {
       const bridgeRes = resolveSource(ref.through.source, model, ctx, `${at} (bridge)`);
       if (bridgeRes.error) issues.push(bridgeRes.error);
-      if (ref.through.primaryOn.length !== 1 || ref.through.referencedOn.length !== 1) {
-        issues.push(`${at}: many_to_many join keys must be a single column each — composite-key m2m is not supported; add a surrogate key or a concatenated key column in a data model`);
-      } else if (model.primaryKey?.length === 1 && ref.through.primaryOn[0].primaryColumn !== model.primaryKey[0]) {
+      const pkCols = (model.primaryKey ?? []).join(',');
+      const onCols = ref.through.primaryOn.map((o) => o.primaryColumn).join(',');
+      if (ref.through.primaryOn.length === 0 || ref.through.referencedOn.length === 0) {
+        issues.push(`${at}: many_to_many needs at least one join-column pair on each side of the bridge`);
+      } else if (pkCols && onCols !== pkCols) {
         // The compiler keys the bridge join off `through.primaryOn`, so a
         // mismatch here would silently compile at a grain that is NOT the
         // declared primaryKey — the "two m2m references can never disagree"
         // guarantee (§2.3) has to be enforced, not just declared.
-        issues.push(`${at}: through.primaryOn joins the primary on "${ref.through.primaryOn[0].primaryColumn}", but the model's primaryKey is "${model.primaryKey[0]}" — the m2m grain must be the declared primary key`);
+        issues.push(`${at}: through.primaryOn joins the primary on "${onCols}", but the model's primaryKey is "${pkCols}" — the m2m grain must be the declared primary key (same columns, same order)`);
       }
     }
   }
@@ -174,8 +176,6 @@ export function validateSemanticModel(
   if (hasM2M) {
     if (!model.primaryKey || model.primaryKey.length === 0) {
       issues.push('primaryKey is required when any reference is many_to_many — it is the grain the m2m compilation preserves');
-    } else if (model.primaryKey.length !== 1) {
-      issues.push('primaryKey must be a single column when any reference is many_to_many — composite-key m2m is not supported');
     }
   }
   for (const pk of model.primaryKey ?? []) {

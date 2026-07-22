@@ -232,19 +232,28 @@ describe('m2m rules', () => {
     expect(issues).toEqual([]);
   });
 
-  it('rejects composite primaryKey when an m2m reference exists', () => {
-    const issues = errorsFor((m) => { m.primaryKey = ['id', 'region']; });
-    expect(issues.some((e) => e.toLowerCase().includes('single'))).toBe(true);
-  });
-
-  it('rejects composite m2m through keys', () => {
+  it('ACCEPTS a composite primaryKey when the bridge correlates on the same columns', () => {
+    // Composite m2m is supported now that the semi-join is a correlated EXISTS
+    // (one correlation term per key column) rather than a single-column IN.
     const issues = errorsFor((m) => {
+      m.primaryKey = ['id', 'region'];
       (m.references![2] as { through: { primaryOn: unknown[] } }).through.primaryOn = [
         { primaryColumn: 'id', bridgeColumn: 'order_id' },
         { primaryColumn: 'region', bridgeColumn: 'region' },
       ];
     });
-    expect(issues.some((e) => e.toLowerCase().includes('single'))).toBe(true);
+    expect(issues).toEqual([]);
+  });
+
+  it('still rejects composite through keys that do NOT match the declared primaryKey', () => {
+    const issues = errorsFor((m) => {
+      (m.references![2] as { through: { primaryOn: unknown[] } }).through.primaryOn = [
+        { primaryColumn: 'id', bridgeColumn: 'order_id' },
+        { primaryColumn: 'region', bridgeColumn: 'region' },
+      ];
+      // primaryKey stays ['id'] — the grain would silently differ.
+    });
+    expect(issues.some((e) => e.includes('primaryKey'))).toBe(true);
   });
 });
 

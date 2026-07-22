@@ -21,8 +21,9 @@
  *  - GROUP BY mirrors dimensions + time; filters become a flat AND WHERE
  *  - ORDER BY: time ascending when present, else first measure descending
  *  - limit defaults to 1000
- *  - many_to_many references are declared-but-not-compiled until M3: touching
- *    one throws a clear SemanticCompileError rather than fanning out silently
+ *  - many_to_many compiles grain-preservingly: a dedup-bridge CTE for grouped
+ *    dimensions, a correlated EXISTS (NOT EXISTS when negated) for filters —
+ *    both support composite keys, neither can fan a measure out
  */
 
 import type { QueryIR, SelectColumn, GroupByItem, FilterCondition, JoinClause, OrderByClause, CTE } from '@/lib/sql/ir-types';
@@ -33,7 +34,6 @@ import type {
 } from '@/lib/types/semantic';
 import type { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 import { VIEWS_SCHEMA } from '@/lib/types/views';
-import { immutableSet } from '@/lib/utils/immutable-collections';
 import { lexMetricSql, rewriteMetricSql } from './metric-sql';
 
 export class SemanticCompileError extends Error {
@@ -90,9 +90,6 @@ const sourceSqlName = (s: SemanticSource): string => {
   return ref.schema ? `${ref.schema}.${ref.table}` : ref.table;
 };
 
-/** m2m filter operators expressing positive membership (§5 — negation deferred). */
-const NEGATED_OPERATORS = immutableSet(['!=', 'IS NULL', 'IS NOT NULL']);
-
 /** SQL literal for a semi-join WHERE value (mirrors ir-to-sql's formatValue). */
 const formatSqlValue = (value: unknown): string => {
   if (value == null) return 'NULL';
@@ -138,9 +135,9 @@ export function validateSemanticQuery(spec: SemanticQuerySpec, model: SemanticMo
       : 'the model has no time dimension configured');
   }
 
-  // m2m rules (§5): GROUP BY dimensions from at most ONE m2m reference (two
-  // bridges cross-multiply and re-inflate measures within groups); m2m filters
-  // express positive membership only — negation (NOT EXISTS) is deferred.
+  // m2m rule (§5): GROUP BY dimensions from at most ONE m2m reference — two
+  // bridges cross-multiply and re-inflate measures within groups. (Filters from
+  // any number of m2m references compose freely; each is its own EXISTS.)
   const m2mAliasOf = (dimName: string): string | undefined => {
     const dim = findDimension(model, dimName);
     if (!dim || dim.source === 'primary') return undefined;
@@ -150,11 +147,6 @@ export function validateSemanticQuery(spec: SemanticQuerySpec, model: SemanticMo
   const groupedM2M = new Set(spec.dimensions.map(m2mAliasOf).filter((a): a is string => !!a));
   if (groupedM2M.size > 1) {
     issues.push(`a semantic query may GROUP BY dimensions from at most one m2m reference (got ${[...groupedM2M].join(', ')}) — split into two queries or model a combined bridge view`);
-  }
-  for (const f of spec.filters ?? []) {
-    if (m2mAliasOf(f.dimension) && NEGATED_OPERATORS.has(f.operator)) {
-      issues.push(`filter on "${f.dimension}": m2m filters express positive membership only ("tagged vip") — negation is not supported yet`);
-    }
   }
 
   return issues;
@@ -340,16 +332,29 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     });
   }
 
-  /** WHERE fragment over the FAR table of an m2m reference (shared by both forms). */
+  /**
+   * WHERE fragment over the FAR table of an m2m reference (shared by both
+   * forms). NEGATED operators are rendered POSITIVELY here — the negation is
+   * carried by `NOT EXISTS` on the outside, because "orders not tagged vip"
+   * means "no matching bridge row exists", not "has a tag whose name != vip".
+   * `IS NULL`/`IS NOT NULL` mean has-no-related-row / has-one, so they
+   * contribute no far-table predicate at all.
+   */
   const farWhere = (farName: string, filters: FarFilter[]): string =>
-    filters.map((f) => {
+    filters.flatMap((f) => {
+      if (f.operator === 'IS NULL' || f.operator === 'IS NOT NULL') return [];
       const lhs = `${farName}.${f.column}`;
       if (f.operator === 'IN') {
         const values = Array.isArray(f.value) ? f.value : [f.value];
-        return `${lhs} IN (${values.map(formatSqlValue).join(', ')})`;
+        return [`${lhs} IN (${values.map(formatSqlValue).join(', ')})`];
       }
-      return `${lhs} ${f.operator} ${formatSqlValue(f.value)}`;
+      const op = f.operator === '!=' ? '=' : f.operator; // negation lives on EXISTS
+      return [`${lhs} ${op} ${formatSqlValue(f.value)}`];
     }).join(' AND ');
+
+  /** True when the filter set asks for ABSENCE of a matching related row. */
+  const isNegated = (filters: FarFilter[]): boolean =>
+    filters.some((f) => f.operator === '!=' || f.operator === 'IS NULL');
 
   // Semi-joins: one `primary.pk IN (SELECT bridge.pk … WHERE …)` per
   // filter-only m2m reference. Independent semi-joins compose (AND).
@@ -357,13 +362,21 @@ export function compileSemanticQuery(spec: SemanticQuerySpec, model: SemanticMod
     const ref = m2mByAlias.get(alias)!;
     const bridgeName = sourceTableName(ref.through.source);
     const farName = sourceTableName(ref.source);
-    const pOn = ref.through.primaryOn[0];
-    const rOn = ref.through.referencedOn[0];
+    // CORRELATED EXISTS rather than `pk IN (SELECT …)`. Three things fall out
+    // of that one choice: composite keys work (one correlation term per key
+    // column — an uncorrelated IN can only carry a single column on BigQuery),
+    // negation works (`NOT EXISTS`, which is NULL-safe where `NOT IN` is not),
+    // and the engine can stop at the first matching bridge row.
+    const correlation = ref.through.primaryOn
+      .map((p) => `${bridgeName}.${p.bridgeColumn} = ${baseName}.${p.primaryColumn}`);
+    const bridgeToFar = ref.through.referencedOn
+      .map((r) => `${bridgeName}.${r.bridgeColumn} = ${farName}.${r.referencedColumn}`)
+      .join(' AND ');
+    const far = farWhere(farName, filters);
+    const where = [...correlation, ...(far ? [far] : [])].join(' AND ');
     conditions.push({
-      raw_column: `${baseName}.${pOn.primaryColumn}`,
-      operator: 'IN',
-      raw_value: `(SELECT ${bridgeName}.${pOn.bridgeColumn} FROM ${sourceSqlName(ref.through.source)} JOIN ${sourceSqlName(ref.source)} ON ${bridgeName}.${rOn.bridgeColumn} = ${farName}.${rOn.referencedColumn} WHERE ${farWhere(farName, filters)})`,
-    });
+      raw_sql: `${isNegated(filters) ? 'NOT EXISTS' : 'EXISTS'} (SELECT 1 FROM ${sourceSqlName(ref.through.source)} JOIN ${sourceSqlName(ref.source)} ON ${bridgeToFar} WHERE ${where})`,
+    } as FilterCondition);
   }
 
   // Joins: to-one references actually used by this query, aliased by the

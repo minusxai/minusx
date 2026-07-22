@@ -482,7 +482,13 @@ honest — both have named safety nets, neither warrants pre-work):
   execution engine for M3's fixtures). **Post-merge check (named so the
   residual doesn't become "assumed forever"): run one m2m semantic query —
   a dimension grouping AND a semi-join filter — against a real BQ
-  connection in a deployed environment.**
+  connection in a deployed environment.** This is the ONLY remaining
+  deferral, and it is environmental: no BigQuery credentials exist in this
+  workspace (verified — no env vars, no gcloud ADC, no BQ connection), so it
+  cannot be executed here at any effort level. Risk is low: the emitted SQL
+  uses only `WITH` + `LEFT/INNER JOIN` + `SELECT DISTINCT` + correlated
+  `EXISTS`, all standard on BQ, and `prepareView` already runs equivalent
+  `LIMIT 0` probes against real BQ connections in production.
 
 ## 5. many_to_many — in scope, same PR
 
@@ -506,16 +512,15 @@ interface SemanticReferenceM2M {
 }
 ```
 
-**Single-column keys only for m2m (decided):** when any m2m reference exists,
-`primaryKey`, `through.primaryOn`, and `through.referencedOn` must each be a
-single column — the validator rejects composite keys with a pointing error
-("composite-key m2m is not supported; add a surrogate key or a concatenated
-key column in a data model"). Reason: the semi-join compiles to
-`pk IN (SELECT …)`, and BigQuery has no multi-column `IN (subquery)` (the
-row-value syntax DuckDB/Postgres accept doesn't port); an `EXISTS`
-compilation is the eventual lift and is deferred like negation. Composite
-`on` keys remain fully supported for to-one references — those compile to
-real JOINs, which all dialects handle.
+**Composite keys are supported** (the `EXISTS` lift landed rather than being
+deferred). The semi-join compiles to a CORRELATED `EXISTS (SELECT 1 … WHERE
+bridge.k = primary.k AND …)`, one correlation term per key column, so a
+composite grain works on every dialect — the earlier restriction existed only
+because an uncorrelated `pk IN (SELECT …)` cannot carry multiple columns on
+BigQuery. The dedup-bridge CTE projects one `_pkN` per key column and joins on
+all of them, so a composite grain can never match on a prefix. The validator
+still requires `through.primaryOn` to name exactly the model's `primaryKey`
+columns, in order.
 
 **Correctness strategy — grain-preserving compilation, not naive joins.** A
 naive `primary JOIN bridge JOIN far` duplicates primary rows and inflates every
@@ -544,10 +549,12 @@ generator, `lib/sql/ir-to-sql.ts`):
   consistent with the lookup-join default — so unmatched primary rows (e.g.
   untagged orders) appear once under a `NULL` dimension group rather than
   silently vanishing from the result; covered by a dedicated fixture test.
-  **Negation is out of scope for m2m filters in this PR:** filters express
-  positive membership only ("tagged vip"); "NOT tagged vip" (a `NOT EXISTS`
-  compilation with NULL hazards) is rejected by the validator with a pointing
-  error and deferred.
+  **Negation is supported**: a negated filter compiles to `NOT EXISTS` over the
+  same correlated subquery, which is NULL-safe (unlike `NOT IN`). `!=` means
+  "has no related row matching the positive condition" — so the negation rides
+  on `EXISTS`, and the far-table predicate inside stays positive. `IS NULL` /
+  `IS NOT NULL` on an m2m dimension mean has-no-related-row / has-one and carry
+  no far-table predicate at all.
   **Filters on a GROUPED alias live INSIDE its CTE** (found by review, proven
   on DuckDB): as an outer condition, the filter's column is dragged into the
   DISTINCT projection and widens the grain from `(pk, groupedCol)` to
