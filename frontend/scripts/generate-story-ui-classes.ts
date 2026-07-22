@@ -18,12 +18,23 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const COMPONENTS_DIR = join(ROOT, 'components', 'kit');
+
+// Re-skinned EMBED CHROME (Renderer_v2 Phase 3): these render INSIDE stories (portaled into the
+// iframe), so their Tailwind classes must be part of every story's compiled CSS — the mirror no
+// longer carries them once Chakra leaves the embed tree. Add each re-skinned embed file here.
+export const EMBED_CHROME_FILES = [
+  join(ROOT, 'components', 'containers', 'SmartEmbeddedQuestionContainer.tsx'),
+];
 const OUT_FILE = join(ROOT, 'lib', 'story-ui', 'recipe-classes.ts');
 
-export function extractRecipeClasses(dir: string): string[] {
+export function extractRecipeClasses(dir: string, extraFiles: string[] = []): string[] {
   const tokens = new Set<string>();
-  for (const file of readdirSync(dir).filter((f) => f.endsWith('.tsx')).sort()) {
-    const src = readFileSync(join(dir, file), 'utf8');
+  const files = [
+    ...readdirSync(dir).filter((f) => f.endsWith('.tsx')).sort().map((f) => join(dir, f)),
+    ...extraFiles,
+  ];
+  for (const file of files) {
+    const src = readFileSync(file, 'utf8');
     // Every string literal (' " `) — cva recipes, className constants, template chunks.
     for (const m of src.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g)) {
       const lit = m[1] ?? m[2] ?? m[3] ?? '';
@@ -37,7 +48,7 @@ export function extractRecipeClasses(dir: string): string[] {
 }
 
 function main() {
-  const classes = extractRecipeClasses(COMPONENTS_DIR);
+  const classes = extractRecipeClasses(COMPONENTS_DIR, EMBED_CHROME_FILES);
   const body = classes.map((c) => `  ${JSON.stringify(c)},`).join('\n');
   writeFileSync(
     OUT_FILE,

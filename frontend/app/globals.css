@@ -5,8 +5,9 @@
 @import "tailwindcss" important;
 /* shadcn token layer for kit components on file pages (Renderer_v2 Phase 3) — generated. */
 @import "./theme-tokens.css";
-/* Kit sources must be scanned explicitly: the dev graph doesn't reliably reach cva() strings. */
-@source "../components/kit";
+/* Component sources scanned explicitly: the dev graph doesn't reliably reach cva()/template
+   strings (kit) and the re-skinned embed chrome (Renderer_v2 Phase 3) lives outside app/. */
+@source "../components";
 
 /* Present mode — the file surface (see components/file-toolbar/PresentationContext.tsx)
    goes fullscreen via the native API; the default fullscreen backdrop is black, which

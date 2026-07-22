@@ -33,6 +33,15 @@ describe('app/theme-tokens.css', () => {
     for (const t of STORY_THEME_NAMES) expect(css).toContain(`[data-theme="${t}"]`);
   });
 
+  it('neutral host block keeps the APP chart palette — unthemed dashboards must not change color (visual bar)', () => {
+    const css = buildAppThemeCss();
+    const hostBlock = css.slice(css.indexOf('[data-mx-theme-host] {'), css.indexOf('.dark [data-mx-theme-host]'));
+    expect(hostBlock).toContain('--chart-1: #16a085');
+    expect(hostBlock).toContain('--chart-2: #2980b9');
+    expect(hostBlock).toContain('--chart-5: #9b59b6');
+    expect(hostBlock).not.toContain('--chart-1: oklch');
+  });
+
   it('globals.css imports the token layer', () => {
     const globals = readFileSync(path.join(process.cwd(), 'app', 'globals.css'), 'utf8');
     expect(globals).toContain(`@import "./theme-tokens.css"`);
