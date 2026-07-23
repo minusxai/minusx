@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" fill="none">
+  <!-- Scrolly: centered cold open, alternating reveal steps, the SAME chart advancing (one bar lights up) -->
+  <rect width="640" height="400" fill="#f8f7f5"/>
+  <!-- cold open hook, centered -->
+  <rect x="200" y="36" width="240" height="18" rx="3" fill="#26251f"/>
+  <rect x="264" y="64" width="112" height="8" rx="2" fill="#a8a49c"/>
+  <!-- scroll cue -->
+  <path d="M320 84 v16 m0 0 l-6 -7 m6 7 l6 -7" stroke="#a8a49c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- step 1, left: narrow text + the chart, all quiet -->
+  <text x="48" y="164" font-family="system-ui, sans-serif" font-size="52" font-weight="800" fill="#eadfdb">1</text>
+  <rect x="92" y="128" width="176" height="10" rx="2" fill="#4a4840"/>
+  <rect x="92" y="146" width="152" height="8" rx="2" fill="#c9c6bf"/>
+  <rect x="92" y="176" width="200" height="58" rx="4" stroke="#dcd9d2" stroke-width="2" fill="#ffffff"/>
+  <g fill="#c9c6bf">
+    <rect x="106" y="210" width="24" height="16" rx="2"/>
+    <rect x="142" y="200" width="24" height="26" rx="2"/>
+    <rect x="178" y="206" width="24" height="20" rx="2"/>
+    <rect x="214" y="194" width="24" height="32" rx="2"/>
+    <rect x="250" y="204" width="24" height="22" rx="2"/>
+  </g>
+  <!-- the connecting path of the scroll -->
+  <path d="M300 246 C 380 268, 420 236, 372 292" stroke="#d64a33" stroke-width="2.5" stroke-dasharray="2 8" stroke-linecap="round"/>
+  <!-- step 2, right: same chart — one bar now lit -->
+  <text x="348" y="312" font-family="system-ui, sans-serif" font-size="52" font-weight="800" fill="#eadfdb">2</text>
+  <rect x="392" y="276" width="176" height="10" rx="2" fill="#4a4840"/>
+  <rect x="392" y="294" width="140" height="8" rx="2" fill="#c9c6bf"/>
+  <rect x="392" y="324" width="200" height="58" rx="4" stroke="#dcd9d2" stroke-width="2" fill="#ffffff"/>
+  <g fill="#c9c6bf">
+    <rect x="406" y="358" width="24" height="16" rx="2"/>
+    <rect x="442" y="348" width="24" height="26" rx="2"/>
+    <rect x="514" y="342" width="24" height="32" rx="2"/>
+    <rect x="550" y="352" width="24" height="22" rx="2"/>
+  </g>
+  <rect x="478" y="334" width="24" height="40" rx="2" fill="#d64a33"/>
+</svg>
