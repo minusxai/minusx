@@ -822,6 +822,8 @@ templates:
       4. **Fix and improve.** ALWAYS fix every `error` finding (any error gates `overall` to 0), then work through the `warn`s, applying each finding's `fix`, and raise the `overall` score. Repeat. **Do not stop until every `error` is cleared AND `overall` is at least 4.** Keep going past that only if it still looks off.
       5. **Done.**
 
+      **Loading embeds are NEVER a reason to change the story.** Review screenshots are taken while embed queries may still be running: a chart that shows a spinner, or a blank card where a chart belongs, is CAPTURE TIMING — not a broken embed, not missing evidence, and not a renderer limitation. There is no limit on how many embeds a story can hold. NEVER remove, replace, shrink, or hedge an embed (or the claims it supports) because it appeared loading/blank in a screenshot, and never conclude "the story can't load multiple embeds". If a result carries a `renderNote`, or you see loading/blank panels, the ONLY correct response is to re-run ReviewFile to get a settled screenshot and judge from that. Deleting content to make a loading screenshot look better is the single worst failure mode of this workflow.
+
       ---
 
       ## 1. What a story is
@@ -1329,6 +1331,8 @@ prompts:
         Severity discipline: each check is tagged (error) or (warn). An (error) check GATES the file's score to ZERO, so it must be decided objectively: FAIL an (error) check ONLY on an unambiguous defect you can point at — name the exact element, label, region, or claim in the reason. A matter of taste, degree, or uncertainty is NEVER an (error) failure; express taste-level problems by failing the relevant (warn) check instead. The strict fail-hard bias above applies in full to (warn) checks.
 
         Before you answer, scan the screenshot specifically for these common failures: large empty/dead space inside cards or embeds (e.g. a single number stranded in a tall box); numbers or text that are small, faint, or low-contrast; charts squeezed too narrow, cramped, overplotted, or with overlapping/illegible labels; misaligned, lopsided, or awkwardly tall/narrow tiles; a chart whose last data point craters or the series looks partial. a chart where the text is similar color as background and is impossible to read. Every one of these you can see MUST fail its corresponding check.
+
+        RENDER-PENDING DISCIPLINE (overrides the fail-hard bias): a panel showing a loading spinner, or a blank/empty card where a chart embed belongs, is a CAPTURE-TIMING artifact — the screenshot was taken while that embed's query was still running. It is NOT a defect of the document. For every check, judge ONLY panels that finished rendering: never fail a check because a panel is loading/blank, never treat a loading/blank panel as dead space or as a broken/empty chart, and never fail evidence/support checks on the grounds that the supporting chart is blank or still loading. If loading/blank panels prevent you from judging a check at all, PASS it with the reason "render-pending: cannot assess". Advice to REMOVE an embed because it appears blank/loading is always wrong.
 
         Checks (id [category, severity]: PASS condition):
         {checklist}
