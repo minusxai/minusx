@@ -174,4 +174,40 @@ describe('ChatSettingsPopover', () => {
     await user.click(customAgents);
     expect(agent).toHaveTextContent('Analyst agent');
   });
+
+  // The workspace default is the grade every chat actually runs on. Badging it
+  // "recommended" while it resolves to nothing tells the user the one option
+  // they're allowed to use is fine, right before the turn errors.
+  it('does not badge the workspace default as recommended when it is unconfigured', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          defaultGrade: 'core',
+          grades: [
+            { grade: 'core', configured: false },
+            { grade: 'advanced', configured: false },
+          ],
+        },
+      }),
+    }));
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ChatSettingsPopover
+        databaseName="warehouse"
+        onDatabaseChange={vi.fn()}
+        selectedGrade={null}
+        onGradeChange={vi.fn()}
+        selectedContextPath="/tutorial/context.json"
+        selectedVersion={2}
+        onContextChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByLabelText('Chat settings'));
+    await user.click(await screen.findByLabelText('LLM'));
+
+    expect(screen.queryByText('recommended')).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Core/ })).toHaveTextContent(/not configured/i);
+  });
 });
