@@ -260,7 +260,7 @@ const ClarifyFrontendParams = Type.Object({
   }), { description: "Multiple-choice options the user can select from. Ignored for preset `type`s (pass [])." }),
   multiSelect: Type.Optional(Type.Boolean({ description: 'Allow selecting more than one option (default false).' })),
   type: Type.Optional(Type.Union([Type.Literal('design'), Type.Literal('template')], {
-    description: "Preset picker — the app supplies the options (with preview images) itself; pass `options: []`. The result returns the chosen value PLUS its authoring guidance. 'design': the six story design themes (tokens/fonts/personality). 'template': the four story templates (structural genre: editorial | deck | brief | scrolly).",
+    description: "Preset picker — the app supplies the options (with preview images) itself; pass `options: []`. The result returns the chosen value PLUS its authoring guidance. 'design': the six story design themes (tokens/fonts/personality). 'template': the story templates (structural genre: editorial | deck | scrolly).",
   })),
 });
 

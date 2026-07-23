@@ -44,6 +44,14 @@ export interface StoryTheme {
   fonts: StoryThemeFonts;
   /** The full shadcn token contract per mode — exactly the vars TW_INPUT_JSX maps, plus --radius. */
   cssVars: { light: Record<string, string>; dark: Record<string, string> };
+  /**
+   * Structural layer BEYOND tokens — restrained element-level CSS giving the theme a physical
+   * personality (rule weight, ::selection tint, blockquote/table treatments), the way a real
+   * design system styles primitives, not just colors. Authored with `&` as the theme-scope
+   * placeholder; the emitter substitutes `[data-theme="<name>"]`. Keep it to a handful of
+   * element rules — utilities/components stay identical across themes.
+   */
+  css?: string;
 }
 
 /** CSS fallback stack per bundled family (the emitter appends it after the quoted family). */
@@ -61,6 +69,11 @@ export const STORY_THEMES: StoryTheme[] = [
     label: 'Modernist',
     description: 'Stark Swiss editorial — white, near-black, one red accent; Archivo display over Inter, zero radius.',
     fonts: { display: 'Inter', body: 'Inter', mono: 'JetBrains Mono' },
+    css: [
+      '& hr { border: none; height: 2px; background: var(--foreground); }',
+      '& ::selection { background: var(--primary); color: var(--primary-foreground); }',
+      '& blockquote { border-left: none; border-top: 2px solid var(--foreground); padding: 0.75rem 0 0; font-style: normal; font-weight: 600; }',
+    ].join('\n'),
     cssVars: {
       light: {
         '--radius': '0rem',
@@ -125,6 +138,11 @@ export const STORY_THEMES: StoryTheme[] = [
     label: 'Classical',
     description: 'Old-print, bookish — cream with ochre/sepia; Cormorant Garamond display over Lora.',
     fonts: { display: 'Noto Serif', body: 'Noto Serif' },
+    css: [
+      '& hr { border: none; height: 1px; background: var(--border); }',
+      '& ::selection { background: color-mix(in oklab, var(--primary) 25%, transparent); }',
+      '& blockquote { font-style: italic; border-left: 1px solid var(--border); padding-left: 1.25rem; }',
+    ].join('\n'),
     cssVars: {
       light: {
         '--radius': '0.375rem',
@@ -189,6 +207,11 @@ export const STORY_THEMES: StoryTheme[] = [
     label: 'Nocturne',
     description: 'Dark-first, technical — deep navy with violet accents; Inter throughout.',
     fonts: { display: 'Inter', body: 'Inter', mono: 'JetBrains Mono' },
+    css: [
+      '& hr { border: none; height: 1px; background: linear-gradient(90deg, transparent, var(--primary), transparent); opacity: 0.6; }',
+      '& ::selection { background: var(--primary); color: var(--primary-foreground); }',
+      '& blockquote { border-left: 1px solid var(--primary); padding-left: 1.25rem; }',
+    ].join('\n'),
     cssVars: {
       light: {
         '--radius': '0.5rem',
@@ -253,6 +276,11 @@ export const STORY_THEMES: StoryTheme[] = [
     label: 'Organic',
     description: 'Warm, soft, playful — sand, terracotta, olive; Fraunces display over Figtree, extra-round corners.',
     fonts: { display: 'Noto Serif', body: 'Inter' },
+    css: [
+      '& hr { border: none; height: 4px; width: 4rem; margin-inline: 0; border-radius: 999px; background: var(--primary); opacity: 0.45; }',
+      '& ::selection { background: color-mix(in oklab, var(--primary) 30%, transparent); }',
+      '& blockquote { border-left: none; background: var(--muted); border-radius: 1.5rem; padding: 1rem 1.5rem; font-style: normal; }',
+    ].join('\n'),
     cssVars: {
       light: {
         '--radius': '1rem',
@@ -317,6 +345,11 @@ export const STORY_THEMES: StoryTheme[] = [
     label: 'Broadsheet',
     description: 'Newspaper/report — paper white, ink, steel blue; Source Serif 4.',
     fonts: { display: 'Noto Serif', body: 'Noto Serif' },
+    css: [
+      '& hr { border: none; height: 3px; border-top: 1px solid var(--foreground); border-bottom: 1px solid var(--foreground); background: transparent; }',
+      '& ::selection { background: color-mix(in oklab, var(--primary) 25%, transparent); }',
+      '& th { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.85em; }',
+    ].join('\n'),
     cssVars: {
       light: {
         '--radius': '0.25rem',
@@ -381,6 +414,12 @@ export const STORY_THEMES: StoryTheme[] = [
     label: 'Industry',
     description: 'Professional, square — slate and industrial blue; Barlow Condensed display over Barlow.',
     fonts: { display: 'Inter', body: 'Inter', mono: 'JetBrains Mono' },
+    css: [
+      '& hr { border: none; height: 1px; background: repeating-linear-gradient(90deg, var(--foreground) 0 6px, transparent 6px 10px); opacity: 0.5; }',
+      '& ::selection { background: color-mix(in oklab, var(--primary) 30%, transparent); }',
+      '& table { font-variant-numeric: tabular-nums; }',
+      '& th { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8em; }',
+    ].join('\n'),
     cssVars: {
       light: {
         '--radius': '0.125rem',
@@ -469,6 +508,10 @@ export function storyThemeCss(): string {
     blocks.push(`${sel} :is(h1, h2, h3, h4, h5, h6) {\n  font-family: ${fontStack(t.fonts.display)};\n}`);
     if (t.fonts.mono) {
       blocks.push(`${sel} :is(code, pre, kbd, samp) {\n  font-family: ${fontStack(t.fonts.mono)};\n}`);
+    }
+    // Structural layer: `&` is the theme-scope placeholder (see StoryTheme.css).
+    if (t.css) {
+      blocks.push(t.css.replaceAll('&', sel));
     }
     blocks.push(`.dark ${sel}, ${sel}.dark {\n${varsBlock(t.cssVars.dark)}\n}`);
   }

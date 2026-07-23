@@ -36,7 +36,7 @@ export type StoryThemeName = (typeof STORY_THEME_NAMES)[number];
  * orthogonal to the design theme. Same pattern as STORY_THEME_NAMES: the enum lives here; the
  * registry (`lib/data/story/story-templates.ts`) types its entries against it.
  */
-export const STORY_TEMPLATE_NAMES = ['editorial', 'deck', 'brief', 'scrolly'] as const;
+export const STORY_TEMPLATE_NAMES = ['editorial', 'deck', 'scrolly'] as const;
 export type StoryTemplateName = (typeof STORY_TEMPLATE_NAMES)[number];
 
 // ============================================================================
@@ -588,8 +588,8 @@ export const StoryContent = Type.Object({
     'theme name); components and utility classes are identical across themes, only the tokens change.'))),
   template: Type.Optional(Nullable(StringEnum(STORY_TEMPLATE_NAMES,
     "Story template (format:'jsx' only) — the document's structural genre: 'editorial' (long-read magazine " +
-    "feature), 'deck' (slide-section presentation), 'brief' (executive one-pager), 'scrolly' (playful " +
-    'scrollytelling). Set it from the Clarify template pick (the result returns that template\'s authoring ' +
+    "feature), 'deck' (slide-section presentation), 'scrolly' (playful scrollytelling). Set it from the " +
+    'Clarify template pick (the result returns that template\'s authoring ' +
     'guidance — follow it for the beat structure). METADATA ONLY: it records intent and drives the structure ' +
     'YOU write; no automatic CSS or layout is applied.'))),
   colorMode: Type.Optional(Nullable(StringEnum(['light', 'dark'],
