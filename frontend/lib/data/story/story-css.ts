@@ -20,7 +20,11 @@ export const STORY_DESIGN_ATTR = 'data-design';
 export const STORY_DESIGN_VALUE = 'tw';
 
 /** StoryContent plus the server-managed compiled stylesheet. */
-export type CompiledCssStoryContent = StoryContent & { compiledCss?: string | null };
+export type CompiledCssStoryContent = StoryContent & {
+  compiledCss?: string | null;
+  /** Compile-environment version stamp (storyCssCompileVersion) — read path recompiles on mismatch. */
+  cssCompileVersion?: string;
+};
 
 const MARKER_RE = /\bdata-design\s*=\s*(?:"tw"|'tw')/;
 

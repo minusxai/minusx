@@ -14,7 +14,7 @@ import { VizPivotView } from '@/components/viz/VizPivotView';
 import { parseErrorMessage } from '@/components/question/error-parser';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { memo, useState, useEffect, useRef } from 'react';
+import { memo, useMemo, useState, useEffect, useRef } from 'react';
 import isEqual from 'lodash/isEqual';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection, selectVizV2Active } from '@/store/uiSlice';
@@ -192,6 +192,26 @@ function QuestionVisualizationInner({
     }
   };
 
+  // V1→V2 render bridge (Viz Arch V2 §21 item 1): a chart whose truth is `vizSettings` renders
+  // through <VegaChart> via just-in-time conversion — render-only, nothing is ever written back;
+  // table/pivot keep their DOM renderers. Vega is the ONLY engine (Renderer_v2 Phase 2 — the
+  // ECharts rollback path is deleted).
+  // Memoized (Renderer_v2 Phase 7, §1.3 lever 2), and ABOVE the early return (rules-of-hooks):
+  // VegaChart's build effect keys on envelope IDENTITY — a fresh object here on every legitimate
+  // re-render (loading flips, new callbacks) would finalize + re-parse + re-render the whole
+  // Vega view mid-interaction.
+  const memoVizV2 = vizV2Enabled && currentState?.viz != null;
+  const vizSettings = currentState?.vizSettings;
+  const legacyRenderViz = useMemo(() => (
+    data
+      ? resolveLegacyRenderEnvelope({
+          hasVizEnvelope: memoVizV2,
+          vizSettings,
+          columns: toVizColumns(data.columns, data.types),
+        })
+      : null
+  ), [data, memoVizV2, vizSettings]);
+
   if (!currentState) {
     return null;
   }
@@ -212,18 +232,6 @@ function QuestionVisualizationInner({
   // — a viz-only file must never render blank on rollback.
   const legacyVizType = currentState?.vizSettings?.type ?? 'table';
   const isChartType = hasVizV2 || legacyVizType !== 'table';
-
-  // V1→V2 render bridge (Viz Arch V2 §21 item 1): a chart whose truth is `vizSettings` renders
-  // through <VegaChart> via just-in-time conversion — render-only, nothing is ever written back;
-  // table/pivot keep their DOM renderers. Vega is the ONLY engine (Renderer_v2 Phase 2 — the
-  // ECharts rollback path is deleted). Pure — recomputed from vizSettings each render.
-  const legacyRenderViz = data
-    ? resolveLegacyRenderEnvelope({
-        hasVizEnvelope: hasVizV2,
-        vizSettings: currentState?.vizSettings,
-        columns: toVizColumns(data.columns, data.types),
-      })
-    : null;
 
   const showChartTitle = config.viz.showTitle;
 

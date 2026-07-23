@@ -67,34 +67,42 @@ export function absolutizeCssUrls(cssText: string, base: string): string {
 }
 
 /**
- * Fill the shadow root's dedicated app-styles tag with the document's
- * stylesheet rules. Reads cssRules rather than cloning <style> tags because
- * emotion in production inserts rules via CSSOM (speedy mode) — the tags are
- * empty. The tag sits FIRST in the shadow root, so the story's own <style>
- * blocks win ties. Re-run after portals mount: emotion injects styles lazily
- * on first render.
+ * The 6a mirror shrink (Renderer_v2): of everything the document's stylesheets contain, ONLY
+ * `@font-face` rules still belong in the story iframe — embed chrome is compiled into every
+ * story's CSS (kit + EMBED_CHROME_FILES recipe union) and Chakra never reaches the iframe.
+ * Relative url()s (self-hosted font src) are absolutized against each sheet's own location so
+ * they don't 404 against the iframe's base. Pure → unit-testable.
+ */
+export function collectFontFaceCss(rules: Array<{ cssText: string; base: string }>): string {
+  return rules
+    .filter((r) => r.cssText.startsWith('@font-face'))
+    .map((r) => absolutizeCssUrls(r.cssText, r.base))
+    .join('\n');
+}
+
+/**
+ * Fill the shadow root's dedicated app-styles tag with the SHRUNK app residue: the static
+ * base guards (chart-fill, min-width guard, marquee) + the document's `@font-face` rules
+ * (read from cssRules — link sheets carry the self-hosted next/font faces). Everything else
+ * the mirror used to carry (the Chakra/emotion CSSOM, ~43% of ~455KB per story) is gone:
+ * story CSS is self-contained after the Phase 5 Chakra exit.
  */
 export function mirrorAppStyles(root: ShadowRoot | Document) {
   const tag = root.querySelector('style[data-mx-app-styles]');
   if (!tag) return;
-  const css: string[] = [APP_STYLES_BASE_CSS];
+  const rules: Array<{ cssText: string; base: string }> = [];
   for (const sheet of Array.from(document.styleSheets)) {
     const owner = sheet.ownerNode;
-    // Skip our own hoisted story-font tag (would re-import the fonts into the
-    // shadow sheet, where @import is invalid mid-sheet anyway) and anything
-    // not rooted in the document proper (jsdom surfaces shadow styles here).
+    // Skip our own hoisted story-font tag (would duplicate the fonts) and anything not rooted
+    // in the document proper (jsdom surfaces shadow styles here).
     if (owner instanceof Element && (owner.hasAttribute('data-mx-story-fonts') || owner.getRootNode() !== document)) continue;
-    // Resolve relative url()s (e.g. self-hosted @font-face src) against the sheet's own location —
-    // not the iframe's — so they don't break when injected into the iframe's inline <style>.
     const sheetBase = sheet.href || document.baseURI;
     try {
-      css.push(Array.from(sheet.cssRules)
-        .filter(r => !r.cssText.startsWith('@import'))
-        .map(r => absolutizeCssUrls(r.cssText, sheetBase)).join('\n'));
+      for (const r of Array.from(sheet.cssRules)) rules.push({ cssText: r.cssText, base: sheetBase });
     } catch {
       // Cross-origin stylesheet — skip
     }
   }
-  const joined = css.join('\n');
+  const joined = `${APP_STYLES_BASE_CSS}\n${collectFontFaceCss(rules)}`;
   if (tag.textContent !== joined) tag.textContent = joined;
 }

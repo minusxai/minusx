@@ -344,6 +344,24 @@ const eslintConfig = defineConfig([
                 "This file is on the kit/Tailwind stack (Renderer_v2 Chakra exit) — no @chakra-ui " +
                 "imports. Use components/kit primitives and Tailwind classes instead.",
             },
+            {
+              // The Chakra-wrapper snippets in components/ui — banned from migrated trees so a
+              // regression can't sneak Chakra DOM back in. (`ui/toaster` — an imperative service
+              // whose DOM lives in the app shell — and the Chakra-free `ui/Link`/`ui/Dither`
+              // stay allowed.)
+              group: [
+                "@/components/ui/tooltip",
+                "@/components/ui/checkbox",
+                "@/components/ui/select",
+                "@/components/ui/close-button",
+                "@/components/ui/color-mode",
+                "@/components/ui/resizable-panel",
+                "@/components/ui/ImageLightbox",
+              ],
+              message:
+                "This file is on the kit/Tailwind stack (Renderer_v2 Chakra exit) — use the " +
+                "components/kit equivalent, not the components/ui Chakra wrappers.",
+            },
           ],
         },
       ],

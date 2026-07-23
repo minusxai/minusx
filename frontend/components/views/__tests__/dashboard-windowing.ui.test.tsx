@@ -1,15 +1,18 @@
 /**
  * Tile windowing × capture (Renderer_v2 Phase 7 — the WINDOWING × CAPTURE gate).
  *
- * Question tiles render as layout GHOSTS until near the viewport (IntersectionObserver with
- * overscan). Two properties are load-bearing and pinned here:
+ * Question tiles render as layout GHOSTS until near the viewport (scroll/resize +
+ * getBoundingClientRect with overscan — NOT IntersectionObserver, whose callbacks never fire
+ * for foreignObject descendants; the real-browser proof lives in the capture-matrix `b2`
+ * windowing fixture). Two properties are load-bearing and pinned here:
  *  1. A ghost stamps `data-mx-busy="true"` — so the capture readiness gate can NEVER settle on a
  *     dashboard that still shows ghosts (a send-time capture would faithfully serialize them).
  *  2. `waitForFileViewReady` FORCE-MOUNTS the ghosts (dispatches `mx-force-mount-tiles`), so a
  *     capture hydrates every tile, then waits for the tiles' own busy markers to clear.
- * jsdom has no IntersectionObserver — the component's fallback there is mount-everything, which
- * is why every existing DashboardView test keeps passing; these tests install a controllable IO
- * mock to exercise the ghost path explicitly.
+ * jsdom has no layout (rects are all-zero, so everything reads as in-viewport and mounts —
+ * which is why every existing DashboardView test keeps passing). These tests shrink
+ * `window.innerHeight` far negative so the visibility check reads "off-screen", exercising the
+ * ghost path explicitly.
  */
 import React from 'react';
 import { screen, act } from '@testing-library/react';
@@ -86,30 +89,17 @@ function setup() {
   return testStore;
 }
 
-/** Controllable IO mock: never intersects on its own; callbacks captured for manual firing. */
-class MockIO {
-  static instances: MockIO[] = [];
-  cb: IntersectionObserverCallback;
-  els: Element[] = [];
-  constructor(cb: IntersectionObserverCallback) {
-    this.cb = cb;
-    MockIO.instances.push(this);
-  }
-  observe(el: Element) { this.els.push(el); }
-  disconnect() {}
-  unobserve() {}
-  fire(isIntersecting: boolean) {
-    this.cb(this.els.map((target) => ({ target, isIntersecting } as IntersectionObserverEntry)), this as unknown as IntersectionObserver);
-  }
-}
+/** jsdom rects are all-zero — a hugely NEGATIVE viewport makes `top < vh + overscan` false,
+ *  so tiles read as off-screen and stay ghosts until scrolled/forced. */
+const setViewportHeight = (h: number) =>
+  Object.defineProperty(window, 'innerHeight', { value: h, configurable: true, writable: true });
 
 beforeEach(() => {
-  MockIO.instances = [];
-  vi.stubGlobal('IntersectionObserver', MockIO as unknown as typeof IntersectionObserver);
+  setViewportHeight(-10_000);
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  setViewportHeight(768);
   vi.restoreAllMocks();
 });
 
@@ -124,12 +114,15 @@ describe('dashboard tile windowing', () => {
     expect(ghost!.getAttribute('data-mx-busy')).toBe('true');
   });
 
-  it('mounts the real tile when the observer reports intersection (scroll into overscan)', async () => {
+  it('mounts the real tile when a scroll brings it into the overscan window', async () => {
     const store = setup();
     renderWithProviders(<DashboardContainerV2 fileId={DASH_ID} mode="view" />, { store });
     expect(screen.queryByLabelText(`Question content ${Q1_ID}`)).not.toBeInTheDocument();
 
-    act(() => { MockIO.instances.forEach((io) => io.fire(true)); });
+    setViewportHeight(768);
+    act(() => { document.dispatchEvent(new Event('scroll')); });
+    // The scroll check is rAF-throttled — let the frame fire.
+    await act(async () => { await new Promise((r) => requestAnimationFrame(() => r(null))); });
 
     expect(await screen.findByLabelText(`Question content ${Q1_ID}`)).toBeInTheDocument();
     expect(document.querySelector('[data-mx-tile-ghost]')).toBeNull();

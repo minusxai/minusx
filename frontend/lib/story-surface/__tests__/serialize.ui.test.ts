@@ -224,19 +224,18 @@ describe('serializeStorySvg — self-contained root', () => {
     expect(out).toContain('value="hello"');
   });
 
-  // CHAKRA TOKEN HOST (capture parity): Chakra declares its token vars under
-  // `:where(html, .chakra-theme)` with color-mode aliases under `:root, .light` / `.dark` — and the
-  // standalone SVG document has NO <html> element (its root is the <svg>), so none of those match
-  // and every var-backed embed style (tile backgrounds, chart chrome) rasterizes transparent. The
-  // clone's story root must therefore be stamped as a `.chakra-theme` host in the current color
-  // mode, so the whole var chain resolves exactly where the live iframe resolves it (on html).
-  describe('chakra token host stamp', () => {
+  // COLOR-MODE STAMP (post-6a): the standalone SVG document has no <html>, so the clone's story
+  // root carries the current color-mode class — story/kit `.dark`-scoped rules keep resolving.
+  // The Chakra token-host stamp (`chakra-theme`) is DELETED: no Chakra reaches the iframe after
+  // the Phase-6a mirror shrink, so there is no Chakra var chain left to resolve.
+  describe('color-mode stamp', () => {
     afterEach(() => { document.documentElement.classList.remove('dark'); });
 
-    it('stamps the CLONED story root as chakra-theme + light (live DOM untouched)', async () => {
+    it('stamps the CLONED story root with light (no chakra-theme; live DOM untouched)', async () => {
       const { svg, root } = makeSvg();
       const out = await serializeStorySvg(svg);
-      expect(out).toMatch(/<div[^>]*class="chakra-theme light"/);
+      expect(out).toMatch(/<div[^>]*class="light"/);
+      expect(out).not.toContain('chakra-theme');
       expect(root.getAttribute('class')).toBeNull();
     });
 
@@ -244,7 +243,7 @@ describe('serializeStorySvg — self-contained root', () => {
       document.documentElement.classList.add('dark');
       const { svg } = makeSvg();
       const out = await serializeStorySvg(svg);
-      expect(out).toMatch(/<div[^>]*class="chakra-theme dark"/);
+      expect(out).toMatch(/<div[^>]*class="dark"/);
       expect(out).not.toMatch(/class="[^"]*light/);
     });
 
@@ -252,7 +251,7 @@ describe('serializeStorySvg — self-contained root', () => {
       const { svg, root } = makeSvg();
       root.setAttribute('class', 'authored');
       const out = await serializeStorySvg(svg);
-      expect(out).toMatch(/<div[^>]*class="authored chakra-theme light"/);
+      expect(out).toMatch(/<div[^>]*class="authored light"/);
       expect(root.getAttribute('class')).toBe('authored');
     });
   });

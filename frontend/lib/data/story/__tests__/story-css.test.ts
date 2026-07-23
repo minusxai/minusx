@@ -224,6 +224,26 @@ describe('jsx-format stories — className candidates + always-compile', () => {
     expect(c).toContain('text-muted-foreground');
   });
 
+  // Phase 6a: with the app-CSS mirror shrunk to fonts, embed chrome inside LEGACY marked
+  // stories has exactly one style source — the compiled sheet. The recipe union (kit +
+  // EMBED_CHROME_FILES classes) therefore applies to marked legacy stories too, compiled
+  // against the token layer so token-backed utilities (bg-muted, animate-spin ring colors)
+  // resolve. Legacy stories keep skipping the banned-candidate guard (frozen semantics).
+  it('marked LEGACY stories get the recipe union + token layer (embeds keep their chrome)', async () => {
+    const css = await compileStoryCss('<div data-design="tw" class="p-4">legacy with embeds</div>');
+    expect(css).toContain('animate-spin');   // embed-chrome class, NOT in the story markup
+    expect(css).toContain('--background');   // token layer present so token utilities resolve
+  });
+
+  // Same visual bar as the app build (buildAppThemeCss): the stock shadcn --chart-1..5 would
+  // silently recolor embedded charts in unthemed/legacy stories (VegaChart reads those tokens).
+  // The NEUTRAL story bodies carry the app palette; [data-theme] blocks still override.
+  it('story neutral bodies keep the APP chart palette (no silent embed recolor)', async () => {
+    const css = (await compileStoryCss('<div data-design="tw" class="p-2">x</div>'))!;
+    expect(css).toContain('--chart-1: #16a085');
+    expect(css).not.toMatch(/:root[^}]*--chart-1: oklch/);
+  });
+
   it('compileStoryCss compiles with force even without the data-design marker', async () => {
     const css = await compileStoryCss('<div className="grid grid-cols-3 bg-red-100">x</div>', { force: true });
     expect(css).toBeTruthy();
@@ -269,9 +289,12 @@ describe('shadcn token preamble + recipe base sheet (format:jsx)', () => {
     expect(css).toContain('.shadow-sm');
   });
 
-  it('does not union recipe classes for legacy marked stories (their compile stays lean)', async () => {
+  // CONTRACT CHANGE (Phase 6a): legacy marked stories now union the recipe classes too — after
+  // the mirror shrink the compiled sheet is the embeds' only style source, so "lean" would mean
+  // "unstyled embed chrome". The kit chrome classes therefore appear in legacy compiles as well.
+  it('unions recipe classes for legacy marked stories (post-6a: embeds have no other source)', async () => {
     const css = (await compileStoryCss('<div data-design="tw" class="p-2">x</div>'))!;
-    expect(css).not.toContain('.rounded-xl');
+    expect(css).toContain('.rounded-xl');
   });
 });
 

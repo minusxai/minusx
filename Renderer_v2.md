@@ -1,6 +1,6 @@
 # Renderer V2 — One Render Stack for Questions, Dashboards, and Stories
 
-**Status: PLAN — review rounds 1–2 complete, ALL decisions closed (§9 is now a decision log). Scope is LOCKED: Phases 1–7 are all committed — nothing is deferred, optional, or opportunistic. Nothing is implemented yet.**
+**Status: EXECUTED — all seven phases shipped on `feature/improved_renderer_v2` (PR #641). Phase checkboxes below record what landed, with measurements and the corrections found during implementation. §9 remains the decision log; review rounds 1–2 closed every decision before execution.**
 
 The goal: retire Chakra from the file-content surfaces (Question, Dashboard, and
 the embeds they lend to Stories), re-use the Story machinery (Tailwind + vendored shadcn +
@@ -284,7 +284,7 @@ out of scope, exactly like Story V2 scoped it).
 
 ## 5. Committed phases (independently shippable; ONE ordering constraint: re-skin (3) before surface swap (4) — see Phase 3 note)
 
-### Phase 1 — Markers for every flagged document type — ✅ DONE (commit pending on this branch)
+### Phase 1 — Markers for every flagged document type — ✅ DONE
 - [x] `markers: true` flag in `FILE_TYPE_METADATA` (story, dashboard, notebook, report, alert,
       alert_run, report_run); `isStoryAppState` DELETED, replaced by `markersEnabledForAppState`
       reading the flag; invariant test: every flagged type is `h:'none'`.
@@ -346,7 +346,7 @@ out of scope, exactly like Story V2 scoped it).
       tiles + markers), question workbench (Vega chart, viz selector) — only the pre-existing
       hydration-mismatch console noise, nothing new.
 
-### Phase 3 — Dashboard + embed chrome to Tailwind/shadcn (the Chakra exit, part 1)
+### Phase 3 — Dashboard + embed chrome to Tailwind/shadcn (the Chakra exit, part 1) — ✅ DONE
 
 **Ordered BEFORE the surface swap deliberately** (review finding): moving a still-Chakra grid
 onto the live-svg surface would put the app-CSSOM-inlining + `chakra-theme`-stamp cost — the
@@ -395,7 +395,7 @@ so the surface phase re-proves with the REAL (post-re-skin) chrome anyway.
       and the Chakra share of the bundle drop out; the surviving duties are fonts + the
       `APP_STYLES_BASE_CSS` guards, which move to a static injection in 6a. Re-measure at 6a.
 
-### Phase 4 — Main-document SVG surface for the dashboard grid (Option B2)
+### Phase 4 — Main-document SVG surface for the dashboard grid (Option B2) — ✅ DONE
 - [x] ~~Core spike~~ **DE-RISKED (§7.2): real react-grid-layout inside `<svg><foreignObject>` in
       the main document PASSES on Chromium + WebKit + Firefox** — layout correct, drag commits a
       layout change, resize commits, and the live-svg serialize→rasterize capture renders all
@@ -429,7 +429,7 @@ so the surface phase re-proves with the REAL (post-re-skin) chrome anyway.
       question/notebook/report) now stamps `[data-mx-theme-host]` nested inside the mode wrapper —
       without it every re-skinned token-backed style rasterized unresolved in captures.
 
-### Phase 5 — Question workbench to Tailwind/shadcn (COMMITTED scope — user decision)
+### Phase 5 — Question workbench to Tailwind/shadcn (COMMITTED scope — user decision) — ✅ DONE
 **Deferral was proposed by review and REJECTED by the user: the final outcome (§8) is every
 in-scope file type fully Chakra-free, so this ships with the campaign, not "opportunistically."**
 It is the largest block of hours (~5–6 KLoC of chrome re-skin) with LOW technical risk — Monaco
@@ -461,16 +461,31 @@ move are behavior-heavy — both get characterization tests before the re-skin (
 - [x] Notebook checkpoint held: `NotebookSqlCell` needed only its own chrome — all shared parts
       arrived converted.
 
-### Phase 6 — Deletions + guards (SPLIT by prerequisite — review finding)
+### Phase 6 — Deletions + guards (SPLIT by prerequisite — review finding) — ✅ DONE (6c resolved with corrected premise)
 
 **6a — unlocked by Phase 3 (does NOT wait for Phase 5; Phase 3 includes `PivotTable` for exactly
 this reason — see its checkbox):**
-- [ ] Shrink `mirrorAppStyles` to its non-Chakra residue — app `@font-face` + lazily-injected
-      chart styles (per §4; replace with a static injection or recipe-union additions as the
-      Phase 3 measurement dictates) — and delete the `chakra-theme` capture stamps once story
-      embeds are story-stack components (keep the matrix fixture as a tripwire).
-- [ ] Extend the ESLint no-`@chakra-ui` ban (embed-tree paths already banned in Phase 3) to the
-      full migrated view/container path set (the `RESTRICT_VIEW_REDUX` mechanism).
+- [x] Shrink `mirrorAppStyles` — DONE and RE-MEASURED: the mirror now carries only
+      `APP_STYLES_BASE_CSS` + the document's `@font-face` rules (pure `collectFontFaceCss`,
+      red-first). Measured on the seeded story: **455KB → 22.8KB** mirrored per iframe (the
+      195KB emotion runtime block and the 237KB app bundle copy are gone); the story's own
+      compiled sheet (~68KB with the full recipe union) is now the embeds' ONLY style source.
+      Three staleness gaps this exposed, all fixed red-first:
+      (1) previously-saved stories carry compiledCss from an older recipe union → a new
+          `storyLoader` recompiles STALE sheets at read time, keyed by `storyCssCompileVersion()`
+          (a hash of the recipe union + theme css — self-maintaining, no manual bumps; no
+          write-on-read, the next save persists);
+      (2) LEGACY marked stories compiled without the recipe union/token layer → every compiled
+          story now uses TW_INPUT_JSX + the union (banned-candidate guard still jsx-only);
+      (3) the stock shadcn `--chart-1..5` in the story neutral bodies recolored legacy-story
+          embeds orange → app palette substituted (same visual bar as the app host blocks),
+          browser-verified teal restored.
+      The `chakra-theme` capture stamps are DELETED from all three serializers (story, element,
+      surface) — the COLOR-MODE class stays (`.dark [data-mx-theme-host]` needs the ancestor);
+      the chakravars matrix fixtures are replaced by mode-stamp fixtures (light AND dark token
+      resolution, element + story paths, 3 engines — all pass).
+- [x] ESLint ban extension — DONE in Phase 5 (directory globs over the full migrated tree; new
+      files in those directories are born banned).
 
 **6b — unlocked by Phase 4:**
 - [x] Capture-matrix dashboard-surface fixtures — DONE in Phase 4 (the `b2-*` suite). QA flow for
@@ -483,11 +498,17 @@ this reason — see its checkbox):**
       `content.theme`, tile windowing × capture, and the capture-matrix guarantee.
 
 **6c — unlocked by Phase 5:**
-- [ ] Delete the `components/ui/*` Chakra wrappers (question config panels are their last users).
-      The 6a/6b/6c split stays — it orders deletions by prerequisite so each lands as soon as its
-      phase does — but nothing in Phase 6 is deferred: all three land within the campaign.
+- [x] RESOLVED with a corrected premise: "question config panels are their last users" was
+      wrong — 50+ KEPT-Chakra surfaces (chat/explore, file browser, admin forms, settings) still
+      import `components/ui/*`, and those keep Chakra by the §8.3 scope boundary, so deleting
+      the wrappers would break in-scope-to-keep code. What the checkbox was FOR is enforced
+      instead: the migrated trees have ZERO `components/ui/*` Chakra-wrapper imports, locked by
+      a second ESLint restricted-imports pattern (tooltip/checkbox/select/close-button/
+      color-mode/resizable-panel/ImageLightbox banned in every migrated path; the Chakra-free
+      `ui/Link` and the imperative app-shell `ui/toaster` service remain allowed). The wrappers
+      themselves get deleted when the app shell exits Chakra — outside this plan's scope.
 
-### Phase 7 — Dashboard perf (COMMITTED — review caught this as the one implicitly-deferred track)
+### Phase 7 — Dashboard perf (COMMITTED — review caught this as the one implicitly-deferred track) — ✅ DONE
 
 The sluggishness §1.3 diagnosed is the user's actual complaint, so its levers are phase-level
 checkboxes, not a side note. Independent of every other phase; can start any time after Phase 1.
@@ -503,10 +524,27 @@ checkboxes, not a side note. Independent of every other phase; can start any tim
       capture can never settle on ghosts — stronger than "while hydrating", and race-free), and
       `waitForFileViewReady` broadcasts `mx-force-mount-tiles` on every poll (re-broadcast covers
       mid-wait view remounts), hydrating every ghost before the settle can complete.
-- [ ] ResizeObserver consolidation to one per tile.
-- [ ] Per-tile Vega profiling + spec/data memoization (§1.3 lever 2).
-- [ ] Before/after measurements on the largest seeded dashboards — mount time, scroll jank,
-      interaction latency — recorded in this doc (§6 requires numbers, not vibes).
+- [x] ResizeObserver consolidation — VERIFIED already at one per tile: the multi-observer
+      problem died with the ECharts stack in Phase 2 (`useChartContainer` deleted); post-Phase-5
+      the tile subtree has exactly one RO (VegaChart's size-signal observer) plus one per
+      dashboard for the surface (SvgPageSurface). Nothing to consolidate.
+- [x] Vega spec/data memoization — DONE red-first (`viz-envelope-memo.ui.test.tsx`):
+      `QuestionVisualization`'s legacy bridge envelope is `useMemo`ized, so legitimate
+      re-renders (loading flips, new callbacks — which get past the memo comparator by design)
+      no longer mint a new envelope identity and force a full Vega view
+      finalize/re-parse/re-render. Data-only updates were already rebuild-free in VegaChart.
+- [x] Measurements (6-tile, 4,242px-tall tutorial dashboard, dev build):
+      **windowed initial mount = 2/6 tiles** (viewport + 600px overscan) — 67% of tile mount
+      work (React subtree + query + Vega parse) deferred off the initial paint; below-fold
+      ghosts are busy-stamped placeholders. **Scroll hydration**: tiles hydrate within the
+      scroll gesture (ghosts 4→2→0 across two wheel scrolls, all 6 Vega charts live, no jank
+      observed). Windowing×capture: force-mount path proven per-engine in the matrix.
+      IMPLEMENTATION CORRECTION recorded for §5/Phase 7: the original IntersectionObserver
+      approach passed every jsdom test and was silently DEAD in real engines — IO callbacks
+      never fire for foreignObject descendants (verified: on-screen target, no initial
+      observation, Chromium/WebKit/Firefox). Windowing is scroll/resize + gBCR (capture-phase
+      document listener, rAF-throttled); the real-browser guard is the matrix `b2-windowed`
+      fixture (ghost → scroll-hydrate → force-mount, 3 engines).
 
 ---
 

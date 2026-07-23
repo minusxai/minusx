@@ -11,6 +11,7 @@ import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import { Responsive, WidthProvider, type Layout } from 'react-grid-layout';
 import { SvgPageSurface } from '@/components/views/shared/SvgPageSurface';
+import { WindowedTile } from '@/components/views/dashboard/WindowedTile';
 import { findSurfaceSvg, serializeSurfaceSvg } from '@/lib/screenshot/serialize-surface';
 import { svgToImage } from '@/lib/story-surface/serialize';
 
@@ -131,11 +132,29 @@ function PopoverApp() {
   );
 }
 
+// The REAL WindowedTile inside the REAL surface: a below-fold tile must be a busy ghost, then
+// hydrate on scroll. This is exactly the fixture jsdom can't provide (no layout): the original
+// IntersectionObserver implementation passed every jsdom test and was silently dead in real
+// engines (IO callbacks never fire for foreignObject descendants).
+function WindowedApp() {
+  return (
+    <SvgPageSurface>
+      <div style={{ height: 1800, background: 'rgb(238,238,238)' }}>spacer above the fold</div>
+      <div style={{ height: 200 }}>
+        <WindowedTile>
+          <div id="b2wcontent" style={{ height: 200, background: 'rgb(22, 160, 133)' }}>hydrated tile</div>
+        </WindowedTile>
+      </div>
+    </SvgPageSurface>
+  );
+}
+
 const APPS: Record<string, () => React.ReactElement> = {
   grid: GridApp,
   edit: EditApp,
   sticky: StickyApp,
   popover: PopoverApp,
+  windowed: WindowedApp,
 };
 
 function mount(kind: string, container: HTMLElement): void {

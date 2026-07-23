@@ -63,14 +63,15 @@ describe('serializeSurfaceSvg', () => {
     expect(out).toContain('Revenue');
   });
 
-  it('stamps the cloned root as a chakra-theme host in the current color mode (live untouched)', async () => {
+  it('stamps the cloned root with the color mode (post-6a: no chakra-theme stamp; live untouched)', async () => {
     const { svg, root } = mountSurface('<p>x</p>');
     const light = await serializeSurfaceSvg(svg);
-    expect(light).toMatch(/class="[^"]*chakra-theme light/);
+    expect(light).toMatch(/class="[^"]*light/);
+    expect(light).not.toContain('chakra-theme');
     document.documentElement.classList.add('dark');
     const dark = await serializeSurfaceSvg(svg);
-    expect(dark).toMatch(/class="[^"]*chakra-theme dark/);
-    expect(root.getAttribute('class') ?? '').not.toContain('chakra-theme');
+    expect(dark).toMatch(/class="[^"]*dark/);
+    expect(root.getAttribute('class') ?? '').not.toContain('dark');
   });
 
   it('bakes form state and drops transient portals, live DOM untouched', async () => {

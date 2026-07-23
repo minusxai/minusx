@@ -56,6 +56,7 @@ export const B2_FIXTURES: Record<string, string> = {
   '/b2-edit.html': b2Page('edit'),
   '/b2-sticky.html': b2Page('sticky'),
   '/b2-popover.html': b2Page('popover'),
+  '/b2-windowed.html': b2Page('windowed'),
 };
 
 interface CheckResult { name: string; pass: boolean; detail?: string }
@@ -156,6 +157,25 @@ export async function runB2Checks(ctx: BrowserContext, base: string): Promise<Ch
     })()`) as { delta: number; scrolled: number };
     const pass = r.scrolled > 300 && r.delta <= 2;
     return { name: '', pass, detail: `stickyTop-containerTop=${r.delta.toFixed(1)} scrollTop=${r.scrolled}` };
+  });
+
+  await run('b2 windowing: below-fold tile is a BUSY ghost, hydrates on scroll (real WindowedTile in foreignObject)', '/b2-windowed.html', async (p) => {
+    const ghost = await p.evaluate(`(() => { const g = document.querySelector('[data-mx-tile-ghost]'); return { present: !!g, busy: g && g.getAttribute('data-mx-busy'), content: !!document.getElementById('b2wcontent') }; })()`) as { present: boolean; busy: string | null; content: boolean };
+    if (!ghost.present || ghost.busy !== 'true' || ghost.content) {
+      return { name: '', pass: false, detail: `pre-scroll: ghost=${ghost.present} busy=${ghost.busy} content=${ghost.content}` };
+    }
+    await p.evaluate(`window.scrollTo(0, document.body.scrollHeight)`);
+    await p.waitForFunction(`!!document.getElementById('b2wcontent')`, undefined, { timeout: 5000 });
+    const after = await p.evaluate(`(() => ({ ghost: !!document.querySelector('[data-mx-tile-ghost]'), content: !!document.getElementById('b2wcontent') }))()`) as { ghost: boolean; content: boolean };
+    return { name: '', pass: after.content && !after.ghost, detail: `post-scroll: content=${after.content} ghost=${after.ghost}` };
+  });
+
+  await run('b2 windowing: force-mount event hydrates the ghost without scrolling (capture contract)', '/b2-windowed.html', async (p) => {
+    const pre = await p.evaluate(`!!document.querySelector('[data-mx-tile-ghost]')`) as boolean;
+    if (!pre) return { name: '', pass: false, detail: 'no ghost before force event' };
+    await p.evaluate(`document.dispatchEvent(new CustomEvent('mx-force-mount-tiles'))`);
+    await p.waitForFunction(`!!document.getElementById('b2wcontent')`, undefined, { timeout: 5000 });
+    return { name: '', pass: true, detail: 'hydrated on force event' };
   });
 
   await run('b2 portal over the surface: clickable, surface stays interactive, excluded from capture', '/b2-popover.html', async (p) => {

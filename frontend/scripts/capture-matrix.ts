@@ -110,22 +110,18 @@ const FIXTURES: Record<string, string> = {
         }
       })();
     </script>`),
-  // The EXACT Chakra v3 token topology (which /appsheet.html's bare `:root` misses — `:root`
-  // happens to match the serialized <svg> root, so it never caught this): base tokens under
-  // `:where(html, .chakra-theme)` (an ELEMENT selector + theme-host class), aliased per color
-  // mode under `:root, .light` / `.dark`, consumed via an escaped-dot var name. A standalone
-  // serialized SVG has no <html>, so without a chakra-theme host stamp in the clone the chain
-  // collapses and var-backed backgrounds rasterize transparent (the "capture loses the embed
-  // backgrounds" bug).
-  '/chakravars.html': page(`
+  // Post-6a topology: content styles key off the COLOR-MODE class + [data-mx-theme-host]
+  // (`.dark [data-mx-theme-host] { --t: … }`). A standalone serialized SVG has no <html>, so
+  // without the mode stamp on the clone wrapper the dark chain collapses and dark captures
+  // rasterize with light (or no) token values.
+  '/modevars.html': page(`
     <div id="target" style="width:200px;height:100px;background:#ffffff">
       <div class="tile" style="width:120px;height:60px"></div>
     </div>`, `
-    <style id="chakra-pattern">
-      @layer tokens { :where(html, .chakra-theme) { --colors-light-bg-subtle: rgb(240, 243, 246); --colors-dark-bg-subtle: rgb(20, 24, 28); } }
-      :root, .light { --colors-bg\\.subtle: var(--colors-light-bg-subtle); }
-      .dark, .dark .chakra-theme:not(.light) { --colors-bg\\.subtle: var(--colors-dark-bg-subtle); }
-      .tile { background: var(--colors-bg\\.subtle); }
+    <style id="mode-pattern">
+      [data-mx-theme-host] { --tile-bg: rgb(240, 243, 246); }
+      .dark [data-mx-theme-host] { --tile-bg: rgb(20, 24, 28); }
+      .tile { background: var(--tile-bg); }
     </style>`),
   '/form.html': page(`
     <div id="target" style="width:260px;height:120px;background:#ffffff">
@@ -249,20 +245,29 @@ async function runEngine(browserType: BrowserType, base: string): Promise<CheckR
       detail: 'line=' + line + ' points=' + points + ' ms=' + Math.round(ms) };
   }`);
 
-  await check('chakra token vars (html/.chakra-theme topology) resolve — element capture', '/chakravars.html', `async () => {
-    const { data, w, h } = await rasterize(document.getElementById('target'));
+  await check('mode-scoped theme-host tokens resolve — element capture, light AND dark', '/modevars.html', `async () => {
+    // Light: the wrapper's theme host makes [data-mx-theme-host] match.
+    const light = await rasterize(document.getElementById('target'));
     // colorAt, not hasColor: the default tolerance (40) would accept the white fallback.
-    const px = colorAt(data, w, 30, 30);
-    const pass = Math.abs(px[0] - 240) <= 5 && Math.abs(px[1] - 243) <= 5 && Math.abs(px[2] - 246) <= 5;
-    return { pass, detail: 'tilePx=' + px.join(',') + ' (want 240,243,246)' };
+    const lp = colorAt(light.data, light.w, 30, 30);
+    const lightOk = Math.abs(lp[0] - 240) <= 5 && Math.abs(lp[1] - 243) <= 5 && Math.abs(lp[2] - 246) <= 5;
+    // Dark: the clone wrapper must carry the mode class so the .dark theme-host block matches.
+    document.documentElement.classList.add('dark');
+    const dark = await rasterize(document.getElementById('target'));
+    document.documentElement.classList.remove('dark');
+    const dp = colorAt(dark.data, dark.w, 30, 30);
+    const darkOk = Math.abs(dp[0] - 20) <= 5 && Math.abs(dp[1] - 24) <= 5 && Math.abs(dp[2] - 28) <= 5;
+    return { pass: lightOk && darkOk, detail: 'light=' + lp.join(',') + ' dark=' + dp.join(',') };
   }`);
 
-  await check('chakra token vars (html/.chakra-theme topology) resolve — story-surface capture', '/chakravars.html', `async () => {
-    // Same pattern through the STORY path: styles live IN-ROOT (self-contained doc) and the
-    // serializer clones the live <svg> — the stamp must land on the cloned story root.
+  await check('mode class survives the story-surface clone (dark rules resolve)', '/modevars.html', `async () => {
+    // Story path: styles live IN-ROOT (self-contained doc); the serializer clones the live <svg>
+    // and must stamp the current color-mode class on the cloned story root.
+    document.documentElement.classList.add('dark');
     const s = window.__story.mountStorySurface(document, 'svg', 200);
     const style = document.createElement('style');
-    style.textContent = document.getElementById('chakra-pattern').textContent;
+    // In-root topology: the story root IS the host-equivalent scope.
+    style.textContent = '.tile { background: rgb(240,243,246); } .dark .tile { background: rgb(20,24,28); }';
     s.root.appendChild(style);
     const tile = document.createElement('div');
     tile.className = 'tile';
@@ -270,6 +275,7 @@ async function runEngine(browserType: BrowserType, base: string): Promise<CheckR
     s.root.appendChild(tile);
     s.applyHeight(100);
     const xml = await window.__story.serializeStorySvg(document.querySelector('svg[data-mx-story-svg]'));
+    document.documentElement.classList.remove('dark');
     const img = await window.__story.storySvgToImage(xml);
     const c = document.createElement('canvas');
     c.width = img.naturalWidth; c.height = img.naturalHeight;
@@ -278,8 +284,8 @@ async function runEngine(browserType: BrowserType, base: string): Promise<CheckR
     ctx.drawImage(img, 0, 0);
     const data = ctx.getImageData(0, 0, c.width, c.height).data; // THROWS if tainted
     const px = colorAt(data, c.width, 30, 30);
-    const pass = Math.abs(px[0] - 240) <= 5 && Math.abs(px[1] - 243) <= 5 && Math.abs(px[2] - 246) <= 5;
-    return { pass, detail: 'tilePx=' + px.join(',') + ' (want 240,243,246)' };
+    const pass = Math.abs(px[0] - 20) <= 5 && Math.abs(px[1] - 24) <= 5 && Math.abs(px[2] - 28) <= 5;
+    return { pass, detail: 'tilePx=' + px.join(',') + ' (want 20,24,28)' };
   }`);
 
   await check('form-control state stamped into the capture', '/form.html', `async () => {

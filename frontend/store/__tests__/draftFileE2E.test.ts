@@ -32,6 +32,7 @@ import { POST as batchSaveHandler } from '@/app/api/files/batch-save/route';
 import { POST as templateHandler } from '@/app/api/files/template/route';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { getModules } from '@/lib/modules/registry';
+import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 
 // ---------------------------------------------------------------------------
 // Jest module mocks — hoisted to top of file by Jest
@@ -378,8 +379,12 @@ describe('createDraftFile', () => {
     expect(dbFile!.type).toBe('story');
     // Empty body is `''` (surfaces as an editable <story></story> tag); `assets` is legacy, dropped.
     // `compiledCss` is the server-managed design-system stylesheet — explicit null until the
-    // story opts in via the data-design="tw" marker (lib/data/story/story-css.ts).
-    expect(dbFile!.content).toEqual({ description: '', story: '', compiledCss: null });
+    // story opts in via the data-design="tw" marker (lib/data/story/story-css.ts). The compile
+    // stamps `cssCompileVersion` (Phase 6a) so the read path can detect stale sheets.
+    expect(dbFile!.content).toEqual({
+      description: '', story: '', compiledCss: null,
+      cssCompileVersion: storyCssCompileVersion(),
+    });
   });
 });
 

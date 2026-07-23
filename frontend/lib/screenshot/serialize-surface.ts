@@ -49,14 +49,13 @@ export async function serializeSurfaceSvg(svg: SVGSVGElement): Promise<string> {
     stampCanvases(liveRoot, cloneRoot);
     cloneRoot.querySelectorAll(TRANSIENT_PORTAL_SELECTOR).forEach((n) => n.remove());
     await inlineImageSources(cloneRoot, doc.baseURI);
-    // Chakra token host: token vars live under `:where(html, .chakra-theme)` with mode aliases
-    // under `:root, .light` / `.dark`, and the serialized document has no <html> — stamp the
-    // cloned root as a chakra-theme host in the current color mode (same as the story path).
-    // The shadcn `[data-mx-theme-host]` is rendered STATICALLY by SvgPageSurface inside the
-    // surface, so it travels with the clone — nothing to stamp for it here.
+    // Color-mode stamp: the serialized document has no <html>, so `.dark`-scoped rules (incl.
+    // `.dark [data-mx-theme-host]`) need the mode class on the cloned root. The shadcn
+    // `[data-mx-theme-host]` itself is rendered STATICALLY by SvgPageSurface inside the surface,
+    // so it travels with the clone. (Chakra token-host stamp deleted post-6a.)
     const mode = doc.documentElement.classList.contains('dark') ? 'dark' : 'light';
     const cls = cloneRoot.getAttribute('class');
-    cloneRoot.setAttribute('class', `${cls ? `${cls} ` : ''}chakra-theme ${mode}`);
+    cloneRoot.setAttribute('class', `${cls ? `${cls} ` : ''}${mode}`);
   }
 
   // Explicit intrinsic size: an <img>-rendered SVG without width/height attributes has no
