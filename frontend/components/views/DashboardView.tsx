@@ -92,10 +92,10 @@ export default function DashboardView({
   // Track current columns for responsive grid background
   const [currentCols, setCurrentCols] = useState(12);
 
-  // The grid's layout width: the surface's measured width minus the reserved marker gutter
-  // (pl-10 on the region below — the grid's containing block is the region's CONTENT box).
+  // The grid's layout width: the surface's measured width minus BOTH reserved gutters
+  // (px-10 on the region below — the grid's containing block is the region's CONTENT box).
   const surfaceWidth = useSurfaceWidth();
-  const gridWidth = Math.max(320, (surfaceWidth ?? FALLBACK_GRID_WIDTH) - MARKER_GUTTER_CSS_PX);
+  const gridWidth = Math.max(320, (surfaceWidth ?? FALLBACK_GRID_WIDTH) - MARKER_GUTTER_CSS_PX * 2);
 
   // Text blocks that a viewer has expanded via "Read more" → extra grid rows.
   // View-only (not persisted); restored to null on collapse or entering edit mode.
@@ -462,10 +462,11 @@ export default function DashboardView({
     // Phase 8: this view renders INSIDE the self-contained iframe surface (DashboardSurface);
     // the [data-file-id] capture anchor, dev marker overlay, and the surface itself are the
     // CONTAINER's (DashboardContainerV2) — the view is the surface's content, nothing more.
-    // pl-10 = the marker column's home (MARKER_GUTTER_PX): badges — live overlay AND captured
-    // image — draw INSIDE this padding instead of widening the canvas, so the agent image keeps
-    // the reader's geometry 1:1.
-    <div role="region" aria-label="Dashboard" className="pl-10" {...(theme ? { 'data-theme': theme } : {})}>
+    // px-10: the LEFT gutter is the marker column's home (MARKER_GUTTER_CSS_PX) — badges, live
+    // overlay AND captured image, draw INSIDE it instead of widening the canvas, so the agent
+    // image keeps the reader's geometry 1:1. The RIGHT gutter mirrors it purely for visual
+    // balance (a left-only gutter read as lopsided padding).
+    <div role="region" aria-label="Dashboard" className="px-10" {...(theme ? { 'data-theme': theme } : {})}>
     {/* Inside the foreignObject surface, transform TRANSITIONS freeze mid-animation (Chromium
         does not incrementally repaint transformed foreignObject content — the stale-tiles bug).
         Tiles snap to their positions instead; DashboardSurface's resize nudge forces the repaint. */}

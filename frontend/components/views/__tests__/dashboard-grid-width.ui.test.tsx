@@ -64,15 +64,20 @@ function itemWidth(container: HTMLElement): number {
 }
 
 describe('dashboard grid width is surface-driven', () => {
-  it('lays the grid out at (surface width − marker gutter), not a self-measured width', async () => {
+  it('reserves a SYMMETRIC gutter: px-10 on the region, grid width = surface − 2×gutter', async () => {
     const { container } = renderAt(1240);
     await waitFor(() => expect(container.querySelector('.react-grid-item')).not.toBeNull());
-    // 6 of 12 cols of (1240 − 40) with 6px margins ≈ 597; jsdom has no layout, so the inline
+    // The left gutter is the markers' home; the right one mirrors it so the dashboard doesn't
+    // read as lopsided (user-reported). Both come off the grid's layout width.
+    const region = container.querySelector('[aria-label="Dashboard"]') as HTMLElement;
+    expect(region.className).toContain('px-10');
+    expect(region.className).not.toContain('pl-10');
+    // 6 of 12 cols of (1240 − 80) with 6px margins ≈ 589; jsdom has no layout, so the inline
     // style IS the contract. A WidthProvider self-measure in jsdom collapses to its 1280
     // default regardless of the provided width — the range below rules that out.
     const w = itemWidth(container as HTMLElement);
-    expect(w).toBeGreaterThan(560);
-    expect(w).toBeLessThan(640);
+    expect(w).toBeGreaterThan(550);
+    expect(w).toBeLessThan(630);
   });
 
   it('re-lays out when the provided surface width changes (the polyfill never did)', async () => {
