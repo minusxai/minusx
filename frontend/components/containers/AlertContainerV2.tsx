@@ -5,7 +5,6 @@
  * Smart component for alert pages.
  * All job run state and network calls are delegated to useJobRuns.
  */
-import { Box } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName, selectIsDirty, type FileId } from '@/store/filesSlice';
 import { selectFileEditMode } from '@/store/uiSlice';
@@ -38,7 +37,7 @@ export default function AlertContainerV2({ fileId }: AlertContainerV2Props) {
   }, [fileId]);
 
   if (fileLoading || !file || !mergedContent) {
-    return <Box p={4}>Loading alert...</Box>;
+    return <div className="p-4">Loading alert...</div>;
   }
 
   if (typeof fileId !== 'number') return null;

@@ -90,6 +90,34 @@ export function assetFeatures(id: string, json: unknown): Feature[] {
 const cache: Record<string, Feature[]> = {};
 
 /**
+ * How a boundary file is fetched, given its PUBLIC path (`/geojson/<file>.json`). The default is
+ * the browser fetch (same-origin static asset). Root-relative URLs are unparseable in Node, so
+ * NO-ORIGIN contexts (headless server renders — Slack images, scripts) install a filesystem
+ * fetcher via `lib/viz/geo-assets.server.ts` instead; without it, geo charts silently dropped
+ * from server images (Renderer_v2 Phase 2).
+ */
+type GeoAssetFetcher = (publicPath: string) => Promise<unknown>;
+
+const defaultFetcher: GeoAssetFetcher = async (publicPath) => {
+  const resp = await fetch(publicPath);
+  if (!resp.ok) throw new Error(`Failed to load boundary asset ${publicPath}`);
+  return resp.json();
+};
+
+// eslint-disable-next-line no-restricted-syntax -- module-level seam, deliberately swappable per runtime
+let assetFetcher: GeoAssetFetcher = defaultFetcher;
+
+/** Swap how boundary files load (fs in headless contexts). Test seam + server installer target. */
+export function setGeoAssetFetcher(fetcher: GeoAssetFetcher): void {
+  assetFetcher = fetcher;
+}
+
+/** Restore the browser-default fetcher (test isolation). */
+export function resetGeoAssetFetcher(): void {
+  assetFetcher = defaultFetcher;
+}
+
+/**
  * Load an allowlisted boundary's features for injection. Rejects unknown ids —
  * geometry only ever comes from the registry, never an arbitrary reference.
  */
@@ -98,9 +126,7 @@ export async function loadGeoFeatures(id: string): Promise<Feature[]> {
     throw new Error(`unknown geo boundary "${id}" — available: ${Object.keys(GEO_ASSETS).join(', ')}`);
   }
   if (cache[id]) return cache[id];
-  const resp = await fetch(`/geojson/${GEO_ASSETS[id].file}.json`);
-  if (!resp.ok) throw new Error(`Failed to load boundary "${id}" (${GEO_ASSETS[id].file})`);
-  const features = assetFeatures(id, await resp.json());
+  const features = assetFeatures(id, await assetFetcher(`/geojson/${GEO_ASSETS[id].file}.json`));
   cache[id] = features;
   return features;
 }

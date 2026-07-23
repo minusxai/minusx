@@ -10,7 +10,7 @@
 import { renderEnvelopeToCanvas } from '@/lib/viz/render-vega';
 import { getEnvelopeVizType, isEnvelopeImageViz } from '@/lib/viz/encoding-edit';
 import { toJpegObjectUrl } from '@/lib/chart/render-chart-client';
-import { getChartHeight } from '@/lib/chart/render-chart-svg';
+import { getChartHeight } from '@/lib/chart/renderable-types';
 import { AGENT_IMAGE_PIXEL_RATIO } from '@/lib/screenshot/constants';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 

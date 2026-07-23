@@ -1,18 +1,27 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Box, HStack, VStack, Text, IconButton, Input, Button } from '@chakra-ui/react'
+import { createPortal } from 'react-dom'
 import { LuSend, LuTable, LuClipboard, LuCheck } from 'react-icons/lu'
 import { useAppDispatch } from '@/store/hooks'
 import { setSidebarPendingMessage, setRightSidebarCollapsed, setActiveSidebarSection } from '@/store/uiSlice'
 import { useConfigs } from '@/lib/hooks/useConfigs'
 import { buildDrillDownSql } from './drilldown-utils'
 
+// Accent constants (the app palette — same values the converted pivot uses).
+const TEAL = '#16a085'
+
 export interface DrillDownState {
   filters: Record<string, string>
   filterTypes?: Record<string, string>
   yColumn: string
   position: { x: number; y: number }
+  /**
+   * The document the drill click happened in (Phase 8): `position` is in ITS viewport space, so
+   * the card portals to THIS document's body — inside the dashboard iframe surface, the top
+   * `document.body` is the wrong coordinate space. Omitted → top document (main-doc questions).
+   */
+  doc?: Document
 }
 
 interface DrillDownCardProps {
@@ -39,7 +48,10 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
     setAskFocused(false)
   }, [drillDown])
 
-  // Close on click outside or Escape
+  // Close on click outside or Escape. Listens on BOTH the card's own document and the top
+  // document: iframe events never bubble across the frame boundary, so a card inside the
+  // dashboard surface must hear iframe clicks directly — while clicks on the app chrome
+  // (top document) should still dismiss it.
   useEffect(() => {
     if (!drillDown) return
     const handleClickOutside = (e: MouseEvent) => {
@@ -50,11 +62,16 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleEscape)
+    const docs = drillDown.doc && drillDown.doc !== document ? [drillDown.doc, document] : [document]
+    docs.forEach(d => {
+      d.addEventListener('mousedown', handleClickOutside)
+      d.addEventListener('keydown', handleEscape)
+    })
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleEscape)
+      docs.forEach(d => {
+        d.removeEventListener('mousedown', handleClickOutside)
+        d.removeEventListener('keydown', handleEscape)
+      })
     }
   }, [drillDown, onClose])
 
@@ -88,11 +105,14 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
 
   if (!drillDown) return null
 
-  // Compute card position: clamp to stay within viewport
+  // Compute card position: clamp to stay within the viewport OF THE DOCUMENT the click
+  // happened in (the iframe surface's own viewport when the table lives there).
+  const targetDoc = drillDown.doc ?? document
+  const targetWin = targetDoc.defaultView ?? window
   const cardW = askFocused ? 440 : 320
   const cardH = 320
-  const vw = window.innerWidth
-  const vh = window.innerHeight
+  const vw = targetWin.innerWidth
+  const vh = targetWin.innerHeight
 
   const spaceRight = vw - drillDown.position.x
   const anchorRight = spaceRight < cardW + 8
@@ -107,32 +127,27 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
 
   const filterEntries = Object.entries(drillDown.filters)
 
-  return (
-    <Box
+  // Portaled to the CLICK document's body (floating card at click coordinates).
+  // data-mx-theme-host is REQUIRED: shadcn token classes don't resolve outside the app-shell
+  // theme host in the main document (inside the surface, the chrome sheet's :root tokens cover
+  // it and the host attr is harmless).
+  return createPortal(
+    <div
       ref={cardRef}
-      position="fixed"
-      left={`${x}px`}
-      top={`${y}px`}
-      zIndex={1000}
-      bg="bg.surface"
-      border="1px solid"
-      borderColor="border.default"
-      borderRadius="lg"
-      boxShadow="lg"
-      p={3}
-      width={askFocused ? '440px' : '320px'}
-      transition="width 0.2s ease, left 0.2s ease"
+      data-mx-theme-host=""
+      className="fixed z-[1000] rounded-lg border border-border bg-popover p-3 shadow-lg transition-[width,left] duration-200 ease-in-out"
+      style={{ left: `${x}px`, top: `${y}px`, width: askFocused ? '440px' : '320px' }}
     >
-      <VStack align="stretch" gap={1.5}>
+      <div className="flex flex-col items-stretch gap-1.5">
         {filterEntries.map(([col, val]) => (
-          <VStack key={col} align="start" gap={1}>
-            <HStack gap={1} w="100%">
-              <Text fontWeight="600" color="fg.muted" fontSize="xs" flex={1}>{col}</Text>
-              <IconButton
+          <div key={col} className="flex flex-col items-start gap-1">
+            <div className="flex w-full items-center gap-1">
+              <span className="flex-1 text-xs font-semibold text-muted-foreground">{col}</span>
+              <button
                 aria-label="Copy value"
-                size="2xs"
-                variant="ghost"
-                color={copiedCol === col ? 'accent.teal' : 'fg.muted'}
+                className={`inline-flex h-5 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md px-1 text-xs font-medium transition-all hover:bg-accent ${
+                  copiedCol === col ? 'text-[#16a085]' : 'text-muted-foreground'
+                }`}
                 onClick={() => {
                   navigator.clipboard.writeText(String(val))
                   setCopiedCol(col)
@@ -140,68 +155,51 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
                 }}
               >
                 {copiedCol === col ? <>Copied <LuCheck /></> : <LuClipboard />}
-              </IconButton>
-            </HStack>
-            <Box
-              w="100%"
-              maxH="120px"
-              overflowY="auto"
-              bg="bg.muted"
-              borderRadius="md"
-              px={2}
-              py={1.5}
-              border="1px solid"
-              borderColor="border.muted"
-            >
-              <Text fontSize="xs" fontFamily="mono" color="fg.default" whiteSpace="pre-wrap" wordBreak="break-all">
+              </button>
+            </div>
+            <div className="max-h-[120px] w-full overflow-y-auto rounded-md border border-border bg-muted px-2 py-1.5">
+              <span className="font-mono text-xs whitespace-pre-wrap break-all text-foreground">
                 {String(val)}
-              </Text>
-            </Box>
-          </VStack>
+              </span>
+            </div>
+          </div>
         ))}
         {filterEntries.length === 0 && (
-          <Text fontSize="xs" color="fg.muted">Total aggregation</Text>
+          <span className="text-xs text-muted-foreground">Total aggregation</span>
         )}
-        <Box borderTop="1px solid" borderColor="border.muted" my={1} />
+        <div className="my-1 border-t border-border" />
         {sql && (
-          <Button
-            size="xs"
-            variant="solid"
-            bg="accent.teal"
-            color="white"
-            width="full"
+          <button
+            className="inline-flex h-6 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-white transition-all hover:opacity-90"
+            style={{ background: TEAL }}
             onClick={handleSeeRecords}
           >
             <LuTable />
             See Similar Records
-          </Button>
+          </button>
         )}
-        <HStack gap={1}>
-          <Input
-            size="xs"
-            fontSize="xs"
+        <div className="flex items-center gap-1">
+          <input
             placeholder={`Ask ${agentName} about this datapoint...`}
             value={askInput}
             onChange={(e) => setAskInput(e.target.value)}
             onFocus={() => setAskFocused(true)}
             onBlur={() => setAskFocused(false)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleAskAgent() }}
-            flex={1}
-            fontFamily="mono"
-            borderColor={askFocused ? 'accent.teal' : 'border.default'}
-            outline={"none"}
+            className="h-6 min-w-0 flex-1 rounded-sm border bg-transparent px-1.5 font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground"
+            style={{ borderColor: askFocused ? TEAL : 'var(--border)' }}
           />
-          <IconButton
+          <button
             aria-label={`Ask ${agentName}`}
-            size="xs"
-            variant="solid"
-            colorPalette="teal"
+            className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-white transition-all hover:opacity-90"
+            style={{ background: TEAL }}
             onClick={handleAskAgent}
           >
             <LuSend />
-          </IconButton>
-        </HStack>
-      </VStack>
-    </Box>
+          </button>
+        </div>
+      </div>
+    </div>,
+    targetDoc.body
   )
 }

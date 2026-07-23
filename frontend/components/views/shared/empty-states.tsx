@@ -1,7 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
-import { Box, HStack, Text, VStack } from '@chakra-ui/react';
+import type { CSSProperties, ReactNode } from 'react';
 import {
   LuBellRing,
   LuCircleAlert,
@@ -17,6 +16,7 @@ import {
   LuSparkles,
 } from 'react-icons/lu';
 
+import { cn } from '@/components/kit/cn';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
 /**
@@ -27,36 +27,30 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
  * (staggered fade-up) rather than scattered micro-interactions.
  */
 
-const KEYFRAMES = {
-  '@keyframes mx-rise': {
-    from: { opacity: 0, transform: 'translateY(10px)' },
-    to: { opacity: 1, transform: 'translateY(0)' },
-  },
-  '@keyframes mx-glow': {
-    '0%, 100%': { opacity: 0.55 },
-    '50%': { opacity: 0.9 },
-  },
-  '@keyframes mx-float': {
-    '0%, 100%': { transform: 'rotate(-4deg) translateY(0)' },
-    '50%': { transform: 'rotate(-4deg) translateY(-7px)' },
-  },
-  '@keyframes mx-drawx': {
-    from: { transform: 'scaleX(0)' },
-    to: { transform: 'scaleX(1)' },
-  },
-  '@keyframes mx-growy': {
-    from: { transform: 'scaleY(0)' },
-    to: { transform: 'scaleY(1)' },
-  },
-  '@keyframes mx-pop': {
-    from: { opacity: 0, transform: 'scale(0.55)' },
-    to: { opacity: 1, transform: 'scale(1)' },
-  },
-};
+// Accent hexes (theme accent.* equivalents, post-Chakra).
+const ACCENT = {
+  sun: '#d35400',
+  primary: '#2980b9',
+  secondary: '#9b59b6',
+  danger: '#c0392b',
+  warning: '#f39c12',
+  teal: '#16a085',
+} as const;
+
+// Keyframes for the hero's orchestrated entrance. Injected via a <style> tag so
+// this stays self-contained (the old Chakra `css` prop defined them inline too).
+const KEYFRAMES_CSS = `
+@keyframes mx-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes mx-glow { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.9; } }
+@keyframes mx-float { 0%, 100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(-4deg) translateY(-7px); } }
+@keyframes mx-drawx { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes mx-growy { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes mx-pop { from { opacity: 0; transform: scale(0.55); } to { opacity: 1; transform: scale(1); } }
+`;
 
 interface HeroProps {
   ariaLabel: string;
-  /** Theme color token for this file type, e.g. 'accent.primary'. */
+  /** Accent hex color for this file type, e.g. ACCENT.primary. */
   accent: string;
   eyebrow: string;
   title: ReactNode;
@@ -71,42 +65,30 @@ interface HeroProps {
 }
 
 function EmptyFileHero({ ariaLabel, accent, eyebrow, title, description, illustration, actions, tip, compact = false }: HeroProps) {
-  const accentVar = `var(--chakra-colors-${accent.replace(/\./g, '-')})`;
   return (
-    <Box
+    <div
       aria-label={ariaLabel}
-      position="relative"
-      flex="1"
-      w="100%"
-      minH={compact ? '340px' : '460px'}
-      overflow="hidden"
-      display="flex"
-      flexDirection="column"
-      alignItems="center"
-      justifyContent="center"
-      px={compact ? 6 : 10}
-      py={compact ? 5 : 10}
-      css={KEYFRAMES}
+      className={cn(
+        'relative flex w-full flex-1 flex-col items-center justify-center overflow-hidden',
+        compact ? 'min-h-[340px] px-6 py-5' : 'min-h-[460px] px-10 py-10',
+      )}
+      style={{ '--mx-accent': accent } as CSSProperties}
     >
+      <style>{KEYFRAMES_CSS}</style>
       {/* Atmosphere: accent-tinted radial glow + faint dotted grid, both edge-masked so they dissolve. */}
-      <Box
+      <div
         aria-hidden
-        position="absolute"
-        inset={0}
-        pointerEvents="none"
-        css={{
-          backgroundImage: `radial-gradient(circle at center, color-mix(in srgb, ${accentVar} 16%, transparent), transparent 62%)`,
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage: `radial-gradient(circle at center, color-mix(in srgb, ${accent} 16%, transparent), transparent 62%)`,
           animation: 'mx-glow 5s ease-in-out infinite',
         }}
       />
-      <Box
+      <div
         aria-hidden
-        position="absolute"
-        inset={0}
-        pointerEvents="none"
-        opacity={0.5}
-        css={{
-          backgroundImage: 'radial-gradient(var(--chakra-colors-border-default) 1px, transparent 1px)',
+        className="pointer-events-none absolute inset-0 opacity-50"
+        style={{
+          backgroundImage: 'radial-gradient(var(--border) 1px, transparent 1px)',
           backgroundSize: '22px 22px',
           maskImage: 'radial-gradient(circle at center, black 0%, transparent 70%)',
           WebkitMaskImage: 'radial-gradient(circle at center, black 0%, transparent 70%)',
@@ -115,131 +97,84 @@ function EmptyFileHero({ ariaLabel, accent, eyebrow, title, description, illustr
 
       {illustration}
 
-      <Text
-        css={{ animation: 'mx-rise 0.5s ease-out 0.7s both' }}
-        fontFamily="mono"
-        fontSize="xs"
-        letterSpacing="0.22em"
-        fontWeight={600}
-        textTransform="uppercase"
-        color={accent}
-        mb={2.5}
+      <p
+        className="mb-2.5 font-mono text-xs font-semibold uppercase tracking-[0.22em]"
+        style={{ color: accent, animation: 'mx-rise 0.5s ease-out 0.7s both' }}
       >
         {eyebrow}
-      </Text>
-      <Text
-        css={{ animation: 'mx-rise 0.5s ease-out 0.8s both' }}
-        fontSize={compact ? 'xl' : '2xl'}
-        fontWeight={700}
-        letterSpacing="-0.02em"
-        color="fg.default"
-        textAlign="center"
-        lineHeight="1.2"
+      </p>
+      <p
+        className={cn(
+          'text-center font-bold leading-[1.2] tracking-[-0.02em] text-foreground',
+          compact ? 'text-xl' : 'text-2xl',
+        )}
+        style={{ animation: 'mx-rise 0.5s ease-out 0.8s both' }}
       >
         {title}
-      </Text>
-      <Text
-        css={{ animation: 'mx-rise 0.5s ease-out 0.9s both' }}
-        fontSize="sm"
-        color="fg.muted"
-        mt={compact ? 2 : 3}
-        maxW="400px"
-        textAlign="center"
-        lineHeight="1.6"
+      </p>
+      <p
+        className={cn(
+          'max-w-[400px] text-center text-sm leading-[1.6] text-muted-foreground',
+          compact ? 'mt-2' : 'mt-3',
+        )}
+        style={{ animation: 'mx-rise 0.5s ease-out 0.9s both' }}
       >
         {description}
-      </Text>
+      </p>
       {actions && (
-        <Box css={{ animation: 'mx-rise 0.5s ease-out 1s both' }} mt={compact ? 5 : 6}>
+        <div className={compact ? 'mt-5' : 'mt-6'} style={{ animation: 'mx-rise 0.5s ease-out 1s both' }}>
           {actions}
-        </Box>
+        </div>
       )}
       {tip && (
-        <Box
-          css={{ animation: 'mx-rise 0.5s ease-out 1.05s both' }}
-          mt={6}
-          display="inline-flex"
-          alignItems="flex-start"
-          gap={2}
-          px={3.5}
-          py={2}
-          maxW={compact ? '640px' : '720px'}
-          borderRadius="full"
-          bg="bg.surface"
-          borderWidth="1px"
-          borderColor="border.default"
-          boxShadow="sm"
-          color="fg.muted"
-          _hover={{ borderColor: accent, color: 'fg.default' }}
-          transition="border-color 0.2s, color 0.2s"
+        <div
+          className={cn(
+            'mt-6 inline-flex items-start gap-2 rounded-full border border-border bg-card px-3.5 py-2 shadow-sm',
+            'text-muted-foreground transition-[border-color,color] duration-200 hover:border-(--mx-accent) hover:text-foreground',
+            compact ? 'max-w-[640px]' : 'max-w-[720px]',
+          )}
+          style={{ animation: 'mx-rise 0.5s ease-out 1.05s both' }}
         >
-          <Box color={accent} display="flex" pt="1px" flexShrink={0}>
+          <div className="flex shrink-0 pt-px" style={{ color: accent }}>
             <LuSparkles size={14} strokeWidth={2} />
-          </Box>
-          <Text fontSize="xs" lineHeight="1.45" css={{ textWrap: 'pretty' }}>{tip}</Text>
-        </Box>
+          </div>
+          <p className="text-xs leading-[1.45] [text-wrap:pretty]">{tip}</p>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
 
 /** The shared tilted card: a shadow page behind, a foreground page holding `children`, and a corner badge glyph. */
 function HeroTile({ accent, badge, children, compact = false, height }: { accent: string; badge: ReactNode; children: ReactNode; compact?: boolean; height?: string }) {
   return (
-    <Box
+    <div
       aria-hidden
-      position="relative"
-      w={compact ? '156px' : '184px'}
-      h={height ?? (compact ? '190px' : '224px')}
-      mb={compact ? 5 : 9}
-      css={{ animation: 'mx-rise 0.5s ease-out both, mx-float 6s ease-in-out 0.5s infinite' }}
+      className={cn('relative', compact ? 'mb-5 w-[156px]' : 'mb-9 w-[184px]')}
+      style={{
+        height: height ?? (compact ? '190px' : '224px'),
+        animation: 'mx-rise 0.5s ease-out both, mx-float 6s ease-in-out 0.5s infinite',
+      }}
     >
-      <Box
-        position="absolute"
-        inset={0}
-        transform="rotate(5deg)"
-        bg="bg.surface"
-        borderWidth="1px"
-        borderColor="border.muted"
-        borderRadius="lg"
-        opacity={0.45}
-      />
-      <Box
-        position="absolute"
-        inset={0}
-        transform="rotate(-4deg)"
-        bg="bg.surface"
-        borderWidth="1px"
-        borderColor="border.default"
-        borderRadius="lg"
-        boxShadow="xl"
-        p={compact ? 4 : 5}
-        display="flex"
-        flexDirection="column"
-        gap={compact ? 2 : 2.5}
+      <div className="absolute inset-0 rotate-[5deg] rounded-lg border border-border/60 bg-card opacity-45" />
+      <div
+        className={cn(
+          'absolute inset-0 flex rotate-[-4deg] flex-col rounded-lg border border-border bg-card shadow-xl',
+          compact ? 'gap-2 p-4' : 'gap-2.5 p-5',
+        )}
       >
         {children}
-      </Box>
-      <Box
-        position="absolute"
-        bottom={compact ? '-10px' : '-14px'}
-        right={compact ? '-10px' : '-14px'}
-        w={compact ? '38px' : '46px'}
-        h={compact ? '38px' : '46px'}
-        borderRadius="full"
-        bg="bg.canvas"
-        borderWidth="1px"
-        borderColor="border.default"
-        color={accent}
-        boxShadow="md"
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-        css={{ animation: 'mx-rise 0.5s ease-out 1.3s both' }}
+      </div>
+      <div
+        className={cn(
+          'absolute flex items-center justify-center rounded-full border border-border bg-background shadow-md',
+          compact ? 'right-[-10px] bottom-[-10px] h-[38px] w-[38px]' : 'right-[-14px] bottom-[-14px] h-[46px] w-[46px]',
+        )}
+        style={{ color: accent, animation: 'mx-rise 0.5s ease-out 1.3s both' }}
       >
         {badge}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -259,62 +194,31 @@ function StoryTile() {
     { w: '82%', d: '1.24s' },
   ];
   return (
-    <HeroTile accent="accent.sun" badge={<LuScrollText size={22} strokeWidth={1.75} />}>
-      <Box
-        h="7px"
-        w="34%"
-        borderRadius="full"
-        bg="accent.sun"
-        transformOrigin="left"
-        css={{ animation: 'mx-drawx 0.45s ease-out 0.55s both' }}
+    <HeroTile accent={ACCENT.sun} badge={<LuScrollText size={22} strokeWidth={1.75} />}>
+      <div
+        className="h-[7px] w-[34%] origin-left rounded-full bg-[#d35400]"
+        style={{ animation: 'mx-drawx 0.45s ease-out 0.55s both' }}
       />
-      <Box
-        h="14px"
-        w="86%"
-        borderRadius="sm"
-        bg="border.emphasized"
-        transformOrigin="left"
-        css={{ animation: 'mx-drawx 0.45s ease-out 0.64s both' }}
+      <div
+        className="h-[14px] w-[86%] origin-left rounded-sm bg-border"
+        style={{ animation: 'mx-drawx 0.45s ease-out 0.64s both' }}
       />
       {lines.slice(0, 2).map((line, i) => (
-        <Box
+        <div
           key={i}
-          h="6px"
-          w={line.w}
-          borderRadius="full"
-          bg="border.emphasized"
-          transformOrigin="left"
-          css={{ animation: `mx-drawx 0.4s ease-out ${line.d} both` }}
+          className="h-[6px] origin-left rounded-full bg-border"
+          style={{ width: line.w, animation: `mx-drawx 0.4s ease-out ${line.d} both` }}
         />
       ))}
-      <Box
-        display="grid"
-        gridTemplateColumns="0.72fr 1fr"
-        gap={2}
-        alignItems="stretch"
-        mt={1}
-        css={{ animation: 'mx-pop 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) 0.98s both' }}
+      <div
+        className="mt-1 grid grid-cols-[0.72fr_1fr] items-stretch gap-2"
+        style={{ animation: 'mx-pop 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) 0.98s both' }}
       >
-        <Box
-          borderWidth="1px"
-          borderColor="border.muted"
-          borderRadius="md"
-          bg="bg.canvas"
-          p={2}
-        >
-          <Box h="10px" w="76%" borderRadius="full" bg="accent.sun" mb={1.5} />
-          <Box h="5px" w="52%" borderRadius="full" bg="border.emphasized" />
-        </Box>
-        <Box
-          borderWidth="1px"
-          borderColor="border.muted"
-          borderRadius="md"
-          bg="bg.canvas"
-          position="relative"
-          overflow="hidden"
-          minH="48px"
-          color="accent.sun"
-        >
+        <div className="rounded-md border border-border/60 bg-background p-2">
+          <div className="mb-1.5 h-[10px] w-[76%] rounded-full bg-[#d35400]" />
+          <div className="h-[5px] w-[52%] rounded-full bg-border" />
+        </div>
+        <div className="relative min-h-[48px] overflow-hidden rounded-md border border-border/60 bg-background text-[#d35400]">
           <svg
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }}
             viewBox="0 0 100 100"
@@ -335,17 +239,13 @@ function StoryTile() {
               vectorEffect="non-scaling-stroke"
             />
           </svg>
-        </Box>
-      </Box>
+        </div>
+      </div>
       {lines.slice(2).map((line, i) => (
-        <Box
+        <div
           key={i}
-          h="6px"
-          w={line.w}
-          borderRadius="full"
-          bg="border.emphasized"
-          transformOrigin="left"
-          css={{ animation: `mx-drawx 0.4s ease-out ${line.d} both` }}
+          className="h-[6px] origin-left rounded-full bg-border"
+          style={{ width: line.w, animation: `mx-drawx 0.4s ease-out ${line.d} both` }}
         />
       ))}
     </HeroTile>
@@ -357,15 +257,15 @@ export function StoryEmptyState() {
   return (
     <EmptyFileHero
       ariaLabel="No story"
-      accent="accent.sun"
+      accent={ACCENT.sun}
       eyebrow="Story"
       title={<>Let&rsquo;s tell a great story</>}
       description={<>Ask {agentName} to spin one up. It weaves your narrative, charts, and headline numbers into a single scrolling page.</>}
       illustration={<StoryTile />}
       tip={
         <>
-          <Box as="span" fontWeight={700} color="accent.sun">Pro tip:</Box>{' '}
-          <Box as="span" fontFamily="mono">@</Box>tag your dashboards and {agentName} weaves them into a story.
+          <span className="font-bold text-[#d35400]">Pro tip:</span>{' '}
+          <span className="font-mono">@</span>tag your dashboards and {agentName} weaves them into a story.
         </>
       }
     />
@@ -387,19 +287,19 @@ const QUESTION_POINTS = [
 
 function QuestionTile() {
   return (
-    <HeroTile accent="accent.primary" badge={<LuScanSearch size={22} strokeWidth={1.75} />}>
+    <HeroTile accent={ACCENT.primary} badge={<LuScanSearch size={22} strokeWidth={1.75} />}>
       {/* Two query lines: an accent keyword then the rest of the statement. */}
-      <Box display="flex" gap={1.5} alignItems="center">
-        <Box h="7px" w="26%" borderRadius="full" bg="accent.primary" transformOrigin="left" css={{ animation: 'mx-drawx 0.4s ease-out 0.55s both' }} />
-        <Box h="7px" flex="1" borderRadius="full" bg="border.emphasized" transformOrigin="left" css={{ animation: 'mx-drawx 0.4s ease-out 0.63s both' }} />
-      </Box>
-      <Box h="7px" w="80%" borderRadius="full" bg="border.emphasized" transformOrigin="left" css={{ animation: 'mx-drawx 0.4s ease-out 0.71s both' }} />
-      <Box h="1px" w="100%" bg="border.muted" my={1} />
+      <div className="flex items-center gap-1.5">
+        <div className="h-[7px] w-[26%] origin-left rounded-full bg-[#2980b9]" style={{ animation: 'mx-drawx 0.4s ease-out 0.55s both' }} />
+        <div className="h-[7px] flex-1 origin-left rounded-full bg-border" style={{ animation: 'mx-drawx 0.4s ease-out 0.63s both' }} />
+      </div>
+      <div className="h-[7px] w-[80%] origin-left rounded-full bg-border" style={{ animation: 'mx-drawx 0.4s ease-out 0.71s both' }} />
+      <div className="my-1 h-px w-full bg-border/60" />
       {/* Line-chart result. */}
-      <Box position="relative" flex="1" mt={1} color="accent.primary">
+      <div className="relative mt-1 flex-1 text-[#2980b9]">
         {/* Axes. */}
-        <Box position="absolute" left={0} bottom={0} top={0} w="1.5px" bg="border.muted" />
-        <Box position="absolute" left={0} right={0} bottom={0} h="1.5px" bg="border.muted" />
+        <div className="absolute inset-y-0 left-0 w-[1.5px] bg-border/60" />
+        <div className="absolute inset-x-0 bottom-0 h-[1.5px] bg-border/60" />
         {/* The connecting line, drawn from the same coordinates used to place the vertices. */}
         <svg
           style={{
@@ -428,24 +328,13 @@ function QuestionTile() {
         </svg>
         {/* Vertices, popping in as the line reaches them. Centered on each point. */}
         {QUESTION_POINTS.map((p, i) => (
-          <Box
+          <div
             key={i}
-            position="absolute"
-            left={`${p.x}%`}
-            top={`${p.y}%`}
-            zIndex={2}
-            ml="-3px"
-            mt="-3px"
-            w="6px"
-            h="6px"
-            borderRadius="full"
-            bg="bg.surface"
-            borderWidth="1.5px"
-            borderColor="accent.primary"
-            css={{ animation: `mx-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) ${p.d} both` }}
+            className="absolute z-[2] -ml-[3px] -mt-[3px] h-[6px] w-[6px] rounded-full border-[1.5px] border-[#2980b9] bg-card"
+            style={{ left: `${p.x}%`, top: `${p.y}%`, animation: `mx-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) ${p.d} both` }}
           />
         ))}
-      </Box>
+      </div>
     </HeroTile>
   );
 }
@@ -455,15 +344,15 @@ export function QuestionEmptyState() {
   return (
     <EmptyFileHero
       ariaLabel="No query yet"
-      accent="accent.primary"
+      accent={ACCENT.primary}
       eyebrow="Question"
       title={<>Let&rsquo;s find some answers!</>}
       description={<>Write SQL in the editor, or just ask {agentName} in plain English. It&rsquo;ll write the query, run it, and pick the perfect chart.</>}
       illustration={<QuestionTile />}
       tip={
         <>
-          <Box as="span" fontWeight={700} color="accent.primary">Pro tip:</Box>{' '}
-          <Box as="span" fontFamily="mono">@</Box>tag a table to focus on specific tables/columns.
+          <span className="font-bold text-[#2980b9]">Pro tip:</span>{' '}
+          <span className="font-mono">@</span>tag a table to focus on specific tables/columns.
         </>
       }
     />
@@ -481,25 +370,18 @@ function DashboardTile() {
     { d: '1.0s', kind: 'map' as const },
   ];
   return (
-    <HeroTile accent="accent.danger" badge={<LuLayoutDashboard size={20} strokeWidth={1.75} />} compact>
-      <Box h="8px" w="48%" borderRadius="full" bg="accent.danger" transformOrigin="left" css={{ animation: 'mx-drawx 0.4s ease-out 0.55s both' }} />
-      <Box flex="1" mt={1} display="grid" gridTemplateColumns="1fr 1fr" gridTemplateRows="1fr 1fr" gap={2}>
+    <HeroTile accent={ACCENT.danger} badge={<LuLayoutDashboard size={20} strokeWidth={1.75} />} compact>
+      <div className="h-[8px] w-[48%] origin-left rounded-full bg-[#c0392b]" style={{ animation: 'mx-drawx 0.4s ease-out 0.55s both' }} />
+      <div className="mt-1 grid flex-1 grid-cols-2 grid-rows-2 gap-2">
         {tiles.map((tile, i) => (
-          <Box
+          <div
             key={i}
-            borderWidth="1px"
-            borderColor="border.muted"
-            borderRadius="md"
-            bg="bg.canvas"
-            p={1.5}
-            display="flex"
-            alignItems="flex-end"
-            gap={1}
-            css={{ animation: `mx-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) ${tile.d} both` }}
+            className="flex items-end gap-1 rounded-md border border-border/60 bg-background p-1.5"
+            style={{ animation: `mx-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) ${tile.d} both` }}
           >
             {tile.kind === 'area' && (
-              <Box w="100%" h="72%" position="relative" color="accent.danger">
-                <Box position="absolute" left={0} right={0} bottom={0} h="1px" bg="border.muted" />
+              <div className="relative h-[72%] w-full text-[#c0392b]">
+                <div className="absolute inset-x-0 bottom-0 h-px bg-border/60" />
                 <svg
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }}
                   viewBox="0 0 100 100"
@@ -522,62 +404,52 @@ function DashboardTile() {
                     vectorEffect="non-scaling-stroke"
                   />
                 </svg>
-              </Box>
+              </div>
             )}
             {tile.kind === 'bar' && (
-              <Box w="100%" h="76%" display="flex" alignItems="flex-end" gap="4px">
+              <div className="flex h-[76%] w-full items-end gap-[4px]">
                 {[
-                  { h: '42%', c: 'border.emphasized' },
-                  { h: '76%', c: 'accent.danger' },
-                  { h: '58%', c: 'border.emphasized' },
-                  { h: '92%', c: 'accent.danger' },
+                  { h: '42%', c: 'bg-border' },
+                  { h: '76%', c: 'bg-[#c0392b]' },
+                  { h: '58%', c: 'bg-border' },
+                  { h: '92%', c: 'bg-[#c0392b]' },
                 ].map((bar, barIndex) => (
-                  <Box
+                  <div
                     key={barIndex}
-                    flex="1"
-                    h={bar.h}
-                    borderRadius="2px 2px 0 0"
-                    bg={bar.c}
+                    className={cn('flex-1 rounded-t-[2px]', bar.c)}
+                    style={{ height: bar.h }}
                   />
                 ))}
-              </Box>
+              </div>
             )}
             {tile.kind === 'map' && (
-              <Box w="100%" h="100%" position="relative" color="accent.danger" overflow="hidden">
-                <Box position="absolute" inset={0} borderWidth="1px" borderColor="border.muted" borderRadius="sm" opacity={0.75} />
-                <Box
-                  position="absolute"
-                  left="50%"
-                  top="50%"
-                  transform="translate(-50%, -50%)"
-                  color="accent.danger"
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="center"
-                >
+              <div className="relative h-full w-full overflow-hidden text-[#c0392b]">
+                <div className="absolute inset-0 rounded-sm border border-border/60 opacity-75" />
+                <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center text-[#c0392b]">
                   <LuMapPinned size={18} strokeWidth={1.8} />
-                </Box>
-              </Box>
+                </div>
+              </div>
             )}
             {tile.kind === 'table' && (
-              <Box w="100%" h="100%" display="grid" gridTemplateRows="0.8fr repeat(3, 1fr)" gap="3px">
+              <div className="grid h-full w-full grid-rows-[0.8fr_repeat(3,1fr)] gap-[3px]">
                 {Array.from({ length: 4 }).map((_, row) => (
-                  <Box key={row} display="grid" gridTemplateColumns="1.25fr 1fr 0.75fr" gap="3px">
+                  <div key={row} className="grid grid-cols-[1.25fr_1fr_0.75fr] gap-[3px]">
                     {Array.from({ length: 3 }).map((__, col) => (
-                      <Box
+                      <div
                         key={col}
-                        borderRadius="2px"
-                        bg={row === 0 ? 'accent.danger' : col === 1 && row === 2 ? 'border.emphasized' : 'border.muted'}
-                        opacity={row === 0 ? 0.95 : col === 1 && row === 2 ? 0.75 : 0.7}
+                        className={cn(
+                          'rounded-[2px]',
+                          row === 0 ? 'bg-[#c0392b] opacity-95' : col === 1 && row === 2 ? 'bg-border opacity-75' : 'bg-border/60 opacity-70',
+                        )}
                       />
                     ))}
-                  </Box>
+                  </div>
                 ))}
-              </Box>
+              </div>
             )}
-          </Box>
+          </div>
         ))}
-      </Box>
+      </div>
     </HeroTile>
   );
 }
@@ -587,15 +459,15 @@ export function DashboardEmptyState() {
   return (
     <EmptyFileHero
       ariaLabel="Empty dashboard"
-      accent="accent.danger"
+      accent={ACCENT.danger}
       eyebrow="Dashboard"
       title={<>Let&rsquo;s build your dashboard</>}
       description={<>Add questions to lay out your dashboard, or just ask {agentName} to assemble one for you.</>}
       illustration={<DashboardTile />}
       tip={
         <>
-          <Box as="span" fontWeight={700} color="accent.danger">Pro tip:</Box>{' '}
-          <Box as="span" fontFamily="mono">@</Box>tag questions and {agentName} can arrange them into a dashboard.
+          <span className="font-bold text-[#c0392b]">Pro tip:</span>{' '}
+          <span className="font-mono">@</span>tag questions and {agentName} can arrange them into a dashboard.
         </>
       }
       compact
@@ -609,38 +481,32 @@ export function DashboardEmptyState() {
  *  check with a pass/fail status that pops into place. Deliberately short. */
 function AlertTile() {
   const rows = [
-    { icon: LuCircleCheck, color: 'accent.teal', width: '70%', d: '0.7s' },
-    { icon: LuCircleAlert, color: 'accent.warning', width: '82%', d: '0.82s' },
+    { icon: LuCircleCheck, color: ACCENT.teal, width: '70%', d: '0.7s' },
+    { icon: LuCircleAlert, color: ACCENT.warning, width: '82%', d: '0.82s' },
   ];
   return (
-    <HeroTile accent="accent.secondary" badge={<LuBellRing size={20} strokeWidth={1.75} />} compact height="108px">
+    <HeroTile accent={ACCENT.secondary} badge={<LuBellRing size={20} strokeWidth={1.75} />} compact height="108px">
       {/* Header: a checklist glyph + the alert's title. */}
-      <HStack gap={2}>
-        <Box color="accent.secondary" display="flex"><LuListChecks size={13} strokeWidth={1.9} /></Box>
-        <Box h="6px" flex="1" maxW="60px" borderRadius="full" bg="border.emphasized" transformOrigin="left" css={{ animation: 'mx-drawx 0.4s ease-out 0.55s both' }} />
-      </HStack>
+      <div className="flex items-center gap-2">
+        <div className="flex text-[#9b59b6]"><LuListChecks size={13} strokeWidth={1.9} /></div>
+        <div className="h-[6px] max-w-[60px] flex-1 origin-left rounded-full bg-border" style={{ animation: 'mx-drawx 0.4s ease-out 0.55s both' }} />
+      </div>
       {/* Test rows, each a discrete check with a pass/fail status. */}
-      <VStack flex="1" gap="6px" align="stretch" justify="center">
+      <div className="flex flex-1 flex-col justify-center gap-[6px]">
         {rows.map((row, index) => {
           const Icon = row.icon;
           return (
-            <HStack
+            <div
               key={index}
-              gap={2}
-              px="7px"
-              py="5px"
-              borderRadius="md"
-              bg="bg.canvas"
-              borderWidth="1px"
-              borderColor="border.muted"
-              css={{ animation: `mx-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) ${row.d} both` }}
+              className="flex items-center gap-2 rounded-md border border-border/60 bg-background px-[7px] py-[5px]"
+              style={{ animation: `mx-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) ${row.d} both` }}
             >
-              <Box color={row.color} display="flex"><Icon size={12} strokeWidth={2} /></Box>
-              <Box h="5px" flex="1" maxW={row.width} borderRadius="full" bg="border.muted" />
-            </HStack>
+              <div className="flex" style={{ color: row.color }}><Icon size={12} strokeWidth={2} /></div>
+              <div className="h-[5px] flex-1 rounded-full bg-border/60" style={{ maxWidth: row.width }} />
+            </div>
           );
         })}
-      </VStack>
+      </div>
     </HeroTile>
   );
 }
@@ -650,15 +516,15 @@ export function AlertHistoryEmptyState({ message }: { message: string }) {
   return (
     <EmptyFileHero
       ariaLabel="No alert checks"
-      accent="accent.secondary"
+      accent={ACCENT.secondary}
       eyebrow="Alert"
       title={<>Let&rsquo;s catch issues early</>}
       description={message}
       illustration={<AlertTile />}
       tip={
         <>
-          <Box as="span" fontWeight={700} color="accent.secondary">Pro tip:</Box>{' '}
-          <Box as="span" fontFamily="mono">@</Box>tag a question and {agentName} sets up an alert that watches it.
+          <span className="font-bold text-[#9b59b6]">Pro tip:</span>{' '}
+          <span className="font-mono">@</span>tag a question and {agentName} sets up an alert that watches it.
         </>
       }
       compact
@@ -672,26 +538,18 @@ export function AlertHistoryEmptyState({ message }: { message: string }) {
  *  text cell (prose lines). Two distinct cells = the essence of a notebook. */
 function NotebookTile() {
   return (
-    <HeroTile accent="accent.warning" badge={<LuNotebook size={20} strokeWidth={1.75} />} compact>
+    <HeroTile accent={ACCENT.warning} badge={<LuNotebook size={20} strokeWidth={1.75} />} compact>
       {/* SQL cell — database glyph, a query line, then a mini area-chart result. */}
-      <Box
-        flex="1"
-        borderWidth="1px"
-        borderColor="border.muted"
-        borderRadius="md"
-        bg="bg.canvas"
-        p={2}
-        display="flex"
-        flexDirection="column"
-        gap={1.5}
-        css={{ animation: 'mx-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.62s both' }}
+      <div
+        className="flex flex-1 flex-col gap-1.5 rounded-md border border-border/60 bg-background p-2"
+        style={{ animation: 'mx-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.62s both' }}
       >
-        <HStack gap={1.5}>
-          <Box color="accent.warning" display="flex"><LuDatabase size={12} strokeWidth={1.9} /></Box>
-          <Box h="6px" flex="1" maxW="58px" borderRadius="full" bg="border.emphasized" transformOrigin="left" css={{ animation: 'mx-drawx 0.4s ease-out 0.8s both' }} />
-        </HStack>
-        <Box position="relative" flex="1" minH="30px" color="accent.warning">
-          <Box position="absolute" left={0} right={0} bottom={0} h="1.5px" bg="border.muted" />
+        <div className="flex items-center gap-1.5">
+          <div className="flex text-[#f39c12]"><LuDatabase size={12} strokeWidth={1.9} /></div>
+          <div className="h-[6px] max-w-[58px] flex-1 origin-left rounded-full bg-border" style={{ animation: 'mx-drawx 0.4s ease-out 0.8s both' }} />
+        </div>
+        <div className="relative min-h-[30px] flex-1 text-[#f39c12]">
+          <div className="absolute inset-x-0 bottom-0 h-[1.5px] bg-border/60" />
           <svg
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }}
             viewBox="0 0 100 100"
@@ -714,26 +572,19 @@ function NotebookTile() {
               vectorEffect="non-scaling-stroke"
             />
           </svg>
-        </Box>
-      </Box>
+        </div>
+      </div>
       {/* Text cell — a prose glyph and two narrative lines. */}
-      <Box
-        borderWidth="1px"
-        borderColor="border.muted"
-        borderRadius="md"
-        bg="bg.canvas"
-        p={2}
-        display="flex"
-        flexDirection="column"
-        gap={1.5}
-        css={{ animation: 'mx-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.92s both' }}
+      <div
+        className="flex flex-col gap-1.5 rounded-md border border-border/60 bg-background p-2"
+        style={{ animation: 'mx-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.92s both' }}
       >
-        <HStack gap={1.5}>
-          <Box color="fg.subtle" display="flex"><LuFileText size={12} strokeWidth={1.9} /></Box>
-          <Box h="6px" flex="1" maxW="70px" borderRadius="full" bg="border.emphasized" transformOrigin="left" css={{ animation: 'mx-drawx 0.4s ease-out 1.08s both' }} />
-        </HStack>
-        <Box h="5px" w="86%" borderRadius="full" bg="border.muted" transformOrigin="left" css={{ animation: 'mx-drawx 0.4s ease-out 1.16s both' }} />
-      </Box>
+        <div className="flex items-center gap-1.5">
+          <div className="flex text-muted-foreground"><LuFileText size={12} strokeWidth={1.9} /></div>
+          <div className="h-[6px] max-w-[70px] flex-1 origin-left rounded-full bg-border" style={{ animation: 'mx-drawx 0.4s ease-out 1.08s both' }} />
+        </div>
+        <div className="h-[5px] w-[86%] origin-left rounded-full bg-border/60" style={{ animation: 'mx-drawx 0.4s ease-out 1.16s both' }} />
+      </div>
     </HeroTile>
   );
 }
@@ -743,7 +594,7 @@ export function NotebookEmptyState({ actions }: { actions?: ReactNode }) {
   return (
     <EmptyFileHero
       ariaLabel="Empty notebook"
-      accent="accent.warning"
+      accent={ACCENT.warning}
       eyebrow="Notebook"
       title={<>Let&rsquo;s think it through, cell by cell</>}
       description={<>Mix SQL cells and rich text into one living document, or ask {agentName} to draft the whole analysis for you.</>}
@@ -751,8 +602,8 @@ export function NotebookEmptyState({ actions }: { actions?: ReactNode }) {
       actions={actions}
       tip={
         <>
-          <Box as="span" fontWeight={700} color="accent.warning">Pro tip:</Box>{' '}
-          <Box as="span" fontFamily="mono">@</Box>tag your tables and {agentName} fills the notebook with cells.
+          <span className="font-bold text-[#f39c12]">Pro tip:</span>{' '}
+          <span className="font-mono">@</span>tag your tables and {agentName} fills the notebook with cells.
         </>
       }
     />

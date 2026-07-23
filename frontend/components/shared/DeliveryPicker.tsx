@@ -2,7 +2,6 @@
 
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Box, HStack, Text, Input, Flex, Badge } from '@chakra-ui/react';
 import { LuX, LuChevronDown, LuMail, LuMessageCircle, LuHash } from 'react-icons/lu';
 import { FaSlack } from 'react-icons/fa';
 import { AlertRecipient, User } from '@/lib/types';
@@ -34,10 +33,24 @@ function deliveryBadgeLabel(kind: DeliveryKind): string {
 }
 
 function deliveryBadgeColor(kind: DeliveryKind): string {
-  if (kind === 'email') return 'accent.danger';
-  if (kind === 'phone') return 'accent.primary';
-  if (kind === 'slack_app') return 'accent.secondary';
-  return 'accent.warning';
+  if (kind === 'email') return '#c0392b';
+  if (kind === 'phone') return '#2980b9';
+  if (kind === 'slack_app') return '#9b59b6';
+  return '#f39c12';
+}
+
+const mix = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+
+function DeliveryBadge({ kind, className }: { kind: DeliveryKind; className?: string }) {
+  const hex = deliveryBadgeColor(kind);
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-sm px-1.5 py-px text-[10px] font-semibold uppercase ${className ?? ''}`}
+      style={{ background: mix(hex, 15), color: hex }}
+    >
+      {deliveryBadgeLabel(kind)}
+    </span>
+  );
 }
 
 function DropdownMenu({ containerRef, options, onSelect }: {
@@ -70,19 +83,9 @@ function DropdownMenu({ containerRef, options, onSelect }: {
   }, [updatePos]);
 
   return (
-    <Box
-      position="fixed"
-      top={`${pos.top}px`}
-      left={`${pos.left}px`}
-      width={`${pos.width}px`}
-      bg="bg.surface"
-      border="1px solid"
-      borderColor="border.muted"
-      borderRadius="md"
-      boxShadow="md"
-      zIndex={9999}
-      maxH="220px"
-      overflowY="auto"
+    <div
+      className="fixed z-[9999] max-h-[220px] overflow-y-auto rounded-md border border-border bg-card shadow-md"
+      style={{ top: `${pos.top}px`, left: `${pos.left}px`, width: `${pos.width}px` }}
     >
       {options.map((opt, i) => {
         const displayName = opt.via === 'user' ? opt.user.name : opt.channel.name;
@@ -94,30 +97,26 @@ function DropdownMenu({ containerRef, options, onSelect }: {
                 : opt.channel.address;
 
         return (
-          <HStack
+          <div
             key={i}
-            px={3}
-            py={2}
-            gap={opt.kind === 'email' || opt.kind === 'slack_app' ? 3 : 2}
-            cursor="pointer"
-            _hover={{ bg: 'bg.muted' }}
+            className={`flex cursor-pointer items-center px-3 py-2 hover:bg-muted ${
+              opt.kind === 'email' || opt.kind === 'slack_app' ? 'gap-3' : 'gap-2'
+            }`}
             onMouseDown={(e: React.MouseEvent) => {
               e.preventDefault();
               onSelect(optionToRecipient(opt));
             }}
           >
             {opt.kind === 'email' ? <LuMail size={16} /> : opt.kind === 'phone' ? <LuMessageCircle size={12} /> : opt.kind === 'slack_app' ? <FaSlack size={16} /> : <LuHash size={12} />}
-            <Box>
-              <Text fontSize="xs" fontWeight="500">{displayName}</Text>
-              {subLabel && <Text fontSize="xs" color="fg.muted">{subLabel}</Text>}
-            </Box>
-            <Badge size="xs" color={deliveryBadgeColor(opt.kind)} ml="auto">
-              {deliveryBadgeLabel(opt.kind)}
-            </Badge>
-          </HStack>
+            <div>
+              <p className="text-xs font-medium">{displayName}</p>
+              {subLabel && <p className="text-xs text-muted-foreground">{subLabel}</p>}
+            </div>
+            <DeliveryBadge kind={opt.kind} className="ml-auto" />
+          </div>
         );
       })}
-    </Box>
+    </div>
   );
 }
 
@@ -182,29 +181,19 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
   }
 
   return (
-    <Box position="relative" ref={containerRef}>
-      <Flex
-        flexWrap="wrap"
-        gap={1.5}
-        p={1.5}
-        minH="36px"
-        bg="bg.surface"
-        borderRadius="md"
-        border="1px solid"
-        borderColor="border.muted"
-        alignItems="center"
-        cursor={effectiveDisabled ? 'not-allowed' : 'text'}
-        opacity={effectiveDisabled ? 0.6 : 1}
+    <div className="relative" ref={containerRef}>
+      <div
+        className={`flex min-h-[36px] flex-wrap items-center gap-1.5 rounded-md border border-border bg-card p-1.5 ${
+          effectiveDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-text'
+        }`}
         onClick={() => { if (!effectiveDisabled) inputRef.current?.focus(); }}
       >
         {recipients.map((r, i) => (
-          <HStack key={i} bg="bg.muted" borderRadius="sm" px={2} py={0.5} gap={1} fontSize="xs">
-            <Text fontSize="xs" lineHeight="short">
+          <div key={i} className="flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs">
+            <span className="text-xs leading-tight">
               {recipientLabel(r)}
-            </Text>
-            <Badge size="xs" color={deliveryBadgeColor(recipientChannel(r))}>
-              {deliveryBadgeLabel(recipientChannel(r))}
-            </Badge>
+            </span>
+            <DeliveryBadge kind={recipientChannel(r)} />
             {!effectiveDisabled && (
               <button
                 onClick={(e) => { e.stopPropagation(); removeRecipient(i); }}
@@ -213,10 +202,10 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
                 <LuX size={12} />
               </button>
             )}
-          </HStack>
+          </div>
         ))}
         {!effectiveDisabled && (
-          <Input
+          <input
             ref={inputRef}
             value={inputValue}
             onChange={(e) => { setInputValue(e.target.value); setShowDropdown(true); }}
@@ -225,17 +214,11 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
             onKeyDown={handleKeyDown}
             autoComplete="one-time-code"
             placeholder={recipients.length === 0 ? 'Search users or channels...' : ''}
-            size="xs"
-            variant="outline"
-            border="none"
-            _focus={{ boxShadow: 'none' }}
-            flex="1"
-            minW="120px"
-            fontSize="xs"
+            className="h-6 min-w-[120px] flex-1 border-none bg-transparent text-xs outline-none placeholder:text-muted-foreground"
           />
         )}
         {effectiveDisabled && !enabled && (
-          <Text fontSize="xs" color="fg.muted" px={1}>No delivery channels configured</Text>
+          <span className="px-1 text-xs text-muted-foreground">No delivery channels configured</span>
         )}
         {!effectiveDisabled && dropdownOptions.length > 0 && (
           <button
@@ -245,25 +228,27 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
             <LuChevronDown size={14} />
           </button>
         )}
-      </Flex>
+      </div>
 
       {showDropdown && !effectiveDisabled && dropdownOptions.length > 0 && createPortal(
-        <DropdownMenu containerRef={containerRef} options={dropdownOptions} onSelect={addRecipient} />,
+        <div data-mx-theme-host="">
+          <DropdownMenu containerRef={containerRef} options={dropdownOptions} onSelect={addRecipient} />
+        </div>,
         document.body
       )}
-    </Box>
+    </div>
   );
 }
 
 export function DeliveryCard({ recipients, onChange, disabled }: DeliveryPickerProps) {
   return (
-    <Box position="relative" bg="bg.muted" borderRadius="md" border="1px solid" borderColor="border.muted" p={3} pl={5} overflow="hidden">
-      <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.primary" borderLeftRadius="md" />
-      <HStack mb={2} gap={1.5}>
-        <LuMail size={14} color="var(--chakra-colors-accent-primary)" />
-        <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Delivery</Text>
-      </HStack>
+    <div className="relative overflow-hidden rounded-md border border-border bg-muted p-3 pl-5">
+      <div className="absolute top-0 bottom-0 left-0 w-[3px] rounded-l-md bg-[#2980b9]" />
+      <div className="mb-2 flex items-center gap-1.5">
+        <LuMail size={14} color="#2980b9" />
+        <span className="text-xs font-bold tracking-wider text-muted-foreground uppercase">Delivery</span>
+      </div>
       <DeliveryPicker recipients={recipients} onChange={onChange} disabled={disabled} />
-    </Box>
+    </div>
   );
 }

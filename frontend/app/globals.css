@@ -1,4 +1,13 @@
-@import "tailwindcss";
+/* `important`: Tailwind v4 emits utilities inside @layer, and UNLAYERED CSS (Chakra/Emotion
+   global element resets, e.g. button{background:transparent}) always beats layered rules —
+   so kit components lost their backgrounds/padding on form elements. `important` lifts
+   utility declarations above the unlayered resets (Renderer_v2 Phase 3 conflict check). */
+@import "tailwindcss" important;
+/* shadcn token layer for kit components on file pages (Renderer_v2 Phase 3) — generated. */
+@import "./theme-tokens.css";
+/* Component sources scanned explicitly: the dev graph doesn't reliably reach cva()/template
+   strings (kit) and the re-skinned embed chrome (Renderer_v2 Phase 3) lives outside app/. */
+@source "../components";
 
 /* Present mode — the file surface (see components/file-toolbar/PresentationContext.tsx)
    goes fullscreen via the native API; the default fullscreen backdrop is black, which

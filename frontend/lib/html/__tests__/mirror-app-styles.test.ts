@@ -2,9 +2,36 @@
 // url() refs (e.g. @font-face `url("../media/x.woff2")` authored relative to /_next/static/css/…)
 // must be rewritten to ABSOLUTE — otherwise they resolve against the iframe's base (/f/<id>) and
 // 404, so self-hosted fonts (JetBrains Mono / Inter) never load and chart text renders wrong.
-import { absolutizeCssUrls } from '@/lib/html/mirror-app-styles';
+import { absolutizeCssUrls, collectFontFaceCss } from '@/lib/html/mirror-app-styles';
 
 const CSS_BASE = 'http://localhost:3000/_next/static/css/abc.css';
+
+// Phase 6a (Renderer_v2): the mirror is SHRUNK to @font-face only — embed chrome is compiled
+// into every story's CSS (kit + EMBED_CHROME_FILES recipe union), and Chakra never reaches the
+// iframe. Mirroring the app's full CSSOM (~455KB, 43% emotion runtime rules) is deleted.
+describe('collectFontFaceCss (the 6a mirror shrink)', () => {
+  const rules = [
+    { cssText: '@font-face{font-family:"JetBrains Mono";src:url("../media/x.woff2") format("woff2")}', base: CSS_BASE },
+    { cssText: '.chakra-card{padding:16px}', base: CSS_BASE },
+    { cssText: '.css-1abc{color:red}', base: CSS_BASE },
+    { cssText: '@font-face{font-family:Inter;src:url(/fonts/inter.woff2)}', base: CSS_BASE },
+    { cssText: '@media (min-width:600px){.x{color:blue}}', base: CSS_BASE },
+  ];
+
+  it('keeps ONLY @font-face rules, with relative urls absolutized', () => {
+    const out = collectFontFaceCss(rules);
+    expect(out).toContain('font-family:"JetBrains Mono"');
+    expect(out).toContain('http://localhost:3000/_next/static/media/x.woff2');
+    expect(out).toContain('font-family:Inter');
+    expect(out).not.toContain('.chakra-card');
+    expect(out).not.toContain('.css-1abc');
+    expect(out).not.toContain('@media');
+  });
+
+  it('returns empty for no font rules', () => {
+    expect(collectFontFaceCss([{ cssText: '.a{color:red}', base: CSS_BASE }])).toBe('');
+  });
+});
 
 describe('absolutizeCssUrls', () => {
   it('rewrites a relative ../media font url to absolute against the stylesheet href', () => {

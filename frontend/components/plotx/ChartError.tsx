@@ -1,4 +1,3 @@
-import { Box, Text, VStack } from '@chakra-ui/react'
 import { LuTriangleAlert, LuInfo } from 'react-icons/lu'
 
 interface ChartErrorProps {
@@ -7,21 +6,14 @@ interface ChartErrorProps {
   variant?: 'warning' | 'info'
 }
 
+// App accent palette (Renderer_v2 Phase 5 — kit/Tailwind stack, no Chakra tokens).
+const ORANGE = '#f39c12'
+const TEAL = '#16a085'
+const mix = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`
+
 const VARIANT_STYLES = {
-  warning: {
-    color: 'orange.500',
-    bg: 'orange.500/6',
-    borderColor: 'orange.500/20',
-    iconBg: 'orange.500/12',
-    Icon: LuTriangleAlert,
-  },
-  info: {
-    color: 'teal.500',
-    bg: 'teal.500/6',
-    borderColor: 'teal.500/20',
-    iconBg: 'teal.500/12',
-    Icon: LuInfo,
-  },
+  warning: { color: ORANGE, Icon: LuTriangleAlert },
+  info: { color: TEAL, Icon: LuInfo },
 } as const
 
 export const ChartError = ({ title, message, variant = 'warning' }: ChartErrorProps) => {
@@ -29,42 +21,29 @@ export const ChartError = ({ title, message, variant = 'warning' }: ChartErrorPr
   const defaultTitle = variant === 'info' ? 'No data to display' : 'Chart configuration error'
 
   return (
-    <Box
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      width="100%"
-      height="100%"
-      minHeight="250px"
-      p={8}
-    >
-      <Box
-        bg={style.bg}
-        border="1px solid"
-        borderColor={style.borderColor}
-        borderRadius="xl"
-        px={8}
-        py={7}
-        maxWidth="460px"
+    <div className="flex h-full min-h-[250px] w-full items-center justify-center p-8">
+      <div
+        className="max-w-[460px] rounded-xl px-8 py-7"
+        style={{
+          background: mix(style.color, 6),
+          border: `1px solid ${mix(style.color, 20)}`,
+        }}
       >
-        <VStack gap={3} textAlign="center">
-          <Box
-            bg={style.iconBg}
-            borderRadius="full"
-            p={3}
-            color={style.color}
-            fontSize="xl"
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div
+            className="rounded-full p-3 text-xl"
+            style={{ background: mix(style.color, 12), color: style.color }}
           >
             <style.Icon />
-          </Box>
-          <Text fontSize="lg" fontWeight="700" fontFamily="mono" color="fg.default">
+          </div>
+          <span className="font-mono text-lg font-bold text-foreground">
             {title || defaultTitle}
-          </Text>
-          <Text fontSize="md" fontFamily="mono" color="fg.subtle" lineHeight="tall">
+          </span>
+          <span className="font-mono text-base leading-relaxed text-muted-foreground">
             {message}
-          </Text>
-        </VStack>
-      </Box>
-    </Box>
+          </span>
+        </div>
+      </div>
+    </div>
   )
 }

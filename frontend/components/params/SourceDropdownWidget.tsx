@@ -4,14 +4,15 @@
 // Rendered in place of the text/number Input when parameter.source is set.
 
 import React, { useState, useMemo } from 'react';
-import { Input, HStack, Box, Spinner } from '@chakra-ui/react';
 import { LuTriangleAlert } from 'react-icons/lu';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/kit/tooltip';
 import { QuestionContent } from '@/lib/types';
 import type { QuestionParameterSource } from '@/lib/validation/atlas-schemas';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { ROW_H, formatNumStr } from './paramInputShared';
 import { useSpreadsheetResult } from '@/lib/hooks/use-spreadsheet-result';
+
+const TEAL = '#16a085';
 
 interface SourceDropdownWidgetProps {
   source: QuestionParameterSource;
@@ -80,45 +81,54 @@ export function SourceDropdownWidget({ source, paramType, currentValue, paramNam
   const listId = `param-src-${source.id}-${source.column}`;
 
   return (
-    <HStack gap={1}>
+    <div className="flex items-center gap-1">
       {(error || (values !== null && values.length === 0 && !loading)) && (
-        <Tooltip content={error ? 'Could not load suggestions' : 'No suggestions found'}>
-          <Box color="orange.400" display="flex" alignItems="center">
-            <LuTriangleAlert size={14} />
-          </Box>
-        </Tooltip>
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild={false} className="flex items-center text-[#f39c12] outline-none">
+              <LuTriangleAlert size={14} />
+            </TooltipTrigger>
+            <TooltipContent>{error ? 'Could not load suggestions' : 'No suggestions found'}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
-      {loading && values === null && <Spinner size="xs" color="accent.teal" />}
+      {loading && values === null && (
+        <div aria-hidden="true" className="size-3 shrink-0 animate-spin rounded-full border-2 border-[#16a085]/25 border-t-[#16a085]" />
+      )}
 
       {/*
         Native <datalist> autocomplete — NOT a floating popover. This control renders inside the
-        story's SHADOW ROOT (StoryParamControl portals it there). A floating dropdown (Ark UI /
+        story's SHADOW ROOT (StoryParamControl portals it there). A floating dropdown (Radix /
         floating-ui) cannot measure its anchor across the shadow boundary, so its menu — and its
         "No matches" empty state — rendered detached in a corner of the window. The browser
         positions a <datalist> itself, correctly, in any context (shadow root included), with zero
-        positioning code. Explicit LIGHT colors because Chakra surface/fg tokens resolve against the
+        positioning code. Explicit LIGHT colors (not theme tokens): tokens resolve against the
         host app's color mode across the shadow boundary (a dark-app token paints this black on a
         light story). `role=combobox` matches the input-with-list ARIA contract.
       */}
-      <Input
+      <input
         list={listId}
         role="combobox"
         aria-label={`param ${paramName}`}
         placeholder={paramType === 'number' ? '0 or select…' : 'type or select…'}
         value={inputDisplay}
-        bg="white"
-        color="gray.900"
-        borderColor="gray.300"
-        _placeholder={{ color: 'gray.500' }}
-        fontSize="sm"
-        h={ROW_H}
-        minW="120px"
-        fontFamily={paramType === 'number' ? 'mono' : 'inherit'}
-        _focus={{
-          borderColor: 'accent.teal',
-          boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
+        className="w-full min-w-[120px] rounded-md border px-3 text-sm outline-none placeholder:text-[#6b7280]"
+        style={{
+          height: ROW_H,
+          background: 'white',
+          color: '#111827',
+          borderColor: '#d1d5db',
+          fontFamily: paramType === 'number' ? 'var(--font-mono, monospace)' : 'inherit',
+          ...inputStyle,
         }}
-        style={inputStyle}
+        onFocus={(e) => {
+          if (inputStyle?.borderColor == null) e.currentTarget.style.borderColor = TEAL;
+          if (inputStyle?.boxShadow == null) e.currentTarget.style.boxShadow = `0 0 0 1px ${TEAL}`;
+        }}
+        onBlur={(e) => {
+          if (inputStyle?.borderColor == null) e.currentTarget.style.borderColor = '#d1d5db';
+          if (inputStyle?.boxShadow == null) e.currentTarget.style.boxShadow = '';
+        }}
         onChange={(e) => commit(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {
@@ -138,6 +148,6 @@ export function SourceDropdownWidget({ source, paramType, currentValue, paramNam
           <option key={v} value={v} />
         ))}
       </datalist>
-    </HStack>
+    </div>
   );
 }

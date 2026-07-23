@@ -8,11 +8,18 @@ import { QuestionContent, QuestionParameter } from '@/lib/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { applyVizOverride } from '@/lib/data/story/story-question';
 import EmbeddedQuestionContainer from './EmbeddedQuestionContainer';
-import { Box, Spinner, Text, HStack, IconButton, Menu, Portal, Icon } from '@chakra-ui/react';
 import { Link } from '@/components/ui/Link';
 import { LuEllipsis, LuSparkles, LuExternalLink, LuTrash2, LuPencil } from 'react-icons/lu';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/kit/dropdown-menu';
 import { useExplainQuestion } from '@/lib/hooks/useExplainQuestion';
 import { runOrDefer } from '@/lib/navigation/nav-progress';
+
+// Tile chrome is kit/Tailwind (Renderer_v2 Phase 3 — the Chakra exit for embeds): the classes
+// below resolve through the shadcn token layer (main document: app/theme-tokens.css under
+// [data-mx-theme-host]; stories: the compiled story CSS). Behavior, aria-labels, and the
+// drag-handle contract are pinned by smart-embedded-tile.ui.test.tsx.
 
 interface SmartEmbeddedQuestionContainerProps {
   questionId: number;
@@ -28,6 +35,16 @@ interface SmartEmbeddedQuestionContainerProps {
   enableDrilldown?: boolean;  // Click-to-drill-down on data points (off for story embeds, on for dashboards)
   showActionsMenu?: boolean;  // Show the "..." (Explain/Edit/Remove) header menu. Default true (dashboards); stories pass their edit-mode flag so the menu only appears while editing.
   vizOverride?: VizEnvelope | null;  // Story-level FULL viz replace for this embed — the saved question file is untouched.
+}
+
+/** Minimal spinner (Tailwind only — no Chakra Spinner in the embed tree). */
+function TileSpinner({ className = 'size-8' }: { className?: string }) {
+  return (
+    <div
+      aria-label="Loading"
+      className={`animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground ${className}`}
+    />
+  );
 }
 
 function SmartEmbeddedQuestionContainerInner({
@@ -99,9 +116,9 @@ function SmartEmbeddedQuestionContainerInner({
   // Show loading state while file loads
   if (loading || !file || !mergedContent) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minH="200px">
-        <Spinner size="lg" />
-      </Box>
+      <div className="flex min-h-[200px] items-center justify-center">
+        <TileSpinner />
+      </div>
     );
   }
 
@@ -110,33 +127,15 @@ function SmartEmbeddedQuestionContainerInner({
 
   // Render embedded question container with loaded content
   return (
-    <Box
-      position="relative"
-      display="flex"
-      flexDirection="column"
-      flex="1"
-      overflow="hidden"
-      css={editMode ? {
-        '& .edit-actions': { opacity: 0, transition: 'opacity 0.15s' },
-        '&:hover .edit-actions': { opacity: 1 },
-      } : undefined}
-    >
+    <div className="group relative flex flex-1 flex-col overflow-hidden">
       {showTitle && (
-        <Box
-          bg={'bg.subtle'}
-          px={5}
-          pt={3}
-          borderColor="border.default"
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-        >
-          <Box flex="1" mr={2}>
+        <div className="flex items-center justify-between bg-muted/60 px-5 pt-3">
+          <div className="mr-2 flex-1">
             {readOnly ? (
               // Public viewers can't open /f/<id> (auth-gated) — show a plain title.
-              <Text fontSize="sm" fontWeight="600" color="fg.default" lineClamp={1} fontFamily="mono">
+              <p className="line-clamp-1 font-mono text-sm font-semibold text-foreground">
                 {effectiveName || file.name}
-              </Text>
+              </p>
             ) : (
               <Link
                 href={questionHref}
@@ -149,98 +148,44 @@ function SmartEmbeddedQuestionContainerInner({
                 }}
                 style={{ pointerEvents: editMode ? 'none' : 'auto' }}
               >
-                <Text
-                  fontSize="sm"
-                  fontWeight="600"
-                  color="fg.default"
-                  lineClamp={1}
-                  fontFamily="mono"
-                  cursor={editMode ? 'move' : 'pointer'}
-                  _hover={{ color: editMode ? 'fg.default' : 'accent.primary', textDecoration: editMode ? 'none' : 'underline' }}
+                <p
+                  className={`line-clamp-1 font-mono text-sm font-semibold text-foreground ${
+                    editMode ? 'cursor-move' : 'cursor-pointer hover:text-primary hover:underline'
+                  }`}
                 >
                   {effectiveName || file.name}
-                </Text>
+                </p>
               </Link>
             )}
-          </Box>
+          </div>
           {!editMode && !readOnly && showActionsMenu && (
-            <Box onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-              <Menu.Root>
-                <Menu.Trigger asChild>
-                  <IconButton
-                    variant="ghost"
-                    size="xs"
-                    aria-label="Card actions"
-                    color="fg.muted"
-                    _hover={{ color: 'fg.default' }}
-                    _focusVisible={{ outline: 'none', boxShadow: 'none' }}
-                  >
-                    <LuEllipsis />
-                  </IconButton>
-                </Menu.Trigger>
-                <Portal>
-                  <Menu.Positioner>
-                    <Menu.Content
-                      minW="180px"
-                      bg="bg.surface"
-                      borderColor="border.default"
-                      shadow="lg"
-                      p={1}
-                    >
-                      <Menu.Item
-                        value="explain"
-                        cursor="pointer"
-                        borderRadius="sm"
-                        px={3}
-                        py={2}
-                        _hover={{ bg: 'bg.muted' }}
-                        onClick={() => explainQuestion(questionId)}
-                        aria-label="Explain chart"
-                      >
-                        <HStack gap={2}>
-                          <Icon as={LuSparkles} boxSize={4} color="accent.teal" />
-                          <span>Explain chart</span>
-                        </HStack>
-                      </Menu.Item>
-                      <Menu.Item
-                        value="edit"
-                        cursor="pointer"
-                        borderRadius="sm"
-                        px={3}
-                        py={2}
-                        _hover={{ bg: 'bg.muted' }}
-                        onClick={() => onEdit ? onEdit() : window.open(questionHref, '_blank')}
-                        aria-label="Edit question"
-                      >
-                        <HStack gap={2}>
-                          <Icon as={LuExternalLink} boxSize={4} />
-                          <span>Edit question</span>
-                        </HStack>
-                      </Menu.Item>
-                      {onRemove && (
-                        <Menu.Item
-                          value="remove"
-                          cursor="pointer"
-                          borderRadius="sm"
-                          px={3}
-                          py={2}
-                          _hover={{ bg: 'bg.muted' }}
-                          onClick={onRemove}
-                          aria-label="Remove from dashboard"
-                        >
-                          <HStack gap={2}>
-                            <Icon as={LuTrash2} boxSize={4} color="accent.danger" />
-                            <span>Remove from dashboard</span>
-                          </HStack>
-                        </Menu.Item>
-                      )}
-                    </Menu.Content>
-                  </Menu.Positioner>
-                </Portal>
-              </Menu.Root>
-            </Box>
+            <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild={false} aria-label="Card actions"
+                  className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground">
+                  <LuEllipsis />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[180px]">
+                  <DropdownMenuItem aria-label="Explain chart" onClick={() => explainQuestion(questionId)}>
+                    <LuSparkles className="size-4 text-primary" />
+                    <span>Explain chart</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem aria-label="Edit question"
+                    onClick={() => onEdit ? onEdit() : window.open(questionHref, '_blank')}>
+                    <LuExternalLink className="size-4" />
+                    <span>Edit question</span>
+                  </DropdownMenuItem>
+                  {onRemove && (
+                    <DropdownMenuItem aria-label="Remove from dashboard" variant="destructive" onClick={onRemove}>
+                      <LuTrash2 className="size-4" />
+                      <span>Remove from dashboard</span>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
-        </Box>
+        </div>
       )}
       {bodyReady ? (
         <EmbeddedQuestionContainer
@@ -252,63 +197,42 @@ function SmartEmbeddedQuestionContainerInner({
           enableDrilldown={enableDrilldown}
         />
       ) : (
-        <Box flex="1" display="flex" alignItems="center" justifyContent="center" minH="120px">
-          <Spinner size="md" />
-        </Box>
+        <div className="flex min-h-[120px] flex-1 items-center justify-center">
+          <TileSpinner className="size-6" />
+        </div>
       )}
       {/* Edit mode: overlay makes entire card draggable, blocks chart interaction */}
       {editMode && (
         <>
-          <Box
-            className="drag-handle"
-            position="absolute"
-            inset={0}
-            cursor="move"
-            zIndex={1}
-            css={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%)' }}
+          <div
+            className="drag-handle absolute inset-0 z-[1] cursor-move"
+            style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%)' }}
           />
-          <HStack
-            className="edit-actions"
-            position="absolute"
-            top={2}
-            right={2}
-            gap={1}
-            zIndex={2}
-          >
+          <div className="absolute top-2 right-2 z-[2] flex gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
             {onEdit && (
-              <IconButton
+              <button
+                type="button"
                 onClick={onEdit}
                 aria-label="Edit question"
-                size="2xs"
-                variant="ghost"
-                color="accent.primary"
-                cursor="pointer"
-                _hover={{ transform: 'scale(1.2)' }}
-                _focusVisible={{ outline: 'none', boxShadow: 'none' }}
-                transition="transform 0.1s ease"
+                className="inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-primary outline-none transition-transform duration-100 hover:scale-125"
               >
                 <LuPencil size={14} />
-              </IconButton>
+              </button>
             )}
             {onRemove && (
-              <IconButton
+              <button
+                type="button"
                 onClick={onRemove}
                 aria-label="Remove from dashboard"
-                size="2xs"
-                variant="ghost"
-                color="accent.danger"
-                cursor="pointer"
-                _hover={{ transform: 'scale(1.2)' }}
-                _focusVisible={{ outline: 'none', boxShadow: 'none' }}
-                transition="transform 0.1s ease"
+                className="inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-destructive outline-none transition-transform duration-100 hover:scale-125"
               >
                 <LuTrash2 size={14} />
-              </IconButton>
+              </button>
             )}
-          </HStack>
+          </div>
         </>
       )}
-    </Box>
+    </div>
   );
 }
 

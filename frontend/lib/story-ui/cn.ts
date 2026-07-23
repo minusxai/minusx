@@ -1,6 +1,2 @@
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+// Re-export: the kit owns `cn` since its promotion out of story-ui (Renderer_v2 Phase 3).
+export { cn } from '@/components/kit/cn';

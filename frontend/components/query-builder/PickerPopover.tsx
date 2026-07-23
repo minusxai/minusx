@@ -6,10 +6,18 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Box, Text, HStack, VStack, Input, Popover, Portal } from '@chakra-ui/react';
 import { LuSearch } from 'react-icons/lu';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/kit/popover';
+import { Input } from '@/components/kit/input';
+import { cn } from '@/components/kit/cn';
 
 /* ─── PickerPopover ─── */
+
+/** Chakra-style positioning hints (kept for interface compatibility). */
+interface PickerPositioning {
+  placement?: string;
+  [key: string]: unknown;
+}
 
 interface PickerPopoverProps {
   open: boolean;
@@ -17,8 +25,18 @@ interface PickerPopoverProps {
   trigger: React.ReactNode;
   width?: string;
   padding?: number;
-  positioning?: Popover.RootProps['positioning'];
+  positioning?: PickerPositioning;
   children: React.ReactNode;
+}
+
+/** Map a Chakra placement ("bottom-start") to Radix side/align. */
+function toSideAlign(placement?: string): { side?: 'top' | 'bottom' | 'left' | 'right'; align?: 'start' | 'center' | 'end' } {
+  if (!placement) return {};
+  const [side, align] = placement.split('-');
+  return {
+    side: (['top', 'bottom', 'left', 'right'] as const).find((s) => s === side),
+    align: align === 'start' || align === 'end' ? align : undefined,
+  };
 }
 
 export function PickerPopover({
@@ -30,27 +48,21 @@ export function PickerPopover({
   positioning,
   children,
 }: PickerPopoverProps) {
+  const { side, align } = toSideAlign(positioning?.placement);
   return (
-    <Popover.Root open={open} onOpenChange={onOpenChange} positioning={positioning}>
-      <Popover.Trigger asChild>{trigger}</Popover.Trigger>
-      <Portal>
-        <Popover.Positioner>
-          <Popover.Content
-            width={width}
-            bg="bg.elevated"
-            // borderColor="border.default"
-            // border="1px solid"
-            p={0}
-            overflow="hidden"
-            borderRadius="lg"
-          >
-            <Popover.Body p={padding} bg="bg.elevated">
-              {children}
-            </Popover.Body>
-          </Popover.Content>
-        </Popover.Positioner>
-      </Portal>
-    </Popover.Root>
+    <Popover open={open} onOpenChange={(o) => onOpenChange({ open: o })}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent
+        side={side}
+        align={align}
+        className="overflow-hidden rounded-lg bg-popover p-0"
+        style={{ width }}
+      >
+        <div style={{ padding: `${padding * 4}px` }}>
+          {children}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -58,17 +70,9 @@ export function PickerPopover({
 
 export function PickerHeader({ children }: { children: React.ReactNode }) {
   return (
-    <Text
-      fontSize="xs"
-      fontWeight="600"
-      color="fg.muted"
-      textTransform="uppercase"
-      px={2}
-      py={1.5}
-      fontFamily="mono"
-    >
+    <p className="px-2 py-1.5 font-mono text-xs font-semibold uppercase text-muted-foreground">
       {children}
-    </Text>
+    </p>
   );
 }
 
@@ -106,51 +110,33 @@ export function PickerList({
   return (
     <>
       {searchable && (
-        <Box px={1} pb={1.5}>
-          <HStack
-            gap={2}
-            px={3}
-            bg="bg.subtle"
-            border="1px solid"
-            borderColor="border.default"
-            borderRadius="md"
-            h="32px"
-            _focusWithin={{
-              borderColor: 'accent.teal',
-              boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
-            }}
-            transition="all 0.2s"
-          >
-            <Box color="fg.muted" flexShrink={0}>
+        <div className="px-1 pb-1.5">
+          <div className="flex h-8 items-center gap-2 rounded-md border border-border bg-muted px-3 transition-all duration-200 focus-within:border-[#16a085] focus-within:shadow-[0_0_0_1px_#16a085]">
+            <span className="shrink-0 text-muted-foreground">
               <LuSearch size={14} />
-            </Box>
+            </span>
             <Input
-              size="xs"
               placeholder={searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
-              bg="transparent"
-              border="none"
-              fontSize="sm"
-              fontFamily="mono"
-              px={0}
-              h="auto"
-              _focus={{ outline: 'none', boxShadow: 'none' }}
-              _placeholder={{ color: 'fg.muted' }}
+              className="h-auto min-w-0 border-none bg-transparent px-0 font-mono text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0"
             />
-          </HStack>
-        </Box>
+          </div>
+        </div>
       )}
-      <VStack gap={0.5} align="stretch" maxH={maxH} overflowY={maxH ? 'auto' : undefined}>
+      <div
+        className={cn('flex flex-col gap-0.5', maxH && 'overflow-y-auto')}
+        style={maxH ? { maxHeight: maxH } : undefined}
+      >
         {isEmpty && searchQuery ? (
-          <Text fontSize="xs" color="fg.muted" px={2} py={2} textAlign="center" fontFamily="mono">
+          <p className="px-2 py-2 text-center font-mono text-xs text-muted-foreground">
             No results for &ldquo;{searchQuery}&rdquo;
-          </Text>
+          </p>
         ) : (
           rendered
         )}
-      </VStack>
+      </div>
     </>
   );
 }
@@ -178,33 +164,29 @@ export function PickerItem({
 }: PickerItemProps) {
   const content =
     typeof children === 'string' ? (
-      <Text fontSize="sm" fontFamily="mono">{children}</Text>
+      <span className="font-mono text-sm">{children}</span>
     ) : (
       children
     );
 
   return (
-    <Box
-      px={2}
-      py={1.5}
-      borderRadius="md"
-      cursor="pointer"
-      bg={selected ? selectedBg : 'transparent'}
-      _hover={{ bg: 'bg.muted' }}
+    <div
+      className={cn('cursor-pointer rounded-md px-2 py-1.5', !selected && 'hover:bg-muted')}
+      style={selected ? { background: selectedBg } : undefined}
       onClick={onClick}
       aria-label={ariaLabel}
     >
       {icon || rightElement ? (
-        <HStack gap={2} justify={rightElement ? 'space-between' : undefined}>
-          <HStack gap={2}>
-            {icon && <Box color="fg.muted">{icon}</Box>}
+        <div className={cn('flex items-center gap-2', rightElement && 'justify-between')}>
+          <div className="flex items-center gap-2">
+            {icon && <span className="text-muted-foreground">{icon}</span>}
             {content}
-          </HStack>
+          </div>
           {rightElement}
-        </HStack>
+        </div>
       ) : (
         content
       )}
-    </Box>
+    </div>
   );
 }

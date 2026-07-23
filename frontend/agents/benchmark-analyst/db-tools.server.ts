@@ -20,8 +20,8 @@ import type { QueryResult, SchemaEntry } from '@/lib/connections/base';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { executeFuzzyMatch } from '@/lib/connections/fuzzy-match-tool';
-import { renderChartToJpeg } from '@/lib/chart/render-chart';
 import { renderVizEnvelopeToJpeg } from '@/lib/chart/render-viz-image';
+import { resolveImageEnvelope } from '@/lib/viz/from-vizsettings';
 import type { VizSettings, VizEnvelope } from '@/lib/validation/atlas-schemas';
 import {
   BaseExecuteQuery,
@@ -99,13 +99,18 @@ export class ExecuteQuery extends BaseExecuteQuery {
     return result;
   }
 
-  /** Server-side ECharts-SSR → JPEG render of the result viz (used when rawData is off). */
+  /** Server-side Vega → JPEG render of the result viz via the V1→V2 bridge (used when rawData is off). */
   protected override async _renderVizJpeg(
     queryResult: QueryResult,
     vizSettings: unknown,
   ): Promise<Buffer | null> {
     try {
-      return await renderChartToJpeg(queryResult, vizSettings as VizSettings, { width: 512, colorMode: 'dark' });
+      const envelope = resolveImageEnvelope({
+        viz: undefined, vizSettings: vizSettings as VizSettings,
+        columns: queryResult.columns, types: queryResult.types,
+      });
+      if (!envelope) return null;
+      return await renderVizEnvelopeToJpeg(envelope, queryResult.rows, { width: 512, colorMode: 'dark' });
     } catch {
       return null; // fall back to row data on any render failure
     }

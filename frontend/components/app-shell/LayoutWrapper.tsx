@@ -66,7 +66,10 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
       <Box
         ml={{ base: 0, md: leftSidebarCollapsed ? '72px' : '260px' }} // No margin on mobile
         pb={{ base: '80px', md: 0 }} // Padding bottom for mobile nav
-        transition="margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+        // NO margin transition: animating the content-pane width makes every dashboard chart
+        // relayout/resize per frame for 300ms on each sidebar toggle (the "sluggish" report) —
+        // and transformed foreignObject content can't paint incrementally anyway. Toggles snap:
+        // one resize, one relayout, one repaint.
         minH="100vh"
       >
         <DataPrepBanner />

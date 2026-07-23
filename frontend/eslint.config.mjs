@@ -290,6 +290,83 @@ const eslintConfig = defineConfig([
       "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI], patterns: [RESTRICT_PI_AI_SUBPATHS] }],
     },
   },
+  // Chakra exit — EMBED TREE + re-skinned chrome (Renderer_v2 Phase 3/6a): these files are
+  // kit/Tailwind now, and the story iframe's style mirror no longer carries Chakra for them.
+  // "No Chakra in the embed render tree" is an `npm run validate` fact, not a review claim —
+  // add each file here as its re-skin lands (lists miss things; PivotTable proved it).
+  {
+    files: [
+      "components/kit/**/*.tsx",
+      // Whole migrated trees (Renderer_v2 Phase 5): the question workbench, all viz/config
+      // panels, the DOM-tier grids, and the param widgets are kit/Tailwind — new files in these
+      // directories are born under the ban.
+      "components/plotx/**/*.ts",
+      "components/plotx/**/*.tsx",
+      "components/viz/**/*.tsx",
+      "components/question/**/*.tsx",
+      "components/params/**/*.tsx",
+      "components/query-builder/**/*.tsx",
+      "components/lexical/**/*.tsx",
+      "components/selectors/DatePicker.tsx",
+      "components/selectors/TabSwitcher.tsx",
+      "components/shared/FileSearchSelect.tsx",
+      "components/shared/DeliveryPicker.tsx",
+      "components/shared/RunNowHeader.tsx",
+      "components/shared/SchedulePicker.tsx",
+      "components/shared/StatusBanner.tsx",
+      "components/containers/ReportContainerV2.tsx",
+      "components/containers/AlertContainerV2.tsx",
+      "components/containers/ReportRunContainerV2.tsx",
+      "components/containers/AlertRunContainerV2.tsx",
+      // Rendered-document views + embed chrome.
+      "components/containers/SmartEmbeddedQuestionContainer.tsx",
+      "components/TextBlockCard.tsx",
+      "components/views/QuestionViewV2.tsx",
+      "components/views/DashboardView.tsx",
+      "components/views/NotebookView.tsx",
+      "components/views/ReportView.tsx",
+      "components/views/AlertView.tsx",
+      "components/views/CodeView.tsx",
+      "components/views/notebook/**/*.tsx",
+      "components/views/dashboard/**/*.tsx",
+      "components/views/story/StoryParamControl.tsx",
+      "components/views/shared/empty-states.tsx",
+      "components/views/shared/SvgPageSurface.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@chakra-ui/*", "@chakra-ui"],
+              message:
+                "This file is on the kit/Tailwind stack (Renderer_v2 Chakra exit) — no @chakra-ui " +
+                "imports. Use components/kit primitives and Tailwind classes instead.",
+            },
+            {
+              // The Chakra-wrapper snippets in components/ui — banned from migrated trees so a
+              // regression can't sneak Chakra DOM back in. (`ui/toaster` — an imperative service
+              // whose DOM lives in the app shell — and the Chakra-free `ui/Link`/`ui/Dither`
+              // stay allowed.)
+              group: [
+                "@/components/ui/tooltip",
+                "@/components/ui/checkbox",
+                "@/components/ui/select",
+                "@/components/ui/close-button",
+                "@/components/ui/color-mode",
+                "@/components/ui/resizable-panel",
+                "@/components/ui/ImageLightbox",
+              ],
+              message:
+                "This file is on the kit/Tailwind stack (Renderer_v2 Chakra exit) — use the " +
+                "components/kit equivalent, not the components/ui Chakra wrappers.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Container/View convention (CLAUDE.md "Component Patterns") — these views were
   // migrated to pure presentation; guard against regression. See RESTRICT_VIEW_REDUX.
   {

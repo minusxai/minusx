@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import { Box, Table as ChakraTable } from '@chakra-ui/react'
+import { TooltipProvider } from '@/components/kit/tooltip'
 import { formatLargeNumber, formatNumber, formatDateValue, applyPrefixSuffix, formatD3Number, formatD3Date } from '@/lib/chart/chart-format'
 import type { PivotData, FormulaResults } from '@/lib/chart/pivot-utils'
 import { useAppSelector } from '@/store/hooks'
@@ -260,19 +260,15 @@ export const PivotTable = ({
 
   // Compact mode sizing
   const COMPACT_CELL_SIZE = 18
-  const headerBg = 'bg.muted'
 
   // Fixed width for frozen row-dimension columns so sticky left offsets align
   const ROW_DIM_COL_W = 120
 
-  // Tooltip styling for compact mode (ECharts-like)
-  const tooltipContentProps = { bg: 'bg.panel', color: 'fg.default', boxShadow: 'lg', borderRadius: 'md', border: '1px solid', borderColor: 'border.muted', px: 3, py: 2 }
-
   if (cells.length === 0 || (cells.length > 0 && cells[0].length === 0)) {
     return (
-      <Box color="fg.subtle" fontSize="sm" textAlign="center" py={8}>
+      <div className="py-8 text-center text-sm text-muted-foreground">
         {emptyMessage || 'No data available for pivot table'}
-      </Box>
+      </div>
     )
   }
 
@@ -284,29 +280,22 @@ export const PivotTable = ({
   const numHeaderRows = augmentedColHeaderRows.length
 
   return (
-    <Box width="100%" height="100%" display="flex" flexDirection="column" minHeight="0">
-    <Box
-      width="100%"
-      flex="1"
-      minHeight="0"
-      overflow="auto"
-      borderRadius="md"
-      css={{
-        '&::-webkit-scrollbar': { width: '8px', height: '8px' },
-        '&::-webkit-scrollbar-track': { background: 'transparent' },
-        '&::-webkit-scrollbar-thumb': { background: 'var(--chakra-colors-fg-subtle)', borderRadius: '4px' },
-        '&::-webkit-scrollbar-thumb:hover': { background: 'var(--chakra-colors-fg-muted)' },
-        // Zebra stripe DEFAULT on data rows — a stylesheet rule (not inline) so css
-        // overrides (.mx-row-odd / .mx-row-even in the scoped `css` field) can
-        // restyle it. Same rule as the flat table (shared contract).
-        ...(compact ? {} : { '& tbody tr.mx-row-odd': { background: 'var(--chakra-colors-bg-emphasized)' } }),
-      }}
-    >
+    <TooltipProvider>
+    <div className="flex h-full w-full min-h-0 flex-col">
+    {/* Base pivot chrome as a low-specificity (:where) stylesheet — NOT inline and
+        NOT !important utilities — so scoped css overrides (`.mx-row-odd { … }`,
+        `.mx-pivot th { … }` in the envelope css field) still win. Travels with the
+        component (works in stories/foreignObject, no globals.css dependency). */}
+    <style>{PIVOT_BASE_CSS}</style>
+    <div className="mx-pivot-scroll w-full flex-1 min-h-0 overflow-auto rounded-md">
       {/* mx-pivot + mx-table: the pivot shares the flat table's STABLE class
           contract (.mx-table .mx-header-row .mx-th .mx-row .mx-cell
           .mx-col-<name> .mx-toolbar) for css overrides; `.mx-pivot` stays as
           the pivot-specific root for element selectors (`.mx-pivot th { … }`). */}
-      <ChakraTable.Root className="mx-pivot mx-table" size="sm" css={{ borderCollapse: 'separate', borderSpacing: compact ? '3px' : 0, ...(compact ? { '& td, & th': { borderBottom: 'none', borderRadius: '3px' } } : { '& td, & th': { borderBottom: '1px solid', borderColor: 'var(--chakra-colors-fg-subtle)' } }) }}>
+      <table
+        className={`mx-pivot mx-table${compact ? ' mx-pivot-compact' : ''} w-full caption-bottom`}
+        style={{ borderCollapse: 'separate', borderSpacing: compact ? '3px' : 0 }}
+      >
         <PivotTableHeader
           augmentedColHeaderRows={augmentedColHeaderRows}
           numRowDims={numRowDims}
@@ -314,7 +303,6 @@ export const PivotTable = ({
           rowDimNames={rowDimNames}
           showRowTotals={showRowTotals}
           compact={compact}
-          headerBg={headerBg}
           getLeftOffset={getLeftOffset}
           isLastDim={isLastDim}
           ROW_DIM_COL_W={ROW_DIM_COL_W}
@@ -345,15 +333,13 @@ export const PivotTable = ({
           buildTooltipContent={buildTooltipContent}
           collapsedGroups={collapsedGroups}
           toggleGroup={toggleGroup}
-          headerBg={headerBg}
           getLeftOffset={getLeftOffset}
           isLastDim={isLastDim}
           ROW_DIM_COL_W={ROW_DIM_COL_W}
           COMPACT_CELL_SIZE={COMPACT_CELL_SIZE}
-          tooltipContentProps={tooltipContentProps}
         />
-      </ChakraTable.Root>
-    </Box>
+      </table>
+    </div>
 
     {/* Shared grid toolbar (same chrome as the flat table; hides via `.mx-toolbar
         { display: none }`). Compact mode is a chart-like surface — no toolbar. */}
@@ -364,6 +350,20 @@ export const PivotTable = ({
         downloadCsv={downloadCsv}
       />
     )}
-    </Box>
+    </div>
+    </TooltipProvider>
   )
 }
+
+// Default pivot chrome (cell padding/borders, zebra stripe, scrollbar). Kept at
+// zero-to-minimal specificity via :where() so the envelope's scoped css field
+// (`.mx-viz-scope-X { .mx-row-odd { … } }`, 0-2-0) overrides every rule here.
+const PIVOT_BASE_CSS = `
+.mx-pivot-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.mx-pivot-scroll::-webkit-scrollbar-track { background: transparent; }
+.mx-pivot-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.mx-pivot-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+:where(.mx-pivot:not(.mx-pivot-compact)) :where(td, th) { padding: 6px 8px; border-bottom: 1px solid var(--muted-foreground); }
+:where(.mx-pivot.mx-pivot-compact) :where(td, th) { border-bottom: none; border-radius: 3px; }
+:where(.mx-pivot:not(.mx-pivot-compact) tbody) tr:where(.mx-row-odd) { background: var(--muted); }
+`

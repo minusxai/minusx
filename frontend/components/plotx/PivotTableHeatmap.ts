@@ -32,7 +32,7 @@ export const getPivotCellBg = ({
 }: GetPivotCellBgParams): string | undefined => {
   if (!showHeatmap) return undefined
   if (!present) return absentBg
-  if (maxValue === minValue) return 'accent.teal/75'
+  if (maxValue === minValue) return 'color-mix(in srgb, #16a085 75%, transparent)'
   const normalized = (value - minValue) / (maxValue - minValue)
   const alpha = compact ? 0.85 : 0.55
   return getScaleColor(normalized, heatmapScale, isDark, alpha)

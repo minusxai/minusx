@@ -5,10 +5,10 @@
 
 'use client';
 
-import { Box, HStack, Text } from '@chakra-ui/react';
 import { LuX, LuHash, LuCalendar, LuType, LuLock } from 'react-icons/lu';
 import { ReactNode } from 'react';
 import { useAppSelector } from '@/store/hooks';
+import { cn } from '@/components/kit/cn';
 
 export type ChipVariant = 'metric' | 'dimension' | 'filter' | 'table' | 'sort' | 'neutral';
 
@@ -122,63 +122,60 @@ export function QueryChip({
   const isClickable = !!onClick && !isLocked;
 
   return (
-    <HStack
-      bg={isActive ? styles.hoverBg : styles.bg}
-      border="1px"
-      borderStyle={isLocked ? 'dashed' : 'solid'}
-      borderColor={styles.border}
-      borderRadius="md"
-      px={size === 'sm' ? 2 : 2.5}
-      py={size === 'sm' ? 1 : 1.5}
-      gap={1.5}
-      cursor={isClickable ? 'pointer' : 'default'}
-      opacity={isLocked ? 0.65 : 1}
-      transition="all 0.15s ease"
-      _hover={isClickable ? { bg: styles.hoverBg, borderColor: styles.color } : undefined}
+    <div
+      className={cn(
+        'flex shrink-0 items-center rounded-md border transition-all duration-150 ease-in-out',
+        'bg-[var(--chip-bg)] border-[var(--chip-border)]',
+        size === 'sm' ? 'gap-1.5 px-2 py-1' : 'gap-1.5 px-2.5 py-1.5',
+        isLocked ? 'border-dashed opacity-65' : 'border-solid',
+        isClickable
+          ? 'cursor-pointer hover:bg-[var(--chip-hover)] hover:border-[var(--chip-color)]'
+          : 'cursor-default',
+      )}
+      style={{
+        '--chip-bg': isActive ? styles.hoverBg : styles.bg,
+        '--chip-border': styles.border,
+        '--chip-hover': styles.hoverBg,
+        '--chip-color': styles.color,
+      } as React.CSSProperties}
       onClick={isClickable ? onClick : undefined}
-      flexShrink={0}
     >
       {icon && (
-        <Box color={styles.color} fontSize={size === 'sm' ? 'xs' : 'sm'} display="flex" alignItems="center">
+        <span
+          className={cn('flex items-center', size === 'sm' ? 'text-xs' : 'text-sm')}
+          style={{ color: styles.color }}
+        >
           {icon}
-        </Box>
+        </span>
       )}
-      <Text
-        fontSize={size === 'sm' ? 'xs' : 'sm'}
-        fontWeight="500"
-        color={styles.color}
-        whiteSpace="nowrap"
-        lineHeight="1.2"
-        fontFamily="mono"
+      <span
+        className={cn(
+          'whitespace-nowrap font-mono font-medium leading-[1.2]',
+          size === 'sm' ? 'text-xs' : 'text-sm',
+        )}
+        style={{ color: styles.color }}
       >
         {children}
-      </Text>
+      </span>
       {isLocked && (
-        <Box color={styles.color} opacity={0.6} display="flex" alignItems="center">
+        <span className="flex items-center opacity-60" style={{ color: styles.color }}>
           <LuLock size={10} />
-        </Box>
+        </span>
       )}
       {onRemove && (
-        <Box
-          as="button"
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          ml={0.5}
-          p={0.5}
-          borderRadius="sm"
-          color={styles.color}
-          opacity={0.5}
-          _hover={{ opacity: 1, bg: 'bg.muted' }}
+        <button
+          type="button"
+          className="ml-0.5 flex items-center justify-center rounded-sm p-0.5 opacity-50 hover:bg-muted hover:opacity-100"
+          style={{ color: styles.color }}
           onClick={(e: React.MouseEvent) => {
             e.stopPropagation();
             onRemove();
           }}
         >
           <LuX size={12} />
-        </Box>
+        </button>
       )}
-    </HStack>
+    </div>
   );
 }
 
@@ -193,26 +190,27 @@ export function AddChipButton({ onClick, variant = 'neutral', size = 'sm' }: Add
   const styles = useChipVariantStyles(variant);
 
   return (
-    <Box
-      as="button"
-      bg="transparent"
-      border="1px dashed"
-      borderColor={styles.border}
-      borderRadius="md"
-      px={size === 'sm' ? 2 : 2.5}
-      py={size === 'sm' ? 1 : 1.5}
-      cursor="pointer"
-      transition="all 0.15s ease"
-      _hover={{ bg: styles.bg, borderStyle: 'solid', borderColor: styles.color }}
+    <button
+      type="button"
+      className={cn(
+        'flex cursor-pointer items-center justify-center rounded-md border border-dashed bg-transparent transition-all duration-150 ease-in-out',
+        'border-[var(--chip-border)] hover:border-solid hover:border-[var(--chip-color)] hover:bg-[var(--chip-bg)]',
+        size === 'sm' ? 'px-2 py-1' : 'px-2.5 py-1.5',
+      )}
+      style={{
+        '--chip-bg': styles.bg,
+        '--chip-border': styles.border,
+        '--chip-color': styles.color,
+      } as React.CSSProperties}
       onClick={onClick}
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
     >
-      <Text fontSize={size === 'sm' ? 'sm' : 'md'} color={styles.color} fontWeight="500" lineHeight="1" fontFamily="mono">
+      <span
+        className={cn('font-mono font-medium leading-none', size === 'sm' ? 'text-sm' : 'text-base')}
+        style={{ color: styles.color }}
+      >
         +
-      </Text>
-    </Box>
+      </span>
+    </button>
   );
 }
 

@@ -5,10 +5,11 @@
  * single capture implementation.
  *
  * Browser-only. Every path is SERIALIZATION capture (Story_Design_V2 §4 — snapdom is gone):
- *  - SVG-rendered stories serialize their live `<svg>` surface (lib/story-surface/serialize) —
- *    the capture IS the renderer the user is looking at.
- *  - Everything else (dashboards/questions/notebooks/reports — main-document React whose CSS
- *    lives in the parent document's stylesheets) goes through the generic element serializer
+ *  - Stories AND dashboards (Phase 8: both live on the self-contained iframe svg surface)
+ *    serialize their live `<svg>` (lib/story-surface/serialize) — the capture IS the renderer
+ *    the user is looking at, and the iframe document is self-contained by construction.
+ *  - Everything else (questions/notebooks/reports — main-document React whose CSS lives in the
+ *    parent document's stylesheets) goes through the generic element serializer
  *    (serialize-element.ts): clone into `<svg><foreignObject>` with all same-origin document
  *    CSS inlined, fixup pass applied, images/fonts as data: URIs.
  * Both rasterize through the same percent-encoded data:-URL pipeline (svgToImage) — never a
@@ -67,10 +68,35 @@ async function captureFromSvgStory(element: HTMLElement, opts: CaptureOptions): 
 }
 
 /**
- * Crop directly from an SVG-rendered story: serialize the live surface and cut the selection out of
- * it. Containment check: coordinates here are relative to the STORY SVG's box, so a selection
- * straying outside it (page chrome, chat panel) must fall through to the generic path rather than
- * be cropped against the wrong origin. Returns null when no SVG story hosts the selection.
+ * The surface svg's box in TOP-viewport coordinates. The svg lives inside a same-origin iframe
+ * (stories, and dashboards since Phase 8), where its own getBoundingClientRect is relative to
+ * the FRAME's viewport — compose the frame element's offset up the chain so it can be compared
+ * against a top-viewport drag selection. Exported for unit tests (pure given the rect calls).
+ */
+export function svgBoxInTopViewport(svg: SVGSVGElement): { left: number; top: number; width: number; height: number } {
+  const box = svg.getBoundingClientRect();
+  let left = box.left;
+  let top = box.top;
+  try {
+    let win: Window | null = svg.ownerDocument.defaultView;
+    while (win && win.frameElement) {
+      const fr = win.frameElement.getBoundingClientRect();
+      left += fr.left;
+      top += fr.top;
+      win = win.parent === win ? null : win.parent;
+    }
+  } catch {
+    // cross-origin ancestor — keep the composition up to the last same-origin frame
+  }
+  return { left, top, width: box.width, height: box.height };
+}
+
+/**
+ * Crop directly from an SVG-rendered surface (story or dashboard): serialize the live surface
+ * and cut the selection out of it. Containment check runs in TOP-viewport space (the svg box is
+ * frame-offset composed), so a selection straying outside it (page chrome, chat panel) falls
+ * through to the generic path rather than be cropped against the wrong origin. Returns null
+ * when no svg surface hosts the selection.
  */
 async function cropFromSvgStory(
   selection: { x: number; y: number; width: number; height: number },
@@ -81,9 +107,9 @@ async function cropFromSvgStory(
   if (!host) return null;
   const svg = findStorySvg(host);
   if (!svg) return null;
-  const box = svg.getBoundingClientRect();
+  const box = svgBoxInTopViewport(svg);
   const inside = selection.x >= box.left && selection.y >= box.top
-    && selection.x + selection.width <= box.right && selection.y + selection.height <= box.bottom;
+    && selection.x + selection.width <= box.left + box.width && selection.y + selection.height <= box.top + box.height;
   if (!inside) return null;
   if (!box.width || !box.height) return null;
 
@@ -109,8 +135,9 @@ async function cropFromSvgStory(
 
 /** Render a single DOM element to an image Blob (jpeg by default). */
 export async function captureElementBlob(element: HTMLElement, opts: CaptureOptions): Promise<Blob> {
-  // SVG story renderer: the story is already an <svg> — serialize the LIVE surface and let the
-  // browser rasterize it, so the capture is the same renderer the user is looking at.
+  // SVG surface renderer (stories AND dashboards — Phase 8 unified them on the self-contained
+  // iframe surface): serialize the LIVE `<svg>` the user is looking at and let the browser
+  // rasterize it, so the capture is the same renderer the user is looking at.
   const fromSvg = await captureFromSvgStory(element, opts);
   if (fromSvg) return fromSvg;
   // Generic app-page path: serialize the element with the parent document's CSS inlined. Always

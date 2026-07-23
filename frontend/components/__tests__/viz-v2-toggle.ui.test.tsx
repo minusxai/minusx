@@ -5,7 +5,8 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers'
 import { QuestionVisualization } from '@/components/question/QuestionVisualization'
 import QuestionViewV2 from '@/components/views/QuestionViewV2'
 import { makeStore } from '@/store/store'
-import { setVizV2, setVizRenderer } from '@/store/uiSlice'
+import * as uiSlice from '@/store/uiSlice'
+import { setVizV2 } from '@/store/uiSlice'
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas'
 import type { QuestionContent, QueryResult } from '@/lib/types'
 
@@ -22,8 +23,8 @@ vi.mock('@/components/viz/VegaChart', () => ({
 vi.mock('@/components/plotx/TableV2', () => ({
   TableV2: () => <div aria-label="Table surface" />,
 }))
-vi.mock('@/components/plotx/ChartBuilder', () => ({
-  ChartBuilder: () => <div aria-label="Classic chart builder" />,
+vi.mock('@/components/viz/VizPivotView', () => ({
+  VizPivotView: () => <div aria-label="Pivot surface" />,
 }))
 vi.mock('@/components/viz/VegaVizPanel', () => ({
   VegaVizPanel: () => <div aria-label="Vega viz panel" />,
@@ -120,10 +121,9 @@ const CONFIG = {
   fixError: false,
 }
 
-function renderQuestion(content: QuestionContent, { vizV2, renderer = 'vega' }: { vizV2: boolean; renderer?: 'echarts' | 'vega' }) {
+function renderQuestion(content: QuestionContent, { vizV2 }: { vizV2: boolean }) {
   const store = makeStore()
   store.dispatch(setVizV2(vizV2))
-  store.dispatch(setVizRenderer(renderer))
   renderWithProviders(
     <QuestionVisualization
       currentState={content}
@@ -152,28 +152,24 @@ describe('viz toggles — defaults', () => {
     expect(makeStore().getState().ui.vizV2).toBe(true)
   })
 
-  it('vega is the default renderer; echarts is the classic escape hatch', () => {
-    expect(makeStore().getState().ui.vizRenderer).toBe('vega')
+  it('vizRenderer is GONE — vega is the only chart engine (Renderer_v2 Phase 2)', () => {
+    expect('vizRenderer' in makeStore().getState().ui).toBe(false)
+    expect((uiSlice as Record<string, unknown>).setVizRenderer).toBeUndefined()
+    expect((uiSlice as Record<string, unknown>).selectVizRenderer).toBeUndefined()
   })
 })
 
-// ─── Renderer toggle: echarts = the exact pre-V2 app ─────────────────────────
-//
-// When the renderer is 'echarts', only V1 is possible: vizSettings drive the
-// classic ECharts pipeline, saved `viz` envelopes are ignored, and the vizV2
-// format flag has no effect.
+// ─── Single engine: the ECharts rollback path is deleted ─────────────────────
 
-describe('QuestionVisualization — renderer=echarts forces the classic V1 pipeline', () => {
-  it('a legacy chart renders the classic ECharts builder, no vega', () => {
-    renderQuestion(legacyLineContent, { vizV2: false, renderer: 'echarts' })
-    expect(screen.getByLabelText('Classic chart builder')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Vega chart surface vega-lite')).not.toBeInTheDocument()
-  })
-
-  it('even with vizV2 ON and a saved envelope, echarts renders from vizSettings', () => {
-    renderQuestion(envelopeContent, { vizV2: true, renderer: 'echarts' })
-    expect(screen.getByLabelText('Classic chart builder')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Vega chart surface recipe')).not.toBeInTheDocument()
+describe('QuestionVisualization — V1 pivot routes to the DOM pivot view', () => {
+  it('a legacy pivot renders VizPivotView via the bridge (ChartBuilder is gone)', () => {
+    const pivotContent = {
+      ...legacyLineContent,
+      vizSettings: { type: 'pivot', xCols: [], yCols: [], pivotConfig: { rows: ['month'], columns: [], values: [{ col: 'revenue', agg: 'sum' }] } },
+      viz: undefined,
+    } as unknown as QuestionContent
+    renderQuestion(pivotContent, { vizV2: false })
+    expect(screen.getByLabelText('Pivot surface')).toBeInTheDocument()
     expect(screen.queryByLabelText('Vega chart surface vega-lite')).not.toBeInTheDocument()
   })
 })
@@ -182,7 +178,6 @@ describe('QuestionVisualization — vega always draws; the toggle picks the auth
   it('toggle V1: a legacy chart renders through vega via JIT conversion (not ECharts)', async () => {
     renderQuestion(legacyLineContent, { vizV2: false })
     expect(await screen.findByLabelText('Vega chart surface vega-lite')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Classic chart builder')).not.toBeInTheDocument()
   })
 
   it('toggle V1: a saved envelope is IGNORED — vega renders the JIT conversion of vizSettings', async () => {
@@ -200,7 +195,6 @@ describe('QuestionVisualization — vega always draws; the toggle picks the auth
   it('toggle V2: a legacy chart still renders via JIT conversion', async () => {
     renderQuestion(legacyLineContent, { vizV2: true })
     expect(await screen.findByLabelText('Vega chart surface vega-lite')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Classic chart builder')).not.toBeInTheDocument()
   })
 })
 
@@ -347,9 +341,4 @@ describe('viz-only files — rollback falls back to table JIT', () => {
     expect(screen.queryByLabelText('Vega chart surface vega-lite')).not.toBeInTheDocument()
   })
 
-  it('echarts escape hatch: falls back to the table, not a blank surface', async () => {
-    renderQuestion(VIZ_ONLY, { vizV2: true, renderer: 'echarts' })
-    expect(await screen.findByLabelText('Table surface')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Classic chart builder')).not.toBeInTheDocument()
-  })
 })

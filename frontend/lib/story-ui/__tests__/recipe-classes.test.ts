@@ -5,12 +5,12 @@
  */
 import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
-import { extractRecipeClasses } from '../../../scripts/generate-story-ui-classes';
+import { extractRecipeClasses, EMBED_CHROME_FILES } from '../../../scripts/generate-story-ui-classes';
 import { STORY_UI_RECIPE_CLASSES } from '../recipe-classes';
 
 describe('recipe-classes.ts freshness', () => {
-  it('matches a fresh extraction from lib/story-ui/components', () => {
-    const fresh = extractRecipeClasses(join(__dirname, '..', 'components'));
+  it('matches a fresh extraction from components/kit + the re-skinned embed chrome', () => {
+    const fresh = extractRecipeClasses(join(__dirname, '..', '..', '..', 'components', 'kit'), EMBED_CHROME_FILES);
     expect([...STORY_UI_RECIPE_CLASSES]).toEqual(fresh);
   });
 });

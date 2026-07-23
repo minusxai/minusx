@@ -12,8 +12,9 @@
  * are shortcuts, the pattern is always visible and directly editable.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Box, Button, HStack, Input, Portal, Text } from '@chakra-ui/react';
+import { createPortal } from 'react-dom';
 import { LuSettings2 } from 'react-icons/lu';
+import { Input } from '@/components/kit/input';
 import { D3_NUMBER_PRESETS, D3_DATE_PRESETS } from '@/lib/chart/chart-format';
 import type { VizColumnKind } from '@/lib/viz/types';
 
@@ -26,6 +27,7 @@ export interface VizFieldPopoverProps {
 }
 
 const PANEL_WIDTH = 220;
+const TEAL = '#16a085';
 
 export function VizFieldPopover({ channel, kind, value, onCommit }: VizFieldPopoverProps) {
   const [open, setOpen] = useState(false);
@@ -64,9 +66,9 @@ export function VizFieldPopover({ channel, kind, value, onCommit }: VizFieldPopo
   const hasCustomization = value.title != null || value.format != null;
 
   return (
-    <Box position="relative" ref={rootRef} display="inline-flex">
-      <Box
-        as="button"
+    <div ref={rootRef} className="relative inline-flex">
+      <button
+        type="button"
         aria-label={`Field settings for ${channel}`}
         onClick={(e: React.MouseEvent) => {
           e.stopPropagation();
@@ -74,93 +76,81 @@ export function VizFieldPopover({ channel, kind, value, onCommit }: VizFieldPopo
           setPos({ top: rect.bottom + 6, left: Math.max(8, rect.right - PANEL_WIDTH) });
           setOpen(o => !o);
         }}
-        color={hasCustomization ? 'accent.teal' : 'fg.subtle'}
-        _hover={{ color: 'accent.teal' }}
-        transition="color 0.2s"
-        flexShrink={0}
+        className={`shrink-0 transition-colors duration-200 hover:text-[#16a085] ${hasCustomization ? 'text-[#16a085]' : 'text-muted-foreground'}`}
       >
         <LuSettings2 size={12} />
-      </Box>
+      </button>
       {open && (
         // Portaled to body: the zone chip clips its contents (overflow:hidden for name
         // ellipsis), so an in-chip absolute panel renders invisibly. Fixed-positioned
-        // from the gear's rect instead.
-        <Portal>
-        <Box
-          ref={panelRef}
-          aria-label={`Field settings panel for ${channel}`}
-          position="fixed"
-          top={`${pos.top}px`}
-          left={`${pos.left}px`}
-          w={`${PANEL_WIDTH}px`}
-          p={3}
-          bg="bg.panel"
-          border="1px solid"
-          borderColor="border.muted"
-          borderRadius="md"
-          boxShadow="md"
-          zIndex={1500}
-          display="flex"
-          flexDirection="column"
-          gap={2}
-        >
-          <Box>
-            <Text fontSize="10px" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
-              Alias
-            </Text>
-            <Input
-              aria-label={`Alias for ${channel}`}
-              size="xs"
-              fontFamily="mono"
-              placeholder="display name"
-              value={alias}
-              onChange={e => setAlias(e.target.value)}
-              onBlur={commitAlias}
-              onKeyDown={e => { if (e.key === 'Enter') { commitAlias(); setOpen(false); } }}
-            />
-          </Box>
-          {presets && (
-            <Box>
-              <Text fontSize="10px" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
-                Format
-              </Text>
-              <HStack gap={1} flexWrap="wrap">
-                {presets.map(({ label, format }) => (
-                  <Button
-                    key={label}
-                    aria-label={`Format ${label}`}
-                    size="2xs"
-                    px={1.5}
-                    fontFamily="mono"
-                    variant={value.format === format ? 'solid' : 'outline'}
-                    colorPalette={value.format === format ? 'teal' : undefined}
-                    onClick={() => onCommit({ title: value.title, format })}
-                  >
-                    {label}
-                  </Button>
-                ))}
-              </HStack>
-              {/* The pattern itself, always visible & editable — a non-preset value
-                  (agent-authored or hand-typed) shows here instead of hiding. */}
-              <Input
-                aria-label={`Custom d3 format for ${channel}`}
-                size="xs"
-                mt={1.5}
-                fontFamily="mono"
-                placeholder="custom d3, e.g. .2~s"
-                value={formatDraft ?? value.format ?? ''}
-                onChange={e => setFormatDraft(e.target.value)}
-                onBlur={() => { if (formatDraft != null) commitFormat(formatDraft); }}
-                onKeyDown={e => { if (e.key === 'Enter') { commitFormat((e.target as HTMLInputElement).value); } }}
-              />
-              <Text fontSize="9px" color="fg.subtle" mt={1.5} lineHeight="1.4">
-                d3 format strings — presets fill the pattern; type your own for anything custom.
-              </Text>
-            </Box>
-          )}
-        </Box>
-        </Portal>
+        // from the gear's rect instead. Carries its own theme host so the kit token
+        // classes resolve outside the app-shell host.
+        createPortal(
+          <div data-mx-theme-host="">
+            <div
+              ref={panelRef}
+              aria-label={`Field settings panel for ${channel}`}
+              className="fixed z-[1500] flex flex-col gap-2 rounded-md border border-border bg-popover p-3 shadow-md"
+              style={{ top: pos.top, left: pos.left, width: PANEL_WIDTH }}
+            >
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+                  Alias
+                </p>
+                <Input
+                  aria-label={`Alias for ${channel}`}
+                  className="h-6 px-2 font-mono text-xs md:text-xs"
+                  placeholder="display name"
+                  value={alias}
+                  onChange={e => setAlias(e.target.value)}
+                  onBlur={commitAlias}
+                  onKeyDown={e => { if (e.key === 'Enter') { commitAlias(); setOpen(false); } }}
+                />
+              </div>
+              {presets && (
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+                    Format
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {presets.map(({ label, format }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        aria-label={`Format ${label}`}
+                        onClick={() => onCommit({ title: value.title, format })}
+                        className={`rounded-md border px-1.5 py-0.5 font-mono text-[10px] transition-colors ${
+                          value.format === format
+                            ? 'border-transparent text-white'
+                            : 'border-border bg-transparent text-foreground hover:bg-accent'
+                        }`}
+                        style={value.format === format ? { background: TEAL } : undefined}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* The pattern itself, always visible & editable — a non-preset value
+                      (agent-authored or hand-typed) shows here instead of hiding. */}
+                  <Input
+                    aria-label={`Custom d3 format for ${channel}`}
+                    className="mt-1.5 h-6 px-2 font-mono text-xs md:text-xs"
+                    placeholder="custom d3, e.g. .2~s"
+                    value={formatDraft ?? value.format ?? ''}
+                    onChange={e => setFormatDraft(e.target.value)}
+                    onBlur={() => { if (formatDraft != null) commitFormat(formatDraft); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { commitFormat((e.target as HTMLInputElement).value); } }}
+                  />
+                  <p className="mt-1.5 text-[9px] leading-[1.4] text-muted-foreground">
+                    d3 format strings — presets fill the pattern; type your own for anything custom.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body
+        )
       )}
-    </Box>
+    </div>
   );
 }

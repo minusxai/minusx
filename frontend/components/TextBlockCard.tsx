@@ -17,7 +17,6 @@
  *    "Read more" pill grows the grid cell (via `onResize`); "Show less" restores.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, HStack, IconButton, Button, Text } from '@chakra-ui/react';
 import { LuX, LuGripVertical, LuChevronDown, LuChevronUp } from 'react-icons/lu';
 import LexicalTextEditor, { LexicalTextViewer, SHARED_TEXT_PADDING, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
 import { uploadFile } from '@/lib/object-store/client';
@@ -124,13 +123,7 @@ function TextBlockCard({
 
   if (editMode) {
     return (
-      <Box
-        position="relative"
-        height="100%"
-        display="flex"
-        flexDirection="column"
-        _hover={{ '& .tb-controls': { opacity: 1 } }}
-      >
+      <div className="group/tb relative flex h-full flex-col">
         <LexicalTextEditor
           key={syncKey}
           initialMarkdown={content}
@@ -148,50 +141,23 @@ function TextBlockCard({
 
         {/* Hover controls: drag grip + remove. Absolute so they never affect the
             text layout; fade in on hover of the block. */}
-        <HStack
-          className="tb-controls"
-          position="absolute"
-          top="4px"
-          right="4px"
-          gap={1}
-          opacity={0}
-          transition="opacity 0.12s"
-          zIndex={2}
-        >
-          <Box
-            className="drag-handle"
-            display="flex"
-            alignItems="center"
-            px={1}
-            py={1}
-            bg="bg.panel"
-            borderWidth="1px"
-            borderColor="border.muted"
-            borderRadius="md"
-            boxShadow="xs"
-            color="fg.muted"
-            cursor="grab"
-            _active={{ cursor: 'grabbing' }}
+        <div className="absolute top-1 right-1 z-[2] flex gap-1 opacity-0 transition-opacity duration-100 group-hover/tb:opacity-100">
+          <div
+            className="drag-handle flex cursor-grab items-center rounded-md border border-border bg-popover px-1 py-1 text-muted-foreground shadow-xs active:cursor-grabbing"
             aria-label="Move text block"
           >
             <LuGripVertical size={14} />
-          </Box>
-          <IconButton
+          </div>
+          <button
+            type="button"
             onClick={() => onRemove(id)}
             aria-label="Remove text block"
-            size="2xs"
-            variant="subtle"
-            color="accent.danger"
-            bg="bg.panel"
-            boxShadow="xs"
-            cursor="pointer"
-            _hover={{ transform: 'scale(1.15)' }}
-            transition="transform 0.1s ease"
+            className="inline-flex size-6 cursor-pointer items-center justify-center rounded-md bg-popover text-destructive shadow-xs transition-transform duration-100 hover:scale-115"
           >
             <LuX size={14} />
-          </IconButton>
-        </HStack>
-      </Box>
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -199,83 +165,48 @@ function TextBlockCard({
   const showFade = isOverflowing && !expanded;
 
   return (
-    <Box height="100%" position="relative" display="flex" flexDirection="column">
-      <Box
+    <div className="relative flex h-full flex-col">
+      <div
         ref={contentRef}
-        flex={1}
-        minH={0}
-        overflow={expanded ? 'visible' : 'hidden'}
+        className={`min-h-0 flex-1 ${expanded ? 'overflow-visible' : 'overflow-hidden'}`}
       >
         {content ? (
           <LexicalTextViewer markdown={content} padding={SHARED_TEXT_PADDING} verticalCenter={!expanded} />
         ) : (
-          <Box p={4} aria-label="Empty text block" color="fg.muted" fontSize="sm" fontStyle="italic">Empty text block</Box>
+          <div className="p-4 text-sm italic text-muted-foreground" aria-label="Empty text block">Empty text block</div>
         )}
-      </Box>
+      </div>
 
       {/* Gradient fade + Read more */}
       {showFade && (
-        <Box
-          position="absolute"
-          bottom={0}
-          left={0}
-          right={0}
-          height="80px"
-          bgGradient="to-t"
-          gradientFrom="bg.subtle"
-          gradientVia="bg.subtle"
-          gradientTo="transparent"
-          display="flex"
-          alignItems="flex-end"
-          justifyContent="center"
-          pb={2}
-          pointerEvents="none"
-        >
-          <Button
-            size="xs"
-            variant="outline"
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-gradient-to-t from-muted via-muted to-transparent pb-2">
+          <button
+            type="button"
             onClick={handleExpand}
             aria-label="Expand text block"
-            borderColor="accent.teal"
-            bg="bg.subtle"
-            color="accent.teal"
-            fontSize="xs"
-            fontWeight={500}
-            borderRadius="full"
-            px={4}
-            pointerEvents="auto"
-            _hover={{ bg: 'accent.teal', color: 'white', borderColor: 'accent.teal' }}
-            transition="all 0.15s"
+            className="pointer-events-auto inline-flex items-center rounded-full border border-primary bg-muted px-4 py-1 text-xs font-medium text-primary transition-all duration-150 hover:bg-primary hover:text-primary-foreground"
           >
             <LuChevronDown size={11} />
-            <Text ml={1}>Read more</Text>
-          </Button>
-        </Box>
+            <span className="ml-1">Read more</span>
+          </button>
+        </div>
       )}
 
       {/* Show less — sits below the (now fully visible) content */}
       {expanded && (
-        <Box flexShrink={0} display="flex" justifyContent="center" py={2}>
-          <Button
-            size="xs"
-            variant="outline"
+        <div className="flex shrink-0 justify-center py-2">
+          <button
+            type="button"
             onClick={handleCollapse}
             aria-label="Collapse text block"
-            borderColor="accent.teal"
-            color="accent.teal"
-            fontSize="xs"
-            fontWeight={500}
-            borderRadius="full"
-            px={4}
-            _hover={{ bg: 'accent.teal', color: 'white', borderColor: 'accent.teal' }}
-            transition="all 0.15s"
+            className="inline-flex items-center rounded-full border border-primary px-4 py-1 text-xs font-medium text-primary transition-all duration-150 hover:bg-primary hover:text-primary-foreground"
           >
             <LuChevronUp size={11} />
-            <Text ml={1}>Show less</Text>
-          </Button>
-        </Box>
+            <span className="ml-1">Show less</span>
+          </button>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
 

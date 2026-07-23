@@ -1,14 +1,16 @@
 'use client';
 
-import { Box } from '@chakra-ui/react';
 import { DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import { getAssetLayoutKey, getLayoutableAssets, getLayoutSignature, computeDashboardLayouts } from './dashboard-assets';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
 import ParameterRow from '../params/ParameterRow';
+import { WindowedTile } from '@/components/views/dashboard/WindowedTile';
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
+import { Layout, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
+import { useSurfaceWidth } from '@/lib/dashboard-surface/surface-width';
+import { MARKER_GUTTER_CSS_PX } from '@/lib/screenshot/draw-markers';
 import { DashboardEmptyState } from '@/components/views/shared/empty-states';
 import type { FileState } from '@/store/filesSlice';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
@@ -25,7 +27,14 @@ const GRID_MARGIN = 6;
 const parseLayoutItemId = (key: string): number | string =>
   /^\d+$/.test(key) ? Number(key) : key;
 
-const ResponsiveGridLayout = WidthProvider(Responsive);
+// NO WidthProvider (Phase 8): its resize-observer-polyfill never fires inside the surface
+// iframe (refresh triggers are bound to the top document's realm), so it measured once at mount
+// and went deaf — pane toggles left the grid at a stale width, clipped at the pane edge. The
+// surface tracks its width authoritatively (SurfaceWidthContext); the grid consumes it directly.
+const ResponsiveGridLayout = Responsive;
+
+/** Fallback grid width when no surface provides one (legacy mounts, jsdom) — WidthProvider's old default. */
+const FALLBACK_GRID_WIDTH = 1280;
 
 interface DashboardViewProps {
   // Data props (all from Redux via smart component)
@@ -52,6 +61,9 @@ interface DashboardViewProps {
   onParamSubmit: (newParamValues: Record<string, any>) => void;
   onAddQuestion: (questionId: number) => void;
   onAddTextBlock: () => void;
+
+  /** Design theme (Renderer_v2 Phase 3): stamps [data-theme] so the six story token sets apply. */
+  theme?: string | null;
 }
 
 export default function DashboardView({
@@ -71,6 +83,7 @@ export default function DashboardView({
   onParamSubmit,
   onAddQuestion,
   onAddTextBlock,
+  theme,
 }: DashboardViewProps) {
   // Ref to always have the latest document for callbacks that may fire with stale closures
   const documentRef = useRef(document);
@@ -78,6 +91,11 @@ export default function DashboardView({
 
   // Track current columns for responsive grid background
   const [currentCols, setCurrentCols] = useState(12);
+
+  // The grid's layout width: the surface's measured width minus BOTH reserved gutters
+  // (px-10 on the region below — the grid's containing block is the region's CONTENT box).
+  const surfaceWidth = useSurfaceWidth();
+  const gridWidth = Math.max(320, (surfaceWidth ?? FALLBACK_GRID_WIDTH) - MARKER_GUTTER_CSS_PX * 2);
 
   // Text blocks that a viewer has expanded via "Read more" → extra grid rows.
   // View-only (not persisted); restored to null on collapse or entering edit mode.
@@ -318,46 +336,23 @@ export default function DashboardView({
     const halfMargin = gridMargin / 2; // 5px — half the margin on each side of a cell
 
     return (
-      <Box
-        position="absolute"
-        top={0}
-        left={0}
-        right={0}
-        height="100%"
-        pointerEvents="none"
-        zIndex={0}
-        overflow="hidden"
-      >
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-full overflow-hidden">
         {Array.from({ length: cols * numRows }).map((_, i) => {
           const col = i % cols;
           const row = Math.floor(i / cols);
           const colWidthPercent = 100 / cols;
 
           return (
-            <Box
+            <div
               key={i}
-              position="absolute"
-              left={`${col * colWidthPercent}%`}
-              top={`${row * cellHeight}px`}
-              width={`${colWidthPercent}%`}
-              height={`${cellHeight}px`}
-              px={`${halfMargin}px`}
-              py={`${halfMargin}px`}
-              pointerEvents="none"
+              className="pointer-events-none absolute"
+              style={{ left: `${col * colWidthPercent}%`, top: `${row * cellHeight}px`, width: `${colWidthPercent}%`, height: `${cellHeight}px`, padding: `${halfMargin}px` }}
             >
-              <Box
-                width="100%"
-                height="100%"
-                border="1px solid"
-                borderColor="border.muted"
-                borderRadius="md"
-                bg="bg.muted"
-                opacity={0.6}
-              />
-            </Box>
+              <div className="size-full rounded-md border border-border bg-muted opacity-60" />
+            </div>
           );
         })}
-      </Box>
+      </div>
     );
   }, [editMode, layouts.lg, currentCols]);
 
@@ -376,74 +371,59 @@ export default function DashboardView({
 
         // Publish-mode highlights take priority over param-hover highlights
         const publishMark = publishHighlights?.get(questionId);
-        let borderColor: string;
-        let opacity: number;
+        let borderClass: string;
+        let opacityClass = '';
         if (publishHighlights !== null) {
           // Publish context active: color by add/move/unchanged
-          if (publishMark === 'added') {
-            borderColor = 'accent.teal';
-            opacity = 1;
-          } else if (publishMark === 'edited') {
-            borderColor = 'accent.warning';
-            opacity = 1;
-          } else if (publishMark === 'moved') {
-            borderColor = 'accent.primary';
-            opacity = 1;
-          } else {
-            borderColor = 'border.subtle';
-            opacity = 1;
-          }
+          if (publishMark === 'added') borderClass = 'border-[#16a085]';
+          else if (publishMark === 'edited') borderClass = 'border-[#f39c12]';
+          else if (publishMark === 'moved') borderClass = 'border-[#2980b9]';
+          else borderClass = 'border-border/50';
         } else {
           // Normal param-hover highlighting
           const isHighlighted = paramHighlightedIds ? paramHighlightedIds.includes(questionId) : null;
-          borderColor = isHighlighted === true ? 'accent.teal' : isHighlighted === false ? 'border.subtle' : 'border.default';
-          opacity = isHighlighted === false ? 0.5 : 1;
+          borderClass = isHighlighted === true ? 'border-[#16a085]' : isHighlighted === false ? 'border-border/50' : 'border-border';
+          opacityClass = isHighlighted === false ? 'opacity-50' : '';
         }
 
         return (
-          <Box
+          <div
             key={key}
             // Surfaces the publish/edit highlight state (added/moved/edited) for
             // component tests — there's no other visible affordance for it besides
             // the border color below.
             aria-label={`Dashboard tile ${questionId}${publishMark ? ` (${publishMark})` : ''}`}
-            bg="bg.subtle"
-            borderWidth={publishMark ? '2px' : '1px'}
-            borderColor={borderColor}
-            borderRadius="md"
-            opacity={opacity}
-            overflow="hidden"
-            display="flex"
-            flexDirection="column"
-            transition="all 0.2s"
+            // transition-COLORS only (highlight borders/opacity) — NEVER transform: react-grid-layout
+            // merges these classes onto its positioned item, and transform transitions inside the
+            // foreignObject surface freeze mid-animation (Chromium paint-invalidation; see the
+            // grid-level transition:none rule below).
+            className={`flex flex-col overflow-hidden rounded-md bg-card transition-[border-color,background-color,opacity] duration-200 ${publishMark ? 'border-2' : 'border'} ${borderClass} ${opacityClass}`}
           >
-            <SmartEmbeddedQuestionContainer
-              questionId={questionId}
-              externalParameters={parameterValuesForDisplay}
-              externalParamValues={effectiveSubmittedValues}
-              showTitle={true}
-              editMode={editMode}
-              index={index}
-              dashboardId={fileId}
-              onEdit={() => onQuestionEdit(questionId, effectiveSubmittedValues)}
-              onRemove={() => handleRemoveAsset(questionId.toString())}
-            />
-          </Box>
+            {/* Windowed (Renderer_v2 Phase 7): off-viewport tiles are BUSY layout ghosts;
+                the capture readiness gate force-mounts them (see WindowedTile). */}
+            <WindowedTile>
+              <SmartEmbeddedQuestionContainer
+                questionId={questionId}
+                externalParameters={parameterValuesForDisplay}
+                externalParamValues={effectiveSubmittedValues}
+                showTitle={true}
+                editMode={editMode}
+                index={index}
+                dashboardId={fileId}
+                onEdit={() => onQuestionEdit(questionId, effectiveSubmittedValues)}
+                onRemove={() => handleRemoveAsset(questionId.toString())}
+              />
+            </WindowedTile>
+          </div>
         );
       }
 
       // Text block
       const textAsset = asset as InlineAsset;
       return (
-        <Box
+        <div
           key={key}
-          bg="bg.subtle"
-          borderWidth="1px"
-          borderColor="border.default"
-          borderRadius="md"
-          overflow="hidden"
-          display="flex"
-          flexDirection="column"
+          className="flex flex-col overflow-hidden rounded-md border border-border bg-card"
         >
           {/* Stable callbacks (memoized) so React.memo(TextBlockCard) can skip
               re-rendering the OTHER text blocks when one block's content changes. */}
@@ -456,7 +436,7 @@ export default function DashboardView({
             onRemove={handleRemoveAsset}
             onResize={handleTextBlockResize}
           />
-        </Box>
+        </div>
       );
     });
   }, [layoutableAssets, editMode, handleRemoveAsset, handleTextBlockResize, onTextBlockContentChange, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, onQuestionEdit, publishHighlights, folderPath]);
@@ -479,14 +459,25 @@ export default function DashboardView({
   };
 
   return (
-    <Box flex="1" data-file-id={fileId} role="region" aria-label="Dashboard">
+    // Phase 8: this view renders INSIDE the self-contained iframe surface (DashboardSurface);
+    // the [data-file-id] capture anchor, dev marker overlay, and the surface itself are the
+    // CONTAINER's (DashboardContainerV2) — the view is the surface's content, nothing more.
+    // px-10: the LEFT gutter is the marker column's home (MARKER_GUTTER_CSS_PX) — badges, live
+    // overlay AND captured image, draw INSIDE it instead of widening the canvas, so the agent
+    // image keeps the reader's geometry 1:1. The RIGHT gutter mirrors it purely for visual
+    // balance (a left-only gutter read as lopsided padding).
+    <div role="region" aria-label="Dashboard" className="px-10" {...(theme ? { 'data-theme': theme } : {})}>
+    {/* Inside the foreignObject surface, transform TRANSITIONS freeze mid-animation (Chromium
+        does not incrementally repaint transformed foreignObject content — the stale-tiles bug).
+        Tiles snap to their positions instead; DashboardSurface's resize nudge forces the repaint. */}
+    <style>{'[aria-label="Dashboard"] .react-grid-item { transition: none; }'}</style>
 
       {/* Visual View (the Code view is rendered upstream by FileView) */}
       {(
         <>
           {/* Dashboard-level Parameters */}
           {parameterValuesForDisplay.length > 0 && (
-            <Box mb={4}>
+            <div className="mb-4">
               <ParameterRow
                 parameters={parameterValuesForDisplay}
                 parameterValues={localParamValues}
@@ -499,17 +490,18 @@ export default function DashboardView({
                 onHoverParam={setHoveredParamKey}
                 database={dashboardDatabase}
               />
-            </Box>
+            </div>
           )}
 
           {/* Grid Layout */}
-          <Box position="relative" maxW="100%" pb={layoutableAssets.length > 0 ? 30 : 4} minH={"100%"}>
+          <div className={`relative min-h-full max-w-full ${layoutableAssets.length > 0 ? 'pb-[120px]' : 'pb-4'}`}>
             {gridBackground}
 
             {layoutableAssets.length > 0 ? (
               <ResponsiveGridLayout
                 key={`grid-v${gridVersion}`}
                 className="layout"
+                width={gridWidth}
                 layouts={layouts}
                 breakpoints={{ lg: 1024, md: 768, sm: 0 }}
                 cols={{ lg: 12, md: 12, sm: 6 }}
@@ -528,20 +520,12 @@ export default function DashboardView({
               </ResponsiveGridLayout>
             ) : (
               /* Empty dashboard: 50/50 split with a compact action rail. */
-              <Box
-                display="flex"
-                flexDirection={{ base: 'column', lg: 'row' }}
-                alignItems="center"
-                justifyContent="center"
-                gap={{ base: 3, lg: 6 }}
-                maxW="900px"
-                mx="auto"
-              >
-                <Box flex={{ base: '0 1 auto', lg: '1 1 0' }} width="100%" minW={0}>
+              <div className="mx-auto flex max-w-[900px] flex-col items-center justify-center gap-3 lg:flex-row lg:gap-6">
+                <div className="w-full min-w-0 lg:flex-1">
                   <DashboardEmptyState />
-                </Box>
+                </div>
                 {editMode && (
-                  <Box flex={{ base: '0 1 auto', lg: '1 1 0' }} width="100%" maxW={{ base: '420px', lg: 'none' }} pb={{ base: 4, lg: 0 }} position="relative" zIndex={10}>
+                  <div className="relative z-10 w-full max-w-[420px] pb-4 lg:max-w-none lg:flex-1 lg:pb-0">
                     <QuestionBrowserPanel
                       folderPath={folderPath}
                       onAddQuestion={onAddQuestion}
@@ -551,14 +535,14 @@ export default function DashboardView({
                       dashboardId={fileId}
                       compact
                     />
-                  </Box>
+                  </div>
                 )}
-              </Box>
+              </div>
             )}
 
             {/* Add Questions/Text Panel - after last card in edit mode */}
             {editMode && layoutableAssets.length > 0 && (
-              <Box mt={4} maxW="500px" mx="auto" position="relative" zIndex={10}>
+              <div className="relative z-10 mx-auto mt-4 max-w-[500px]">
                 <QuestionBrowserPanel
                   folderPath={folderPath}
                   onAddQuestion={onAddQuestion}
@@ -567,13 +551,13 @@ export default function DashboardView({
                   title="Add more questions / text"
                   dashboardId={fileId}
                 />
-              </Box>
+              </div>
             )}
-          </Box>
+          </div>
 
         </>
       )}
 
-    </Box>
+    </div>
   );
 }

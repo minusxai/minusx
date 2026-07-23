@@ -9,10 +9,15 @@
  */
 import 'server-only';
 
-import { composeSvgToJpeg } from './render-chart';
+import { composeSvgToJpeg } from './svg-to-jpeg';
 import { renderEnvelopeToSvg } from '@/lib/viz/render-vega';
+import { installFsGeoAssetFetcher } from '@/lib/viz/geo-assets.server';
 import { isEnvelopeImageViz } from '@/lib/viz/encoding-edit';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+
+// Headless context: boundary files resolve from public/ on disk (Renderer_v2 Phase 2) — without
+// this, geo charts silently drop from server-rendered images.
+installFsGeoAssetFetcher();
 
 export interface RenderVizImageOptions {
   width?: number;

@@ -5,7 +5,6 @@
  * Smart component for report pages.
  * Uses the unified job runs system (useJobRuns) for execution and run history.
  */
-import { Box } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName, selectIsDirty, type FileId } from '@/store/filesSlice';
 import { selectFileEditMode } from '@/store/uiSlice';
@@ -32,6 +31,8 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as ReportContent | undefined;
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
+  const devMode = useAppSelector(state => state.ui.devMode);
+  const colorMode = useAppSelector(state => state.ui.colorMode);
 
   // Context databases for the report's path — powers @-mention of tables/columns
   // in the instructions editor (questions/dashboards come from the server).
@@ -59,13 +60,15 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
   }, [selectRun]);
 
   if (fileLoading || !file || !mergedContent) {
-    return <Box p={4}>Loading report...</Box>;
+    return <div className="p-4">Loading report...</div>;
   }
 
   if (typeof fileId !== 'number') return null;
 
   return (
     <ReportView
+      showDevMarkers={devMode}
+      colorMode={colorMode}
       report={mergedContent}
       fileId={fileId}
       isRunning={isRunning}

@@ -30,7 +30,6 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Box, VStack, HStack, Text, Button, Input, Icon, Grid } from '@chakra-ui/react';
 import { LuPlay, LuPause, LuRefreshCw, LuSigma, LuTag, LuCalendarDays, LuSearch, LuTriangleAlert, LuX, LuCheck, LuLayers, LuListFilter, LuHash, LuFingerprint, LuDivide, LuArrowDownToLine, LuArrowUpToLine, LuPercent, LuSquareFunction } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import { compileSemanticQuery, validateSemanticQuery, semanticAlias, timeDimensionsOf } from '@/lib/semantic/compile';
@@ -41,8 +40,20 @@ import { VIEWS_SCHEMA, type SemanticAggregate, type SemanticMetricV2, type Seman
 import type { SemanticQuerySpec, SemanticQueryFilter } from '@/lib/validation/atlas-schemas';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AddChipButton } from './QueryChip';
+import { Button } from '@/components/kit/button';
+import { Input } from '@/components/kit/input';
+import { cn } from '@/components/kit/cn';
 
 const TIME_GRAINS: SemanticTimeGrain[] = ['HOUR', 'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'];
+
+// Accent hexes (Chakra accent.* equivalents) + the color-mix helper for
+// translucent tints (matches the PivotTableBody pattern).
+const TEAL = '#16a085';
+const PRIMARY = '#2980b9';
+const SECONDARY = '#9b59b6';
+const WARNING = '#f39c12';
+const CYAN = '#1abc9c';
+const mix = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 
 /** One icon per aggregation — the metric list telegraphs HOW each aggregates. */
 const AGG_ICONS: Record<SemanticAggregate, IconType> = {
@@ -291,112 +302,95 @@ export function SemanticExplorer({
   const foreignHits = otherHits.filter((h) => h.model !== spec?.model).slice(0, 20);
 
   const fieldRow = (label: string, assigned: boolean, accent: string, icon: React.ReactNode, onClick: () => void, ariaLabel: string, tag?: string) => (
-    <HStack
+    <button
       key={ariaLabel}
       aria-label={ariaLabel}
-      as="button"
-      gap={1.5} px={2} py={1}
-      bg={assigned ? `${accent}/10` : 'transparent'}
-      borderRadius="md" border="1px solid"
-      borderColor={assigned ? accent : 'transparent'}
-      cursor="pointer"
-      _hover={{ bg: assigned ? `${accent}/15` : 'bg.muted' }}
+      type="button"
+      className="flex w-full shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md border border-[var(--fr-border)] bg-[var(--fr-bg)] px-2 py-1 text-left transition-[background] duration-100 ease-in hover:bg-[var(--fr-hover)]"
+      style={{
+        '--fr-border': assigned ? accent : 'transparent',
+        '--fr-bg': assigned ? mix(accent, 10) : 'transparent',
+        '--fr-hover': assigned ? mix(accent, 15) : 'var(--muted)',
+      } as React.CSSProperties}
       onClick={onClick}
-      userSelect="none"
-      width="100%"
-      textAlign="left"
-      flexShrink={0}
-      transition="background 0.1s ease"
     >
       {icon}
-      <Text fontSize="xs" fontFamily="mono" truncate flex={1}>{label}</Text>
-      {tag && <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" flexShrink={0}>{tag}</Text>}
-      {assigned && <Box flexShrink={0}><LuCheck size={12} color={`var(--chakra-colors-${accent.replace('.', '-')})`} /></Box>}
-    </HStack>
+      <span className="min-w-0 flex-1 truncate font-mono text-xs">{label}</span>
+      {tag && <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{tag}</span>}
+      {assigned && <span className="flex shrink-0 items-center"><LuCheck size={12} color={accent} /></span>}
+    </button>
   );
 
   // --- top strip: table chip + search + validation + run ------------------------
 
   const topStrip = (
-    <HStack px={3} py={2} gap={2} flexShrink={0} borderBottom="1px solid" borderColor="border.muted">
+    <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
       {spec && (
-        <HStack
-          as="button"
+        <button
+          type="button"
           aria-label="Change model"
-          gap={1.5} px={2} py={1}
-          borderRadius="md" border="1px solid" borderColor="border.muted"
-          bg={browsingModels ? 'bg.muted' : 'bg.surface'}
-          _hover={{ bg: 'bg.muted' }}
+          className={cn(
+            'flex max-w-[200px] shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-1 hover:bg-muted',
+            browsingModels ? 'bg-muted' : 'bg-card',
+          )}
           onClick={() => setBrowsingModels((b) => !b)}
-          flexShrink={0}
-          maxW="200px"
           title="Pick a different semantic model (starts a fresh query)"
         >
-          <Icon as={LuLayers} boxSize={3} color="accent.teal" flexShrink={0} />
-          <Text fontSize="xs" fontFamily="mono" fontWeight="600" truncate>{spec.model}</Text>
-          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">▾</Text>
-        </HStack>
+          <LuLayers size={12} color={TEAL} className="shrink-0" />
+          <span className="truncate font-mono text-xs font-semibold">{spec.model}</span>
+          <span className="font-mono text-[10px] text-muted-foreground">▾</span>
+        </button>
       )}
-      <HStack gap={1.5} px={2} flex={1} minW={0} bg="bg.surface" borderRadius="md" border="1px solid" borderColor="border.muted">
-        <LuSearch size={13} color="var(--chakra-colors-fg-subtle)" />
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-card px-2">
+        <LuSearch size={13} className="shrink-0 text-muted-foreground" />
         <Input
           aria-label="Semantic field search"
-          variant="subtle"
-          bg="transparent"
-          size="xs"
-          fontFamily="mono"
-          fontSize="xs"
-          border="none"
+          className="h-6 min-w-0 border-none bg-transparent px-0 font-mono text-xs shadow-none focus-visible:border-transparent focus-visible:ring-0"
           placeholder={model && !browsingModels ? 'Filter fields…' : 'Search models and fields…'}
           value={query}
           onChange={(e) => runSearch(e.target.value)}
         />
-      </HStack>
+      </div>
       {spec && issues.length > 0 && (
-        <HStack gap={1} color="orange.400" flexShrink={0} title={issues[0]}>
+        <div className="flex shrink-0 items-center gap-1 text-[#f39c12]" title={issues[0]}>
           <LuTriangleAlert size={13} />
-          <Text fontSize="2xs" fontFamily="mono" maxW="140px" truncate>{issues[0]}</Text>
-        </HStack>
+          <span className="max-w-[140px] truncate font-mono text-[10px]">{issues[0]}</span>
+        </div>
       )}
       {spec && onToggleAutoRun && (
-        <HStack
-          as="button"
+        <button
+          type="button"
           aria-label="Toggle auto-run"
           onClick={onToggleAutoRun}
-          gap={1} px={2} py={1}
-          borderRadius="md" border="1px solid"
-          borderColor={autoRun ? 'accent.teal' : 'border.muted'}
-          bg={autoRun ? 'accent.teal/10' : 'transparent'}
-          color={autoRun ? 'accent.teal' : 'fg.subtle'}
-          cursor="pointer"
-          _hover={{ bg: autoRun ? 'accent.teal/15' : 'bg.muted' }}
-          flexShrink={0}
+          className={cn(
+            'flex shrink-0 cursor-pointer items-center gap-1 rounded-md border px-2 py-1',
+            autoRun
+              ? 'border-[#16a085] bg-[#16a085]/10 text-[#16a085] hover:bg-[#16a085]/15'
+              : 'border-border bg-transparent text-muted-foreground hover:bg-muted',
+          )}
           title={autoRun ? 'Auto-run is on: every edit executes automatically' : 'Auto-run is off: use Run'}
         >
           {autoRun ? <LuRefreshCw size={11} /> : <LuPause size={11} />}
-          <Text fontSize="2xs" fontFamily="mono" fontWeight="600">Auto</Text>
-        </HStack>
+          <span className="font-mono text-[10px] font-semibold">Auto</span>
+        </button>
       )}
       {spec && onExecute && (
         <Button
           aria-label="Execute semantic query"
           onClick={onExecute}
           size="xs"
-          loading={isExecuting}
-          bg="accent.teal"
-          color="white"
-          _hover={{ opacity: 0.9 }}
-          fontWeight="600"
-          fontFamily="mono"
-          px={3}
-          flexShrink={0}
-          disabled={issues.length > 0}
+          className="shrink-0 bg-[#16a085] px-3 font-mono font-semibold text-white hover:bg-[#16a085] hover:opacity-90"
+          disabled={isExecuting || issues.length > 0}
         >
-          <LuPlay size={12} fill="currentColor" />
+          {isExecuting ? (
+            <span className="size-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+          ) : (
+            <LuPlay size={12} fill="currentColor" />
+          )}
           Run
         </Button>
       )}
-    </HStack>
+    </div>
   );
 
   // --- shelves: the current selection, always visible on top --------------------
@@ -404,51 +398,51 @@ export function SemanticExplorer({
   // Fixed-width labels line the shelves up into a label column — one shelf
   // per line reads far calmer than a single wrapped row.
   const shelfLabel = (label: string, empty: boolean) => (
-    <Text
-      fontSize="2xs" fontWeight="700" color="fg.subtle"
-      textTransform="uppercase" letterSpacing="0.06em"
-      opacity={empty ? 0.45 : 1}
-      flexShrink={0} minW="80px"
+    <span
+      className={cn(
+        'min-w-[80px] shrink-0 text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground',
+        empty ? 'opacity-45' : 'opacity-100',
+      )}
     >
       {label}
-    </Text>
+    </span>
   );
 
   const shelves = spec && (
-    <Box aria-label="Semantic shelves" px={3} py={2} flexShrink={0} borderBottom="1px solid" borderColor="border.muted" bg="bg.surface">
-      <VStack gap={1.5} align="stretch">
-        <HStack gap={1.5} align="center" flexWrap="wrap">
+    <div aria-label="Semantic shelves" className="shrink-0 border-b border-border bg-card px-3 py-2">
+      <div className="flex flex-col items-stretch gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {shelfLabel('Metrics', spec.metrics.length === 0)}
           {spec.metrics.map((name) => (
             <ShelfChip
               key={name}
               label={`Metrics chip: ${name}`}
-              accent="accent.primary"
+              accent={PRIMARY}
               onRemove={spec.metrics.length > 1 ? () => update({ metrics: spec.metrics.filter((m) => m !== name) }) : undefined}
             >
-              <Text fontSize="xs" fontFamily="mono">{name}</Text>
+              <span className="font-mono text-xs">{name}</span>
             </ShelfChip>
           ))}
-        </HStack>
-        <HStack gap={1.5} align="center" flexWrap="wrap">
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
           {shelfLabel('Dimensions', spec.dimensions.length === 0)}
           {spec.dimensions.map((name) => (
             <ShelfChip
               key={name}
               label={`Dimensions chip: ${name}`}
-              accent="accent.warning"
+              accent={WARNING}
               onRemove={() => update({ dimensions: spec.dimensions.filter((d) => d !== name) })}
             >
-              <Text fontSize="xs" fontFamily="mono">{name}</Text>
+              <span className="font-mono text-xs">{name}</span>
             </ShelfChip>
           ))}
-        </HStack>
+        </div>
         {temporalDims.length > 0 && (
-          <HStack gap={1.5} align="center" flexWrap="wrap">
+          <div className="flex flex-wrap items-center gap-1.5">
             {shelfLabel('Time', !spec.timeGrain)}
             {spec.timeGrain && (
-              <ShelfChip label={`Time chip: ${timeLabel}`} accent="accent.secondary" onRemove={() => update({ timeGrain: undefined })}>
-                <Text fontSize="xs" fontFamily="mono">{timeLabel}</Text>
+              <ShelfChip label={`Time chip: ${timeLabel}`} accent={SECONDARY} onRemove={() => update({ timeGrain: undefined })}>
+                <span className="font-mono text-xs">{timeLabel}</span>
                 <select
                   aria-label="Time grain"
                   value={spec.timeGrain ?? 'MONTH'}
@@ -460,10 +454,10 @@ export function SemanticExplorer({
                 </select>
               </ShelfChip>
             )}
-          </HStack>
+          </div>
         )}
         {/* Filters and Limit share the last line — Limit hugs the right edge. */}
-        <HStack gap={1.5} align="center" flexWrap="wrap">
+        <div className="flex flex-wrap items-center gap-1.5">
           {shelfLabel('Filters', (spec.filters ?? []).length === 0)}
           {(spec.filters ?? []).map((f, idx) => (
             <SemanticFilterPicker
@@ -472,23 +466,23 @@ export function SemanticExplorer({
               initial={f}
               onSubmit={(filter) => update({ filters: (spec.filters ?? []).map((prev, i) => (i === idx ? filter : prev)) })}
               trigger={(openEditor) => (
-                // The Box is the popover anchor: Popover.Trigger asChild needs a
+                // The div is the popover anchor: PopoverTrigger asChild needs a
                 // ref-forwarding element, which the plain ShelfChip fn is not —
                 // without it the popover loses its anchor and renders top-left.
-                <Box display="inline-flex">
+                <div className="inline-flex">
                   <ShelfChip
                     label={`Filter chip: ${f.dimension}`}
-                    accent="accent.cyan"
+                    accent={CYAN}
                     onClick={openEditor}
                     onRemove={() => update({ filters: (spec.filters ?? []).filter((_, i) => i !== idx) })}
                   >
-                    <Text fontSize="xs" fontFamily="mono">
+                    <span className="font-mono text-xs">
                       {f.operator === 'IS NULL' || f.operator === 'IS NOT NULL'
                         ? `${f.dimension} ${f.operator}`
                         : `${f.dimension} ${f.operator} ${Array.isArray(f.value) ? `(${f.value.join(', ')})` : String(f.value ?? '')}`}
-                    </Text>
+                    </span>
                   </ShelfChip>
-                </Box>
+                </div>
               )}
             />
           ))}
@@ -497,21 +491,27 @@ export function SemanticExplorer({
               dimensions={model.dimensions.map((d) => d.name)}
               onSubmit={(filter) => update({ filters: [...(spec.filters ?? []), filter] })}
               trigger={(openEditor) => (
-                <Box aria-label="Add semantic filter">
+                <div aria-label="Add semantic filter">
                   <AddChipButton onClick={openEditor} variant="filter" />
-                </Box>
+                </div>
               )}
             />
           )}
-          <HStack gap={1.5} align="center" ml="auto">
-            <Text fontSize="2xs" fontWeight="700" color="fg.subtle"
-              textTransform="uppercase" letterSpacing="0.06em"
-              opacity={spec.limit ? 1 : 0.45} flexShrink={0}>
+          <div className="ml-auto flex items-center gap-1.5">
+            {/* Inline label (not shelfLabel): the right-hugging Limit must not carry the
+                80px label-column width. Opacity keys on the limit being set. */}
+            <span
+              className={cn(
+                'shrink-0 text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground',
+                spec.limit ? 'opacity-100' : 'opacity-45',
+              )}
+            >
               Limit
-            </Text>
+            </span>
             <Input
               aria-label="Semantic row limit"
-              size="2xs" width="64px" type="number" fontFamily="mono" fontSize="xs"
+              type="number"
+              className="h-6 w-16 px-1.5 font-mono text-xs"
               value={spec.limit ?? ''}
               placeholder="1000"
               onChange={(e) => {
@@ -519,10 +519,10 @@ export function SemanticExplorer({
                 update({ limit: isNaN(limit) || limit <= 0 ? undefined : limit });
               }}
             />
-          </HStack>
-        </HStack>
-      </VStack>
-    </Box>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 
   // --- field columns -------------------------------------------------------------
@@ -539,39 +539,39 @@ export function SemanticExplorer({
     emptyText: string,
     first = true,
   ) => (
-    <Box aria-label={ariaLabel} display="flex" flexDirection="column" minW={0}>
-      <HStack
-        gap={1.5} px={2.5} py={1.5} flexShrink={0}
-        borderBottom="1px solid" borderColor="border.muted"
-        {...(first ? {} : { borderTop: '1px solid', borderTopColor: 'border.muted' })}
-        position="sticky" top={0} bg="bg.muted" zIndex={1}
+    <div aria-label={ariaLabel} className="flex min-w-0 flex-col">
+      <div
+        className={cn(
+          'sticky top-0 z-[1] flex shrink-0 items-center gap-1.5 border-b border-border bg-muted px-2.5 py-1.5',
+          !first && 'border-t border-border',
+        )}
       >
         {icon}
-        <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">{label}</Text>
-        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" ml="auto">{count}</Text>
-      </HStack>
-      <VStack align="stretch" gap={1} px={1.5} py={1.5}>
+        <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">{label}</span>
+        <span className="ml-auto font-mono text-[10px] text-muted-foreground">{count}</span>
+      </div>
+      <div className="flex flex-col gap-1 px-1.5 py-1.5">
         {count === 0
-          ? <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" px={1} py={1}>{emptyText}</Text>
+          ? <span className="px-1 py-1 font-mono text-[10px] text-muted-foreground">{emptyText}</span>
           : rows}
-      </VStack>
-    </Box>
+      </div>
+    </div>
   );
 
   // Two columns: Dimensions with Time beneath (neither list is usually long),
   // Measures on the right.
   const columns = model && spec && (
-    <Grid templateColumns="minmax(0,1fr) minmax(0,1fr)" flex={1} minH={0}>
-      <Box borderRight="1px solid" borderColor="border.muted" overflowY="auto" minH={0} minW={0}>
+    <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="min-h-0 min-w-0 overflow-y-auto border-r border-border">
         {fieldSection(
           'Dimensions column', 'Dimensions',
-          <LuTag size={11} color="var(--chakra-colors-accent-warning)" />,
+          <LuTag size={11} color={WARNING} />,
           visibleDimensions.length,
           visibleDimensions.map((d) => fieldRow(
             d.name,
             spec.dimensions.includes(d.name),
-            'accent.warning',
-            <LuTag size={12} color="var(--chakra-colors-accent-warning)" />,
+            WARNING,
+            <LuTag size={12} color={WARNING} />,
             () => toggleDimension(d.name),
             `Field dimension: ${d.name}`,
           )),
@@ -579,14 +579,14 @@ export function SemanticExplorer({
         )}
         {fieldSection(
           'Time column', 'Time',
-          <LuCalendarDays size={11} color="var(--chakra-colors-accent-secondary)" />,
+          <LuCalendarDays size={11} color={SECONDARY} />,
           visibleTemporal.length,
           <>
             {visibleTemporal.map((d) => fieldRow(
               d.name,
               (!!spec.timeGrain && effectiveTimeColumn === d.column) || spec.dimensions.includes(d.name),
-              'accent.secondary',
-              <LuCalendarDays size={12} color="var(--chakra-colors-accent-secondary)" />,
+              SECONDARY,
+              <LuCalendarDays size={12} color={SECONDARY} />,
               () => (spec.dimensions.includes(d.name) ? toggleDimension(d.name) : toggleTime(d.column)),
               `Field time: ${d.name}`,
             ))}
@@ -594,19 +594,19 @@ export function SemanticExplorer({
           query ? 'No matches' : 'No time fields',
           false,
         )}
-      </Box>
-      <Box overflowY="auto" minH={0} minW={0}>
+      </div>
+      <div className="min-h-0 min-w-0 overflow-y-auto">
         {fieldSection(
           'Metrics column', 'Metrics',
-          <LuSigma size={11} color="var(--chakra-colors-accent-primary)" />,
+          <LuSigma size={11} color={PRIMARY} />,
           visibleMetrics.length,
           visibleMetrics.map((m) => {
             const MetricRowIcon = m.icon;
             return fieldRow(
               m.name,
               spec.metrics.includes(m.name),
-              'accent.primary',
-              <MetricRowIcon size={12} color="var(--chakra-colors-accent-primary)" />,
+              PRIMARY,
+              <MetricRowIcon size={12} color={PRIMARY} />,
               () => toggleMetric(m.name),
               `Field metric: ${m.name}`,
               m.tag,
@@ -614,8 +614,8 @@ export function SemanticExplorer({
           }),
           query ? 'No matches' : 'No metrics',
         )}
-      </Box>
-    </Grid>
+      </div>
+    </div>
   );
 
   // --- model picker (no model yet, or explicitly changing model) -----------------
@@ -626,78 +626,65 @@ export function SemanticExplorer({
   const visibleModels = models.filter((m) => matches(query, `${m.name} ${m.description ?? ''}`));
 
   const modelPicker = (
-    <VStack aria-label="Semantic model picker" align="stretch" gap={1} px={3} py={2} overflowY="auto" flex={1} minH={0}>
+    <div aria-label="Semantic model picker" className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
       {spec && !model && (
-        <Text aria-label="semantic-model-unavailable" fontSize="2xs" fontFamily="mono" color="orange.400" px={1} pb={1}>
+        <span aria-label="semantic-model-unavailable" className="px-1 pb-1 font-mono text-[10px] text-[#f39c12]">
           &quot;{spec.model}&quot; isn&apos;t available here — pick a model below
-        </Text>
+        </span>
       )}
-      <HStack gap={1.5} pb={1}>
-        <Icon as={LuLayers} boxSize={3} color="accent.secondary" />
-        <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">Semantic models</Text>
-        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" ml="auto">{visibleModels.length}</Text>
-      </HStack>
+      <div className="flex items-center gap-1.5 pb-1">
+        <LuLayers size={12} color={SECONDARY} />
+        <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Semantic models</span>
+        <span className="ml-auto font-mono text-[10px] text-muted-foreground">{visibleModels.length}</span>
+      </div>
       {visibleModels.length === 0 ? (
-        <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" px={1} py={1}>No models match</Text>
+        <span className="px-1 py-1 font-mono text-[10px] text-muted-foreground">No models match</span>
       ) : visibleModels.map((m) => (
-        <HStack
+        <button
           key={m.name}
           aria-label={`Pick model: ${m.name}`}
-          as="button"
-          gap={2} px={2} py={1.5}
-          borderRadius="md" border="1px solid" borderColor="transparent"
-          cursor="pointer"
-          _hover={{ bg: 'bg.muted' }}
+          type="button"
+          className="flex w-full shrink-0 cursor-pointer select-none items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left transition-[background] duration-100 ease-in hover:bg-muted"
           onClick={() => pickModel(m)}
-          userSelect="none"
-          width="100%"
-          textAlign="left"
-          flexShrink={0}
-          transition="background 0.1s ease"
         >
-          <Icon as={LuLayers} boxSize={3.5} color="accent.secondary" flexShrink={0} />
-          <VStack align="stretch" gap={0} flex={1} minW={0}>
-            <Text fontSize="xs" fontFamily="mono" fontWeight="600" truncate>{m.name}</Text>
-            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate>
+          <LuLayers size={14} color={SECONDARY} className="shrink-0" />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate font-mono text-xs font-semibold">{m.name}</span>
+            <span className="truncate font-mono text-[10px] text-muted-foreground">
               {primaryLabel(m)}{m.description ? ` · ${m.description}` : ''}
-            </Text>
-          </VStack>
-        </HStack>
+            </span>
+          </div>
+        </button>
       ))}
-    </VStack>
+    </div>
   );
 
   // --- cross-model search hits (pinned under the columns) -------------------------
 
   const otherTablesStrip = foreignHits.length > 0 && (
-    <Box flexShrink={0} borderTop="1px solid" borderColor="border.muted" px={3} py={2} maxH="160px" overflowY="auto" bg="bg.surface">
-      <HStack gap={1.5} pb={1.5}>
-        <LuListFilter size={11} color="var(--chakra-colors-fg-subtle)" />
-        <Text fontSize="2xs" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" color="fg.muted">Other models</Text>
-      </HStack>
-      <VStack align="stretch" gap={1}>
+    <div className="max-h-[160px] shrink-0 overflow-y-auto border-t border-border bg-card px-3 py-2">
+      <div className="flex items-center gap-1.5 pb-1.5">
+        <LuListFilter size={11} className="text-muted-foreground" />
+        <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Other models</span>
+      </div>
+      <div className="flex flex-col gap-1">
         {foreignHits.map((h) => (
-          <HStack
+          <button
             key={`${h.kind}:${h.model}:${h.name}`}
             aria-label={`Other model field ${h.kind}: ${h.name} (${h.model})`}
-            as="button"
-            gap={1.5} px={2} py={1}
-            borderRadius="md" border="1px dashed" borderColor="border.muted"
-            _hover={{ bg: 'bg.muted' }}
+            type="button"
+            className="flex w-full shrink-0 items-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1 text-left hover:bg-muted"
             onClick={() => pickOtherHit(h)}
-            width="100%"
-            textAlign="left"
-            flexShrink={0}
           >
             {h.kind === 'dimension'
-              ? <LuTag size={12} color="var(--chakra-colors-accent-warning)" />
-              : <LuSigma size={12} color="var(--chakra-colors-accent-primary)" />}
-            <Text fontSize="xs" fontFamily="mono" flex={1} truncate>{h.name}</Text>
-            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate maxW="90px">{h.model}</Text>
-          </HStack>
+              ? <LuTag size={12} color={WARNING} />
+              : <LuSigma size={12} color={PRIMARY} />}
+            <span className="min-w-0 flex-1 truncate font-mono text-xs">{h.name}</span>
+            <span className="max-w-[90px] truncate font-mono text-[10px] text-muted-foreground">{h.model}</span>
+          </button>
         ))}
-      </VStack>
-    </Box>
+      </div>
+    </div>
   );
 
   // M5 (Semantic_Model_v2.md §2.7): models are AUTHORED, not derived. `models`
@@ -706,31 +693,27 @@ export function SemanticExplorer({
   // Anything else lands on the picker below, never on this state.
   if (models.length === 0) {
     return (
-      <VStack align="center" justify="center" h="100%" minH={0} px={6} py={8} gap={2}>
-        <Icon as={LuLayers} boxSize={5} color="fg.subtle" />
-        <Text
+      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-2 px-6 py-8">
+        <LuLayers size={20} className="text-muted-foreground" />
+        <p
           aria-label="semantic-models-empty-state"
-          fontSize="xs"
-          fontFamily="mono"
-          color="fg.muted"
-          textAlign="center"
-          maxW="360px"
+          className="max-w-[360px] text-center font-mono text-xs text-muted-foreground"
         >
           No semantic models yet — create one in the knowledge base (context) editor
-        </Text>
-      </VStack>
+        </p>
+      </div>
     );
   }
 
   return (
-    <VStack align="stretch" gap={0} h="100%" minH={0}>
+    <div className="flex h-full min-h-0 flex-col">
       {!browsingModels && shelves}
       {topStrip}
       {/* No spec, explicitly changing model, or a spec naming a model that no
           longer exists → the picker. Never a dead "Loading …" screen. */}
       {!spec || browsingModels || !model ? modelPicker : columns}
       {otherTablesStrip}
-    </VStack>
+    </div>
   );
 }
 
@@ -738,31 +721,35 @@ export function SemanticExplorer({
 // Pieces
 // ---------------------------------------------------------------------------
 
-function ShelfChip({ label, accent = 'border.muted', onRemove, onClick, children }: {
+function ShelfChip({ label, accent = 'var(--border)', onRemove, onClick, children }: {
   label: string; accent?: string; onRemove?: () => void; onClick?: () => void; children: React.ReactNode;
 }) {
   return (
-    <HStack
+    <div
       aria-label={label}
-      gap={1.5} px={2} py={0.5}
-      bg={`${accent}/8`} borderRadius="md" border="1px solid" borderColor={`${accent}/25`}
-      userSelect="none"
-      {...(onClick ? { onClick, cursor: 'pointer', _hover: { bg: `${accent}/15` } } : {})}
+      className={cn(
+        'flex select-none items-center gap-1.5 rounded-md border border-[var(--sc-border)] bg-[var(--sc-bg)] px-2 py-0.5',
+        onClick && 'cursor-pointer hover:bg-[var(--sc-hover)]',
+      )}
+      style={{
+        '--sc-bg': mix(accent, 8),
+        '--sc-border': mix(accent, 25),
+        '--sc-hover': mix(accent, 15),
+      } as React.CSSProperties}
+      onClick={onClick}
     >
       {children}
       {onRemove && (
-        <Box
-          as="button"
+        <button
+          type="button"
           aria-label={`Remove ${label.split(': ')[1]} from ${label.split(' chip')[0]}`}
           onClick={(e: React.MouseEvent) => { e.stopPropagation(); onRemove(); }}
-          color="fg.subtle"
-          _hover={{ color: 'accent.danger' }}
-          flexShrink={0}
+          className="shrink-0 text-muted-foreground hover:text-[#c0392b]"
         >
           <LuX size={12} />
-        </Box>
+        </button>
       )}
-    </HStack>
+    </div>
   );
 }
 
@@ -812,7 +799,7 @@ function SemanticFilterPicker({ dimensions, initial, trigger, onSubmit }: {
       width="300px"
       padding={3}
     >
-      <VStack gap={2} align="stretch">
+      <div className="flex flex-col gap-2">
         {!dimension ? (
           <>
             <PickerHeader>Filter dimension</PickerHeader>
@@ -828,27 +815,25 @@ function SemanticFilterPicker({ dimensions, initial, trigger, onSubmit }: {
           </>
         ) : (
           <>
-            <Text fontSize="xs" fontFamily="mono" fontWeight="600">{dimension}</Text>
-            <HStack gap={1} flexWrap="wrap">
+            <p className="font-mono text-xs font-semibold">{dimension}</p>
+            <div className="flex flex-wrap items-center gap-1">
               {OPERATORS.map((op) => (
                 <Button
                   key={op}
                   aria-label={`Semantic operator ${op}`}
-                  size="2xs"
-                  variant={operator === op ? 'solid' : 'outline'}
-                  fontFamily="mono"
+                  size="xs"
+                  variant={operator === op ? 'default' : 'outline'}
+                  className="h-5 px-1.5 font-mono text-[10px]"
                   onClick={() => setOperator(op)}
                 >
                   {op}
                 </Button>
               ))}
-            </HStack>
+            </div>
             {needsValue && (
               <Input
                 aria-label="Semantic filter value"
-                size="sm"
-                fontFamily="mono"
-                fontSize="xs"
+                className="h-8 font-mono text-xs"
                 placeholder={operator === 'IN' ? 'a, b, c' : 'value'}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
@@ -856,16 +841,21 @@ function SemanticFilterPicker({ dimensions, initial, trigger, onSubmit }: {
                 autoFocus
               />
             )}
-            <HStack justify="flex-end" gap={2}>
-              <Button size="2xs" variant="outline" onClick={close}>Cancel</Button>
-              <Button aria-label="Apply semantic filter" size="2xs" bg="accent.teal" color="white" onClick={submit}
-                disabled={!dimension || (needsValue && !value.trim())}>
+            <div className="flex items-center justify-end gap-2">
+              <Button size="xs" variant="outline" className="h-5 px-1.5 text-[10px]" onClick={close}>Cancel</Button>
+              <Button
+                aria-label="Apply semantic filter"
+                size="xs"
+                className="h-5 bg-[#16a085] px-1.5 text-[10px] text-white hover:bg-[#16a085]/90"
+                onClick={submit}
+                disabled={!dimension || (needsValue && !value.trim())}
+              >
                 Apply
               </Button>
-            </HStack>
+            </div>
           </>
         )}
-      </VStack>
+      </div>
     </PickerPopover>
   );
 }

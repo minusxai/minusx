@@ -28,7 +28,7 @@ export function DataLoader() {
   // Restore persisted UI flags after hydration — single dispatch avoids 3 separate re-render cycles
   useEffect(() => {
     try {
-      const flags: { devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; vizRenderer?: 'echarts' | 'vega'; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Record<string, unknown> } = {};
+      const flags: { devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Record<string, unknown> } = {};
       const dev = localStorage.getItem('devMode');
       if (dev !== null) flags.devMode = dev === 'true';
       const confirm = localStorage.getItem('askForConfirmation');
@@ -39,10 +39,10 @@ export function DataLoader() {
       // so stale opt-outs from before the vega+V2 default flip don't pin a browser to V1
       const vizV2 = localStorage.getItem('vizV2_v2');
       if (vizV2 !== null) flags.vizV2 = vizV2 === 'true';
-      const vizRenderer = localStorage.getItem('vizRenderer_v2');
-      if (vizRenderer === 'echarts' || vizRenderer === 'vega') flags.vizRenderer = vizRenderer;
       localStorage.removeItem('vizV2');
       localStorage.removeItem('vizRenderer');
+      // Renderer_v2 Phase 2: the vizRenderer toggle is deleted — vega is the only engine.
+      localStorage.removeItem('vizRenderer_v2');
       const suggestedQuestions = localStorage.getItem('showSuggestedQuestions');
       if (suggestedQuestions !== null) flags.showSuggestedQuestions = suggestedQuestions === 'true';
       const trustScore = localStorage.getItem('showTrustScore');

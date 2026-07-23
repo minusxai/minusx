@@ -497,6 +497,10 @@ export const DashboardContent = Type.Object({
   assets: Type.Array(AssetReference, { description: 'ordered list of questions in the dashboard' }),
   layout: Nullable(DashboardLayout),
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
+  theme: Type.Optional(Nullable(StringEnum(STORY_THEME_NAMES,
+    'Design theme for the dashboard (Renderer_v2 Phase 3) — the SAME six named design-token sets stories use ' +
+    '(colors, corner radius, fonts, chart palette). Omit/null → the org default, else the neutral app look. ' +
+    'Only tokens change; layout and components are identical across themes.'))),
 }, { title: 'DashboardContent' });
 export type DashboardContent = Static<typeof DashboardContent>;
 

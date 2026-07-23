@@ -1,6 +1,6 @@
 'use client';
 
-import { Box } from '@chakra-ui/react';
+import { cn } from '@/components/kit/cn';
 
 interface SqlEditorResizeHandleProps {
   fillHeight: boolean;
@@ -22,53 +22,34 @@ export default function SqlEditorResizeHandle({
   }
 
   return (
-    <Box
-      position="absolute"
-      bottom="0"
-      left="0"
-      right="0"
-      height="8px"
-      cursor="ns-resize"
+    <div
+      className={cn(
+        'absolute inset-x-0 bottom-0 z-10 flex h-2 cursor-ns-resize items-center justify-center bg-transparent transition-colors duration-200',
+        isResizing ? 'hover:bg-[#16a085]' : 'hover:bg-border',
+      )}
       onMouseDown={onResizeStart}
-      bg="transparent"
-      _hover={{
-        bg: isResizing ? 'accent.teal' : 'border.emphasized',
-      }}
-      transition="background 0.2s"
-      zIndex={10}
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
     >
       {/* Resize indicator dots */}
-      <Box
-        display="flex"
-        gap="4px"
-        alignItems="center"
-        py="2px"
-      >
-        <Box
-          width="3px"
-          height="3px"
-          borderRadius="full"
-          bg={isResizing ? 'white' : 'border.emphasized'}
-          transition="background 0.2s"
+      <div className="flex items-center gap-1 py-[2px]">
+        <div
+          className={cn(
+            'size-[3px] rounded-full transition-colors duration-200',
+            isResizing ? 'bg-white' : 'bg-border',
+          )}
         />
-        <Box
-          width="3px"
-          height="3px"
-          borderRadius="full"
-          bg={isResizing ? 'white' : 'border.emphasized'}
-          transition="background 0.2s"
+        <div
+          className={cn(
+            'size-[3px] rounded-full transition-colors duration-200',
+            isResizing ? 'bg-white' : 'bg-border',
+          )}
         />
-        <Box
-          width="3px"
-          height="3px"
-          borderRadius="full"
-          bg={isResizing ? 'white' : 'border.emphasized'}
-          transition="background 0.2s"
+        <div
+          className={cn(
+            'size-[3px] rounded-full transition-colors duration-200',
+            isResizing ? 'bg-white' : 'bg-border',
+          )}
         />
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

@@ -10,12 +10,17 @@ import { getRegisteredToolNames, executeToolCall } from '@/lib/tools/tool-handle
 import { UserInputException, type UserInputProps, type UserInput } from '@/lib/tools/user-input-exception';
 import { getStore } from '@/store/store';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import type { ToolCall, FileType } from '@/lib/types';
-import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
+import type { ToolCall } from '@/lib/types';
+import type { FileAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import { uploadFile } from '@/lib/object-store/client';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
-import { extractChartEntries } from '@/lib/chart/chart-attachments';
-import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
+import { Button as KitButton } from '@/components/kit/button';
+import { Badge as KitBadge } from '@/components/kit/badge';
+import { Card as KitCard, CardContent as KitCardContent, CardHeader as KitCardHeader, CardTitle as KitCardTitle } from '@/components/kit/card';
+import { Input as KitInput } from '@/components/kit/input';
+import { Switch as KitSwitch } from '@/components/kit/switch';
+import { Checkbox as KitCheckbox } from '@/components/kit/checkbox';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/kit/dropdown-menu';
 
 interface DevToolsPanelProps {
   appState: AppState | null | undefined;
@@ -215,6 +220,46 @@ function ToolTester() {
   );
 }
 
+// ── Kit preview (Renderer_v2 Phase 3 conflict check) ─────────────────────────
+// Renders the shadcn kit next to live Chakra chrome, inside its own `data-mx-theme-host`
+// token scope — the permanent eyeball-check that main-document Tailwind tokens resolve and
+// neither system bleeds into the other. Dev-only by construction (this whole panel is).
+
+function KitPreviewPanel() {
+  return (
+    <Box borderWidth="1px" borderColor="border.default" borderRadius="md" p={3} bg="bg.surface">
+      <VStack align="stretch" gap={2}>
+        <Text fontSize="xs" fontWeight="600" color="fg.muted">Kit Preview (shadcn tokens)</Text>
+        <div data-mx-theme-host="" aria-label="Kit preview host">
+          <KitCard>
+            <KitCardHeader>
+              <KitCardTitle>Kit card</KitCardTitle>
+            </KitCardHeader>
+            <KitCardContent className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <KitButton size="sm">Button</KitButton>
+                <KitBadge>Badge</KitBadge>
+                <KitSwitch aria-label="Kit switch" defaultChecked />
+                <KitCheckbox aria-label="Kit checkbox" defaultChecked />
+              </div>
+              <KitInput placeholder="Kit input" aria-label="Kit input" />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <KitButton variant="outline" size="sm" aria-label="Kit menu trigger">Menu</KitButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem>First action</DropdownMenuItem>
+                  <DropdownMenuItem>Second action</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </KitCardContent>
+          </KitCard>
+        </div>
+      </VStack>
+    </Box>
+  );
+}
+
 // ── Image Tools test panel ────────────────────────────────────────────────────
 
 type ImageItem = { label: string; dataUrl?: string; url?: string };
@@ -232,7 +277,6 @@ export function ImageToolsPanel({ fileId, appState }: { fileId: number | undefin
   // dev can preview the exact image the agent receives.
   const [markers, setMarkers] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [agentBusy, setAgentBusy] = useState(false);
   const [result, setResult] = useState<ImageResult | null>(null);
   // Memoized so captureElement's useCallback deps don't change on every render
   const screenshotOptions = useMemo(
@@ -242,8 +286,6 @@ export function ImageToolsPanel({ fileId, appState }: { fileId: number | undefin
     [limit512, markers],
   );
   const { captureFileView, blobToDataURL } = useScreenshot(screenshotOptions);
-  const colorMode = useAppSelector(state => state.ui.colorMode);
-  const queryResultsMap = useAppSelector(state => state.queryResults.results);
 
   // Pre-capture state — all hooks must be above the early return
   const captureCache = useRef<Blob | null>(null);
@@ -278,30 +320,6 @@ export function ImageToolsPanel({ fileId, appState }: { fileId: number | undefin
 
   if (fileId === undefined) return null;
 
-  const handleAgentImage = async () => {
-    setAgentBusy(true);
-    setResult(null);
-    try {
-      const entries = extractChartEntries(appState, queryResultsMap);
-      if (entries.length === 0) {
-        setResult({ kind: 'error', error: 'No renderable charts found for this file', label: 'Agent Image' });
-        return;
-      }
-      const rendered = await clientChartImageRenderer.renderCharts(
-        entries,
-        { width: 512, colorMode, addWatermark: false, padding: false },
-      );
-      if (rendered.length === 0) {
-        setResult({ kind: 'error', error: 'Renderer returned no images', label: 'Agent Image' });
-        return;
-      }
-      setResult({ kind: 'items', items: rendered.map(r => ({ label: r.label, dataUrl: r.dataUrl })) });
-    } catch (err: any) {
-      setResult({ kind: 'error', error: err.message ?? String(err), label: 'Agent Image' });
-    } finally {
-      setAgentBusy(false);
-    }
-  };
 
   // Display-only: fetch the capture and show it inline — never trigger a browser download.
   const handleGetImage = async () => {
@@ -376,10 +394,6 @@ export function ImageToolsPanel({ fileId, appState }: { fileId: number | undefin
           >
             <LuRefreshCw />
           </IconButton>
-          <Button size="2xs" variant="outline" onClick={handleAgentImage} loading={agentBusy}
-            aria-label="Agent image">
-            Agent image
-          </Button>
         </HStack>
 
         {result && (
@@ -446,15 +460,11 @@ function fmtCost(c: number): string {
   return c < 0.01 ? `$${c.toFixed(4)}` : `$${c.toFixed(3)}`;
 }
 
-function FileAnalyticsPanel({ fileId, fileType }: { fileId: number; fileType: FileType }) {
+function FileAnalyticsPanel({ fileId }: { fileId: number }) {
   const analytics = useAppSelector((state): FileAnalyticsSummary | null | undefined =>
     state.files.files[fileId]?.analytics
   );
-  const convAnalytics = useAppSelector((state): ConversationAnalyticsSummary | null | undefined =>
-    state.files.files[fileId]?.conversationAnalytics
-  );
-
-  if (!analytics && !convAnalytics) {
+  if (!analytics) {
     return <Text fontSize="2xs" color="fg.muted" fontStyle="italic">No analytics data yet.</Text>;
   }
 
@@ -484,33 +494,6 @@ function FileAnalyticsPanel({ fileId, fileType }: { fileId: number; fileType: Fi
         </>
       )}
 
-      {/* Conversation LLM breakdown */}
-      {fileType === 'conversation' && convAnalytics && (
-        <>
-          <Box borderTopWidth="1px" borderColor="border.default" pt={2}>
-            <Text fontSize="2xs" fontWeight="600" color="fg.muted" mb={2} textTransform="uppercase" letterSpacing="wide">LLM Usage</Text>
-            <HStack gap={2} flexWrap="wrap" mb={2}>
-              <StatTile label="Total calls" value={fmtNum(convAnalytics.totalCalls)} />
-              <StatTile label="Total tokens" value={fmtNum(convAnalytics.totalTokens)} />
-              <StatTile label="Est. cost" value={fmtCost(convAnalytics.totalCost)} />
-            </HStack>
-            {Object.keys(convAnalytics.byModel).length > 0 && (
-              <VStack align="stretch" gap="1">
-                {Object.entries(convAnalytics.byModel).map(([model, stats]) => (
-                  <HStack key={model} justify="space-between" px={2} py={1} borderRadius="sm" bg="bg.subtle" borderWidth="1px" borderColor="border.default">
-                    <Text fontSize="2xs" fontFamily="mono" color="fg.default" flex="1" minW="0" truncate>{model}</Text>
-                    <HStack gap={3}>
-                      <Text fontSize="2xs" color="fg.muted">{fmtNum(stats.tokens)} tok</Text>
-                      <Text fontSize="2xs" color="fg.muted">{fmtNum(stats.calls)} calls</Text>
-                      <Text fontSize="2xs" color="accent.secondary" fontFamily="mono">{fmtCost(stats.cost)}</Text>
-                    </HStack>
-                  </HStack>
-                ))}
-              </VStack>
-            )}
-          </Box>
-        </>
-      )}
 
     </VStack>
   );
@@ -531,6 +514,7 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
 
         {/* Image Tools */}
         <ImageToolsPanel fileId={fileId} appState={appState} />
+        <KitPreviewPanel />
 
         {/* App State (collapsible) */}
         <Box borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface" overflow="hidden">
@@ -564,10 +548,7 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
             </HStack>
             {analyticsOpen && (
               <Box px={3} pb={3}>
-                <FileAnalyticsPanel
-                  fileId={appState.state.fileState.id}
-                  fileType={appState.state.fileState.type}
-                />
+                <FileAnalyticsPanel fileId={appState.state.fileState.id} />
               </Box>
             )}
           </Box>

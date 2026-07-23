@@ -2,12 +2,12 @@
  * MinusX Vega-Lite theme configs (RFC §7, Mechanism A).
  *
  * One token source generates the light and dark VL `config` objects. Tokens are
- * sourced from the existing chart constants (lib/chart/echarts-theme.ts palette +
+ * sourced from the existing chart constants (lib/chart/chart-theme.ts palette +
  * JetBrains Mono) so the two chart stacks cannot drift during migration.
  * Passed as external compiler config — spec-internal `config` wins natively.
  */
 import type { Config as VegaLiteConfig } from 'vega-lite';
-import { COLOR_PALETTE, LIGHT_THEME, DARK_THEME, getChartFontFamily } from '@/lib/chart/echarts-theme';
+import { COLOR_PALETTE, LIGHT_THEME, DARK_THEME, getChartFontFamily } from '@/lib/chart/chart-theme';
 
 /**
  * The card-surface color per mode. Used by render-time enrichments that need an OPAQUE

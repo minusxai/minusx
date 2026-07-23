@@ -10,7 +10,7 @@ import type { VizSettings } from '@/lib/validation/atlas-schemas';
 import { materializeRecipe } from '@/lib/viz/viz-templates';
 import { validateVizEnvelope } from '@/lib/viz/validate';
 import { getEnvelopeVizType, annotationSplit } from '@/lib/viz/encoding-edit';
-import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme';
+import { getEffectiveColorPalette } from '@/lib/chart/chart-theme';
 import type { GeoConfig } from '@/lib/validation/atlas-schemas';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { VizResultColumn } from '@/lib/viz/types';

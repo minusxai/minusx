@@ -8,6 +8,7 @@ import { CustomLoader, defaultLoader } from './types';
 import { configLoader } from './config-loader';
 import { connectionLoader } from './connection-loader';
 import { contextLoader } from './context-loader';
+import { storyLoader } from './story-loader';
 
 /**
  * Loader registry: Maps file types to custom loader functions
@@ -19,6 +20,7 @@ const registry: LoaderRegistry = {
   config: configLoader,
   connection: connectionLoader,
   context: contextLoader,
+  story: storyLoader,
   // All other types use defaultLoader (pass-through)
 };
 

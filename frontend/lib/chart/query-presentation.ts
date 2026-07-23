@@ -10,7 +10,7 @@
  * Pure + dependency-light so both the browser-bridged ReadFiles and the server ExecuteQuery share
  * one decision and it can be unit-tested directly.
  */
-import { RENDERABLE_CHART_TYPES } from './render-chart-svg';
+import { RENDERABLE_CHART_TYPES } from './renderable-types';
 import { isEnvelopeImageViz } from '@/lib/viz/encoding-edit';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 

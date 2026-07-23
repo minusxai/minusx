@@ -5,25 +5,23 @@
  * Displays query results with multiple visualization types
  */
 
-import { Box, HStack, VStack, Text, Spinner, Button } from '@chakra-ui/react';
 import { LuRocket, LuWrench, LuCode, LuRefreshCw, LuCloudOff } from 'react-icons/lu';
 import dynamic from 'next/dynamic';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/kit/tooltip';
 import { TableV2 } from '@/components/plotx/TableV2';
 import { VizTableView } from '@/components/viz/VizTableView';
 import { VizPivotView } from '@/components/viz/VizPivotView';
-import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/components/question/error-parser';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { memo, useState, useEffect, useRef } from 'react';
+import { memo, useMemo, useState, useEffect, useRef } from 'react';
 import isEqual from 'lodash/isEqual';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection, selectVizV2Active, selectVizRenderer } from '@/store/uiSlice';
+import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection, selectVizV2Active } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 import { setRecipeParam } from '@/lib/viz/encoding-edit';
-import { resolveLegacyRenderEnvelope } from '@/lib/viz/from-vizsettings';
+import { resolveLegacyRenderEnvelope, vizSettingsToEnvelopeStatic } from '@/lib/viz/from-vizsettings';
 import { toVizColumns } from '@/lib/viz/query-data';
 import { ChartDownloadMenu } from '@/components/viz/ChartDownloadMenu';
 import { getBrandLogoUrl } from '@/lib/branding/whitelabel';
@@ -118,36 +116,29 @@ function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: 
   const barDurationS = estimatedDurationMs != null ? (estimatedDurationMs + 3000) / 1000 : 0;
 
   return (
-    <VStack gap={2}>
-      <Text fontFamily="mono">
+    <div className="flex flex-col items-center gap-2">
+      <p className="font-mono">
         Executing query
-        <Box as="span" display="inline-block" w="3ch" textAlign="left" whiteSpace="nowrap">
-          {'.'.repeat(dotCount)}
-        </Box>
-      </Text>
+        <span className="inline-block w-[3ch] whitespace-nowrap text-left">{'.'.repeat(dotCount)}</span>
+      </p>
       {estimatedDurationMs != null && (
-        <Box w="200px" h="2px" bg="bg.muted" borderRadius="full" overflow="hidden">
-          <Box
-            h="full"
-            bg="accent.teal"
+        <div className="h-0.5 w-[200px] overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full bg-primary"
             style={{
               width: `${barWidth}%`,
               transition: `width ${barDurationS}s linear`,
             }}
           />
-        </Box>
+        </div>
       )}
       {estimateLabel && elapsed < 10 && (
-        <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-          {estimateLabel}
-        </Text>
+        <p className="font-mono text-xs text-muted-foreground">{estimateLabel}</p>
       )}
       {elapsed >= 10 && (
-        <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-          Query is still running...
-        </Text>
+        <p className="font-mono text-xs text-muted-foreground">Query is still running...</p>
       )}
-    </VStack>
+    </div>
   );
 }
 
@@ -180,7 +171,6 @@ function QuestionVisualizationInner({
   const dispatch = useAppDispatch();
   const showJson = useAppSelector(state => state.ui.devMode);
   const colorMode = useAppSelector(state => state.ui.colorMode);
-  const vegaDraws = useAppSelector(selectVizRenderer) === 'vega';
   const vizV2Enabled = useAppSelector(selectVizV2Active);
   const { config: appConfig } = useConfigs();
   const agentName = appConfig.branding.agentName;
@@ -201,6 +191,26 @@ function QuestionVisualizationInner({
       setIsRetrying(false);
     }
   };
+
+  // V1→V2 render bridge (Viz Arch V2 §21 item 1): a chart whose truth is `vizSettings` renders
+  // through <VegaChart> via just-in-time conversion — render-only, nothing is ever written back;
+  // table/pivot keep their DOM renderers. Vega is the ONLY engine (Renderer_v2 Phase 2 — the
+  // ECharts rollback path is deleted).
+  // Memoized (Renderer_v2 Phase 7, §1.3 lever 2), and ABOVE the early return (rules-of-hooks):
+  // VegaChart's build effect keys on envelope IDENTITY — a fresh object here on every legitimate
+  // re-render (loading flips, new callbacks) would finalize + re-parse + re-render the whole
+  // Vega view mid-interaction.
+  const memoVizV2 = vizV2Enabled && currentState?.viz != null;
+  const vizSettings = currentState?.vizSettings;
+  const legacyRenderViz = useMemo(() => (
+    data
+      ? resolveLegacyRenderEnvelope({
+          hasVizEnvelope: memoVizV2,
+          vizSettings,
+          columns: toVizColumns(data.columns, data.types),
+        })
+      : null
+  ), [data, memoVizV2, vizSettings]);
 
   if (!currentState) {
     return null;
@@ -223,24 +233,12 @@ function QuestionVisualizationInner({
   const legacyVizType = currentState?.vizSettings?.type ?? 'table';
   const isChartType = hasVizV2 || legacyVizType !== 'table';
 
-  // V1→V2 render bridge (Viz Arch V2 §21 item 1): on EVERY surface, a chart whose
-  // truth is `vizSettings` renders through <VegaChart> via just-in-time conversion —
-  // render-only, nothing is ever written back to the file; table/pivot keep their
-  // DOM renderers. Pure — recomputed from vizSettings each render.
-  const legacyRenderViz = vegaDraws && data
-    ? resolveLegacyRenderEnvelope({
-        hasVizEnvelope: hasVizV2,
-        vizSettings: currentState?.vizSettings,
-        columns: toVizColumns(data.columns, data.types),
-      })
-    : null;
-
   const showChartTitle = config.viz.showTitle;
 
   // Image + CSV download, revealed on hover of the chart (V1 parity). Rendered over both
   // the V2 chart and the legacy render bridge; a subtle top-right control on every chart.
   const chartDownloadOverlay = (envelope: VizEnvelope) => (
-    <Box className="mx-chart-dl" position="absolute" bottom={2} right={2} zIndex={6} opacity={0} transition="opacity 0.12s">
+    <div className="mx-chart-dl absolute bottom-2 right-2 z-[6] opacity-0 transition-opacity duration-100">
       <ChartDownloadMenu
         envelope={envelope}
         rows={data?.rows ?? []}
@@ -248,46 +246,16 @@ function QuestionVisualizationInner({
         colorMode={colorMode}
         logoSrc={getBrandLogoUrl(appConfig.branding, colorMode)}
       />
-    </Box>
+    </div>
   );
 
   return (
-    <VStack gap={0} width="full" align="stretch" flex="1" overflow="hidden"
-    // borderRadius={'lg'} border={'1px solid'} borderColor={'border.muted'}
-    >
-      {/* Viz Config toggle button — show/hide viz tab in the left panel */}
-      {/* {(onOpenVizTab || onHideVizTab) && isChartType && config.viz.showChartBuilder && data && !error && (
-        <Box display="flex" alignItems="center" justifyContent="flex-end" bg="bg.muted" shadow="sm" px={2} py={1}>
-          <Button
-            aria-label={vizTabOpen ? "Hide viz settings" : "Show viz settings"}
-            size="xs"
-            variant="ghost"
-            onClick={vizTabOpen ? onHideVizTab : onOpenVizTab}
-            color="fg.muted"
-            fontWeight="600"
-            fontSize="2xs"
-            flexShrink={0}
-          >
-            <LuSettings />
-            {vizTabOpen ? 'Hide Viz Settings' : 'Show Viz Settings'}
-          </Button>
-        </Box>
-      )} */}
+    <div className="flex w-full flex-1 flex-col items-stretch overflow-hidden">
 
       {/* Results and Side Selector Container */}
-      <HStack gap={0} width="full" align="stretch" flex="1" overflow="hidden" minH="0px">
+      <div className="flex min-h-0 w-full flex-1 items-stretch overflow-hidden">
         {/* Results container */}
-        <Box
-          flex="1"
-          bg="bg.subtle"
-        //   borderRadius="lg"
-          // border="1px solid"
-          // borderColor="border.default"
-          position="relative"
-          overflow="hidden"
-          display="flex"
-          flexDirection="column"
-        >
+        <div className="relative flex flex-1 flex-col overflow-hidden bg-muted/40">
         {/* Error state */}
         {error && (() => {
           const parsed = parseErrorMessage(error);
@@ -296,203 +264,119 @@ function QuestionVisualizationInner({
           // prominent Retry — they're transient, not a bug in the user's query.
           if (parsed.isNetworkError) {
             return (
-              <Box p={6} width="full" height="full" display="flex" alignItems="center" justifyContent="center">
-                <VStack gap={3} maxW="320px" textAlign="center">
-                  <LuCloudOff size={28} color="var(--chakra-colors-fg-muted)" />
-                  <Text fontSize="sm" fontWeight="600" color="fg.default">
-                    {parsed.title}
-                  </Text>
-                  <Text fontSize="xs" color="fg.muted" lineHeight="1.6">
-                    {parsed.hint}
-                  </Text>
+              <div className="flex size-full items-center justify-center p-6">
+                <div className="flex max-w-[320px] flex-col items-center gap-3 text-center">
+                  <LuCloudOff size={28} className="text-muted-foreground" />
+                  <p className="text-sm font-semibold text-foreground">{parsed.title}</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">{parsed.hint}</p>
                   {onRetry && (
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      colorPalette="teal"
+                    <button
+                      type="button"
                       onClick={handleRetry}
-                      loading={isRetrying}
-                      loadingText="Retrying"
-                      mt={1}
+                      disabled={isRetrying}
+                      className="mt-1 inline-flex items-center gap-1 rounded-md border border-primary px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
                     >
-                      <LuRefreshCw />
-                      Retry
-                    </Button>
+                      <LuRefreshCw className={isRetrying ? 'animate-spin' : undefined} />
+                      {isRetrying ? 'Retrying' : 'Retry'}
+                    </button>
                   )}
-                </VStack>
-              </Box>
+                </div>
+              </div>
             );
           }
 
           // Query / SQL errors keep the detailed, red-accented treatment.
           return (
-          <Box p={6} width="full">
-            <VStack gap={4} align="stretch">
-              <Box
-                bg="accent.danger/10"
-                border="1px solid"
-                borderColor="accent.danger/30"
-                p={4}
-              >
-                <HStack justify="space-between" align="center" mb={2}>
-                  <Text
-                    fontSize="sm"
-                    fontWeight="600"
-                    color="accent.danger"
-                  >
-                    {parsed.title}
-                  </Text>
-                  <HStack gap={2}>
+          <div className="w-full p-6">
+            <div className="flex flex-col gap-4">
+              <div className="border border-destructive/30 bg-destructive/10 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-destructive">{parsed.title}</p>
+                  <div className="flex gap-2">
                     {onRetry && (
-                      <Button
-                        size="xs"
-                        variant="ghost"
+                      <button
+                        type="button"
                         onClick={handleRetry}
-                        loading={isRetrying}
-                        loadingText="Retrying"
+                        disabled={isRetrying}
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-60"
                       >
-                        <LuRefreshCw />
-                        Retry
-                      </Button>
+                        <LuRefreshCw className={isRetrying ? 'animate-spin' : undefined} />
+                        {isRetrying ? 'Retrying' : 'Retry'}
+                      </button>
                     )}
-                    {config.fixError && <Button
-                      size="xs"
-                      variant="solid"
-                      colorPalette="teal"
-                      onClick={handleFixError}
-                    >
-                      <LuWrench />
-                      Fix with {agentName}
-                    </Button>
-                    }
-                  </HStack>
-                </HStack>
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                  {parsed.hint}
-                </Text>
-              </Box>
+                    {config.fixError && (
+                      <button
+                        type="button"
+                        onClick={handleFixError}
+                        className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                      >
+                        <LuWrench />
+                        Fix with {agentName}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="font-mono text-xs text-muted-foreground">{parsed.hint}</p>
+              </div>
 
               {parsed.details && (
-                <Box>
-                  <Text
-                    fontSize="xs"
-                    fontWeight="600"
-                    color="fg.muted"
-                    mb={2}
-                    textTransform="uppercase"
-                    letterSpacing="0.05em"
-                  >
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Error Details
-                  </Text>
-                  <Box
-                    p={3}
-                    bg="bg.canvas"
-                    borderRadius="md"
-                    border="1px solid"
-                    borderColor="border.muted"
-                    maxH="200px"
-                    overflowY="auto"
-                  >
-                    <Text
-                      fontSize="xs"
-                      color="fg.muted"
-                      fontFamily="mono"
-                      whiteSpace="pre-wrap"
-                      wordBreak="break-word"
-                      lineHeight="1.6"
-                    >
+                  </p>
+                  <div className="max-h-[200px] overflow-y-auto rounded-md border border-border bg-background p-3">
+                    <p className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-muted-foreground">
                       {parsed.details}
-                    </Text>
-                  </Box>
-                </Box>
+                    </p>
+                  </div>
+                </div>
               )}
-            </VStack>
-          </Box>
+            </div>
+          </div>
           );
         })()}
 
         {/* Empty state overlay */}
         {!loading && !data && !error && config.showHeader && (
-          <Box
-            position="absolute"
-            top="0"
-            left="0"
-            right="0"
-            bottom="0"
-            bg="bg.surface/80"
-            backdropFilter="blur(8px)"
-            display="flex"
-            alignItems="center"
-            justifyContent="center"
-            zIndex="10"
-          >
-            <VStack gap={3}>
-              <LuRocket size={40} color="var(--chakra-colors-accent-teal)" opacity="0.6" />
-              <Text
-                color="fg.muted"
-                fontSize="md"
-                fontWeight="600"
-                letterSpacing="-0.01em"
-              >
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-popover/80 backdrop-blur-md">
+            <div className="flex flex-col items-center gap-3">
+              <LuRocket size={40} className="text-primary opacity-60" />
+              <p className="text-base font-semibold tracking-tight text-muted-foreground">
                 Run question to see results
-              </Text>
-              <Box
-                mt={1}
-                px={3}
-                py={1}
-                bg="bg.muted"
-                borderRadius="full"
-                border="1px solid"
-                borderColor="border.muted"
-              >
-                <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
-                  Cmd/Ctrl + Enter
-                </Text>
-              </Box>
-            </VStack>
-          </Box>
+              </p>
+              <div className="mt-1 rounded-full border border-border bg-muted px-3 py-1">
+                <p className="font-mono text-xs text-muted-foreground">Cmd/Ctrl + Enter</p>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Data content */}
         {!error && (
-          <Box
-            p={(hasVizV2 ? isVizV2Table : legacyVizType === 'table') && config.showHeader ? 6 : 0}
-            flex="1"
-            display="flex"
-            flexDirection="column"
-            overflow="hidden"
-            minHeight="0"
+          <div
+            className={`flex min-h-0 flex-1 flex-col overflow-hidden ${(hasVizV2 ? isVizV2Table : legacyVizType === 'table') && config.showHeader ? 'p-6' : ''}`}
           >
             {loading ? (
-              <VStack
-                flex="1"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
+              <div
+                className="flex flex-1 flex-col items-center justify-center gap-2"
                 // Screenshot readiness marker (lib/screenshot/readiness.ts): the capture waits
                 // until no data-mx-busy elements remain, so it never rasterizes this spinner.
                 data-mx-busy="true"
               >
-                <Spinner size="xl" color="accent.teal" />
+                <div aria-label="Loading" className="size-10 animate-spin rounded-full border-[3px] border-primary/25 border-t-primary" />
                 <QueryLoadingIndicator estimatedDurationMs={queryEstimatedDurationMs} />
-              </VStack>
+              </div>
             ) : data ? (
               <>
                 {data.finalQuery && showJson && (
-                  <Tooltip content={data.finalQuery} positioning={{ placement: 'bottom-start' }}>
-                    <Box
-                      position="absolute"
-                      top={1}
-                      right={1}
-                      zIndex={5}
-                      color="fg.subtle"
-                      cursor="help"
-                      _hover={{ color: 'accent.teal' }}
-                      transition="color 0.1s"
-                    >
+                  <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger className="absolute top-1 right-1 z-[5] cursor-help text-muted-foreground outline-none transition-colors duration-100 hover:text-primary">
                       <LuCode size={14} />
-                    </Box>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="start" className="max-w-md whitespace-pre-wrap font-mono text-[11px]">{data.finalQuery}</TooltipContent>
                   </Tooltip>
+                  </TooltipProvider>
                 )}
                 {hasVizV2 && isVizV2Table && (
                   <VizTableView
@@ -516,7 +400,7 @@ function QuestionVisualizationInner({
                   />
                 )}
                 {hasVizV2 && !isVizV2Table && !isVizV2Pivot && (
-                  <Box position="relative" flex="1" minHeight="0" overflow="hidden" display="flex" p={3} css={{ '&:hover .mx-chart-dl, &:focus-within .mx-chart-dl': { opacity: 1 } }}>
+                  <div className="group/chart relative flex min-h-0 flex-1 overflow-hidden p-3 [&:hover_.mx-chart-dl]:opacity-100 [&:focus-within_.mx-chart-dl]:opacity-100">
                     <VegaChart
                       envelope={currentState.viz!}
                       rows={data.rows}
@@ -534,80 +418,39 @@ function QuestionVisualizationInner({
                         : undefined}
                     />
                     {chartDownloadOverlay(currentState.viz!)}
-                  </Box>
+                  </div>
                 )}
                 {!hasVizV2 && legacyVizType === 'table' && (
-                  <Box flex="1" minHeight="0" overflow="hidden" display="flex" width={"100%"} alignItems={"stretch"} flexDirection={"column"}>
+                  <div className="flex w-full min-h-0 flex-1 flex-col items-stretch overflow-hidden">
                     <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.connection_name} enableDrilldown={config.enableDrilldown !== false} columnFormats={currentState.vizSettings?.columnFormats ?? undefined} onColumnFormatsChange={config.editable ? onColumnFormatsChange : undefined} conditionalFormats={currentState.vizSettings?.conditionalFormats ?? undefined} />
-                  </Box>
+                  </div>
                 )}
                 {legacyRenderViz && (
-                  <Box position="relative" flex="1" minHeight="0" overflow="hidden" display="flex" p={3} css={{ '&:hover .mx-chart-dl, &:focus-within .mx-chart-dl': { opacity: 1 } }}>
+                  <div className="group/chart relative flex min-h-0 flex-1 overflow-hidden p-3 [&:hover_.mx-chart-dl]:opacity-100 [&:focus-within_.mx-chart-dl]:opacity-100">
                     <VegaChart envelope={legacyRenderViz} rows={data.rows} colorMode={colorMode} />
                     {chartDownloadOverlay(legacyRenderViz)}
-                  </Box>
+                  </div>
                 )}
-                {!hasVizV2 && !legacyRenderViz && (currentState?.vizSettings?.type === 'line' ||
-                  currentState?.vizSettings?.type === 'bar' ||
-                  currentState?.vizSettings?.type === 'area' ||
-                  currentState?.vizSettings?.type === 'scatter' ||
-                  currentState?.vizSettings?.type === 'funnel' ||
-                  currentState?.vizSettings?.type === 'pie' ||
-                  currentState?.vizSettings?.type === 'pivot' ||
-                  currentState?.vizSettings?.type === 'trend' ||
-                  currentState?.vizSettings?.type === 'waterfall' ||
-                  currentState?.vizSettings?.type === 'combo' ||
-                  currentState?.vizSettings?.type === 'radar' ||
-                  currentState?.vizSettings?.type === 'geo' ||
-                  currentState?.vizSettings?.type === 'single_value' ||
-                  currentState?.vizSettings?.type === 'row') && (
-                  <Box flex="1" width="100%" overflow="hidden" minHeight="0" display="flex">
-                    <ChartBuilder
-                      columns={data.columns}
-                      types={data.types}
-                      rows={data.rows}
-                      chartType={currentState.vizSettings.type}
-                      initialXCols={currentState.vizSettings?.xCols ?? undefined}
-                      initialYCols={currentState.vizSettings?.yCols ?? undefined}
-                      initialYRightCols={currentState.vizSettings?.yRightCols ?? undefined}
-                      onAxisChange={onAxisChange}
-                      onYRightColsChange={onYRightColsChange}
-                      initialTooltipCols={currentState.vizSettings?.tooltipCols ?? undefined}
-                      onTooltipColsChange={onTooltipColsChange}
-                      fillHeight={true}
-                      initialPivotConfig={currentState.vizSettings?.pivotConfig ?? undefined}
-                      onPivotConfigChange={onPivotConfigChange}
-                      initialGeoConfig={currentState.vizSettings?.geoConfig ?? undefined}
-                      onGeoConfigChange={onGeoConfigChange}
-                      sql={currentState?.query}
-                      databaseName={currentState?.connection_name}
-                      initialColumnFormats={currentState.vizSettings?.columnFormats ?? undefined}
-                      onColumnFormatsChange={onColumnFormatsChange}
-                      showChartTitle={showChartTitle}
-                      styleConfig={currentState.vizSettings?.styleConfig ?? undefined}
-                      onStyleConfigChange={onStyleConfigChange}
-                      axisConfig={currentState.vizSettings?.axisConfig ?? undefined}
-                      onAxisConfigChange={onAxisConfigChange}
-                      annotations={currentState.vizSettings?.annotations ?? undefined}
-                      onAnnotationsChange={onAnnotationsChange}
-                      trendConfig={currentState.vizSettings?.trendConfig ?? undefined}
-                      onTrendConfigChange={onTrendConfigChange}
-                      singleValueConfig={currentState.vizSettings?.singleValueConfig ?? undefined}
-                      exportBranding={appConfig.branding}
-                      enableDrilldown={config.enableDrilldown !== false}
-                      onMapReady={onMapReady}
-                      onSeriesCountChange={onSeriesCountChange}
-                    />
-                  </Box>
+                {/* V1 pivot: the bridge deliberately returns null for pivot — it renders on the
+                    DOM tier through the SAME view V2 pivots use, via a JIT-bridged envelope
+                    (Renderer_v2 Phase 2: ChartBuilder + the ECharts stack are deleted). */}
+                {!hasVizV2 && !legacyRenderViz && currentState?.vizSettings?.type === 'pivot' && (
+                  <VizPivotView
+                    envelope={vizSettingsToEnvelopeStatic(currentState.vizSettings, currentState?.query)}
+                    rows={data.rows}
+                    sql={currentState?.query}
+                    databaseName={currentState?.connection_name}
+                    enableDrilldown={config.enableDrilldown !== false}
+                  />
                 )}
               </>
             ) : null}
-          </Box>
+          </div>
         )}
-      </Box>
+      </div>
 
-      </HStack>
-    </VStack>
+      </div>
+    </div>
   );
 }
 

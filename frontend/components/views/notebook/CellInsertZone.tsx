@@ -4,11 +4,9 @@
  * Jupyter/Colab-style insert affordance between cells (and above the first /
  * below the last). It shows a faint divider with a "+" at rest; on hover the
  * divider highlights and "+ SQL" / "+ Text" buttons appear to insert a new cell
- * at this position. Hover is tracked in local state (robust across Chakra's
- * group-hover selector quirks).
+ * at this position. Hover is tracked in local state.
  */
 import { useState } from 'react';
-import { Box, HStack, Button, Icon } from '@chakra-ui/react';
 import { LuPlus } from 'react-icons/lu';
 
 interface CellInsertZoneProps {
@@ -16,61 +14,52 @@ interface CellInsertZoneProps {
   readOnly?: boolean;
 }
 
+const INSERT_BTN = 'flex h-5 items-center gap-1 rounded-md border px-2 text-[10px] font-medium transition-colors';
+
 export default function CellInsertZone({ onInsert, readOnly = false }: CellInsertZoneProps) {
   const [hovered, setHovered] = useState(false);
   if (readOnly) return null;
 
   return (
-    <Box
+    <div
       role="group"
       aria-label="Insert cell"
-      position="relative"
-      h="26px"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
+      className="relative z-[1] flex h-[26px] items-center justify-center"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      zIndex={1}
     >
       {/* Divider line */}
-      <Box
-        position="absolute"
-        left={2}
-        right={2}
-        top="50%"
-        h="1px"
-        bg={hovered ? 'accent.teal' : 'border.muted'}
-        opacity={hovered ? 0.6 : 0.5}
-        transition="all 0.12s"
+      <div
+        className="absolute left-2 right-2 top-1/2 h-px transition-all duration-100"
+        style={{ background: hovered ? '#16a085' : 'var(--border)', opacity: hovered ? 0.6 : 0.5 }}
       />
       {/* Affordance: a small "+" at rest, expanding to insert buttons on hover */}
-      <HStack gap={1} bg="bg.canvas" px={1} position="relative" transition="all 0.12s">
+      <div className="relative flex items-center gap-1 bg-background px-1 transition-all duration-100">
         {hovered ? (
           <>
-            <Button aria-label="Insert SQL cell" size="2xs" variant="outline" colorPalette="teal" h="20px" px={2} fontSize="10px" gap={1} onClick={() => onInsert('sql')}>
+            <button
+              type="button"
+              aria-label="Insert SQL cell"
+              className={`${INSERT_BTN} border-[#16a085] text-[#16a085] hover:bg-[color-mix(in_srgb,#16a085_10%,transparent)]`}
+              onClick={() => onInsert('sql')}
+            >
               <LuPlus size={10} /> SQL
-            </Button>
-            <Button aria-label="Insert text cell" size="2xs" variant="outline" h="20px" px={2} fontSize="10px" gap={1} onClick={() => onInsert('text')}>
+            </button>
+            <button
+              type="button"
+              aria-label="Insert text cell"
+              className={`${INSERT_BTN} border-border text-foreground hover:bg-muted`}
+              onClick={() => onInsert('text')}
+            >
               <LuPlus size={10} /> Text
-            </Button>
+            </button>
           </>
         ) : (
-          <Box
-            display="flex"
-            alignItems="center"
-            justifyContent="center"
-            boxSize="18px"
-            borderRadius="full"
-            borderWidth="1px"
-            borderColor="border.muted"
-            color="fg.subtle"
-            bg="bg.canvas"
-          >
-            <Icon as={LuPlus} boxSize="11px" />
-          </Box>
+          <div className="flex size-[18px] items-center justify-center rounded-full border border-border bg-background text-muted-foreground">
+            <LuPlus size={11} />
+          </div>
         )}
-      </HStack>
-    </Box>
+      </div>
+    </div>
   );
 }

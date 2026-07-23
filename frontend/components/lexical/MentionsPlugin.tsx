@@ -15,8 +15,8 @@ import {
   KEY_ENTER_COMMAND,
   KEY_ESCAPE_COMMAND,
 } from 'lexical';
+import { createPortal } from 'react-dom';
 import { $createMentionNode, MentionData } from './MentionNode';
-import { Box, HStack, VStack, Text, Portal } from '@chakra-ui/react';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { MentionItem } from '@/lib/data/completions/types';
 import type { DatabaseWithSchema, SkillMention, SlashCommand } from '@/lib/types';
@@ -410,7 +410,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
   }, [showDropdown, filteredMentions.length, anchorToCaret, query]);
 
   if (!showDropdown || filteredMentions.length === 0) {
-    return <Box ref={anchorRef} position="absolute" top={0} left={0} right={0} pointerEvents="none" />;
+    return <div ref={anchorRef} className="pointer-events-none absolute top-0 right-0 left-0" />;
   }
 
   // Drill-down: the highlighted table's columns, if any are known (yet).
@@ -418,48 +418,40 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
 
   return (
     <>
-      <Box ref={anchorRef} position="absolute" top={0} left={0} right={0} pointerEvents="none" />
-      <Portal>
-        <Box
-          position="fixed"
-          top={anchorToCaret ? (caretPos ? `${caretPos.top}px` : 0) : (dropdownPos ? `${dropdownPos.top}px` : 0)}
-          left={anchorToCaret ? (caretPos ? `${caretPos.left}px` : 0) : (dropdownPos ? `${dropdownPos.left}px` : 0)}
-          transform={anchorToCaret ? undefined : 'translateY(-100%)'}
-          zIndex={1000}
-          display="flex"
-          alignItems="flex-start"
-          gap={2}
+      <div ref={anchorRef} className="pointer-events-none absolute top-0 right-0 left-0" />
+      {createPortal(
+        <div
+          data-mx-theme-host=""
+          className="fixed z-[1000] flex items-start gap-2"
+          style={{
+            top: anchorToCaret ? (caretPos ? `${caretPos.top}px` : 0) : (dropdownPos ? `${dropdownPos.top}px` : 0),
+            left: anchorToCaret ? (caretPos ? `${caretPos.left}px` : 0) : (dropdownPos ? `${dropdownPos.left}px` : 0),
+            transform: anchorToCaret ? undefined : 'translateY(-100%)',
+          }}
         >
-        <Box
-          width={anchorToCaret ? undefined : (dropdownPos ? `${dropdownPos.width}px` : undefined)}
-          minW={anchorToCaret ? '280px' : undefined}
-          bg="bg.panel"
-          border="1px solid"
-          borderColor="border.default"
-          borderRadius="lg"
-          boxShadow="lg"
-          maxH="360px"
-          overflow="hidden"
-          fontFamily="mono"
+        <div
+          className="max-h-[360px] overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
+          style={{
+            width: anchorToCaret ? undefined : (dropdownPos ? `${dropdownPos.width}px` : undefined),
+            minWidth: anchorToCaret ? '280px' : undefined,
+            fontFamily: 'var(--font-jetbrains-mono), monospace',
+          }}
         >
-          <Box
-            px={3}
-            py={2}
-            borderBottom="1px solid"
-            borderColor="border.muted"
-            bg="bg.subtle"
+          <div
+            className="border-b border-border px-3 py-2"
+            style={{ background: 'color-mix(in srgb, var(--muted) 50%, transparent)' }}
           >
-            <HStack justify="space-between" gap={2}>
-              <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-bold tracking-[0] text-muted-foreground uppercase">
                 {getDropdownTitle(mentionType)}
-              </Text>
-              <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
+              </span>
+              <span className="text-xs text-muted-foreground">
                 {filteredMentions.length}
-              </Text>
-            </HStack>
-          </Box>
-          <Box maxH="312px" overflowY="auto">
-            <VStack align="stretch" gap={0}>
+              </span>
+            </div>
+          </div>
+          <div className="max-h-[312px] overflow-y-auto">
+            <div className="flex flex-col items-stretch">
               {filteredMentions.map((mention, index) => {
                 // Generate unique key including schema for tables
                 const uniqueKey = isSlashCommand(mention)
@@ -508,9 +500,9 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
                   />
                 );
               })}
-            </VStack>
-          </Box>
-        </Box>
+            </div>
+          </div>
+        </div>
 
         {/* Column drill-down submenu for the highlighted table */}
         {showSubmenu && activeTable && (
@@ -526,8 +518,9 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
             }}
           />
         )}
-        </Box>
-      </Portal>
+        </div>,
+        document.body,
+      )}
     </>
   );
 }

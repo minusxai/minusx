@@ -3,8 +3,7 @@
  * Grouped chart type selector with category labels
  */
 
-import { Box, HStack, VStack, Text, IconButton } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/kit/tooltip';
 import {
   LuTable2,
   LuChartLine,
@@ -184,16 +183,7 @@ export function VizTypeSelector({
     const allTypes = groups.flatMap(g => g.types);
 
     return (
-      <Box
-        display="grid"
-        gridTemplateColumns="repeat(5, 1fr)"
-        gap={1}
-        width="100%"
-        bg={"bg.subtle"}
-        borderRadius={"md"}
-        p={2}
-        mb={2}
-      >
+      <div className="mb-2 grid w-full grid-cols-5 gap-1 rounded-md bg-muted/50 p-2">
         {allTypes.map(({ type, icon, label, informational, informationalReason }) => {
           const isActive = value === type;
           const isRecommended = recommended?.includes(type) ?? false;
@@ -202,27 +192,18 @@ export function VizTypeSelector({
           const dimmed = !!recommended && !isRecommended && !isActive;
           const isDisabled = disabledTypes?.includes(type) ?? false;
           return (
-            <Box
+            <button
               key={type}
-              as="button"
-              display="flex"
-              flexDirection="column"
-              alignItems="center"
-              justifyContent="center"
-              gap={0.5}
-              py={1.5}
-              borderRadius="md"
-              bg={isActive ? 'accent.teal/15' : 'transparent'}
-              color={isActive ? 'accent.teal' : 'fg.muted'}
-              cursor={isDisabled ? 'not-allowed' : 'pointer'}
-              opacity={isDisabled ? 0.3 : dimmed ? 0.5: 1}
-
-              transition="all 0.12s ease"
-              _hover={isDisabled ? undefined : {
-                bg: isActive ? 'accent.teal/20' : 'bg.muted',
-                color: isActive ? 'accent.teal' : 'fg.default',
-                opacity: 1,
-              }}
+              type="button"
+              className={`flex flex-col items-center justify-center gap-0.5 rounded-md py-1.5 transition-all duration-[120ms] ease-in-out ${
+                isActive
+                  ? 'bg-[#16a085]/15 text-[#16a085]'
+                  : 'bg-transparent text-muted-foreground'
+              } ${
+                isDisabled
+                  ? 'cursor-not-allowed opacity-30'
+                  : `cursor-pointer hover:opacity-100 ${isActive ? 'hover:bg-[#16a085]/20' : 'hover:bg-muted hover:text-foreground'} ${dimmed ? 'opacity-50' : 'opacity-100'}`
+              }`}
               onClick={() => { if (!isDisabled) onChange(type); }}
               aria-label={label}
               data-recommended={isRecommended ? 'true' : undefined}
@@ -232,53 +213,55 @@ export function VizTypeSelector({
               title={informational ? informationalReason : isDisabled ? disabledReason : undefined}
             >
               {icon}
-              <Text fontSize="2xs" fontFamily="mono" fontWeight={isActive ? '700' : '500'} lineHeight="1">
+              <span className={`font-mono text-[10px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>
                 {label}
-              </Text>
-            </Box>
+              </span>
+            </button>
           );
         })}
-      </Box>
+      </div>
     );
   }
 
   // Legacy flat layout (horizontal / vertical)
   const vizTypes = offered(ALL_VIZ_TYPES);
 
-  const Container = orientation === 'horizontal' ? HStack : VStack;
+  const isHorizontal = orientation === 'horizontal';
 
   return (
-    <Container
-      gap={0.5}
-      bg={orientation === 'horizontal' ? 'transparent' : 'bg.muted'}
-      p={orientation === 'horizontal' ? 0 : 1.5}
-      shadow={orientation === 'horizontal' ? undefined : 'sm'}
-      h={'100%'}
-      flexWrap={orientation === 'horizontal' ? 'wrap' : undefined}
-    >
-      {vizTypes.map(({ type, icon, label, informational, informationalReason }) => {
-        const isActive = value === type;
+    <TooltipProvider delayDuration={200}>
+      <div
+        className={`flex h-full items-center gap-0.5 ${
+          isHorizontal
+            ? 'flex-row flex-wrap bg-transparent p-0'
+            : 'flex-col bg-muted p-1.5 shadow-sm'
+        }`}
+      >
+        {vizTypes.map(({ type, icon, label, informational, informationalReason }) => {
+          const isActive = value === type;
 
-        return (
-          <Tooltip
-            key={type}
-            content={informationalReason ?? label}
-            positioning={{ placement: orientation === 'vertical' ? 'left' : 'top' }}
-          >
-            <IconButton
-              aria-label={label}
-              size="xs"
-              variant={isActive ? 'solid' : 'ghost'}
-              colorPalette={isActive ? 'teal' : undefined}
-              onClick={() => onChange(type)}
-              aria-pressed={isActive}
-              data-informational-state={informational ? (isActive ? 'active' : 'inactive') : undefined}
-            >
-              {icon}
-            </IconButton>
-          </Tooltip>
-        );
-      })}
-    </Container>
+          return (
+            <Tooltip key={type}>
+              <TooltipTrigger
+                aria-label={label}
+                onClick={() => onChange(type)}
+                aria-pressed={isActive}
+                data-informational-state={informational ? (isActive ? 'active' : 'inactive') : undefined}
+                className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors ${
+                  isActive
+                    ? 'bg-[#16a085] text-white'
+                    : 'bg-transparent text-foreground hover:bg-muted'
+                }`}
+              >
+                {icon}
+              </TooltipTrigger>
+              <TooltipContent side={isHorizontal ? 'top' : 'left'}>
+                {informationalReason ?? label}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </TooltipProvider>
   );
 }

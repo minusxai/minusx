@@ -1,15 +1,14 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Box, HStack, VStack, Text, Input, IconButton, Icon } from '@chakra-ui/react'
 import { LuPlus, LuX, LuChevronDown, LuSquareFunction } from 'react-icons/lu'
 import type { PivotFormula, FormulaOperator } from '@/lib/types'
 
 const OPERATORS: { value: FormulaOperator; label: string }[] = [
   { value: '+', label: '+' },
-  { value: '-', label: '\u2212' },
-  { value: '*', label: '\u00d7' },
-  { value: '/', label: '\u00f7' },
+  { value: '-', label: '−' },
+  { value: '*', label: '×' },
+  { value: '/', label: '÷' },
 ]
 
 export interface DimensionInfo {
@@ -63,64 +62,35 @@ const SimpleSelect = ({
   }, [open])
 
   return (
-    <Box position="relative" ref={ref}>
-      <HStack
-        gap={0.5}
-        px={2}
-        py={0.5}
-        bg="bg.surface"
-        border="1px solid"
-        borderColor="border.muted"
-        borderRadius="sm"
-        cursor="pointer"
+    <div className="relative" ref={ref}>
+      <div
+        className="flex cursor-pointer items-center gap-0.5 rounded-sm border border-border bg-card px-2 py-0.5 transition-all duration-150 hover:border-muted-foreground/50"
+        style={{ minWidth: minW }}
         onClick={(e) => { e.stopPropagation(); setOpen(!open) }}
-        _hover={{ borderColor: 'border.default' }}
-        transition="all 0.15s"
-        minW={minW}
       >
-        <Text fontSize="xs" fontWeight="500" color={selected ? 'fg.default' : 'fg.subtle'} truncate>
+        <span className={`truncate text-xs font-medium ${selected ? 'text-foreground' : 'text-muted-foreground'}`}>
           {selected?.label || placeholder}
-        </Text>
-        <Box as={LuChevronDown} fontSize="2xs" color="fg.subtle" flexShrink={0} />
-      </HStack>
+        </span>
+        <LuChevronDown className="shrink-0 text-[10px] text-muted-foreground" />
+      </div>
       {open && (
-        <VStack
-          position="absolute"
-          top="100%"
-          left={0}
-          mt={1}
-          bg="bg.panel"
-          border="1px solid"
-          borderColor="border.muted"
-          borderRadius="md"
-          boxShadow="md"
-          zIndex={20}
-          p={1}
-          gap={0}
-          minW="90px"
-          maxH="200px"
-          overflowY="auto"
-        >
+        <div className="absolute left-0 top-full z-20 mt-1 flex max-h-[200px] min-w-[90px] flex-col items-center gap-0 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md">
           {options.map(opt => (
-            <Box
+            <div
               key={opt.value}
-              px={2}
-              py={1}
-              cursor="pointer"
-              borderRadius="sm"
-              bg={opt.value === value ? 'accent.secondary/15' : 'transparent'}
-              _hover={{ bg: 'accent.secondary/10' }}
+              className={`w-full cursor-pointer rounded-sm px-2 py-1 hover:bg-[#9b59b6]/10 ${
+                opt.value === value ? 'bg-[#9b59b6]/15' : 'bg-transparent'
+              }`}
               onClick={(e) => { e.stopPropagation(); onChange(opt.value); setOpen(false) }}
-              width="100%"
             >
-              <Text fontSize="xs" fontWeight={opt.value === value ? '700' : '500'} color={opt.value === value ? 'accent.secondary' : 'fg.default'} truncate>
+              <span className={`block truncate text-xs ${opt.value === value ? 'font-bold text-[#9b59b6]' : 'font-medium text-foreground'}`}>
                 {opt.label}
-              </Text>
-            </Box>
+              </span>
+            </div>
           ))}
-        </VStack>
+        </div>
       )}
-    </Box>
+    </div>
   )
 }
 
@@ -176,9 +146,9 @@ export const FormulaBuilder = ({
       const updated = { ...f, ...update }
       // Auto-generate name only when operand/operator changes (not when user edits name directly)
       if (!('name' in update)) {
-        const oldAutoName = `${f.operandA} ${f.operator === '-' ? '-' : f.operator === '+' ? '+' : f.operator === '*' ? '\u00d7' : '\u00f7'} ${f.operandB}`
+        const oldAutoName = `${f.operandA} ${f.operator === '-' ? '-' : f.operator === '+' ? '+' : f.operator === '*' ? '×' : '÷'} ${f.operandB}`
         if (f.name === oldAutoName || f.name === `${f.operandA} - ${f.operandB}`) {
-          const opLabel = updated.operator === '-' ? '-' : updated.operator === '+' ? '+' : updated.operator === '*' ? '\u00d7' : '\u00f7'
+          const opLabel = updated.operator === '-' ? '-' : updated.operator === '+' ? '+' : updated.operator === '*' ? '×' : '÷'
           updated.name = `${updated.operandA} ${opLabel} ${updated.operandB}`
         }
       }
@@ -202,7 +172,7 @@ export const FormulaBuilder = ({
 
     const a = newOperandValues[0] || ''
     const b = newOperandValues[1] || ''
-    const opLabel = formula.operator === '-' ? '-' : formula.operator === '+' ? '+' : formula.operator === '*' ? '\u00d7' : '\u00f7'
+    const opLabel = formula.operator === '-' ? '-' : formula.operator === '+' ? '+' : formula.operator === '*' ? '×' : '÷'
 
     onChange(formulas.map((f, i) => {
       if (i !== index) return f
@@ -233,7 +203,7 @@ export const FormulaBuilder = ({
 
     const a = newOperandValues[0] || ''
     const b = newOperandValues[1] || ''
-    const opLabel = formula.operator === '-' ? '-' : formula.operator === '+' ? '+' : formula.operator === '*' ? '\u00d7' : '\u00f7'
+    const opLabel = formula.operator === '-' ? '-' : formula.operator === '+' ? '+' : formula.operator === '*' ? '×' : '÷'
 
     onChange(formulas.map((f, i) => {
       if (i !== index) return f
@@ -255,13 +225,13 @@ export const FormulaBuilder = ({
   })) ?? []
 
   return (
-    <VStack gap={2} align="stretch" width="100%">
-      <HStack gap={1}>
-        <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">
+    <div className="flex w-full flex-col items-stretch gap-2">
+      <div className="flex items-center gap-1">
+        <span className="text-xs font-bold uppercase tracking-wider">
           {axis === 'row' ? 'Row' : 'Column'} Formulas
-        </Text>
-        <Text fontSize="xs" color="fg.subtle">({dimensionName})</Text>
-      </HStack>
+        </span>
+        <span className="text-xs text-muted-foreground">({dimensionName})</span>
+      </div>
 
       {formulas.map((formula, index) => {
         const level = formula.dimensionLevel ?? 0
@@ -270,17 +240,17 @@ export const FormulaBuilder = ({
         const priorFormulaNames = formulas.slice(0, index).map(f => f.name).filter(n => n.length > 0)
         const valueOptions = [
           ...operandValues.map(v => ({ value: v, label: v })),
-          ...priorFormulaNames.map(n => ({ value: n, label: `\u0192 ${n}` })),
+          ...priorFormulaNames.map(n => ({ value: n, label: `ƒ ${n}` })),
         ]
         const parentOpts = getParentOptions(level)
         const parentOptions = parentOpts.map(v => ({ value: v, label: v }))
 
         return (
-          <VStack key={index} gap={1} align="stretch">
+          <div key={index} className="flex flex-col items-stretch gap-1">
             {/* Dimension level + parent selectors (only when multiple dimensions) */}
             {hasMultipleDimensions && (
-              <HStack gap={1.5} flexWrap="wrap" alignItems="center">
-                <Text fontSize="2xs" color="fg.subtle" fontWeight="600">Level:</Text>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-semibold text-muted-foreground">Level:</span>
                 <SimpleSelect
                   value={String(level)}
                   options={dimensionLevelOptions}
@@ -290,7 +260,7 @@ export const FormulaBuilder = ({
                 />
                 {level > 0 && parentOptions.length > 0 && (
                   <>
-                    <Text fontSize="2xs" color="fg.subtle" fontWeight="600">in:</Text>
+                    <span className="text-[10px] font-semibold text-muted-foreground">in:</span>
                     <SimpleSelect
                       value={formula.parentValues?.[0] ?? ''}
                       options={parentOptions}
@@ -300,24 +270,18 @@ export const FormulaBuilder = ({
                     />
                   </>
                 )}
-              </HStack>
+              </div>
             )}
             {/* Formula row: name = operandA op operandB */}
-            <HStack gap={1.5} flexWrap="wrap" alignItems="center">
-              <Icon fontSize="md" color="accent.secondary">
-                <LuSquareFunction />
-              </Icon>
-              <Input
+            <div className="flex flex-wrap items-center gap-1.5">
+              <LuSquareFunction className="text-base text-[#9b59b6]" />
+              <input
+                type="text"
                 value={formula.name}
                 onChange={(e) => updateFormula(index, { name: e.target.value })}
-                size="xs"
-                maxW="120px"
-                fontWeight="600"
-                fontSize="xs"
-                borderColor="border.muted"
-                _focus={{ borderColor: 'accent.secondary' }}
+                className="h-6 w-full max-w-[120px] rounded-md border border-border bg-transparent px-2 text-xs font-semibold outline-none focus:border-[#9b59b6]"
               />
-              <Text fontSize="xs" color="fg.subtle" fontWeight="600">=</Text>
+              <span className="text-xs font-semibold text-muted-foreground">=</span>
               <SimpleSelect
                 value={formula.operandA}
                 options={valueOptions}
@@ -337,38 +301,30 @@ export const FormulaBuilder = ({
                 onChange={(v) => updateFormula(index, { operandB: v })}
                 placeholder="Select..."
               />
-              <IconButton
+              <button
+                type="button"
                 aria-label="Remove formula"
-                size="2xs"
-                variant="ghost"
-                color="fg.subtle"
-                _hover={{ color: 'fg.error', bg: 'bg.error/10' }}
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-[#c0392b]/10 hover:text-[#c0392b]"
                 onClick={() => removeFormula(index)}
               >
                 <LuX />
-              </IconButton>
-            </HStack>
-          </VStack>
+              </button>
+            </div>
+          </div>
         )
       })}
 
-      <Box>
-        <HStack
-          gap={1}
-          px={2}
-          py={1}
-          cursor="pointer"
-          borderRadius="sm"
-          _hover={{ bg: 'accent.secondary/10' }}
+      <div>
+        <div
+          className="flex w-fit cursor-pointer items-center gap-1 rounded-sm px-2 py-1 hover:bg-[#9b59b6]/10"
           onClick={addFormula}
-          width="fit-content"
         >
-          <Box as={LuPlus} fontSize="xs" color="accent.secondary" />
-          <Text fontSize="xs" fontWeight="600" color="accent.secondary">
+          <LuPlus className="text-xs text-[#9b59b6]" />
+          <span className="text-xs font-semibold text-[#9b59b6]">
             Add Formula
-          </Text>
-        </HStack>
-      </Box>
-    </VStack>
+          </span>
+        </div>
+      </div>
+    </div>
   )
 }

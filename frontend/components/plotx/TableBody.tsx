@@ -71,7 +71,7 @@ export const TableBody = ({
                   className={`table-v2-cell mx-cell ${cssColumnClass(colId)}`}
                   style={{
                     width: colSizes[colId],
-                    borderRight: cellIdx < lastColIdx ? '1px solid var(--chakra-colors-border-muted)' : undefined,
+                    borderRight: cellIdx < lastColIdx ? '1px solid var(--border)' : undefined,
                     ...(cellBg ? { backgroundColor: cellBg, color: getContrastText(cellBg) } : undefined),
                     ...(shouldWrap ? { whiteSpace: 'normal', wordBreak: 'break-word' } : undefined),
                   }}

@@ -1,9 +1,7 @@
 'use client'
 
-import { Box } from '@chakra-ui/react'
-
-// Compact-mode tooltip content for a pivot cell, extracted verbatim from
-// PivotTable.tsx's buildTooltipContent callback (pure code motion, no logic change).
+// Compact-mode tooltip content for a pivot cell. Native/Tailwind on the kit stack
+// (Renderer_v2 Phase 3) — same content structure as the Chakra original.
 interface PivotTableTooltipContentProps {
   value: number
   rowIndex: number
@@ -52,17 +50,20 @@ export const PivotTableTooltipContent = ({
   const formattedValue = present ? fmt(value, valueIndex) : 'No data'
   const cellBg = getCellBg(value, present)
   return (
-    <Box fontFamily="mono" fontSize="xs">
+    <div className="font-mono text-xs">
       {dims.length > 0 && (
-        <Box fontWeight="600" mb={1}>
+        <div className="mb-1 font-semibold">
           {dims.map(d => d.value).join(' · ')}
-        </Box>
+        </div>
       )}
-      <Box display="flex" alignItems="center" gap={2}>
-        <Box w="10px" h="10px" borderRadius="full" flexShrink={0} bg={cellBg ?? 'fg.subtle'} />
-        <Box color="fg.muted">{valueLabels[valueIndex ?? 0] || 'Value'}</Box>
-        <Box fontWeight="700" ml="auto" color={present ? undefined : 'fg.subtle'}>{formattedValue}</Box>
-      </Box>
-    </Box>
+      <div className="flex items-center gap-2">
+        <span
+          className="size-2.5 shrink-0 rounded-full"
+          style={{ background: cellBg ?? 'var(--muted-foreground)' }}
+        />
+        <span className="opacity-75">{valueLabels[valueIndex ?? 0] || 'Value'}</span>
+        <span className={`ml-auto font-bold ${present ? '' : 'opacity-60'}`}>{formattedValue}</span>
+      </div>
+    </div>
   )
 }

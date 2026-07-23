@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { Box, HStack, Text } from '@chakra-ui/react'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
 import type { ColumnFormatConfig, TrendConfig, TrendCompareMode } from '@/lib/types'
 
@@ -58,30 +57,13 @@ export const TrendAxisBuilder = ({
   }, [xAxisColumns, yAxisColumns, onAxisChange])
 
   return (
-    <Box display="flex" flexDirection="column" gap={3} width="100%">
+    <div className="flex w-full flex-col gap-3">
       {/* Column chips */}
-      <Box
-        bg="bg.muted"
-        borderRadius="md"
-        p={2}
-        pt={3}
-        position="relative"
-      >
-        <Text
-          position="absolute"
-          top={-2}
-          fontSize="2xs"
-          fontWeight="700"
-          color="fg.subtle"
-          textTransform="uppercase"
-          letterSpacing="0.05em"
-          bg="bg.muted"
-          px={1.5}
-          borderRadius="sm"
-        >
+      <div className="relative rounded-md bg-muted p-2 pt-3">
+        <span className="absolute -top-2 rounded-sm bg-muted px-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           Columns
-        </Text>
-        <HStack gap={2} flexWrap="wrap">
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
           {columns.map(col => (
             <ColumnChip
               key={col}
@@ -96,12 +78,12 @@ export const TrendAxisBuilder = ({
               onMobileSelect={() => setSelectedColumnForMobile(prev => prev === col ? null : col)}
             />
           ))}
-        </HStack>
-      </Box>
+        </div>
+      </div>
 
       {/* Drop zones */}
-      <Box display="grid" gridTemplateColumns="repeat(2, 1fr)" gap={2} minWidth={0}>
-        <Box minW={0} display="flex" alignItems="stretch">
+      <div className="grid min-w-0 grid-cols-2 gap-2">
+        <div className="flex min-w-0 items-stretch">
           <DropZone
             label="Time Axis"
             onDrop={() => {
@@ -112,7 +94,7 @@ export const TrendAxisBuilder = ({
             }}
             isTouchDevice={isTouchDevice}
           >
-            <HStack gap={1.5} flexWrap="wrap" minW={0} width="100%">
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5">
               {xAxisColumns.map(col => (
                 <ZoneChip
                   key={col}
@@ -123,13 +105,13 @@ export const TrendAxisBuilder = ({
                   onFormatChange={onColumnFormatChange ? (config) => onColumnFormatChange(col, config) : undefined}
                 />
               ))}
-            </HStack>
+            </div>
             {xAxisColumns.length === 0 && (
-              <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Drop a date/time column</Text>
+              <p className="text-xs italic text-muted-foreground">Drop a date/time column</p>
             )}
           </DropZone>
-        </Box>
-        <Box minW={0} display="flex" alignItems="stretch">
+        </div>
+        <div className="flex min-w-0 items-stretch">
           <DropZone
             label="Metrics"
             onDrop={() => {
@@ -140,7 +122,7 @@ export const TrendAxisBuilder = ({
             }}
             isTouchDevice={isTouchDevice}
           >
-            <HStack gap={1.5} flexWrap="wrap" minW={0} width="100%">
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5">
               {yAxisColumns.map(col => (
                 <ZoneChip
                   key={col}
@@ -151,44 +133,38 @@ export const TrendAxisBuilder = ({
                   onFormatChange={onColumnFormatChange ? (config) => onColumnFormatChange(col, config) : undefined}
                 />
               ))}
-            </HStack>
+            </div>
             {yAxisColumns.length === 0 && (
-              <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Drop metric columns</Text>
+              <p className="text-xs italic text-muted-foreground">Drop metric columns</p>
             )}
           </DropZone>
-        </Box>
-      </Box>
+        </div>
+      </div>
 
       {/* Comparison mode */}
       {onTrendConfigChange && (
-        <HStack gap={3} align="center">
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             Compare
-          </Text>
-          <HStack gap={1}>
+          </span>
+          <div className="flex items-center gap-1">
             {COMPARE_OPTIONS.map(opt => (
-              <Box
+              <button
                 key={opt.value}
-                as="button"
-                px={2}
-                py={1}
-                fontSize="xs"
-                fontFamily="mono"
-                fontWeight={compareMode === opt.value ? '700' : '500'}
-                bg={compareMode === opt.value ? 'accent.teal' : 'transparent'}
-                color={compareMode === opt.value ? 'white' : 'fg.subtle'}
-                borderRadius="md"
-                cursor="pointer"
-                _hover={{ bg: compareMode === opt.value ? 'accent.teal' : 'bg.muted' }}
-                transition="all 0.15s"
+                type="button"
+                className={`cursor-pointer rounded-md px-2 py-1 font-mono text-xs transition-all duration-150 ${
+                  compareMode === opt.value
+                    ? 'bg-[#16a085] font-bold text-white'
+                    : 'bg-transparent font-medium text-muted-foreground hover:bg-muted'
+                }`}
                 onClick={() => onTrendConfigChange({ ...trendConfig, compareMode: opt.value })}
               >
                 {opt.label}
-              </Box>
+              </button>
             ))}
-          </HStack>
-        </HStack>
+          </div>
+        </div>
       )}
-    </Box>
+    </div>
   )
 }

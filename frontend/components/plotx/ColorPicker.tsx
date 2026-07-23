@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Box, HStack, Text } from '@chakra-ui/react'
-import { CHART_COLORS, COLOR_PALETTE, resolveSeriesColor } from '@/lib/chart/echarts-theme'
+import { CHART_COLORS, COLOR_PALETTE, resolveSeriesColor } from '@/lib/chart/chart-theme'
 import { useConfigs } from '@/lib/hooks/useConfigs'
 
 interface ColorPickerProps {
@@ -14,11 +13,12 @@ interface ColorPickerProps {
 const HEX_TO_KEY = Object.fromEntries(Object.entries(CHART_COLORS).map(([k, v]) => [v, k]))
 
 const Circle = ({ color, size, selected, onClick }: { color: string; size: string; selected: boolean; onClick: () => void }) => (
-  <Box
-    w={size} h={size} borderRadius="full" bg={color} cursor="pointer"
-    border="2px solid" borderColor={selected ? 'fg.default' : 'transparent'}
-    opacity={selected ? 1 : 0.6} _hover={{ opacity: 1 }}
-    transition="all 0.15s" flexShrink={0} onClick={onClick}
+  <div
+    className={`shrink-0 cursor-pointer rounded-full border-2 transition-all duration-150 hover:opacity-100 ${
+      selected ? 'border-foreground opacity-100' : 'border-transparent opacity-60'
+    }`}
+    style={{ width: size, height: size, background: color }}
+    onClick={onClick}
   />
 )
 
@@ -60,26 +60,25 @@ export const ColorPicker = ({ colorOverrides, numSeries, onChange }: ColorPicker
   }
 
   return (
-    <Box position="relative" ref={ref}>
-      <HStack gap={1.5} px={1} py={0.5} alignItems="center" justify="center">
-        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" flexShrink={0}>Colors</Text>
+    <div className="relative" ref={ref}>
+      <div className="flex items-center justify-center gap-1.5 px-1 py-0.5">
+        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Colors</span>
         {Array.from({ length: Math.min(Math.max(numSeries, 1), palette.length) }, (_, i) => (
           <Circle key={i} color={getColor(i)} size="14px" selected={activeIndex === i}
             onClick={() => setActiveIndex(activeIndex === i ? null : i)} />
         ))}
-      </HStack>
+      </div>
 
       {activeIndex !== null && (
-        <Box position="absolute" top="100%" right={0} mt={1} bg="bg.panel"
-          border="1px solid" borderColor="border.muted" borderRadius="md" boxShadow="md" zIndex={20} p={2}>
-          <HStack gap={1.5} flexWrap="wrap" justify="center">
+        <div className="absolute right-0 top-full z-20 mt-1 rounded-md border border-border bg-popover p-2 shadow-md">
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
             {palette.map((hex) => (
               <Circle key={hex} color={hex} size="24px" selected={getColor(activeIndex) === hex}
                 onClick={() => handlePick(hex)} />
             ))}
-          </HStack>
-        </Box>
+          </div>
+        </div>
       )}
-    </Box>
+    </div>
   )
 }

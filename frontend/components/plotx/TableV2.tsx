@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Box, Text } from '@chakra-ui/react'
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
 import { calculateHistogram } from '@/lib/chart/histogram'
 import { formatNumber, applyPrefixSuffix, formatDateValue, formatD3Number, formatD3Date } from '@/lib/chart/chart-format'
@@ -255,6 +254,9 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
       filterTypes: { [colId]: colType },
       yColumn: colId,
       position: { x: e.clientX, y: e.clientY },
+      // The click's coordinate space (Phase 8): inside the dashboard iframe surface the card
+      // must portal to THIS document's body, where clientX/Y are meaningful.
+      doc: td.ownerDocument,
     })
   }, [tableRows, colIndexMap, columnTypes])
 
@@ -312,82 +314,48 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
 
   if (!colNames || colNames.length === 0) {
     return (
-      <Box color="fg.subtle" fontSize="sm" textAlign="center" py={8}>
+      <div className="py-8 text-center text-sm text-muted-foreground">
         No data available
-      </Box>
+      </div>
     )
   }
 
   if (rows.length === 0) {
     return (
-      <Box color="fg.subtle" fontSize="sm" textAlign="center" h="100%" display="flex" alignItems="center" justifyContent="center">
+      <div className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
         Uh-oh, no data in results!
-      </Box>
+      </div>
     )
   }
 
   const visibleHeaders = table.getHeaderGroups()[0].headers.filter(h => h.column.getIsVisible())
 
   return (
-    <Box ref={containerRef} height="100%" display="flex" flexDirection="column">
+    <div ref={containerRef} className="flex h-full flex-col">
+      {/* Base table chrome (zebra, hover, cell typography, scrollbar) as a
+          low-specificity (:where) stylesheet — NOT inline styles — so scoped css
+          overrides (`.mx-row-odd { … }` in the envelope css field) still win. */}
+      <style>{TABLE_BASE_CSS}</style>
       {visibleColumnCount === 0 ? (
-        <Box flex="1" display="flex" alignItems="center" justifyContent="center">
-          <Text fontSize="sm" color="fg.muted">
+        <div className="flex flex-1 items-center justify-center">
+          <span className="text-sm text-muted-foreground">
             No columns selected. Use the Columns menu to show columns.
-          </Text>
-        </Box>
+          </span>
+        </div>
       ) : (
-        <Box
+        <div
           ref={tableBodyRef}
-          flex="1"
-          minHeight="0"
-          overflowX="auto"
-          overflowY="auto"
-          css={{
-            '&::-webkit-scrollbar': { height: '6px', width: '6px' },
-            '&::-webkit-scrollbar-track': { background: 'transparent' },
-            '&::-webkit-scrollbar-thumb': { background: 'rgba(128,128,128,0.3)', borderRadius: '3px' },
-            '&::-webkit-scrollbar-thumb:hover': { background: 'rgba(128,128,128,0.5)' },
-            '&::-webkit-scrollbar-corner': { background: 'transparent' },
-            // Zebra stripe DEFAULT — a stylesheet rule (not inline) so css overrides
-            // (.mx-row-odd / .mx-row-even in the scoped `css` field) can restyle it.
-            '& .mx-row-odd': {
-              background: 'var(--chakra-colors-bg-emphasized)',
-            },
-            '& .table-v2-row': {},
-            '& .table-v2-row:hover': {
-              background: 'var(--chakra-colors-bg-muted) !important',
-            },
-            '& .table-v2-cell': {
-              fontFamily: 'var(--chakra-fonts-mono)',
-              fontSize: 'var(--chakra-fontSizes-sm)',
-              color: 'var(--chakra-colors-fg-default)',
-              padding: '12px 16px',
-              textAlign: 'left',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              cursor: 'pointer',
-            },
-            '& .table-v2-cell:hover': {
-              background: 'var(--chakra-colors-bg-emphasized)',
-            },
-          }}
+          className="table-v2-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto"
         >
-          <Box
-            as="table"
+          <table
             // mx-* classes are the STABLE contract for css overrides (Viz V2 table
             // source `css` field / story-level styling) — documented in atlas-schemas.
-            className="mx-table"
-            width="100%"
-            fontSize="sm"
-            borderCollapse="collapse"
-            tableLayout="fixed"
-            minW={`${visibleColumnCount * 150}px`}
+            className="mx-table w-full border-collapse table-fixed text-sm"
+            style={{ minWidth: `${visibleColumnCount * 150}px` }}
           >
             {/* Header */}
-            <Box as="thead" position="sticky" top={0} zIndex={2} bg="bg.muted">
-              <Box as="tr" className="mx-header-row">
+            <thead className="sticky top-0 z-[2] bg-muted">
+              <tr className="mx-header-row">
                 {visibleHeaders.map((header, displayIndex) => (
                   <TableHeaderCell
                     key={header.id}
@@ -413,8 +381,8 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                     histograms={histograms}
                   />
                 ))}
-              </Box>
-            </Box>
+              </tr>
+            </thead>
 
             {/* Virtualized Body — native elements + event delegation for performance */}
             <TableBody
@@ -433,8 +401,8 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
               columnTypes={columnTypes}
               colIndexMap={colIndexMap}
             />
-          </Box>
-        </Box>
+          </table>
+        </div>
       )}
 
       {/* Bottom Bar */}
@@ -453,6 +421,35 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
         downloadCsv={downloadCsv}
       />
       <DrillDownCard drillDown={drillDown} onClose={closeDrillDown} sql={sql} databaseName={databaseName} />
-    </Box>
+    </div>
   )
 }
+
+// Default flat-table chrome (zebra stripe, row/cell hover, cell typography,
+// scrollbar). Kept at zero specificity via :where() so the envelope's scoped css
+// field (`.mx-viz-scope-X { .mx-row-odd { … } }`, 0-2-0) overrides every rule
+// here. `!important` on row hover matches the previous behaviour (the hover wins
+// over the zebra default, both being stylesheet rules).
+const TABLE_BASE_CSS = `
+.table-v2-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
+.table-v2-scroll::-webkit-scrollbar-track { background: transparent; }
+.table-v2-scroll::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.3); border-radius: 3px; }
+.table-v2-scroll::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.5); }
+.table-v2-scroll::-webkit-scrollbar-corner { background: transparent; }
+.mx-facet-list::-webkit-scrollbar { width: 4px; }
+.mx-facet-list::-webkit-scrollbar-thumb { background: #16a085; border-radius: 2px; }
+:where(.table-v2-scroll) :where(.mx-row-odd) { background: var(--muted); }
+:where(.table-v2-scroll .table-v2-row):hover { background: var(--accent) !important; }
+:where(.table-v2-scroll .table-v2-cell) {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.875rem;
+  color: var(--foreground);
+  padding: 12px 16px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+:where(.table-v2-scroll .table-v2-cell):hover { background: color-mix(in srgb, var(--muted-foreground) 12%, transparent); }
+`

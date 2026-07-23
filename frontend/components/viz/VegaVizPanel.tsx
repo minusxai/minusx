@@ -7,8 +7,10 @@
  * the long tail of styling stays with the agent. Pure view: no Redux.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { Box, Button, HStack, Input, Text, Textarea, Switch, NativeSelect } from '@chakra-ui/react';
 import { LuLayoutGrid, LuSettings2, LuBraces } from 'react-icons/lu';
+import { Button } from '@/components/kit/button';
+import { Input } from '@/components/kit/input';
+import { Switch } from '@/components/kit/switch';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { VizSettings } from '@/lib/types';
 import {
@@ -54,6 +56,16 @@ const CHOROPLETH_SCALE_OPTIONS = [
   { value: 'red-yellow-green', label: 'Red → Green' },
   { value: 'blue-orange', label: 'Blue → Orange' },
 ];
+
+// Shared control fragments (kit/Tailwind re-skin of the old xs/sm Chakra controls).
+const SELECT_XS = 'h-6 rounded-md border border-input bg-transparent px-1 text-xs text-foreground outline-none focus-visible:border-ring';
+const SELECT_SM = 'h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm text-foreground outline-none focus-visible:border-ring';
+const CARD = 'rounded-md border border-border bg-card p-3';
+const CARD_TITLE = 'text-[10px] font-bold uppercase tracking-[0.05em] text-muted-foreground';
+const SWITCH_TEAL = 'data-[state=checked]:bg-[#16a085]';
+const COLOR_INPUT_STYLE: React.CSSProperties = {
+  width: 26, height: 18, padding: 0, border: '1px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer',
+};
 
 export interface VegaVizPanelProps {
   envelope: VizEnvelope;
@@ -104,17 +116,17 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
   };
   const referenceLines = getReferenceLines(envelope);
   const referenceLineCard = (
-    <Box p={3} bg="bg.surface" borderRadius="md" border="1px solid" borderColor="border.muted" display="flex" flexDirection="column" gap={2}>
-      <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+    <div className={`${CARD} flex flex-col gap-2`}>
+      <p className={CARD_TITLE}>
         Reference lines
-      </Text>
+      </p>
       {referenceLines.map(line => {
         const name = line.label ?? String(line.value);
         return (
-          <HStack key={line.index} justify="space-between" gap={2}>
-            <Text fontSize="xs" color="fg.muted" flex="1" minW={0} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+          <div key={line.index} className="flex items-center justify-between gap-2">
+            <p className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground">
               {line.label ? `${line.label} · ` : ''}{line.axis} = {String(line.value)}
-            </Text>
+            </p>
             <input
               key={`${line.index}:${line.color}`}
               aria-label={`Color for reference line ${name}`}
@@ -123,39 +135,45 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
               onBlur={(e) => {
                 if (e.target.value !== line.color) onVizChange(setReferenceLineColor(envelope, line.index, e.target.value));
               }}
-              style={{ width: 26, height: 18, padding: 0, border: '1px solid var(--chakra-colors-border-muted)', borderRadius: 4, background: 'transparent', cursor: 'pointer' }}
+              style={COLOR_INPUT_STYLE}
             />
-            <Box
-              as="button"
+            <button
+              type="button"
               aria-label={`Remove reference line ${name}`}
-              fontSize="xs"
-              color="fg.subtle"
-              _hover={{ color: 'accent.danger' }}
+              className="text-xs text-muted-foreground hover:text-[#c0392b]"
               onClick={() => onVizChange(removeReferenceLine(envelope, line.index))}
             >
               ✕
-            </Box>
-          </HStack>
+            </button>
+          </div>
         );
       })}
-      <HStack gap={1.5}>
-        <NativeSelect.Root size="xs" width="58px" flexShrink={0}>
-          <NativeSelect.Field aria-label="Reference line axis" value={refAxis} onChange={(e) => setRefAxis(e.target.value as 'y' | 'x')}>
-            <option value="y">Y</option>
-            <option value="x">X</option>
-          </NativeSelect.Field>
-          <NativeSelect.Indicator />
-        </NativeSelect.Root>
-        <Input aria-label="Reference line value" size="xs" flex="1" minW="60px" placeholder="value" value={refValue} onChange={(e) => setRefValue(e.target.value)} />
-        <Input aria-label="Reference line label" size="xs" flex="1" minW="60px" placeholder="label (optional)" value={refLabel} onChange={(e) => setRefLabel(e.target.value)} />
-        <Button aria-label="Add reference line" size="xs" variant="solid" colorPalette="teal" onClick={commitReferenceLine} disabled={refValue.trim() === ''}>
+      <div className="flex items-center gap-1.5">
+        <select
+          aria-label="Reference line axis"
+          className={`${SELECT_XS} w-[58px] shrink-0`}
+          value={refAxis}
+          onChange={(e) => setRefAxis(e.target.value as 'y' | 'x')}
+        >
+          <option value="y">Y</option>
+          <option value="x">X</option>
+        </select>
+        <Input aria-label="Reference line value" className="h-6 min-w-[60px] flex-1 px-2 text-xs md:text-xs" placeholder="value" value={refValue} onChange={(e) => setRefValue(e.target.value)} />
+        <Input aria-label="Reference line label" className="h-6 min-w-[60px] flex-1 px-2 text-xs md:text-xs" placeholder="label (optional)" value={refLabel} onChange={(e) => setRefLabel(e.target.value)} />
+        <Button
+          aria-label="Add reference line"
+          size="xs"
+          className="bg-[#16a085] text-white hover:bg-[#16a085]/90"
+          onClick={commitReferenceLine}
+          disabled={refValue.trim() === ''}
+        >
           Add
         </Button>
-      </HStack>
-      <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+      </div>
+      <p className="text-[10px] leading-normal text-muted-foreground">
         Saved as real chart layers — the agent and the Spec tab see exactly the same thing.
-      </Text>
-    </Box>
+      </p>
+    </div>
   );
 
   // Pivot Formulas builder inputs — the same derivation ChartBuilder does for the
@@ -189,7 +207,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
   ] as const;
 
   return (
-    <Box>
+    <div>
       {/* Viz-type icon grid on top — same placement as the classic panel. Disabled
           entries double as the live "not yet in V2" coverage list. CUSTOM keeps
           the grid visible for authored compositions; clicking it previews the
@@ -213,33 +231,30 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
         disabledTypes={V2_DISABLED_TYPES}
         disabledReason="Not yet supported for Vega charts — ask the agent"
       />
-      <HStack gap={1} pb={2}>
+      <div className="flex items-center gap-1 pb-2">
         {TABS.map(({ key, icon: Icon, label }) => (
           <Button
             key={key}
             aria-label={`${label} tab`}
             size="xs"
-            variant={activeTab === key ? 'solid' : 'ghost'}
-            colorPalette={activeTab === key ? 'teal' : undefined}
-            color={activeTab === key ? undefined : 'fg.muted'}
-            fontWeight="600"
+            variant={activeTab === key ? 'default' : 'ghost'}
+            className={`px-2 font-semibold ${activeTab === key ? 'bg-[#16a085] text-white hover:bg-[#16a085]/90' : 'text-muted-foreground'}`}
             onClick={() => setActiveTab(key)}
-            px={2}
           >
             <Icon size={13} />
             {label}
           </Button>
         ))}
-      </HStack>
+      </div>
 
       {activeTab === 'fields' && (
         customPreview ? (
           <VegaEncodingPanel envelope={envelope} columns={columns} types={types} onVizChange={onVizChange} customPreview />
         ) : isTable ? (
-          <Text aria-label="Table fields hint" fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
+          <p aria-label="Table fields hint" className="py-1 text-xs leading-[1.6] text-muted-foreground">
             Table columns are managed on the table itself — sort/filter/hide via the column
             headers and bottom toolbar, rename &amp; format via each header&apos;s ⚙.
-          </Text>
+          </p>
         ) : isPivot ? (
           // section="fields": the panel's own tabs host the builder's sections —
           // zones here, pivot options under the Settings tab (no nested tab bar).
@@ -261,14 +276,14 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
       {/* The Custom preview owns BOTH content tabs — showing the real type's
           toggles under a selected Custom icon would contradict the selection. */}
       {activeTab === 'settings' && customPreview && (
-        <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
+        <p className="py-1 text-xs leading-[1.6] text-muted-foreground">
           Custom charts have no settings toggles — ask the agent, or edit the JSON in Spec.
           Pick a chart type above to go back.
-        </Text>
+        </p>
       )}
 
       {activeTab === 'settings' && !customPreview && isDomTier && (
-        <Box display="flex" flexDirection="column" gap={3} py={1}>
+        <div className="flex flex-col gap-3 py-1">
           {isPivot && (
             <PivotAxisBuilder
               columns={columns}
@@ -292,13 +307,11 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
               onChange={(rules) => onVizChange(setTableConditionalFormats(envelope, rules))}
             />
           )}
-          <Box>
-            <Text fontSize="xs" color="fg.muted" mb={1}>CSS overrides</Text>
-            <Textarea
+          <div>
+            <p className="mb-1 text-xs text-muted-foreground">CSS overrides</p>
+            <textarea
               aria-label="CSS overrides"
-              size="xs"
-              fontFamily="mono"
-              fontSize="11px"
+              className="w-full rounded-md border border-input bg-transparent px-2 py-1.5 font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring"
               rows={5}
               placeholder={isTable
                 ? '.mx-th { background: #223; }\n.mx-toolbar { display: none; }'
@@ -310,112 +323,97 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                 setCssDraft(null);
               }}
             />
-            <Text fontSize="10px" color="fg.subtle" mt={1} lineHeight="1.5">
+            <p className="mt-1 text-[10px] leading-normal text-muted-foreground">
               {isTable
                 ? 'Scoped to this table. Classes: .mx-table, .mx-header-row, .mx-th, .mx-row (+ .mx-row-odd/-even zebra), .mx-cell, .mx-col-<column>, .mx-toolbar. No @import / url().'
                 : 'Scoped to this pivot. Target .mx-pivot with element selectors (th, td, thead). No @import / url().'}
-            </Text>
-          </Box>
-        </Box>
+            </p>
+          </div>
+        </div>
       )}
 
       {activeTab === 'settings' && !customPreview && !isDomTier && (
         isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/funnel@1' ? (
-          <Box display="flex" flexDirection="column" gap={3} py={1}>
-            <HStack justify="space-between">
-              <Box>
-                <Text fontSize="xs" color="fg.muted">Horizontal layout</Text>
-                <Text fontSize="10px" color="fg.subtle">Stages run left to right instead of top to bottom</Text>
-              </Box>
-              <Switch.Root colorPalette="teal"
+          <div className="flex flex-col gap-3 py-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Horizontal layout</p>
+                <p className="text-[10px] text-muted-foreground">Stages run left to right instead of top to bottom</p>
+              </div>
+              <Switch
                 aria-label="Horizontal funnel"
-                size="sm"
+                className={SWITCH_TEAL}
                 checked={getRecipeParams(envelope).orientation === 'horizontal'}
-                onCheckedChange={(e) => onVizChange(setRecipeParam(envelope, 'orientation', e.checked ? 'horizontal' : undefined))}
-              >
-                <Switch.HiddenInput />
-                <Switch.Control><Switch.Thumb /></Switch.Control>
-              </Switch.Root>
-            </HStack>
-            <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+                onCheckedChange={(checked) => onVizChange(setRecipeParam(envelope, 'orientation', checked ? 'horizontal' : undefined))}
+              />
+            </div>
+            <p className="text-[10px] leading-normal text-muted-foreground">
               Stage order follows the query&apos;s row order. Rename and format the value in Fields.
-            </Text>
-          </Box>
+            </p>
+          </div>
         ) : isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/trend@1' ? (
-          <Box display="flex" flexDirection="column" gap={3} py={1}>
-            <HStack justify="space-between">
-              <Box>
-                <Text fontSize="xs" color="fg.muted">Skip partial period</Text>
-                <Text fontSize="10px" color="fg.subtle">Compare the last two COMPLETE periods (ignores the in-progress one)</Text>
-              </Box>
-              <Switch.Root colorPalette="teal"
+          <div className="flex flex-col gap-3 py-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Skip partial period</p>
+                <p className="text-[10px] text-muted-foreground">Compare the last two COMPLETE periods (ignores the in-progress one)</p>
+              </div>
+              <Switch
                 aria-label="Skip partial period"
-                size="sm"
+                className={SWITCH_TEAL}
                 checked={getRecipeParams(envelope).compareMode === 'previous'}
-                onCheckedChange={(e) => onVizChange(setRecipeParam(envelope, 'compareMode', e.checked ? 'previous' : undefined))}
-              >
-                <Switch.HiddenInput />
-                <Switch.Control><Switch.Thumb /></Switch.Control>
-              </Switch.Root>
-            </HStack>
-            <HStack justify="space-between">
-              <Text fontSize="xs" color="fg.muted">Sparkline</Text>
-              <Switch.Root colorPalette="teal"
+                onCheckedChange={(checked) => onVizChange(setRecipeParam(envelope, 'compareMode', checked ? 'previous' : undefined))}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Sparkline</p>
+              <Switch
                 aria-label="Toggle sparkline"
-                size="sm"
+                className={SWITCH_TEAL}
                 checked={getRecipeParams(envelope).sparkline !== false}
-                onCheckedChange={(e) => onVizChange(setRecipeParam(envelope, 'sparkline', e.checked ? undefined : false))}
-              >
-                <Switch.HiddenInput />
-                <Switch.Control><Switch.Thumb /></Switch.Control>
-              </Switch.Root>
-            </HStack>
-            <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+                onCheckedChange={(checked) => onVizChange(setRecipeParam(envelope, 'sparkline', checked ? undefined : false))}
+              />
+            </div>
+            <p className="text-[10px] leading-normal text-muted-foreground">
               Font sizes and everything else — ask the agent (valueFontSize/deltaFontSize/labelFontSize/dateFontSize params).
-            </Text>
-          </Box>
+            </p>
+          </div>
         ) : isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/single-value@1' ? (
-          <Box display="flex" flexDirection="column" gap={3} py={1}>
-            <HStack justify="space-between">
-              <Box>
-                <Text fontSize="xs" color="fg.muted">Label</Text>
-                <Text fontSize="10px" color="fg.subtle">Uses the field alias configured in Fields</Text>
-              </Box>
-              <Switch.Root colorPalette="teal"
+          <div className="flex flex-col gap-3 py-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Label</p>
+                <p className="text-[10px] text-muted-foreground">Uses the field alias configured in Fields</p>
+              </div>
+              <Switch
                 aria-label="Show label"
-                size="sm"
+                className={SWITCH_TEAL}
                 checked={getRecipeParams(envelope).showLabel !== false}
-                onCheckedChange={(e) => onVizChange(setRecipeParam(envelope, 'showLabel', e.checked ? undefined : false))}
-              >
-                <Switch.HiddenInput />
-                <Switch.Control><Switch.Thumb /></Switch.Control>
-              </Switch.Root>
-            </HStack>
-            <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+                onCheckedChange={(checked) => onVizChange(setRecipeParam(envelope, 'showLabel', checked ? undefined : false))}
+              />
+            </div>
+            <p className="text-[10px] leading-normal text-muted-foreground">
               Rename and format the value in Fields. For a caption, alignment, custom color, or exact font sizes, ask the agent.
-            </Text>
-          </Box>
+            </p>
+          </div>
         ) : isRecipe && (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/combo@1' ? (
-          <Box display="flex" flexDirection="column" gap={3} py={1}>
-            <HStack justify="space-between">
-              <Box>
-                <Text fontSize="xs" color="fg.muted">Line points</Text>
-                <Text fontSize="10px" color="fg.subtle">Keep individual line values easy to inspect</Text>
-              </Box>
-              <Switch.Root colorPalette="teal"
+          <div className="flex flex-col gap-3 py-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Line points</p>
+                <p className="text-[10px] text-muted-foreground">Keep individual line values easy to inspect</p>
+              </div>
+              <Switch
                 aria-label="Show line points"
-                size="sm"
+                className={SWITCH_TEAL}
                 checked={getRecipeParams(envelope).linePoints !== false}
-                onCheckedChange={(e) => onVizChange(setRecipeParam(envelope, 'linePoints', e.checked ? undefined : false))}
-              >
-                <Switch.HiddenInput />
-                <Switch.Control><Switch.Thumb /></Switch.Control>
-              </Switch.Root>
-            </HStack>
-            <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+                onCheckedChange={(checked) => onVizChange(setRecipeParam(envelope, 'linePoints', checked ? undefined : false))}
+              />
+            </div>
+            <p className="text-[10px] leading-normal text-muted-foreground">
               Bars use the left scale; the line uses the right. Bind Color / Split, rename, and format in Fields.
-            </Text>
-          </Box>
+            </p>
+          </div>
         ) : isRecipe && ['minusx/choropleth@1', 'minusx/point-map@1'].includes(String((envelope.source as unknown as Record<string, unknown>).recipe)) ? (
           (() => {
             const isPoints = (envelope.source as unknown as Record<string, unknown>).recipe === 'minusx/point-map@1';
@@ -425,53 +423,47 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
             const scaleValue = typeof params.colorScale === 'string' ? String(params.colorScale) : (isPoints ? 'category' : 'green');
             const scaleOptions = isPoints ? [{ value: 'category', label: 'By category' }, ...CHOROPLETH_SCALE_OPTIONS] : CHOROPLETH_SCALE_OPTIONS;
             return (
-              <Box display="flex" flexDirection="column" gap={3} py={1}>
-                <Box>
-                  <Text fontSize="xs" color="fg.muted" mb={1}>Map</Text>
-                  <NativeSelect.Root size="sm">
-                    <NativeSelect.Field
-                      aria-label="Map"
-                      value={resolveGeoAsset(params.mapName)}
-                      onChange={(e) => onVizChange(setRecipeParam(envelope, 'mapName', e.currentTarget.value))}
-                    >
-                      {GEO_ASSET_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </NativeSelect.Field>
-                    <NativeSelect.Indicator />
-                  </NativeSelect.Root>
-                </Box>
-                <Box>
-                  <Text fontSize="xs" color="fg.muted" mb={1}>Color scale</Text>
-                  <NativeSelect.Root size="sm">
-                    <NativeSelect.Field
-                      aria-label="Color scale"
-                      value={scaleValue}
-                      onChange={(e) => onVizChange(setRecipeParam(envelope, 'colorScale', e.currentTarget.value === 'category' ? undefined : e.currentTarget.value))}
-                    >
-                      {scaleOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </NativeSelect.Field>
-                    <NativeSelect.Indicator />
-                  </NativeSelect.Root>
-                </Box>
+              <div className="flex flex-col gap-3 py-1">
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">Map</p>
+                  <select
+                    aria-label="Map"
+                    className={SELECT_SM}
+                    value={resolveGeoAsset(params.mapName)}
+                    onChange={(e) => onVizChange(setRecipeParam(envelope, 'mapName', e.currentTarget.value))}
+                  >
+                    {GEO_ASSET_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">Color scale</p>
+                  <select
+                    aria-label="Color scale"
+                    className={SELECT_SM}
+                    value={scaleValue}
+                    onChange={(e) => onVizChange(setRecipeParam(envelope, 'colorScale', e.currentTarget.value === 'category' ? undefined : e.currentTarget.value))}
+                  >
+                    {scaleOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
                 {isPoints && (
                   <>
-                    <Box>
-                      <Text fontSize="xs" color="fg.muted" mb={1}>Basemap</Text>
-                      <NativeSelect.Root size="sm">
-                        <NativeSelect.Field
-                          aria-label="Basemap"
-                          value={params.basemap === 'tiles' ? 'tiles' : 'vector'}
-                          onChange={(e) => onVizChange(setRecipeParam(envelope, 'basemap', e.currentTarget.value === 'tiles' ? 'tiles' : undefined))}
-                        >
-                          <option value="vector">Vector outline</option>
-                          <option value="tiles">Street tiles</option>
-                        </NativeSelect.Field>
-                        <NativeSelect.Indicator />
-                      </NativeSelect.Root>
-                    </Box>
-                    <Box>
-                      <Text fontSize="xs" color="fg.muted" mb={1}>Center (lat, lng)</Text>
+                    <div>
+                      <p className="mb-1 text-xs text-muted-foreground">Basemap</p>
+                      <select
+                        aria-label="Basemap"
+                        className={SELECT_SM}
+                        value={params.basemap === 'tiles' ? 'tiles' : 'vector'}
+                        onChange={(e) => onVizChange(setRecipeParam(envelope, 'basemap', e.currentTarget.value === 'tiles' ? 'tiles' : undefined))}
+                      >
+                        <option value="vector">Vector outline</option>
+                        <option value="tiles">Street tiles</option>
+                      </select>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs text-muted-foreground">Center (lat, lng)</p>
                       <Input
-                        size="sm"
+                        className="h-8 text-sm md:text-sm"
                         aria-label="Center lat lng"
                         placeholder="e.g. 37, -119 — centers the map"
                         key={JSON.stringify(params.center ?? '')}
@@ -482,11 +474,11 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                           onVizChange(setRecipeParam(envelope, 'center', valid ? parts : undefined));
                         }}
                       />
-                    </Box>
-                    <Box>
-                      <Text fontSize="xs" color="fg.muted" mb={1}>Zoom</Text>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs text-muted-foreground">Zoom</p>
                       <Input
-                        size="sm"
+                        className="h-8 text-sm md:text-sm"
                         type="number"
                         aria-label="Zoom"
                         step="0.1"
@@ -498,65 +490,58 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                           onVizChange(setRecipeParam(envelope, 'zoom', Number.isFinite(v) && v !== 1 ? v : undefined));
                         }}
                       />
-                    </Box>
+                    </div>
                   </>
                 )}
-                <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+                <p className="text-[10px] leading-normal text-muted-foreground">
                   {isPoints
                     ? 'Bind Latitude + Longitude in Fields. Add Size for bubbles, Color to group, or End lat/lng for flows. Center + Zoom frame the map geographically (no SQL filter needed). Street-tile basemap shows real streets for local/city views (browser only — exports fall back to the vector outline).'
                     : 'Bind Region + Value in Fields. Region names must match the map (e.g. "California", "Tanzania").'}
-                </Text>
-              </Box>
+                </p>
+              </div>
             );
           })()
         ) : isRecipe ? (
-          <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
+          <p className="py-1 text-xs leading-[1.6] text-muted-foreground">
             This chart is generated from the {String((envelope.source as unknown as Record<string, unknown>).recipe)} recipe —
             bind columns in Fields, or ask the agent for deeper customization.
-          </Text>
+          </p>
         ) : isUnit && spec ? (
-          <Box display="flex" flexDirection="column" gap={2.5} py={1}>
-            {/* Card sections matching the pivot settings look (bg.surface + border + radius). */}
+          <div className="flex flex-col gap-2.5 py-1">
+            {/* Card sections matching the pivot settings look (card bg + border + radius). */}
             {/* Stacked / log-y are cartesian concepts — hidden for pie (theta) and
                 heatmap (colour), where they'd silently do nothing sensible. */}
             {(!['heatmap', 'pie'].includes(vizType ?? '') || vizType === 'histogram') && (
-              <Box p={3} bg="bg.surface" borderRadius="md" border="1px solid" borderColor="border.muted" display="flex" flexDirection="column" gap={2.5}>
-                <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+              <div className={`${CARD} flex flex-col gap-2.5`}>
+                <p className={CARD_TITLE}>
                   Options
-                </Text>
+                </p>
                 {!['heatmap', 'pie'].includes(vizType ?? '') && (<>
-                  <HStack justify="space-between">
-                    <Text fontSize="xs" color="fg.muted">Stacked</Text>
-                    <Switch.Root colorPalette="teal"
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Stacked</p>
+                    <Switch
                       aria-label="Toggle stacked"
-                      size="sm"
+                      className={SWITCH_TEAL}
                       checked={getStacked(spec)}
-                      onCheckedChange={(e) => onVizChange(setStacked(envelope, e.checked))}
-                    >
-                      <Switch.HiddenInput />
-                      <Switch.Control><Switch.Thumb /></Switch.Control>
-                    </Switch.Root>
-                  </HStack>
-                  <HStack justify="space-between">
-                    <Text fontSize="xs" color="fg.muted">Log scale (Y)</Text>
-                    <Switch.Root colorPalette="teal"
+                      onCheckedChange={(checked) => onVizChange(setStacked(envelope, checked))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Log scale (Y)</p>
+                    <Switch
                       aria-label="Toggle log scale"
-                      size="sm"
+                      className={SWITCH_TEAL}
                       checked={getYLogScale(spec)}
-                      onCheckedChange={(e) => onVizChange(setYLogScale(envelope, e.checked))}
-                    >
-                      <Switch.HiddenInput />
-                      <Switch.Control><Switch.Thumb /></Switch.Control>
-                    </Switch.Root>
-                  </HStack>
+                      onCheckedChange={(checked) => onVizChange(setYLogScale(envelope, checked))}
+                    />
+                  </div>
                 </>)}
                 {vizType === 'histogram' && (
-                  <HStack justify="space-between">
-                    <Text fontSize="xs" color="fg.muted">Max bins</Text>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Max bins</p>
                     <Input
                       aria-label="Max bins"
-                      size="xs"
-                      width="90px"
+                      className="h-6 w-[90px] px-2 text-xs md:text-xs"
                       type="number"
                       placeholder="auto"
                       value={maxBinsDraft ?? getMaxBins(spec) ?? ''}
@@ -570,19 +555,18 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                         setMaxBinsDraft(null);
                       }}
                     />
-                  </HStack>
+                  </div>
                 )}
                 {/* Y bounds — hidden for row (its vertical axis is the category, not the measure). */}
                 {!['heatmap', 'pie', 'row'].includes(vizType ?? '') && (
-                  <HStack justify="space-between">
-                    <Text fontSize="xs" color="fg.muted">Y range</Text>
-                    <HStack gap={1}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Y range</p>
+                    <div className="flex items-center gap-1">
                       {([['min', yMinDraft, setYMinDraft], ['max', yMaxDraft, setYMaxDraft]] as const).map(([side, draft, setDraft]) => (
                         <Input
                           key={side}
                           aria-label={`Y axis ${side}`}
-                          size="xs"
-                          width="72px"
+                          className="h-6 w-[72px] px-2 text-xs md:text-xs"
                           type="number"
                           placeholder={side === 'min' ? 'min (auto)' : 'max (auto)'}
                           value={draft ?? getYBounds(spec)[side] ?? ''}
@@ -597,28 +581,26 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                           }}
                         />
                       ))}
-                    </HStack>
-                  </HStack>
+                    </div>
+                  </div>
                 )}
                 {/* Line style — only where a line is drawn. */}
                 {['line', 'area'].includes(vizType ?? '') && (
-                  <HStack justify="space-between">
-                    <Text fontSize="xs" color="fg.muted">Line style</Text>
-                    <NativeSelect.Root size="xs" width="110px">
-                      <NativeSelect.Field
-                        aria-label="Line style"
-                        value={getLineInterpolate(spec)}
-                        onChange={(e) => onVizChange(setLineInterpolate(envelope, e.target.value as LineInterpolate))}
-                      >
-                        <option value="linear">Straight</option>
-                        <option value="monotone">Smooth</option>
-                        <option value="step">Step</option>
-                      </NativeSelect.Field>
-                      <NativeSelect.Indicator />
-                    </NativeSelect.Root>
-                  </HStack>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Line style</p>
+                    <select
+                      aria-label="Line style"
+                      className={`${SELECT_XS} w-[110px]`}
+                      value={getLineInterpolate(spec)}
+                      onChange={(e) => onVizChange(setLineInterpolate(envelope, e.target.value as LineInterpolate))}
+                    >
+                      <option value="linear">Straight</option>
+                      <option value="monotone">Smooth</option>
+                      <option value="step">Step</option>
+                    </select>
+                  </div>
                 )}
-              </Box>
+              </div>
             )}
             {/* Series colors (V1 Style-popover parity): per-series overrides, keyed by
                 series NAME on the color scale. Heatmap's quantitative ramp is excluded. */}
@@ -627,27 +609,25 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
               if (seriesColors.length === 0) return null;
               const shown = seriesColors.slice(0, 12);
               return (
-                <Box p={3} bg="bg.surface" borderRadius="md" border="1px solid" borderColor="border.muted">
-                  <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={2}>
+                <div className={CARD}>
+                  <p className={`${CARD_TITLE} mb-2`}>
                     {vizType === 'pie' ? 'Slice colors' : 'Series colors'}
-                  </Text>
-                  <Box display="flex" flexDirection="column" gap={1.5}>
+                  </p>
+                  <div className="flex flex-col gap-1.5">
                     {shown.map(s => (
-                      <HStack key={s.key} justify="space-between" gap={2}>
-                        <Text fontSize="xs" color="fg.muted" flex="1" minW={0} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                      <div key={s.key} className="flex items-center justify-between gap-2">
+                        <p className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground">
                           {s.key}
-                        </Text>
+                        </p>
                         {s.overridden && (
-                          <Box
-                            as="button"
+                          <button
+                            type="button"
                             aria-label={`Reset color for ${s.key}`}
-                            fontSize="10px"
-                            color="fg.subtle"
-                            _hover={{ color: 'fg.default' }}
+                            className="text-[10px] text-muted-foreground hover:text-foreground"
                             onClick={() => onVizChange(setSeriesColor(envelope, rows ?? [], s.key, null))}
                           >
                             reset
-                          </Box>
+                          </button>
                         )}
                         <input
                           key={`${s.key}:${s.color}`}
@@ -659,33 +639,33 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
                           onBlur={(e) => {
                             if (e.target.value !== s.color) onVizChange(setSeriesColor(envelope, rows ?? [], s.key, e.target.value));
                           }}
-                          style={{ width: 26, height: 18, padding: 0, border: '1px solid var(--chakra-colors-border-muted)', borderRadius: 4, background: 'transparent', cursor: 'pointer' }}
+                          style={COLOR_INPUT_STYLE}
                         />
-                      </HStack>
+                      </div>
                     ))}
                     {seriesColors.length > shown.length && (
-                      <Text fontSize="10px" color="fg.subtle">+{seriesColors.length - shown.length} more series — ask the agent to color those.</Text>
+                      <p className="text-[10px] text-muted-foreground">+{seriesColors.length - shown.length} more series — ask the agent to color those.</p>
                     )}
-                  </Box>
-                </Box>
+                  </div>
+                </div>
               );
             })()}
             {referenceLineCard}
-            <Text fontSize="10px" color="fg.subtle" lineHeight="1.5">
+            <p className="text-[10px] leading-normal text-muted-foreground">
               Everything else (formats, layers, interactions) — ask the agent; it edits the spec directly.
-            </Text>
-          </Box>
+            </p>
+          </div>
         ) : spec != null && Array.isArray((spec as Record<string, unknown>).layer) ? (
-          <Box display="flex" flexDirection="column" gap={2.5} py={1}>
+          <div className="flex flex-col gap-2.5 py-1">
             {referenceLineCard}
-            <Text fontSize="xs" color="fg.subtle" lineHeight="1.6">
+            <p className="text-xs leading-[1.6] text-muted-foreground">
               This spec uses layers — the other settings toggles only apply to simple charts. Edit via chat.
-            </Text>
-          </Box>
+            </p>
+          </div>
         ) : (
-          <Text fontSize="xs" color="fg.subtle" py={1} lineHeight="1.6">
+          <p className="py-1 text-xs leading-[1.6] text-muted-foreground">
             This spec uses facets/concat — settings toggles only apply to simple charts. Edit via chat.
-          </Text>
+          </p>
         )
       )}
 
@@ -696,6 +676,6 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
           onReattach={canReattach(envelope) ? () => onVizChange(reattachRecipe(envelope)) : undefined}
         />
       )}
-    </Box>
+    </div>
   );
 }

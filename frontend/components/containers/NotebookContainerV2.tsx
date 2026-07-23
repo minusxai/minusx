@@ -37,6 +37,8 @@ export default function NotebookContainerV2({ fileId }: NotebookContainerV2Props
   );
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
+  const devMode = useAppSelector(state => state.ui.devMode);
+  const colorMode = useAppSelector(state => state.ui.colorMode);
   const readOnly = !!effectiveUser && !!file && !canCreateFileByRole(effectiveUser.role, file.type as 'notebook');
 
   const handleChange = useCallback((updates: Partial<NotebookContent>) => {
@@ -68,6 +70,8 @@ export default function NotebookContainerV2({ fileId }: NotebookContainerV2Props
 
   return (
     <NotebookView
+      showDevMarkers={devMode}
+      colorMode={colorMode}
       content={mergedContent}
       onChange={handleChange}
       readOnly={readOnly}

@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
-import { useAppSelector } from '@/store/hooks'
-import { EChart } from './EChart'
-import { withMinusXTheme } from '@/lib/chart/echarts-theme'
+/**
+ * Column-stat top-values spark (table header). Plain hand-rendered SVG — no chart engine
+ * (Renderer_v2 Phase 2 removed ECharts): a row per value with a truncated label, a
+ * proportional bar, and a native <title> tooltip.
+ */
 
 interface MiniBarChartProps {
   data: Array<{ value: string; count: number }>
@@ -10,81 +11,57 @@ interface MiniBarChartProps {
   height?: number
 }
 
+const ROW_H = 14
+const LABEL_W = 62
+
 export const MiniBarChart = ({
   data,
   totalUnique,
   color = '#f39c12',
 }: MiniBarChartProps) => {
-  const colorMode = useAppSelector((state) => state.ui.colorMode)
-
-  const option = useMemo(() => {
-    if (!data || data.length === 0) return {}
-
-    const remaining = totalUnique - data.length
-
-    return withMinusXTheme({
-      grid: {
-        left: 0,
-        right: 0,
-        top: 0,
-        bottom: remaining > 0 ? 15 : 0,
-        containLabel: true,
-      },
-      xAxis: {
-        type: 'value' as const,
-        show: false,
-      },
-      yAxis: {
-        type: 'category' as const,
-        data: data.map(d => d.value),
-        axisLabel: {
-          fontSize: 9,
-          width: 60,
-          overflow: 'truncate' as const,
-        },
-        axisTick: {
-          show: false,
-        },
-        axisLine: {
-          show: false,
-        },
-      },
-      series: [
-        {
-          type: 'bar' as const,
-          data: data.map(d => d.count),
-          itemStyle: {
-            color: color,
-            borderRadius: [0, 2, 2, 0],
-          },
-          barWidth: '70%',
-          animation: false,
-          label: {
-            show: false,
-          },
-        },
-      ],
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: {
-          type: 'shadow',
-        },
-        extraCssText: 'z-index: 9999;',
-        confine: true,
-        formatter: (params: any) => {
-          const param = params[0]
-          return `${param.name}<br/>Count: ${param.value.toLocaleString()}`
-        },
-      },
-    }, colorMode)
-  }, [data, color, totalUnique, colorMode])
-
   if (!data || data.length === 0) return null
 
+  const maxCount = Math.max(...data.map(d => d.count), 1)
+  const remaining = totalUnique - data.length
+  const chartH = data.length * ROW_H
+
   return (
-    <EChart
-      option={option}
-      style={{ width: '100%', height: `75px`, display: 'flex', justifyContent: 'center' }}
-    />
+    <div>
+      <svg
+        aria-label="Top values bar chart"
+        width="100%"
+        height={chartH}
+        viewBox={`0 0 160 ${chartH}`}
+        preserveAspectRatio="none"
+        style={{ display: 'block' }}
+      >
+        {data.map((d, i) => {
+          const w = Math.max((d.count / maxCount) * (160 - LABEL_W - 2), 1)
+          return (
+            <g key={i}>
+              <text
+                x={LABEL_W - 4}
+                y={i * ROW_H + ROW_H / 2 + 3}
+                textAnchor="end"
+                fontSize={9}
+                fontFamily="var(--font-mono, monospace)"
+                fill="currentColor"
+                opacity={0.75}
+              >
+                {d.value.length > 9 ? `${d.value.slice(0, 8)}…` : d.value}
+              </text>
+              <rect x={LABEL_W} y={i * ROW_H + 2} width={w} height={ROW_H - 4} rx={2} fill={color}>
+                <title>{`${d.value}\nCount: ${d.count.toLocaleString()}`}</title>
+              </rect>
+            </g>
+          )
+        })}
+      </svg>
+      {remaining > 0 && (
+        <p className="mt-0.5 font-mono text-[9px] text-muted-foreground">
+          +{remaining.toLocaleString()} more
+        </p>
+      )}
+    </div>
   )
 }

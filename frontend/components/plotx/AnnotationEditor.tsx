@@ -1,10 +1,19 @@
 'use client'
 
 import { useEffect, useMemo } from 'react'
-import { Box, HStack, Text, VStack } from '@chakra-ui/react'
 import { LuPlus, LuTrash2 } from 'react-icons/lu'
 import type { ChartAnnotation } from '@/lib/types'
-import { findMatchingXIndex } from '@/lib/chart/chart-annotations'
+// Pure matcher (formerly lib/chart/chart-annotations, deleted with the ECharts stack):
+// exact match first, then date-prefix matching (date-only vs full ISO).
+const findMatchingXIndex = (xAxisData: string[], annotationX: string | number): number => {
+  const needle = String(annotationX)
+  const exactIndex = xAxisData.findIndex(item => String(item) === needle)
+  if (exactIndex !== -1) return exactIndex
+  return xAxisData.findIndex(item => {
+    const hay = String(item)
+    return hay.startsWith(needle) || needle.startsWith(hay)
+  })
+}
 
 interface AnnotationEditorProps {
   annotations?: ChartAnnotation[] | null
@@ -16,15 +25,18 @@ interface AnnotationEditorProps {
 
 const MAX_ANNOTATIONS = 8
 
+// Tiny section label (Chakra 2xs/700/0.05em equivalent)
+const SECTION_LABEL = 'text-[10px] font-bold uppercase tracking-wider text-muted-foreground'
+
 const inputStyle: React.CSSProperties = {
   fontSize: '12px',
-  fontFamily: 'var(--fonts-mono, monospace)',
+  fontFamily: 'var(--font-jetbrains-mono, monospace)',
   padding: '4px 8px',
   width: '100%',
-  border: '1px solid var(--chakra-colors-border-muted)',
+  border: '1px solid var(--border)',
   borderRadius: '4px',
-  background: 'var(--chakra-colors-bg-canvas)',
-  color: 'var(--chakra-colors-fg-default)',
+  background: 'var(--background)',
+  color: 'var(--foreground)',
   outline: 'none',
   height: '28px',
 }
@@ -82,50 +94,39 @@ export const AnnotationEditor = ({ annotations, onChange, enabled, xOptions, ser
 
   if (!enabled) {
     return (
-      <Text fontSize="xs" color="fg.muted">
+      <p className="text-xs text-muted-foreground">
         Available for line, bar, area, and scatter charts with exactly one X-axis field.
-      </Text>
+      </p>
     )
   }
 
   return (
-    <VStack align="stretch" gap={2.5} minW={0}>
+    <div className="flex min-w-0 flex-col items-stretch gap-2.5">
       {items.length === 0 && (
-        <HStack justify="space-between" align="center">
-          <Text fontSize="xs" color="fg.muted">No annotations yet.</Text>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">No annotations yet.</p>
           <button
             type="button"
             onClick={addItem}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '4px',
-              border: '1px solid var(--chakra-colors-border-muted)',
-              background: 'transparent',
-              color: 'var(--chakra-colors-fg-subtle)',
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
+            className="inline-flex cursor-pointer items-center gap-1 rounded border border-border bg-transparent px-2 py-[3px] text-muted-foreground transition-all duration-150"
           >
             <LuPlus size={10} />
-            <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">
+            <span className="text-[10px] font-bold uppercase tracking-wider">
               Add
-            </Text>
+            </span>
           </button>
-        </HStack>
+        </div>
       )}
 
       {items.length > 0 && (
-        <VStack align="stretch" gap={2} maxH="260px" overflowY="auto">
+        <div className="flex max-h-[260px] flex-col items-stretch gap-2 overflow-y-auto">
           {normalizedItems.map((annotation, index) => (
-            <VStack key={index} align="stretch" gap={1.5} p={2} border="1px solid" borderColor="border.muted" borderRadius="md">
-              <HStack gap={2} minW={0}>
-                <Box flex={1} minW={0}>
-                  <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={0.5}>
+            <div key={index} className="flex flex-col items-stretch gap-1.5 rounded-md border border-border p-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className={`${SECTION_LABEL} mb-0.5`}>
                     X Value
-                  </Text>
+                  </div>
                   <select
                     value={String(annotation.x ?? '')}
                     onChange={(e) => updateItem(index, { x: e.target.value })}
@@ -137,11 +138,11 @@ export const AnnotationEditor = ({ annotations, onChange, enabled, xOptions, ser
                       </option>
                     ))}
                   </select>
-                </Box>
-                <Box flex={1} minW={0}>
-                  <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={0.5}>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className={`${SECTION_LABEL} mb-0.5`}>
                     Series
-                  </Text>
+                  </div>
                   <select
                     value={annotation.series ?? ''}
                     onChange={(e) => updateItem(index, { series: e.target.value || null })}
@@ -154,13 +155,13 @@ export const AnnotationEditor = ({ annotations, onChange, enabled, xOptions, ser
                       </option>
                     ))}
                   </select>
-                </Box>
-              </HStack>
-              <HStack gap={2} minW={0}>
-                <Box flex={1} minW={0}>
-                  <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={0.5}>
+                </div>
+              </div>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className={`${SECTION_LABEL} mb-0.5`}>
                     Label
-                  </Text>
+                  </div>
                   <input
                     type="text"
                     value={annotation.text}
@@ -168,58 +169,33 @@ export const AnnotationEditor = ({ annotations, onChange, enabled, xOptions, ser
                     placeholder="Short note"
                     style={inputStyle}
                   />
-                </Box>
+                </div>
                 <button
                   type="button"
                   onClick={() => removeItem(index)}
                   aria-label="Remove annotation"
-                  style={{
-                    marginTop: '16px',
-                    color: 'var(--chakra-colors-fg-subtle)',
-                    background: 'transparent',
-                    border: 'none',
-                    padding: '4px',
-                    flexShrink: 0,
-                    cursor: 'pointer',
-                    opacity: 0.6,
-                    transition: 'opacity 0.15s',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6' }}
+                  className="mt-4 shrink-0 cursor-pointer border-none bg-transparent p-1 text-muted-foreground opacity-60 transition-opacity duration-150 hover:opacity-100"
                 >
                   <LuTrash2 size={13} />
                 </button>
-              </HStack>
-            </VStack>
+              </div>
+            </div>
           ))}
 
           {items.length < MAX_ANNOTATIONS && (
             <button
               type="button"
               onClick={addItem}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                padding: '4px 8px',
-                borderRadius: '4px',
-                border: '1px solid var(--chakra-colors-border-muted)',
-                background: 'transparent',
-                color: 'var(--chakra-colors-fg-subtle)',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-                width: '100%',
-              }}
+              className="inline-flex w-full cursor-pointer items-center justify-center gap-1 rounded border border-border bg-transparent px-2 py-1 text-muted-foreground transition-all duration-150"
             >
               <LuPlus size={10} />
-              <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">
+              <span className="text-[10px] font-bold uppercase tracking-wider">
                 Add annotation
-              </Text>
+              </span>
             </button>
           )}
-        </VStack>
+        </div>
       )}
-    </VStack>
+    </div>
   )
 }

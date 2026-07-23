@@ -1,9 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Input, HStack, Text, Box } from '@chakra-ui/react';
 import { LuBan } from 'react-icons/lu';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/kit/tooltip';
 import { QuestionParameter } from '@/lib/types';
 import type { QuestionParameterSource, SqlParameterSource } from '@/lib/validation/atlas-schemas';
 import { getTypeColor, getTypeIcon } from '@/lib/sql/param-type-display';
@@ -76,53 +75,37 @@ export default function ParameterInput({
 
 
   return (
-    <HStack
-      gap={0}
-      bg="bg.muted"
-      borderRadius="md"
-      border="1px solid"
-      borderColor="border.muted"
-      h={ROW_H}
-      align="center"
+    <div
+      className="flex items-center overflow-hidden rounded-md border border-border bg-muted"
+      style={{ height: ROW_H }}
       onMouseEnter={() => onHoverParam?.(paramKey)}
       onMouseLeave={() => onHoverParam?.(null)}
-      overflow="hidden"
     >
       {/* Param label — shows the friendly display name; tooltip reveals the raw :name binding */}
-      <Tooltip content={`:${parameter.name}`} positioning={{ placement: 'top-start' }}>
-        <HStack
-          gap={1}
-          px={2}
-          h="full"
-          bg={`${getTypeColor(parameter.type)}/20`}
-          color="fg.emphasized"
-          fontSize="xs"
-          fontWeight="600"
-          fontFamily="mono"
-          flexShrink={0}
-          borderLeft="3px solid"
-          borderLeftColor={getTypeColor(parameter.type)}
-        >
-          {React.createElement(getTypeIcon(parameter.type), { size: 11 })}
-          <Text aria-label={`Parameter ${parameter.name}`} fontSize="xs" fontFamily="mono" fontWeight="600">{getParameterDisplayName(parameter)}</Text>
-        </HStack>
+      <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild={false} className="h-full shrink-0 outline-none">
+          <span
+            className="flex h-full items-center gap-1 px-2 font-mono text-xs font-semibold text-foreground"
+            style={{ borderLeft: `3px solid ${getTypeColor(parameter.type)}`, background: `color-mix(in srgb, ${getTypeColor(parameter.type)} 20%, transparent)` }}
+          >
+            {React.createElement(getTypeIcon(parameter.type), { size: 11 })}
+            <span aria-label={`Parameter ${parameter.name}`} className="font-mono text-xs font-semibold">{getParameterDisplayName(parameter)}</span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="start">{`:${parameter.name}`}</TooltipContent>
       </Tooltip>
+      </TooltipProvider>
 
       {/* Value area */}
       {isNone ? (
-        <HStack
-          px={2}
-          h="full"
-          gap={1}
-          cursor="pointer"
+        <div
+          className="flex h-full cursor-pointer items-center gap-1 px-2 text-destructive transition-colors duration-100 hover:bg-destructive/10"
           onClick={() => onChange('')}
-          color="accent.danger"
-          _hover={{ bg: 'accent.danger/10' }}
-          transition="all 0.1s"
         >
           <LuBan style={{ width: 10, height: 10 }} />
-          <Text fontSize="xs" fontWeight="600" fontFamily="mono">Skipped</Text>
-        </HStack>
+          <span className="font-mono text-xs font-semibold">Skipped</span>
+        </div>
       ) : (
         hasQuestionSource && parameter.type !== 'date' ? (
           <SourceDropdownWidget
@@ -153,23 +136,12 @@ export default function ParameterInput({
             ariaLabel={parameter.name}
           />
         ) : (
-          <Input
+          <input
             value={value ?? ''}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             type={parameter.type === 'number' ? 'number' : 'text'}
-            w="100px"
-            bg="transparent"
-            border="none"
-            fontFamily="mono"
-            fontSize="xs"
-            px={2}
-            h="full"
-            borderRadius={0}
-            _focus={{
-              outline: 'none',
-              boxShadow: 'none',
-            }}
+            className="h-full w-[100px] border-none bg-transparent px-2 font-mono text-xs outline-none placeholder:text-muted-foreground"
             placeholder={parameter.type === 'number' ? '0' : 'value'}
             aria-label={parameter.name}
           />
@@ -178,23 +150,18 @@ export default function ParameterInput({
 
       {/* Actions */}
       {!isNone && (
-        <Tooltip content="Skip this filter">
-          <Box
-            as="button"
-            px={1.5}
-            h="full"
-            display="flex"
-            alignItems="center"
-            color="fg.subtle"
-            cursor="pointer"
-            _hover={{ color: 'accent.danger', bg: 'accent.danger/10' }}
-            transition="all 0.1s"
+        <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger
+            className="flex h-full cursor-pointer items-center px-1.5 text-muted-foreground outline-none transition-colors duration-100 hover:bg-destructive/10 hover:text-destructive"
             onClick={() => onChange(null)}
             aria-label="Skip this filter"
           >
             <LuBan style={{ width: 11, height: 11 }} />
-          </Box>
+          </TooltipTrigger>
+          <TooltipContent>Skip this filter</TooltipContent>
         </Tooltip>
+        </TooltipProvider>
       )}
 
       {!disableSourceConfig && onParameterChange && (
@@ -205,6 +172,6 @@ export default function ParameterInput({
           disableTypeChange={disableTypeChange}
         />
       )}
-    </HStack>
+    </div>
   );
 }

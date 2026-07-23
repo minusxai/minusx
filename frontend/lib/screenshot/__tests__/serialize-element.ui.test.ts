@@ -45,6 +45,27 @@ describe('collectDocumentCss', () => {
     const css = collectDocumentCss(fakeDoc);
     expect(css).toContain('.from-link{color:red}');
   });
+
+  // Link-sheet url() refs are RELATIVE TO THE SHEET, not the page: next/font emits
+  // `src: url("../media/x.woff2")` inside /_next/static/css/… — resolving that against the page
+  // URL 404s, the font never inlines, and every mono numeral in a capture falls back to a wider
+  // face (the clipped-caption bug). collectDocumentCss must absolutize per-sheet (sheet.href).
+  it('absolutizes relative url() refs against EACH link sheet\'s own href', () => {
+    const linkNode = document.createElement('link');
+    const fakeDoc = {
+      baseURI: 'http://localhost:3000/f/11-top-level-metrics',
+      styleSheets: [
+        {
+          ownerNode: linkNode,
+          href: 'http://localhost:3000/_next/static/css/abc.css',
+          cssRules: [{ cssText: '@font-face { font-family: "JetBrains Mono"; src: url("../media/04c5.woff2") format("woff2"); }' }],
+        },
+      ],
+    } as unknown as Document;
+    const css = collectDocumentCss(fakeDoc);
+    expect(css).toContain('http://localhost:3000/_next/static/media/04c5.woff2');
+    expect(css).not.toContain('../media/');
+  });
 });
 
 describe('inlineCssUrls', () => {
@@ -93,21 +114,50 @@ describe('serializeElementToSvg', () => {
     expect(out.match(/xmlns="http:\/\/www\.w3\.org\/2000\/svg"/g)!.length).toBe(1); // no duplicate declaration
   });
 
-  // Chakra declares token vars under `:where(html, .chakra-theme)` — `html` is an ELEMENT selector,
-  // so copying documentElement.className onto the wrapper <div> can never match it. Without an
-  // explicit chakra-theme + color-mode host, every var-backed Chakra style in a dashboard/question
-  // capture resolves to nothing and rasterizes transparent.
-  it('wraps the clone in a chakra-theme host carrying the color mode', async () => {
+  // Post-6a contract: captured content is kit/Tailwind — no Chakra token host is reconstructed.
+  // The COLOR-MODE class must survive on the wrapper (the `.dark [data-mx-theme-host]` token
+  // block needs a .dark ancestor), but the vestigial `chakra-theme` stamp is gone.
+  it('wraps the clone in a color-mode wrapper (no chakra-theme stamp)', async () => {
     const el = document.createElement('div');
     stubRect(el, 100, 50);
     document.body.appendChild(el);
     document.documentElement.classList.remove('dark');
     const out = await serializeElementToSvg(el);
-    expect(out).toMatch(/<div[^>]*class="chakra-theme light/);
+    expect(out).toMatch(/<div[^>]*class="light/);
+    expect(out).not.toContain('chakra-theme');
     document.documentElement.classList.add('dark');
     const outDark = await serializeElementToSvg(el);
-    expect(outDark).toMatch(/<div[^>]*class="chakra-theme dark/);
+    expect(outDark).toMatch(/<div[^>]*class="dark/);
     document.documentElement.classList.remove('dark');
+  });
+
+  // Renderer_v2 Phase 3/4: re-skinned views consume shadcn tokens declared under
+  // `[data-mx-theme-host]` / `.dark [data-mx-theme-host]` (app/theme-tokens.css). The live host
+  // is an ANCESTOR outside the captured subtree (FileLayout's content root), so without a host
+  // stamp in the wrapper every token-backed Tailwind style (bg-muted, text-foreground, chart
+  // palette) rasterizes unresolved. It must sit NESTED INSIDE the mode wrapper so the
+  // `.dark [data-mx-theme-host]` descendant selector matches in dark mode.
+  it('stamps the shadcn token host nested inside the mode wrapper', async () => {
+    const el = document.createElement('div');
+    stubRect(el, 100, 50);
+    document.body.appendChild(el);
+    const out = await serializeElementToSvg(el);
+    expect(out).toMatch(/<div[^>]*class="(light|dark)[^"]*"[^>]*><div[^>]*data-mx-theme-host/);
+  });
+
+  // Inherited-environment snapshot: the clone loses text color / font metrics it inherited from
+  // ancestors outside the captured subtree (black-table-text + font-fallback capture bugs).
+  it('stamps an inherited-style snapshot (color/font) onto the wrapper', async () => {
+    const el = document.createElement('div');
+    stubRect(el, 100, 50);
+    document.body.appendChild(el);
+    const csSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation(() => ({
+      getPropertyValue: (p: string) => ({ color: 'rgb(4, 5, 6)', 'font-family': 'SnapFont' } as Record<string, string>)[p] ?? '',
+    } as unknown as CSSStyleDeclaration));
+    const out = await serializeElementToSvg(el);
+    csSpy.mockRestore();
+    expect(out).toContain('rgb(4, 5, 6)');
+    expect(out).toContain('SnapFont');
   });
 
   it('applies the fixup pass: scroll transforms and form-value stamping, live DOM untouched', async () => {

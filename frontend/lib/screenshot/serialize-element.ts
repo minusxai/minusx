@@ -18,6 +18,7 @@
  * full-page capture) — accepted divergence; the bar is content complete and legible.
  */
 import { applyScrollOffsets, stampFormValues } from '@/lib/story-surface/serialize';
+import { absolutizeCssUrls } from '@/lib/html/css-urls';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -41,13 +42,36 @@ export function collectDocumentCss(doc: Document): string {
       parts.push(node.textContent || '');
       continue;
     }
+    // Link-sheet url() refs are relative to THE SHEET (next/font: `url("../media/x.woff2")`
+    // inside /_next/static/css/…) — absolutize against the sheet's own href so the later
+    // data:-URI inlining fetches the real resource instead of 404ing against the page URL
+    // (which silently dropped every webfont from captures).
+    const base = sheet.href || doc.baseURI;
     try {
-      parts.push(Array.from(sheet.cssRules).map((r) => r.cssText).join('\n'));
+      parts.push(Array.from(sheet.cssRules).map((r) => absolutizeCssUrls(r.cssText, base)).join('\n'));
     } catch {
       // cross-origin sheet — unreadable, skip (its fonts/styles fall back)
     }
   }
   return parts.join('\n');
+}
+
+/**
+ * Snapshot the INHERITED text environment of a live element as a CSS declaration string. The
+ * serialized copy is detached from every ancestor the element inherited from — un-colored text
+ * fell back to initial black on dark tiles, and font-family fell back to a wider system mono
+ * (clipping captions). Baking the computed values onto the clone wrapper restores the context.
+ */
+export function snapshotInheritedStyle(el: Element): string {
+  const win = el.ownerDocument.defaultView;
+  if (!win) return '';
+  const cs = win.getComputedStyle(el);
+  return ['color', 'font-family', 'font-size', 'line-height', 'letter-spacing']
+    .map((p) => {
+      const v = cs.getPropertyValue(p);
+      return v ? `${p}:${v};` : '';
+    })
+    .join('');
 }
 
 /** Best-effort fetch → data: URL. Null on any failure — a miss must never fail the capture. */
@@ -118,7 +142,7 @@ export function stampCanvases(liveRoot: Element, cloneRoot: Element): void {
 }
 
 /** Inline every non-data <img> src in the clone as a data: URI; failures are left as-is. */
-async function inlineImageSources(cloneRoot: Element, baseHref: string): Promise<void> {
+export async function inlineImageSources(cloneRoot: Element, baseHref: string): Promise<void> {
   const imgs = Array.from(cloneRoot.querySelectorAll('img'));
   await Promise.all(imgs.map(async (img) => {
     const src = img.getAttribute('src');
@@ -193,20 +217,25 @@ export async function serializeElementToSvg(
   fo.setAttribute('width', '100%');
   fo.setAttribute('height', '100%');
   // Wrapper layers re-establish the ancestor class/theme context the document CSS keys off
-  // (html/body classes like `.dark`, `data-theme`) — the clone is detached from both. The wrapper
-  // is additionally a `chakra-theme` host in the current color mode: Chakra's token vars live
-  // under `:where(html, .chakra-theme)` with mode aliases under `:root, .light` / `.dark`, and
-  // `html` is an ELEMENT selector — copying documentElement.className onto a <div> can never
-  // match it, so without this stamp every var-backed Chakra style rasterizes transparent.
+  // (html/body classes like `.dark`, `data-theme`) — the clone is detached from both. Post-6a
+  // the captured content is kit/Tailwind, so the color-mode class (which `.dark
+  // [data-mx-theme-host]` keys off) is what matters; the Chakra `chakra-theme` token-host
+  // stamp is deleted.
   const outer = doc.createElement('div');
   const mode = doc.documentElement.classList.contains('dark') ? 'dark' : 'light';
   const htmlClasses = doc.documentElement.className;
-  outer.setAttribute('class', `chakra-theme ${mode}${htmlClasses ? ` ${htmlClasses}` : ''}`);
+  outer.setAttribute('class', `${mode}${htmlClasses ? ` ${htmlClasses}` : ''}`);
   const theme = doc.documentElement.getAttribute('data-theme');
   if (theme) outer.setAttribute('data-theme', theme);
   outer.setAttribute('style', `width:${width}px;height:${height}px;overflow:hidden;`
-    + (opts.backgroundColor ? `background:${opts.backgroundColor};` : ''));
+    + (opts.backgroundColor ? `background:${opts.backgroundColor};` : '')
+    + snapshotInheritedStyle(element));
   const inner = doc.createElement('div');
+  // shadcn token host (Renderer_v2 Phase 3+): re-skinned views consume tokens declared under
+  // `[data-mx-theme-host]` / `.dark [data-mx-theme-host]` (app/theme-tokens.css), and the live
+  // host is an ANCESTOR outside the captured subtree (FileLayout's content root). Stamp it on the
+  // INNER wrapper — nested under the mode wrapper — so the dark-descendant selector matches too.
+  inner.setAttribute('data-mx-theme-host', '');
   if (doc.body?.className) inner.setAttribute('class', doc.body.className);
   inner.appendChild(clone);
   outer.appendChild(inner);

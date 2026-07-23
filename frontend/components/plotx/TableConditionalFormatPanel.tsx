@@ -1,7 +1,12 @@
 'use client'
 
-import { Box, Button, HStack, Icon, Menu, Portal, Text, VStack } from '@chakra-ui/react'
 import { LuChevronDown, LuPlus, LuTrash2 } from 'react-icons/lu'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/kit/dropdown-menu'
 import type { ColorScaleFormatRule, ConditionFormatRule, ConditionalFormatRule } from '@/lib/types'
 import { isColorScaleRule } from '@/lib/chart/conditional-format-utils'
 import type { ColorScaleName } from '@/lib/chart/color-scale'
@@ -39,36 +44,17 @@ const TARGETS: { value: Target; label: string }[] = [
 
 const DEFAULT_COLOR = '#fde68a'
 
-const inputStyle: React.CSSProperties = {
-  fontSize: '12px',
-  fontFamily: 'var(--fonts-mono, monospace)',
-  padding: '4px 8px',
-  width: '100%',
-  border: '1px solid var(--chakra-colors-border-muted)',
-  borderRadius: '4px',
-  background: 'var(--chakra-colors-bg-canvas)',
-  color: 'var(--chakra-colors-fg-default)',
-  outline: 'none',
-  height: '28px',
-}
+// Tiny section label (Chakra 2xs/700/0.05em equivalent)
+const SECTION_LABEL = 'text-[10px] font-bold uppercase tracking-wider'
 
-const addButtonStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '4px',
-  padding: '3px 8px',
-  borderRadius: '4px',
-  border: '1px solid var(--chakra-colors-border-muted)',
-  background: 'transparent',
-  color: 'var(--chakra-colors-fg-subtle)',
-  cursor: 'pointer',
-  transition: 'all 0.15s',
-}
+const INPUT_CLASSES = 'h-7 w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs text-foreground outline-none'
+const ADD_BUTTON_CLASSES = 'inline-flex cursor-pointer items-center gap-1 rounded border border-border bg-transparent px-2 py-[3px] text-muted-foreground transition-all duration-150'
+const DELETE_BUTTON_CLASSES = 'inline-flex cursor-pointer items-center border-none bg-transparent p-1 text-muted-foreground'
 
 const newId = (): string =>
   typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `cf-${Date.now()}-${Math.round(Math.random() * 1e9)}`
 
-/** Compact Chakra Menu-based select, styled to match the rest of the viz panel. */
+/** Compact dropdown-based select, styled to match the rest of the viz panel. */
 function MenuSelect<T extends string>({ value, options, onChange, ariaLabel }: {
   value: T
   options: { value: T; label: string }[]
@@ -77,47 +63,28 @@ function MenuSelect<T extends string>({ value, options, onChange, ariaLabel }: {
 }) {
   const current = options.find(o => o.value === value)
   return (
-    <Menu.Root>
-      <Menu.Trigger asChild>
-        <Button
-          aria-label={ariaLabel}
-          size="2xs"
-          variant="outline"
-          w="100%"
-          justifyContent="space-between"
-          fontFamily="mono"
-          fontSize="xs"
-          bg="bg.canvas"
-          borderColor="border.muted"
-          _hover={{ bg: 'bg.subtle', borderColor: 'border.emphasized' }}
-        >
-          <Text truncate>{current?.label ?? value}</Text>
-          <Icon as={LuChevronDown} boxSize={3} color="fg.muted" />
-        </Button>
-      </Menu.Trigger>
-      <Portal>
-        <Menu.Positioner>
-          <Menu.Content minW="120px" maxH="280px" overflowY="auto" bg="bg.surface" borderColor="border.default" shadow="lg" p={1}>
-            {options.map(o => (
-              <Menu.Item
-                key={o.value}
-                value={o.value}
-                cursor="pointer"
-                borderRadius="sm"
-                px={2.5}
-                py={1.5}
-                _hover={{ bg: 'bg.muted' }}
-                onClick={() => onChange(o.value)}
-              >
-                <Text fontSize="xs" fontFamily="mono" fontWeight={o.value === value ? '700' : '500'} color={o.value === value ? 'accent.teal' : 'fg.default'}>
-                  {o.label}
-                </Text>
-              </Menu.Item>
-            ))}
-          </Menu.Content>
-        </Menu.Positioner>
-      </Portal>
-    </Menu.Root>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={ariaLabel}
+        className="flex h-6 w-full items-center justify-between gap-1 rounded-md border border-border bg-background px-2 font-mono text-xs font-medium text-foreground transition-colors hover:bg-muted/50"
+      >
+        <span className="truncate">{current?.label ?? value}</span>
+        <LuChevronDown className="size-3 shrink-0 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="max-h-[280px] min-w-[120px] overflow-y-auto p-1">
+        {options.map(o => (
+          <DropdownMenuItem
+            key={o.value}
+            className="cursor-pointer rounded-sm px-2.5 py-1.5"
+            onClick={() => onChange(o.value)}
+          >
+            <span className={`font-mono text-xs ${o.value === value ? 'font-bold text-[#16a085]' : 'font-medium text-foreground'}`}>
+              {o.label}
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -148,103 +115,103 @@ export const TableConditionalFormatPanel = ({ columns, rules, onChange }: TableC
   }
 
   return (
-    <VStack align="stretch" gap={2.5} p={3} mt={2} bg="bg.surface" borderRadius="md" border="1px solid" borderColor="border.muted">
-      <HStack justify="space-between" align="center">
-        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+    <div className="mt-2 flex flex-col items-stretch gap-2.5 rounded-md border border-border bg-card p-3">
+      <div className="flex items-center justify-between">
+        <span className={`${SECTION_LABEL} text-muted-foreground`}>
           Conditional Formatting
-        </Text>
-        <HStack gap={1}>
-          <button type="button" onClick={addRule} aria-label="Add conditional formatting rule" style={addButtonStyle}>
+        </span>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={addRule} aria-label="Add conditional formatting rule" className={ADD_BUTTON_CLASSES}>
             <LuPlus size={10} />
-            <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">Rule</Text>
+            <span className={SECTION_LABEL}>Rule</span>
           </button>
-          <button type="button" onClick={addScaleRule} aria-label="Add color scale rule" style={addButtonStyle}>
+          <button type="button" onClick={addScaleRule} aria-label="Add color scale rule" className={ADD_BUTTON_CLASSES}>
             <LuPlus size={10} />
-            <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">Scale</Text>
+            <span className={SECTION_LABEL}>Scale</span>
           </button>
-        </HStack>
-      </HStack>
+        </div>
+      </div>
 
       {items.length === 0 && (
-        <Text fontSize="xs" fontFamily="mono" color="fg.muted">
+        <p className="font-mono text-xs text-muted-foreground">
           No rules yet. Color cells when a condition holds (Rule), or paint a numeric column min→max (Scale).
-        </Text>
+        </p>
       )}
 
       {items.length > 0 && (
-        <VStack align="stretch" gap={2} maxH="320px" overflowY="auto">
+        <div className="flex max-h-[320px] flex-col items-stretch gap-2 overflow-y-auto">
           {items.map((rule, index) => isColorScaleRule(rule) ? (
-            <VStack key={rule.id} align="stretch" gap={1.5} p={2} border="1px solid" borderColor="border.muted" borderRadius="md">
+            <div key={rule.id} className="flex flex-col items-stretch gap-1.5 rounded-md border border-border p-2">
               {/* Colour scale: column · scale · delete */}
-              <HStack gap={1.5} minW={0} align="center">
-                <Box flex={2} minW={0}>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <div className="min-w-0 flex-[2]">
                   <MenuSelect ariaLabel="Scale column" value={rule.column} options={columnOptions} onChange={(column) => updateRule(index, { column })} />
-                </Box>
-                <Box flex={2} minW={0}>
+                </div>
+                <div className="min-w-0 flex-[2]">
                   <MenuSelect ariaLabel="Color scale" value={rule.scale} options={SCALES} onChange={(scale) => updateRule(index, { scale })} />
-                </Box>
+                </div>
                 <button
                   type="button"
                   onClick={() => removeRule(index)}
                   aria-label="Remove conditional formatting rule"
-                  style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--chakra-colors-fg-subtle)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}
+                  className={DELETE_BUTTON_CLASSES}
                 >
                   <LuTrash2 size={14} />
                 </button>
-              </HStack>
-            </VStack>
+              </div>
+            </div>
           ) : (
-            <VStack key={rule.id} align="stretch" gap={1.5} p={2} border="1px solid" borderColor="border.muted" borderRadius="md">
+            <div key={rule.id} className="flex flex-col items-stretch gap-1.5 rounded-md border border-border p-2">
               {/* Condition: column · operator · value */}
-              <HStack gap={1.5} minW={0}>
-                <Box flex={2} minW={0}>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <div className="min-w-0 flex-[2]">
                   <MenuSelect ariaLabel="Condition column" value={rule.column} options={columnOptions} onChange={(column) => updateRule(index, { column })} />
-                </Box>
-                <Box flex={1} minW={0}>
+                </div>
+                <div className="min-w-0 flex-1">
                   <MenuSelect ariaLabel="Condition operator" value={rule.operator} options={OPERATORS} onChange={(operator) => updateRule(index, { operator })} />
-                </Box>
-                <Box flex={2} minW={0}>
+                </div>
+                <div className="min-w-0 flex-[2]">
                   <input
                     type="text"
                     aria-label="Condition value"
                     value={rule.value}
                     onChange={(e) => updateRule(index, { value: e.target.value })}
                     placeholder="value"
-                    style={inputStyle}
+                    className={INPUT_CLASSES}
                   />
-                </Box>
-              </HStack>
+                </div>
+              </div>
               {/* Paint: target · color · delete */}
-              <HStack gap={1.5} minW={0} align="center">
-                <Box flex={1} minW={0}>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <div className="min-w-0 flex-1">
                   <MenuSelect ariaLabel="Paint target" value={rule.target} options={TARGETS} onChange={(target) => updateRule(index, { target })} />
-                </Box>
+                </div>
                 <input
                   type="color"
                   aria-label="Background color"
                   value={rule.bgColor}
                   onChange={(e) => updateRule(index, { bgColor: e.target.value })}
-                  style={{ width: '34px', height: '28px', padding: 0, border: '1px solid var(--chakra-colors-border-muted)', borderRadius: '4px', background: 'transparent', cursor: 'pointer' }}
+                  className="h-7 w-[34px] cursor-pointer rounded border border-border bg-transparent p-0"
                 />
                 <button
                   type="button"
                   onClick={() => removeRule(index)}
                   aria-label="Remove conditional formatting rule"
-                  style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--chakra-colors-fg-subtle)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}
+                  className={DELETE_BUTTON_CLASSES}
                 >
                   <LuTrash2 size={14} />
                 </button>
-              </HStack>
-            </VStack>
+              </div>
+            </div>
           ))}
-        </VStack>
+        </div>
       )}
 
       {items.length > 1 && (
-        <Text fontSize="2xs" fontFamily="mono" color="fg.muted">
+        <p className="font-mono text-[10px] text-muted-foreground">
           When rules overlap, later rules override earlier ones.
-        </Text>
+        </p>
       )}
-    </VStack>
+    </div>
   )
 }

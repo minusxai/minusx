@@ -1,9 +1,4 @@
-import { buildChartOption } from '@/lib/chart/chart-utils'
-import { buildRadarChartOption } from '@/lib/chart/chart-builders/radar'
-import { buildPieChartOption } from '@/lib/chart/chart-builders/pie'
-import { buildFunnelChartOption } from '@/lib/chart/chart-builders/funnel'
 import { formatDateValue } from '@/lib/chart/chart-format'
-import { resolveXAxisTypes, resolveAnnotationY, findMatchingXIndex, resolveAnnotationX } from '@/lib/chart/chart-annotations'
 import { getColorScale, getHeatGradient, getRadiusScale, interpolateColor, COLOR_SCALES } from '@/lib/chart/geo-color-scale'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import type { GeoConfig } from '@/lib/types'
@@ -14,517 +9,11 @@ import type { PivotConfig } from '@/lib/types'
 import { computeTrendComparison } from '@/lib/chart/trend-utils'
 import { getVizConstraintError, getVizSettingsWarning } from '@/lib/chart/viz-constraints'
 
-// ─── chart-utils.test.ts ───
-
-describe('buildChartOption animation default', () => {
-  // Background: a Chrome perf trace showed zrender Animation.update / step / ZRText
-  // ._updatePlainTexts dominating main-thread CPU (~590ms over a 16s session),
-  // plus ~500ms of forced layout from measureText on every animation frame
-  // (zrender appends a span → reads offsetWidth → removes it). ECharts' default
-  // animation is decorative and not worth the cost in a BI tool; disable by
-  // default and let callers opt back in per chart via additionalOptions.
-  it('returns animation: false by default for standard charts', () => {
-    const option = buildChartOption({
-      chartType: 'bar',
-      xAxisData: ['a', 'b', 'c'],
-      series: [{ name: 's', data: [1, 2, 3] }],
-      colorPalette: ['#16a085'],
-    })
-    expect(option.animation).toBe(false)
-  })
-
-  it('honours an explicit animation override from additionalOptions', () => {
-    const option = buildChartOption({
-      chartType: 'bar',
-      xAxisData: ['a', 'b', 'c'],
-      series: [{ name: 's', data: [1, 2, 3] }],
-      colorPalette: ['#16a085'],
-      additionalOptions: { animation: true },
-    })
-    expect(option.animation).toBe(true)
-  })
-
-  it('returns animation: false by default for pie charts', () => {
-    const option = buildPieChartOption({
-      xAxisData: ['a', 'b'],
-      series: [{ name: 's', data: [1, 2] }],
-      colorPalette: ['#16a085', '#27ae60'],
-    } as any)
-    expect(option.animation).toBe(false)
-  })
-})
-
-describe('buildChartOption scatter log axis', () => {
-  it('derives x-axis log extent from positive scatter values and excludes non-positive x points', () => {
-    const option = buildChartOption({
-      chartType: 'scatter',
-      xAxisData: ['0', '0.5', '1', '30', '150'],
-      series: [
-        { name: 'elo', data: [1000, 1100, 1200, 1300, 1400] },
-      ],
-      xAxisLabel: 'output_cost_per_m_tokens',
-      yAxisLabel: 'elo',
-      colorPalette: ['#16a085'],
-      axisConfig: { xScale: 'log' },
-      xAxisColumns: ['output_cost_per_m_tokens'],
-      columnTypes: { output_cost_per_m_tokens: 'number' },
-    })
-
-    const xAxis = option.xAxis as any
-    const scatterSeries = (option.series as any[])[0]
-
-    expect(xAxis.type).toBe('log')
-    expect(xAxis.min).toBe(0.5)
-    expect(xAxis.max).toBe(150)
-    expect(xAxis.splitLine).toMatchObject({
-      show: true,
-      lineStyle: {
-        color: 'rgba(208, 215, 222, 0.8)',
-        type: 'dashed',
-        opacity: 0.45,
-        width: 1,
-      },
-    })
-    expect(xAxis.minorTick).toMatchObject({
-      show: true,
-      splitNumber: 9,
-    })
-    expect(xAxis.minorSplitLine).toMatchObject({
-      show: true,
-      lineStyle: {
-        color: 'rgba(208, 215, 222, 0.5)',
-        type: 'dashed',
-        opacity: 0.45,
-        width: 1,
-      },
-    })
-    expect(scatterSeries.data).toEqual([
-      { value: [0.5, 1100], tooltipMeta: undefined },
-      { value: [1, 1200], tooltipMeta: undefined },
-      { value: [30, 1300], tooltipMeta: undefined },
-      { value: [150, 1400], tooltipMeta: undefined },
-    ])
-  })
-})
-
-describe('buildChartOption scatter with date x-axis', () => {
-  it('uses time axis and preserves all data points when xAxisData contains dates', () => {
-    const option = buildChartOption({
-      chartType: 'scatter',
-      xAxisData: ['2024-01-15', '2024-02-20', '2024-03-10'],
-      series: [
-        { name: 'revenue', data: [100, 200, 300] },
-      ],
-      xAxisLabel: 'date',
-      yAxisLabel: 'revenue',
-      xAxisColumns: ['date'],
-      colorPalette: ['#16a085'],
-      columnTypes: { date: 'date' },
-    })
-
-    const xAxis = option.xAxis as any
-    const scatterSeries = (option.series as any[])[0]
-
-    expect(xAxis.type).toBe('time')
-    expect(scatterSeries.data).toHaveLength(3)
-    expect(scatterSeries.data[0].value[0]).toBe('2024-01-15')
-    expect(scatterSeries.data[1].value[0]).toBe('2024-02-20')
-    expect(scatterSeries.data[2].value[0]).toBe('2024-03-10')
-  })
-})
-
-describe('buildChartOption scatter with category x-axis', () => {
-  it('uses category axis and preserves all data points when xAxisData contains strings', () => {
-    const option = buildChartOption({
-      chartType: 'scatter',
-      xAxisData: ['US', 'UK', 'Canada', 'Germany'],
-      series: [
-        { name: 'sales', data: [500, 300, 200, 400] },
-      ],
-      xAxisLabel: 'country',
-      yAxisLabel: 'sales',
-      xAxisColumns: ['country'],
-      colorPalette: ['#16a085'],
-      columnTypes: { country: 'text' },
-    })
-
-    const xAxis = option.xAxis as any
-    const scatterSeries = (option.series as any[])[0]
-
-    expect(xAxis.type).toBe('category')
-    expect(xAxis.data).toEqual(['US', 'UK', 'Canada', 'Germany'])
-    expect(scatterSeries.data).toHaveLength(4)
-  })
-})
-
-describe('buildChartOption scatter with numeric x-axis', () => {
-  it('still uses value axis for numeric data (existing behavior)', () => {
-    const option = buildChartOption({
-      chartType: 'scatter',
-      xAxisData: ['10', '20', '30'],
-      series: [
-        { name: 'metric', data: [100, 200, 300] },
-      ],
-      xAxisLabel: 'x',
-      yAxisLabel: 'y',
-      xAxisColumns: ['x'],
-      colorPalette: ['#16a085'],
-      columnTypes: { x: 'number' },
-    })
-
-    const xAxis = option.xAxis as any
-    const scatterSeries = (option.series as any[])[0]
-
-    expect(xAxis.type).toBe('value')
-    expect(scatterSeries.data).toHaveLength(3)
-    expect(scatterSeries.data[0].value).toEqual([10, 100])
-    expect(scatterSeries.data[1].value).toEqual([20, 200])
-  })
-})
-
-describe('resolveXAxisTypes', () => {
-  it.each([
-    {
-      desc: 'returns category for both when column type is text',
-      columns: ['region'], columnTypes: { region: 'text' }, chartType: 'line', xScaleType: undefined,
-      expected: { columnKind: 'category', axisType: 'category' },
-    },
-    {
-      desc: 'returns time/time for line chart with date column',
-      columns: ['date'], columnTypes: { date: 'date' }, chartType: 'line', xScaleType: undefined,
-      expected: { columnKind: 'time', axisType: 'time' },
-    },
-    {
-      desc: 'returns time/time for area chart with date column',
-      columns: ['date'], columnTypes: { date: 'date' }, chartType: 'area', xScaleType: undefined,
-      expected: { columnKind: 'time', axisType: 'time' },
-    },
-    {
-      desc: 'returns time/time for scatter chart with date column',
-      columns: ['date'], columnTypes: { date: 'date' }, chartType: 'scatter', xScaleType: undefined,
-      expected: { columnKind: 'time', axisType: 'time' },
-    },
-    {
-      desc: 'forces category axis for bar chart with date column',
-      columns: ['date'], columnTypes: { date: 'date' }, chartType: 'bar', xScaleType: undefined,
-      expected: { columnKind: 'time', axisType: 'category' },
-    },
-    {
-      desc: 'forces category axis for bar chart with number column',
-      columns: ['rank'], columnTypes: { rank: 'number' }, chartType: 'bar', xScaleType: undefined,
-      expected: { columnKind: 'value', axisType: 'category' },
-    },
-    {
-      desc: 'forces category axis for combo chart with date column',
-      columns: ['date'], columnTypes: { date: 'date' }, chartType: 'combo', xScaleType: undefined,
-      expected: { columnKind: 'time', axisType: 'category' },
-    },
-    {
-      desc: 'forces category axis for waterfall chart',
-      columns: ['date'], columnTypes: { date: 'date' }, chartType: 'waterfall', xScaleType: undefined,
-      expected: { columnKind: 'time', axisType: 'category' },
-    },
-    {
-      desc: 'returns value/value for line chart with number column',
-      columns: ['rank'], columnTypes: { rank: 'number' }, chartType: 'line', xScaleType: undefined,
-      expected: { columnKind: 'value', axisType: 'value' },
-    },
-    {
-      desc: 'returns value/log when xScaleType is log',
-      columns: ['cost'], columnTypes: { cost: 'number' }, chartType: 'scatter', xScaleType: 'log',
-      expected: { columnKind: 'value', axisType: 'log' },
-    },
-    {
-      desc: 'bar chart with log scale still gets category (bar overrides log)',
-      columns: ['cost'], columnTypes: { cost: 'number' }, chartType: 'bar', xScaleType: 'log',
-      expected: { columnKind: 'value', axisType: 'category' },
-    },
-    {
-      desc: 'defaults to category when no columns provided',
-      columns: undefined, columnTypes: undefined, chartType: 'line', xScaleType: undefined,
-      expected: { columnKind: 'category', axisType: 'category' },
-    },
-  ])('$desc', ({ columns, columnTypes, chartType, xScaleType, expected }) => {
-    const result = resolveXAxisTypes(columns as any, columnTypes as any, chartType as any, xScaleType as any)
-    expect(result).toEqual(expected)
-  })
-})
-
-describe('buildChartOption cartesian x-axis type resolution', () => {
-  it.each([
-    ['line'],
-    ['area'],
-  ] as const)('uses time axis for %s charts when x column is date', (chartType) => {
-    const option = buildChartOption({
-      chartType,
-      xAxisData: ['2024-01-15', '2024-02-20', '2024-03-10'],
-      series: [{ name: 'revenue', data: [100, 200, 300] }],
-      xAxisLabel: 'date',
-      yAxisLabel: 'revenue',
-      xAxisColumns: ['date'],
-      colorPalette: ['#16a085'],
-      columnTypes: { date: 'date' },
-    })
-
-    const xAxis = option.xAxis as any
-    const chartSeries = (option.series as any[])[0]
-
-    expect(xAxis.type).toBe('time')
-    expect(chartSeries.data[0]).toEqual(['2024-01-15', 100])
-    expect(chartSeries.data[1]).toEqual(['2024-02-20', 200])
-  })
-
-  it.each([
-    ['bar'],
-    ['combo'],
-  ] as const)('uses category axis for %s charts when x column is date', (chartType) => {
-    const option = buildChartOption({
-      chartType,
-      xAxisData: ['2024-01-31', '2024-02-28', '2024-03-31'],
-      series: [{ name: 'revenue', data: [100, 200, 300] }],
-      xAxisLabel: 'date',
-      yAxisLabel: 'revenue',
-      xAxisColumns: ['date'],
-      colorPalette: ['#16a085'],
-      columnTypes: { date: 'date' },
-    })
-
-    const xAxis = option.xAxis as any
-    const chartSeries = (option.series as any[])[0]
-
-    expect(xAxis.type).toBe('category')
-    // Category axis: data is plain y values, xAxis.data has the raw date strings
-    expect(xAxis.data).toEqual(['2024-01-31', '2024-02-28', '2024-03-31'])
-    expect(chartSeries.data).toEqual([100, 200, 300])
-  })
-
-  it('bar chart with date column formats axis labels as dates', () => {
-    const option = buildChartOption({
-      chartType: 'bar',
-      xAxisData: ['2024-02-28'],
-      series: [{ name: 'revenue', data: [100] }],
-      xAxisLabel: 'date',
-      yAxisLabel: 'revenue',
-      xAxisColumns: ['date'],
-      colorPalette: ['#16a085'],
-      columnTypes: { date: 'date' },
-    })
-
-    const xAxis = option.xAxis as any
-    // The formatter should format date strings into human-readable labels
-    expect(xAxis.axisLabel.formatter('2024-02-28')).toBe('28 Feb 2024')
-  })
-
-  describe('data label color', () => {
-    const barWith = (styleConfig: any) => buildChartOption({
-      chartType: 'bar',
-      xAxisData: ['a', 'b', 'c'],
-      series: [{ name: 'revenue', data: [100, 200, 300] }],
-      xAxisLabel: 'zone',
-      yAxisLabel: 'revenue',
-      xAxisColumns: ['zone'],
-      colorPalette: ['#16a085'],
-      columnTypes: { zone: 'text' },
-      styleConfig,
-    })
-
-    it('defaults bar data labels to black', () => {
-      const series = (barWith({ showDataLabels: true }).series as any[])[0]
-      expect(series.label.color).toBe('#000')
-    })
-
-    it('uses styleConfig.dataLabelColor when set', () => {
-      const series = (barWith({ showDataLabels: true, dataLabelColor: '#ffffff' }).series as any[])[0]
-      expect(series.label.color).toBe('#ffffff')
-    })
-  })
-
-  it('bar chart with number column uses category axis with number-formatted labels', () => {
-    const option = buildChartOption({
-      chartType: 'bar',
-      xAxisData: ['1000', '2000', '3000'],
-      series: [{ name: 'revenue', data: [100, 200, 300] }],
-      xAxisLabel: 'rank',
-      yAxisLabel: 'revenue',
-      xAxisColumns: ['rank'],
-      colorPalette: ['#16a085'],
-      columnTypes: { rank: 'number' },
-    })
-
-    const xAxis = option.xAxis as any
-    const chartSeries = (option.series as any[])[0]
-
-    expect(xAxis.type).toBe('category')
-    expect(xAxis.data).toEqual(['1000', '2000', '3000'])
-    expect(chartSeries.data).toEqual([100, 200, 300])
-  })
-
-  it.each([
-    ['line'],
-    ['area'],
-  ] as const)('uses value axis for %s charts when x column is number', (chartType) => {
-    const option = buildChartOption({
-      chartType,
-      xAxisData: ['10', '20', '30'],
-      series: [{ name: 'revenue', data: [100, 200, 300] }],
-      xAxisLabel: 'rank',
-      yAxisLabel: 'revenue',
-      xAxisColumns: ['rank'],
-      colorPalette: ['#16a085'],
-      columnTypes: { rank: 'number' },
-    })
-
-    const xAxis = option.xAxis as any
-    const chartSeries = (option.series as any[])[0]
-
-    expect(xAxis.type).toBe('value')
-    expect(chartSeries.data[0]).toEqual([10, 100])
-    expect(chartSeries.data[1]).toEqual([20, 200])
-  })
-
-  it('scatter chart with date column uses time axis (not category)', () => {
-    const option = buildChartOption({
-      chartType: 'scatter',
-      xAxisData: ['2024-01-15', '2024-02-20'],
-      series: [{ name: 'revenue', data: [100, 200] }],
-      xAxisLabel: 'date',
-      yAxisLabel: 'revenue',
-      xAxisColumns: ['date'],
-      colorPalette: ['#16a085'],
-      columnTypes: { date: 'date' },
-    })
-
-    const xAxis = option.xAxis as any
-    expect(xAxis.type).toBe('time')
-  })
-})
-
-describe('buildRadarChartOption', () => {
-  const COLOR_PALETTE = ['#16a085', '#2980b9', '#8e44ad']
-
-  it('produces a radar series with correct indicator count', () => {
-    const option = buildRadarChartOption({
-      xAxisData: ['Speed', 'Power', 'Defense', 'Magic', 'Luck'],
-      series: [
-        { name: 'Player A', data: [80, 60, 90, 40, 70] },
-      ],
-      colorPalette: COLOR_PALETTE,
-    })
-
-    const radar = option.radar as any
-    expect(radar.indicator).toHaveLength(5)
-    expect(radar.indicator[0].name).toBe('Speed')
-    expect(radar.shape).toBe('polygon')
-  })
-
-  it('uses a single shared max across all indicators', () => {
-    const option = buildRadarChartOption({
-      xAxisData: ['A', 'B', 'C'],
-      series: [
-        { name: 's1', data: [10, 50, 30] },
-        { name: 's2', data: [20, 40, 100] },
-      ],
-      colorPalette: COLOR_PALETTE,
-    })
-
-    const radar = option.radar as any
-    const maxValues = radar.indicator.map((ind: any) => ind.max)
-    expect(new Set(maxValues).size).toBe(1)
-    expect(maxValues[0]).toBeGreaterThanOrEqual(100)
-  })
-
-  it('creates one radar data entry per series', () => {
-    const option = buildRadarChartOption({
-      xAxisData: ['X', 'Y', 'Z'],
-      series: [
-        { name: 'budget', data: [100, 200, 300] },
-        { name: 'actual', data: [90, 210, 280] },
-      ],
-      colorPalette: COLOR_PALETTE,
-    })
-
-    const radarSeries = (option.series as any[])[0]
-    expect(radarSeries.type).toBe('radar')
-    expect(radarSeries.data).toHaveLength(2)
-    expect(radarSeries.data[0].name).toBe('budget')
-    expect(radarSeries.data[1].name).toBe('actual')
-    expect(radarSeries.data[0].value).toEqual([100, 200, 300])
-  })
-})
-
-describe('buildFunnelChartOption', () => {
-  it('honors styleConfig.dataLabelColor on the funnel label', () => {
-    const option = buildFunnelChartOption({
-      xAxisData: ['Visit', 'Signup', 'Purchase'],
-      series: [{ name: 'Stage', data: [100, 60, 30] }],
-      colorPalette: ['#16a085', '#2980b9'],
-      styleConfig: { dataLabelColor: '#ff00ff' },
-    })
-    expect((option.series as any[])[0].label.color).toBe('#ff00ff')
-  })
-})
-
-describe('buildPieChartOption', () => {
-  const COLOR_PALETTE = ['#16a085', '#2980b9', '#8e44ad', '#d35400', '#c0392b']
-
-  it('produces a single pie series for single-series data', () => {
-    const option = buildPieChartOption({
-      xAxisData: ['Chrome', 'Firefox', 'Safari'],
-      series: [{ name: 'Users', data: [60, 25, 15] }],
-      colorPalette: COLOR_PALETTE,
-    })
-
-    const allSeries = option.series as any[]
-    expect(allSeries).toHaveLength(1)
-    expect(allSeries[0].type).toBe('pie')
-    expect(allSeries[0].data).toHaveLength(3)
-  })
-
-  it('honors styleConfig.dataLabelColor on the pie label', () => {
-    const option = buildPieChartOption({
-      xAxisData: ['Chrome', 'Firefox'],
-      series: [{ name: 'Users', data: [60, 40] }],
-      colorPalette: COLOR_PALETTE,
-      styleConfig: { dataLabelColor: '#ff00ff' },
-    })
-    expect((option.series as any[])[0].label.color).toBe('#ff00ff')
-  })
-
-  it('produces two pie series (inner + outer ring) for multi-series data', () => {
-    const option = buildPieChartOption({
-      xAxisData: ['US', 'UK'],
-      series: [
-        { name: 'Chrome', data: [40, 15] },
-        { name: 'Firefox', data: [20, 25] },
-      ],
-      colorPalette: COLOR_PALETTE,
-    })
-
-    const allSeries = option.series as any[]
-    expect(allSeries).toHaveLength(2)
-
-    const inner = allSeries[0]
-    expect(inner.type).toBe('pie')
-    expect(inner.data).toHaveLength(2)
-    expect(inner.data[0].name).toBe('US')
-    expect(inner.data[0].value).toBe(60)
-    expect(inner.data[1].name).toBe('UK')
-    expect(inner.data[1].value).toBe(40)
-    expect(inner.radius[1]).not.toBe(inner.radius[0])
-
-    const outer = allSeries[1]
-    expect(outer.type).toBe('pie')
-    expect(outer.data).toHaveLength(4)
-    const innerMax = parseInt(inner.radius[1])
-    const outerMin = parseInt(outer.radius[0])
-    expect(outerMin).toBeGreaterThan(innerMax)
-  })
-})
-
-// ─── format-date-value.test.ts ───
-
 const DATE = '2024-01-15T14:05:09Z'
 const DATE_ONLY = '2024-01-15'
+const geoColumns = ['state', 'revenue', 'lat', 'lng', 'lat2', 'lng2', 'intensity']
+
+// ─── chart-utils.test.ts ───
 
 describe('formatDateValue', () => {
   describe('pattern-based formatting', () => {
@@ -573,8 +62,6 @@ describe('formatDateValue', () => {
     })
   })
 })
-
-// ─── geo-color-scale.test.ts ───
 
 describe('interpolateColor', () => {
   it.each([
@@ -690,10 +177,6 @@ describe('getRadiusScale', () => {
   })
 })
 
-// ─── geo-constraints.test.ts ───
-
-const geoColumns = ['state', 'revenue', 'lat', 'lng', 'lat2', 'lng2', 'intensity']
-
 describe('getGeoConstraintError', () => {
   // expected: a substring the error must contain, null = no error, TRUTHY = some error
   const TRUTHY = Symbol('truthy-error')
@@ -730,8 +213,6 @@ describe('getGeoConstraintError', () => {
     }
   })
 })
-
-// ─── geo-heatmap-defaults.test.ts ───
 
 describe('computeHeatmapOptions', () => {
   it('should normalize intensity values to 0-1 range', () => {
@@ -820,8 +301,6 @@ describe('computeHeatmapOptions', () => {
   })
 })
 
-// ─── geo-value-utils.test.ts ───
-
 describe('parseGeoNumber', () => {
   it.each<[string, string | number, number]>([
     ['returns numeric inputs unchanged (positive)', 42, 42],
@@ -839,8 +318,6 @@ describe('parseGeoNumber', () => {
     expect(parseGeoNumber(input)).toBeNaN()
   })
 })
-
-// ─── pivot-utils.test.ts ───
 
 describe('aggregatePivotData', () => {
   describe('row and column sorting', () => {
@@ -909,8 +386,6 @@ describe('aggregatePivotData', () => {
     })
   })
 })
-
-// ─── trend-utils.test.ts ───
 
 describe('computeTrendComparison', () => {
   const labels = ['Jan', 'Feb', 'Mar', 'Apr']
@@ -1010,8 +485,6 @@ describe('computeTrendComparison', () => {
   })
 })
 
-// ─── viz-constraints.test.ts ───
-
 describe('getVizConstraintError', () => {
   describe('trend chart', () => {
     it('returns error when X-axis column is not a temporal type', () => {
@@ -1095,8 +568,6 @@ describe('getVizConstraintError', () => {
   })
 })
 
-// ─── getVizSettingsWarning ───
-
 describe('getVizSettingsWarning', () => {
   it('returns null for table type', () => {
     expect(getVizSettingsWarning({ type: 'table' })).toBeNull()
@@ -1157,179 +628,5 @@ describe('getVizSettingsWarning', () => {
       // This is exactly why the agent never saw the error before: structural-only.
       expect(getVizSettingsWarning({ type: 'trend', xCols: ['family'], yCols: ['avg_context_k'] })).toBeNull()
     })
-  })
-})
-
-// ─── resolveAnnotationY ───
-
-describe('resolveAnnotationY', () => {
-  const series = [
-    { name: 'A', data: [10, 20, 30] },
-    { name: 'B', data: [5, 15, 25] },
-    { name: 'C', data: [3, 7, 12] },
-  ]
-
-  it('returns individual value when not stacked', () => {
-    const result = resolveAnnotationY({
-      series,
-      matchedSeriesIndex: 1,
-      pointIndex: 2,
-      pointY: 25,
-      isStacked: false,
-      yAxisAssignments: [0, 0, 0],
-    })
-    expect(result).toBe(25)
-  })
-
-  it('returns cumulative value for bottom series when stacked', () => {
-    // Series A is index 0 (bottom of stack), its cumulative = its own value
-    const result = resolveAnnotationY({
-      series,
-      matchedSeriesIndex: 0,
-      pointIndex: 1,
-      pointY: 20,
-      isStacked: true,
-      yAxisAssignments: [0, 0, 0],
-    })
-    expect(result).toBe(20)
-  })
-
-  it('returns cumulative value for middle series when stacked', () => {
-    // Series B is index 1, stacked on A. cumulative = A[1] + B[1] = 20 + 15 = 35
-    const result = resolveAnnotationY({
-      series,
-      matchedSeriesIndex: 1,
-      pointIndex: 1,
-      pointY: 15,
-      isStacked: true,
-      yAxisAssignments: [0, 0, 0],
-    })
-    expect(result).toBe(35)
-  })
-
-  it('returns cumulative value for top series when stacked', () => {
-    // Series C is index 2, stacked on A+B. cumulative = A[1] + B[1] + C[1] = 20 + 15 + 7 = 42
-    const result = resolveAnnotationY({
-      series,
-      matchedSeriesIndex: 2,
-      pointIndex: 1,
-      pointY: 7,
-      isStacked: true,
-      yAxisAssignments: [0, 0, 0],
-    })
-    expect(result).toBe(42)
-  })
-
-  it('only sums series in the same stack group (dual axis)', () => {
-    // A and C on left (axis 0), B on right (axis 1)
-    // C is index 2, stacked with A only. cumulative = A[0] + C[0] = 10 + 3 = 13
-    const result = resolveAnnotationY({
-      series,
-      matchedSeriesIndex: 2,
-      pointIndex: 0,
-      pointY: 3,
-      isStacked: true,
-      yAxisAssignments: [0, 1, 0],
-    })
-    expect(result).toBe(13)
-  })
-
-  it('returns null when no series specified (x-only annotation)', () => {
-    const result = resolveAnnotationY({
-      series,
-      matchedSeriesIndex: null,
-      pointIndex: null,
-      pointY: null,
-      isStacked: false,
-      yAxisAssignments: [0, 0, 0],
-    })
-    expect(result).toBeNull()
-  })
-
-  it('skips NaN values in stack summation', () => {
-    const seriesWithNaN = [
-      { name: 'A', data: [10, NaN, 30] },
-      { name: 'B', data: [5, 15, 25] },
-    ]
-    const result = resolveAnnotationY({
-      series: seriesWithNaN,
-      matchedSeriesIndex: 1,
-      pointIndex: 1,
-      pointY: 15,
-      isStacked: true,
-      yAxisAssignments: [0, 0],
-    })
-    // A[1] is NaN, so only B[1] = 15
-    expect(result).toBe(15)
-  })
-})
-
-// ─── findMatchingXIndex ───
-
-describe('findMatchingXIndex', () => {
-  it('returns exact match index', () => {
-    const xAxisData = ['Jan', 'Feb', 'Mar']
-    expect(findMatchingXIndex(xAxisData, 'Feb')).toBe(1)
-  })
-
-  it('matches date-only string against full ISO timestamp', () => {
-    const xAxisData = ['2026-01-01T00:00:00.000Z', '2026-02-28T00:00:00.000Z', '2026-03-15T00:00:00.000Z']
-    expect(findMatchingXIndex(xAxisData, '2026-02-28')).toBe(1)
-  })
-
-  it('matches full ISO against date-only xAxisData', () => {
-    const xAxisData = ['2026-01-01', '2026-02-28', '2026-03-15']
-    expect(findMatchingXIndex(xAxisData, '2026-02-28T00:00:00.000Z')).toBe(1)
-  })
-
-  it('returns -1 when no match found', () => {
-    const xAxisData = ['2026-01-01T00:00:00.000Z', '2026-03-15T00:00:00.000Z']
-    expect(findMatchingXIndex(xAxisData, '2026-02-28')).toBe(-1)
-  })
-
-  it('prefers exact match over prefix match', () => {
-    const xAxisData = ['2026-02-28', '2026-02-28T00:00:00.000Z']
-    expect(findMatchingXIndex(xAxisData, '2026-02-28')).toBe(0)
-  })
-
-  it('works with numeric x values', () => {
-    const xAxisData = ['10', '20', '30']
-    expect(findMatchingXIndex(xAxisData, 20)).toBe(1)
-  })
-})
-
-// ─── resolveAnnotationX ───
-
-describe('resolveAnnotationX', () => {
-  const xAxisData = ['2026-01-01T00:00:00.000Z', '2026-02-28T00:00:00.000Z', '2026-03-15T00:00:00.000Z']
-
-  it('snaps to nearest xAxisData for category axis', () => {
-    const result = resolveAnnotationX({ annotationX: '2026-02-28', xAxisData, axisType: 'category' })
-    expect(result).toEqual({ xValue: '2026-02-28T00:00:00.000Z', matchedIndex: 1 })
-  })
-
-  it('uses raw value for time axis even when data point exists', () => {
-    const result = resolveAnnotationX({ annotationX: '2026-02-28', xAxisData, axisType: 'time' })
-    expect(result).toEqual({ xValue: '2026-02-28', matchedIndex: -1 })
-  })
-
-  it('uses raw value for time axis with arbitrary date', () => {
-    const result = resolveAnnotationX({ annotationX: '2026-02-15', xAxisData, axisType: 'time' })
-    expect(result).toEqual({ xValue: '2026-02-15', matchedIndex: -1 })
-  })
-
-  it('uses raw number for value axis', () => {
-    const result = resolveAnnotationX({ annotationX: 42, xAxisData: ['10', '20', '30'], axisType: 'value' })
-    expect(result).toEqual({ xValue: 42, matchedIndex: -1 })
-  })
-
-  it('snaps numeric value on category axis', () => {
-    const result = resolveAnnotationX({ annotationX: 20, xAxisData: ['10', '20', '30'], axisType: 'category' })
-    expect(result).toEqual({ xValue: '20', matchedIndex: 1 })
-  })
-
-  it('returns raw value for category axis when no match found', () => {
-    const result = resolveAnnotationX({ annotationX: 'missing', xAxisData: ['a', 'b', 'c'], axisType: 'category' })
-    expect(result).toEqual({ xValue: 'missing', matchedIndex: -1 })
   })
 })

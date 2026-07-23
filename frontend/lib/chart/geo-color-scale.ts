@@ -3,7 +3,7 @@
  * Uses CHART_COLORS from the shared theme for consistency.
  */
 
-import { CHART_COLORS } from './echarts-theme'
+import { CHART_COLORS } from './chart-theme'
 
 const MIN_RADIUS = 4
 const MAX_RADIUS = 30

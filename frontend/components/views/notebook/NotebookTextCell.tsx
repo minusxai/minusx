@@ -9,7 +9,7 @@
  * are wired like the context docs editor.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { Box } from '@chakra-ui/react';
+import { cn } from '@/components/kit/cn';
 import NotebookCellHeader from './NotebookCellHeader';
 import LexicalTextEditor, { LexicalTextViewer, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
 import { uploadFile } from '@/lib/object-store/client';
@@ -80,7 +80,7 @@ export default function NotebookTextCell({
   // Present mode: render just the rendered markdown (skip empty cells).
   if (presentMode) {
     if (!cell.content?.trim()) return null;
-    return <Box py={1}><LexicalTextViewer markdown={cell.content} /></Box>;
+    return <div className="py-1"><LexicalTextViewer markdown={cell.content} /></div>;
   }
 
   const chrome = (middle?: React.ReactNode) => (
@@ -97,15 +97,13 @@ export default function NotebookTextCell({
   );
 
   return (
-    <Box
-      borderWidth="1px"
-      borderColor={active ? 'accent.teal' : 'border.muted'}
-      borderRadius="md"
-      bg="bg.canvas"
-      overflow="hidden"
-      transition="border-color 0.15s, box-shadow 0.15s"
-      boxShadow={active ? '0 0 0 2px var(--chakra-colors-accent-teal)' : undefined}
-      _hover={{ borderColor: active ? 'accent.teal' : 'border.default' }}
+    <div
+      className={cn(
+        'overflow-hidden rounded-md border bg-background transition-[border-color,box-shadow] duration-150',
+        active
+          ? 'border-[#16a085] shadow-[0_0_0_2px_#16a085] hover:border-[#16a085]'
+          : 'border-border/60 hover:border-border',
+      )}
       onMouseDownCapture={activate}
       onFocusCapture={activate}
     >
@@ -126,6 +124,6 @@ export default function NotebookTextCell({
           renderToolbar={(toolbar) => chrome(toolbar)}
         />
       )}
-    </Box>
+    </div>
   );
 }

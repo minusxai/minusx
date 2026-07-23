@@ -16,9 +16,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   appStateWithFileScreenshot,
   appStateShotKey,
-  isStoryAppState,
+  markersEnabledForAppState,
   _internal,
 } from '@/lib/screenshot/app-state-screenshot';
+import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import type { AppState } from '@/lib/appState';
 
 const storyAppState = (id: number, markup = 'm'): AppState =>
@@ -109,19 +110,49 @@ describe('appStateWithFileScreenshot (the ONLY capture path — lazy, on send)',
   });
 });
 
-describe('position markers are STORY-ONLY', () => {
-  it('isStoryAppState is true only for a story file view', () => {
-    expect(isStoryAppState(storyAppState(1))).toBe(true);
-    expect(isStoryAppState(fileAppState(1, 'm'))).toBe(false); // no type → not a story
-    expect(isStoryAppState({ type: 'file', state: { fileState: { id: 1, type: 'dashboard' } } } as unknown as AppState)).toBe(false);
-    expect(isStoryAppState({ type: 'explore', state: null } as AppState)).toBe(false);
+// Markers are gated by ONE declared flag in FILE_TYPE_METADATA (Renderer_v2 §2b), replacing the
+// old story-only isStoryAppState check. Full-flow document types are flagged; internally-scrolled
+// (question) and admin/form types (connection/context — h:'none' but NOT rendered documents, the
+// over-match review finding) are not.
+describe('position markers gate on FILE_TYPE_METADATA.markers', () => {
+  const typedAppState = (type: string): AppState =>
+    ({ type: 'file', state: { fileState: { id: 1, type, markup: 'm' }, queryResults: {} } } as unknown as AppState);
+
+  it('is true for every flagged document type', () => {
+    for (const t of ['story', 'dashboard', 'notebook', 'report', 'alert', 'alert_run', 'report_run']) {
+      expect(markersEnabledForAppState(typedAppState(t)), t).toBe(true);
+    }
   });
 
-  it('requests the marker gutter for a story capture but not for other file views', async () => {
+  it('is false for internally-scrolled, admin, unverified-rendering, and non-file states', () => {
+    for (const t of ['question', 'connection', 'context', 'context_run', 'config', 'users', 'folder']) {
+      expect(markersEnabledForAppState(typedAppState(t)), t).toBe(false);
+    }
+    expect(markersEnabledForAppState(fileAppState(1, 'm'))).toBe(false); // no type
+    expect(markersEnabledForAppState({ type: 'explore', state: null } as AppState)).toBe(false);
+    expect(markersEnabledForAppState(null)).toBe(false);
+  });
+
+  it('INVARIANT: every flagged type is h:\'none\' — markers on an internally-scrolled view would be wrong by construction', () => {
+    for (const [type, meta] of Object.entries(FILE_TYPE_METADATA)) {
+      if ((meta as { markers?: boolean }).markers) {
+        expect(meta.h, `${type} is flagged for markers but not full-flow`).toBe('none');
+      }
+    }
+  });
+
+  it('conversation is GONE from FILE_TYPE_METADATA (not a file type since the v3 chat migration)', () => {
+    expect('conversation' in FILE_TYPE_METADATA).toBe(false);
+  });
+
+  it('requests the marker gutter for flagged captures but not for unflagged file views', async () => {
     await appStateWithFileScreenshot(storyAppState(1), 'light', false);
     expect((_internal.capture as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[2]).toBe(true);
     _internal.reset();
-    await appStateWithFileScreenshot(fileAppState(2, 'm'), 'light', false);
+    await appStateWithFileScreenshot(typedAppState('dashboard'), 'light', false);
+    expect((_internal.capture as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[2]).toBe(true);
+    _internal.reset();
+    await appStateWithFileScreenshot(typedAppState('question'), 'light', false);
     expect((_internal.capture as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[2]).toBe(false);
   });
 });

@@ -10,30 +10,29 @@
 import 'server-only'
 
 import path from 'path'
-import { renderChartToJpeg } from '@/lib/chart/render-chart'
 import { renderVizEnvelopeToJpeg } from '@/lib/chart/render-viz-image'
-import { getChartHeight } from '@/lib/chart/render-chart-svg'
+import { getChartHeight } from '@/lib/chart/renderable-types'
 import { getEnvelopeVizType } from '@/lib/viz/encoding-edit'
 import { resolveImageEnvelope } from '@/lib/viz/from-vizsettings'
 import type { IChartImageRenderer, ChartInput, ChartRenderOptions, RenderedChart } from './IChartImageRenderer'
 
-// Path that does not exist — renderChartToJpeg skips logo overlay when file not found
+// Path that does not exist — the JPEG encoder skips the logo overlay when the file is absent
 const NO_LOGO = '/dev/null/no-logo'
 
 export const serverChartImageRenderer: IChartImageRenderer = {
   async renderCharts(inputs: ChartInput[], options: ChartRenderOptions): Promise<RenderedChart[]> {
     const { width, colorMode, addWatermark, padding, logoSrc } = options
     // logoSrc is a public-relative URL (e.g. "/static/logo.svg"); resolve to a file under public/.
-    // Omitted → renderChartToJpeg uses the default brand mark; watermark off → NO_LOGO sentinel.
+    // Omitted → the default brand mark; watermark off → NO_LOGO sentinel.
     const logoPath = addWatermark
       ? (logoSrc ? path.join(process.cwd(), 'public', logoSrc.replace(/^\//, '')) : undefined)
       : NO_LOGO
     const results: RenderedChart[] = []
 
     for (const { queryResult, vizSettings, viz, titleOverride } of inputs) {
-      // Vega-only rendering (retirement stage 2): a V2 `viz` renders directly; legacy
-      // `vizSettings` converts through the SAME bridge as the on-screen chart, so images
-      // match what users see. ECharts remains only as a crash fallback until stage 4.
+      // Vega-only rendering: a V2 `viz` renders directly; legacy `vizSettings` converts
+      // through the SAME bridge as the on-screen chart, so images match what users see.
+      // (Renderer_v2 Phase 2: the ECharts crash-fallback is deleted.)
       let buf: Buffer | null = null
       let label = titleOverride
       const envelope = resolveImageEnvelope({
@@ -46,14 +45,10 @@ export const serverChartImageRenderer: IChartImageRenderer = {
           })
           label = label ?? getEnvelopeVizType(envelope) ?? 'chart'
         } catch (e) {
-          console.error('[ChartImageRenderer] vega render failed, falling back to echarts:', e)
+          // Render-only path: a failed chart is SKIPPED, never a crash (the ECharts
+          // fallback is deleted — Renderer_v2 Phase 2; the bridge is the only renderer).
+          console.error('[ChartImageRenderer] vega render failed, skipping chart:', e)
         }
-      }
-      if (!buf && !viz && vizSettings) {
-        buf = await renderChartToJpeg(queryResult, vizSettings, {
-          width, height: getChartHeight(vizSettings.type, width), colorMode, logoPath, titleOverride, padding,
-        })
-        label = label ?? vizSettings.type
       }
       if (!buf) continue
       results.push({ label: label ?? 'chart', dataUrl: `data:image/jpeg;base64,${buf.toString('base64')}` })

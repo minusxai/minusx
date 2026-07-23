@@ -12,7 +12,6 @@
  * the visual-vs-code decision now lives.
  */
 import { useState } from 'react';
-import { Box, HStack } from '@chakra-ui/react';
 import { LuBraces, LuCode } from 'react-icons/lu';
 import TabSwitcher from '../selectors/TabSwitcher';
 import JsonEditor from '../slides/JsonEditor';
@@ -77,14 +76,14 @@ export default function CodeView({ fileId, fileType, persistableContent, mergedC
       ];
 
   return (
-    <Box p={4} data-file-id={fileId}>
-      <HStack mb={3}>
+    <div className="p-4" data-file-id={fileId}>
+      <div className="mb-3 flex items-center gap-2">
         <TabSwitcher
           tabs={tabs}
           activeTab={tab}
           onTabChange={(t) => setTab(t as typeof tab)}
         />
-      </HStack>
+      </div>
 
       {/* Distinct `key` per tab: the JSON editor is uncontrolled (Monaco keeps its own buffer), so
           without a remount, switching tabs would leave the previous tab's text (and language) in the
@@ -122,6 +121,6 @@ export default function CodeView({ fileId, fileType, persistableContent, mergedC
         // The agent-facing markup — read-only (fileToMarkup of the agent's view).
         <JsonEditor key="xml" language="xml" readOnly value={fileToMarkup(fileType, agentView)} />
       )}
-    </Box>
+    </div>
   );
 }

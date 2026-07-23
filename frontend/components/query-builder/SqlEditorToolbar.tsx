@@ -1,8 +1,7 @@
 'use client';
 
-import { IconButton, VStack } from '@chakra-ui/react';
 import { LuAlignLeft, LuPlay } from 'react-icons/lu';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/kit/tooltip';
 
 interface SqlEditorToolbarProps {
   readOnly: boolean;
@@ -29,34 +28,44 @@ export default function SqlEditorToolbar({
   }
 
   return (
-    <VStack gap={2} justify="flex-start" py={2}>
-      {showFormatButton && (
-        <Tooltip content="Format SQL" positioning={{ placement: 'left' }}>
-          <IconButton
-            onClick={onFormat}
-            aria-label="Format SQL"
-            size="sm"
-            variant="ghost"
-            color="accent.teal"
-            _hover={{ bg: 'accent.teal', color: 'white' }}
-          >
-            <LuAlignLeft />
-          </IconButton>
-        </Tooltip>
-      )}
-      {showRunButton && onRun && (
-        <Tooltip content="Run Query (Cmd+Enter)" positioning={{ placement: 'left' }}>
-          <IconButton
-            onClick={onRun}
-            aria-label="Run query"
-            size="sm"
-            colorPalette="teal"
-            loading={isRunning}
-          >
-            <LuPlay fill="white" />
-          </IconButton>
-        </Tooltip>
-      )}
-    </VStack>
+    <TooltipProvider delayDuration={300}>
+      <div className="flex flex-col items-center justify-start gap-2 py-2">
+        {showFormatButton && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onFormat}
+                aria-label="Format SQL"
+                className="flex size-8 cursor-pointer items-center justify-center rounded-md text-[#16a085] transition-colors hover:bg-[#16a085] hover:text-white"
+              >
+                <LuAlignLeft size={16} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left">Format SQL</TooltipContent>
+          </Tooltip>
+        )}
+        {showRunButton && onRun && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onRun}
+                aria-label="Run query"
+                disabled={isRunning}
+                className="flex size-8 cursor-pointer items-center justify-center rounded-md bg-[#16a085] text-white transition-colors hover:bg-[#16a085]/90 disabled:pointer-events-none disabled:opacity-60"
+              >
+                {isRunning ? (
+                  <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                ) : (
+                  <LuPlay size={16} fill="white" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left">Run Query (Cmd+Enter)</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }

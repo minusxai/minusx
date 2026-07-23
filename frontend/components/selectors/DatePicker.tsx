@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DayPicker } from 'react-day-picker';
-import { Box, Portal, Input, IconButton, HStack } from '@chakra-ui/react';
 import { LuCalendar } from 'react-icons/lu';
 import 'react-day-picker/dist/style.css';
 
@@ -69,156 +69,131 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
   };
 
   return (
-    <Box position="relative">
-      <HStack gap={0} ref={setButtonRef}>
-        <Input
+    <div className="relative">
+      <div className="flex items-center" ref={setButtonRef}>
+        <input
           value={inputValue}
           onChange={handleInputChange}
           onBlur={handleInputBlur}
           onKeyDown={handleInputKeyDown}
           placeholder={placeholder}
           aria-label={ariaLabel}
-          size="md"
-          minW="120px"
-          maxW="150px"
-          bg="bg.canvas"
-          borderColor="border.muted"
-          borderRightRadius={0}
-          fontFamily="mono"
-          fontSize="sm"
-          px={3}
-          py={2}
-          _focus={{
-            borderColor: 'accent.teal',
-            boxShadow: '0 0 0 1px #16a085',
-          }}
+          className="h-10 min-w-[120px] max-w-[150px] rounded-l-md rounded-r-none border border-border bg-background px-3 py-2 font-mono text-sm outline-none placeholder:text-muted-foreground focus:border-[#16a085] focus:shadow-[0_0_0_1px_#16a085]"
         />
-        <IconButton
+        <button
           aria-label="Open calendar"
-          size="md"
-          variant="outline"
           onClick={() => setIsOpen(!isOpen)}
-          borderLeftRadius={0}
-          borderLeft="none"
-          bg="bg.canvas"
-          borderColor="border.muted"
-          color="fg.muted"
-          _hover={{
-            bg: 'bg.muted',
-            color: 'accent.teal',
-          }}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-r-md rounded-l-none border border-l-0 border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-[#16a085]"
         >
           <LuCalendar size={16} />
-        </IconButton>
-      </HStack>
+        </button>
+      </div>
 
-      {isOpen && (
+      {isOpen && buttonRef && (
         <>
-          {/* Backdrop */}
-          <Box
-            position="fixed"
-            top="0"
-            left="0"
-            right="0"
-            bottom="0"
-            zIndex="50"
-            onClick={() => setIsOpen(false)}
-          />
-          {/* Calendar */}
-          <Portal>
-            <Box
-              position="fixed"
-              zIndex="100"
-              style={{
-                top: buttonRef ? `${buttonRef.getBoundingClientRect().bottom + 4}px` : '0',
-                left: buttonRef ? `${buttonRef.getBoundingClientRect().left}px` : '0',
-              }}
-            >
-              <Box
-                bg="bg.canvas"
-                borderRadius="md"
-                border="1px solid"
-                borderColor="border.muted"
-                shadow="lg"
-                p={4}
-                color="fg.default"
+          {/* Backdrop + calendar — portaled to the ANCHOR's document body (Phase 8): inside the
+              dashboard iframe surface the anchor rect is iframe-relative, so the top document.body
+              is the wrong coordinate space — and fixed positioning is broken inside the
+              <svg><foreignObject> surface, so the backdrop must escape it too. In the main
+              document ownerDocument.body IS document.body (behavior unchanged). The calendar
+              carries its own theme host so kit tokens resolve outside the app-shell host. */}
+          {createPortal(
+            <div
+              className="fixed inset-0 z-50"
+              onClick={() => setIsOpen(false)}
+            />,
+            buttonRef.ownerDocument.body
+          )}
+          {createPortal(
+            <div data-mx-theme-host="">
+              <div
+                className="fixed z-[100]"
                 style={{
-                  fontFamily: 'var(--font-jetbrains-mono)',
+                  top: buttonRef ? `${buttonRef.getBoundingClientRect().bottom + 4}px` : '0',
+                  left: buttonRef ? `${buttonRef.getBoundingClientRect().left}px` : '0',
                 }}
               >
-                <style>{`
-                  .rdp {
-                    --rdp-cell-size: 40px;
-                    --rdp-accent-color: #16a085;
-                    --rdp-accent-background-color: #16a085;
-                    --rdp-selected-border: 2px solid #16a085;
-                    --rdp-today-color: #16a085;
-                    font-family: var(--font-jetbrains-mono);
-                    color: var(--chakra-colors-fg-default);
-                  }
-                  .rdp-day {
-                    border-radius: 0.25rem;
-                    font-size: 0.875rem;
-                    font-weight: 600;
-                    transition: all 0.2s;
-                    font-family: var(--font-jetbrains-mono);
-                  }
-                  .rdp-day:hover:not(.rdp-selected) {
-                    background-color: var(--chakra-colors-bg-muted);
-                    color: #16a085;
-                  }
-                  .rdp-selected,
-                  .rdp-selected .rdp-day_button {
-                    background-color: #16a085 !important;
-                    color: white !important;
-                    font-weight: 800;
-                    border-radius: 0.25rem;
-                    border: none;
-                  }
-                  .rdp-chevron {
-                    fill: #16a085 !important;
-                  }
-                  .rdp-button_previous:hover,
-                  .rdp-button_next:hover {
-                    background-color: var(--chakra-colors-bg-muted);
-                  }
-                  .rdp-weekday {
-                    color: var(--chakra-colors-fg-muted);
-                    font-weight: 700;
-                    font-size: 0.75rem;
-                    text-transform: uppercase;
-                    font-family: var(--font-jetbrains-mono);
-                    letter-spacing: 0.05em;
-                  }
-                  .rdp-month_caption {
-                    color: var(--chakra-colors-fg-default);
-                    font-weight: 800;
-                    font-size: 0.875rem;
-                    font-family: var(--font-jetbrains-mono);
-                    letter-spacing: 0.02em;
-                  }
-                  .rdp-today:not(.rdp-outside) {
-                    color: #16a085 !important;
-                  }
-                  .rdp-disabled:not(.rdp-selected) {
-                    color: var(--chakra-colors-fg-muted);
-                    opacity: 0.5;
-                  }
-                `}</style>
-                <DayPicker
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={handleSelect}
-                  showOutsideDays
-                  captionLayout="dropdown"
-                  fromYear={1900}
-                  toYear={2100}
-                />
-              </Box>
-            </Box>
-          </Portal>
+                <div
+                  className="rounded-md border border-border bg-background p-4 text-foreground shadow-lg"
+                  style={{
+                    fontFamily: 'var(--font-jetbrains-mono)',
+                  }}
+                >
+                  <style>{`
+                    .rdp {
+                      --rdp-cell-size: 40px;
+                      --rdp-accent-color: #16a085;
+                      --rdp-accent-background-color: #16a085;
+                      --rdp-selected-border: 2px solid #16a085;
+                      --rdp-today-color: #16a085;
+                      font-family: var(--font-jetbrains-mono);
+                      color: var(--foreground);
+                    }
+                    .rdp-day {
+                      border-radius: 0.25rem;
+                      font-size: 0.875rem;
+                      font-weight: 600;
+                      transition: all 0.2s;
+                      font-family: var(--font-jetbrains-mono);
+                    }
+                    .rdp-day:hover:not(.rdp-selected) {
+                      background-color: var(--muted);
+                      color: #16a085;
+                    }
+                    .rdp-selected,
+                    .rdp-selected .rdp-day_button {
+                      background-color: #16a085 !important;
+                      color: white !important;
+                      font-weight: 800;
+                      border-radius: 0.25rem;
+                      border: none;
+                    }
+                    .rdp-chevron {
+                      fill: #16a085 !important;
+                    }
+                    .rdp-button_previous:hover,
+                    .rdp-button_next:hover {
+                      background-color: var(--muted);
+                    }
+                    .rdp-weekday {
+                      color: var(--muted-foreground);
+                      font-weight: 700;
+                      font-size: 0.75rem;
+                      text-transform: uppercase;
+                      font-family: var(--font-jetbrains-mono);
+                      letter-spacing: 0.05em;
+                    }
+                    .rdp-month_caption {
+                      color: var(--foreground);
+                      font-weight: 800;
+                      font-size: 0.875rem;
+                      font-family: var(--font-jetbrains-mono);
+                      letter-spacing: 0.02em;
+                    }
+                    .rdp-today:not(.rdp-outside) {
+                      color: #16a085 !important;
+                    }
+                    .rdp-disabled:not(.rdp-selected) {
+                      color: var(--muted-foreground);
+                      opacity: 0.5;
+                    }
+                  `}</style>
+                  <DayPicker
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={handleSelect}
+                    showOutsideDays
+                    captionLayout="dropdown"
+                    fromYear={1900}
+                    toYear={2100}
+                  />
+                </div>
+              </div>
+            </div>,
+            buttonRef.ownerDocument.body
+          )}
         </>
       )}
-    </Box>
+    </div>
   );
 }

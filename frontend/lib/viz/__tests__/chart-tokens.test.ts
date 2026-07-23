@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { chartTokenRange } from '../chart-tokens';
 import { compileVegaLite, toVegaSpec } from '../render-vega';
-import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
+import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 
 const readerOf = (vars: Record<string, string>) => (name: string) => vars[name] ?? '';
 

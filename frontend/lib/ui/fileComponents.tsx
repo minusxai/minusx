@@ -14,7 +14,6 @@ import NotebookContainerV2 from '@/components/containers/NotebookContainerV2';
 import StoryContainerV2 from '@/components/containers/StoryContainerV2';
 import ContextContainerV2 from '@/components/containers/ContextContainerV2';
 import ConnectionContainerV2 from '@/components/containers/ConnectionContainerV2';
-import ConversationContainerV2 from '@/components/containers/ConversationContainerV2';
 import SessionContainerV2 from '@/components/containers/SessionContainerV2';
 import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
 import StylesContainerV2 from '@/components/containers/StylesContainerV2';
@@ -49,7 +48,6 @@ const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileComponentProps
   story: StoryContainerV2,
   context: ContextContainerV2,
   connection: ConnectionContainerV2,
-  conversation: ConversationContainerV2,
   session: SessionContainerV2,
   config: ConfigContainerV2,
   styles: StylesContainerV2,
