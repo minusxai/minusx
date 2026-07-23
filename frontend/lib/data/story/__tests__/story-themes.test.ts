@@ -9,6 +9,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { STORY_THEMES, STORY_THEME_NAMES, getStoryTheme, storyThemeCss } from '../story-themes';
+import { getStoryThemeGuidance } from '../story-templates';
 
 /** Exactly the CSS variables TW_INPUT_JSX maps utilities onto, plus --radius. */
 const REQUIRED_VARS = [
@@ -36,6 +37,18 @@ describe('STORY_THEMES registry', () => {
       expect(t.description.length).toBeGreaterThan(0);
       expect(t.fonts.display.length).toBeGreaterThan(0);
       expect(t.fonts.body.length).toBeGreaterThan(0);
+    }
+  });
+
+  // Guidance lives in story-guidance.yaml, accessed via story-templates.ts — NOT on the
+  // StoryTheme entries — because this module must stay importable by tsx scripts
+  // (generate-theme-previews), which cannot parse native YAML imports.
+  it("every theme has authoring guidance (accent discipline Do/Don'ts for the Clarify pick)", () => {
+    for (const name of STORY_THEME_NAMES) {
+      const guidance = getStoryThemeGuidance(name);
+      expect(guidance, `${name} guidance`).toBeDefined();
+      expect(guidance!.length, `${name} guidance`).toBeGreaterThan(200);
+      expect(guidance, `${name} Don't section`).toContain("Don't");
     }
   });
 

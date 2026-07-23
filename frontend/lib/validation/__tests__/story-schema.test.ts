@@ -65,3 +65,18 @@ describe('StoryContent schema — format field (jsx-format stories)', () => {
     expect(validateFileState({ type: 'story', content: { ...baseStory, format: 1 } })).not.toBeNull();
   });
 });
+
+describe('StoryContent schema — template field (structural genre)', () => {
+  it('accepts each named template, null, and absent', () => {
+    for (const name of ['editorial', 'deck', 'brief', 'scrolly']) {
+      expect(validateFileState({ type: 'story', content: { ...baseStory, format: 'jsx', template: name } })).toBeNull();
+    }
+    expect(validateFileState({ type: 'story', content: { ...baseStory, template: null } })).toBeNull();
+    expect(validateFileState({ type: 'story', content: baseStory })).toBeNull();
+  });
+
+  it('rejects an unknown template value', () => {
+    expect(validateFileState({ type: 'story', content: { ...baseStory, template: 'bogus' } })).not.toBeNull();
+    expect(validateFileState({ type: 'story', content: { ...baseStory, template: 1 } })).not.toBeNull();
+  });
+});
