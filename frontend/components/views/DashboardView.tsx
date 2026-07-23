@@ -387,7 +387,11 @@ export default function DashboardView({
             // component tests — there's no other visible affordance for it besides
             // the border color below.
             aria-label={`Dashboard tile ${questionId}${publishMark ? ` (${publishMark})` : ''}`}
-            className={`flex flex-col overflow-hidden rounded-md bg-muted/40 transition-all duration-200 ${publishMark ? 'border-2' : 'border'} ${borderClass} ${opacityClass}`}
+            // transition-COLORS only (highlight borders/opacity) — NEVER transform: react-grid-layout
+            // merges these classes onto its positioned item, and transform transitions inside the
+            // foreignObject surface freeze mid-animation (Chromium paint-invalidation; see the
+            // grid-level transition:none rule below).
+            className={`flex flex-col overflow-hidden rounded-md bg-muted/40 transition-[border-color,background-color,opacity] duration-200 ${publishMark ? 'border-2' : 'border'} ${borderClass} ${opacityClass}`}
           >
             {/* Windowed (Renderer_v2 Phase 7): off-viewport tiles are BUSY layout ghosts;
                 the capture readiness gate force-mounts them (see WindowedTile). */}
@@ -458,7 +462,14 @@ export default function DashboardView({
         foreignObject so the serialized copy carries the theme with it. */}
     <div data-file-id={fileId}>
     <SvgPageSurface>
-    <div role="region" aria-label="Dashboard" {...(theme ? { 'data-theme': theme } : {})}>
+    {/* pl-10 = the marker column's home (MARKER_GUTTER_PX): badges — live overlay AND captured
+        image — draw INSIDE this padding instead of widening the canvas, so the agent image keeps
+        the reader's geometry 1:1. */}
+    <div role="region" aria-label="Dashboard" className="pl-10" {...(theme ? { 'data-theme': theme } : {})}>
+    {/* Inside the foreignObject surface, transform TRANSITIONS freeze mid-animation (Chromium
+        does not incrementally repaint transformed foreignObject content — the stale-tiles bug).
+        Tiles snap to their positions instead; SvgPageSurface's resize nudge forces the repaint. */}
+    <style>{'[aria-label="Dashboard"] .react-grid-item { transition: none; }'}</style>
 
       {/* Visual View (the Code view is rendered upstream by FileView) */}
       {(

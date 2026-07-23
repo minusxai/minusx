@@ -49,13 +49,15 @@ export async function serializeSurfaceSvg(svg: SVGSVGElement): Promise<string> {
     stampCanvases(liveRoot, cloneRoot);
     cloneRoot.querySelectorAll(TRANSIENT_PORTAL_SELECTOR).forEach((n) => n.remove());
     await inlineImageSources(cloneRoot, doc.baseURI);
-    // Color-mode stamp: the serialized document has no <html>, so `.dark`-scoped rules (incl.
-    // `.dark [data-mx-theme-host]`) need the mode class on the cloned root. The shadcn
-    // `[data-mx-theme-host]` itself is rendered STATICALLY by SvgPageSurface inside the surface,
-    // so it travels with the clone. (Chakra token-host stamp deleted post-6a.)
+    // Color-mode stamp: the serialized document has no <html>, so `.dark`-scoped rules need the
+    // mode class in the copy. It goes on the cloned <svg> ROOT — NOT the foreignObject root:
+    // that root IS the statically-rendered `[data-mx-theme-host]` (SvgPageSurface), and the dark
+    // token block is the DESCENDANT selector `.dark [data-mx-theme-host]`, which a same-element
+    // stamp can never match (live it matches via `<html class="dark">`; the copy has no <html> —
+    // this was the light-chrome dark-dashboard capture bug).
     const mode = doc.documentElement.classList.contains('dark') ? 'dark' : 'light';
-    const cls = cloneRoot.getAttribute('class');
-    cloneRoot.setAttribute('class', `${cls ? `${cls} ` : ''}${mode}`);
+    const svgCls = clone.getAttribute('class');
+    clone.setAttribute('class', `${svgCls ? `${svgCls} ` : ''}${mode}`);
   }
 
   // Explicit intrinsic size: an <img>-rendered SVG without width/height attributes has no

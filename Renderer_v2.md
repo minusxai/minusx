@@ -2,6 +2,27 @@
 
 **Status: EXECUTED — all seven phases shipped on `feature/improved_renderer_v2` (PR #641). Phase checkboxes below record what landed, with measurements and the corrections found during implementation. §9 remains the decision log; review rounds 1–2 closed every decision before execution.**
 
+**Post-execution user-testing fixes (all red-first, all matrix-guarded on 3 engines):**
+1. **Dark dashboard captures rasterized with LIGHT chrome** — the surface serializer stamped the
+   color-mode class on the foreignObject root, which IS the `[data-mx-theme-host]`; the dark
+   token block is the DESCENDANT selector `.dark [data-mx-theme-host]`, so it never matched in
+   the detached copy (live it matches via `<html class="dark">`). Mode class now lands on the
+   cloned `<svg>` ancestor; new dark-capture pixel guards in the matrix (`b2` + `modevars`).
+2. **Markers widened the agent image** — the canvas gutter prepended a 40px strip, so the image
+   had different geometry than the page. Markers are now a pure OVERLAY (badges + full-width
+   dashed band lines, identical to the live dev preview); dashboards carry `pl-10` default left
+   padding as the badge column's home. `drawMarkerGutter` never changes canvas dimensions
+   (contract test).
+3. **Stale-paint bug on relayout (the "broken dashboard" and much of the sidebar jank)** —
+   Chromium does not repaint transformed foreignObject content after a relayout (DOM/layout
+   correct, old pixels survive until an unrelated invalidation like a scroll), and transform
+   TRANSITIONS freeze mid-animation. Fixes: RGL tile transitions disabled inside the surface
+   (tiles snap; tile chrome transitions colors only), SvgPageSurface forces a compositor nudge
+   (translateZ toggle) after each committed size change, and surface measuring is
+   trailing-debounced (120ms) so an animated sidebar toggle costs ONE relayout + repaint instead
+   of ~20 per-frame grid relayouts + Vega resizes. Screen-pixel (screenshot, not serializer)
+   staleness guard added to the matrix.
+
 The goal: retire Chakra from the file-content surfaces (Question, Dashboard, and
 the embeds they lend to Stories), re-use the Story machinery (Tailwind + vendored shadcn +
 theme tokens + SVG-serializable surface + serialization capture), extend app-state **page markers

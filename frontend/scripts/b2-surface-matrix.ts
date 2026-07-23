@@ -118,6 +118,56 @@ export async function runB2Checks(ctx: BrowserContext, base: string): Promise<Ch
     return { name: '', pass, detail: `found=${r.found.join(',')} ${r.w}x${r.h}` };
   });
 
+  await run('b2 SCREEN paint tracks relayout inside foreignObject (no stale pixels after container resize)', '/b2-grid.html', async (p) => {
+    // Shrink the container: RGL re-lays-out the tiles at new positions/widths. The Chromium
+    // foreignObject bug leaves the OLD paint on screen (layout right, pixels stale) — so this
+    // asserts against a real SCREENSHOT, not the serializer.
+    await p.evaluate(`document.getElementById('container').style.width = '500px'`);
+    await p.waitForTimeout(600); // surface RO + RGL relayout + the repaint nudge
+    const shot = await p.screenshot();
+    const png = shot;
+    // Decode via the page (canvas) — check that no tile color is painted beyond the new width.
+    const probe = await p.evaluate(`(async (b64) => {
+      const img = new Image();
+      img.src = 'data:image/png;base64,' + b64;
+      await img.decode();
+      const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
+      const scale = img.naturalWidth / window.innerWidth; // device pixel ratio of the shot
+      const beyond = ctx.getImageData(Math.round(560 * scale), 0, Math.round(200 * scale), Math.round(300 * scale)).data;
+      let stale = 0;
+      for (let i = 0; i < beyond.length; i += 4) {
+        const [r, g, b] = [beyond[i], beyond[i+1], beyond[i+2]];
+        if ((Math.abs(r-41)<30 && Math.abs(g-128)<30 && Math.abs(b-185)<30) || (Math.abs(r-22)<30 && Math.abs(g-160)<30 && Math.abs(b-133)<30) || (Math.abs(r-192)<30 && Math.abs(g-57)<30 && Math.abs(b-43)<30) || (Math.abs(r-241)<30 && Math.abs(g-196)<30 && Math.abs(b-15)<30)) stale++;
+      }
+      const inside = ctx.getImageData(0, 0, Math.round(490 * scale), Math.round(300 * scale)).data;
+      let present = 0;
+      for (let i = 0; i < inside.length; i += 4) {
+        const [r, g, b] = [inside[i], inside[i+1], inside[i+2]];
+        if (Math.abs(r-22)<30 && Math.abs(g-160)<30 && Math.abs(b-133)<30) present++;
+      }
+      return { stale, present };
+    })(${JSON.stringify(png.toString('base64'))})`) as { stale: number; present: number };
+    const pass = probe.stale < 50 && probe.present > 500;
+    return { name: '', pass, detail: `stalePxBeyondNewWidth=${probe.stale} tilePxInside=${probe.present}` };
+  });
+
+  await run('b2 DARK-mode capture resolves .dark theme-host tokens (mode stamp is an ANCESTOR of the host)', '/b2-grid.html', async (p) => {
+    await p.evaluate(`document.documentElement.classList.add('dark')`);
+    // Probe the strip's pixel in the captured raster: dark --muted ≈ oklch(0.269 0 0) ≈ rgb(~46).
+    const r = await p.evaluate(`(async () => {
+      const probe = await window.__b2.captureProbe([]);
+      const img = await (async () => { const i = new Image(); i.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(probe.xml); await i.decode(); return i; })();
+      const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0);
+      const px = ctx.getImageData(30, 10, 1, 1).data;
+      return { r: px[0], g: px[1], b: px[2] };
+    })()`) as { r: number; g: number; b: number };
+    await p.evaluate(`document.documentElement.classList.remove('dark')`);
+    const pass = r.r < 120 && r.g < 120 && r.b < 120; // dark gray, NOT the light-mode ~rgb(247)
+    return { name: '', pass, detail: `probePx=${r.r},${r.g},${r.b} (dark --muted expected <120)` };
+  });
+
   await run('b2 input editing in foreignObject: focus, typing, caret; value baked into capture', '/b2-edit.html', async (p) => {
     await p.click('#b2input');
     await p.keyboard.type('hello caret');

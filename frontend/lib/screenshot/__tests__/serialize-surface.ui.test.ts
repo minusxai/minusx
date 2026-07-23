@@ -63,15 +63,31 @@ describe('serializeSurfaceSvg', () => {
     expect(out).toContain('Revenue');
   });
 
-  it('stamps the cloned root with the color mode (post-6a: no chakra-theme stamp; live untouched)', async () => {
+  it('stamps the color mode on an ANCESTOR of the theme host — never the host element itself', async () => {
+    // The dashboard's dark tokens live under `.dark [data-mx-theme-host]` — a DESCENDANT
+    // selector. The foreignObject root IS the statically-rendered theme host (SvgPageSurface),
+    // so putting `dark` on that same element can never match: live it works only because
+    // `<html class="dark">` is an ancestor, and the serialized copy has no <html> — every
+    // dark-mode dashboard capture rasterized with LIGHT chrome (the tile-header bug).
+    // Mirror the REAL SvgPageSurface shape: the foreignObject root div ITSELF is the host.
     const { svg, root } = mountSurface('<p>x</p>');
+    root.setAttribute('data-mx-theme-host', '');
     const light = await serializeSurfaceSvg(svg);
     expect(light).toMatch(/class="[^"]*light/);
     expect(light).not.toContain('chakra-theme');
     document.documentElement.classList.add('dark');
     const dark = await serializeSurfaceSvg(svg);
-    expect(dark).toMatch(/class="[^"]*dark/);
-    expect(root.getAttribute('class') ?? '').not.toContain('dark');
+    const doc = new DOMParser().parseFromString(dark, 'image/svg+xml');
+    const host = doc.querySelector('[data-mx-theme-host]')!;
+    // The host itself must NOT carry the mode class…
+    expect((host.getAttribute('class') ?? '')).not.toMatch(/\bdark\b/);
+    // …but SOME ancestor of it must, so `.dark [data-mx-theme-host]` matches.
+    let ancestorHasDark = false;
+    for (let el = host.parentElement; el; el = el.parentElement) {
+      if (/\bdark\b/.test(el.getAttribute('class') ?? '')) { ancestorHasDark = true; break; }
+    }
+    expect(ancestorHasDark).toBe(true);
+    expect(root.getAttribute('class') ?? '').not.toContain('dark'); // live DOM untouched
   });
 
   it('bakes form state and drops transient portals, live DOM untouched', async () => {

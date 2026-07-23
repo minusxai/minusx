@@ -43,6 +43,10 @@ function GridApp() {
   };
   return (
     <SvgPageSurface>
+      {/* Mode-differing token probe: --muted is light-gray in light mode, near-black in dark.
+          A dark-mode capture must resolve `.dark [data-mx-theme-host]` — the same-element-stamp
+          bug rasterized this strip light in every dark capture. */}
+      <div id="mode-probe" style={{ height: 24, background: 'var(--muted)' }} />
       <div style={{ position: 'relative', minHeight: 400 }}>
         <RGL
           className="layout"

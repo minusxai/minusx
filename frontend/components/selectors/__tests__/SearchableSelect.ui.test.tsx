@@ -36,8 +36,13 @@ describe('SearchableSelect', () => {
     expect(await screen.findByLabelText('Claude Sonnet 4.6')).toBeInTheDocument();
     expect(screen.getByLabelText('GPT-4.1')).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText('Model picker search'), 'haiku');
-    expect(screen.queryByLabelText('GPT-4.1')).not.toBeInTheDocument();
+    // The popover moves focus to the search input ASYNC after opening (Ark autofocus) — typing
+    // before that lands loses keystrokes to the focus steal. Settle focus first, then poll the
+    // filter result (state → re-render is async under userEvent's realistic event stream).
+    const search = screen.getByLabelText('Model picker search');
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.type(search, 'haiku');
+    await waitFor(() => expect(screen.queryByLabelText('GPT-4.1')).not.toBeInTheDocument());
 
     await user.click(screen.getByLabelText('Claude Haiku 4.5'));
     expect(onChange).toHaveBeenCalledWith('claude-haiku-4-5');
@@ -100,13 +105,16 @@ describe('SearchableSelect', () => {
     const user = userEvent.setup();
     await user.click(screen.getByLabelText('Model picker'));
 
-    await user.type(screen.getByLabelText('Model picker search'), '4-6');
+    // Same focus-settle + poll pattern as above: Ark autofocus races user.type.
+    const search = screen.getByLabelText('Model picker search');
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.type(search, '4-6');
+    await waitFor(() => expect(screen.queryByLabelText('GPT-4.1')).not.toBeInTheDocument());
     expect(screen.getByLabelText('Claude Sonnet 4.6')).toBeInTheDocument();
-    expect(screen.queryByLabelText('GPT-4.1')).not.toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText('Model picker search'));
-    await user.type(screen.getByLabelText('Model picker search'), 'nope');
-    expect(screen.getByText('No matches')).toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, 'nope');
+    await waitFor(() => expect(screen.getByText('No matches')).toBeInTheDocument());
   });
 
   it('supports keyboard selection: arrows move the highlight, Enter picks', async () => {
@@ -118,7 +126,11 @@ describe('SearchableSelect', () => {
 
     await user.click(screen.getByLabelText('Model picker'));
     const search = screen.getByLabelText('Model picker search');
+    // Focus settles async (Ark autofocus) — type only once keystrokes will land in the input,
+    // and wait for the filter to apply before driving the highlight.
+    await waitFor(() => expect(search).toHaveFocus());
     await user.type(search, 'claude');
+    await waitFor(() => expect(screen.queryByLabelText('GPT-4.1')).not.toBeInTheDocument());
     // Highlight starts on the first filtered option; ArrowDown moves to the second.
     await user.keyboard('{ArrowDown}{Enter}');
     expect(onChange).toHaveBeenCalledWith('claude-haiku-4-5');
