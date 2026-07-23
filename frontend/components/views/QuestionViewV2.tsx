@@ -184,6 +184,11 @@ export default function QuestionViewV2({
   const effectiveSourceFamily: SourceFamily = spreadsheetHasData
     ? 'spreadsheet'
     : queryHasData ? 'query' : sourceFamily;
+  // GUI/SQL run against the live warehouse connection; spreadsheet is throwaway
+  // scratch data saved inside the question. The toolbar leans on these to make
+  // that live-vs-scratch split unmistakable.
+  const queryActive = effectiveSourceFamily === 'query';
+  const spreadsheetActive = effectiveSourceFamily === 'spreadsheet';
 
   const activateSpreadsheet = useCallback(() => {
     if (queryHasData) return;
@@ -693,31 +698,69 @@ export default function QuestionViewV2({
                   once that block vanishes (spreadsheet is the active source). */}
               <div className="flex items-center gap-1.5 px-3 py-2">
                 {!spreadsheetHasData && (
-                  <div className="shrink-0">
-                    <QueryModeSelector
-                      mode={effectiveQueryMode}
-                      active={effectiveSourceFamily === 'query'}
-                      onModeChange={(m: QueryTab) => { activateQuery(); setUserPickedMode(true); setQueryMode(m); }}
-                      showSemanticTab={showSemanticTab}
-                      canUseSemantic={canUseSemantic}
-                      showVizTab={showVizControls && useCompactLayout}
-                      canUseViz={!!queryData}
-                    />
-                  </div>
-                )}
-                {!spreadsheetHasData && (
-                  <div className="min-w-0 shrink">
-                    <DatabaseSelector
-                      value={content.connection_name || ''}
-                      onChange={handleDatabaseChange}
-                      compact
-                    />
+                  /* LIVE SOURCE GROUP — GUI and SQL are two views of the SAME live
+                     warehouse connection. A neutral container binds the tabs, the
+                     connection selector, and a blue "LIVE" chip into one unit. The
+                     accent is blue (echoing the connection), deliberately NOT the
+                     green/teal the active tab already occupies — a green badge beside
+                     the green-teal tab reads muddy. The LIVE chip shows only while
+                     query is the active family. */
+                  <div
+                    className={cn(
+                      'flex h-[34px] min-w-0 shrink items-center gap-1.5 rounded-lg border bg-muted/40 pl-[3px]',
+                      queryActive ? 'pr-1.5' : 'pr-[3px]',
+                    )}
+                  >
+                    <div className="shrink-0">
+                      <QueryModeSelector
+                        mode={effectiveQueryMode}
+                        active={queryActive}
+                        onModeChange={(m: QueryTab) => { activateQuery(); setUserPickedMode(true); setQueryMode(m); }}
+                        showSemanticTab={showSemanticTab}
+                        canUseSemantic={canUseSemantic}
+                        showVizTab={showVizControls && useCompactLayout}
+                        canUseViz={!!queryData}
+                      />
+                    </div>
+                    {/* The connection only matters for GUI/SQL. Hide it when the
+                        spreadsheet is the active surface — local data touches no
+                        connection, so showing one here would be misleading. */}
+                    {queryActive && (
+                      <div className="min-w-0 shrink">
+                        <DatabaseSelector
+                          value={content.connection_name || ''}
+                          onChange={handleDatabaseChange}
+                          compact
+                        />
+                      </div>
+                    )}
+                    {queryActive && (
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div
+                              className="flex shrink-0 cursor-default items-center gap-1 rounded-full border border-[#2980b9]/25 bg-[#2980b9]/10 px-1.5 py-0.5"
+                              aria-label="Live connection"
+                            >
+                              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#2980b9]" />
+                              <span className="font-mono text-[10px] font-bold tracking-[0.04em] text-[#2980b9]">LIVE</span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">GUI &amp; SQL run live against this connection — results reflect current warehouse data</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </div>
                 )}
                 {/* Spacer only while the query block is shown — pushes the
                     spreadsheet toggle to the right; absent, it sits on the left. */}
                 {!spreadsheetHasData && <div className="min-w-0 flex-1" />}
                 {!queryHasData && (
+                  /* SCRATCH SOURCE — same height and solid border as the live group so
+                     the two sit as clean peers. Its "not live" meaning is carried by the
+                     persistent "Scratch" label and the grey LOCAL chip once active — not
+                     by a dashed border, which reads as unfinished next to the live group.
+                     Fills solid teal when it's the active surface. */
                   <TooltipProvider delayDuration={300}>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -725,29 +768,43 @@ export default function QuestionViewV2({
                           type="button"
                           role="group"
                           className={cn(
-                            'group flex shrink-0 cursor-pointer items-center gap-0 rounded-md px-1.5 py-1 transition-all duration-150',
-                            effectiveSourceFamily === 'spreadsheet'
-                              ? 'bg-[#16a085] text-white hover:bg-[#16a085] hover:text-white'
-                              : 'bg-transparent text-muted-foreground hover:bg-muted hover:text-muted-foreground',
+                            'flex h-[34px] shrink-0 cursor-pointer items-center gap-0 rounded-lg border px-2.5 transition-all duration-150',
+                            spreadsheetActive
+                              ? 'border-[#16a085] bg-[#16a085] text-white hover:bg-[#16a085] hover:text-white'
+                              : 'border-border bg-muted/40 text-muted-foreground hover:border-foreground/30 hover:bg-muted hover:text-muted-foreground',
                           )}
                           aria-label="Spreadsheet"
                           onClick={activateSpreadsheet}
                         >
                           <span className="flex shrink-0"><LuTable2 size={14} /></span>
-                          {/* Label collapsed to 0-width at rest; expands on hover or while active */}
-                          <span
-                            className={cn(
-                              'overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200',
-                              effectiveSourceFamily === 'spreadsheet'
-                                ? 'max-w-[120px] opacity-100'
-                                : 'max-w-0 opacity-0 group-hover:max-w-[120px] group-hover:opacity-100',
-                            )}
-                          >
-                            <span className="pl-1 font-mono text-xs font-semibold">Spreadsheet</span>
+                          <span className="whitespace-nowrap pl-1.5 font-mono text-xs font-semibold">
+                            {spreadsheetActive ? 'Spreadsheet' : 'Scratch'}
                           </span>
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="top">Build from a pasted or typed spreadsheet</TooltipContent>
+                      <TooltipContent side="top" portalled>Scratch data — type or paste rows. Not a live connection; saved inside this question.</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {/* LOCAL badge — the deliberate counterpart to the LIVE chip. Same
+                    shape, but a STILL grey dot (no pulse): the absence of the pulse is
+                    itself the "not live" signal. Shown only while the spreadsheet is
+                    the active surface. */}
+                {spreadsheetActive && (
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className="flex shrink-0 cursor-default items-center gap-1 rounded-full border bg-muted px-1.5 py-0.5"
+                          aria-label="Local data, not a live connection"
+                        >
+                          {/* Still dot — deliberately NOT pulsing: a pulse reads as "alive",
+                              the opposite of what this badge means. Stillness IS the signal. */}
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                          <span className="font-mono text-[10px] font-bold tracking-[0.04em] text-muted-foreground">LOCAL</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" portalled>Local data — typed or pasted and saved in this question. It doesn&apos;t refresh from a connection.</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}

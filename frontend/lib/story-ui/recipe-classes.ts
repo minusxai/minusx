@@ -2404,6 +2404,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "poppers)",
   "portal",
   "portal-free",
+  "portalled",
   "portals",
   "portals),",
   "position",

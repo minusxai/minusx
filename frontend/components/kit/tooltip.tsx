@@ -30,21 +30,31 @@ function TooltipTrigger({
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 
-// STORY PATCH vs shadcn source: no <TooltipPrimitive.Portal>. Stories render
-// inside <svg><foreignObject>, where `position: fixed` (which Radix's Portal +
-// Popper rely on) is broken — so content renders inline, inside the story root.
-// Radix still wraps content in an internal `[data-radix-popper-content-wrapper]`
-// div with `position: fixed`; the story stylesheet must include
-// STORY_FLOATING_CSS (see ../floating.ts) to force it to `absolute`.
-// `collisionBoundary` is left at its default; the mounting code should pass the
-// story root as the collision boundary via props where possible.
+// STORY PATCH vs shadcn source: no <TooltipPrimitive.Portal> BY DEFAULT. Stories
+// render inside <svg><foreignObject>, where `position: fixed` (which Radix's
+// Portal + Popper rely on) is broken — so content renders inline, inside the
+// story root. Radix still wraps content in an internal
+// `[data-radix-popper-content-wrapper]` div with `position: fixed`; the story
+// stylesheet must include STORY_FLOATING_CSS (see ../floating.ts) to force it to
+// `absolute`. `collisionBoundary` is left at its default; the mounting code
+// should pass the story root as the collision boundary via props where possible.
+//
+// Main-app callers (NOT inside a foreignObject) sitting in an `overflow-hidden`
+// or transformed panel must opt into `portalled` so the content escapes the
+// clipping ancestor and reaches the viewport — standard shadcn behavior. Stories
+// must NOT set it.
 function TooltipContent({
   className,
   sideOffset = 0,
+  portalled = false,
   children,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
-  return (
+}: React.ComponentProps<typeof TooltipPrimitive.Content> & {
+  /** Render the content in a Portal (document.body) so it escapes clipping/transformed
+   *  ancestors. Main-app only — leave false inside stories (foreignObject). */
+  portalled?: boolean
+}) {
+  const content = (
     <TooltipPrimitive.Content
       data-slot="tooltip-content"
       data-story-floating=""
@@ -59,6 +69,8 @@ function TooltipContent({
       <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground" />
     </TooltipPrimitive.Content>
   )
+
+  return portalled ? <TooltipPrimitive.Portal>{content}</TooltipPrimitive.Portal> : content
 }
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }

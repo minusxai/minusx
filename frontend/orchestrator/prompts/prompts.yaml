@@ -328,9 +328,15 @@ templates:
 
       ### Data Source — query vs spreadsheet (mutually exclusive)
       A question is backed by EXACTLY ONE source — never populate both:
-      - **Query** (default) — SQL against a connection: set `<query>` + `<connection_name>`; no `<spreadsheet>` element. Use for anything that reads from the database.
-      - **Spreadsheet** — data the USER hands you directly (pastes, dictates, "just add/type in/enter/make a table of…", or dummy/sample data) with NO database behind it: emit `<spreadsheet>` and set `<query></query>` + `<connection_name></connection_name>` empty. NEVER fabricate SQL to invent rows.
-      - Switching: query→spreadsheet = add `<spreadsheet>` and blank out `<query>`/`<connection_name>` in the same edit; spreadsheet→query = remove `<spreadsheet>` and set them.
+      - **Query** (default — this is almost always the answer) — SQL against a connection: set `<query>` + `<connection_name>`; no `<spreadsheet>` element. Use for anything that reads from, or could ever read from, the database.
+      - **Spreadsheet** — a NARROW escape hatch, NOT a general-purpose tool. Emit `<spreadsheet>` (with `<query></query>` + `<connection_name></connection_name>` empty) ONLY when BOTH are true: **(1)** the USER hands you the actual data IN CHAT (pastes rows, dictates the numbers, or explicitly says "just type in / enter / make a table of" the data they just gave you), AND **(2)** there is genuinely NO database behind those figures — the platform cannot query them from anywhere. Its ONLY purpose is to spare the user from hand-writing low-stakes, un-queryable data into a SQL query.
+      - **HARD RULES — provenance is sacred. Read these before ever emitting a `<spreadsheet>`:**
+        - NEVER put data in a spreadsheet on your own initiative, to "snapshot"/"capture"/"freeze" results, or because it seems convenient. If the user did not hand you the data in chat, it is NOT a spreadsheet.
+        - NEVER run a query, take its results, and write them into a spreadsheet. That DESTROYS provenance — the data can no longer refresh and can no longer be traced to its source. Query results MUST stay a live `<query>`.
+        - NEVER replace an existing `<query>` with a spreadsheet of the same (or similar) numbers. If a question already has SQL, the SQL stays. If the user asks to "put this in a spreadsheet" / "make this a table I can edit" on a question that already has a working query, do NOT just do it — use **Clarify** to double-check they understand the live query and its provenance will be lost, and only proceed if they confirm.
+        - NEVER fabricate SQL to invent rows the user handed you — that inversion is exactly what the spreadsheet exists to prevent.
+        - When unsure whether the data is (or could be) queryable, default to a query, or Clarify — do NOT reach for a spreadsheet.
+      - Switching: query→spreadsheet = add `<spreadsheet>` and blank out `<query>`/`<connection_name>` in the same edit — but only in the rare case above (user-supplied, un-queryable data), never to snapshot a live query; spreadsheet→query = remove `<spreadsheet>` and set them.
       ```xml
       <spreadsheet>
         <version>1</version>
@@ -909,7 +915,7 @@ templates:
       ```
       Prefer a saved question when one already shows the beat's evidence; reach for inline only for genuine one-offs. An inline `viz` is ALWAYS a full Viz V2 envelope — the same grammar as a saved question's viz (`vega-lite` | `recipe` | `table` | `pivot`, taught in the questions skill). Never write the legacy classic settings (`{type: "bar", xCols: …}`); omit `viz` entirely for a plain table.
 
-      **(D) Spreadsheet question — literal data, no SQL.** When the figures come from the user or an external source (pasted numbers, offline benchmarks) rather than a connection, embed the data directly:
+      **(D) Spreadsheet question — literal data, no SQL. A narrow escape hatch, use it rarely.** ONLY when the USER hands you the figures IN CHAT (pastes them, dictates them) AND there is no database behind them — pure un-queryable data the user wants captured without hand-writing SQL. Embed the data directly:
       ```
       <Question
         spreadsheet={{ version: 1,
@@ -919,7 +925,7 @@ templates:
         height="300px"
       />
       ```
-      `rows` are arrays of STRINGS (parsed per `columns[].type`: `auto` | `text` | `number` | `boolean` | `date`); no `connection`. NEVER use a spreadsheet to freeze numbers that exist in the warehouse — those must stay live ((A)–(C)); a spreadsheet embed is only for data the platform cannot query.
+      `rows` are arrays of STRINGS (parsed per `columns[].type`: `auto` | `text` | `number` | `boolean` | `date`); no `connection`. NEVER use a spreadsheet to freeze numbers that exist in the warehouse, and NEVER run a query and paste its results into a spreadsheet — that destroys provenance; those must stay live ((A)–(C)). A spreadsheet embed is only for user-supplied data the platform genuinely cannot query.
 
       **(E) Inline number, a live figure IN THE PROSE.** When a number belongs inside a sentence or a tight callout, use `<Number>`: it renders the live digits in a `<span>` that flows with the text, no card, no title bar.
       ```
