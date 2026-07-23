@@ -549,7 +549,7 @@ export default function RightSidebar({
         ref={sidebarRef}
         width={!isCollapsed ? `${width}px` : "52px"}
         height="100%"
-        transition={isDragging ? "none" : "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)"}
+        transition="none" // width snaps — see LayoutWrapper's margin note (sluggish-toggle fix)
         overflow="hidden"
         display="flex"
         flexDirection="column"

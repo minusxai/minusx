@@ -66,7 +66,7 @@ export const SvgPageSurface = ({ children }: SvgPageSurfaceProps) => {
     let t = 0
     const scheduleMeasure = () => {
       window.clearTimeout(t)
-      t = window.setTimeout(measure, 120)
+      t = window.setTimeout(measure, 60)
     }
     const ro = new ResizeObserver(scheduleMeasure)
     ro.observe(host)

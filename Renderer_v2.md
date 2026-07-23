@@ -13,6 +13,18 @@
    dashed band lines, identical to the live dev preview); dashboards carry `pl-10` default left
    padding as the badge column's home. `drawMarkerGutter` never changes canvas dimensions
    (contract test).
+3a. **Second user-testing round:** sidebar toggles now SNAP (the 300ms margin/width transitions
+   in LayoutWrapper/Sidebar/RightSidebar are gone — animating the pane width forced per-frame
+   grid relayouts + Vega resizes for the duration, and transformed foreignObject content can't
+   paint incrementally anyway); surface measure debounce trimmed to 60ms. Dashboard tiles are
+   SOLID `bg-card` surfaces (bg-muted/40 was near-invisible on dark — the "horrendous" barren
+   loading look). Markers are now PIXEL-PARITY with the live overlay: same 22px/13px badge
+   geometry and colors drawn at content scale in the reserved `MARKER_GUTTER_CSS_PX` (40px,
+   pl-10) gutter that dashboards, notebooks (pre-existing 40px), and reports carry — with a
+   14-output-px legibility floor that still fits the gutter at agent scale; stories keep their
+   authored margins (injecting structural padding would shift every curated story). Dev-loop
+   note: several "regressions" in this round were a STALE turbopack CSS chunk (classes present
+   in DOM, absent from served CSS) — restart the dev server before diagnosing.
 3. **Stale-paint bug on relayout (the "broken dashboard" and much of the sidebar jank)** —
    Chromium does not repaint transformed foreignObject content after a relayout (DOM/layout
    correct, old pixels survive until an unrelated invalidation like a scroll), and transform

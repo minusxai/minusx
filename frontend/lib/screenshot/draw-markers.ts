@@ -1,25 +1,22 @@
 /**
  * Paint the numbered position markers onto an already-captured content canvas (browser-only).
  *
- * WHY a post-capture draw (not CSS): the agent image is capped hard (AGENT_IMAGE_MAX_PX = 512), so a
- * ~1280px story is captured at ~0.4×. A CSS gutter in the live page would shrink with the content and
- * the numbers would be illegible. Drawing here, AFTER the content is scaled, lets the badges be sized
- * in FIXED output pixels — always legible — while only their POSITION tracks the content (band-top y ×
- * the capture's vertical scale). One helper, fed by story captures plus dashboards, so the numbering
- * is identical everywhere.
- *
- * OVERLAY, never extra width (user directive): badges paint over the view's OWN left padding and the
- * band lines run dashed across the content — exactly what the live PageMarkerDevOverlay shows. The
- * capture keeps the reader's geometry 1:1 (no phantom strip shifting every x-coordinate the agent
- * reasons about); views whose content hugs the left edge give themselves default padding instead
- * (DashboardView does). Marker geometry (which labels, at what document y) is the pure module.
+ * PARITY with the live overlay is the contract (user directive): the captured markers are the
+ * SAME badges and dashed band lines `PageMarkerDevOverlay` renders — same left inset, same
+ * 22px/13px geometry, same colors — drawn in CONTENT scale, inside the dedicated left padding
+ * every marker-flagged main-document view reserves (`MARKER_GUTTER_CSS_PX`; stories rely on
+ * their authored margins). The canvas is never widened and badges never drift onto content:
+ * what the agent sees is pixel-for-pixel what the reader sees.
  */
 import { pageMarkers, MARKER_CADENCE_PX } from './page-markers';
 
-/** Fixed OUTPUT-pixel column the badges are centered in — matches the live overlay's left inset. */
-export const MARKER_GUTTER_PX = 40;
-/** Fixed OUTPUT-pixel font size for badges — legible on a 512px-wide agent image regardless of shrink. */
-const MARKER_FONT_PX = 19;
+/** CSS-pixel gutter marker-flagged views reserve (Tailwind pl-10) — the badges' home. */
+export const MARKER_GUTTER_CSS_PX = 40;
+/** Live-overlay badge geometry (PageMarkerDevOverlay) — the capture mirrors these exactly. */
+const BADGE_LEFT_CSS = 4;
+const BADGE_TOP_CSS = 4;
+const BADGE_SIZE_CSS = 22;
+const BADGE_FONT_CSS = 13;
 
 interface GutterOpts {
   /** Full CSS-pixel height of the captured document (element.offsetHeight / svg or surface box height). */
@@ -50,23 +47,24 @@ export function drawMarkerGutter(content: HTMLCanvasElement, opts: GutterOpts): 
   if (!ctx) return content;
 
   const dark = opts.colorMode === 'dark';
-  // Output px per CSS px: content.height already equals docHeightCss × captureScale.
-  const vscale = content.height / opts.docHeightCssPx;
+  // Output px per CSS px: content.height already equals docHeightCss × captureScale. Everything
+  // below is the live overlay's CSS geometry multiplied by this one scale — parity by
+  // construction.
+  const s = content.height / opts.docHeightCssPx;
   const markers = pageMarkers(opts.docHeightCssPx, opts.cadencePx ?? MARKER_CADENCE_PX);
-  const cx = MARKER_GUTTER_PX / 2;
+  const lineW = Math.max(1, s);
 
-  ctx.font = `600 ${MARKER_FONT_PX}px ui-monospace, "SF Mono", Menlo, monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
   for (const m of markers) {
-    const bandTop = m.y * vscale;
+    const bandTop = m.y * s;
     // Faint dashed divider across the CONTENT at the band boundary (skip the very top edge) —
-    // same affordance the live dev overlay draws.
+    // the same 1px dashed border-top the live overlay draws.
     if (bandTop > 0.5) {
-      ctx.strokeStyle = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)';
+      ctx.lineWidth = lineW;
+      ctx.setLineDash([4 * s, 4 * s]);
       ctx.beginPath();
       ctx.moveTo(0, Math.round(bandTop) + 0.5);
       ctx.lineTo(content.width, Math.round(bandTop) + 0.5);
@@ -74,18 +72,25 @@ export function drawMarkerGutter(content: HTMLCanvasElement, opts: GutterOpts): 
       ctx.setLineDash([]);
     }
     const label = String(m.label);
-    // Badge sits just below the band top; clamp so the last band's badge stays on-canvas.
-    const badgeH = MARKER_FONT_PX + 6;
-    const cy = Math.min(content.height - badgeH / 2 - 2, bandTop + badgeH / 2 + 3);
-    const badgeW = Math.max(badgeH, MARKER_FONT_PX * 0.62 * label.length + 12);
+    // Badge box: the overlay's 22px/13px geometry at content scale, with a LEGIBILITY FLOOR of
+    // 14 output px (an agent image at ~0.45× would otherwise carry ~6px numerals). The floored
+    // badge still fits the reserved 40px-CSS gutter at agent scale, so it never crosses into
+    // content — position and style stay identical to the live overlay.
+    const badgeH = Math.max(BADGE_SIZE_CSS * s, 14);
+    const font = Math.max(BADGE_FONT_CSS * s, badgeH - 9);
+    ctx.font = `600 ${font}px ui-monospace, "SF Mono", Menlo, monospace`;
+    const badgeW = Math.max(badgeH, font * 0.62 * label.length + 8);
+    const bx = BADGE_LEFT_CSS * s;
+    // Clamp so the last band's badge stays on-canvas.
+    const by = Math.min(content.height - badgeH - 2, bandTop + BADGE_TOP_CSS * s);
     ctx.fillStyle = dark ? '#0D1117' : '#FFFFFF';
-    roundRectPath(ctx, cx - badgeW / 2, cy - badgeH / 2, badgeW, badgeH, 5);
+    roundRectPath(ctx, bx, by, badgeW, badgeH, Math.max(3, 5 * s));
     ctx.fill();
-    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.18)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)';
+    ctx.lineWidth = lineW;
     ctx.stroke();
     ctx.fillStyle = dark ? '#E6EDF3' : '#1F2328';
-    ctx.fillText(label, cx, cy + 0.5);
+    ctx.fillText(label, bx + badgeW / 2, by + badgeH / 2 + 0.5);
   }
   return content;
 }

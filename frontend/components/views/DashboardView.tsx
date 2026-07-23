@@ -391,7 +391,7 @@ export default function DashboardView({
             // merges these classes onto its positioned item, and transform transitions inside the
             // foreignObject surface freeze mid-animation (Chromium paint-invalidation; see the
             // grid-level transition:none rule below).
-            className={`flex flex-col overflow-hidden rounded-md bg-muted/40 transition-[border-color,background-color,opacity] duration-200 ${publishMark ? 'border-2' : 'border'} ${borderClass} ${opacityClass}`}
+            className={`flex flex-col overflow-hidden rounded-md bg-card transition-[border-color,background-color,opacity] duration-200 ${publishMark ? 'border-2' : 'border'} ${borderClass} ${opacityClass}`}
           >
             {/* Windowed (Renderer_v2 Phase 7): off-viewport tiles are BUSY layout ghosts;
                 the capture readiness gate force-mounts them (see WindowedTile). */}
@@ -417,7 +417,7 @@ export default function DashboardView({
       return (
         <div
           key={key}
-          className="flex flex-col overflow-hidden rounded-md border border-border bg-muted/40"
+          className="flex flex-col overflow-hidden rounded-md border border-border bg-card"
         >
           {/* Stable callbacks (memoized) so React.memo(TextBlockCard) can skip
               re-rendering the OTHER text blocks when one block's content changes. */}

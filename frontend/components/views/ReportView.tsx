@@ -149,7 +149,8 @@ export default function ReportView({
     // Overlay OUTSIDE the captured [data-file-id] subtree (StoryView contract).
     <div className="relative flex min-h-0 flex-1 flex-col">
       <PageMarkerDevOverlay enabled={!!showDevMarkers} colorMode={colorMode ?? 'light'} />
-    <div data-file-id={fileId} className="flex min-h-0 flex-1 flex-col overflow-hidden font-mono">
+    {/* pl-10: the dedicated marker-gutter every marker-flagged view reserves (MARKER_GUTTER_CSS_PX). */}
+    <div data-file-id={fileId} className="flex min-h-0 flex-1 flex-col overflow-hidden pl-10 font-mono">
       {/* Status bar: Live/Draft toggle */}
       <StatusBanner
         status={report.status ?? 'draft'}
