@@ -45,17 +45,19 @@ const WORKBENCH_CONFIG = { ...EMBED_CONFIG, showHeader: true }
 
 const busyEls = () => document.querySelectorAll('[data-mx-busy="true"]')
 
-function mount(props: Partial<React.ComponentProps<typeof QuestionVisualization>>) {
-  return renderWithProviders(
-    <QuestionVisualization
-      currentState={content()}
-      config={EMBED_CONFIG}
-      loading={false}
-      error={undefined}
-      data={undefined}
-      {...props}
-    />,
-  )
+type VizProps = React.ComponentProps<typeof QuestionVisualization>
+
+function mount(props: Partial<VizProps>) {
+  const base: VizProps = {
+    currentState: content(),
+    config: EMBED_CONFIG,
+    loading: false,
+    error: null,
+    data: null,
+    onVizTypeChange: () => {},
+    onAxisChange: () => {},
+  }
+  return renderWithProviders(<QuestionVisualization {...base} {...props} />)
 }
 
 describe('headerless embed pre-result state is BUSY (capture readiness)', () => {
