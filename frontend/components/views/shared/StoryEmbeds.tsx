@@ -17,7 +17,7 @@
 import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Provider as ReduxStoreProvider } from 'react-redux';
-import { Box, ChakraProvider, EnvironmentProvider } from '@chakra-ui/react';
+import { ChakraProvider, EnvironmentProvider } from '@chakra-ui/react';
 
 import { getOrCreateStore } from '@/store/store';
 import { withColorModeOverride } from '@/store/color-mode-override';
@@ -26,7 +26,7 @@ import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbedde
 import EmbeddedQuestionContainer from '@/components/containers/EmbeddedQuestionContainer';
 import StoryParamControl from '@/components/views/story/StoryParamControl';
 import InlineNumber from '@/components/views/story/InlineNumber';
-import { HStack, Icon, IconButton, Menu, Portal } from '@chakra-ui/react';
+import { Menu, Portal } from '@chakra-ui/react';
 import { LuEllipsis, LuExternalLink } from 'react-icons/lu';
 import { storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story/story-params';
 import type { InlineNumberEmbed } from '@/lib/data/story/story-number';
@@ -34,6 +34,12 @@ import type { InlineQuestionEmbed } from '@/lib/data/story/story-question';
 import type { QuestionContent } from '@/lib/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
+
+// The embed card's chrome as TOKEN CLASSES (compiled into every story's CSS — this file is in
+// EMBED_CHROME_FILES): the story iframe has no other style source, so Chakra props on these
+// wrappers resolve to nothing there (the collapsed-embed staging regression). Sizing comes from
+// the placeholder's inline style (sizeEmbedEl) + `.mx-chart-fill` (height:100% guard).
+const EMBED_CARD_CLASSES = 'rounded-md border border-border bg-card';
 
 export interface ChartTarget {
   el: HTMLElement;
@@ -136,7 +142,7 @@ export default function StoryEmbeds({
   return (
     <StoryEmbedProviders doc={doc} colorMode={colorMode}>
           {targets.map((t, i) => createPortal(
-            <Box className="mx-chart-fill" bg="bg.subtle" borderWidth="1px" borderColor="border.default" borderRadius="md" overflow="hidden" display="flex" flexDirection="column">
+            <div aria-label="Question embed" className={`mx-chart-fill ${EMBED_CARD_CLASSES}`}>
               <SmartEmbeddedQuestionContainer
                 questionId={t.questionId}
                 vizOverride={t.vizOverride}
@@ -156,18 +162,14 @@ export default function StoryEmbeds({
                   vizOverride: t.vizOverride ?? null,
                 }) : undefined}
               />
-            </Box>,
+            </div>,
             t.el,
             `${i}-${t.questionId}`,
           ))}
           {inlineTargets.map((t, i) => createPortal(
-            <Box
-              className="mx-chart-fill"
-              position="relative"
-              {...(t.bare ? {} : { bg: 'bg.subtle', borderWidth: '1px', borderColor: 'border.default', borderRadius: 'md' })}
-              overflow="hidden"
-              display="flex"
-              flexDirection="column"
+            <div
+              aria-label="Question embed"
+              className={`mx-chart-fill relative ${t.bare ? '' : EMBED_CARD_CLASSES}`}
             >
               <EmbeddedQuestionContainer
                 question={t.content}
@@ -180,51 +182,39 @@ export default function StoryEmbeds({
               {/* Same "Card actions" menu the saved cards get (SmartEmbeddedQuestionContainer) —
                   inline cards have no title bar, so it floats top-right. */}
               {editable && onEditQuestion && t.embed && (
-                <Box position="absolute" top={2} right={2} zIndex={2}>
+                <div className="absolute right-2 top-2 z-[2]">
+                  {/* ark-ui Menu (via EnvironmentProvider) portals into and positions against the
+                      IFRAME document — but its Chakra recipe styles never reach the iframe, so
+                      every visual is a token class compiled into the story CSS. */}
                   <Menu.Root>
                     <Menu.Trigger asChild>
-                      <IconButton
-                        variant="ghost"
-                        size="xs"
+                      <button
+                        type="button"
                         aria-label="Card actions"
-                        color="fg.muted"
-                        _hover={{ color: 'fg.default' }}
-                        _focusVisible={{ outline: 'none', boxShadow: 'none' }}
+                        className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground"
                       >
-                        <LuEllipsis />
-                      </IconButton>
+                        <LuEllipsis className="size-4" />
+                      </button>
                     </Menu.Trigger>
                     <Portal>
                       <Menu.Positioner>
-                        <Menu.Content
-                          minW="180px"
-                          bg="bg.surface"
-                          borderColor="border.default"
-                          shadow="lg"
-                          p={1}
-                        >
+                        <Menu.Content className="z-50 min-w-[180px] rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
                           <Menu.Item
                             value="edit"
-                            cursor="pointer"
-                            borderRadius="sm"
-                            px={3}
-                            py={2}
-                            _hover={{ bg: 'bg.muted' }}
                             onClick={() => onEditQuestion({ kind: 'inline', index: i, embed: t.embed! })}
                             aria-label="Edit question"
+                            className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
                           >
-                            <HStack gap={2}>
-                              <Icon as={LuExternalLink} boxSize={4} />
-                              <span>Edit question</span>
-                            </HStack>
+                            <LuExternalLink className="size-4" />
+                            <span>Edit question</span>
                           </Menu.Item>
                         </Menu.Content>
                       </Menu.Positioner>
                     </Portal>
                   </Menu.Root>
-                </Box>
+                </div>
               )}
-            </Box>,
+            </div>,
             t.el,
             `inline-${i}`,
           ))}

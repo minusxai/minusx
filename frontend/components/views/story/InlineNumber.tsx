@@ -7,7 +7,7 @@
  * click it to reveal the source question's chart in a popover (footnote-style).
  */
 import { useState } from 'react';
-import { Box, Button, Popover, Portal } from '@chakra-ui/react';
+import { Popover, Portal } from '@chakra-ui/react';
 import { LuPencil } from 'react-icons/lu';
 import type { CSSProperties } from 'react';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
@@ -32,17 +32,22 @@ function formatCell(v: unknown): string {
  * editor must live outside it. In edit mode this panel just offers the "Edit query" trigger.
  */
 function QueryPanel({ query, editable, onEdit }: { query: string; editable?: boolean; onEdit?: () => void }) {
-  const wrap: CSSProperties = { padding: '10px 12px', borderBottom: '1px solid #e5e7eb', background: '#fafafa' };
-  const label: CSSProperties = { fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6b7280', marginBottom: '4px' };
-  const mono: CSSProperties = { fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '11px', color: '#111827', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0, maxHeight: '120px', overflow: 'auto' };
+  // Token classes throughout (compiled into the story CSS — this file is in EMBED_CHROME_FILES):
+  // the popover renders inside the story iframe, where Chakra/emotion styles never resolve, and
+  // the tokens keep it correct in both color modes (the old hardcoded light grays didn't).
   return (
-    <div style={wrap}>
-      <div style={label}>Source query</div>
-      <pre aria-label="inline number query" style={mono}>{query}</pre>
+    <div className="border-b border-border bg-muted/50 px-3 py-2.5">
+      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Source query</div>
+      <pre aria-label="inline number query" className="m-0 max-h-[120px] overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-foreground">{query}</pre>
       {editable && onEdit && (
-        <Button size="xs" mt={2} variant="outline" aria-label="edit inline number query" onClick={onEdit}>
-          <LuPencil /> Edit query
-        </Button>
+        <button
+          type="button"
+          aria-label="edit inline number query"
+          onClick={onEdit}
+          className="mt-2 inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
+        >
+          <LuPencil className="size-3" /> Edit query
+        </button>
       )}
     </div>
   );
@@ -79,16 +84,19 @@ function NumberSpan({ embed, text, source, query, editable, onEditQuery, loading
       </Popover.Trigger>
       <Portal>
         <Popover.Positioner>
-          <Popover.Content width="420px" maxW="90vw">
-            <Popover.Arrow />
-            <Popover.Body p={0}>
-              {query != null && query !== '' && (
-                <QueryPanel key={query} query={query} editable={editable} onEdit={onEditQuery} />
-              )}
-              {source != null && (
-                <Box height="260px" overflow="hidden" borderRadius="md">{source}</Box>
-              )}
-            </Popover.Body>
+          {/* ark-ui positions the popover against the IFRAME document (EnvironmentProvider), but
+              its Chakra recipe styling never reaches the iframe — every visual below is a token
+              class compiled into the story CSS. */}
+          <Popover.Content
+            aria-label="Number footnote"
+            className="z-50 w-[420px] max-w-[90vw] overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-lg outline-none"
+          >
+            {query != null && query !== '' && (
+              <QueryPanel key={query} query={query} editable={editable} onEdit={onEditQuery} />
+            )}
+            {source != null && (
+              <div className="h-[260px] overflow-hidden rounded-md">{source}</div>
+            )}
           </Popover.Content>
         </Popover.Positioner>
       </Portal>

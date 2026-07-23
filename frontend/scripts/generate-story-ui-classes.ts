@@ -43,6 +43,13 @@ export const EMBED_CHROME_FILES = [
   join(ROOT, 'components', 'plotx', 'ChartError.tsx'),
   join(ROOT, 'components', 'params', 'SourceDropdownWidget.tsx'),
   join(ROOT, 'components', 'params', 'InlineSqlDropdownWidget.tsx'),
+  // The embed WRAPPER chrome itself: these render the card/menu/footnote chrome INSIDE the
+  // story iframe, so their token classes must be part of every story's compiled CSS. (They were
+  // Chakra Boxes before Jul 2026 — a style channel that never reaches the iframe; see
+  // lib/story-ui/__tests__/embed-chrome-coverage.test.ts.)
+  join(ROOT, 'components', 'views', 'shared', 'StoryJsxBody.tsx'),
+  join(ROOT, 'components', 'views', 'shared', 'StoryEmbeds.tsx'),
+  join(ROOT, 'components', 'views', 'story', 'InlineNumber.tsx'),
 ];
 const OUT_FILE = join(ROOT, 'lib', 'story-ui', 'recipe-classes.ts');
 
