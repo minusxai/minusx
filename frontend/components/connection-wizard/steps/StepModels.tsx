@@ -2,7 +2,7 @@
 
 /**
  * Setup-wizard step 0: connect an AI model provider. Reuses the settings
- * `LlmModelsSection` (providers + test connection + optional assignments);
+ * `LlmModelsSection` (providers + test connection + optional grade mappings);
  * skippable — a deployment configured via env vars works without it.
  */
 

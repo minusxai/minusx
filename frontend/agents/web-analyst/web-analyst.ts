@@ -71,6 +71,7 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     LoadContext.schema,
   ];
   static model = getAgentModelOrTestFallback(FAUX_MODEL);
+  static override readonly llmAgent = 'web-analyst';
   // Call-time stream options (spread blindly into `streamSimple`). Default
   // `reasoning: 'low'` so adaptive thinking is on out of the box; the DB model
   // plan's options merge over these per call (Settings → Models assignments).

@@ -316,10 +316,11 @@ build_llm_json() {
   [ -n "$LLM_BASE_URL" ]   && entry_fields="$entry_fields,\"baseUrl\":\"$(json_escape "$LLM_BASE_URL")\""
   LLM_ENTRY_JSON="{$entry_fields}"
   if [ "$LLM_KIND" = "managed" ]; then
-    # Managed provider: no assignments needed — the gateway routes per use case.
+    # Managed provider: no grade mappings needed — the gateway routes per grade.
     LLM_JSON="{\"providers\":[$LLM_ENTRY_JSON]}"
   else
-    LLM_JSON="{\"providers\":[$LLM_ENTRY_JSON],\"assignments\":{\"analyst\":{\"chain\":[{\"providerName\":\"$(json_escape "$LLM_PROVIDER_ID")\",\"model\":\"$(json_escape "$LLM_ANALYST_MODEL")\"}]},\"micro\":{\"chain\":[{\"providerName\":\"$(json_escape "$LLM_PROVIDER_ID")\",\"model\":\"$(json_escape "$LLM_MICRO_MODEL")\"}]}}}"
+    local pn="\"providerName\":\"$(json_escape "$LLM_PROVIDER_ID")\""
+    LLM_JSON="{\"providers\":[$LLM_ENTRY_JSON],\"grades\":{\"lite\":{$pn,\"model\":\"$(json_escape "$LLM_LITE_MODEL")\"},\"core\":{$pn,\"model\":\"$(json_escape "$LLM_CORE_MODEL")\"},\"advanced\":{$pn,\"model\":\"$(json_escape "$LLM_ADVANCED_MODEL")\"}}}"
   fi
 }
 
@@ -342,23 +343,27 @@ interview_llm_credentials() {
 
 interview_llm_models() {
   [ "$LLM_KIND" = "managed" ] && return 0
-  local analyst_default="" micro_default=""
+  local lite_default="" core_default="" advanced_default=""
   if [ "$HAVE_COMPAT" = 1 ] && [ "$LLM_KIND" = "registry" ]; then
-    analyst_default=$(compat "
+    lite_default=$(compat "
 p = next(p for p in data['llm']['providers'] if p['id'] == '$LLM_PROVIDER_ID')
-print(p.get('defaults', {}).get('analyst', ''))")
-    micro_default=$(compat "
+print(p.get('defaults', {}).get('lite', ''))")
+    core_default=$(compat "
 p = next(p for p in data['llm']['providers'] if p['id'] == '$LLM_PROVIDER_ID')
-print(p.get('defaults', {}).get('micro', ''))")
+print(p.get('defaults', {}).get('core', ''))")
+    advanced_default=$(compat "
+p = next(p for p in data['llm']['providers'] if p['id'] == '$LLM_PROVIDER_ID')
+print(p.get('defaults', {}).get('advanced', ''))")
     info "Suggested models:"
     compat "
 p = next(p for p in data['llm']['providers'] if p['id'] == '$LLM_PROVIDER_ID')
-rec = p.get('recommended', {})
-for uc in ('analyst', 'micro'):
-    for m in rec.get(uc, []): print(f\"    - {m}  ({uc})\")" > /dev/tty
+defaults = p.get('defaults', {})
+for grade in ('lite', 'core', 'advanced'):
+    if defaults.get(grade): print(f\"    - {defaults[grade]}  ({grade})\")" > /dev/tty
   fi
-  ask "Analyst model ${DIM}(main chat/analysis agent)${RESET}" "$analyst_default"; LLM_ANALYST_MODEL="$REPLY_VALUE"
-  ask "Micro model ${DIM}(titles, summaries — a small fast model)${RESET}" "${micro_default:-$LLM_ANALYST_MODEL}"; LLM_MICRO_MODEL="$REPLY_VALUE"
+  ask "Lite model ${DIM}(fast + cheap — titles, summaries)${RESET}" "$lite_default"; LLM_LITE_MODEL="$REPLY_VALUE"
+  ask "Core model ${DIM}(balanced default — most analysis)${RESET}" "${core_default:-$LLM_LITE_MODEL}"; LLM_CORE_MODEL="$REPLY_VALUE"
+  ask "Advanced model ${DIM}(strongest — hardest analysis)${RESET}" "${advanced_default:-$LLM_CORE_MODEL}"; LLM_ADVANCED_MODEL="$REPLY_VALUE"
 }
 
 interview_connection_fields() { # <type> — builds CONN_CONFIG_JSON; empty on abort

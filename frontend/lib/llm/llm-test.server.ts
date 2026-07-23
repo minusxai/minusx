@@ -68,7 +68,9 @@ export async function testLlmEntry(
   let callOptions: Record<string, unknown> | undefined;
   try {
     const catalog = await getModelCatalog();
-    const step = buildPlanStep(entry, { providerName: entry.name, model: choice.model, options: choice.options }, 'analyst', catalog);
+    // The probe rides the core grade (compat core default for model-less
+    // registry entries; `core` in the minusx routing header).
+    const step = buildPlanStep(entry, { providerName: entry.name, model: choice.model, options: choice.options }, 'core', catalog);
     model = step.model;
     callOptions = step.callOptions;
   } catch (err) {

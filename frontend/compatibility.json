@@ -32,18 +32,9 @@
           }
         ],
         "defaults": {
-          "analyst": "claude-sonnet-4-6",
-          "micro": "claude-haiku-4-5"
-        },
-        "recommended": {
-          "analyst": [
-            "claude-sonnet-5",
-            "claude-opus-4-8",
-            "claude-sonnet-4-6"
-          ],
-          "micro": [
-            "claude-haiku-4-5"
-          ]
+          "lite": "claude-haiku-4-5",
+          "core": "claude-sonnet-5",
+          "advanced": "claude-opus-4-8"
         }
       },
       {
@@ -60,22 +51,9 @@
           }
         ],
         "defaults": {
-          "analyst": "gpt-5.6-terra",
-          "micro": "gpt-5.6-luna"
-        },
-        "recommended": {
-          "analyst": [
-            "gpt-5.6-terra",
-            "gpt-5.6-luna",
-            "gpt-5.6-sol",
-            "gpt-5.5",
-            "gpt-5.4"
-          ],
-          "micro": [
-            "gpt-5.4-mini",
-            "gpt-5.4-nano",
-            "gpt-5.6-luna"
-          ]
+          "lite": "gpt-5.6-luna",
+          "core": "gpt-5.6-terra",
+          "advanced": "gpt-5.6-sol"
         }
       },
       {
@@ -92,18 +70,9 @@
           }
         ],
         "defaults": {
-          "analyst": "gemini-3.1-pro-preview",
-          "micro": "gemini-3.5-flash"
-        },
-        "recommended": {
-          "analyst": [
-            "gemini-3.1-pro-preview",
-            "gemini-2.5-pro"
-          ],
-          "micro": [
-            "gemini-3.5-flash",
-            "gemini-2.5-flash"
-          ]
+          "lite": "gemini-3.5-flash",
+          "core": "gemini-3.1-pro-preview",
+          "advanced": "gemini-3.1-pro-preview"
         }
       },
       {
@@ -127,22 +96,9 @@
           }
         ],
         "defaults": {
-          "analyst": "global.anthropic.claude-sonnet-4-6",
-          "micro": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
-        },
-        "recommended": {
-          "analyst": [
-            "global.anthropic.claude-sonnet-4-6",
-            "global.anthropic.claude-sonnet-5",
-            "global.anthropic.claude-opus-4-8",
-            "us.anthropic.claude-sonnet-5",
-            "us.anthropic.claude-opus-4-8",
-            "us.anthropic.claude-sonnet-4-6"
-          ],
-          "micro": [
-            "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-            "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-          ]
+          "lite": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+          "core": "global.anthropic.claude-sonnet-5",
+          "advanced": "global.anthropic.claude-opus-4-8"
         }
       },
       {

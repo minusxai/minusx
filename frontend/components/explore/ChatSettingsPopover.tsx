@@ -10,13 +10,17 @@ import {
   Portal,
   Text,
 } from '@chakra-ui/react';
+import type { IconType } from 'react-icons';
 import {
   LuBookOpen,
   LuBot,
   LuBrainCircuit,
   LuChevronDown,
   LuDatabase,
+  LuGauge,
   LuSettings2,
+  LuSparkles,
+  LuZap,
 } from 'react-icons/lu';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContexts } from '@/lib/hooks/useContexts';
@@ -25,7 +29,7 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { ContextContent } from '@/lib/types';
-import type { ChatModelCatalog, ChatModelSelection } from '@/lib/llm/llm-config-types';
+import type { ChatGradeCatalog, LlmGrade } from '@/lib/llm/llm-config-types';
 import {
   SearchableSelect,
   type SearchableOption,
@@ -38,13 +42,35 @@ import {
   resolveContextSelectorValue,
 } from './context-selector-options';
 
-const DEFAULT_MODEL = '__configured_default__';
+const DEFAULT_GRADE = '__default_grade__';
+
+/** Display metadata for the grade picker (grade ids stay lowercase in
+ *  config/wire). GRADES ONLY — never provider/model identity: which model a
+ *  grade resolves to is a behind-the-scenes workspace concern. */
+const GRADE_META: Record<LlmGrade, { label: string; icon: IconType; description: string }> = {
+  lite: {
+    label: 'Lite',
+    icon: LuZap,
+    description: 'Fastest and lightest — quick lookups and small edits.',
+  },
+  core: {
+    label: 'Core',
+    icon: LuGauge,
+    description: 'Optimized for most tasks — fast, dependable analysis.',
+  },
+  advanced: {
+    label: 'Advanced',
+    icon: LuSparkles,
+    description: 'A more powerful model for the hardest questions — slower and uses ~2x more tokens.',
+  },
+};
+const GRADE_LABELS: Record<LlmGrade, string> = { lite: 'Lite', core: 'Core', advanced: 'Advanced' };
 
 export interface ChatSettingsPopoverProps {
   databaseName: string;
   onDatabaseChange: (name: string) => void;
-  selectedModel: ChatModelSelection | null;
-  onModelChange: (model: ChatModelSelection | null) => void;
+  selectedGrade: LlmGrade | null;
+  onGradeChange: (grade: LlmGrade | null) => void;
   modelDisabled?: boolean;
   selectedContextPath?: string | null;
   selectedVersion?: number;
@@ -102,15 +128,11 @@ function SettingsCombobox({
   );
 }
 
-function modelValue(selection: ChatModelSelection): string {
-  return JSON.stringify([selection.providerName, selection.model ?? null]);
-}
-
 export default function ChatSettingsPopover({
   databaseName,
   onDatabaseChange,
-  selectedModel,
-  onModelChange,
+  selectedGrade,
+  onGradeChange,
   modelDisabled = false,
   selectedContextPath,
   selectedVersion,
@@ -119,7 +141,7 @@ export default function ChatSettingsPopover({
   compactSummary = false,
 }: ChatSettingsPopoverProps) {
   const [open, setOpen] = useState(false);
-  const [catalog, setCatalog] = useState<ChatModelCatalog | null>(null);
+  const [catalog, setCatalog] = useState<ChatGradeCatalog | null>(null);
   const stableOnContextChange = useStableCallback(onContextChange);
   const user = useAppSelector((state) => state.auth.user);
   const canChooseContext = !!user && isAdmin(user.role);
@@ -133,11 +155,11 @@ export default function ChatSettingsPopover({
     fetch('/api/llm/chat-models', { credentials: 'include' })
       .then((response) => (response.ok ? response.json() : null))
       .then((body) => {
-        if (!cancelled && body?.data?.defaultModel && Array.isArray(body.data.models)) {
-          setCatalog(body.data as ChatModelCatalog);
+        if (!cancelled && body?.data?.defaultGrade && Array.isArray(body.data.grades)) {
+          setCatalog(body.data as ChatGradeCatalog);
         }
       })
-      .catch(() => { /* The configured default remains available without model metadata. */ });
+      .catch(() => { /* The workspace default grade remains available without catalog metadata. */ });
     return () => { cancelled = true; };
   }, []);
 
@@ -179,60 +201,42 @@ export default function ChatSettingsPopover({
     if (publishedVersion) stableOnContextChange(homeSelectableContext.path, publishedVersion);
   }, [homeSelectableContext, selectedContextPath, stableOnContextChange]);
 
-  const { modelOptions, modelSelections } = useMemo(() => {
-    const selections = new Map<string, ChatModelSelection | null>([[DEFAULT_MODEL, null]]);
+  const modelOptions = useMemo(() => {
+    const defaultMeta = catalog ? GRADE_META[catalog.defaultGrade] : undefined;
     const options: ComboboxOption[] = [{
-      value: DEFAULT_MODEL,
-      label: catalog?.defaultModel.modelLabel ?? 'Default model',
-      subtitle: catalog
-        ? [catalog.defaultModel.providerLabel, catalog.defaultModel.model]
-            .filter(Boolean)
-            .join(' · ')
-        : 'Follows Settings → Models',
+      value: DEFAULT_GRADE,
+      label: defaultMeta?.label ?? 'Default',
+      icon: defaultMeta?.icon,
+      description: defaultMeta?.description ?? 'Follows Settings → Models',
       badge: 'recommended',
       group: 'Workspace default',
     }];
 
-    for (const model of catalog?.models ?? []) {
-      if (
-        model.providerName === catalog?.defaultModel.providerName
-        && (model.model ?? null) === (catalog.defaultModel.model ?? null)
-      ) {
-        continue;
-      }
-      const value = modelValue(model);
-      selections.set(value, {
-        providerName: model.providerName,
-        ...(model.model ? { model: model.model } : {}),
-      });
+    for (const option of catalog?.grades ?? []) {
+      if (option.grade === catalog?.defaultGrade) continue;
+      const meta = GRADE_META[option.grade];
       options.push({
-        value,
-        label: model.modelLabel,
-        subtitle: model.model && model.model !== model.modelLabel ? model.model : undefined,
-        group: model.providerLabel,
+        value: option.grade,
+        label: meta.label,
+        icon: meta.icon,
+        description: option.configured ? meta.description : 'Not configured for this workspace.',
+        disabled: !option.configured,
       });
     }
 
-    if (selectedModel) {
-      const value = modelValue(selectedModel);
-      if (!selections.has(value)) {
-        selections.set(value, selectedModel);
-        options.push({
-          value,
-          label: selectedModel.model ?? selectedModel.providerName,
-          group: 'Selected override',
-        });
-      }
+    if (selectedGrade && selectedGrade !== catalog?.defaultGrade && !options.some((o) => o.value === selectedGrade)) {
+      options.push({ value: selectedGrade, label: GRADE_LABELS[selectedGrade], group: 'Selected override' });
     }
 
-    return { modelOptions: options, modelSelections: selections };
-  }, [catalog, selectedModel]);
+    return options;
+  }, [catalog, selectedGrade]);
 
-  const selectedModelValue = selectedModel ? modelValue(selectedModel) : DEFAULT_MODEL;
-  const modelSummary = modelOptions.find((option) => option.value === selectedModelValue)?.label
-    ?? selectedModel?.model
-    ?? selectedModel?.providerName
-    ?? 'Default';
+  // The default grade selects the sentinel (an explicit pick of the default is
+  // the same as no override — the workspace default stays authoritative).
+  const selectedModelValue = selectedGrade && selectedGrade !== catalog?.defaultGrade ? selectedGrade : DEFAULT_GRADE;
+  const modelSummary = selectedGrade
+    ? GRADE_LABELS[selectedGrade]
+    : (catalog ? GRADE_LABELS[catalog.defaultGrade] : 'Default');
   const databaseComboboxOptions = useMemo(
     () => databaseOptions.map((name) => ({ value: name, label: name })),
     [databaseOptions],
@@ -459,15 +463,15 @@ export default function ChatSettingsPopover({
                     </Text>
                     <Text aria-hidden="true" fontSize="2xs" color="fg.subtle" lineHeight="1" flexShrink={0}>·</Text>
                     <Text truncate minW={0} fontSize="2xs" color="fg.muted" lineHeight="1">
-                      Agent's primary LLM
+                      Agent's primary LLM grade
                     </Text>
                   </HStack>
                   <SettingsCombobox
                     options={modelOptions}
                     value={selectedModelValue}
-                    onChange={(value) => onModelChange(modelSelections.get(value) ?? null)}
+                    onChange={(value) => onGradeChange(value === DEFAULT_GRADE ? null : value as LlmGrade)}
                     label="LLM"
-                    placeholder="Default model"
+                    placeholder="Default grade"
                     disabled={modelDisabled}
                   />
                 </Box>

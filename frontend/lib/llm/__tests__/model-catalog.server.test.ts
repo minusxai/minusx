@@ -85,7 +85,7 @@ describe('buildPlanStep with a live catalog', () => {
   const entry = { name: 'oa', provider: 'openai', apiKey: 'k' };
 
   it('resolves a model id newer than the baked registry via the catalog', () => {
-    const step = buildPlanStep(entry, { providerName: 'oa', model: 'gpt-5.6' }, 'analyst', catalog);
+    const step = buildPlanStep(entry, { providerName: 'oa', model: 'gpt-5.6' }, 'core', catalog);
     const model = step.model as { id: string; provider: string; contextWindow: number; reasoning: boolean };
     expect(model.id).toBe('gpt-5.6');
     expect(model.provider).toBe('openai');
@@ -95,12 +95,12 @@ describe('buildPlanStep with a live catalog', () => {
   });
 
   it('still throws for a model unknown to both registry and catalog', () => {
-    expect(() => buildPlanStep(entry, { providerName: 'oa', model: 'gpt-99-fake' }, 'analyst', catalog))
+    expect(() => buildPlanStep(entry, { providerName: 'oa', model: 'gpt-99-fake' }, 'core', catalog))
       .toThrow(/not in the model registry/);
   });
 
   it('baked registry models are unaffected by the catalog', () => {
-    const step = buildPlanStep(entry, { providerName: 'oa', model: 'gpt-4.1' }, 'analyst', catalog);
+    const step = buildPlanStep(entry, { providerName: 'oa', model: 'gpt-4.1' }, 'core', catalog);
     expect((step.model as { id: string }).id).toBe('gpt-4.1');
   });
 });

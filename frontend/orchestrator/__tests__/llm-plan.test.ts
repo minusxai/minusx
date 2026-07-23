@@ -1,6 +1,6 @@
 // DB-backed LLM plans: the app installs `orchestrator.resolveLlmPlan`; callLLM
-// consults it per call (keyed by use case) and uses the plan's model/options
-// over the agent's static ones. One model per use case — no fallback chains.
+// consults it per call (keyed by an agent + optional grade selector) and uses
+// the plan's model/options over the agent's static ones.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as llm from '@/orchestrator/llm';
 import { Orchestrator } from '../orchestrator';
@@ -43,14 +43,14 @@ describe('Orchestrator.callLLM — plan resolution', () => {
     expect(calls[0].options?.maxRetryDelayMs).toBe(5);      // agent-only keys survive
   });
 
-  it('passes the use case to the resolver (default analyst)', async () => {
+  it('passes the selector to the resolver verbatim (default agent analyst)', async () => {
     stubStream();
-    const seen: string[] = [];
+    const seen: unknown[] = [];
     const orch = new Orchestrator([]);
-    orch.resolveLlmPlan = async (useCase) => { seen.push(useCase); return null; };
+    orch.resolveLlmPlan = async (selector) => { seen.push(selector); return null; };
     await orch.callLLM(staticModel, {} as never, 'agent-1');
-    await orch.callLLM(staticModel, {} as never, 'agent-1', undefined, 'micro');
-    expect(seen).toEqual(['analyst', 'micro']);
+    await orch.callLLM(staticModel, {} as never, 'agent-1', undefined, { agent: 'micro', grade: 'core' });
+    expect(seen).toEqual([{ agent: 'analyst' }, { agent: 'micro', grade: 'core' }]);
   });
 
   it('a null plan falls back to the static model', async () => {

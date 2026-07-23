@@ -58,9 +58,9 @@ setup('authenticate qa user', async ({ page, request }) => {
         ...(slug === 'amazon-bedrock' ? { awsRegion: process.env.AWS_REGION || 'us-east-1' } : {}),
       };
       const model = hint.model ?? (slug === 'amazon-bedrock' ? 'anthropic.claude-sonnet-4-6' : 'claude-sonnet-4-6');
-      const chain = [{ providerName: provider.name, model, options: hint.options ?? { reasoning: 'low' } }];
+      const choice = { providerName: provider.name, model, options: hint.options ?? { reasoning: 'low' } };
       const llmRes = await page.request.post('/api/configs', {
-        data: { llm: { providers: [provider], assignments: { analyst: { chain }, micro: { chain } } } },
+        data: { llm: { providers: [provider], grades: { lite: choice, core: choice, advanced: choice } } },
       });
       if (!llmRes.ok()) {
         throw new Error(`qa llm config seed failed: ${llmRes.status()} ${await llmRes.text()}`);

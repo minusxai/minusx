@@ -87,9 +87,9 @@ describe('static agent models (substrate under the DB plan resolver)', () => {
     expect(micro.provider).toBe('minusx');
   });
 
-  it('production static options carry the use-case routing header', () => {
+  it('production static options carry the grade routing header (agent default grades)', () => {
     stubProductionEnv();
-    expect((getAnalystModelOptions()?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('analyst');
-    expect((getMicroModelOptions()?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('micro');
+    expect((getAnalystModelOptions()?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('core');
+    expect((getMicroModelOptions()?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('lite');
   });
 });

@@ -11,7 +11,6 @@ import type { Tool, TextContent, ImageContent, AssistantMessage } from '@/orches
 import { renderPrompt } from '@/orchestrator/prompts';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
-import { getAgentModelOrTestFallback, getAnalystModelOptions } from '@/agents/analyst/model-config';
 import { getMicroModelOrTestFallback, getMicroModelOptions } from './model-config';
 import { getMicroTask } from './micro-tasks';
 import type { MicroAgentContext } from './types';
@@ -53,22 +52,17 @@ export class MicroAgent extends RemoteAnalystAgent {
     return [{ type: 'text', text }, ...(this.microContext.images ?? [])];
   }
 
-  static override readonly modelUseCase = 'micro' as const;
+  static override readonly llmAgent = 'micro';
 
-  // A task runs on either the micro model (class default) or the analyst model — its `modelSource`
-  // picks which of the two already-wired configs to use, model AND options together (including the
-  // DB-backed use-case plan the orchestrator resolves per call).
+  // A task rides micro's default grade (lite) unless it declares a code-owned
+  // grade override (e.g. rubric_llm → core); the DB-backed plan the
+  // orchestrator resolves per call picks the concrete model for that grade.
   protected override async llm(): Promise<AssistantMessage> {
-    const useAnalyst = getMicroTask(this.microContext.taskKey).modelSource === 'analyst';
-    const model = useAnalyst
-      ? getAgentModelOrTestFallback(FAUX_MODEL)
-      : (this.constructor as typeof MicroAgent).model;
-    return this.orchestrator.callLLM(model, this.buildLLMContext(), this.id, this.resolveCallOptions(), useAnalyst ? 'analyst' : 'micro');
-  }
-
-  protected override resolveCallOptions(): Record<string, unknown> | undefined {
-    return getMicroTask(this.microContext.taskKey).modelSource === 'analyst'
-      ? getAnalystModelOptions()
-      : (this.constructor as typeof MicroAgent).callOptions;
+    const ctor = this.constructor as typeof MicroAgent;
+    const grade = getMicroTask(this.microContext.taskKey).grade;
+    return this.orchestrator.callLLM(
+      ctor.model, this.buildLLMContext(), this.id, this.resolveCallOptions(),
+      { agent: ctor.llmAgent, ...(grade ? { grade } : {}) },
+    );
   }
 }

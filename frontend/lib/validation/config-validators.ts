@@ -3,7 +3,7 @@ import { validateWebhook } from '@/lib/messaging/webhook-executor';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import type { VisualizationType } from '@/lib/types';
-import { LLM_USE_CASES } from '@/lib/llm/llm-config-types';
+import { LLM_AGENT_KEYS, LLM_GRADES } from '@/lib/llm/llm-config-types';
 
 const VALID_VIZ_TYPES: readonly VisualizationType[] = [
   'table', 'bar', 'row', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot', 'trend', 'waterfall', 'combo', 'radar', 'geo'
@@ -180,22 +180,42 @@ export function validateLlmConfig(llm: unknown): string | null {
     }
   }
 
+  // The pre-grades shape. Rejected on write with a pointer at the new model
+  // (stored old configs are never re-validated at read time, so existing
+  // workspaces don't brick — they just behave as unconfigured grades).
   if (cfg.assignments !== undefined) {
-    if (typeof cfg.assignments !== 'object' || cfg.assignments === null) return 'assignments must be an object';
-    for (const [useCase, assignment] of Object.entries(cfg.assignments)) {
-      if (!(LLM_USE_CASES as readonly string[]).includes(useCase)) return `unknown use case '${useCase}'`;
-      if (typeof assignment !== 'object' || assignment === null) return `assignment for '${useCase}' must be an object`;
-      const chain = (assignment as Record<string, unknown>).chain;
-      if (!Array.isArray(chain) || chain.length === 0) return `assignment for '${useCase}' needs a non-empty chain`;
-      for (const choice of chain) {
-        if (typeof choice !== 'object' || choice === null) return `chain entries for '${useCase}' must be objects`;
-        const c = choice as Record<string, unknown>;
-        if (typeof c.providerName !== 'string' || c.providerName === '') return `a chain entry for '${useCase}' is missing its provider`;
-        if (cfg.providers !== undefined && !names.has(c.providerName)) {
-          return `the '${useCase}' assignment references provider '${c.providerName}', which does not exist`;
+    return '`assignments` was replaced by `grades` — reconfigure in Settings → Models';
+  }
+
+  if (cfg.grades !== undefined) {
+    if (typeof cfg.grades !== 'object' || cfg.grades === null) return 'grades must be an object';
+    for (const [grade, choice] of Object.entries(cfg.grades)) {
+      if (!(LLM_GRADES as readonly string[]).includes(grade)) return `unknown grade '${grade}'`;
+      if (typeof choice !== 'object' || choice === null) return `grade '${grade}' must map to an object`;
+      const c = choice as Record<string, unknown>;
+      if (typeof c.providerName !== 'string' || c.providerName === '') return `grade '${grade}' is missing its provider`;
+      if (cfg.providers !== undefined && !names.has(c.providerName)) {
+        return `grade '${grade}' references provider '${c.providerName}', which does not exist`;
+      }
+      if (c.model !== undefined && typeof c.model !== 'string') return `model for grade '${grade}' must be a string`;
+      if (c.options !== undefined && (typeof c.options !== 'object' || c.options === null)) return `options for grade '${grade}' must be an object`;
+    }
+  }
+
+  if (cfg.agents !== undefined) {
+    if (typeof cfg.agents !== 'object' || cfg.agents === null) return 'agents must be an object';
+    for (const [agent, policy] of Object.entries(cfg.agents)) {
+      if (!(LLM_AGENT_KEYS as readonly string[]).includes(agent)) return `unknown agent '${agent}'`;
+      if (typeof policy !== 'object' || policy === null) return `agent '${agent}' policy must be an object`;
+      const p = policy as Record<string, unknown>;
+      if (p.allowedGrades !== undefined) {
+        if (!Array.isArray(p.allowedGrades) || p.allowedGrades.length === 0) return `agent '${agent}': allowedGrades must be a non-empty array`;
+        for (const grade of p.allowedGrades) {
+          if (!(LLM_GRADES as readonly string[]).includes(grade as string)) return `agent '${agent}': invalid grade '${grade}'`;
         }
-        if (c.model !== undefined && typeof c.model !== 'string') return `model for '${useCase}' must be a string`;
-        if (c.options !== undefined && (typeof c.options !== 'object' || c.options === null)) return `options for '${useCase}' must be an object`;
+      }
+      if (p.defaultGrade !== undefined && !(LLM_GRADES as readonly string[]).includes(p.defaultGrade as string)) {
+        return `agent '${agent}': invalid grade '${p.defaultGrade}'`;
       }
     }
   }

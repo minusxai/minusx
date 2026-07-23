@@ -64,6 +64,7 @@ export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentCo
   static readonly tools = [];
   // Required by MXAgent; never used because `run()` makes no LLM call.
   static model = getAgentModelOrTestFallback(FAUX_MODEL);
+  static override readonly llmAgent = 'report';
 
   /** Sub-agent dispatched for the report. Read-only analyst (server-side tools only). */
   static analystAgent: AnalystAgentClass = RemoteAnalystAgent;

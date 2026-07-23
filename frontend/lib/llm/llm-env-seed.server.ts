@@ -89,36 +89,42 @@ function toSeedPiece(cfg: SeedModelConfig, name: string): { entry: LlmProviderEn
 /**
  * Build the seed LlmConfig from an env record. Null when there is nothing to
  * seed. Pure — exported for tests.
+ *
+ * Grade mapping: the analyst config seeds `core` AND `advanced`, the micro config
+ * seeds `lite`; a lone config seeds all three. Every grade is mapped after a
+ * seed, so an env-provisioned workspace can never hit the unmapped-grade
+ * runtime error.
  */
 export function buildSeedLlmConfig(env: Env): LlmConfig | null {
   const analystCfg = parseSeed(env['ANALYST_AGENT_MODEL_CONFIG']);
   const microCfg = parseSeed(env['MICRO_AGENT_MODEL_CONFIG']);
   // Providers are named by their TYPE (matching the UI's auto-naming, so a
-  // seeded config shows no name field); a suffix appears only when both use
-  // cases genuinely need distinct entries of the same type.
+  // seeded config shows no name field); a suffix appears only when the two
+  // configs genuinely need distinct entries of the same type.
   const analyst = toSeedPiece(analystCfg ?? {}, analystCfg?.customModel ? 'custom' : analystCfg?.provider ?? '');
   const micro = toSeedPiece(microCfg ?? {}, microCfg?.customModel ? 'custom' : microCfg?.provider ?? '');
   if (!analyst && !micro) return null;
 
-  // A lone config covers both use cases rather than leaving one unconfigured.
+  // A lone config covers every grade rather than leaving some unconfigured.
   if (analyst && !micro) {
-    return { providers: [analyst.entry], assignments: { analyst: { chain: [analyst.choice] }, micro: { chain: [analyst.choice] } } };
+    return { providers: [analyst.entry], grades: { lite: analyst.choice, core: analyst.choice, advanced: analyst.choice } };
   }
   if (micro && !analyst) {
-    return { providers: [micro.entry], assignments: { analyst: { chain: [micro.choice] }, micro: { chain: [micro.choice] } } };
+    return { providers: [micro.entry], grades: { lite: micro.choice, core: micro.choice, advanced: micro.choice } };
   }
 
   // Both present: dedupe to ONE provider when the endpoints are identical
-  // (same type, key, and endpoint details) — the assignments just pick
-  // different models on it.
+  // (same type, key, and endpoint details) — the grades just pick different
+  // models on it.
   const sameEndpoint = (a: LlmProviderEntry, b: LlmProviderEntry) =>
     JSON.stringify({ ...a, name: '' }) === JSON.stringify({ ...b, name: '' });
   if (sameEndpoint(analyst!.entry, micro!.entry)) {
     return {
       providers: [analyst!.entry],
-      assignments: {
-        analyst: { chain: [analyst!.choice] },
-        micro: { chain: [{ ...micro!.choice, providerName: analyst!.entry.name }] },
+      grades: {
+        lite: { ...micro!.choice, providerName: analyst!.entry.name },
+        core: analyst!.choice,
+        advanced: analyst!.choice,
       },
     };
   }
@@ -130,7 +136,7 @@ export function buildSeedLlmConfig(env: Env): LlmConfig | null {
   }
   return {
     providers: [analyst!.entry, micro!.entry],
-    assignments: { analyst: { chain: [analyst!.choice] }, micro: { chain: [micro!.choice] } },
+    grades: { lite: micro!.choice, core: analyst!.choice, advanced: analyst!.choice },
   };
 }
 

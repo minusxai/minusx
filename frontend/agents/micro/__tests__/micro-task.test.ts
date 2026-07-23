@@ -19,7 +19,7 @@ import { fauxAssistantMessage, registerFauxProvider } from '@/orchestrator/llm/t
 import { fauxRegistration as microFaux } from '@/agents/micro/micro-agent';
 import { runMicroTask } from '@/lib/chat/run-micro-task.server';
 import { buildLlmPlanResolver } from '@/lib/llm/llm-plan.server';
-import type { LlmPlanStep, LlmUseCase } from '@/orchestrator/types';
+import type { LlmPlanStep, LlmPlanSelector } from '@/orchestrator/types';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { Context } from '@/orchestrator/llm';
@@ -136,8 +136,8 @@ describe('runMicroTask', () => {
   // MicroAgent's static MinusX-gateway model — which has no API key, failing every
   // micro-task with "No API key for provider: minusx" on configured workspaces.
   it('runs on the DB-configured model plan, not the static fallback model', async () => {
-    const resolver = vi.fn(async (useCase: LlmUseCase): Promise<LlmPlanStep | null> =>
-      useCase === 'micro' ? { model: planFaux.getModel() } : null,
+    const resolver = vi.fn(async (selector: LlmPlanSelector): Promise<LlmPlanStep | null> =>
+      selector.agent === 'micro' ? { model: planFaux.getModel() } : null,
     );
     vi.mocked(buildLlmPlanResolver).mockReturnValue(resolver);
     planFaux.setResponses([fauxAssistantMessage('from the configured model', { stopReason: 'stop' })]);
@@ -145,7 +145,19 @@ describe('runMicroTask', () => {
 
     const out = await runMicroTask('title', { input: 'x', subject: 'a question', instructions: '' }, USER);
 
-    expect(resolver).toHaveBeenCalledWith('micro');
+    expect(resolver).toHaveBeenCalledWith({ agent: 'micro' });
     expect(out).toBe('from the configured model');
+  });
+
+  // Per-task grade override: rubric_llm judges visual output and rides the
+  // core grade (code-owned — not bounded by micro's lite-only user policy).
+  it('passes the task-declared grade to the resolver (rubric_llm → core)', async () => {
+    const resolver = vi.fn(async (): Promise<LlmPlanStep | null> => null);
+    vi.mocked(buildLlmPlanResolver).mockReturnValue(resolver);
+    microFaux.setResponses([fauxAssistantMessage('PASS', { stopReason: 'stop' })]);
+
+    await runMicroTask('rubric_llm', { checklist: '- looks right', file_type: 'question', markup: '<question/>', screenshot_note: '' }, USER);
+
+    expect(resolver).toHaveBeenCalledWith({ agent: 'micro', grade: 'core' });
   });
 });

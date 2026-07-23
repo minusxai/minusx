@@ -79,8 +79,8 @@ export interface OrgConfig {
   /** Remote Agent Sessions ("Copy to Agent"): lets an external agent drive a chat over HTTP.
    *  OFF by default — enable in Settings → Integrations. Gates minting AND live-session auth. */
   remoteAgentsEnabled?: boolean;
-  /** In-app LLM provider config: providers + per-use-case model assignments
-   *  (see lib/llm/llm-config-types.ts). Overrides env model config when set;
+  /** In-app LLM provider config: providers + per-grade model mappings +
+   *  per-agent grade policies (see lib/llm/llm-config-types.ts).
    *  `apiKey` values are @SECRETS/… refs at rest. */
   llm?: LlmConfig;
 }

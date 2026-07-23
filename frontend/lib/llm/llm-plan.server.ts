@@ -2,14 +2,21 @@
  * DB-backed LLM call-plan resolution (server-only). Model config is DB-ONLY —
  * there is no env-var tier and no hardcoded provider default.
  *
- * Tier order per use case:
- *   1. `llm.assignments[useCase]` (explicit; the stored `chain` array's first
- *      entry — one model per use case, no fallbacks)
- *   2. the minusx provider entry, if configured (fully managed, keyed)
- *   3. the managed MinusX gateway, unkeyed — the universal default. An
- *      unconfigured workspace routes there and gets a clear auth error
- *      pointing at Settings → Models, instead of silently using some other
- *      vendor's model.
+ * Resolution per call: selector (agent + optional code-owned grade) → the
+ * agent's grade policy (config over built-in defaults) → a grade → a model:
+ *   1. `llm.grades[grade]` (explicit mapping: one provider+model per grade)
+ *   2. the minusx provider entry, if configured (fully managed, keyed — the
+ *      gateway routes the grade)
+ *   3. with an `llm` section but neither: a hard error naming the unmapped
+ *      grade (no silent nearest-grade fallback)
+ * A workspace with NO `llm` section routes to the managed MinusX gateway,
+ * unkeyed — the universal default. An unconfigured workspace gets a clear
+ * auth error pointing at Settings → Models, instead of silently using some
+ * other vendor's model.
+ *
+ * A per-chat grade override (the user's picker) is validated against the
+ * agent's allowed grades; a selector grade (code-owned, e.g. a micro-task
+ * needing a stronger class) is not.
  *
  * Test environments return `null` (agents use their faux static models) so the
  * suite stays deterministic and network-free.
@@ -23,30 +30,30 @@ import { resolveConfigSecrets } from '@/lib/secrets/config-secrets.server';
 import { getModel, buildCustomModel, buildRegistryModel, type CustomModelSpec } from '@/orchestrator/llm';
 import { getModelCatalog, type ModelCatalog } from './model-catalog.server';
 import { buildMinusxModel, minusxCallOptions, MINUSX_AUTO_MODEL, MINUSX_UNCONFIGURED_KEY } from './minusx-default';
-import type { LlmPlanStep } from '@/orchestrator/types';
+import type { LlmPlanStep, LlmPlanSelector } from '@/orchestrator/types';
 import { E2E_MODE } from '@/lib/constants';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import {
-  MINUSX_PROVIDER, CUSTOM_PROVIDER,
-  findLlmProvider, findMinusxProvider,
-  type ChatModelSelection, type LlmConfig, type LlmModelChoice, type LlmProviderEntry, type LlmUseCase,
+  LLM_AGENT_KEYS, LLM_GRADES, MINUSX_PROVIDER, CUSTOM_PROVIDER,
+  findLlmProvider, findMinusxProvider, resolveAgentPolicy,
+  type LlmAgentKey, type LlmConfig, type LlmGrade, type LlmModelChoice, type LlmProviderEntry,
 } from './llm-config-types';
-import { compatDefaultModel, resolveAllowedModels } from './compat-models';
+import { compatDefaultModel } from './compat-models';
 
 /**
  * Build one executable plan step from a provider entry + model choice.
  * The entry must already have RESOLVED credentials (no refs).
  * Exported for reuse by the connection-test endpoint (`/api/llm/test`).
  */
-export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, useCase: LlmUseCase, catalog?: ModelCatalog | null): LlmPlanStep {
+export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, grade: LlmGrade, catalog?: ModelCatalog | null): LlmPlanStep {
   const options: Record<string, unknown> = { ...(choice.options ?? {}) };
   if (entry.apiKey) options['apiKey'] = entry.apiKey;
 
   if (entry.provider === MINUSX_PROVIDER) {
     // Managed gateway: OpenAI-compatible endpoint; the gateway owns model
-    // routing + system-prompt policy per use case (X-MX-Use-Case header).
+    // routing + system-prompt policy per grade (X-MX-Use-Case header).
     const model = buildMinusxModel(entry.baseUrl, choice.model || MINUSX_AUTO_MODEL);
-    return { model, callOptions: { ...options, ...minusxCallOptions(useCase, entry.headers) } };
+    return { model, callOptions: { ...options, ...minusxCallOptions(grade, entry.headers) } };
   }
 
   if (entry.provider === CUSTOM_PROVIDER) {
@@ -63,8 +70,8 @@ export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, u
   }
 
   // Registry provider (anthropic / openai / google / amazon-bedrock / …).
-  // No stored model = "Auto": the per-use-case default from compatibility.json.
-  const modelId = choice.model || compatDefaultModel(entry.provider, useCase);
+  // No stored model = "Auto": the per-grade default from compatibility.json.
+  const modelId = choice.model || compatDefaultModel(entry.provider, grade);
   if (!modelId) throw new Error(`LLM provider '${entry.name}': model id is required (no compatibility default for '${entry.provider}')`);
   let model;
   try {
@@ -87,60 +94,19 @@ export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, u
   return { model, callOptions: options };
 }
 
-/** Resolve one use case's model from an (already secret-resolved) LlmConfig. */
-function planFromConfig(llm: LlmConfig | undefined, useCase: LlmUseCase, catalog: ModelCatalog | null): LlmPlanStep | null {
-  // Assignments store a `chain` array for schema stability; only the FIRST
-  // entry is used (fallbacks were deliberately removed — one model per use case).
-  const choice = llm?.assignments?.[useCase]?.chain?.[0];
+/** Resolve one grade's model from an (already secret-resolved) LlmConfig. */
+function planFromConfig(llm: LlmConfig, agent: LlmAgentKey, grade: LlmGrade, catalog: ModelCatalog | null): LlmPlanStep {
+  const choice = llm.grades?.[grade];
   if (choice) {
     const entry = findLlmProvider(llm, choice.providerName);
-    if (!entry) throw new Error(`LLM assignment for '${useCase}' references unknown provider '${choice.providerName}'`);
-    return buildPlanStep(entry, choice, useCase, catalog);
+    if (!entry) throw new Error(`Grade '${grade}' references unknown provider '${choice.providerName}'`);
+    return buildPlanStep(entry, choice, grade, catalog);
   }
-  // No assignment: a configured minusx provider handles every use case.
+  // No mapping: a configured minusx provider handles every grade (the gateway
+  // routes the grade itself).
   const minusx = findMinusxProvider(llm);
-  if (minusx) return buildPlanStep(minusx, { providerName: minusx.name }, useCase);
-  // A workspace that configured only chat (the `analyst` assignment) has no `micro` model, so the
-  // low-stakes micro helpers (feed summary, auto-title, description) would otherwise fall through to
-  // the unconfigured MinusX gateway and 500. Reuse the analyst model for `micro` rather than fail —
-  // one configured provider then powers everything. (`micro` keeps its own assignment when present.)
-  if (useCase === 'micro') {
-    const analystChoice = llm?.assignments?.analyst?.chain?.[0];
-    const analystEntry = analystChoice && findLlmProvider(llm, analystChoice.providerName);
-    if (analystChoice && analystEntry) return buildPlanStep(analystEntry, analystChoice, 'micro', catalog);
-  }
-  return null;
-}
-
-/** Build a chat-scoped analyst override from server-owned provider config. */
-function planFromChatSelection(
-  llm: LlmConfig | undefined,
-  selection: ChatModelSelection,
-  catalog: ModelCatalog | null,
-): LlmPlanStep {
-  const entry = findLlmProvider(llm, selection.providerName);
-  if (!entry) throw new Error(`Chat model provider '${selection.providerName}' is not configured`);
-
-  if (entry.provider !== MINUSX_PROVIDER && !selection.model) {
-    throw new Error(`Chat model provider '${selection.providerName}' requires a model id`);
-  }
-
-  const allowed = resolveAllowedModels(entry);
-  if (selection.model && allowed && !allowed.includes(selection.model)) {
-    throw new Error(`Model '${selection.model}' is not allowed for provider '${selection.providerName}'`);
-  }
-
-  // A custom endpoint's model capabilities live only in the server-owned
-  // assignment. The browser selects that known model id, never its metadata.
-  if (entry.provider === CUSTOM_PROVIDER) {
-    const configured = llm?.assignments?.analyst?.chain?.[0];
-    if (configured?.providerName !== selection.providerName || configured.model !== selection.model) {
-      throw new Error(`Model '${selection.model}' is not allowed for custom provider '${selection.providerName}'`);
-    }
-    return buildPlanStep(entry, configured, 'analyst', catalog);
-  }
-
-  return buildPlanStep(entry, selection, 'analyst', catalog);
+  if (minusx) return buildPlanStep(minusx, { providerName: minusx.name }, grade);
+  throw new Error(`No model is mapped to grade '${grade}' (agent '${agent}'). Map it in Settings → Models.`);
 }
 
 function isTestEnv(): boolean {
@@ -149,12 +115,18 @@ function isTestEnv(): boolean {
 }
 
 /** The universal default: the managed MinusX gateway (sentinel key until configured). */
-function minusxDefaultPlan(useCase: LlmUseCase): LlmPlanStep {
-  return { model: buildMinusxModel(), callOptions: { apiKey: MINUSX_UNCONFIGURED_KEY, ...minusxCallOptions(useCase) } };
+function minusxDefaultPlan(grade: LlmGrade): LlmPlanStep {
+  return { model: buildMinusxModel(), callOptions: { apiKey: MINUSX_UNCONFIGURED_KEY, ...minusxCallOptions(grade) } };
+}
+
+/** Narrow an engine-side selector string to a known agent key (benchmark/eval
+ *  agents and future strings ride the analyst policy). */
+function toAgentKey(agent: string): LlmAgentKey {
+  return (LLM_AGENT_KEYS as readonly string[]).includes(agent) ? agent as LlmAgentKey : 'analyst';
 }
 
 /**
- * Resolve the LLM call plan for a use case. LLM providers are WORKSPACE-level
+ * Resolve the LLM call plan for a selector. LLM providers are WORKSPACE-level
  * infrastructure: always read from the org config, shared by every mode
  * (tutorial chats run on the same providers as org chats — mode isolation is
  * about files/content, not model credentials). Never null in production — an
@@ -162,33 +134,39 @@ function minusxDefaultPlan(useCase: LlmUseCase): LlmPlanStep {
  * environments (agents keep their faux static models).
  */
 export async function resolveLlmPlan(
-  useCase: LlmUseCase,
-  chatSelection?: ChatModelSelection,
+  selector: LlmPlanSelector,
+  gradeOverride?: LlmGrade,
 ): Promise<LlmPlanStep | null> {
   // E2E builds force every agent onto its faux provider — DB config must not override.
   if (E2E_MODE) return null;
+  const agent = toAgentKey(selector.agent);
   const raw = await getRawConfig(DEFAULT_MODE);
   const llm = raw.llm as LlmConfig | undefined;
-  if (chatSelection && useCase === 'analyst' && !llm) {
-    throw new Error(`Chat model provider '${chatSelection.providerName}' is not configured`);
+  const policy = resolveAgentPolicy(llm, agent);
+
+  // The user's per-chat pick is bounded by the agent policy; a selector grade
+  // (code-owned, e.g. rubric_llm → core) is not.
+  if (gradeOverride && !policy.allowedGrades.includes(gradeOverride)) {
+    throw new Error(`Grade '${gradeOverride}' is not allowed for agent '${agent}'`);
   }
+  const selectorGrade = selector.grade && (LLM_GRADES as readonly string[]).includes(selector.grade)
+    ? selector.grade as LlmGrade
+    : undefined;
+  const grade = gradeOverride ?? selectorGrade ?? policy.defaultGrade;
+
   if (llm) {
     const resolved = await resolveConfigSecrets(llm);
     // Live catalog only matters for model ids newer than the baked registry;
     // fetch is cached in-process and null-safe (baked-only fallback).
     const catalog = await getModelCatalog();
-    if (chatSelection && useCase === 'analyst') {
-      return planFromChatSelection(resolved, chatSelection, catalog);
-    }
-    const plan = planFromConfig(resolved, useCase, catalog);
-    if (plan) return plan;
+    return planFromConfig(resolved, agent, grade, catalog);
   }
-  return isTestEnv() ? null : minusxDefaultPlan(useCase);
+  return isTestEnv() ? null : minusxDefaultPlan(grade);
 }
 
 /** Orchestrator hook: per-call plan resolution (workspace-level, mode-independent). */
 export function buildLlmPlanResolver(
-  chatSelection?: ChatModelSelection,
-): (useCase: LlmUseCase) => Promise<LlmPlanStep | null> {
-  return (useCase) => resolveLlmPlan(useCase, useCase === 'analyst' ? chatSelection : undefined);
+  gradeOverride?: LlmGrade,
+): (selector: LlmPlanSelector) => Promise<LlmPlanStep | null> {
+  return (selector) => resolveLlmPlan(selector, gradeOverride);
 }

@@ -1,7 +1,7 @@
 import { createSlice, createSelector, PayloadAction } from '@reduxjs/toolkit';
 import type { RootState } from './store';
 import type { Attachment } from '@/lib/types';
-import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
+import type { LlmGrade } from '@/lib/llm/llm-config-types';
 
 export type ViewStackItem =
   | { type: 'question'; fileId: number; dashboardId?: number; dashboardParamValues?: Record<string, any> }
@@ -14,7 +14,7 @@ interface UIState {
   colorMode: 'light' | 'dark';
   devMode: boolean;
   sidebarPendingMessage: string | null;
-  chatModelSelection: ChatModelSelection | null;
+  chatGradeSelection: LlmGrade | null;
   sidebarPendingSlashCommand: string | null;
   activeSidebarSection: string | null;
   askForConfirmation: boolean;
@@ -66,7 +66,7 @@ const initialState: UIState = {
   colorMode: 'dark',
   devMode: false,
   sidebarPendingMessage: null,
-  chatModelSelection: null,
+  chatGradeSelection: null,
   sidebarPendingSlashCommand: null,
   activeSidebarSection: null,
   askForConfirmation: false,
@@ -134,8 +134,8 @@ const uiSlice = createSlice({
     setSidebarPendingMessage: (state, action: PayloadAction<string | null>) => {
       state.sidebarPendingMessage = action.payload;
     },
-    setChatModelSelection: (state, action: PayloadAction<ChatModelSelection | null>) => {
-      state.chatModelSelection = action.payload;
+    setChatGradeSelection: (state, action: PayloadAction<LlmGrade | null>) => {
+      state.chatGradeSelection = action.payload;
     },
     setSidebarPendingSlashCommand: (state, action: PayloadAction<UIState['sidebarPendingSlashCommand']>) => {
       state.sidebarPendingSlashCommand = action.payload;
@@ -288,7 +288,7 @@ export const {
   toggleColorMode,
   setDevMode,
   setSidebarPendingMessage,
-  setChatModelSelection,
+  setChatGradeSelection,
   setSidebarPendingSlashCommand,
   setActiveSidebarSection,
   setAskForConfirmation,

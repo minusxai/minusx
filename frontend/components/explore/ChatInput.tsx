@@ -22,7 +22,7 @@ import { handlePastedText } from '@/lib/chat/paste-attachment';
 import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
 import { Tooltip } from '@/components/ui/tooltip';
-import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
+import type { LlmGrade } from '@/lib/llm/llm-config-types';
 
 const CHAT_PRO_TIPS = [
   { shortcut: '@', detail: 'to mention tables & columns' },
@@ -42,8 +42,8 @@ interface ChatInputProps {
   isPreparing?: boolean;
   databaseName: string;
   onDatabaseChange: (name: string) => void;
-  selectedModel?: ChatModelSelection | null;
-  onModelChange?: (model: ChatModelSelection | null) => void;
+  selectedGrade?: LlmGrade | null;
+  onGradeChange?: (grade: LlmGrade | null) => void;
   container?: 'page' | 'sidebar' | 'floating';
   isCompact: boolean;
   colSpan?: any;
@@ -70,8 +70,8 @@ function ChatInputInner({
   isPreparing = false,
   databaseName,
   onDatabaseChange,
-  selectedModel = null,
-  onModelChange,
+  selectedGrade = null,
+  onGradeChange,
   container = 'page',
   isCompact,
   colSpan: colSpanProp,
@@ -732,8 +732,8 @@ function ChatInputInner({
                     <ChatSettingsPopover
                       databaseName={databaseName}
                       onDatabaseChange={onDatabaseChange}
-                      selectedModel={selectedModel}
-                      onModelChange={onModelChange || (() => {})}
+                      selectedGrade={selectedGrade}
+                      onGradeChange={onGradeChange || (() => {})}
                       modelDisabled={isAgentRunning || remoteSessionActive}
                       selectedContextPath={selectedContextPath || null}
                       selectedVersion={selectedVersion}
@@ -817,7 +817,7 @@ const chatInputPropsEqual = (prev: ChatInputProps, next: ChatInputProps): boolea
   if (!isEqual(prev.whitelistedSchemas, next.whitelistedSchemas)) return false;
   return shallowEqualExcept(prev, next, [
     'availableSkills', 'availableCommands', 'whitelistedSchemas',
-    'onSend', 'onStop', 'onDatabaseChange', 'onModelChange', 'onContextChange', 'onCommandExecute',
+    'onSend', 'onStop', 'onDatabaseChange', 'onGradeChange', 'onContextChange', 'onCommandExecute',
   ]);
 };
 

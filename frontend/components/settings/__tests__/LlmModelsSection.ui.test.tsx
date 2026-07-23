@@ -20,6 +20,7 @@ const REGISTRY = {
       {
         slug: 'anthropic',
         models: [
+          { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', reasoning: true, input: ['text'], contextWindow: 200000 },
           { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', reasoning: true, input: ['text'], contextWindow: 200000 },
           { id: 'claude-3-opus', name: 'Claude 3 Opus', reasoning: false, input: ['text'], contextWindow: 200000 },
           { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', reasoning: true, input: ['text'], contextWindow: 200000 },
@@ -105,7 +106,7 @@ describe('LlmModelsSection', () => {
     renderWithProviders(<LlmModelsSection />, {
       store: storeWithLlm({
         providers: [{ name: 'main-anthropic', provider: 'anthropic', apiKey: ref }],
-        assignments: { analyst: { chain: [{ providerName: 'main-anthropic', model: 'claude-sonnet-4-6' }] } },
+        grades: { core: { providerName: 'main-anthropic', model: 'claude-sonnet-4-6' } },
       }),
     });
 
@@ -113,6 +114,15 @@ describe('LlmModelsSection', () => {
     expect(screen.getByLabelText('LLM provider main-anthropic key saved')).toBeInTheDocument();
     // The key input never carries the ref value into the DOM.
     expect((screen.getByLabelText('LLM provider main-anthropic API key') as HTMLInputElement).value).toBe('');
+  });
+
+  it('never renders an allowed-models picker (retired: grades replaced allowlists)', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'anthropic', provider: 'anthropic', apiKey: 'k' }] }),
+    });
+    expect(await screen.findByLabelText('LLM provider anthropic')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/allowed models/)).not.toBeInTheDocument();
   });
 
   it('adds a provider (MinusX pinned as the default pick) and saves via /api/configs', async () => {
@@ -135,12 +145,12 @@ describe('LlmModelsSection', () => {
     });
   });
 
-  it('shows the managed banner when MinusX is configured with no explicit assignments', async () => {
+  it('shows the managed banner when MinusX is configured with no explicit grade mappings', async () => {
     mockFetch();
     renderWithProviders(<LlmModelsSection />, {
       store: storeWithLlm({ providers: [{ name: 'minusx', provider: 'minusx', apiKey: 'k' }] }),
     });
-    expect(await screen.findByLabelText('Assignments managed by MinusX')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Grades managed by MinusX')).toBeInTheDocument();
   });
 
   it('tests a provider through /api/llm/test and shows the result', async () => {
@@ -158,7 +168,7 @@ describe('LlmModelsSection', () => {
     const testCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/llm/test'));
     const body = JSON.parse((testCall![1] as RequestInit).body as string);
     expect(body.provider.apiKey).toBe('sk-new');
-    expect(body.model).toBe('claude-sonnet-4-6'); // registry default for the provider
+    expect(body.model).toBe(ANTHROPIC_DEFAULTS['core']); // probe rides the core grade default
   });
 
   it('shows a failing test result', async () => {
@@ -173,82 +183,39 @@ describe('LlmModelsSection', () => {
     });
   });
 
-  it('model options live behind a gear button; reasoning defaults to low and is stored explicitly', async () => {
+  it('renders all three grade slots and saves a grade mapping (no chain array)', async () => {
     const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
     renderWithProviders(<LlmModelsSection />, {
       store: storeWithLlm({ providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k1' }] }),
     });
     const user = userEvent.setup();
 
-    await user.click(await screen.findByLabelText('Add Analyst model'));
-    // No inline reasoning dropdown — an options gear instead.
-    expect(screen.queryByLabelText('Analyst reasoning')).not.toBeInTheDocument();
+    expect(await screen.findByLabelText('Model grade Lite')).toBeInTheDocument();
+    expect(screen.getByLabelText('Model grade Core')).toBeInTheDocument();
+    expect(screen.getByLabelText('Model grade Advanced')).toBeInTheDocument();
 
-    await user.click(screen.getByLabelText('Analyst options'));
-    // 'low' is pre-selected (the default) — no ambiguous 'default' option exists.
-    expect(await screen.findByLabelText('Reasoning effort low selected')).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Reasoning effort default/)).not.toBeInTheDocument();
-
-    await user.click(screen.getByLabelText('Set reasoning effort high'));
-    await user.click(screen.getByLabelText('Close model options'));
+    await user.click(screen.getByLabelText('Add Core model'));
+    expect(screen.getByLabelText('Core provider')).toBeInTheDocument();
+    // The reasoning-options gear is hidden for now (low is stored implicitly).
+    expect(screen.queryByLabelText('Core options')).not.toBeInTheDocument();
 
     await user.click(screen.getByLabelText('Save LLM configuration'));
     await waitFor(() => {
       const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
       const body = JSON.parse((configCall![1] as RequestInit).body as string);
-      expect(body.llm.assignments.analyst.chain[0].options.reasoning).toBe('high');
+      expect(body.llm.grades.core.providerName).toBe('a');
+      expect(body.llm.grades.core.chain).toBeUndefined();
+      expect(body.llm.grades.core.options.reasoning).toBe('low'); // stored explicitly
+      expect(body.llm.grades.lite).toBeUndefined();               // untouched slots stay unmapped
     });
   });
 
-  it('a new chain step stores reasoning low explicitly (what you see is what is saved)', async () => {
-    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
-    renderWithProviders(<LlmModelsSection />, {
-      store: storeWithLlm({ providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k1' }] }),
-    });
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByLabelText('Add Analyst model'));
-    await user.click(screen.getByLabelText('Save LLM configuration'));
-    await waitFor(() => {
-      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
-      const body = JSON.parse((configCall![1] as RequestInit).body as string);
-      expect(body.llm.assignments.analyst.chain[0].options.reasoning).toBe('low');
-    });
-  });
-
-  it('assigns exactly ONE model per use case — no fallback affordance exists', async () => {
-    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
-    renderWithProviders(<LlmModelsSection />, {
-      store: storeWithLlm({
-        providers: [
-          { name: 'a', provider: 'anthropic', apiKey: 'k1' },
-          { name: 'o', provider: 'openai', apiKey: 'k2' },
-        ],
-      }),
-    });
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByLabelText('Add Analyst model'));
-    expect(screen.getByLabelText('Analyst provider')).toBeInTheDocument();
-    // Once a model is set, there is no way to add another (fallbacks removed).
-    expect(screen.queryByLabelText('Add Analyst fallback')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Add Analyst model')).not.toBeInTheDocument();
-
-    await user.click(screen.getByLabelText('Save LLM configuration'));
-    await waitFor(() => {
-      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
-      const body = JSON.parse((configCall![1] as RequestInit).body as string);
-      expect(body.llm.assignments.analyst.chain).toHaveLength(1);
-      expect(body.llm.assignments.analyst.chain[0].providerName).toBe('a');
-    });
-  });
-
-  it('renaming a provider cascades into assignment chains (no dangling references)', async () => {
+  it('renaming a provider cascades into grade mappings (no dangling references)', async () => {
     const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
     renderWithProviders(<LlmModelsSection />, {
       store: storeWithLlm({
         providers: [{ name: 'OpenAI', provider: 'openai', apiKey: 'k' }],
-        assignments: { analyst: { chain: [{ providerName: 'OpenAI', model: 'gpt-4.1' }] } },
+        grades: { core: { providerName: 'OpenAI', model: 'gpt-4.1' } },
       }),
     });
     const user = userEvent.setup();
@@ -262,7 +229,7 @@ describe('LlmModelsSection', () => {
       const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
       const body = JSON.parse((configCall![1] as RequestInit).body as string);
       expect(body.llm.providers[0].name).toBe('Default');
-      expect(body.llm.assignments.analyst.chain[0].providerName).toBe('Default');
+      expect(body.llm.grades.core.providerName).toBe('Default');
     });
   });
 
@@ -320,7 +287,7 @@ describe('LlmModelsSection', () => {
     });
   });
 
-  it('removing a provider drops chain steps that referenced it', async () => {
+  it('removing a provider drops the grade mappings that referenced it', async () => {
     const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
     renderWithProviders(<LlmModelsSection />, {
       store: storeWithLlm({
@@ -328,8 +295,9 @@ describe('LlmModelsSection', () => {
           { name: 'a', provider: 'anthropic', apiKey: 'k1' },
           { name: 'o', provider: 'openai', apiKey: 'k2' },
         ],
-        assignments: {
-          analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }, { providerName: 'o', model: 'gpt-4.1' }] },
+        grades: {
+          core: { providerName: 'a', model: 'claude-sonnet-4-6' },
+          lite: { providerName: 'o', model: 'gpt-4.1' },
         },
       }),
     });
@@ -342,249 +310,160 @@ describe('LlmModelsSection', () => {
       const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
       const body = JSON.parse((configCall![1] as RequestInit).body as string);
       expect(body.llm.providers).toHaveLength(1);
-      expect(body.llm.assignments.analyst.chain).toHaveLength(1);
-      expect(body.llm.assignments.analyst.chain[0].providerName).toBe('o');
+      expect(body.llm.grades.core).toBeUndefined();
+      expect(body.llm.grades.lite.providerName).toBe('o');
     });
   });
 
-  it('picks allowed models per provider and saves them to allowedModels', async () => {
-    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
-    renderWithProviders(<LlmModelsSection />, {
-      store: storeWithLlm({ providers: [{ name: 'anthropic', provider: 'anthropic', apiKey: 'k' }] }),
-    });
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByLabelText('LLM provider anthropic allowed models'));
-    await user.click(await screen.findByLabelText('Claude Haiku 4.5'));
-    await user.click(screen.getByLabelText('Save LLM configuration'));
-
-    await waitFor(() => {
-      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
-      expect(configCall).toBeTruthy();
-      const body = JSON.parse((configCall![1] as RequestInit).body as string);
-      expect(body.llm.providers[0].allowedModels).toEqual(['claude-haiku-4-5']);
-    });
-  });
-
-  it('shows no allowed-models picker for the managed MinusX provider', async () => {
-    mockFetch();
-    renderWithProviders(<LlmModelsSection />, {
-      store: storeWithLlm({ providers: [{ name: 'minusx', provider: 'minusx', apiKey: 'k' }] }),
-    });
-    expect(await screen.findByLabelText('LLM provider minusx')).toBeInTheDocument();
-    expect(screen.queryByLabelText('LLM provider minusx allowed models')).not.toBeInTheDocument();
-  });
-
-  it('filters the assignment model picker to the provider allowedModels', async () => {
-    mockFetch();
-    renderWithProviders(<LlmModelsSection />, {
-      store: storeWithLlm({
-        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k', allowedModels: ['claude-haiku-4-5'] }],
-        assignments: { analyst: { chain: [{ providerName: 'a' }] } },
-      }),
-    });
-    const user = userEvent.setup();
-
-    await openModelPicker(user, 'Analyst model');
-    expect(await screen.findByLabelText('Claude Haiku 4.5')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Claude Sonnet 4.6')).not.toBeInTheDocument();
-  });
-
-  it('shows all registry models in the assignment picker when no allowlist is set', async () => {
+  it("badges each grade's compatibility default in the model picker and sorts it first", async () => {
     mockFetch();
     renderWithProviders(<LlmModelsSection />, {
       store: storeWithLlm({
         providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
-        assignments: { analyst: { chain: [{ providerName: 'a' }] } },
-      }),
-    });
-    const user = userEvent.setup();
-
-    await openModelPicker(user, 'Analyst model');
-    expect(await screen.findByLabelText('Claude Haiku 4.5')).toBeInTheDocument();
-    expect(screen.getByLabelText('Claude Sonnet 4.6')).toBeInTheDocument();
-  });
-
-  it('keeps a currently-assigned model visible even when outside the allowlist', async () => {
-    mockFetch();
-    renderWithProviders(<LlmModelsSection />, {
-      store: storeWithLlm({
-        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k', allowedModels: ['claude-haiku-4-5'] }],
-        assignments: { analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] } },
-      }),
-    });
-    const user = userEvent.setup();
-
-    // The existing pick still shows on the trigger and in the list. (The
-    // trigger swaps from free-text input to picker once the registry loads —
-    // re-query until then.)
-    await waitFor(() => {
-      expect(screen.getByLabelText('Analyst model')).toHaveTextContent('Claude Sonnet 4.6');
-    });
-    await user.click(screen.getByLabelText('Analyst model'));
-    expect(await screen.findByLabelText('Claude Sonnet 4.6')).toBeInTheDocument();
-    expect(screen.getByLabelText('Claude Haiku 4.5')).toBeInTheDocument();
-  });
-
-  it('badges recommended models per use case (compatibility.json) and sorts them first', async () => {
-    mockFetch();
-    renderWithProviders(<LlmModelsSection />, {
-      store: storeWithLlm({
-        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
-        assignments: {
-          analyst: { chain: [{ providerName: 'a' }] },
-          micro: { chain: [{ providerName: 'a' }] },
+        grades: {
+          lite: { providerName: 'a' },
+          core: { providerName: 'a' },
         },
       }),
     });
     const user = userEvent.setup();
 
-    // Analyst: Sonnet is recommended for analyst; Haiku (micro-only) and the
-    // uncurated Opus are not.
-    await openModelPicker(user, 'Analyst model');
-    expect(await screen.findByLabelText('Claude Sonnet 4.6 recommended')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Claude Haiku 4.5 recommended')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Claude 3 Opus recommended')).not.toBeInTheDocument();
-    await closePicker(user, 'Analyst model', 'Claude Sonnet 4.6');
+    // Core: only the core default (Sonnet 5) is badged.
+    await openModelPicker(user, 'Core model');
+    expect(await screen.findByLabelText('Claude Sonnet 5 default')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Claude Sonnet 4.6 default')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Claude Haiku 4.5 default')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Claude 3 Opus default')).not.toBeInTheDocument();
+    await closePicker(user, 'Core model', 'Claude Sonnet 4.6');
 
-    // Micro: only Haiku is recommended, and it sorts above the others
+    // Lite: only Haiku is badged, and it sorts above the others
     // (registry order puts it last).
-    await openModelPicker(user, 'Micro tasks model');
-    expect(await screen.findByLabelText('Claude Haiku 4.5 recommended')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Claude Sonnet 4.6 recommended')).not.toBeInTheDocument();
+    await openModelPicker(user, 'Lite model');
+    expect(await screen.findByLabelText('Claude Haiku 4.5 default')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Claude Sonnet 5 default')).not.toBeInTheDocument();
     const haiku = screen.getByLabelText('Claude Haiku 4.5');
     const sonnet = screen.getByLabelText('Claude Sonnet 4.6');
     expect(haiku.compareDocumentPosition(sonnet) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await closePicker(user, 'Micro tasks model', 'Claude Sonnet 4.6');
-
-    // The provider-level allowed-models picker has no use case: it badges the
-    // union of all use cases' recommendations.
-    await user.click(screen.getByLabelText('LLM provider a allowed models'));
-    expect(await screen.findByLabelText('Claude Sonnet 4.6 recommended')).toBeInTheDocument();
-    expect(screen.getByLabelText('Claude Haiku 4.5 recommended')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Claude 3 Opus recommended')).not.toBeInTheDocument();
   });
 
-  it('an Auto button beside the model picker clears the pick back to the compatibility default', async () => {
+  it('an Auto button beside the model picker clears the pick back to the compatibility grade default', async () => {
     const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
     renderWithProviders(<LlmModelsSection />, {
       store: storeWithLlm({
         providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
-        assignments: { analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] } },
+        grades: { core: { providerName: 'a', model: 'claude-sonnet-4-6' } },
       }),
     });
     const user = userEvent.setup();
 
-    await user.click(await screen.findByLabelText('Analyst model auto'));
+    await user.click(await screen.findByLabelText('Core model auto'));
     // The picker reflects the auto state and names the model auto resolves to.
     await waitFor(() => {
-      expect(screen.getByLabelText('Analyst model')).toHaveTextContent(`Auto (${ANTHROPIC_DEFAULTS['analyst']})`);
+      expect(screen.getByLabelText('Core model')).toHaveTextContent(`Auto (${ANTHROPIC_DEFAULTS['core']})`);
     });
 
     await user.click(screen.getByLabelText('Save LLM configuration'));
     await waitFor(() => {
       const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
       const body = JSON.parse((configCall![1] as RequestInit).body as string);
-      expect(body.llm.assignments.analyst.chain[0].providerName).toBe('a');
-      expect(body.llm.assignments.analyst.chain[0].model).toBeUndefined();
+      expect(body.llm.grades.core.providerName).toBe('a');
+      expect(body.llm.grades.core.model).toBeUndefined();
     });
   });
 
-  it('flags an Auto assignment whose compatibility default is excluded by allowed models', async () => {
-    // The scenario needs distinct defaults: allow only the micro default, so
-    // the analyst auto pick is excluded and the micro one is not.
-    expect(ANTHROPIC_DEFAULTS['analyst']).not.toBe(ANTHROPIC_DEFAULTS['micro']);
-    mockFetch();
-    renderWithProviders(<LlmModelsSection />, {
-      store: storeWithLlm({
-        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k', allowedModels: [ANTHROPIC_DEFAULTS['micro']] }],
-        assignments: {
-          analyst: { chain: [{ providerName: 'a' }] },
-          micro: { chain: [{ providerName: 'a' }] },
-        },
-      }),
-    });
-
-    // Analyst auto default is excluded by the allowlist.
-    expect(await screen.findByLabelText('Analyst auto model conflict')).toHaveTextContent(ANTHROPIC_DEFAULTS['analyst']);
-    // Micro auto default is allowed — no conflict.
-    expect(screen.queryByLabelText('Micro tasks auto model conflict')).not.toBeInTheDocument();
-  });
-
-  it("an Auto button beside allowed models stores 'auto' and toggles back to all", async () => {
-    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
-    renderWithProviders(<LlmModelsSection />, {
-      store: storeWithLlm({ providers: [{ name: 'anthropic', provider: 'anthropic', apiKey: 'k' }] }),
-    });
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByLabelText('LLM provider anthropic allowed models auto'));
-    expect(screen.getByLabelText('LLM provider anthropic allowed models')).toHaveTextContent('Auto (recommended)');
-
-    await user.click(screen.getByLabelText('Save LLM configuration'));
-    await waitFor(() => {
-      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
-      const body = JSON.parse((configCall![1] as RequestInit).body as string);
-      expect(body.llm.providers[0].allowedModels).toBe('auto');
-    });
-
-    // Toggling Auto off returns to unrestricted (All models).
-    await user.click(screen.getByLabelText('LLM provider anthropic allowed models auto'));
-    expect(screen.getByLabelText('LLM provider anthropic allowed models')).toHaveTextContent('All models');
-  });
-
-  it("an 'auto' allowlist bounds the assignment picker to the recommended union", async () => {
-    mockFetch();
-    renderWithProviders(<LlmModelsSection />, {
-      store: storeWithLlm({
-        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k', allowedModels: 'auto' }],
-        assignments: { analyst: { chain: [{ providerName: 'a' }] } },
-      }),
-    });
-    const user = userEvent.setup();
-
-    await openModelPicker(user, 'Analyst model');
-    expect(await screen.findByLabelText('Claude Sonnet 4.6')).toBeInTheDocument();
-    expect(screen.getByLabelText('Claude Haiku 4.5')).toBeInTheDocument();
-    // Uncurated model: outside the recommended union → filtered out.
-    expect(screen.queryByLabelText('Claude 3 Opus')).not.toBeInTheDocument();
-  });
-
-  it('hides both Auto buttons for providers without compatibility recommendations', async () => {
+  it('hides the Auto button for providers without compatibility recommendations', async () => {
     mockFetch();
     renderWithProviders(<LlmModelsSection />, {
       store: storeWithLlm({
         providers: [{ name: 'mistral', provider: 'mistral', apiKey: 'k' }],
-        assignments: { analyst: { chain: [{ providerName: 'mistral' }] } },
+        grades: { core: { providerName: 'mistral' } },
       }),
     });
 
-    // The pickers themselves render (the registry serves models)…
-    expect(await screen.findByLabelText('LLM provider mistral allowed models')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByLabelText('Analyst model').tagName).toBe('BUTTON'));
-    // …but with nothing recommended, there is no Auto to offer.
-    expect(screen.queryByLabelText('LLM provider mistral allowed models auto')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Analyst model auto')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Core model').tagName).toBe('BUTTON'));
+    expect(screen.queryByLabelText('Core model auto')).not.toBeInTheDocument();
   });
 
-  it('switching a provider type clears its allowedModels (they belong to the old registry)', async () => {
-    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+  it('shows the five agent policy rows prefilled from the built-in defaults', async () => {
+    mockFetch();
     renderWithProviders(<LlmModelsSection />, {
-      store: storeWithLlm({
-        providers: [{ name: 'anthropic', provider: 'anthropic', apiKey: 'k', allowedModels: ['claude-haiku-4-5'] }],
-      }),
+      store: storeWithLlm({ providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }] }),
+    });
+
+    expect(await screen.findByLabelText('Agent analyst grades')).toBeInTheDocument();
+    for (const agent of ['analyst', 'web-analyst', 'slack', 'report', 'micro']) {
+      expect(screen.getByLabelText(`Agent ${agent} allowed grades`)).toBeInTheDocument();
+      expect(screen.getByLabelText(`Agent ${agent} default grade`)).toBeInTheDocument();
+    }
+    // Built-in defaults surface without any config: analyst allows core +
+    // advanced (default core), micro is lite-only.
+    expect(screen.getByLabelText('Agent analyst allowed grades')).toHaveTextContent('Core, Advanced');
+    expect(screen.getByLabelText('Agent analyst default grade')).toHaveTextContent('Core');
+    expect(screen.getByLabelText('Agent micro allowed grades')).toHaveTextContent('Lite');
+    expect(screen.getByLabelText('Agent micro default grade')).toHaveTextContent('Lite');
+  });
+
+  it("badges the built-in default grade as recommended in each agent's pickers", async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }] }),
     });
     const user = userEvent.setup();
 
-    await user.click(await screen.findByLabelText('LLM provider anthropic type'));
-    await user.click(await screen.findByLabelText('OpenAI'));
+    // micro's built-in default is lite.
+    await user.click(await screen.findByLabelText('Agent micro default grade'));
+    expect(await screen.findByLabelText('Lite recommended')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Core recommended')).not.toBeInTheDocument();
+    await closePicker(user, 'Agent micro default grade', 'Lite recommended');
+
+    // analyst's built-in default is core — badged even when another grade is selected.
+    await user.click(screen.getByLabelText('Agent analyst default grade'));
+    expect(await screen.findByLabelText('Core recommended')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Lite recommended')).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText('Advanced'));
+    await user.click(screen.getByLabelText('Agent analyst default grade'));
+    expect(await screen.findByLabelText('Core recommended')).toBeInTheDocument();
+  });
+
+  it('saves a sparse agent policy override (only the touched agent is stored)', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }] }),
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('Agent slack default grade'));
+    await user.click(await screen.findByLabelText('Advanced'));
     await user.click(screen.getByLabelText('Save LLM configuration'));
 
     await waitFor(() => {
       const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
       const body = JSON.parse((configCall![1] as RequestInit).body as string);
-      expect(body.llm.providers[0].provider).toBe('openai');
-      expect(body.llm.providers[0].allowedModels).toBeUndefined();
+      expect(body.llm.agents.slack.defaultGrade).toBe('advanced');
+      // Only the touched agent is stored — the rest stay on built-ins.
+      expect(body.llm.agents.analyst).toBeUndefined();
+    });
+  });
+
+  it('drops a stored agent override when reset back to the built-in policy', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+        agents: { slack: { allowedGrades: ['core', 'advanced'], defaultGrade: 'advanced' } },
+      }),
+    });
+    const user = userEvent.setup();
+
+    expect(await screen.findByLabelText('Agent slack default grade')).toHaveTextContent('Advanced');
+    await user.click(screen.getByLabelText('Agent slack default grade'));
+    await user.click(await screen.findByLabelText('Core'));
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.agents?.slack).toBeUndefined();
     });
   });
 });

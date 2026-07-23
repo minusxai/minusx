@@ -15,17 +15,17 @@ vi.mock('@/components/explore/ChatInput', () => ({
   __esModule: true,
   default: (props: {
     onSend: (m: string, a: unknown[]) => void;
-    selectedModel?: { providerName: string; model?: string } | null;
-    onModelChange?: (model: { providerName: string; model: string }) => void;
+    selectedGrade?: string | null;
+    onGradeChange?: (grade: string) => void;
   }) => React.createElement(
     'div',
     null,
     React.createElement('button', { 'aria-label': 'send-test', onClick: () => props.onSend('summarize this', [IMG]) }, 'send'),
     React.createElement('button', {
-      'aria-label': 'select-model-test',
-      onClick: () => props.onModelChange?.({ providerName: 'openai', model: 'gpt-5.5' }),
-    }, 'model'),
-    React.createElement('span', { 'data-testid': 'selected-model' }, props.selectedModel?.model ?? 'default'),
+      'aria-label': 'select-grade-test',
+      onClick: () => props.onGradeChange?.('advanced'),
+    }, 'grade'),
+    React.createElement('span', { 'data-testid': 'selected-grade' }, props.selectedGrade ?? 'default'),
   ),
 }));
 
@@ -34,7 +34,7 @@ import { screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
-import { selectChatAttachments, setChatModelSelection } from '@/store/uiSlice';
+import { selectChatAttachments, setChatGradeSelection } from '@/store/uiSlice';
 import FloatingChatWrapper from '@/components/app-shell/FloatingChatWrapper';
 
 describe('FloatingChatWrapper: attachment hand-off to the sidebar chat', () => {
@@ -49,19 +49,17 @@ describe('FloatingChatWrapper: attachment hand-off to the sidebar chat', () => {
     expect(store.getState().ui.sidebarPendingMessage).toBe('summarize this');
   });
 
-  it('reads and writes the shared chat model selection', async () => {
+  it('reads and writes the shared chat grade selection', async () => {
     const store = storeModule.makeStore();
     renderWithProviders(<FloatingChatWrapper appState={null} />, { store });
 
-    await userEvent.click(screen.getByLabelText('select-model-test'));
-    expect(screen.getByTestId('selected-model')).toHaveTextContent('gpt-5.5');
-    expect(store.getState().ui.chatModelSelection).toEqual({
-      providerName: 'openai', model: 'gpt-5.5',
-    });
+    await userEvent.click(screen.getByLabelText('select-grade-test'));
+    expect(screen.getByTestId('selected-grade')).toHaveTextContent('advanced');
+    expect(store.getState().ui.chatGradeSelection).toBe('advanced');
 
     act(() => {
-      store.dispatch(setChatModelSelection({ providerName: 'openai', model: 'gpt-5.6' }));
+      store.dispatch(setChatGradeSelection('lite'));
     });
-    expect(screen.getByTestId('selected-model')).toHaveTextContent('gpt-5.6');
+    expect(screen.getByTestId('selected-grade')).toHaveTextContent('lite');
   });
 });

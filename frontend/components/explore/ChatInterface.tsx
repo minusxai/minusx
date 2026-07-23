@@ -20,7 +20,7 @@ import { ConversationsAPI } from '@/lib/data/conversations';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { toaster } from '@/components/ui/toaster';
-import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setChatModelSelection, setSidebarPendingSlashCommand } from '@/store/uiSlice';
+import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setChatGradeSelection, setSidebarPendingSlashCommand } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
 import { appStateWithFileScreenshot, isStoryAppState } from '@/lib/screenshot/app-state-screenshot';
 import { readViewportPointer } from '@/lib/screenshot/read-viewport';
@@ -43,7 +43,7 @@ import { selectDisableAppStateImages } from '@/store/configsSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import ToolDebugBar from './ToolDebugBar';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
-import type { ChatModelSelection } from '@/lib/llm/llm-config-types';
+import type { LlmGrade } from '@/lib/llm/llm-config-types';
 
 // next/dynamic with ssr:false prevents pdfjs-dist (browser-only, uses DOMMatrix at module init)
 // from being evaluated during SSR prerendering. This is an intentional SSR boundary, not a
@@ -147,14 +147,14 @@ export default function ChatInterface({
   const viewMode = showExpandedMessages ? 'detailed' : 'compact';
   const [continueChatConfirmed, setContinueChatConfirmed] = useState(false)
   const [isPreparing, setIsPreparing] = useState(false)
-  const [localSelectedModel, setLocalSelectedModel] = useState<ChatModelSelection | null>(null);
-  const sharedSelectedModel = useAppSelector(state => state.ui.chatModelSelection);
-  const selectedModel = container === 'sidebar' ? sharedSelectedModel : localSelectedModel;
-  const setSelectedModel = useCallback((model: ChatModelSelection | null) => {
+  const [localSelectedGrade, setLocalSelectedGrade] = useState<LlmGrade | null>(null);
+  const sharedSelectedGrade = useAppSelector(state => state.ui.chatGradeSelection);
+  const selectedGrade = container === 'sidebar' ? sharedSelectedGrade : localSelectedGrade;
+  const setSelectedGrade = useCallback((grade: LlmGrade | null) => {
     if (container === 'sidebar') {
-      dispatch(setChatModelSelection(model));
+      dispatch(setChatGradeSelection(grade));
     } else {
-      setLocalSelectedModel(model);
+      setLocalSelectedGrade(grade);
     }
   }, [container, dispatch]);
 
@@ -239,9 +239,9 @@ export default function ChatInterface({
   // Keep the choice scoped to this chat. In-session Redux agent args retain it
   // when switching away and back; no explicit choice uses Settings → Models.
   useEffect(() => {
-    const stored = conversation?.agent_args?.model_override as ChatModelSelection | undefined;
+    const stored = conversation?.agent_args?.grade_override as LlmGrade | undefined;
     if (container === 'sidebar' && !conversation) return;
-    setSelectedModel(stored ?? null);
+    setSelectedGrade(stored ?? null);
     // Only switch selection when the active conversation itself changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationID]);
@@ -598,7 +598,7 @@ export default function ChatInterface({
       },
       ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
       ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
-      ...(selectedModel ? { model_override: selectedModel } : {}),
+      ...(selectedGrade ? { grade_override: selectedGrade } : {}),
     };
   }, [
     appState,
@@ -612,7 +612,7 @@ export default function ChatInterface({
     database,
     getSkillsFromMessage,
     selectedDatabase,
-    selectedModel,
+    selectedGrade,
     store,
     uniqueSkills,
   ]);
@@ -1118,8 +1118,8 @@ export default function ChatInterface({
               disabled={isLoading}
               databaseName={selectedDatabase || ''}
               onDatabaseChange={handleDatabaseChange}
-              selectedModel={selectedModel}
-              onModelChange={setSelectedModel}
+              selectedGrade={selectedGrade}
+              onGradeChange={setSelectedGrade}
               container={container}
               isCompact={isCompact}
               colSpan={colSpan}
