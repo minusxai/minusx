@@ -782,7 +782,7 @@ export default function QuestionViewV2({
                           </span>
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="top">Scratch data — type or paste rows. Not a live connection; saved inside this question.</TooltipContent>
+                      <TooltipContent side="top" portalled>Scratch data — type or paste rows. Not a live connection; saved inside this question.</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}
@@ -804,7 +804,7 @@ export default function QuestionViewV2({
                           <span className="font-mono text-[10px] font-bold tracking-[0.04em] text-muted-foreground">LOCAL</span>
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent side="top">Local data — typed or pasted and saved in this question. It doesn&apos;t refresh from a connection.</TooltipContent>
+                      <TooltipContent side="top" portalled>Local data — typed or pasted and saved in this question. It doesn&apos;t refresh from a connection.</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}
