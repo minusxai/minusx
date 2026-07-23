@@ -145,6 +145,95 @@ describe('LlmModelsSection', () => {
     });
   });
 
+  // Adding a BYOK provider must leave the workspace RUNNABLE. Without this the
+  // saved config carries providers and no grades, and every chat dies with
+  // "No model is mapped to grade 'core'".
+  it('auto-maps every grade to a newly added BYOK provider (as Auto — no model pinned)', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, { store: storeWithLlm(undefined) });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('Add LLM provider'));
+    // New entries default to MinusX — switch to a BYOK provider.
+    await user.click(screen.getByLabelText('LLM provider minusx type'));
+    await user.click(await screen.findByLabelText('Anthropic'));
+
+    // Every grade slot is now mapped (the editor shows providers, not "Set model").
+    await waitFor(() => expect(screen.getByLabelText('Core provider')).toBeInTheDocument());
+    expect(screen.getByLabelText('Lite provider')).toBeInTheDocument();
+    expect(screen.getByLabelText('Advanced provider')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      for (const grade of ['lite', 'core', 'advanced']) {
+        expect(body.llm.grades[grade].providerName).toBe('anthropic');
+        expect(body.llm.grades[grade].model).toBeUndefined(); // Auto: the compat default per grade
+      }
+    });
+  });
+
+  it('leaves grades unmapped for the managed MinusX provider (the gateway routes them)', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, { store: storeWithLlm(undefined) });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('Add LLM provider'));
+    expect(await screen.findByLabelText('Grades managed by MinusX')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.grades).toBeUndefined();
+    });
+  });
+
+  it('never overwrites a grade that is already mapped when another provider is added', async () => {
+    const fetchSpy = mockFetch({ '/api/configs': { success: true, data: { config: {} } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'anthropic', provider: 'anthropic', apiKey: 'k' }],
+        grades: { core: { providerName: 'anthropic', model: 'claude-sonnet-4-6' } },
+      }),
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('Add LLM provider'));
+    await user.click(screen.getByLabelText('LLM provider minusx type'));
+    await user.click(await screen.findByLabelText('OpenAI'));
+
+    await user.click(screen.getByLabelText('Save LLM configuration'));
+    await waitFor(() => {
+      const configCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/configs'));
+      const body = JSON.parse((configCall![1] as RequestInit).body as string);
+      expect(body.llm.grades.core).toMatchObject({ providerName: 'anthropic', model: 'claude-sonnet-4-6' });
+      expect(body.llm.grades.lite.providerName).toBe('openai');   // only the empty slots fill
+      expect(body.llm.grades.advanced.providerName).toBe('openai');
+    });
+  });
+
+  // The stored key is a ref keyed by the OLD provider identity. Carrying it
+  // across a type switch sends one vendor's key to another, while the field
+  // still badges "saved".
+  it('clears the saved API key (and type-specific fields) when the provider type changes', async () => {
+    mockFetch();
+    const ref = configSecretRefPath('org', 'llm.providers', 'anthropic', 'apiKey');
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'anthropic', provider: 'anthropic', apiKey: ref }] }),
+    });
+    const user = userEvent.setup();
+
+    expect(await screen.findByLabelText('LLM provider anthropic key saved')).toBeInTheDocument();
+    await user.click(screen.getByLabelText('LLM provider anthropic type'));
+    await user.click(await screen.findByLabelText('OpenAI'));
+
+    await waitFor(() => expect(screen.getByLabelText('LLM provider openai')).toBeInTheDocument());
+    expect(screen.queryByLabelText('LLM provider openai key saved')).not.toBeInTheDocument();
+    expect((screen.getByLabelText('LLM provider openai API key') as HTMLInputElement).value).toBe('');
+  });
+
   it('shows the managed banner when MinusX is configured with no explicit grade mappings', async () => {
     mockFetch();
     renderWithProviders(<LlmModelsSection />, {
@@ -169,6 +258,54 @@ describe('LlmModelsSection', () => {
     const body = JSON.parse((testCall![1] as RequestInit).body as string);
     expect(body.provider.apiKey).toBe('sk-new');
     expect(body.model).toBe(ANTHROPIC_DEFAULTS['core']); // probe rides the core grade default
+  });
+
+  it('names the model it probed in a successful test result', async () => {
+    mockFetch({ '/api/llm/test': { success: true, data: { ok: true, latencyMs: 420, model: 'claude-sonnet-5' } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'main-anthropic', provider: 'anthropic', apiKey: 'sk-new' }] }),
+    });
+    const user = userEvent.setup();
+    await user.click(await screen.findByLabelText('Test LLM provider main-anthropic'));
+    await waitFor(() => {
+      expect(screen.getByLabelText('LLM provider main-anthropic test result')).toHaveTextContent('claude-sonnet-5');
+    });
+  });
+
+  // Probing the alphabetically-first registry model tests a model the key may
+  // not cover (mistral → codestral-latest). With no model to probe there is
+  // nothing meaningful to test, so the button says so instead of failing.
+  it('disables Test until a model is pickable for providers with no compatibility default', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'mistral', provider: 'mistral', apiKey: 'k' }] }),
+    });
+    expect(await screen.findByLabelText('Test LLM provider mistral')).toBeDisabled();
+  });
+
+  it('enables Test for a curation-less provider once a grade pins a model', async () => {
+    const fetchSpy = mockFetch({ '/api/llm/test': { success: true, data: { ok: true, latencyMs: 12 } } });
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [{ name: 'local', provider: 'custom', baseUrl: 'http://localhost:11434/v1' }],
+        grades: { core: { providerName: 'local', model: 'qwen3:32b' } },
+      }),
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByLabelText('Test LLM provider local'));
+    await waitFor(() => {
+      const testCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/llm/test'));
+      expect(JSON.parse((testCall![1] as RequestInit).body as string).model).toBe('qwen3:32b');
+    });
+  });
+
+  it('disables Test for a custom endpoint with no model pinned anywhere', async () => {
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({ providers: [{ name: 'local', provider: 'custom', baseUrl: 'http://localhost:11434/v1' }] }),
+    });
+    expect(await screen.findByLabelText('Test LLM provider local')).toBeDisabled();
   });
 
   it('shows a failing test result', async () => {

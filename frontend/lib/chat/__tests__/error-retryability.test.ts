@@ -5,7 +5,7 @@
  * MUST be terminal; genuinely transient blips (network / 500 / 429 / timeout / unknown) stay
  * retryable.
  */
-import { classifyErrorRetryability } from '@/lib/chat/error-retryability';
+import { classifyErrorRetryability, classifyTerminalReason } from '@/lib/chat/error-retryability';
 
 describe('classifyErrorRetryability', () => {
   describe('terminal — retry would deterministically re-fail', () => {
@@ -66,4 +66,40 @@ describe('classifyErrorRetryability', () => {
       expect(classifyErrorRetryability(msg)).toBe('transient');
     });
   });
+});
+
+// "Start a new chat" is the right move for a context overflow and useless for a bad API key — the
+// next chat fails identically until an admin fixes the provider. The banner needs the REASON, not
+// just the verdict, to say something true.
+describe('classifyTerminalReason', () => {
+  it('separates a context overflow from a malformed request (both are 400 invalid_request_error)', () => {
+    expect(classifyTerminalReason(
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 250000 tokens > 200000 maximum"}}',
+    )).toBe('context_length');
+    expect(classifyTerminalReason(
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"messages: at least one message is required"}}',
+    )).toBe('malformed');
+  });
+
+  it.each([
+    '401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
+    'invalid_api_key: incorrect API key provided',
+    'Unauthorized',
+  ])('auth: %s', (msg) => {
+    expect(classifyTerminalReason(msg)).toBe('auth');
+  });
+
+  it.each([
+    '403 {"type":"error","error":{"type":"permission_error","message":"not allowed"}}',
+    'Forbidden',
+  ])('permission: %s', (msg) => {
+    expect(classifyTerminalReason(msg)).toBe('permission');
+  });
+
+  it.each(['Network error', '429 rate_limit_error', null, undefined, ''])(
+    'null when a retry may succeed: %s',
+    (msg) => {
+      expect(classifyTerminalReason(msg)).toBeNull();
+    },
+  );
 });

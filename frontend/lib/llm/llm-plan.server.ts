@@ -7,10 +7,16 @@
  *   1. `llm.grades[grade]` (explicit mapping: one provider+model per grade)
  *   2. the minusx provider entry, if configured (fully managed, keyed — the
  *      gateway routes the grade)
- *   3. with an `llm` section but neither: a hard error naming the unmapped
- *      grade (no silent nearest-grade fallback)
- * A workspace with NO `llm` section routes to the managed MinusX gateway,
- * unkeyed — the universal default. An unconfigured workspace gets a clear
+ *   3. the workspace's SOLE bring-your-own-key provider, run as "Auto" (the
+ *      compatibility.json default for the grade) — connecting one provider
+ *      powers every grade with no further setup
+ *   4. with an `llm` section but none of those: a hard error naming the
+ *      unmapped grade (no silent nearest-grade fallback). Reached only when
+ *      the pick would be a guess — 2+ BYOK providers, or a provider with no
+ *      curation for the grade (custom endpoints, niche registry slugs).
+ * A workspace with no configured endpoint — no `llm` section, or one holding
+ * neither providers nor grades — routes to the managed MinusX gateway,
+ * unkeyed: the universal default. An unconfigured workspace gets a clear
  * auth error pointing at Settings → Models, instead of silently using some
  * other vendor's model.
  *
@@ -35,10 +41,10 @@ import { E2E_MODE } from '@/lib/constants';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import {
   LLM_AGENT_KEYS, LLM_GRADES, MINUSX_PROVIDER, CUSTOM_PROVIDER,
-  findLlmProvider, findMinusxProvider, resolveAgentPolicy,
+  findLlmProvider, findMinusxProvider, hasLlmEndpoints, resolveAgentPolicy,
   type LlmAgentKey, type LlmConfig, type LlmGrade, type LlmModelChoice, type LlmProviderEntry,
 } from './llm-config-types';
-import { compatDefaultModel } from './compat-models';
+import { autoGradeProvider, compatDefaultModel } from './compat-models';
 
 /**
  * Build one executable plan step from a provider entry + model choice.
@@ -106,6 +112,13 @@ function planFromConfig(llm: LlmConfig, agent: LlmAgentKey, grade: LlmGrade, cat
   // routes the grade itself).
   const minusx = findMinusxProvider(llm);
   if (minusx) return buildPlanStep(minusx, { providerName: minusx.name }, grade);
+  // Still no mapping, but the workspace has exactly ONE bring-your-own-key
+  // provider with curation for this grade: run it as "Auto". Connecting a
+  // single provider is the overwhelmingly common setup, and requiring three
+  // separate grade mappings on top of it means a saved-and-tested provider
+  // still fails every call. Grade-agnostic, so lite/micro is covered too.
+  const auto = autoGradeProvider(llm, grade);
+  if (auto) return buildPlanStep(auto, { providerName: auto.name }, grade, catalog);
   throw new Error(`No model is mapped to grade '${grade}' (agent '${agent}'). Map it in Settings → Models.`);
 }
 
@@ -154,7 +167,11 @@ export async function resolveLlmPlan(
     : undefined;
   const grade = gradeOverride ?? selectorGrade ?? policy.defaultGrade;
 
-  if (llm) {
+  // An `llm` section with no providers and no grade mappings is not a
+  // configuration — it's what Settings → Models leaves behind once the last
+  // provider is deleted, and the page cannot remove the section itself. Treat
+  // it as unconfigured rather than a dead end no admin can undo from the UI.
+  if (hasLlmEndpoints(llm)) {
     const resolved = await resolveConfigSecrets(llm);
     // Live catalog only matters for model ids newer than the baked registry;
     // fetch is cached in-process and null-safe (baked-only fallback).

@@ -9,21 +9,26 @@ import {
   LLM_GRADES,
   findLlmProvider,
   findMinusxProvider,
+  hasLlmEndpoints,
   resolveAgentPolicy,
   type ChatGradeCatalog,
   type ChatGradeOption,
   type LlmConfig,
   type LlmGrade,
 } from './llm-config-types';
+import { autoGradeProvider } from './compat-models';
 
 function gradeOption(llm: LlmConfig | undefined, grade: LlmGrade): ChatGradeOption {
-  // Configured = picking this grade resolves to SOME model: an explicit
+  // Configured = picking this grade resolves to SOME model. Mirrors the
+  // resolver's ladder exactly (lib/llm/llm-plan.server.ts) — an explicit
   // mapping with a live provider, a minusx provider (the gateway routes every
-  // grade), or — with no llm section at all — the managed gateway default.
+  // grade), the sole BYOK provider run as Auto, or — with no endpoint
+  // configured at all — the managed gateway default.
   const choice = llm?.grades?.[grade];
-  const configured = !llm
+  const configured = !hasLlmEndpoints(llm)
     || (!!choice && !!findLlmProvider(llm, choice.providerName))
-    || !!findMinusxProvider(llm);
+    || !!findMinusxProvider(llm)
+    || !!autoGradeProvider(llm, grade);
   return { grade, configured };
 }
 

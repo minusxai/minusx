@@ -67,7 +67,9 @@ describe('buildChatGradeCatalog', () => {
     expect(result.grades.map(g => g.grade)).toEqual(['core', 'advanced']);
   });
 
-  it('marks unmapped grades unconfigured when there is no minusx provider', () => {
+  // Mirrors the resolver: a lone BYOK provider auto-covers unmapped grades, so
+  // the picker must not label them unconfigured (they resolve fine).
+  it('treats unmapped grades as configured when a lone BYOK provider auto-covers them', () => {
     const llm: LlmConfig = {
       providers: [{ name: 'a', provider: 'anthropic' }],
       grades: { core: { providerName: 'a', model: 'claude-sonnet-4-6' } },
@@ -75,7 +77,42 @@ describe('buildChatGradeCatalog', () => {
     const result = buildChatGradeCatalog(llm);
     expect(result.grades).toEqual([
       { grade: 'core', configured: true },
+      { grade: 'advanced', configured: true },
+    ]);
+  });
+
+  it('marks unmapped grades unconfigured when two BYOK providers make the pick ambiguous', () => {
+    const llm: LlmConfig = {
+      providers: [{ name: 'a', provider: 'anthropic' }, { name: 'o', provider: 'openai' }],
+      grades: { core: { providerName: 'a', model: 'claude-sonnet-4-6' } },
+    };
+    const result = buildChatGradeCatalog(llm);
+    expect(result.grades).toEqual([
+      { grade: 'core', configured: true },
       { grade: 'advanced', configured: false },
+    ]);
+  });
+
+  it('marks unmapped grades unconfigured for a provider with no compatibility curation', () => {
+    const llm: LlmConfig = {
+      providers: [{ name: 'local', provider: 'custom', baseUrl: 'http://localhost:11434/v1' }],
+      grades: { core: { providerName: 'local', model: 'qwen3:32b' } },
+    };
+    const result = buildChatGradeCatalog(llm);
+    expect(result.grades).toEqual([
+      { grade: 'core', configured: true },
+      { grade: 'advanced', configured: false },
+    ]);
+  });
+
+  it('treats every grade as configured for an `llm` section with no endpoints (managed default)', () => {
+    expect(buildChatGradeCatalog({}).grades).toEqual([
+      { grade: 'core', configured: true },
+      { grade: 'advanced', configured: true },
+    ]);
+    expect(buildChatGradeCatalog({ agents: { slack: { defaultGrade: 'advanced' } } }).grades).toEqual([
+      { grade: 'core', configured: true },
+      { grade: 'advanced', configured: true },
     ]);
   });
 

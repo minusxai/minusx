@@ -103,6 +103,31 @@ describe('Chat error retry affordance', () => {
     expect(queryByLabelText('Try again')).toBeNull();
   });
 
+  // A context overflow and a bad API key are both terminal, but only ONE of them is fixed by
+  // starting a new chat. Telling an admin with an expired key that the conversation "grew too
+  // long" sends them down entirely the wrong path.
+  it('a provider auth failure points at Settings → Models, not at conversation length', async () => {
+    const { findByLabelText, queryByLabelText, container } = renderWith(makeErroredConversation(
+      '401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
+      'terminal',
+    ));
+    expect(await findByLabelText('Open model settings')).toBeTruthy();
+    expect(container.textContent).toMatch(/Settings → Models/);
+    expect(container.textContent).not.toMatch(/grown too long/);
+    // "Start a new chat" cannot help — the next chat fails identically.
+    expect(queryByLabelText('Start a new chat')).toBeNull();
+    expect(queryByLabelText('Try again')).toBeNull();
+  });
+
+  it('a context overflow still steers to a new chat', async () => {
+    const { findByLabelText, container } = renderWith(makeErroredConversation(
+      'prompt is too long: 250000 tokens > 200000 maximum',
+      'terminal',
+    ));
+    expect(await findByLabelText('Start a new chat')).toBeTruthy();
+    expect(container.textContent).toMatch(/grown too long/);
+  });
+
   it('clicking "Try again" clears the error WITHOUT appending a "Continue" message', async () => {
     // Hang the network so the retry listener stays pending and never re-sets the error — we assert
     // only the synchronous reducer effect of retryConversationTurn (error cleared, no new bubble).

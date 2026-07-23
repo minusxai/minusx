@@ -151,31 +151,66 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
     return `${slug}-${n}`;
   };
 
+  /**
+   * Fill every UNMAPPED grade with an Auto mapping on `providerName` (no model
+   * pinned — resolution takes the compatibility default per grade). Mappings
+   * the admin already made are never touched. Skipped for the managed MinusX
+   * provider, which routes every grade itself and reads better as the
+   * "managed" banner than as three redundant rows.
+   */
+  const fillUnmappedGrades = (config: LlmConfig, providerName: string) => {
+    for (const grade of LLM_GRADES) {
+      if (config.grades?.[grade]) continue;
+      config.grades = config.grades ?? {};
+      config.grades[grade] = { providerName, options: { reasoning: DEFAULT_REASONING } };
+    }
+  };
+
   const setProvider = (index: number, patch: Partial<LlmProviderEntry>) => {
     setDraft(d => {
       const next = structuredClone(d);
       next.providers = next.providers ?? [];
       const prev = next.providers[index];
+      const typeChanged = patch.provider !== undefined && !!prev && patch.provider !== prev.provider;
       // Switching the provider type refreshes an auto-generated name; a
       // user-customized name is left alone.
       if (patch.provider !== undefined && prev && (prev.name === '' || prev.name === prev.provider || prev.name === autoName(prev.provider, next.providers, index))) {
         patch = { ...patch, name: autoName(patch.provider, next.providers, index) };
+      }
+      // Credentials and endpoint details belong to the OLD provider type. A
+      // stored key is a ref keyed by the old identity, so carrying it over
+      // would send one vendor's key to another while the field still badges
+      // "saved" — clear them and make the admin re-enter.
+      if (typeChanged) {
+        patch = { ...patch, apiKey: undefined, awsRegion: undefined, baseUrl: undefined, headers: undefined };
       }
       const updated = { ...prev, ...patch };
       next.providers[index] = updated;
       // Cascade the EFFECTIVE name (blank name = the auto name) into every
       // grade mapping that referenced the old one — a dangling reference
       // would fail validation on save. Covers renames, clears, and type switches.
+      const newEffective = updated.name || autoName(updated.provider, next.providers, index);
       if (prev && next.grades) {
         const oldEffective = prev.name || autoName(prev.provider, next.providers, index);
-        const newEffective = updated.name || autoName(updated.provider, next.providers, index);
-        if (oldEffective !== newEffective) {
-          for (const grade of LLM_GRADES) {
-            const choice = next.grades[grade];
-            if (choice?.providerName === oldEffective) choice.providerName = newEffective;
+        for (const grade of LLM_GRADES) {
+          const choice = next.grades[grade];
+          if (choice?.providerName !== oldEffective) continue;
+          // Switched to the managed gateway: it routes every grade itself, so
+          // an explicit mapping is redundant (and its model id is now invalid).
+          if (typeChanged && updated.provider === MINUSX_PROVIDER) {
+            delete next.grades[grade];
+            continue;
           }
+          choice.providerName = newEffective;
+          // A pinned model id belongs to the old vendor's catalog — drop it
+          // back to Auto rather than leave a mapping that can never resolve.
+          if (typeChanged) delete choice.model;
         }
+        if (Object.keys(next.grades).length === 0) delete next.grades;
       }
+      // Pointing a row at a bring-your-own-key type must leave every grade
+      // runnable, exactly as adding one does.
+      if (typeChanged && updated.provider !== MINUSX_PROVIDER) fillUnmappedGrades(next, newEffective);
       return next;
     });
   };
@@ -185,7 +220,11 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
       const next = structuredClone(d);
       next.providers = next.providers ?? [];
       const slug = minusx ? 'anthropic' : MINUSX_PROVIDER;
-      next.providers.push({ name: autoName(slug, next.providers, -1), provider: slug });
+      const name = autoName(slug, next.providers, -1);
+      next.providers.push({ name, provider: slug });
+      // A provider the admin adds must leave the workspace runnable: without a
+      // grade mapping every chat fails with "No model is mapped to grade …".
+      if (slug !== MINUSX_PROVIDER) fillUnmappedGrades(next, name);
       return next;
     });
   };
@@ -256,14 +295,28 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
     }
   };
 
-  /** Model used for a provider's connectivity test: its first grade use, else the compat core default, else the registry's first. */
+  /**
+   * Model used for a provider's connectivity test: a model it is already
+   * mapped to, else the compatibility default for the core grade.
+   *
+   * Deliberately does NOT fall back to the registry's first model — that is
+   * alphabetical, so it probed models a key often has no access to (mistral →
+   * `codestral-latest`), turning a healthy endpoint into a failed test. With
+   * nothing curated and nothing mapped there is no meaningful probe: the Test
+   * button stays disabled until a grade pins a model. The managed MinusX
+   * provider needs none — the gateway picks the model.
+   */
   const testModelFor = (entry: LlmProviderEntry): string | undefined => {
     for (const grade of LLM_GRADES) {
       const choice = draft.grades?.[grade];
       if (choice?.providerName === (entry.name || entry.provider) && choice.model) return choice.model;
     }
-    return compatDefaultModel(entry.provider, 'core') ?? modelsFor(entry.provider)[0]?.id;
+    return compatDefaultModel(entry.provider, 'core');
   };
+
+  /** Whether a connectivity probe can be built for this entry at all. */
+  const canTest = (entry: LlmProviderEntry): boolean =>
+    entry.provider === MINUSX_PROVIDER || !!testModelFor(entry);
 
   const testProvider = async (entry: LlmProviderEntry) => {
     const key = entry.name || entry.provider;
@@ -283,7 +336,9 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
       setTestResults(r => ({
         ...r,
         [key]: ok
-          ? { ok: true, detail: `Connected (${body.data.latencyMs}ms)` }
+          // Name the model that answered — otherwise a green Test says nothing
+          // about WHICH model was reachable.
+          ? { ok: true, detail: `Connected (${body.data.latencyMs}ms)${body.data.model ? ` · ${body.data.model}` : ''}` }
           : { ok: false, detail: body.data?.error ?? 'Connection failed' },
       }));
     } catch (error) {
@@ -404,7 +459,8 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
                       size="sm" variant="outline" fontFamily="mono"
                       onClick={() => testProvider(entry)}
                       loading={testing === (entry.name || entry.provider)}
-                      disabled={status === 'none' && !isCustom}
+                      disabled={(status === 'none' && !isCustom) || !canTest(entry)}
+                      title={canTest(entry) ? undefined : 'Set this provider’s model under Model grades first'}
                       aria-label={`Test LLM provider ${label}`}
                     >
                       <LuPlug /> Test

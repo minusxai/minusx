@@ -203,12 +203,21 @@ export default function ChatSettingsPopover({
 
   const modelOptions = useMemo(() => {
     const defaultMeta = catalog ? GRADE_META[catalog.defaultGrade] : undefined;
+    // The default is the grade every turn actually runs on. Badging it
+    // "recommended" while it resolves to nothing tells the user the one option
+    // they're allowed to use is fine, moments before the turn errors — so the
+    // badge tracks `configured`, exactly like the other grades' descriptions.
+    const defaultConfigured = catalog
+      ? (catalog.grades.find((g) => g.grade === catalog.defaultGrade)?.configured ?? true)
+      : true;
     const options: ComboboxOption[] = [{
       value: DEFAULT_GRADE,
       label: defaultMeta?.label ?? 'Default',
       icon: defaultMeta?.icon,
-      description: defaultMeta?.description ?? 'Follows Settings → Models',
-      badge: 'recommended',
+      description: defaultConfigured
+        ? (defaultMeta?.description ?? 'Follows Settings → Models')
+        : 'Not configured for this workspace.',
+      ...(defaultConfigured ? { badge: 'recommended' } : {}),
       group: 'Workspace default',
     }];
 

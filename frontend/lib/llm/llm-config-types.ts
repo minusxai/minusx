@@ -150,3 +150,21 @@ export function findLlmProvider(config: LlmConfig | undefined, name: string): Ll
 export function findMinusxProvider(config: LlmConfig | undefined): LlmProviderEntry | undefined {
   return config?.providers?.find(p => p.provider === MINUSX_PROVIDER);
 }
+
+/** Bring-your-own-key entries: every provider except the managed MinusX gateway. */
+export function byokProviders(config: LlmConfig | undefined): LlmProviderEntry[] {
+  return (config?.providers ?? []).filter(p => p.provider !== MINUSX_PROVIDER);
+}
+
+/**
+ * Whether an `llm` section actually configures an endpoint. A section carrying
+ * only agent-policy overrides — or nothing at all, which is what Settings →
+ * Models writes once the last provider is deleted — is NOT configuration.
+ * Resolution treats it exactly like an absent section (managed default) rather
+ * than failing every call with an unmapped-grade error the settings page offers
+ * no way to undo.
+ */
+export function hasLlmEndpoints(config: LlmConfig | undefined): config is LlmConfig {
+  return (config?.providers?.length ?? 0) > 0
+    || Object.keys(config?.grades ?? {}).length > 0;
+}

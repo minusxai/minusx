@@ -88,14 +88,70 @@ describe('resolveLlmPlan', () => {
     expect((plan.model as { id: string }).id).toBe('claude-sonnet-4-6');
   });
 
-  it('an unmapped grade with no minusx provider throws a clear settings-pointing error', async () => {
+  // Connecting ONE provider must power every grade — the settings page implies
+  // it, and the env-seed path has always guaranteed it. Without this, saving a
+  // provider and nothing else bricks every chat with an unmapped-grade error.
+  it('auto-resolves an unmapped grade to the workspace\'s sole BYOK provider (compat default for that grade)', async () => {
+    const anthropicDefaults = (compatibility.llm.providers as { id: string; defaults?: Record<string, string> }[])
+      .find(p => p.id === 'anthropic')!.defaults!;
     await setLlmConfig({
       providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      grades: { core: { providerName: 'a', model: 'claude-sonnet-4-6' } },
+    } satisfies LlmConfig);
+    // lite is unmapped; micro rides it and must still resolve.
+    expect(((await resolveLlmPlan({ agent: 'micro' }))!.model as { id: string }).id).toBe(anthropicDefaults['lite']);
+    // The explicit mapping still wins for the grade that has one.
+    expect(((await resolveLlmPlan({ agent: 'analyst' }))!.model as { id: string }).id).toBe('claude-sonnet-4-6');
+  });
+
+  it('auto-resolves EVERY grade when a lone provider is saved with no grade mappings at all', async () => {
+    const anthropicDefaults = (compatibility.llm.providers as { id: string; defaults?: Record<string, string> }[])
+      .find(p => p.id === 'anthropic')!.defaults!;
+    // Exactly what Settings → Models writes after "add provider + key + save".
+    await setLlmConfig({ providers: [{ name: 'anthropic', provider: 'anthropic', apiKey: 'k' }] } satisfies LlmConfig);
+    expect(((await resolveLlmPlan({ agent: 'web-analyst' }))!.model as { id: string }).id).toBe(anthropicDefaults['core']);
+    expect(((await resolveLlmPlan({ agent: 'micro' }))!.model as { id: string }).id).toBe(anthropicDefaults['lite']);
+    expect(((await resolveLlmPlan({ agent: 'analyst' }, 'advanced'))!.model as { id: string }).id)
+      .toBe(anthropicDefaults['advanced']);
+  });
+
+  it('still throws for an unmapped grade when TWO BYOK providers make the pick ambiguous', async () => {
+    await setLlmConfig({
+      providers: [
+        { name: 'a', provider: 'anthropic', apiKey: 'k' },
+        { name: 'o', provider: 'openai', apiKey: 'k2' },
+      ],
       grades: { core: { providerName: 'a', model: 'claude-sonnet-4-6' } },
     } satisfies LlmConfig);
     await expect(resolveLlmPlan({ agent: 'micro' })).rejects.toThrow(
       /No model is mapped to grade 'lite' \(agent 'micro'\)\. Map it in Settings → Models\./,
     );
+  });
+
+  it('still throws for a lone provider with no compatibility curation (a model id cannot be guessed)', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'local', provider: 'custom', baseUrl: 'http://localhost:11434/v1' }],
+    } satisfies LlmConfig);
+    await expect(resolveLlmPlan({ agent: 'analyst' })).rejects.toThrow(
+      /No model is mapped to grade 'core' \(agent 'analyst'\)\. Map it in Settings → Models\./,
+    );
+  });
+
+  // Deleting the last provider in Settings → Models saves `llm: {}`. That must
+  // not be a dead end: the page cannot remove the section, so treating an empty
+  // section as "configured" leaves the workspace unrecoverable from the UI.
+  it('treats an `llm` section with no endpoints as unconfigured (managed default, not a hard error)', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('VITEST', '');
+    try {
+      await setLlmConfig({} satisfies LlmConfig);
+      expect(((await resolveLlmPlan({ agent: 'analyst' }))!.model as { provider: string }).provider).toBe('minusx');
+      // An agent-policy-only section is likewise not an endpoint configuration.
+      await setLlmConfig({ agents: { slack: { defaultGrade: 'advanced' } } } satisfies LlmConfig);
+      expect(((await resolveLlmPlan({ agent: 'slack' }))!.model as { provider: string }).provider).toBe('minusx');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('an unmapped grade routes to the minusx provider when configured, grade in the header', async () => {
@@ -202,9 +258,24 @@ describe('resolveLlmPlan', () => {
     );
   });
 
-  it('an allowed but unmapped per-chat grade hits the unmapped-grade error', async () => {
+  it('an allowed but unmapped per-chat grade auto-resolves on the sole provider', async () => {
+    const anthropicDefaults = (compatibility.llm.providers as { id: string; defaults?: Record<string, string> }[])
+      .find(p => p.id === 'anthropic')!.defaults!;
     await setLlmConfig({
       providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      grades: { core: { providerName: 'a', model: 'claude-sonnet-4-6' } },
+    } satisfies LlmConfig);
+    // The picker offers Advanced, so picking it must run — not error.
+    expect(((await resolveLlmPlan({ agent: 'analyst' }, 'advanced'))!.model as { id: string }).id)
+      .toBe(anthropicDefaults['advanced']);
+  });
+
+  it('an allowed but unmapped per-chat grade still errors when the provider pick is ambiguous', async () => {
+    await setLlmConfig({
+      providers: [
+        { name: 'a', provider: 'anthropic', apiKey: 'k' },
+        { name: 'o', provider: 'openai', apiKey: 'k2' },
+      ],
       grades: { core: { providerName: 'a', model: 'claude-sonnet-4-6' } },
     } satisfies LlmConfig);
     await expect(resolveLlmPlan({ agent: 'analyst' }, 'advanced')).rejects.toThrow(
@@ -221,13 +292,17 @@ describe('resolveLlmPlan', () => {
     expect((plan.model as { id: string }).id).toBe('claude-sonnet-4-6');
   });
 
-  it('a legacy assignments-only config behaves as unconfigured (fresh start)', async () => {
-    // Pre-grades shape, stored before the redesign: ignored, not migrated.
+  it('a legacy assignments-only config is ignored, not migrated (the provider auto-covers grades)', async () => {
+    const anthropicDefaults = (compatibility.llm.providers as { id: string; defaults?: Record<string, string> }[])
+      .find(p => p.id === 'anthropic')!.defaults!;
+    // Pre-grades shape, stored before the redesign: never read. The provider
+    // it names still auto-covers every grade — at the COMPAT default, not the
+    // model the legacy assignment pinned.
     await setLlmConfig({
       providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
       assignments: { analyst: { chain: [{ providerName: 'a', model: 'claude-sonnet-4-6' }] } },
     });
-    await expect(resolveLlmPlan({ agent: 'analyst' })).rejects.toThrow(/No model is mapped to grade 'core'/);
+    expect(((await resolveLlmPlan({ agent: 'analyst' }))!.model as { id: string }).id).toBe(anthropicDefaults['core']);
   });
 
   it('uses server-owned metadata for a custom-provider grade mapping', async () => {
