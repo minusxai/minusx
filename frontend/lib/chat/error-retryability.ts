@@ -135,3 +135,29 @@ export function isRetryableStreamError(errorMessage: string | null | undefined):
   if (classifyTerminalReason(errorMessage)) return false;
   return RETRYABLE_STREAM_ERROR_PATTERNS.some((re) => re.test(errorMessage));
 }
+
+/**
+ * The complete gate for a SILENT auto-replay of a failed turn — the two-part guard as one pure,
+ * testable decision. `isRetryableStreamError` is the message-shape half; the other guards catch
+ * cases the message text can't reliably reveal:
+ *  - `cancelled`: a user Stop, whose abort can surface with transport-flavored text ("terminated")
+ *    that WOULD match the allowlist — so the flag, not the message, is authoritative here.
+ *  - `isUserMessageTurn`: a resume segment (frontend-tool completion) has no safe rollback point to
+ *    replay from (see prepareAutoRetry) — never auto-replayed.
+ *  - `usedRetries`/`maxRetries`: bounds the replay loop so it always converges.
+ * A missing `errorMessage` means the turn didn't fail — nothing to retry.
+ */
+export function shouldAutoRetryStreamDrop(opts: {
+  errorMessage: string | null | undefined;
+  cancelled: boolean;
+  isUserMessageTurn: boolean;
+  usedRetries: number;
+  maxRetries: number;
+}): boolean {
+  const { errorMessage, cancelled, isUserMessageTurn, usedRetries, maxRetries } = opts;
+  if (!errorMessage) return false;
+  if (cancelled) return false;
+  if (!isUserMessageTurn) return false;
+  if (usedRetries >= maxRetries) return false;
+  return isRetryableStreamError(errorMessage);
+}

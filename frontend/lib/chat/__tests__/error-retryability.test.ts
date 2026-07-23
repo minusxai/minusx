@@ -5,7 +5,7 @@
  * MUST be terminal; genuinely transient blips (network / 500 / 429 / timeout / unknown) stay
  * retryable.
  */
-import { classifyErrorRetryability, classifyTerminalReason, isRetryableStreamError } from '@/lib/chat/error-retryability';
+import { classifyErrorRetryability, classifyTerminalReason, isRetryableStreamError, shouldAutoRetryStreamDrop } from '@/lib/chat/error-retryability';
 
 describe('classifyErrorRetryability', () => {
   describe('terminal — retry would deterministically re-fail', () => {
@@ -155,5 +155,46 @@ describe('isRetryableStreamError', () => {
     it.each([null, undefined, ''])('empty/nullish is not retryable: %s', (msg) => {
       expect(isRetryableStreamError(msg)).toBe(false);
     });
+  });
+});
+
+// The whole silent-auto-retry gate as one pure decision — the two-part guard (message allowlist +
+// cancelled/resume/budget) that the turn runner consults. Tested here so the safety-critical branches
+// (never replay a user Stop; never replay a resume turn) are proven deterministically, without having
+// to drive a flaky mid-turn interrupt.
+describe('shouldAutoRetryStreamDrop', () => {
+  const base = {
+    errorMessage: 'OpenAI Responses stream ended before a terminal response event',
+    cancelled: false,
+    isUserMessageTurn: true,
+    usedRetries: 0,
+    maxRetries: 2,
+  };
+
+  it('retries a transient stream drop on a fresh user turn under budget', () => {
+    expect(shouldAutoRetryStreamDrop(base)).toBe(true);
+  });
+
+  it('never retries a user cancellation — even when the abort surfaces as a transport error', () => {
+    // "terminated" IS in the transient allowlist; the `cancelled` flag must override it. This is the
+    // exact edge the flag exists for — a Stop must never be silently restarted.
+    expect(shouldAutoRetryStreamDrop({ ...base, cancelled: true, errorMessage: 'terminated' })).toBe(false);
+    expect(shouldAutoRetryStreamDrop({ ...base, cancelled: true })).toBe(false);
+  });
+
+  it('never retries a resume turn (frontend-tool completion) — no safe rollback point', () => {
+    expect(shouldAutoRetryStreamDrop({ ...base, isUserMessageTurn: false })).toBe(false);
+  });
+
+  it('stops once the retry budget is exhausted', () => {
+    expect(shouldAutoRetryStreamDrop({ ...base, usedRetries: 1 })).toBe(true);
+    expect(shouldAutoRetryStreamDrop({ ...base, usedRetries: 2 })).toBe(false);
+    expect(shouldAutoRetryStreamDrop({ ...base, usedRetries: 3 })).toBe(false);
+  });
+
+  it('never retries a non-transient error (terminal / unknown / no error)', () => {
+    expect(shouldAutoRetryStreamDrop({ ...base, errorMessage: 'context_length_exceeded' })).toBe(false);
+    expect(shouldAutoRetryStreamDrop({ ...base, errorMessage: 'synthetic LLM failure' })).toBe(false);
+    expect(shouldAutoRetryStreamDrop({ ...base, errorMessage: null })).toBe(false);
   });
 });

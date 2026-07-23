@@ -21,7 +21,7 @@ import {
   bumpAutoRetries, resetAutoRetries, truncateMessagesFrom, setLastContextTokens, MAX_AUTO_RETRIES, AUTO_RETRY_EXHAUSTED_MESSAGE,
 } from '@/lib/data/conversations.server';
 import type { Conversation } from '@/lib/data/conversations.types';
-import { isRetryableStreamError } from '@/lib/chat/error-retryability';
+import { shouldAutoRetryStreamDrop } from '@/lib/chat/error-retryability';
 import { notifyMessage, notifyDelta, notifyStatus, subscribe } from './conversation-stream.server';
 import { truncateMessageForName } from '@/lib/conversations-utils';
 import { runMicroTask } from '@/lib/chat/run-micro-task.server';
@@ -299,9 +299,9 @@ export async function runConversationTurn(
   // Excluded: user cancellation (`cancelled`), resume turns (`!isUserMessageTurn`), and anything not
   // in the transient-stream allowlist (unknown / concurrent-write / terminal). Bounded by
   // MAX_AUTO_RETRIES (prepareAutoRetry bumps the counter on each replay), so it always converges.
-  if (runError && !cancelled && isUserMessageTurn && isRetryableStreamError(runError)) {
+  if (runError) {
     const usedRetries = Number((await getConversation(conversationId))?.meta?.autoRetries ?? 0);
-    if (usedRetries < MAX_AUTO_RETRIES) {
+    if (shouldAutoRetryStreamDrop({ errorMessage: runError, cancelled, isUserMessageTurn, usedRetries, maxRetries: MAX_AUTO_RETRIES })) {
       // Leave the lease 'running' and don't NOTIFY error — the replay re-claims the lease and the
       // client never sees the transient failure. Returns the replay's terminal result.
       return await runConversationTurn(conversationId, user, body, { autoRetry: true });
