@@ -80,3 +80,58 @@ export function classifyTerminalReason(errorMessage: string | null | undefined):
 export function classifyErrorRetryability(errorMessage: string | null | undefined): ErrorRetryability {
   return classifyTerminalReason(errorMessage) ? 'terminal' : 'transient';
 }
+
+/**
+ * A narrow, POSITIVE allowlist of transient LLM stream / transport drops that a SILENT machine
+ * auto-retry may replay. Deliberately stricter than `classifyErrorRetryability`, whose unknown →
+ * transient default is right for a human "Try again" click (worst case: one wasted click) but WRONG
+ * for an automatic replay: an unmatched message here → false, so we never auto-replay
+ *  - an UNKNOWN error (could be a real bug, replaying just burns the retry budget + side effects),
+ *  - a user CANCELLATION ("Request was aborted" — a Stop is not a failure to retry), or
+ *  - a CONCURRENT-write conflict ("the conversation advanced underneath this run" — replaying a
+ *    lost race is wrong).
+ * Terminal errors (context-length / auth / permission / malformed) are excluded a fortiori via the
+ * `classifyTerminalReason` short-circuit even if their text brushes a transient pattern.
+ *
+ * The patterns mirror the upstream provider/transport retry signals (pi-ai's
+ * RETRYABLE_PROVIDER_ERROR_PATTERN): premature stream ends, provider overload / 5xx, rate limits,
+ * and network/socket drops — the failure modes behind the "OpenAI Responses stream ended before a
+ * terminal response event" flood this exists to absorb.
+ *
+ * NOTE: a user Stop can surface with transport-flavored text (e.g. "terminated") that DOES match
+ * here — so the turn runner additionally gates on an explicit `cancelled` flag; this predicate is
+ * the message-shape half of a two-part guard, not the whole of it.
+ */
+const RETRYABLE_STREAM_ERROR_PATTERNS: RegExp[] = [
+  // Premature stream termination — the reported flood and its siblings.
+  /stream ended before/i,
+  /ended without/i,
+  /terminal response event/i,
+  /premature (?:close|eof|end)/i,
+  /unexpected (?:end|eof)/i,
+  // Provider overload / server-side transient (5xx + Cloudflare 524).
+  /\boverloaded\b/i,
+  /\b(?:429|500|502|503|504|524)\b/i,
+  /rate.?limit/i,
+  /too many requests/i,
+  /service.?unavailable/i,
+  /server.?error/i,
+  /internal.?error/i,
+  // Network / transport drops.
+  /fetch failed/i,
+  /socket hang up/i,
+  /connection (?:reset|refused|closed|error)/i,
+  /econnreset|econnrefused|epipe|etimedout/i,
+  /network.?error/i,
+  /\btimed?.?out\b/i,
+  /\btimeout\b/i,
+  /\bterminated\b/i,
+  /http2 request did not get a response/i,
+];
+
+export function isRetryableStreamError(errorMessage: string | null | undefined): boolean {
+  if (!errorMessage) return false;
+  // Never auto-replay a terminal error, even if its text also brushes a transient pattern.
+  if (classifyTerminalReason(errorMessage)) return false;
+  return RETRYABLE_STREAM_ERROR_PATTERNS.some((re) => re.test(errorMessage));
+}

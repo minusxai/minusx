@@ -5,7 +5,7 @@
  * MUST be terminal; genuinely transient blips (network / 500 / 429 / timeout / unknown) stay
  * retryable.
  */
-import { classifyErrorRetryability, classifyTerminalReason } from '@/lib/chat/error-retryability';
+import { classifyErrorRetryability, classifyTerminalReason, isRetryableStreamError } from '@/lib/chat/error-retryability';
 
 describe('classifyErrorRetryability', () => {
   describe('terminal — retry would deterministically re-fail', () => {
@@ -102,4 +102,58 @@ describe('classifyTerminalReason', () => {
       expect(classifyTerminalReason(msg)).toBeNull();
     },
   );
+});
+
+// The SILENT machine auto-retry gate (turn runner). Narrower than classifyErrorRetryability: an
+// UNMATCHED message must NOT auto-replay — only known transient stream/transport drops do. This is
+// the guard that keeps a user's Stop, a concurrent-write conflict, or a genuine bug from silently
+// re-running the turn (and re-alerting Slack) up to MAX_AUTO_RETRIES times.
+describe('isRetryableStreamError', () => {
+  describe('retryable — a transient stream / transport drop', () => {
+    it.each([
+      // THE reported flood, raw and wrapped by the orchestrator's callLLM error.
+      'OpenAI Responses stream ended before a terminal response event',
+      "callLLM: LLM stream errored (agent=AnalystAgent, reason='error'): OpenAI Responses stream ended before a terminal response event",
+      'Anthropic stream ended before message_stop',
+      'stream ended without a stop event',
+      // Provider overload / 5xx / rate limits.
+      '529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+      '500 {"type":"error","error":{"type":"api_error","message":"internal server error"}}',
+      '503 service unavailable',
+      '524 a timeout occurred',
+      '429 {"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}',
+      // Network / transport.
+      'fetch failed',
+      'socket hang up',
+      'ECONNRESET',
+      'The operation timed out',
+    ])('retryable: %s', (msg) => {
+      expect(isRetryableStreamError(msg)).toBe(true);
+    });
+  });
+
+  describe('NOT retryable — must not silently replay', () => {
+    it.each([
+      // User cancellation (Stop) — not a failure to retry.
+      'Request was aborted',
+      // Concurrent-write conflict — replaying a lost race is wrong.
+      'concurrent turn — the conversation advanced underneath this run',
+      // Terminal — deterministically re-fails (excluded via classifyTerminalReason).
+      'context_length_exceeded',
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 250000 tokens > 200000 maximum"}}',
+      'invalid x-api-key',
+      'Unauthorized',
+      'Forbidden',
+      // Unknown — the forgiving human default does NOT apply to machine auto-retry.
+      'synthetic LLM failure',
+      'something totally unexpected',
+      'chat error',
+    ])('not retryable: %s', (msg) => {
+      expect(isRetryableStreamError(msg)).toBe(false);
+    });
+
+    it.each([null, undefined, ''])('empty/nullish is not retryable: %s', (msg) => {
+      expect(isRetryableStreamError(msg)).toBe(false);
+    });
+  });
 });

@@ -21,6 +21,7 @@ import {
   bumpAutoRetries, resetAutoRetries, truncateMessagesFrom, setLastContextTokens, MAX_AUTO_RETRIES, AUTO_RETRY_EXHAUSTED_MESSAGE,
 } from '@/lib/data/conversations.server';
 import type { Conversation } from '@/lib/data/conversations.types';
+import { isRetryableStreamError } from '@/lib/chat/error-retryability';
 import { notifyMessage, notifyDelta, notifyStatus, subscribe } from './conversation-stream.server';
 import { truncateMessageForName } from '@/lib/conversations-utils';
 import { runMicroTask } from '@/lib/chat/run-micro-task.server';
@@ -174,6 +175,14 @@ export async function runConversationTurn(
     await resetAutoRetries(conversationId);
   }
 
+  // Whether THIS segment can be silently auto-retried on a transient stream drop: only a plain
+  // user-message turn (or a replay of one — the block above rewrites body to that shape). A RESUME
+  // segment (frontend-tool completion) is excluded: prepareAutoRetry deliberately won't roll back a
+  // half-applied frontend-tool resume, so replaying it is unsafe. Derived from `body` (no DB read),
+  // exactly mirroring prepareAutoRetry's user-message-root precondition.
+  const isUserMessageTurn = typeof body.user_message === 'string'
+    && !(Array.isArray(body.completed_tool_calls) && body.completed_tool_calls.length > 0);
+
   const savedLog = await loadLog(conversationId);
   const startSeq = savedLog.length;
 
@@ -191,8 +200,11 @@ export async function runConversationTurn(
   const heartbeat = setInterval(() => { void heartbeatRunLease(conversationId, INSTANCE_ID); }, HEARTBEAT_MS);
 
   // Honor a "Stop" (interrupt NOTIFY) by cancelling this orchestrator, wherever Stop was clicked.
+  // `cancelled` gates the auto-retry below: a user Stop must never be read as a transient failure to
+  // silently replay (its abort can even surface with transport-flavored text like "terminated").
+  let cancelled = false;
   const unsubInterrupt = await subscribe(conversationId, (n) => {
-    if (n.kind === 'interrupt') setup.orchestrator.cancel();
+    if (n.kind === 'interrupt') { cancelled = true; setup.orchestrator.cancel(); }
   });
 
   let runError: string | undefined;
@@ -266,9 +278,9 @@ export async function runConversationTurn(
 
   const piDiff = setup.orchestrator.log.slice(startSeq) as ConversationLog;
   const finalSeq = committedSeq;
-  await mirrorErrors(conversationId, piDiff, runError);
   // `setup.pageType` (explore/question/dashboard/…) is recorded as the LLM-call `trigger`
-  // so usage can be split by surface.
+  // so usage can be split by surface. Record BEFORE any retry branch — a failed attempt still
+  // consumed tokens, and its llm_logs rows are keyed separately (a retry's truncate can't erase them).
   await recordLlmCalls(piDiff, conversationId, user, setup.pageType);
   // Stamp the turn's final context size (last call's totalTokens) for the client's
   // "conversation too long" gate. Best-effort — never fails the turn.
@@ -280,6 +292,23 @@ export async function runConversationTurn(
     await setLastContextTokens(conversationId, lastUsage.totalTokens).catch(() => {});
   }
 
+  // SILENT auto-retry of a TRANSIENT stream/transport drop (e.g. an upstream SSE close mid-response):
+  // replay the turn from the preserved user message instead of surfacing an error. Decided BEFORE
+  // mirrorErrors on purpose — error rows have seq=NULL and survive the retry's truncate, so mirroring
+  // first would strand a phantom error row (and re-alert the error channel) after a successful retry.
+  // Excluded: user cancellation (`cancelled`), resume turns (`!isUserMessageTurn`), and anything not
+  // in the transient-stream allowlist (unknown / concurrent-write / terminal). Bounded by
+  // MAX_AUTO_RETRIES (prepareAutoRetry bumps the counter on each replay), so it always converges.
+  if (runError && !cancelled && isUserMessageTurn && isRetryableStreamError(runError)) {
+    const usedRetries = Number((await getConversation(conversationId))?.meta?.autoRetries ?? 0);
+    if (usedRetries < MAX_AUTO_RETRIES) {
+      // Leave the lease 'running' and don't NOTIFY error — the replay re-claims the lease and the
+      // client never sees the transient failure. Returns the replay's terminal result.
+      return await runConversationTurn(conversationId, user, body, { autoRetry: true });
+    }
+  }
+
+  await mirrorErrors(conversationId, piDiff, runError);
   const pendingToolCalls = setup.orchestrator.getPendingToolCalls();
   const runStatus: TurnResult['runStatus'] = runError ? 'error' : pendingToolCalls.length > 0 ? 'paused' : 'idle';
   await releaseRunLease(conversationId, runStatus);
