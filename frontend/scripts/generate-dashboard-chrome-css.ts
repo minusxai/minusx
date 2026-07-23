@@ -34,6 +34,8 @@ const OUT_FILE = join(ROOT, 'lib', 'dashboard-surface', 'chrome-css.gen.ts');
  * incomplete — review this list when adding components to the dashboard tree).
  */
 export const DASHBOARD_CHROME_FILES = [
+  // The surface host itself: it stamps base classes (text-foreground) on the surface root.
+  join(ROOT, 'components', 'views', 'shared', 'DashboardSurface.tsx'),
   join(ROOT, 'components', 'views', 'DashboardView.tsx'),
   join(ROOT, 'components', 'views', 'dashboard', 'WindowedTile.tsx'),
   join(ROOT, 'components', 'TextBlockCard.tsx'),

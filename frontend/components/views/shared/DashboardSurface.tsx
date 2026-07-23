@@ -101,6 +101,25 @@ export default function DashboardSurface({ colorMode, children }: DashboardSurfa
     const surface = mountStorySurface(doc, 'svg', mountWidth);
     surfaceRef.current = surface;
     surfaceWidthRef.current = mountWidth;
+
+    // ── Base text environment ─────────────────────────────────────────────────────────────
+    // In the main document the app BODY establishes inherited color + font; this document has
+    // no body styles, so unclassed text (heat-map pivot cells, loading copy) fell back to
+    // initial BLACK. Establish the base ON THE SURFACE ROOT — inside the captured subtree, so
+    // live render and capture stay identical by construction:
+    //  - color: the `text-foreground` token class (mode/theme-correct via the chrome sheet);
+    //  - font: the same stack globals.css puts on body. Its `--font-inter` (and the mono var
+    //    utilities resolve) are next/font variables declared by CLASSES on the TOP <html>,
+    //    whose rules live in app link sheets that never reach this document — copy the
+    //    RESOLVED values inline instead (mode-independent, capture-safe).
+    surface.root.classList.add('text-foreground');
+    surface.root.style.fontFamily = "var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    (surface.root.style as CSSStyleDeclaration & { webkitFontSmoothing?: string }).webkitFontSmoothing = 'antialiased';
+    const topStyle = window.getComputedStyle(document.documentElement);
+    for (const v of ['--font-inter', '--font-jetbrains-mono']) {
+      const val = topStyle.getPropertyValue(v);
+      if (val) surface.root.style.setProperty(v, val);
+    }
     // Busy until the nested root commits (cleared by ClearBusyStamp) — the readiness gate
     // must never capture the pre-hydration empty surface.
     surface.root.setAttribute('data-mx-busy', 'true');

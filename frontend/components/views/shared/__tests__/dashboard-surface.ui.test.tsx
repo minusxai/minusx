@@ -75,6 +75,29 @@ describe('DashboardSurface', () => {
     expect(doc!.body).toBe(docIdentity);
   });
 
+  it('establishes the base text environment on the surface root (color + font travel with captures)', async () => {
+    // The app document's BODY establishes inherited color/font for main-doc pages; the
+    // self-contained iframe has no body styles, so unclassed text (heat-map pivot cells,
+    // "Executing query…" loading copy) fell back to initial BLACK in dark mode. The surface
+    // root must set the base itself — inside the captured subtree, not the iframe body.
+    document.documentElement.style.setProperty('--font-inter', '__Inter_test, sans-serif');
+    try {
+      const { container } = render(
+        <DashboardSurface colorMode="dark">
+          <div aria-label="Surface payload">payload</div>
+        </DashboardSurface>,
+      );
+      const { root } = getSurfaceParts(container);
+      expect(root!.classList.contains('text-foreground')).toBe(true);
+      expect(root!.style.fontFamily).toContain('--font-inter');
+      // next/font variables live on the TOP html element — copied onto the root so the
+      // font-family var chain resolves inside the detached document AND in captures.
+      expect(root!.style.getPropertyValue('--font-inter')).toContain('__Inter_test');
+    } finally {
+      document.documentElement.style.removeProperty('--font-inter');
+    }
+  });
+
   it('clears the busy stamp only after the nested root commits (readiness contract)', async () => {
     const { container } = render(
       <DashboardSurface colorMode="light">
