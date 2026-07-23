@@ -14,7 +14,7 @@ import { STORY_TEMPLATES, STORY_TEMPLATE_NAMES, getStoryTemplate } from '../stor
 describe('STORY_TEMPLATES registry', () => {
   it('has exactly one entry per schema enum name, in enum order', () => {
     expect(STORY_TEMPLATES.map(t => t.name)).toEqual([...STORY_TEMPLATE_NAMES]);
-    expect([...STORY_TEMPLATE_NAMES]).toEqual(['editorial', 'deck', 'brief', 'scrolly']);
+    expect([...STORY_TEMPLATE_NAMES]).toEqual(['editorial', 'deck', 'scrolly']);
   });
 
   it('every template carries label, description, personality and a beat structure', () => {

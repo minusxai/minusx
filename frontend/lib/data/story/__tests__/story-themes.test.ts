@@ -114,4 +114,23 @@ describe('storyThemeCss emitter', () => {
     expect(withMono).toBeTruthy();
     expect(css).toContain(`[data-theme="${withMono!.name}"] :is(code, pre, kbd, samp)`);
   });
+
+  // Structural layer (beyond tokens): every theme ships restrained element-level rules —
+  // an hr identity and a ::selection tint at minimum — scoped inside its [data-theme] block
+  // via the `&` placeholder in StoryTheme.css.
+  it('every theme carries a structural css layer, scoped to its data-theme selector', () => {
+    for (const t of STORY_THEMES) {
+      expect(t.css, `${t.name}.css`).toBeTruthy();
+      expect(t.css, `${t.name} uses & scope placeholder`).toContain('&');
+      expect(css, `${t.name} hr rule emitted`).toContain(`[data-theme="${t.name}"] hr`);
+      expect(css, `${t.name} selection rule emitted`).toContain(`[data-theme="${t.name}"] ::selection`);
+      // No unresolved placeholder leaks into the emitted sheet.
+      expect(css).not.toContain('& hr');
+    }
+  });
+
+  it('structural css expresses personality: modernist 2px ink rules, organic short rounded rule', () => {
+    expect(getStoryTheme('modernist')!.css).toContain('2px');
+    expect(getStoryTheme('organic')!.css).toContain('999px');
+  });
 });

@@ -44,15 +44,16 @@ describe("ClarifyFrontend schema — type accepts 'template'", () => {
 });
 
 describe('getStoryTemplateOptions — projected from the STORY_TEMPLATES registry', () => {
-  it('derives every option from its registry entry (slim: text rows, no image, no guidance)', () => {
+  it('derives every option from its registry entry (SVG wireframe card, no guidance)', () => {
     const opts = getStoryTemplateOptions();
     expect(opts).toHaveLength(STORY_TEMPLATES.length);
-    expect(opts.map((o) => o.value)).toEqual(['editorial', 'deck', 'brief', 'scrolly']);
+    expect(opts.map((o) => o.value)).toEqual(['editorial', 'deck', 'scrolly']);
     for (const [i, t] of STORY_TEMPLATES.entries()) {
       expect(opts[i]).toEqual({
         value: t.name,
         label: t.label,
         description: t.description,
+        imageUrl: `/story-templates/${t.name}.svg`,
       });
     }
   });
@@ -67,8 +68,9 @@ describe("clarifyFrontendHandler — type: 'template' preset", () => {
       multiSelect: true,
     });
     expect(thrown.type).toBe('choice');
-    expect(thrown.options).toHaveLength(4);
-    expect(thrown.options!.map((o) => o.value)).toEqual(['editorial', 'deck', 'brief', 'scrolly']);
+    expect(thrown.options).toHaveLength(3);
+    expect(thrown.options!.map((o) => o.value)).toEqual(['editorial', 'deck', 'scrolly']);
+    expect(thrown.options![1].imageUrl).toBe('/story-templates/deck.svg');
     expect(thrown.multiSelect).toBe(false);
   });
 
@@ -100,7 +102,7 @@ describe("clarifyFrontendHandler — type: 'template' preset", () => {
     const content = result.content as Record<string, unknown>;
     expect(content.success).toBe(true);
     const catalog = content.templates as Array<Record<string, unknown>>;
-    expect(catalog).toHaveLength(4);
+    expect(catalog).toHaveLength(3);
     for (const entry of catalog) {
       expect(String(entry.value).length).toBeGreaterThan(0);
       expect(String(entry.description).length).toBeGreaterThan(0);
@@ -142,8 +144,8 @@ describe("clarifyFrontendHandler — enriched type: 'design' answers", () => {
 describe('reconstructClarifyProps — template preset reopen path', () => {
   it("re-populates template preset options when args carry type: 'template'", () => {
     const props = reconstructClarifyProps({ question: 'Pick', options: [], type: 'template' });
-    expect(props.options).toHaveLength(4);
-    expect(props.options![1]).toMatchObject({ value: 'deck', label: 'Deck' });
+    expect(props.options).toHaveLength(3);
+    expect(props.options![1]).toMatchObject({ value: 'deck', label: 'Deck', imageUrl: '/story-templates/deck.svg' });
     expect(props.multiSelect).toBe(false);
   });
 });

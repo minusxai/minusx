@@ -68,7 +68,7 @@ describe('StoryContent schema — format field (jsx-format stories)', () => {
 
 describe('StoryContent schema — template field (structural genre)', () => {
   it('accepts each named template, null, and absent', () => {
-    for (const name of ['editorial', 'deck', 'brief', 'scrolly']) {
+    for (const name of ['editorial', 'deck', 'scrolly']) {
       expect(validateFileState({ type: 'story', content: { ...baseStory, format: 'jsx', template: name } })).toBeNull();
     }
     expect(validateFileState({ type: 'story', content: { ...baseStory, template: null } })).toBeNull();
