@@ -1,6 +1,6 @@
 # Story authoring guidance ("mini-skills") returned with Clarify picks.
 #
-# - `templates:` — FULL definitions of the four story templates (structural genres). Projected
+# - `templates:` — FULL definitions of the story templates (structural genres). Projected
 #   into the registry by lib/data/story/story-templates.ts; the `guidance` block is returned
 #   verbatim to the agent when the user picks that template (Clarify `type: 'template'`).
 # - `themes:` — authoring guidance ONLY for the six design themes (their code entries + CSS
@@ -23,7 +23,7 @@ templates:
       prose against wide evidence — is the design.
     beats:
       - Hero
-      - Chapters (3–5, one claim each)
+      - Chapters (3-5, one claim each)
       - Full-bleed interlude
       - Nuance chapter
       - Takeaway
@@ -33,7 +33,7 @@ templates:
       Voice: a magazine feature, not a report. Reading only the headlines must deliver the whole
       argument; each is a claim with a number where the data allows.
 
-      Beats: Hero → Chapters (3–5, one idea = one section = one visual) → ONE full-bleed
+      Beats: Hero → Chapters (3-5, one idea = one section = one visual) → ONE full-bleed
       interlude → a nuance chapter (name the caveat inside the win) → Takeaway.
 
       Layout grammar
@@ -69,14 +69,14 @@ templates:
         </aside>
         <section class="py-16 border-t border-border">
           <h2 class="text-3xl font-semibold max-w-2xl">The takeaway restates the lead with its earned weight</h2>
-          <ul class="mt-6 space-y-3 max-w-prose">2–3 quantified takeaways, each with a live number, answering "so what should the reader do?"</ul>
+          <ul class="mt-6 space-y-3 max-w-prose">2-3 quantified takeaways, each with a live number, answering "so what should the reader do?"</ul>
         </section>
       </div>
 
       Do
       - One idea per chapter; split any section carrying two.
       - Give the nuance its own chapter ("dependable, and exposed") — one flagged caveat is more persuasive than none.
-      - Vary chart heights with the beat (evidence 400–460px, single-values 180–260px).
+      - Vary chart heights with the beat (evidence 400-460px, single-values 180-260px).
       Don't
       - Every section a Card; centered-everything; all charts one height; topic headlines.
       - A second interlude — it is a breather, not a rhythm.
@@ -104,7 +104,7 @@ templates:
       Slide grammar (CSS-only; `position: fixed/sticky` are banned — a slide is just a tall section):
       - Every slide: `<section class="min-h-[560px] @2xl:min-h-[760px] flex flex-col justify-center border-b border-border py-16">`.
       - Slide footer INSIDE the flex: `<div class="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Deck title · date</span><span>04</span></div>`.
-      - Chart slide = one claim headline + ONE `<Question>` (430–460px) + one takeaway line. Never two charts.
+      - Chart slide = one claim headline + ONE `<Question>` (430-460px) + one takeaway line. Never two charts.
       - Divider = inverted band (`bg-foreground text-background`) with a giant act numeral
         (`text-8xl @2xl:text-9xl font-bold opacity-30`) and the act title; contents list mirrors these titles exactly.
       - Cover = eyebrow → `text-6xl @2xl:text-8xl` title → one-line standfirst → byline/date row. The lead
@@ -138,63 +138,6 @@ templates:
       - Two charts on a slide; paragraphs of prose (three lines max); scroll-snap or parallax tricks.
       - Cram a slide to avoid adding one — add the slide.
 
-  brief:
-    label: Brief
-    description: Executive one-pager — KPI band up top, 2–3 evidence blocks, a recommendation box.
-    personality: >-
-      Terse and decision-oriented: scannable in sixty seconds, every headline a finding, every
-      figure live, and it ends by telling the reader what to do. Density is respect for the
-      reader's time.
-    beats:
-      - Header row
-      - KPI band
-      - Evidence blocks (2–3)
-      - Recommendation
-      - Risks / method footnote
-    guidance: |-
-      ## Brief — the executive one-pager
-
-      Voice: terse, decision-oriented. The whole document scans in ~60 seconds and fits in
-      roughly two viewports. Every headline is a finding; the ending is an instruction.
-
-      Layout grammar
-      - `max-w-5xl mx-auto`, modest scale (h1 ≤ `text-4xl`), tight rhythm (`py-8`/`py-10`
-        sections), `tabular-nums` on every figure.
-      - Header row: title + owner + date + a status Badge, one line.
-      - KPI band: 3–4 single-value embeds in `grid @2xl:grid-cols-4 gap-px bg-border` (hairline
-        grid), each ~200px tall.
-      - Evidence block: `@3xl:grid-cols-2` — claim headline + two-bullet reading on one side, a
-        compact chart (340–380px) on the other; alternate which side the chart takes.
-      - Recommendation: a filled accent box (`bg-primary/10 border border-primary rounded-lg p-6`)
-        with an imperative headline and a live supporting number. NEVER a colored left-edge bar.
-
-      Skeleton:
-
-      <div data-design="tw" class="@container px-6 @2xl:px-12 max-w-5xl mx-auto">
-        <header class="py-8 flex flex-wrap items-baseline justify-between gap-2 border-b border-border">
-          <h1 class="text-3xl @2xl:text-4xl font-bold">The brief's finding in one sentence</h1>
-          <p class="text-sm text-muted-foreground">Owner · Date · <Badge>On track</Badge></p>
-        </header>
-        <section class="py-8 grid @2xl:grid-cols-4 gap-px bg-border">4 single-value embeds, ~200px each — the numbers leadership will quote</section>
-        <section class="py-8 grid @3xl:grid-cols-2 gap-10 items-center border-t border-border">
-          <div><h2 class="text-xl font-semibold">Evidence headline: a claim with a number</h2>
-            <ul class="mt-4 space-y-2 text-sm text-muted-foreground">Two bullets max — what the chart shows, what it implies.</ul></div>
-          <Question id={N} height="360px" />
-        </section>
-        <section class="my-8 bg-primary/10 border border-primary rounded-lg p-6">
-          <h2 class="text-xl font-semibold">Recommend: an imperative verb and a deadline</h2>
-          <p class="mt-2 text-sm">Backed by a live number inline, not a hand-typed one.</p>
-        </section>
-        <footer class="py-6 border-t border-border text-xs text-muted-foreground">Risks named plainly; method and data window in one line.</footer>
-      </div>
-
-      Do
-      - Alternate evidence chart sides; keep bullets to two per block; name the risks.
-      - One decisive recommendation — a brief that recommends nothing is a dashboard.
-      Don't
-      - Hero theatrics, interludes, decorative imagery, more than ~2 viewports of scroll.
-      - A colored accent bar on any card's left edge (banned house-wide).
-
   scrolly:
     label: Scrolly
     description: Playful scrollytelling — a pudding.cool-style data story that reveals in steps.
@@ -204,7 +147,7 @@ templates:
     beats:
       - Cold open hook
       - Setup
-      - Reveal steps (3–5)
+      - Reveal steps (3-5)
       - Twist
       - Payoff
       - Methodology footer
@@ -268,6 +211,8 @@ themes:
     strong (`border-t-2 border-foreground`), never decorative hairlines everywhere.
     Charts: all series in grays (`--muted-foreground`), the focal series red; direct labels over
     legends; no gradient fills.
+    Structural: `<hr>` renders as a strong 2px ink rule and `<blockquote>` carries a bold top
+    rule — use them as section dividers instead of hand-styled borders.
     Do: visible grid, generous white, uppercase tracked eyebrows, one red element per viewport.
     Don't: round a corner (radius is 0 on purpose), gradients, shadows, a second accent hue,
     tinted or decorative imagery.
@@ -276,6 +221,8 @@ themes:
     an illuminator's ink: initials, rules, the focal series — never large fills. Drop caps and
     small-caps kickers are welcome; figures may sit in the margin like plates in an atlas.
     Charts: muted earth tones with the ochre focal series; serif axis labels feel right here.
+    Structural: `<hr>` is a hairline; `<blockquote>` sets italic with a fine left rule — both
+    already in the bookish voice.
     Do: wide margins, `max-w-prose` columns, numbered figures with captions ("Fig. 2 — …").
     Don't: neon or saturated hues, heavy shadows, condensed grotesque headlines, large radii,
     dense borderless tables.
@@ -284,6 +231,7 @@ themes:
     the focal voice, cyan the support; `JetBrains Mono` for figures and axis text; a restrained
     glow (a soft primary-tinted shadow on the hero number) is on-brand.
     Charts: luminous lines on the deep field; keep gridlines barely-there; two lit hues max per view.
+    Structural: `<hr>` renders as a fading violet gradient line — a ready-made scene divider.
     Do: big luminous hero numbers, mono `tabular-nums` KPI rows, deep layered card surfaces.
     Don't: light/white cards, unpaired light-mode utilities, pastel fills, three glowing colors
     in one chart, long paragraphs in pure white (soften to the muted foreground).
@@ -292,6 +240,8 @@ themes:
     olive support; the voice is friendly and the shapes agree with it. Whitespace is soft, not
     architectural — sections breathe into each other.
     Charts: terracotta focal, olive secondary; area fills at low opacity feel at home here.
+    Structural: `<hr>` is a short rounded terracotta dash (a friendly beat mark, not a wall);
+    `<blockquote>` becomes a soft rounded tinted block.
     Do: rounded chart containers, pill badges, warm muted backgrounds alternating with cream.
     Don't: hard edges or 0-radius anything, pure black text, corporate blue, airless dense
     tables, neon accents.
@@ -301,6 +251,8 @@ themes:
     first-class graphics with strong header rules.
     Charts: ink-gray series with the steel-blue focal; direct labels over legends; no fills
     brighter than the accent.
+    Structural: `<hr>` renders as the classic double newspaper rule and table `<th>` sets in
+    tracked small caps — native tables already look typeset.
     Do: multi-column layouts (`@3xl:columns-2` for long prose), datelines, ruled section
     headers, dense-but-ordered stat tables.
     Don't: playful color, large radii, gradients, oversized decoration, centered body copy.
@@ -311,5 +263,7 @@ themes:
     visible grid discipline.
     Charts: blue primary, gray context series, orange only on the flagged element; reference
     lines and thresholds drawn explicitly.
+    Structural: `<hr>` is a dashed engineering rule; tables default to tabular figures with
+    uppercase headers — spec-sheet look for free.
     Do: spec-sheet tables, labeled thresholds, `tabular-nums`, section numbering (1.0, 1.1).
     Don't: pastels, decorative serifs, rounded cards, orange as decoration, unlabeled axes.
