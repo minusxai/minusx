@@ -83,125 +83,177 @@ templates:
 
   deck:
     label: Deck
-    description: Presentation deck — full-height slide sections; cover, contents, dividers, chart slides, a quote, a close.
+    description: Presentation deck — full-viewport slides in acts; quiet paper slides between full-bleed accent dividers.
     personality: >-
-      A boardroom keynote rendered as a scroll: one idea per slide, headlines you could speak
-      aloud to the room, generous emptiness as the luxury. Structure is announced (contents,
-      dividers) rather than discovered.
+      A boardroom keynote rendered as a scroll: one idea per full-viewport slide, headlines you
+      could speak aloud to the room, generous emptiness as the luxury. The deck moves in ACTS —
+      quiet paper slides punctuated by full-bleed solid-accent dividers — and its structure is
+      announced (contents, numbered acts), never discovered.
     beats:
       - Cover
-      - Contents
-      - Section divider (per act)
-      - Content / chart slides
-      - Quote or big-number slide
-      - Close / next steps
+      - Contents (mirrors the act titles)
+      - Act divider (solid accent, per act)
+      - Content slides (statement / columns / chart / table / big number)
+      - Quote or image slide (a breather per act)
+      - Timeline / roadmap
+      - Close
     guidance: |-
       ## Deck — a presentation that scrolls
 
       Voice: a keynote. Every slide headline is a spoken sentence ("Retention pays for the price
-      increase"), never a label ("Retention"). One idea per slide; emptiness is intentional.
+      increase"), never a label ("Retention"). One idea per slide. A good slide is ~40% empty —
+      put the air BELOW the content, not around it.
 
-      Slide grammar (CSS-only; `position: fixed/sticky` are banned — a slide is just a tall section):
-      - Every slide: `<section class="min-h-[560px] @2xl:min-h-[760px] flex flex-col justify-center border-b border-border py-16">`.
-      - Slide footer INSIDE the flex: `<div class="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Deck title · date</span><span>04</span></div>`.
-      - Chart slide = one claim headline + ONE `<Question>` (430-460px) + one takeaway line. Never two charts.
-      - Divider = inverted band (`bg-foreground text-background`) with a giant act numeral
-        (`text-8xl @2xl:text-9xl font-bold opacity-30`) and the act title; contents list mirrors these titles exactly.
-      - Cover = eyebrow → `text-6xl @2xl:text-8xl` title → one-line standfirst → byline/date row. The lead
-        number may sit here as a styled single-value embed.
+      THE SLIDE (every slide, no exceptions; fixed/sticky are banned — a slide is a tall section):
+      - `<section class="min-h-[var(--mx-vh,760px)] flex flex-col border-b border-border py-14">` —
+        `--mx-vh` is the reader's real viewport height (platform-provided), so each slide fills the
+        screen; the fallback covers headless renders. Never vh units (broken in this surface).
+      - HEADER BAND on every content slide: kicker `<p class="text-xs uppercase tracking-widest font-semibold text-primary">01 · ACT NAME</p>`
+        + hairline `<hr class="mt-3 mb-10">`; then the slide h2. Same gutters, same band, every slide — the repetition IS the design.
+      - FOOTER META closes every content slide: `<div class="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Deck title — date</span><span class="font-semibold">07</span></div>`.
 
-      Skeleton (three representative slides):
+      ACTS AND COLOR RHYTHM (the interleaving that makes it feel designed):
+      - Group slides into 2-4 numbered acts. Each act OPENS with a full-bleed solid-accent divider:
+        `<section class="min-h-[var(--mx-vh,760px)] flex flex-col justify-center bg-primary text-primary-foreground -mx-6 @2xl:-mx-12 px-6 @2xl:px-12">`
+        carrying a giant TONE-ON-TONE act numeral (same hue, darker: `<span class="text-9xl font-bold text-primary-foreground/25">02</span>`
+        — or a darker literal of the accent) and the act title below it. Nothing else on the slide.
+      - Dividers are the ONLY saturated slides; everything between is quiet paper. That alternation
+        (paper… paper… ACCENT… paper) is the pulse of the deck — never color a content slide's ground.
+      - The contents slide lists the acts as numbered rows (accent numerals, hairline row rules,
+        `tabular-nums`) whose titles mirror the dividers EXACTLY.
+
+      SLIDE TYPES (pick per beat; each stays one idea):
+      - Statement: at most 3 one-line bullets with square accent markers
+        (`<span class="inline-block size-2 bg-primary mr-3">`), then air. No paragraphs.
+      - Columns (2 or 3): equal cells on one gutter, and EACH COLUMN OPENS UNDER A RULE
+        (`<div class="border-t-2 border-foreground pt-3">` heading + short copy); columns top-align
+        and share the line rhythm. Collapse to one column on phones (`@2xl:grid-cols-3`).
+      - Quadrants: 2×2 grid with hairline cross rules (`divide-x divide-y divide-border`) and tiny
+        muted axis labels at the edges ("← less … more →").
+      - Chart slide: claim headline + ONE `<Question>` (430-460px, ≥ 60% width) + one takeaway line
+        under it. Restyle via `viz` override: all series in grays, ONE accent element (the bar/line
+        being discussed), direct labels, no legend where possible. Never two charts on a slide.
+      - Big-number slide: one enormous accent figure — a styled single-value embed
+        (`valueColor` = the accent, huge `valueFontSize`) — plus a two-line muted caption. NOTHING else.
+        Use once or twice as an act's exclamation point.
+      - Table slide: a compact table; uppercase tracked `<th>`, hairline row rules, `tabular-nums`.
+      - Quote slide: display-size quote in `text-muted-foreground` (softer than headlines, not black),
+        hanging quote mark, `— attribution` line. A breather between dense slides.
+      - Timeline: a horizontal rail — uppercase tracked date labels over square nodes over bold
+        labels + muted notes, one left edge per milestone; the CURRENT step is the one accent square.
+      - Cover and Close share one grammar: kicker + hairline, huge flush-left title
+        (`text-6xl @2xl:text-8xl tracking-tight`), one-line muted standfirst, byline/date at the foot.
+        The close restates the lead number and the next step, then contact.
+
+      Skeleton (cover → divider → chart slide; extend the pattern per act):
 
       <div data-design="tw" class="@container px-6 @2xl:px-12">
-        <section class="min-h-[560px] @2xl:min-h-[760px] flex flex-col justify-center border-b border-border py-16">
-          <p class="text-xs uppercase tracking-widest text-muted-foreground">Company · Quarter</p>
-          <h1 class="mt-6 text-6xl @2xl:text-8xl font-bold tracking-tight max-w-4xl">The title states the one finding</h1>
+        <section class="min-h-[var(--mx-vh,760px)] flex flex-col border-b border-border py-14">
+          <p class="text-xs uppercase tracking-widest font-semibold text-primary">Company · Quarter</p>
+          <hr class="mt-3" />
+          <h1 class="mt-auto text-6xl @2xl:text-8xl font-bold tracking-tight max-w-4xl">The title states the one finding</h1>
           <p class="mt-6 text-lg text-muted-foreground max-w-xl">A standfirst no longer than the breath it takes to say it.</p>
-          <div class="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Author · Date</span><span>01</span></div>
+          <div class="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Author</span><span>Date</span></div>
         </section>
-        <section class="min-h-[560px] @2xl:min-h-[760px] flex flex-col justify-center bg-foreground text-background -mx-6 @2xl:-mx-12 px-6 @2xl:px-12 py-16">
-          <span class="text-8xl @2xl:text-9xl font-bold opacity-30">02</span>
-          <h2 class="mt-4 text-4xl @2xl:text-5xl font-semibold">Act title, mirrored in the contents</h2>
+        <section class="min-h-[var(--mx-vh,760px)] flex flex-col justify-center bg-primary text-primary-foreground -mx-6 @2xl:-mx-12 px-6 @2xl:px-12">
+          <span class="text-9xl font-bold text-primary-foreground/25">01</span>
+          <h2 class="mt-2 text-4xl @2xl:text-5xl font-semibold">Act title, mirrored in the contents</h2>
         </section>
-        <section class="min-h-[560px] @2xl:min-h-[760px] flex flex-col justify-center border-b border-border py-16">
+        <section class="min-h-[var(--mx-vh,760px)] flex flex-col border-b border-border py-14">
+          <p class="text-xs uppercase tracking-widest font-semibold text-primary">01 · ACT NAME</p>
+          <hr class="mt-3 mb-10" />
           <h2 class="text-3xl @2xl:text-5xl font-semibold max-w-3xl">The headline is the takeaway, spoken aloud</h2>
-          <div class="mt-10"><Question id={N} height="440px" /></div>
-          <p class="mt-4 text-sm text-muted-foreground">One line under the chart: what to remember when the slide is gone.</p>
-          <div class="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Deck title · date</span><span>07</span></div>
+          <div class="mt-10 max-w-5xl"><Question id={N} height="440px" /></div>
+          <p class="mt-4 text-sm text-muted-foreground max-w-prose">One line under the chart: what to remember when the slide is gone.</p>
+          <div class="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Deck title — date</span><span class="font-semibold">07</span></div>
         </section>
       </div>
 
       Do
-      - Contents slide with numbered acts; close with next steps and the lead number restated.
-      - Huge type, few words; `tabular-nums` on every figure row.
+      - Speakable headlines; huge type, few words; the air below the content.
+      - One accent element per figure; contents ↔ dividers mirrored to the word.
       Don't
-      - Two charts on a slide; paragraphs of prose (three lines max); scroll-snap or parallax tricks.
-      - Cram a slide to avoid adding one — add the slide.
+      - Color a content slide's ground; two charts on a slide; paragraphs (three lines max).
+      - Scroll-snap/parallax tricks; cramming a slide to avoid adding one — add the slide.
 
   scrolly:
     label: Scrolly
-    description: Playful scrollytelling — a pudding.cool-style data story that reveals in steps.
+    description: Playful scrollytelling — a pudding.cool-style data story with a conceit, ticker bands, and chapter breaks.
     personality: >-
-      Curious, witty, second-person: the scroll IS the story, suspense lives between steps, and
-      one visual motif runs the whole way. Serious about the data, playful about everything else.
+      Curious, witty, second-person — and DRESSED UP: the story wears a costume (a mission
+      console, a field report, a race broadcast) and every element plays along. The scroll IS
+      the story, suspense lives between chapters, and fun, visual stunningness is the point —
+      serious about the data, theatrical about everything else.
     beats:
-      - Cold open hook
-      - Setup
-      - Reveal steps (3-5)
+      - Console hero / cold open (the conceit announces itself)
+      - Ticker band
+      - Chapters (3-5), each opened by a page-break band
       - Twist
       - Payoff
       - Methodology footer
     guidance: |-
       ## Scrolly — the playful data story
 
-      Voice: curious, witty, second person ("you'd expect X — that's not what happened"). Build
-      suspense between steps; land one moral at the payoff. Honesty rules still hold: the humor
-      is in the telling, never at the data's expense.
+      Voice: curious, witty, second person ("you'd expect X — that's not what happened").
+      Honesty rules hold: the humor is in the telling, never at the data's expense.
 
-      Layout grammar
-      - Short steps, huge whitespace: each step `py-24`, text narrow (`max-w-md`), alternating
-        alignment (default left; every other step `@3xl:ml-auto @3xl:text-right`).
-      - ONE running visual motif — the accent color, a recurring shape, THE bar being followed —
-        appears in every step. One motif, not three.
-      - The evolving chart: re-embed the SAME saved question across consecutive steps with
-        progressive `viz` overrides (first gray, then one bar highlighted, then the domain
-        zoomed, then all series revealed). `position: fixed/sticky` are banned — this re-embed
-        progression IS the platform's scrolly scene.
-      - Oversized step numerals or a giant question mark as ornament (pure decoration may be
-        hand-drawn; every data number is still a live embed).
-      - Payoff: the full chart at full width plus the one-sentence moral, big. Then a small,
-        honest methodology footer.
+      THE CONCEIT (the single biggest lever): invent a fiction the data lives inside — a mission
+      console, a case file, a broadcast — and commit EVERY element to it: name the fake console
+      ("STRAIT WATCH · TRAFFIC MONITOR"), chapter labels in its voice ("SITREP 02 · THE
+      CHOKEPOINT"), figure numbers ("FIG.03"), status chips ("● STATUS: CLOSED"), timestamps
+      ("AS OF 17 JUN · 00:00Z"). Mono uppercase letter-spaced type (`font-mono text-xs uppercase
+      tracking-widest`) is the conceit's voice for ALL labels. One conceit, total commitment.
 
-      Skeleton (two steps of the progression + payoff):
+      THE FUN KIT (compose 4-6 per story; pace them, never all on one screen):
+      - Console topbar: a slim full-bleed bar opening the story — conceit name left, status chip
+        and timestamp right, strong rule below. It scrolls away (fixed/sticky stay banned).
+      - Two-tone headline: huge condensed uppercase claim with THE one word in the accent —
+        `<h1 class="text-6xl @2xl:text-8xl font-bold uppercase tracking-tight">The strait went <span class="text-primary">dark.</span></h1>`.
+      - Ticker band (marquee): a full-bleed accent strip of repeating key stats
+        ("··· CARGO -97% ··· DAILY 95→5 ··· WAR 28 FEB ···"). A `<style>` block with an
+        `@keyframes` translateX(-50%) loop on a `flex whitespace-nowrap` row duplicated twice
+        inside an `overflow-hidden` band. The ONE sanctioned continuous animation — use it as a
+        section seam, once or twice, ~20s slow.
+      - Page-break band: chapters open with a full-bleed inverted strip (`bg-foreground
+        text-background -mx-6 @2xl:-mx-12 py-10`) carrying a small centered mono label ("↓
+        SITREP 04 · THE STANDOFF NOW") and a GIANT ghost chapter numeral bleeding off one edge —
+        outline text via a scoped `<style>` rule (`-webkit-text-stroke: 2px` in the accent,
+        `color: transparent`) or a huge 15%-opacity numeral. Large type IS the decoration.
+      - Stamped section label: the chapter kicker in a bordered, slightly rotated box
+        (`inline-block border-2 border-foreground px-3 py-1 -rotate-2 font-mono text-xs
+        uppercase tracking-widest`) with an italic muted aside sitting beside it.
+      - Hard-shadow chart slab: charts sit in framed cards with an OFFSET SOLID shadow — a solid
+        color block behind the graph, no blur, printed-poster feel: `border-2 border-foreground
+        shadow-[8px_8px_0_0_var(--primary)]` (or the foreground token; alternate per chapter).
+      - Figure spec strip: under each chart, a dashed-top footer row — `FIG.02 · WHAT IT SHOWS`
+        left, an accent annotation right ("MAR ONWARD: THE GAP").
+      - Dashed stat cards: `border-2 border-dashed border-foreground/60` cards — mono kicker, a
+        giant accent single-value embed, one-line caption. Arrow notation for change ("3,253 → 129"
+        — as a suffix in the embed's columnFormats, still live).
+      - Chip row: small bordered mono tags of the key facts under the hero ("TANKERS 43%",
+        "DAILY 95→5", "● CLOSED").
+      - Texture: a faint blueprint grid on quiet sections via one scoped `<style>` rule
+        (`repeating-linear-gradient` hairlines every ~48px at ~4% opacity), barely-there.
+      - Drop cap: each chapter's first paragraph opens with a huge accent initial (floated
+        `<span>`); pure ornament — every data number is still a live embed.
 
-      <div data-design="tw" class="@container px-6 @2xl:px-12">
-        <header class="py-24 text-center">
-          <p class="text-sm uppercase tracking-widest text-muted-foreground">A cold open asks the question</p>
-          <h1 class="mt-4 text-5xl @2xl:text-7xl font-bold tracking-tight">Everyone believes X.</h1>
-          <p class="mt-4 text-lg text-muted-foreground">Scroll. It's more fun than the answer.</p>
-        </header>
-        <section class="py-24 max-w-md">
-          <span class="text-6xl font-bold text-primary/30">1</span>
-          <p class="mt-4 text-lg">Here's the picture everyone starts with — steady, boring, safe.</p>
-          <div class="mt-6 -mr-6 @3xl:mr-0"><Question id={N} height="340px" viz={{...all series muted gray...}} /></div>
-        </section>
-        <section class="py-24 max-w-md @3xl:ml-auto @3xl:text-right">
-          <span class="text-6xl font-bold text-primary/30">2</span>
-          <p class="mt-4 text-lg">Now watch this one bar. Same chart, one highlight — the motif returns.</p>
-          <div class="mt-6"><Question id={N} height="340px" viz={{...one series in the accent...}} /></div>
-        </section>
-        <section class="py-24 text-center">
-          <h2 class="text-4xl @2xl:text-5xl font-bold max-w-3xl mx-auto">The payoff states the moral in one sentence, with its number.</h2>
-          <div class="mt-10"><Question id={N} height="460px" /></div>
-        </section>
-        <footer class="py-10 border-t border-border text-xs text-muted-foreground max-w-prose">Methodology: where the data comes from, the window, what was excluded — small and honest.</footer>
-      </div>
+      STRUCTURE: console hero (conceit topbar → two-tone claim → one-sentence setup → the ONE
+      stat enormous with its spec caption → chip row) → ticker seam → chapters, each: page-break
+      band → stamped label + italic aside → two-tone headline → short 2-column prose
+      (`@3xl:grid-cols-2`, three sentences per column max) → slab-framed chart with spec strip,
+      dashed stat cards beside it (`@3xl:grid-cols-[3fr_2fr]`) → the TWIST chapter breaks the
+      pattern (inverted ground, or the evolving chart: re-embed the SAME question across steps
+      with progressive `viz` overrides — gray, then one series accented, then the domain zoomed;
+      the platform's scrolly scene, no sticky needed) → PAYOFF: the full-width chart and the
+      moral in one huge two-tone sentence → small honest methodology footer in the conceit's
+      voice ("END OF TRANSMISSION · sources, window, exclusions").
 
       Do
-      - Address the reader; hold one reveal per step; direct-label the thing being followed.
-      - Keep captions doing jokes AND work ("the red bar is why we can't have nice things").
+      - Commit to the conceit in every label; alternate dark/light grounds between chapters.
+      - One reveal per chapter; direct-label the thing being followed; captions do jokes AND work.
       Don't
-      - Fake sticky scenes; walls of prose; three motifs; a payoff without its number.
+      - Fake sticky scenes; walls of prose; two conceits; a payoff without its number; the whole
+        fun kit on one screen.
 
 themes:
   modernist: |-
