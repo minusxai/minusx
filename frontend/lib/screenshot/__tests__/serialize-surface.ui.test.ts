@@ -90,6 +90,25 @@ describe('serializeSurfaceSvg', () => {
     expect(root.getAttribute('class') ?? '').not.toContain('dark'); // live DOM untouched
   });
 
+  // The detached copy loses everything the live subtree INHERITED from ancestors outside the
+  // svg: root-scoped CSS vars from <html> classes (next/font's --font-jetbrains-mono — losing it
+  // swapped every mono numeral to a wider fallback and clipped captions), and inherited text
+  // color (losing it painted un-colored table text black on dark tiles).
+  it('carries the <html> classes and an inherited-style snapshot on the cloned root', async () => {
+    document.documentElement.classList.add('__font_var_class');
+    const { svg, root } = mountSurface('<p>x</p>');
+    const csSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation(() => ({
+      getPropertyValue: (p: string) => ({ color: 'rgb(1, 2, 3)', 'font-family': 'TestMono', 'font-size': '14px', 'line-height': '20px' } as Record<string, string>)[p] ?? '',
+    } as unknown as CSSStyleDeclaration));
+    const out = await serializeSurfaceSvg(svg);
+    csSpy.mockRestore();
+    document.documentElement.classList.remove('__font_var_class');
+    expect(out).toContain('__font_var_class');
+    expect(out).toContain('rgb(1, 2, 3)');
+    expect(out).toContain('TestMono');
+    expect(root.getAttribute('style') ?? '').not.toContain('TestMono'); // live untouched
+  });
+
   it('bakes form state and drops transient portals, live DOM untouched', async () => {
     const { svg, root } = mountSurface(
       '<input id="i" type="text"><div data-scope="menu" data-part="positioner"><p>menu body</p></div>',

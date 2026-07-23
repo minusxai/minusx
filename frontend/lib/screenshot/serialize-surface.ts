@@ -17,6 +17,7 @@ import {
   collectDocumentCss,
   inlineCssUrls,
   inlineImageSources,
+  snapshotInheritedStyle,
   stampCanvases,
   TRANSIENT_PORTAL_SELECTOR,
 } from './serialize-element';
@@ -56,8 +57,16 @@ export async function serializeSurfaceSvg(svg: SVGSVGElement): Promise<string> {
     // stamp can never match (live it matches via `<html class="dark">`; the copy has no <html> —
     // this was the light-chrome dark-dashboard capture bug).
     const mode = doc.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    // ALSO carry the <html> classes: root-scoped CSS vars keyed off them (next/font's
+    // `--font-jetbrains-mono` variable classes) die in the detached copy otherwise — every mono
+    // numeral fell back to a wider system mono and captions clipped.
+    const htmlClasses = doc.documentElement.className;
     const svgCls = clone.getAttribute('class');
-    clone.setAttribute('class', `${svgCls ? `${svgCls} ` : ''}${mode}`);
+    clone.setAttribute('class', [svgCls, mode, htmlClasses].filter(Boolean).join(' '));
+    // Inherited-environment snapshot (text color, font metrics) — the copy loses everything the
+    // live subtree inherited from ancestors outside the svg (black-table-text bug).
+    const rootStyle = cloneRoot.getAttribute('style');
+    cloneRoot.setAttribute('style', `${rootStyle ? `${rootStyle};` : ''}${snapshotInheritedStyle(liveRoot)}`);
   }
 
   // Explicit intrinsic size: an <img>-rendered SVG without width/height attributes has no

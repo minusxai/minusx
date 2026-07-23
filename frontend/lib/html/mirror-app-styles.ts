@@ -34,6 +34,11 @@
 // scrolls right-to-left on a loop. Duration is overridable via inline
 // `animation-duration` on the track for longer/shorter copy. Pauses on hover and
 // falls back to a static, horizontally-scrollable strip under reduced-motion.
+import { absolutizeCssUrls } from './css-urls';
+
+// Re-exported for existing consumers (tests, story-font resolution).
+export { absolutizeCssUrls };
+
 const MARQUEE_CSS =
   `.mx-marquee { overflow: hidden; }\n` +
   `.mx-marquee-track { display: inline-block; white-space: nowrap; padding-left: 100%; animation: mx-marquee-scroll 22s linear infinite; will-change: transform; }\n` +
@@ -46,25 +51,6 @@ const APP_STYLES_BASE_CSS =
   `:where(:has(> [data-question-id], > [data-question-inline])) { min-width: 0; }\n` +
   MARQUEE_CSS;
 
-/**
- * Rewrite RELATIVE `url(...)` refs in a rule's cssText to ABSOLUTE, resolved against `base` (the
- * source stylesheet's href). Mirrored rules are dropped into an inline <style> in the story iframe,
- * whose base URL is the page (/f/<id>) — so a font's `url("../media/x.woff2")` (authored relative to
- * /_next/static/css/…) would resolve to /media/x.woff2 and 404. Absolutising against the original
- * stylesheet's href makes it /_next/static/media/x.woff2 again. Absolute/data/blob/root-relative/
- * fragment refs already resolve correctly and are left as-is.
- */
-export function absolutizeCssUrls(cssText: string, base: string): string {
-  return cssText.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (match, quote: string, ref: string) => {
-    const r = ref.trim();
-    if (/^(data:|https?:|blob:|\/|#)/i.test(r)) return match; // already absolute / data / blob / root-relative / fragment
-    try {
-      return `url(${quote}${new URL(r, base).href}${quote})`;
-    } catch {
-      return match;
-    }
-  });
-}
 
 /**
  * The 6a mirror shrink (Renderer_v2): of everything the document's stylesheets contain, ONLY

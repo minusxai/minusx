@@ -25,6 +25,23 @@
    authored margins (injecting structural padding would shift every curated story). Dev-loop
    note: several "regressions" in this round were a STALE turbopack CSS chunk (classes present
    in DOM, absent from served CSS) — restart the dev server before diagnosing.
+3b. **Third user-testing round — capture fidelity (DOM vs image deltas), all red-first:** the
+   detached copy loses ENVIRONMENT, and every observed delta traced to one of three leaks:
+   (a) inherited text color/font metrics (un-colored pivot text rasterized BLACK on dark tiles)
+   → both serializers now bake a computed-style snapshot (color/font/line-height) of the live
+   root onto the clone wrapper; (b) root-scoped CSS vars from `<html>` classes (next/font's
+   `--font-jetbrains-mono` variable classes) — the surface serializer now carries the html
+   classes like the element serializer always did; (c) `@font-face` src urls are RELATIVE TO
+   THEIR SHEET (`url("../media/x.woff2")` inside /_next/static/css/…) and `collectDocumentCss`
+   resolved them against the PAGE url → 404 → no webfont in any capture → wider fallback mono →
+   the clipped-caption / oversized-numerals report. Fixed with per-sheet absolutizing
+   (`lib/html/css-urls.ts`, shared with the story mirror — extracted because the ui test setup
+   mocks mirror-app-styles wholesale, which had silently un-defined the import). Verified by a
+   live side-by-side (Top Level Metrics, tutorial): numerals, captions, pivot text, markers all
+   match the DOM. Perf verified: settled-page cold capture ≈3.0s (≥250ms readiness settle +
+   one-time font inlining, dev CSS), instant on repeat (one-slot cache); the raw
+   serialize+rasterize pipeline measures 1–19ms on the matrix grid even at 6× CPU throttle —
+   the cost is I/O-shaped (font fetches), not CPU-shaped, so older machines track the cold case.
 3. **Stale-paint bug on relayout (the "broken dashboard" and much of the sidebar jank)** —
    Chromium does not repaint transformed foreignObject content after a relayout (DOM/layout
    correct, old pixels survive until an unrelated invalidation like a scroll), and transform

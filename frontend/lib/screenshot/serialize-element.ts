@@ -18,6 +18,7 @@
  * full-page capture) — accepted divergence; the bar is content complete and legible.
  */
 import { applyScrollOffsets, stampFormValues } from '@/lib/story-surface/serialize';
+import { absolutizeCssUrls } from '@/lib/html/css-urls';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -41,13 +42,36 @@ export function collectDocumentCss(doc: Document): string {
       parts.push(node.textContent || '');
       continue;
     }
+    // Link-sheet url() refs are relative to THE SHEET (next/font: `url("../media/x.woff2")`
+    // inside /_next/static/css/…) — absolutize against the sheet's own href so the later
+    // data:-URI inlining fetches the real resource instead of 404ing against the page URL
+    // (which silently dropped every webfont from captures).
+    const base = sheet.href || doc.baseURI;
     try {
-      parts.push(Array.from(sheet.cssRules).map((r) => r.cssText).join('\n'));
+      parts.push(Array.from(sheet.cssRules).map((r) => absolutizeCssUrls(r.cssText, base)).join('\n'));
     } catch {
       // cross-origin sheet — unreadable, skip (its fonts/styles fall back)
     }
   }
   return parts.join('\n');
+}
+
+/**
+ * Snapshot the INHERITED text environment of a live element as a CSS declaration string. The
+ * serialized copy is detached from every ancestor the element inherited from — un-colored text
+ * fell back to initial black on dark tiles, and font-family fell back to a wider system mono
+ * (clipping captions). Baking the computed values onto the clone wrapper restores the context.
+ */
+export function snapshotInheritedStyle(el: Element): string {
+  const win = el.ownerDocument.defaultView;
+  if (!win) return '';
+  const cs = win.getComputedStyle(el);
+  return ['color', 'font-family', 'font-size', 'line-height', 'letter-spacing']
+    .map((p) => {
+      const v = cs.getPropertyValue(p);
+      return v ? `${p}:${v};` : '';
+    })
+    .join('');
 }
 
 /** Best-effort fetch → data: URL. Null on any failure — a miss must never fail the capture. */
@@ -204,7 +228,8 @@ export async function serializeElementToSvg(
   const theme = doc.documentElement.getAttribute('data-theme');
   if (theme) outer.setAttribute('data-theme', theme);
   outer.setAttribute('style', `width:${width}px;height:${height}px;overflow:hidden;`
-    + (opts.backgroundColor ? `background:${opts.backgroundColor};` : ''));
+    + (opts.backgroundColor ? `background:${opts.backgroundColor};` : '')
+    + snapshotInheritedStyle(element));
   const inner = doc.createElement('div');
   // shadcn token host (Renderer_v2 Phase 3+): re-skinned views consume tokens declared under
   // `[data-mx-theme-host]` / `.dark [data-mx-theme-host]` (app/theme-tokens.css), and the live
