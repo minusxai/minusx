@@ -2,62 +2,75 @@
  * SemanticModelsSection — per-connection semantic-model editor (rendered inside
  * the Databases tab above Data Models; the connection is implied, never picked).
  *
- * One layout for BOTH modes: read mode renders the same cards with definitions
- * as text; edit mode swaps them for inputs. Join columns are INFERRED on source
- * pick (lib/semantic/infer-join) — the author corrects, never assembles.
+ * Data-Models look & feel: an own bordered container with a header bar, one
+ * COMPACT ROW per model (name · description · counts), and the full definition
+ * expanding BELOW the row (`toggle-semantic-model-<name>`). Read mode renders
+ * the expanded definitions as text; edit mode swaps them for inputs.
+ *
+ * Pickers are SchemaOptionPicker popovers (click trigger → click option row),
+ * not native selects. Columns resolve on demand via the shared
+ * use-table-columns cache when the bounded schema shipped names-only.
+ * Text inputs are DRAFTS: they commit on blur/Enter, never per keystroke.
  *
  * Unit tests: mount the component directly with props (no full-app flow).
  * All queries via aria-label ONLY (repo rule).
  */
 import React from 'react';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import SemanticModelsSection, { parseSemanticModelIssues } from '@/components/context/SemanticModelsEditor';
 import { testSemanticModel } from '@/lib/semantic/models-client';
+import { clearTableColumnsCache } from '@/lib/hooks/use-table-columns';
+import { CompletionsAPI } from '@/lib/data/completions/completions';
 import type { SemanticModelV2, DatabaseWithSchema, ViewDef } from '@/lib/types';
 
 vi.mock('@/lib/semantic/models-client', () => ({
   testSemanticModel: vi.fn(async () => ({ issues: [], verified: {} })),
 }));
+vi.mock('@/lib/data/completions/completions', () => ({
+  CompletionsAPI: { getColumnSuggestions: vi.fn(async () => ({ success: false })) },
+}));
 const mockTest = vi.mocked(testSemanticModel);
+const mockColumns = vi.mocked(CompletionsAPI.getColumnSuggestions);
+
+const TABLE_COLUMNS: Record<string, { name: string; type: string }[]> = {
+  orders: [
+    { name: 'id', type: 'BIGINT' },
+    { name: 'customer_id', type: 'BIGINT' },
+    { name: 'total', type: 'DOUBLE' },
+    { name: 'created_at', type: 'TIMESTAMP' },
+  ],
+  customers: [
+    { name: 'id', type: 'BIGINT' },
+    { name: 'name', type: 'VARCHAR' },
+  ],
+  order_tags: [
+    { name: 'order_id', type: 'BIGINT' },
+    { name: 'tag_id', type: 'BIGINT' },
+  ],
+  tags: [
+    { name: 'id', type: 'BIGINT' },
+    { name: 'label', type: 'VARCHAR' },
+  ],
+};
 
 const DATABASE: DatabaseWithSchema = {
   databaseName: 'warehouse',
   schemas: [
     {
       schema: 'mxfood',
-      tables: [
-        {
-          table: 'orders',
-          columns: [
-            { name: 'id', type: 'BIGINT' },
-            { name: 'customer_id', type: 'BIGINT' },
-            { name: 'total', type: 'DOUBLE' },
-            { name: 'created_at', type: 'TIMESTAMP' },
-          ],
-        },
-        {
-          table: 'customers',
-          columns: [
-            { name: 'id', type: 'BIGINT' },
-            { name: 'name', type: 'VARCHAR' },
-          ],
-        },
-        {
-          table: 'order_tags',
-          columns: [
-            { name: 'order_id', type: 'BIGINT' },
-            { name: 'tag_id', type: 'BIGINT' },
-          ],
-        },
-        {
-          table: 'tags',
-          columns: [
-            { name: 'id', type: 'BIGINT' },
-            { name: 'label', type: 'VARCHAR' },
-          ],
-        },
-      ],
+      tables: Object.entries(TABLE_COLUMNS).map(([table, columns]) => ({ table, columns })),
+    },
+  ],
+};
+
+/** The memory-bounded (names-only) shape of the same schema — no columns. */
+const DATABASE_BOUNDED: DatabaseWithSchema = {
+  databaseName: 'warehouse',
+  schemas: [
+    {
+      schema: 'mxfood',
+      tables: Object.keys(TABLE_COLUMNS).map((table) => ({ table, columns: [] })),
     },
   ],
 };
@@ -112,9 +125,72 @@ const renderSection = (over: Partial<React.ComponentProps<typeof SemanticModelsS
   return { onChange };
 };
 
+/** Expand the definition body below a model's row. */
+const expand = (name: string) => fireEvent.click(screen.getByLabelText(`toggle-semantic-model-${name}`));
+
+/** Pick an option in a SchemaOptionPicker: open the trigger, click the row. */
+const pick = async (label: string, value: string) => {
+  fireEvent.click(screen.getByLabelText(label));
+  fireEvent.click(await screen.findByLabelText(`${label}-option-${value}`));
+};
+
+/** Commit a draft input: type, then blur. */
+const commitInput = (label: string, value: string) => {
+  const input = screen.getByLabelText(label);
+  fireEvent.change(input, { target: { value } });
+  fireEvent.blur(input);
+};
+
+beforeEach(() => {
+  clearTableColumnsCache();
+  mockColumns.mockReset();
+  mockColumns.mockImplementation(async ({ table }) => {
+    const columns = TABLE_COLUMNS[table];
+    if (!columns) return { success: false, error: 'not found' };
+    return { success: true, columns: columns.map((c) => ({ ...c, displayName: c.name })) };
+  });
+});
+
+describe('data-models look: compact rows, definitions expand below', () => {
+  it('renders one row per model with name, description, and counts; body hidden until expanded', () => {
+    renderSection();
+    const row = screen.getByLabelText('semantic-model-row-Orders');
+    expect(row.textContent).toContain('Orders');
+    expect(row.textContent).toContain('Order-level facts');
+    expect(row.textContent).toContain('2 dims');
+    expect(row.textContent).toContain('4 metrics');
+    // definition body is collapsed
+    expect(screen.queryByLabelText('semantic-model-0-name')).toBeNull();
+    expand('Orders');
+    expect((screen.getByLabelText('semantic-model-0-name') as HTMLInputElement).value).toBe('Orders');
+  });
+
+  it('read mode with no models renders nothing (no empty container)', () => {
+    renderSection({ editMode: false, models: [] });
+    expect(screen.queryByLabelText('Semantic models for warehouse')).toBeNull();
+  });
+
+  it('edit mode with no models renders the container with a hint and the add button', () => {
+    renderSection({ models: [] });
+    expect(screen.getByLabelText('Semantic models for warehouse')).toBeTruthy();
+    expect(screen.getByLabelText('add-semantic-model')).toBeTruthy();
+  });
+
+  it('inherited models render as read-only rows', () => {
+    renderSection({ models: [], inheritedModels: [ORDERS_MODEL] });
+    const row = screen.getByLabelText('semantic-model-row-inherited-Orders');
+    expect(row.textContent).toContain('inherited');
+    expand('Orders');
+    // read-only: definitions as text, no inputs
+    expect(screen.queryByLabelText('semantic-model-0-name')).toBeNull();
+    expect(screen.getByLabelText('semantic-model-0-metric-0-definition').textContent).toContain('SUM(total)');
+  });
+});
+
 describe('one layout for both modes', () => {
   it('read mode shows full definitions as text: metric formulas, dimension mappings, joins', () => {
     renderSection({ editMode: false });
+    expand('Orders');
     expect(screen.getByLabelText('semantic-model-0-metric-0-definition').textContent).toContain('SUM(total)');
     expect(screen.getByLabelText('semantic-model-0-metric-2-definition').textContent).toContain('Revenue ÷ Order Count');
     expect(screen.getByLabelText('semantic-model-0-dimension-1-definition').textContent).toContain('customer.name');
@@ -127,6 +203,7 @@ describe('one layout for both modes', () => {
 
   it('edit mode renders the same sections with inputs, plus + buttons on each heading', () => {
     renderSection();
+    expand('Orders');
     expect((screen.getByLabelText('semantic-model-0-name') as HTMLInputElement).value).toBe('Orders');
     for (const label of [
       'semantic-model-0-add-reference',
@@ -140,11 +217,34 @@ describe('one layout for both modes', () => {
 
   it('temporal dimensions render under Time Dimensions, others under Dimensions', () => {
     renderSection({ editMode: false });
+    expand('Orders');
     const time = screen.getByLabelText('semantic-model-0-time-dimensions');
     const dims = screen.getByLabelText('semantic-model-0-plain-dimensions');
     expect(time.textContent).toContain('Order Date');
     expect(dims.textContent).toContain('Customer Name');
     expect(dims.textContent).not.toContain('Order Date');
+  });
+});
+
+describe('draft inputs commit on blur, never per keystroke (perf contract)', () => {
+  it('typing in the name field does not emit; blur commits exactly once', () => {
+    const { onChange } = renderSection();
+    expand('Orders');
+    const input = screen.getByLabelText('semantic-model-0-name');
+    fireEvent.change(input, { target: { value: 'O' } });
+    fireEvent.change(input, { target: { value: 'Or' } });
+    fireEvent.change(input, { target: { value: 'Orders v2' } });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect((onChange.mock.calls[0][0] as SemanticModelV2[])[0].name).toBe('Orders v2');
+  });
+
+  it('an unchanged blur does not emit', () => {
+    const { onChange } = renderSection();
+    expand('Orders');
+    fireEvent.blur(screen.getByLabelText('semantic-model-0-name'));
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 
@@ -159,15 +259,15 @@ describe('creating a model', () => {
     expect(next[1].name).toBe('Orders');
   });
 
-  it('picking a primary on an empty model auto-prefills vocabulary (temporal dims first, Count metric)', () => {
+  it('picking a primary on an empty model auto-prefills vocabulary (temporal dims first, Count metric)', async () => {
     const empty: SemanticModelV2 = {
       name: 'new_model', connection: 'warehouse',
       primary: { kind: 'table', table: '' }, dimensions: [], metrics: [],
     };
     const { onChange } = renderSection({ models: [empty] });
-    fireEvent.change(screen.getByLabelText('semantic-model-0-primary-source'), {
-      target: { value: 't|mxfood|orders' },
-    });
+    expand('new_model');
+    await pick('semantic-model-0-primary-source', 't|mxfood|orders');
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
     const next = (onChange.mock.calls[0][0] as SemanticModelV2[])[0];
     expect(next.primary).toEqual({ kind: 'table', schema: 'mxfood', table: 'orders' });
     expect(next.metrics.some((m) => m.name === 'Count')).toBe(true);
@@ -182,8 +282,34 @@ describe('creating a model', () => {
   });
 });
 
+describe('on-demand columns — the bounded (names-only) schema still works', () => {
+  it('column pickers populate from the completions API when the local schema has no columns', async () => {
+    renderSection({ database: DATABASE_BOUNDED });
+    expand('Orders');
+    fireEvent.click(screen.getByLabelText('semantic-model-0-metric-0-column'));
+    expect(await screen.findByLabelText('semantic-model-0-metric-0-column-option-total')).toBeTruthy();
+    expect(mockColumns).toHaveBeenCalledWith(expect.objectContaining({
+      databaseName: 'warehouse', table: 'orders', schema: 'mxfood',
+    }));
+  });
+
+  it('primary prefill works from fetched columns too', async () => {
+    const empty: SemanticModelV2 = {
+      name: 'new_model', connection: 'warehouse',
+      primary: { kind: 'table', table: '' }, dimensions: [], metrics: [],
+    };
+    const { onChange } = renderSection({ database: DATABASE_BOUNDED, models: [empty] });
+    expand('new_model');
+    await pick('semantic-model-0-primary-source', 't|mxfood|orders');
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const next = (onChange.mock.calls[0][0] as SemanticModelV2[])[0];
+    expect(next.dimensions.length).toBeGreaterThan(0);
+    expect(next.metrics.some((m) => m.name === 'Count')).toBe(true);
+  });
+});
+
 describe('references — inferred joins, no bridge jargon', () => {
-  it('picking a to-one source infers alias AND join columns by name', () => {
+  it('picking a to-one source infers alias AND join columns by name', async () => {
     const bare: SemanticModelV2 = {
       ...ORDERS_MODEL,
       references: [{
@@ -195,9 +321,9 @@ describe('references — inferred joins, no bridge jargon', () => {
       dimensions: ORDERS_MODEL.dimensions.filter((d) => d.source === 'primary'),
     };
     const { onChange } = renderSection({ models: [bare] });
-    fireEvent.change(screen.getByLabelText('semantic-model-0-reference-0-source'), {
-      target: { value: 't|mxfood|customers' },
-    });
+    expand('Orders');
+    await pick('semantic-model-0-reference-0-source', 't|mxfood|customers');
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
     const next = (onChange.mock.calls[0][0] as SemanticModelV2[])[0];
     const ref = next.references![0];
     expect(ref.alias).toBe('customer');
@@ -206,11 +332,12 @@ describe('references — inferred joins, no bridge jargon', () => {
 
   it('the join line spells REAL table.column equalities (edit mode too)', () => {
     renderSection();
+    expand('Orders');
     expect(screen.getByLabelText('semantic-model-0-reference-0-join').textContent)
       .toContain('orders.customer_id = customers.id');
   });
 
-  it('switching to many-to-many + picking a via table infers the whole through mapping and the grain', () => {
+  it('switching to many-to-many + picking a via table infers the whole through mapping and the grain', async () => {
     const withTagRef: SemanticModelV2 = {
       ...ORDERS_MODEL,
       primaryKey: undefined,
@@ -223,16 +350,17 @@ describe('references — inferred joins, no bridge jargon', () => {
       dimensions: [],
     };
     const { onChange } = renderSection({ models: [withTagRef] });
-    fireEvent.change(screen.getByLabelText('semantic-model-0-reference-0-relationship'), {
-      target: { value: 'many_to_many' },
-    });
+    expand('Orders');
+    await pick('semantic-model-0-reference-0-relationship', 'many_to_many');
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
     let next = (onChange.mock.calls[0][0] as SemanticModelV2[])[0];
     expect(next.references![0].relationship).toBe('many_to_many');
 
+    cleanup(); // fresh mount for the second stage — labels must stay unique
     const { onChange: onChange2 } = renderSection({ models: [next] });
-    fireEvent.change(screen.getByLabelText('semantic-model-0-reference-0-via-source'), {
-      target: { value: 't|mxfood|order_tags' },
-    });
+    expand('Orders');
+    await pick('semantic-model-0-reference-0-via-source', 't|mxfood|order_tags');
+    await waitFor(() => expect(onChange2).toHaveBeenCalled());
     next = (onChange2.mock.calls[0][0] as SemanticModelV2[])[0];
     const ref = next.references![0] as { through: { primaryOn: unknown; referencedOn: unknown } };
     expect(ref.through.primaryOn).toEqual([{ primaryColumn: 'id', bridgeColumn: 'order_id' }]);
@@ -242,7 +370,8 @@ describe('references — inferred joins, no bridge jargon', () => {
 
   it('renaming a reference alias cascades to dimensions that use it', () => {
     const { onChange } = renderSection();
-    fireEvent.change(screen.getByLabelText('semantic-model-0-reference-0-alias'), { target: { value: 'buyer' } });
+    expand('Orders');
+    commitInput('semantic-model-0-reference-0-alias', 'buyer');
     const next = (onChange.mock.calls[0][0] as SemanticModelV2[])[0];
     expect(next.references![0].alias).toBe('buyer');
     expect(next.dimensions.find((d) => d.name === 'Customer Name')!.source).toBe('buyer');
@@ -252,88 +381,91 @@ describe('references — inferred joins, no bridge jargon', () => {
 describe('metrics — one list, three types', () => {
   it('add-metric appends an aggregation metric (COUNT default)', () => {
     const { onChange } = renderSection();
+    expand('Orders');
     fireEvent.click(screen.getByLabelText('semantic-model-0-add-metric'));
     const next = (onChange.mock.calls[0][0] as SemanticModelV2[])[0];
     const added = next.metrics[next.metrics.length - 1];
     expect(added).toMatchObject({ type: 'aggregation', agg: 'COUNT' });
   });
 
-  it('ratio numerator/denominator options are AGGREGATION metrics only', () => {
+  it('ratio numerator/denominator options are AGGREGATION metrics only', async () => {
     renderSection();
-    const numerator = screen.getByLabelText('semantic-model-0-metric-2-numerator') as HTMLSelectElement;
-    const options = Array.from(numerator.options).map((o) => o.value).filter(Boolean);
-    expect(options).toEqual(['Revenue', 'Order Count']); // AOV / Net Revenue excluded
+    expand('Orders');
+    fireEvent.click(screen.getByLabelText('semantic-model-0-metric-2-numerator'));
+    expect(await screen.findByLabelText('semantic-model-0-metric-2-numerator-option-Revenue')).toBeTruthy();
+    expect(screen.getByLabelText('semantic-model-0-metric-2-numerator-option-Order Count')).toBeTruthy();
+    // AOV / Net Revenue excluded
+    expect(screen.queryByLabelText('semantic-model-0-metric-2-numerator-option-AOV')).toBeNull();
+    expect(screen.queryByLabelText('semantic-model-0-metric-2-numerator-option-Net Revenue')).toBeNull();
   });
 
-  it('switching a metric type converts it in place (name preserved)', () => {
+  it('switching a metric type converts it in place (name preserved)', async () => {
     const { onChange } = renderSection();
-    fireEvent.change(screen.getByLabelText('semantic-model-0-metric-1-type'), { target: { value: 'sql' } });
+    expand('Orders');
+    await pick('semantic-model-0-metric-1-type', 'sql');
     const next = (onChange.mock.calls[0][0] as SemanticModelV2[])[0];
     expect(next.metrics[1]).toMatchObject({ type: 'sql', name: 'Order Count' });
   });
 });
 
 describe('names auto-fill from the picked column', () => {
-  it('picking a dimension column fills an empty name (humanized)', () => {
+  it('picking a dimension column fills an empty name (humanized)', async () => {
     const m: SemanticModelV2 = {
       ...ORDERS_MODEL,
       dimensions: [...ORDERS_MODEL.dimensions, { name: '', source: 'primary', column: '' }],
     };
     const { onChange } = renderSection({ models: [m] });
-    fireEvent.change(screen.getByLabelText('semantic-model-0-dimension-2-field'), {
-      target: { value: 'primary|customer_id' },
-    });
+    expand('Orders');
+    await pick('semantic-model-0-dimension-2-field', 'primary|customer_id');
     const next = (onChange.mock.calls[0][0] as SemanticModelV2[])[0];
     expect(next.dimensions[2]).toMatchObject({ column: 'customer_id', name: 'Customer Id' });
   });
 
-  it('a hand-typed name is NEVER clobbered by a later column change', () => {
+  it('a hand-typed name is NEVER clobbered by a later column change', async () => {
     const m: SemanticModelV2 = {
       ...ORDERS_MODEL,
       dimensions: [...ORDERS_MODEL.dimensions, { name: 'My Field', source: 'primary', column: 'total' }],
     };
     const { onChange } = renderSection({ models: [m] });
-    fireEvent.change(screen.getByLabelText('semantic-model-0-dimension-2-field'), {
-      target: { value: 'primary|customer_id' },
-    });
+    expand('Orders');
+    await pick('semantic-model-0-dimension-2-field', 'primary|customer_id');
     const next = (onChange.mock.calls[0][0] as SemanticModelV2[])[0];
     expect(next.dimensions[2].name).toBe('My Field');
   });
 
-  it('an auto-filled name FOLLOWS a column change (still auto)', () => {
+  it('an auto-filled name FOLLOWS a column change (still auto)', async () => {
     const m: SemanticModelV2 = {
       ...ORDERS_MODEL,
       dimensions: [...ORDERS_MODEL.dimensions, { name: 'Total', source: 'primary', column: 'total' }],
     };
     const { onChange } = renderSection({ models: [m] });
-    fireEvent.change(screen.getByLabelText('semantic-model-0-dimension-2-field'), {
-      target: { value: 'primary|customer_id' },
-    });
+    expand('Orders');
+    await pick('semantic-model-0-dimension-2-field', 'primary|customer_id');
     const next = (onChange.mock.calls[0][0] as SemanticModelV2[])[0];
     expect(next.dimensions[2].name).toBe('Customer Id');
   });
 
-  it('picking an aggregation-metric column fills an empty name from the agg (SUM → Total X)', () => {
+  it('picking an aggregation-metric column fills an empty name from the agg (SUM → Total X)', async () => {
     const m: SemanticModelV2 = {
       ...ORDERS_MODEL,
       metrics: [...ORDERS_MODEL.metrics, { name: '', type: 'aggregation', agg: 'SUM' }],
     };
     const { onChange } = renderSection({ models: [m] });
-    fireEvent.change(screen.getByLabelText('semantic-model-0-metric-4-column'), {
-      target: { value: 'total' },
-    });
+    expand('Orders');
+    await pick('semantic-model-0-metric-4-column', 'total');
     const next = (onChange.mock.calls[0][0] as SemanticModelV2[])[0];
     expect(next.metrics[4]).toMatchObject({ column: 'total', name: 'Total Total' });
   });
 });
 
 describe('live tier-1 validation (no save needed)', () => {
-  it('a duplicate name surfaces inline immediately', () => {
+  it('a duplicate name surfaces inline immediately (and force-opens the row)', () => {
     const m: SemanticModelV2 = {
       ...ORDERS_MODEL,
       dimensions: [...ORDERS_MODEL.dimensions, { name: 'Customer Name', source: 'primary', column: 'total' }],
     };
     renderSection({ models: [m] });
+    // no manual expand — a row with issues opens itself
     expect(screen.getByLabelText('semantic-model-0-issues').textContent)
       .toContain('declared more than once');
   });
@@ -345,6 +477,7 @@ describe('live tier-1 validation (no save needed)', () => {
       metrics: [...ORDERS_MODEL.metrics, { name: '', type: 'aggregation', agg: 'COUNT' }],
     };
     renderSection({ models: [m] });
+    expand('Orders');
     expect(screen.queryByLabelText('semantic-model-0-issues')).toBeNull();
   });
 
@@ -354,6 +487,7 @@ describe('live tier-1 validation (no save needed)', () => {
       dimensions: [...ORDERS_MODEL.dimensions, { name: 'Customer Name', source: 'primary', column: 'total' }],
     };
     renderSection({ models: [m], editMode: false });
+    expand('Orders');
     expect(screen.queryByLabelText('semantic-model-0-issues')).toBeNull();
   });
 });
@@ -361,6 +495,7 @@ describe('live tier-1 validation (no save needed)', () => {
 describe('time dimensions', () => {
   it('add-time-dimension appends a temporal primary dimension', () => {
     const { onChange } = renderSection();
+    expand('Orders');
     fireEvent.click(screen.getByLabelText('semantic-model-0-add-time-dimension'));
     const next = (onChange.mock.calls[0][0] as SemanticModelV2[])[0];
     const added = next.dimensions[next.dimensions.length - 1];
@@ -382,7 +517,7 @@ const UNKNOWN_MODEL_ISSUE =
   'Semantic model "Shipments": primary table mxfood.shipments is not exposed by this context';
 
 describe('save-gate issues surface at the row that caused them', () => {
-  it('renders each issue under the model / metric row it names', () => {
+  it('renders each issue under the model / metric row it names (auto-opening the model)', () => {
     renderSection({ issues: [ENGINE_ISSUE, MODEL_ISSUE, UNKNOWN_MODEL_ISSUE] });
 
     // metric issue lands on the metric it names ('Net Revenue' is metric index 3)
@@ -401,6 +536,7 @@ describe('save-gate issues surface at the row that caused them', () => {
 
   it('renders no issue elements when the save gate reported nothing', () => {
     renderSection();
+    expand('Orders');
     expect(screen.queryByLabelText('semantic-model-0-issues')).toBeNull();
     expect(screen.queryByLabelText('semantic-model-0-metric-3-issue')).toBeNull();
     expect(screen.queryByLabelText('semantic-model-unattributed-issues')).toBeNull();
@@ -447,7 +583,8 @@ describe('the Test button', () => {
     renderSection();
     fireEvent.click(screen.getByLabelText('semantic-model-0-test'));
     await waitFor(() => expect(screen.getByLabelText('semantic-model-0-test-ok')).toBeTruthy());
-    fireEvent.change(screen.getByLabelText('semantic-model-0-description'), { target: { value: 'edited' } });
+    expand('Orders');
+    commitInput('semantic-model-0-description', 'edited');
     expect(screen.queryByLabelText('semantic-model-0-test-ok')).toBeNull();
   });
 

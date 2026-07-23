@@ -335,23 +335,24 @@ export function DatabasesTabContent({
                           <Box p={4}>
                             {/* Semantic models: the authored vocabulary layer —
                                 ABOVE data models and the raw schema, since it's
-                                the surface agents and the GUI query first. */}
-                            <Box mb={4} border="1px solid" borderColor="border.muted" borderRadius="md" p={3}>
-                              <SemanticModelsSection
-                                connection={database.databaseName}
-                                database={database}
-                                contextPath={contextPath}
-                                views={[...(content.fullViews || []), ...(content.views || [])]}
-                                models={(content.semanticModels || []).filter((m) => m.connection === database.databaseName)}
-                                inheritedModels={(content.fullSemanticModels || []).filter((m) => m.connection === database.databaseName)}
-                                editMode={editMode}
-                                issues={issuesForSection(database.databaseName, availableDatabases[0]?.databaseName === database.databaseName)}
-                                onChange={(nextForConnection) => {
-                                  const others = (content.semanticModels || []).filter((m) => m.connection !== database.databaseName);
-                                  onChange({ semanticModels: [...nextForConnection, ...others] });
-                                }}
-                              />
-                            </Box>
+                                the surface agents and the GUI query first. The
+                                section owns its container (border + header) and
+                                renders NOTHING when empty in read mode — no
+                                wrapper here, or an empty box would linger. */}
+                            <SemanticModelsSection
+                              connection={database.databaseName}
+                              database={database}
+                              contextPath={contextPath}
+                              views={[...(content.fullViews || []), ...(content.views || [])]}
+                              models={(content.semanticModels || []).filter((m) => m.connection === database.databaseName)}
+                              inheritedModels={(content.fullSemanticModels || []).filter((m) => m.connection === database.databaseName)}
+                              editMode={editMode}
+                              issues={issuesForSection(database.databaseName, availableDatabases[0]?.databaseName === database.databaseName)}
+                              onChange={(nextForConnection) => {
+                                const others = (content.semanticModels || []).filter((m) => m.connection !== database.databaseName);
+                                onChange({ semanticModels: [...nextForConnection, ...others] });
+                              }}
+                            />
                             {/* Views: curated SQL that behaves like a table. Sits
                                 above the raw schema — it's the layer people should
                                 reach for first. */}

@@ -261,6 +261,12 @@ export default function ViewsSection({
       {inherited.map((v) => renderRow(v, null, true))}
       {mine.map(({ v, index }) => renderRow(v, index, false))}
 
+      {editable && mine.length === 0 && inherited.length === 0 && editing?.kind !== 'new' && (
+        <Text px={3} py={2} fontSize="xs" color="fg.muted">
+          No data models yet — create curated SQL that behaves like a table for this connection.
+        </Text>
+      )}
+
       {editing?.kind === 'new' && (
         <Box p={2}>
           <ViewWorkbench
