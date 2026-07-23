@@ -14,6 +14,7 @@
 import type { UserInputProps, UserInput } from '@/lib/tools/user-input-exception';
 import type { DerivedPendingToolCall } from '@/lib/data/conversation-log';
 import { getDesignThemeOptions } from '@/lib/branding/story-theme-options';
+import { getStoryTemplateOptions } from '@/lib/branding/story-template-options';
 
 const PREFIX = 'mx:clarify-answer:';
 const TTL_MS = 24 * 60 * 60 * 1000; // 24h — abandoned stashes self-expire.
@@ -111,12 +112,14 @@ export function clearStaleClarifyAnswers(conversationId: number, pendingToolCall
  * tool has no userInputs and the card renders a dead "Waiting for response…" state).
  */
 export function reconstructClarifyProps(args: Record<string, unknown>): UserInputProps {
-  // The design preset's options are app-supplied (never in the tool args) — re-populate them the
-  // same way the handler does so the reopened picker still shows the theme cards.
-  const isDesignPreset = args.type === 'design';
-  const rawOptions = isDesignPreset
+  // Preset options ('design'/'template') are app-supplied (never in the tool args) — re-populate
+  // them the same way the handler does so the reopened picker still shows the cards.
+  const isPreset = args.type === 'design' || args.type === 'template';
+  const rawOptions = args.type === 'design'
     ? (getDesignThemeOptions() as unknown as Array<Record<string, unknown>>)
-    : Array.isArray(args.options) ? (args.options as Array<Record<string, unknown>>) : [];
+    : args.type === 'template'
+      ? (getStoryTemplateOptions() as unknown as Array<Record<string, unknown>>)
+      : Array.isArray(args.options) ? (args.options as Array<Record<string, unknown>>) : [];
   return {
     type: 'choice',
     title: 'Clarification needed',
@@ -127,7 +130,7 @@ export function reconstructClarifyProps(args: Record<string, unknown>): UserInpu
       ...(typeof o.value === 'string' ? { value: o.value } : {}),
       ...(typeof o.imageUrl === 'string' ? { imageUrl: o.imageUrl } : {}),
     })),
-    multiSelect: !isDesignPreset && args.multiSelect === true,
+    multiSelect: !isPreset && args.multiSelect === true,
     cancellable: true,
   };
 }

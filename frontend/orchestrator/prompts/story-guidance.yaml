@@ -1,0 +1,315 @@
+# Story authoring guidance ("mini-skills") returned with Clarify picks.
+#
+# - `templates:` — FULL definitions of the four story templates (structural genres). Projected
+#   into the registry by lib/data/story/story-templates.ts; the `guidance` block is returned
+#   verbatim to the agent when the user picks that template (Clarify `type: 'template'`).
+# - `themes:` — authoring guidance ONLY for the six design themes (their code entries + CSS
+#   tokens live in lib/data/story/story-themes.ts, which must stay YAML-free so tsx scripts
+#   can import it). Returned with the Clarify `type: 'design'` pick.
+#
+# Style contract for guidance blocks (learned from claude.ai/design's system readmes):
+# a personality statement, the beat structure, the layout grammar, a SELF-DOCUMENTING skeleton
+# (placeholder copy teaches the rule it sits in), and blunt Do/Don't lists. Keep each compact.
+# Everything must respect the story platform rules: container variants (@2xl:) not viewport
+# variants, no position:fixed/sticky, every data number a live embed, Vega for every chart.
+
+templates:
+  editorial:
+    label: Editorial
+    description: Long-read magazine feature — hero, numbered chapters, one full-bleed interlude, a takeaway.
+    personality: >-
+      Confident, literary data journalism in the tradition of a NYT feature or a Stripe annual
+      letter. The scroll is the pacing, headlines carry the argument, and width contrast — narrow
+      prose against wide evidence — is the design.
+    beats:
+      - Hero
+      - Chapters (3–5, one claim each)
+      - Full-bleed interlude
+      - Nuance chapter
+      - Takeaway
+    guidance: |-
+      ## Editorial — long-read feature
+
+      Voice: a magazine feature, not a report. Reading only the headlines must deliver the whole
+      argument; each is a claim with a number where the data allows.
+
+      Beats: Hero → Chapters (3–5, one idea = one section = one visual) → ONE full-bleed
+      interlude → a nuance chapter (name the caveat inside the win) → Takeaway.
+
+      Layout grammar
+      - Width contrast IS the design: body copy capped at `max-w-prose`; charts break WIDER
+        (`max-w-4xl`) or full-bleed (`-mx-6 @2xl:-mx-12`). Never let prose run full width.
+      - Oversized low-contrast chapter numerals (`text-7xl font-bold text-muted-foreground/25`)
+        pace the scroll.
+      - Alternate section backgrounds (`bg-background` / `bg-muted`); the interlude is the ONE
+        inverted band (`bg-foreground text-background`) holding a single huge live number.
+      - Asymmetry over symmetry: `@3xl:grid-cols-[3fr_2fr]` splits, not centered stacks.
+
+      Skeleton (the placeholder copy states the rule it demonstrates):
+
+      <div data-design="tw" class="@container px-6 @2xl:px-12">
+        <header class="py-16 @2xl:py-24 max-w-4xl">
+          <p class="text-xs uppercase tracking-widest text-muted-foreground">Eyebrow · names the beat, ~4 words</p>
+          <h1 class="mt-4 text-5xl @2xl:text-7xl font-bold tracking-tight" style={{lineHeight: 1.05}}>The headline states the finding, with its number</h1>
+          <p class="mt-6 text-lg text-muted-foreground max-w-prose">The standfirst earns the scroll in one sentence: why this matters and to whom.</p>
+          <div class="mt-10 max-w-sm"><Question id={N} height="220px" /></div>
+        </header>
+        <section class="py-16 border-t border-border">
+          <div class="flex items-baseline gap-6">
+            <span class="text-7xl font-bold text-muted-foreground/25">01</span>
+            <h2 class="text-3xl @2xl:text-4xl font-semibold max-w-2xl">Chapter headline: a claim, never a topic</h2>
+          </div>
+          <p class="mt-6 max-w-prose text-muted-foreground">Two to four sentences set up the chart — what to look at and why it matters.</p>
+          <div class="mt-8 max-w-4xl"><Question id={N} height="430px" /></div>
+          <p class="mt-3 text-sm text-muted-foreground max-w-prose">The caption states what the chart proves, at the data's precision.</p>
+        </section>
+        <aside class="-mx-6 @2xl:-mx-12 my-16 bg-foreground text-background py-20 px-6 text-center">
+          <p class="text-sm uppercase tracking-widest opacity-70">The interlude: one number, no chart, full width</p>
+          <div class="mt-6 mx-auto max-w-md"><Question id={N} height="200px" /></div>
+        </aside>
+        <section class="py-16 border-t border-border">
+          <h2 class="text-3xl font-semibold max-w-2xl">The takeaway restates the lead with its earned weight</h2>
+          <ul class="mt-6 space-y-3 max-w-prose">2–3 quantified takeaways, each with a live number, answering "so what should the reader do?"</ul>
+        </section>
+      </div>
+
+      Do
+      - One idea per chapter; split any section carrying two.
+      - Give the nuance its own chapter ("dependable, and exposed") — one flagged caveat is more persuasive than none.
+      - Vary chart heights with the beat (evidence 400–460px, single-values 180–260px).
+      Don't
+      - Every section a Card; centered-everything; all charts one height; topic headlines.
+      - A second interlude — it is a breather, not a rhythm.
+
+  deck:
+    label: Deck
+    description: Presentation deck — full-height slide sections; cover, contents, dividers, chart slides, a quote, a close.
+    personality: >-
+      A boardroom keynote rendered as a scroll: one idea per slide, headlines you could speak
+      aloud to the room, generous emptiness as the luxury. Structure is announced (contents,
+      dividers) rather than discovered.
+    beats:
+      - Cover
+      - Contents
+      - Section divider (per act)
+      - Content / chart slides
+      - Quote or big-number slide
+      - Close / next steps
+    guidance: |-
+      ## Deck — a presentation that scrolls
+
+      Voice: a keynote. Every slide headline is a spoken sentence ("Retention pays for the price
+      increase"), never a label ("Retention"). One idea per slide; emptiness is intentional.
+
+      Slide grammar (CSS-only; `position: fixed/sticky` are banned — a slide is just a tall section):
+      - Every slide: `<section class="min-h-[560px] @2xl:min-h-[760px] flex flex-col justify-center border-b border-border py-16">`.
+      - Slide footer INSIDE the flex: `<div class="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Deck title · date</span><span>04</span></div>`.
+      - Chart slide = one claim headline + ONE `<Question>` (430–460px) + one takeaway line. Never two charts.
+      - Divider = inverted band (`bg-foreground text-background`) with a giant act numeral
+        (`text-8xl @2xl:text-9xl font-bold opacity-30`) and the act title; contents list mirrors these titles exactly.
+      - Cover = eyebrow → `text-6xl @2xl:text-8xl` title → one-line standfirst → byline/date row. The lead
+        number may sit here as a styled single-value embed.
+
+      Skeleton (three representative slides):
+
+      <div data-design="tw" class="@container px-6 @2xl:px-12">
+        <section class="min-h-[560px] @2xl:min-h-[760px] flex flex-col justify-center border-b border-border py-16">
+          <p class="text-xs uppercase tracking-widest text-muted-foreground">Company · Quarter</p>
+          <h1 class="mt-6 text-6xl @2xl:text-8xl font-bold tracking-tight max-w-4xl">The title states the one finding</h1>
+          <p class="mt-6 text-lg text-muted-foreground max-w-xl">A standfirst no longer than the breath it takes to say it.</p>
+          <div class="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Author · Date</span><span>01</span></div>
+        </section>
+        <section class="min-h-[560px] @2xl:min-h-[760px] flex flex-col justify-center bg-foreground text-background -mx-6 @2xl:-mx-12 px-6 @2xl:px-12 py-16">
+          <span class="text-8xl @2xl:text-9xl font-bold opacity-30">02</span>
+          <h2 class="mt-4 text-4xl @2xl:text-5xl font-semibold">Act title, mirrored in the contents</h2>
+        </section>
+        <section class="min-h-[560px] @2xl:min-h-[760px] flex flex-col justify-center border-b border-border py-16">
+          <h2 class="text-3xl @2xl:text-5xl font-semibold max-w-3xl">The headline is the takeaway, spoken aloud</h2>
+          <div class="mt-10"><Question id={N} height="440px" /></div>
+          <p class="mt-4 text-sm text-muted-foreground">One line under the chart: what to remember when the slide is gone.</p>
+          <div class="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Deck title · date</span><span>07</span></div>
+        </section>
+      </div>
+
+      Do
+      - Contents slide with numbered acts; close with next steps and the lead number restated.
+      - Huge type, few words; `tabular-nums` on every figure row.
+      Don't
+      - Two charts on a slide; paragraphs of prose (three lines max); scroll-snap or parallax tricks.
+      - Cram a slide to avoid adding one — add the slide.
+
+  brief:
+    label: Brief
+    description: Executive one-pager — KPI band up top, 2–3 evidence blocks, a recommendation box.
+    personality: >-
+      Terse and decision-oriented: scannable in sixty seconds, every headline a finding, every
+      figure live, and it ends by telling the reader what to do. Density is respect for the
+      reader's time.
+    beats:
+      - Header row
+      - KPI band
+      - Evidence blocks (2–3)
+      - Recommendation
+      - Risks / method footnote
+    guidance: |-
+      ## Brief — the executive one-pager
+
+      Voice: terse, decision-oriented. The whole document scans in ~60 seconds and fits in
+      roughly two viewports. Every headline is a finding; the ending is an instruction.
+
+      Layout grammar
+      - `max-w-5xl mx-auto`, modest scale (h1 ≤ `text-4xl`), tight rhythm (`py-8`/`py-10`
+        sections), `tabular-nums` on every figure.
+      - Header row: title + owner + date + a status Badge, one line.
+      - KPI band: 3–4 single-value embeds in `grid @2xl:grid-cols-4 gap-px bg-border` (hairline
+        grid), each ~200px tall.
+      - Evidence block: `@3xl:grid-cols-2` — claim headline + two-bullet reading on one side, a
+        compact chart (340–380px) on the other; alternate which side the chart takes.
+      - Recommendation: a filled accent box (`bg-primary/10 border border-primary rounded-lg p-6`)
+        with an imperative headline and a live supporting number. NEVER a colored left-edge bar.
+
+      Skeleton:
+
+      <div data-design="tw" class="@container px-6 @2xl:px-12 max-w-5xl mx-auto">
+        <header class="py-8 flex flex-wrap items-baseline justify-between gap-2 border-b border-border">
+          <h1 class="text-3xl @2xl:text-4xl font-bold">The brief's finding in one sentence</h1>
+          <p class="text-sm text-muted-foreground">Owner · Date · <Badge>On track</Badge></p>
+        </header>
+        <section class="py-8 grid @2xl:grid-cols-4 gap-px bg-border">4 single-value embeds, ~200px each — the numbers leadership will quote</section>
+        <section class="py-8 grid @3xl:grid-cols-2 gap-10 items-center border-t border-border">
+          <div><h2 class="text-xl font-semibold">Evidence headline: a claim with a number</h2>
+            <ul class="mt-4 space-y-2 text-sm text-muted-foreground">Two bullets max — what the chart shows, what it implies.</ul></div>
+          <Question id={N} height="360px" />
+        </section>
+        <section class="my-8 bg-primary/10 border border-primary rounded-lg p-6">
+          <h2 class="text-xl font-semibold">Recommend: an imperative verb and a deadline</h2>
+          <p class="mt-2 text-sm">Backed by a live number inline, not a hand-typed one.</p>
+        </section>
+        <footer class="py-6 border-t border-border text-xs text-muted-foreground">Risks named plainly; method and data window in one line.</footer>
+      </div>
+
+      Do
+      - Alternate evidence chart sides; keep bullets to two per block; name the risks.
+      - One decisive recommendation — a brief that recommends nothing is a dashboard.
+      Don't
+      - Hero theatrics, interludes, decorative imagery, more than ~2 viewports of scroll.
+      - A colored accent bar on any card's left edge (banned house-wide).
+
+  scrolly:
+    label: Scrolly
+    description: Playful scrollytelling — a pudding.cool-style data story that reveals in steps.
+    personality: >-
+      Curious, witty, second-person: the scroll IS the story, suspense lives between steps, and
+      one visual motif runs the whole way. Serious about the data, playful about everything else.
+    beats:
+      - Cold open hook
+      - Setup
+      - Reveal steps (3–5)
+      - Twist
+      - Payoff
+      - Methodology footer
+    guidance: |-
+      ## Scrolly — the playful data story
+
+      Voice: curious, witty, second person ("you'd expect X — that's not what happened"). Build
+      suspense between steps; land one moral at the payoff. Honesty rules still hold: the humor
+      is in the telling, never at the data's expense.
+
+      Layout grammar
+      - Short steps, huge whitespace: each step `py-24`, text narrow (`max-w-md`), alternating
+        alignment (default left; every other step `@3xl:ml-auto @3xl:text-right`).
+      - ONE running visual motif — the accent color, a recurring shape, THE bar being followed —
+        appears in every step. One motif, not three.
+      - The evolving chart: re-embed the SAME saved question across consecutive steps with
+        progressive `viz` overrides (first gray, then one bar highlighted, then the domain
+        zoomed, then all series revealed). `position: fixed/sticky` are banned — this re-embed
+        progression IS the platform's scrolly scene.
+      - Oversized step numerals or a giant question mark as ornament (pure decoration may be
+        hand-drawn; every data number is still a live embed).
+      - Payoff: the full chart at full width plus the one-sentence moral, big. Then a small,
+        honest methodology footer.
+
+      Skeleton (two steps of the progression + payoff):
+
+      <div data-design="tw" class="@container px-6 @2xl:px-12">
+        <header class="py-24 text-center">
+          <p class="text-sm uppercase tracking-widest text-muted-foreground">A cold open asks the question</p>
+          <h1 class="mt-4 text-5xl @2xl:text-7xl font-bold tracking-tight">Everyone believes X.</h1>
+          <p class="mt-4 text-lg text-muted-foreground">Scroll. It's more fun than the answer.</p>
+        </header>
+        <section class="py-24 max-w-md">
+          <span class="text-6xl font-bold text-primary/30">1</span>
+          <p class="mt-4 text-lg">Here's the picture everyone starts with — steady, boring, safe.</p>
+          <div class="mt-6 -mr-6 @3xl:mr-0"><Question id={N} height="340px" viz={{...all series muted gray...}} /></div>
+        </section>
+        <section class="py-24 max-w-md @3xl:ml-auto @3xl:text-right">
+          <span class="text-6xl font-bold text-primary/30">2</span>
+          <p class="mt-4 text-lg">Now watch this one bar. Same chart, one highlight — the motif returns.</p>
+          <div class="mt-6"><Question id={N} height="340px" viz={{...one series in the accent...}} /></div>
+        </section>
+        <section class="py-24 text-center">
+          <h2 class="text-4xl @2xl:text-5xl font-bold max-w-3xl mx-auto">The payoff states the moral in one sentence, with its number.</h2>
+          <div class="mt-10"><Question id={N} height="460px" /></div>
+        </section>
+        <footer class="py-10 border-t border-border text-xs text-muted-foreground max-w-prose">Methodology: where the data comes from, the window, what was excluded — small and honest.</footer>
+      </div>
+
+      Do
+      - Address the reader; hold one reveal per step; direct-label the thing being followed.
+      - Keep captions doing jokes AND work ("the red bar is why we can't have nice things").
+      Don't
+      - Fake sticky scenes; walls of prose; three motifs; a payoff without its number.
+
+themes:
+  modernist: |-
+    Modernist — Swiss editorial discipline. The red `--primary` is the ONLY hue on the page and
+    it always means the subject; everything else is ink on paper. Keep everything flush left —
+    headlines, copy, even wide CTA-like elements; centered text is off-brand. Dividers are
+    strong (`border-t-2 border-foreground`), never decorative hairlines everywhere.
+    Charts: all series in grays (`--muted-foreground`), the focal series red; direct labels over
+    legends; no gradient fills.
+    Do: visible grid, generous white, uppercase tracked eyebrows, one red element per viewport.
+    Don't: round a corner (radius is 0 on purpose), gradients, shadows, a second accent hue,
+    tinted or decorative imagery.
+  classical: |-
+    Classical — bookish print. Serif air, generous leading, hairline rules; the ochre accent is
+    an illuminator's ink: initials, rules, the focal series — never large fills. Drop caps and
+    small-caps kickers are welcome; figures may sit in the margin like plates in an atlas.
+    Charts: muted earth tones with the ochre focal series; serif axis labels feel right here.
+    Do: wide margins, `max-w-prose` columns, numbered figures with captions ("Fig. 2 — …").
+    Don't: neon or saturated hues, heavy shadows, condensed grotesque headlines, large radii,
+    dense borderless tables.
+  nocturne: |-
+    Nocturne — dark-first. ALWAYS set `colorMode: "dark"` and design for dark only. Violet is
+    the focal voice, cyan the support; `JetBrains Mono` for figures and axis text; a restrained
+    glow (a soft primary-tinted shadow on the hero number) is on-brand.
+    Charts: luminous lines on the deep field; keep gridlines barely-there; two lit hues max per view.
+    Do: big luminous hero numbers, mono `tabular-nums` KPI rows, deep layered card surfaces.
+    Don't: light/white cards, unpaired light-mode utilities, pastel fills, three glowing colors
+    in one chart, long paragraphs in pure white (soften to the muted foreground).
+  organic: |-
+    Organic — warm, rounded, human. `rounded-2xl` and up, soft shadows, terracotta focal with
+    olive support; the voice is friendly and the shapes agree with it. Whitespace is soft, not
+    architectural — sections breathe into each other.
+    Charts: terracotta focal, olive secondary; area fills at low opacity feel at home here.
+    Do: rounded chart containers, pill badges, warm muted backgrounds alternating with cream.
+    Don't: hard edges or 0-radius anything, pure black text, corporate blue, airless dense
+    tables, neon accents.
+  broadsheet: |-
+    Broadsheet — newsprint. Ink on paper with steel-blue as the highlighter; column rules
+    (`divide-x` hairlines), small-caps kickers, serif headlines, and tables treated as
+    first-class graphics with strong header rules.
+    Charts: ink-gray series with the steel-blue focal; direct labels over legends; no fills
+    brighter than the accent.
+    Do: multi-column layouts (`@3xl:columns-2` for long prose), datelines, ruled section
+    headers, dense-but-ordered stat tables.
+    Don't: playful color, large radii, gradients, oversized decoration, centered body copy.
+  industry: |-
+    Industry — the engineering report. Slate ground, industrial blue as the working color, and
+    safety orange RESERVED for the one exception being discussed (the outlier, the alert, the
+    threshold breach) — if everything is orange, nothing is. Square corners, mono figures,
+    visible grid discipline.
+    Charts: blue primary, gray context series, orange only on the flagged element; reference
+    lines and thresholds drawn explicitly.
+    Do: spec-sheet tables, labeled thresholds, `tabular-nums`, section numbering (1.0, 1.1).
+    Don't: pastels, decorative serifs, rounded cards, orange as decoration, unlabeled axes.
