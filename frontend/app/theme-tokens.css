@@ -116,6 +116,9 @@
 [data-theme="modernist"] :is(code, pre, kbd, samp) {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
+[data-theme="modernist"] hr { border: none; height: 2px; background: var(--foreground); }
+[data-theme="modernist"] ::selection { background: var(--primary); color: var(--primary-foreground); }
+[data-theme="modernist"] blockquote { border-left: none; border-top: 2px solid var(--foreground); padding: 0.75rem 0 0; font-style: normal; font-weight: 600; }
 .dark [data-theme="modernist"], [data-theme="modernist"].dark {
   --radius: 0rem;
   --background: oklch(0.17 0 0);
@@ -174,6 +177,9 @@
 [data-theme="classical"] :is(h1, h2, h3, h4, h5, h6) {
   font-family: "Noto Serif", Georgia, serif;
 }
+[data-theme="classical"] hr { border: none; height: 1px; background: var(--border); }
+[data-theme="classical"] ::selection { background: color-mix(in oklab, var(--primary) 25%, transparent); }
+[data-theme="classical"] blockquote { font-style: italic; border-left: 1px solid var(--border); padding-left: 1.25rem; }
 .dark [data-theme="classical"], [data-theme="classical"].dark {
   --radius: 0.375rem;
   --background: oklch(0.23 0.02 55);
@@ -235,6 +241,9 @@
 [data-theme="nocturne"] :is(code, pre, kbd, samp) {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
+[data-theme="nocturne"] hr { border: none; height: 1px; background: linear-gradient(90deg, transparent, var(--primary), transparent); opacity: 0.6; }
+[data-theme="nocturne"] ::selection { background: var(--primary); color: var(--primary-foreground); }
+[data-theme="nocturne"] blockquote { border-left: 1px solid var(--primary); padding-left: 1.25rem; }
 .dark [data-theme="nocturne"], [data-theme="nocturne"].dark {
   --radius: 0.5rem;
   --background: oklch(0.18 0.035 265);
@@ -293,6 +302,9 @@
 [data-theme="organic"] :is(h1, h2, h3, h4, h5, h6) {
   font-family: "Noto Serif", Georgia, serif;
 }
+[data-theme="organic"] hr { border: none; height: 4px; width: 4rem; margin-inline: 0; border-radius: 999px; background: var(--primary); opacity: 0.45; }
+[data-theme="organic"] ::selection { background: color-mix(in oklab, var(--primary) 30%, transparent); }
+[data-theme="organic"] blockquote { border-left: none; background: var(--muted); border-radius: 1.5rem; padding: 1rem 1.5rem; font-style: normal; }
 .dark [data-theme="organic"], [data-theme="organic"].dark {
   --radius: 1rem;
   --background: oklch(0.22 0.02 50);
@@ -351,6 +363,9 @@
 [data-theme="broadsheet"] :is(h1, h2, h3, h4, h5, h6) {
   font-family: "Noto Serif", Georgia, serif;
 }
+[data-theme="broadsheet"] hr { border: none; height: 3px; border-top: 1px solid var(--foreground); border-bottom: 1px solid var(--foreground); background: transparent; }
+[data-theme="broadsheet"] ::selection { background: color-mix(in oklab, var(--primary) 25%, transparent); }
+[data-theme="broadsheet"] th { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.85em; }
 .dark [data-theme="broadsheet"], [data-theme="broadsheet"].dark {
   --radius: 0.25rem;
   --background: oklch(0.2 0.01 260);
@@ -412,6 +427,10 @@
 [data-theme="industry"] :is(code, pre, kbd, samp) {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
+[data-theme="industry"] hr { border: none; height: 1px; background: repeating-linear-gradient(90deg, var(--foreground) 0 6px, transparent 6px 10px); opacity: 0.5; }
+[data-theme="industry"] ::selection { background: color-mix(in oklab, var(--primary) 30%, transparent); }
+[data-theme="industry"] table { font-variant-numeric: tabular-nums; }
+[data-theme="industry"] th { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8em; }
 .dark [data-theme="industry"], [data-theme="industry"].dark {
   --radius: 0.125rem;
   --background: oklch(0.2 0.015 255);
