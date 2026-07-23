@@ -79,19 +79,6 @@ export interface OrgConfig {
   /** Remote Agent Sessions ("Copy to Agent"): lets an external agent drive a chat over HTTP.
    *  OFF by default — enable in Settings → Integrations. Gates minting AND live-session auth. */
   remoteAgentsEnabled?: boolean;
-  /** In-app LLM provider config: providers + per-use-case model assignments
-   *  (see lib/llm/llm-config-types.ts). Overrides env model config when set;
-  /** Which engine renders story files (Settings → General). One setting, not a flag per engine:
-   *  exactly one renderer is active, so a union has no invalid states (canvas+svg can't both be on).
-   *   - 'dom'    — AgentHtml in a same-origin iframe (default). Captured via snapdom.
-   *   - 'canvas' — Takumi raster + embed islands. Captures straight from its bitmaps.
-   *   - 'svg'    — AgentHtml in an iframe, story body inside <svg><foreignObject>. Captures by
-   *                serializing that live SVG (browser-rendered, snapdom-free).
-   *  'canvas' and 'svg' fall back to DOM per story when rendering fails. */
-  storyRenderer?: StoryRenderer;
-  /** @deprecated Legacy boolean superseded by {@link storyRenderer}. Still READ for workspaces whose
-   *  stored config predates the union (resolveStoryRenderer maps true → 'canvas'); never written. */
-  useCanvasRenderer?: boolean;
   /** In-app LLM provider config: providers + per-grade model mappings +
    *  per-agent grade policies (see lib/llm/llm-config-types.ts).
    *  `apiKey` values are @SECRETS/… refs at rest. */

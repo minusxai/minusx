@@ -20,6 +20,7 @@ const REGISTRY = {
       {
         slug: 'anthropic',
         models: [
+          { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', reasoning: true, input: ['text'], contextWindow: 200000 },
           { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', reasoning: true, input: ['text'], contextWindow: 200000 },
           { id: 'claude-3-opus', name: 'Claude 3 Opus', reasoning: false, input: ['text'], contextWindow: 200000 },
           { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', reasoning: true, input: ['text'], contextWindow: 200000 },
@@ -327,9 +328,10 @@ describe('LlmModelsSection', () => {
     });
     const user = userEvent.setup();
 
-    // Core: only the core default (Sonnet) is badged.
+    // Core: only the core default (Sonnet 5) is badged.
     await openModelPicker(user, 'Core model');
-    expect(await screen.findByLabelText('Claude Sonnet 4.6 default')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Claude Sonnet 5 default')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Claude Sonnet 4.6 default')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Claude Haiku 4.5 default')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Claude 3 Opus default')).not.toBeInTheDocument();
     await closePicker(user, 'Core model', 'Claude Sonnet 4.6');
@@ -338,7 +340,7 @@ describe('LlmModelsSection', () => {
     // (registry order puts it last).
     await openModelPicker(user, 'Lite model');
     expect(await screen.findByLabelText('Claude Haiku 4.5 default')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Claude Sonnet 4.6 default')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Claude Sonnet 5 default')).not.toBeInTheDocument();
     const haiku = screen.getByLabelText('Claude Haiku 4.5');
     const sonnet = screen.getByLabelText('Claude Sonnet 4.6');
     expect(haiku.compareDocumentPosition(sonnet) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
