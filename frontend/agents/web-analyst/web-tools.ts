@@ -257,10 +257,10 @@ const ClarifyFrontendParams = Type.Object({
     description: Type.Optional(Type.String({ description: 'Longer description shown beneath the label.' })),
     value: Type.Optional(Type.String({ description: 'Machine value returned when this option is picked (defaults to the label).' })),
     imageUrl: Type.Optional(Type.String({ description: 'Preview image URL — when present, options render as image cards.' })),
-  }), { description: "Multiple-choice options the user can select from. Ignored when `type: 'design'` (pass [])." }),
+  }), { description: "Multiple-choice options the user can select from. Ignored for preset `type`s (pass [])." }),
   multiSelect: Type.Optional(Type.Boolean({ description: 'Allow selecting more than one option (default false).' })),
-  type: Type.Optional(Type.Literal('design', {
-    description: "Preset picker. 'design' shows the story design-theme picker: the app supplies the six theme options (with preview images) itself — pass `options: []`. The result returns the chosen theme's value and its personality description.",
+  type: Type.Optional(Type.Union([Type.Literal('design'), Type.Literal('template')], {
+    description: "Preset picker — the app supplies the options (with preview images) itself; pass `options: []`. The result returns the chosen value PLUS its authoring guidance. 'design': the six story design themes (tokens/fonts/personality). 'template': the four story templates (structural genre: editorial | deck | brief | scrolly).",
   })),
 });
 
