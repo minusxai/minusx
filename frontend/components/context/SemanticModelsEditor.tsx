@@ -38,10 +38,10 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, VStack, HStack, Text, Input, Icon, Button } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Input, Icon, Button, SimpleGrid } from '@chakra-ui/react';
 import {
   LuPlus, LuTrash2, LuBoxes, LuTriangleAlert, LuPencil, LuKeyRound, LuFlaskConical,
-  LuCircleCheck, LuChevronRight, LuChevronDown,
+  LuCircleCheck, LuChevronRight, LuChevronDown, LuTag, LuCalendarDays, LuSigma, LuLink2,
 } from 'react-icons/lu';
 import SchemaOptionPicker, { SchemaPickerOption } from '@/components/schema-browser/SchemaOptionPicker';
 import { getTableColumns, type ColumnInfo } from '@/lib/hooks/use-table-columns';
@@ -276,15 +276,21 @@ function DraftTextarea({ 'aria-label': label, value, onCommit, placeholder, rows
 // Small shared pieces
 // ---------------------------------------------------------------------------
 
-/** Section heading with count and (edit mode) a compact + button. */
-function SectionHeading({ label, count, onAdd, addLabel }: {
-  label: string; count: number; onAdd?: () => void; addLabel?: string;
+/**
+ * Group bar — the SemanticExplorer field-panel header: icon + uppercase title
+ * on the left, count + (edit mode) a compact + button on the right.
+ */
+function GroupBar({ icon, label, count, onAdd, addLabel }: {
+  icon: React.ElementType; label: string; count: number; onAdd?: () => void; addLabel?: string;
 }) {
   return (
-    <HStack gap={1.5} align="center">
+    <HStack gap={1.5} align="center" px={2} py={1}
+      bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted">
+      <Icon as={icon} boxSize={3} color="fg.subtle" />
       <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.04em">
         {label}
       </Text>
+      <Box flex={1} />
       {count > 0 && <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">{count}</Text>}
       {onAdd && (
         <Box as="button" aria-label={addLabel} onClick={onAdd} color="fg.subtle" cursor="pointer"
@@ -293,6 +299,16 @@ function SectionHeading({ label, count, onAdd, addLabel }: {
         </Box>
       )}
     </HStack>
+  );
+}
+
+/** A bordered field panel (rows under a GroupBar), explorer-style. */
+function FieldPanel({ children, ...rest }: React.ComponentProps<typeof Box>) {
+  return (
+    <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden"
+      bg="bg.surface" alignSelf="start" w="100%" {...rest}>
+      {children}
+    </Box>
   );
 }
 
@@ -601,7 +617,8 @@ function ModelCard({
     const far = sourceName(r.source);
     const via = isM2M(r) ? sourceName(r.through.source) : '';
     return (
-      <VStack key={j} align="stretch" gap={1} py={1}>
+      <VStack key={j} align="stretch" gap={1} px={2} py={1.5}
+        borderBottom="1px solid" borderColor="border.muted" _last={{ borderBottom: 'none' }}>
         <HStack gap={2} flexWrap="wrap" align="center">
           {canEdit ? (
             <>
@@ -708,33 +725,50 @@ function ModelCard({
     );
   };
 
-  // Dimension rows read SOURCE-FIRST (`column → name`): the column is the
-  // input, the business name is what it becomes.
-  const timeDimRow = ({ d, j }: { d: SemanticDimensionV2; j: number }) => (
-    <HStack key={j} gap={2} align="center" py={0.5}>
-      {canEdit ? (
-        <>
-          {columnPicker(`semantic-model-${i}-dimension-${j}-column`,
-            temporalColumns.length > 0 ? temporalColumns : primaryColumns, d.column,
-            (v) => patchDim(j, {
-              ...d, column: v,
-              name: followAutoName(d.name, humanizeName(d.column), humanizeName(v)),
-            }))}
-          <Text fontSize="xs" color="fg.subtle">→</Text>
-          <DraftInput aria-label={`semantic-model-${i}-dimension-${j}-name`} maxW="180px"
-            value={d.name} placeholder="name" onCommit={(v) => patchDim(j, { ...d, name: v })} />
-          <Box flex={1} />
-          <DeleteRowButton label={`semantic-model-${i}-dimension-${j}-delete`}
-            onClick={() => patchModel({ dimensions: m.dimensions.filter((_, k) => k !== j) })} />
-        </>
-      ) : (
-        <DefText label={`semantic-model-${i}-dimension-${j}-definition`} muted={false}>
-          <Text as="span" fontWeight="600">{d.name}</Text>
-          <Text as="span" color="fg.muted"> ← {dimensionDefText(d)}</Text>
-        </DefText>
-      )}
+  /** Explorer-style read row: icon + business name left, definition right. */
+  const readFieldRow = (label: string, icon: React.ElementType, name: string, def: string, extra?: React.ReactNode) => (
+    <HStack aria-label={label} px={2} py={1} gap={2} justify="space-between"
+      borderBottom="1px solid" borderColor="border.muted" _last={{ borderBottom: 'none' }}
+      _hover={{ bg: 'bg.muted' }} transition="background 0.1s">
+      <HStack gap={1.5} minW={0}>
+        <Icon as={icon} boxSize={3} color="fg.muted" flexShrink={0} />
+        <Text fontSize="xs" fontWeight="600" truncate>{name}</Text>
+        {extra}
+      </HStack>
+      <Text fontSize="xs" fontFamily="mono" color="fg.muted" truncate flexShrink={1} maxW="60%" title={def}>
+        {def}
+      </Text>
     </HStack>
   );
+
+  const editRowProps = {
+    px: 2, py: 1, gap: 2, align: 'center' as const,
+    borderBottom: '1px solid', borderColor: 'border.muted', _last: { borderBottom: 'none' },
+  };
+
+  // Dimension rows read SOURCE-FIRST (`column → name`): the column is the
+  // input, the business name is what it becomes.
+  const timeDimRow = ({ d, j }: { d: SemanticDimensionV2; j: number }) =>
+    canEdit ? (
+      <HStack key={j} {...editRowProps}>
+        {columnPicker(`semantic-model-${i}-dimension-${j}-column`,
+          temporalColumns.length > 0 ? temporalColumns : primaryColumns, d.column,
+          (v) => patchDim(j, {
+            ...d, column: v,
+            name: followAutoName(d.name, humanizeName(d.column), humanizeName(v)),
+          }))}
+        <Text fontSize="xs" color="fg.subtle">→</Text>
+        <DraftInput aria-label={`semantic-model-${i}-dimension-${j}-name`} maxW="180px"
+          value={d.name} placeholder="name" onCommit={(v) => patchDim(j, { ...d, name: v })} />
+        <Box flex={1} />
+        <DeleteRowButton label={`semantic-model-${i}-dimension-${j}-delete`}
+          onClick={() => patchModel({ dimensions: m.dimensions.filter((_, k) => k !== j) })} />
+      </HStack>
+    ) : (
+      <React.Fragment key={j}>
+        {readFieldRow(`semantic-model-${i}-dimension-${j}-definition`, LuCalendarDays, d.name, dimensionDefText(d))}
+      </React.Fragment>
+    );
 
   // Combined source+column pick for a plain dimension: one picker, values
   // `primary|<col>` and `<alias>|<col>` — two dropdowns collapsed into one.
@@ -745,40 +779,37 @@ function ModelCard({
       columnsOf(r.source).map((c) => ({ value: `${r.alias}|${c.name}`, label: `${r.alias}.${c.name}`, meta: c.type }))),
   ];
 
-  const plainDimRow = ({ d, j }: { d: SemanticDimensionV2; j: number }) => (
-    <HStack key={j} gap={2} align="center" py={0.5}>
-      {canEdit ? (
-        <>
-          <SchemaOptionPicker label={`semantic-model-${i}-dimension-${j}-field`}
-            value={fieldValue(d)} options={fieldOptions()} placeholder="column…"
-            emptyMessage="no columns found — pick a primary table first"
-            onSelect={(v) => {
-              const [source, column] = v.split('|');
-              if (column) {
-                patchDim(j, {
-                  ...d, source, column,
-                  name: followAutoName(d.name, humanizeName(d.column), humanizeName(column)),
-                });
-              }
-            }} />
-          <Text fontSize="xs" color="fg.subtle">→</Text>
-          <DraftInput aria-label={`semantic-model-${i}-dimension-${j}-name`} maxW="180px"
-            value={d.name} placeholder="name" onCommit={(v) => patchDim(j, { ...d, name: v })} />
-          <Box flex={1} />
-          <DeleteRowButton label={`semantic-model-${i}-dimension-${j}-delete`}
-            onClick={() => patchModel({ dimensions: m.dimensions.filter((_, k) => k !== j) })} />
-        </>
-      ) : (
-        <DefText label={`semantic-model-${i}-dimension-${j}-definition`} muted={false}>
-          <Text as="span" fontWeight="600">{d.name}</Text>
-          <Text as="span" color="fg.muted"> ← {dimensionDefText(d)}</Text>
-        </DefText>
-      )}
-    </HStack>
-  );
+  const plainDimRow = ({ d, j }: { d: SemanticDimensionV2; j: number }) =>
+    canEdit ? (
+      <HStack key={j} {...editRowProps}>
+        <SchemaOptionPicker label={`semantic-model-${i}-dimension-${j}-field`}
+          value={fieldValue(d)} options={fieldOptions()} placeholder="column…"
+          emptyMessage="no columns found — pick a primary table first"
+          onSelect={(v) => {
+            const [source, column] = v.split('|');
+            if (column) {
+              patchDim(j, {
+                ...d, source, column,
+                name: followAutoName(d.name, humanizeName(d.column), humanizeName(column)),
+              });
+            }
+          }} />
+        <Text fontSize="xs" color="fg.subtle">→</Text>
+        <DraftInput aria-label={`semantic-model-${i}-dimension-${j}-name`} maxW="180px"
+          value={d.name} placeholder="name" onCommit={(v) => patchDim(j, { ...d, name: v })} />
+        <Box flex={1} />
+        <DeleteRowButton label={`semantic-model-${i}-dimension-${j}-delete`}
+          onClick={() => patchModel({ dimensions: m.dimensions.filter((_, k) => k !== j) })} />
+      </HStack>
+    ) : (
+      <React.Fragment key={j}>
+        {readFieldRow(`semantic-model-${i}-dimension-${j}-definition`, LuTag, d.name, dimensionDefText(d))}
+      </React.Fragment>
+    );
 
   const metricRow = (mt: SemanticMetricV2, j: number) => (
-    <VStack key={j} align="stretch" gap={1} py={0.5}>
+    <VStack key={j} align="stretch" gap={1} px={canEdit ? 2 : 0} py={canEdit ? 1 : 0}
+      borderBottom="1px solid" borderColor="border.muted" _last={{ borderBottom: 'none' }}>
       <HStack gap={2} align="center" flexWrap="wrap">
         {canEdit ? (
           <>
@@ -830,13 +861,12 @@ function ModelCard({
               onClick={() => patchModel({ metrics: m.metrics.filter((_, k) => k !== j) })} />
           </>
         ) : (
-          <>
-            <DefText label={`semantic-model-${i}-metric-${j}-definition`} muted={false}>
-              <Text as="span" fontWeight="600">{mt.name}</Text>
-              <Text as="span" color="fg.muted"> = {metricDefText(mt)}</Text>
-            </DefText>
-            {mt.verified === false && <UnverifiedBadge label={`semantic-model-${i}-metric-${j}-unverified`} />}
-          </>
+          <Box flex={1}>
+            {readFieldRow(`semantic-model-${i}-metric-${j}-definition`, LuSigma, mt.name, metricDefText(mt),
+              mt.verified === false
+                ? <UnverifiedBadge label={`semantic-model-${i}-metric-${j}-unverified`} />
+                : undefined)}
+          </Box>
         )}
       </HStack>
       {canEdit && mt.type === 'sql' && (
@@ -974,9 +1004,12 @@ function ModelCard({
             </HStack>
           )}
 
+          {/* References span the full width (join lines are long); the
+              dimension/metric vocabulary sits in explorer-style side-by-side
+              field panels. */}
           {(canEdit || refs.length > 0) && (
-            <VStack align="stretch" gap={0.5}>
-              <SectionHeading label="References" count={refs.length}
+            <FieldPanel>
+              <GroupBar icon={LuLink2} label="References" count={refs.length}
                 {...(canEdit ? {
                   addLabel: `semantic-model-${i}-add-reference`,
                   onAdd: () => patchModel({
@@ -987,47 +1020,54 @@ function ModelCard({
                   }),
                 } : {})} />
               {refs.map(referenceRow)}
-            </VStack>
+            </FieldPanel>
           )}
 
-          {(canEdit || timeDims.length > 0) && (
-            <VStack align="stretch" gap={0.5} aria-label={`semantic-model-${i}-time-dimensions`}>
-              <SectionHeading label="Time Dimensions" count={timeDims.length}
-                {...(canEdit ? {
-                  addLabel: `semantic-model-${i}-add-time-dimension`,
-                  onAdd: () => patchModel({
-                    dimensions: [...m.dimensions, { name: '', source: 'primary', column: '', temporal: true }],
-                  }),
-                } : {})} />
-              {timeDims.map(timeDimRow)}
-            </VStack>
-          )}
+          <SimpleGrid columns={{ base: 1, lg: 2 }} gap={2.5} alignItems="start">
+            {(canEdit || m.dimensions.length > 0) && (
+              <FieldPanel>
+                {(canEdit || timeDims.length > 0) && (
+                  <Box aria-label={`semantic-model-${i}-time-dimensions`}>
+                    <GroupBar icon={LuCalendarDays} label="Time Dimensions" count={timeDims.length}
+                      {...(canEdit ? {
+                        addLabel: `semantic-model-${i}-add-time-dimension`,
+                        onAdd: () => patchModel({
+                          dimensions: [...m.dimensions, { name: '', source: 'primary', column: '', temporal: true }],
+                        }),
+                      } : {})} />
+                    {timeDims.map(timeDimRow)}
+                  </Box>
+                )}
+                {(canEdit || plainDims.length > 0) && (
+                  <Box aria-label={`semantic-model-${i}-plain-dimensions`}
+                    borderTop={(canEdit || timeDims.length > 0) ? '1px solid' : undefined}
+                    borderColor="border.muted">
+                    <GroupBar icon={LuTag} label="Dimensions" count={plainDims.length}
+                      {...(canEdit ? {
+                        addLabel: `semantic-model-${i}-add-dimension`,
+                        onAdd: () => patchModel({
+                          dimensions: [...m.dimensions, { name: '', source: 'primary', column: '' }],
+                        }),
+                      } : {})} />
+                    {plainDims.map(plainDimRow)}
+                  </Box>
+                )}
+              </FieldPanel>
+            )}
 
-          {(canEdit || plainDims.length > 0) && (
-            <VStack align="stretch" gap={0.5} aria-label={`semantic-model-${i}-plain-dimensions`}>
-              <SectionHeading label="Dimensions" count={plainDims.length}
-                {...(canEdit ? {
-                  addLabel: `semantic-model-${i}-add-dimension`,
-                  onAdd: () => patchModel({
-                    dimensions: [...m.dimensions, { name: '', source: 'primary', column: '' }],
-                  }),
-                } : {})} />
-              {plainDims.map(plainDimRow)}
-            </VStack>
-          )}
-
-          {(canEdit || m.metrics.length > 0) && (
-            <VStack align="stretch" gap={0.5}>
-              <SectionHeading label="Metrics" count={m.metrics.length}
-                {...(canEdit ? {
-                  addLabel: `semantic-model-${i}-add-metric`,
-                  onAdd: () => patchModel({
-                    metrics: [...m.metrics, { name: '', type: 'aggregation', agg: 'COUNT' }],
-                  }),
-                } : {})} />
-              {m.metrics.map(metricRow)}
-            </VStack>
-          )}
+            {(canEdit || m.metrics.length > 0) && (
+              <FieldPanel>
+                <GroupBar icon={LuSigma} label="Metrics" count={m.metrics.length}
+                  {...(canEdit ? {
+                    addLabel: `semantic-model-${i}-add-metric`,
+                    onAdd: () => patchModel({
+                      metrics: [...m.metrics, { name: '', type: 'aggregation', agg: 'COUNT' }],
+                    }),
+                  } : {})} />
+                {m.metrics.map(metricRow)}
+              </FieldPanel>
+            )}
+          </SimpleGrid>
         </VStack>
       )}
     </Box>

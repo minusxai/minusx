@@ -401,12 +401,14 @@ export function SemanticExplorer({
 
   // --- shelves: the current selection, always visible on top --------------------
 
+  // Fixed-width labels line the shelves up into a label column — one shelf
+  // per line reads far calmer than a single wrapped row.
   const shelfLabel = (label: string, empty: boolean) => (
     <Text
       fontSize="2xs" fontWeight="700" color="fg.subtle"
       textTransform="uppercase" letterSpacing="0.06em"
       opacity={empty ? 0.45 : 1}
-      flexShrink={0}
+      flexShrink={0} minW="80px"
     >
       {label}
     </Text>
@@ -414,7 +416,7 @@ export function SemanticExplorer({
 
   const shelves = spec && (
     <Box aria-label="Semantic shelves" px={3} py={2} flexShrink={0} borderBottom="1px solid" borderColor="border.muted" bg="bg.surface">
-      <HStack gap={4} rowGap={1.5} flexWrap="wrap" align="center">
+      <VStack gap={1.5} align="stretch">
         <HStack gap={1.5} align="center" flexWrap="wrap">
           {shelfLabel('Metrics', spec.metrics.length === 0)}
           {spec.metrics.map((name) => (
@@ -460,6 +462,7 @@ export function SemanticExplorer({
             )}
           </HStack>
         )}
+        {/* Filters and Limit share the last line — Limit hugs the right edge. */}
         <HStack gap={1.5} align="center" flexWrap="wrap">
           {shelfLabel('Filters', (spec.filters ?? []).length === 0)}
           {(spec.filters ?? []).map((f, idx) => (
@@ -500,21 +503,25 @@ export function SemanticExplorer({
               )}
             />
           )}
+          <HStack gap={1.5} align="center" ml="auto">
+            <Text fontSize="2xs" fontWeight="700" color="fg.subtle"
+              textTransform="uppercase" letterSpacing="0.06em"
+              opacity={spec.limit ? 1 : 0.45} flexShrink={0}>
+              Limit
+            </Text>
+            <Input
+              aria-label="Semantic row limit"
+              size="2xs" width="64px" type="number" fontFamily="mono" fontSize="xs"
+              value={spec.limit ?? ''}
+              placeholder="1000"
+              onChange={(e) => {
+                const limit = parseInt(e.target.value, 10);
+                update({ limit: isNaN(limit) || limit <= 0 ? undefined : limit });
+              }}
+            />
+          </HStack>
         </HStack>
-        <HStack gap={1.5} align="center" ml="auto">
-          {shelfLabel('Limit', !spec.limit)}
-          <Input
-            aria-label="Semantic row limit"
-            size="2xs" width="64px" type="number" fontFamily="mono" fontSize="xs"
-            value={spec.limit ?? ''}
-            placeholder="1000"
-            onChange={(e) => {
-              const limit = parseInt(e.target.value, 10);
-              update({ limit: isNaN(limit) || limit <= 0 ? undefined : limit });
-            }}
-          />
-        </HStack>
-      </HStack>
+      </VStack>
     </Box>
   );
 
