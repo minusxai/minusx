@@ -23,6 +23,9 @@ export const reviewFileHandler: FrontendToolHandler = async (args, context) => {
       ...(review.rubric ? { rubric: review.rubric } : {}),
       ...(review.reviewMode === 'deterministic' && review.rubric
         ? { note: 'Rules-only rubric (the visual judge did not run).' } : {}),
+      // Mid-load capture: loading/blank cards in the screenshot are capture timing, not broken
+      // embeds — the note stops the agent from "fixing" healthy content.
+      ...(review.renderPending ? { renderNote: review.renderPending } : {}),
     };
     return {
       content: [

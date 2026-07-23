@@ -468,6 +468,9 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
     // score to 0); try to fix `warn` findings. Full (screenshot + rules + visual judge) when
     // the view was captured; rules-only otherwise.
     ...(review.rubric ? { rubric: review.rubric } : {}),
+    // Mid-load capture: the screenshot below shows embeds that were still loading — the note
+    // tells the agent not to treat them as broken (and that the visual judge was skipped).
+    ...(review.renderPending ? { renderNote: review.renderPending } : {}),
   };
   const augmentedDetails: AugmentedToolDetails = {
     __augmented: [{ file: entry, references: [] }],

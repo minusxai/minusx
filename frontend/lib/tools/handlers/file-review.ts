@@ -10,7 +10,8 @@
  */
 import { selectFile, selectMergedContent } from '@/store/filesSlice';
 import { getStore } from '@/store/store';
-import { captureFileViewBlob } from '@/lib/screenshot/capture';
+import { captureFileViewWithReadiness } from '@/lib/screenshot/capture';
+import type { FileViewReadiness } from '@/lib/screenshot/readiness';
 import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { FilesAPI } from '@/lib/data/files';
@@ -27,8 +28,23 @@ export interface FileReview {
   /** Present only for a full review (the view was mounted and captured). */
   screenshotUrl?: string;
   /** 'full' = screenshot + deterministic + LLM visual judge; 'deterministic' = rules only
-   *  (no rendered view available, e.g. a background draft). */
+   *  (no rendered view available, e.g. a background draft — or the view never settled). */
   reviewMode: 'full' | 'deterministic';
+  /**
+   * Set when the screenshot was captured BEFORE the view settled (embed queries still running at
+   * the readiness timeout). The note is LLM-facing: without it, the agent reads loading/blank
+   * cards as broken embeds and deletes healthy content (the staging overcorrection). When set,
+   * the visual judge is skipped — it would grade the same mid-load pixels.
+   */
+  renderPending?: string;
+}
+
+/** The LLM-facing warning attached to a mid-load capture. */
+export function renderPendingNote(busyCount: number): string {
+  return `Screenshot captured before the view finished rendering — ${busyCount} embed(s) were still ` +
+    'loading (queries running). Loading or blank cards in this image reflect CAPTURE TIMING, not ' +
+    'broken embeds: do NOT remove, resize, or restyle embeds based on this image. Re-run ReviewFile ' +
+    'to get a settled view.';
 }
 
 /**
@@ -87,15 +103,20 @@ export function measureStoryEmbeds(fileId: number): DeterministicContext['measur
 export async function captureFileScreenshot(
   fileId: number,
   opts: { colorMode: 'light' | 'dark'; fullHeight?: boolean },
-): Promise<string> {
+): Promise<{ url: string; readiness: FileViewReadiness }> {
   // Yield once so the chat's tool state can paint before the capture runs — the capture is
   // synchronous main-thread work (DOM clone + rasterize) that briefly freezes the UI.
   await new Promise((r) => setTimeout(r, 0));
   // Render→capture handshake: after an edit the view is often mid-rebuild (story iframe
-  // remounting, embed queries re-running). captureFileViewBlob waits for the view to settle
-  // internally (bounded; a stuck query degrades to a screenshot of its spinner).
-  const blob = await captureFileViewBlob(fileId, { colorMode: opts.colorMode, fullHeight: !!opts.fullHeight, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg' });
-  return uploadBlobOrEmbed(blob, 'screenshot.jpg', 'image/jpeg');
+  // remounting, EVERY embed query re-running). The agent path waits longer than the default —
+  // a multi-embed story cold-runs several queries and 10s timed out often enough that agents
+  // saw loading embeds and deleted them. Still bounded: a stuck query degrades to a screenshot
+  // of its spinner, with `readiness.settled === false` telling the caller to say so.
+  const { blob, readiness } = await captureFileViewWithReadiness(fileId, {
+    colorMode: opts.colorMode, fullHeight: !!opts.fullHeight, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg',
+    readinessTimeoutMs: 20000,
+  });
+  return { url: await uploadBlobOrEmbed(blob, 'screenshot.jpg', 'image/jpeg'), readiness };
 }
 
 /**
@@ -112,10 +133,24 @@ export async function reviewFile(
   if (!type || !isRubricFileType(type)) return { reviewMode: 'deterministic' };
 
   let screenshotUrl: string | undefined;
+  let readiness: FileViewReadiness | undefined;
   try {
-    screenshotUrl = await captureFileScreenshot(fileId, opts);
+    ({ url: screenshotUrl, readiness } = await captureFileScreenshot(fileId, opts));
   } catch {
     // View not mounted (background draft/edit) or capture failed — rules-only review below.
+  }
+
+  // Mid-load capture (the readiness wait timed out with embeds still loading): the screenshot
+  // shows spinners/blank cards. Do NOT run the visual judge on it — it grades those pixels and
+  // its findings feed destructive "fixes". Return the rules rubric + the screenshot WITH an
+  // explicit note, so the agent knows the blanks are timing, not breakage.
+  if (screenshotUrl && readiness && !readiness.settled) {
+    return {
+      rubric: deterministicAgentRubric(fileId),
+      screenshotUrl,
+      reviewMode: 'deterministic',
+      renderPending: renderPendingNote(readiness.busyCount),
+    };
   }
 
   if (screenshotUrl) {

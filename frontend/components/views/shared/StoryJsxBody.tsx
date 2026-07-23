@@ -27,7 +27,6 @@ import {
   createContext, memo, useContext, useEffect, useMemo, useState,
   cloneElement, type ComponentType, type ReactElement, type RefObject, type FocusEvent, type FormEvent,
 } from 'react';
-import { Box } from '@chakra-ui/react';
 
 import { parseJsx, type JsxNode, type JsxElement } from '@/lib/jsx';
 import {
@@ -49,11 +48,19 @@ import { applyDomEditsToJsx, isEditableTextHost } from '@/lib/data/story/jsx-edi
 import { envelopeVizType } from '@/lib/viz/viz-templates';
 import type { QuestionParameter } from '@/lib/types';
 
-// Embed sizing floors/defaults — the same contract AgentHtml applies to legacy placeholders.
+// Embed sizing floors/defaults — the same contract AgentHtml applies to legacy placeholders
+// (and the default the skill documents: "Missing height defaults to 430px").
 const MIN_CHART_H = 340;
-const DEFAULT_CHART_H = 400;
+const DEFAULT_CHART_H = 430;
 const SINGLE_VALUE_MIN_H = 48;
 const SINGLE_VALUE_DEFAULT_H = 120;
+
+// The embed card's chrome, as TOKEN CLASSES compiled into every story's CSS (this file is in
+// EMBED_CHROME_FILES). The story iframe has no other style source — Chakra/emotion rules live
+// in the top document and never reach it, so wrapper chrome must be Tailwind classes and
+// SIZING must be inline style (see QuestionEmbedAdapter). Class parity with dashboard tiles.
+const EMBED_CARD_CLASSES = 'flex flex-col overflow-hidden rounded-md border border-border bg-card';
+const EMBED_BARE_CLASSES = 'flex flex-col overflow-hidden';
 
 export interface StoryJsxBodyProps {
   /** The iframe's document — floating content (ark-ui, Radix poppers) positions against it. */
@@ -202,18 +209,11 @@ function QuestionEmbedAdapter(props: Record<string, unknown>) {
   // Saved question by id — the `data-question-id` placeholder's equivalent.
   if (typeof props.id === 'number') {
     return (
-      <Box
+      <div
         {...{ [AST_PATH_ATTR]: astPath }}
-        className="mx-chart-fill"
-        width="100%"
-        height={`${embedHeightPx(props.height, MIN_CHART_H, DEFAULT_CHART_H)}px`}
-        bg="bg.subtle"
-        borderWidth="1px"
-        borderColor="border.default"
-        borderRadius="md"
-        overflow="hidden"
-        display="flex"
-        flexDirection="column"
+        aria-label="Question embed"
+        className={EMBED_CARD_CLASSES}
+        style={{ width: '100%', height: `${embedHeightPx(props.height, MIN_CHART_H, DEFAULT_CHART_H)}px` }}
       >
         <SmartEmbeddedQuestionContainer
           questionId={props.id}
@@ -225,7 +225,7 @@ function QuestionEmbedAdapter(props: Record<string, unknown>) {
           externalParameters={extParams}
           externalParamValues={extValues}
         />
-      </Box>
+      </div>
     );
   }
 
@@ -239,16 +239,11 @@ function QuestionEmbedAdapter(props: Record<string, unknown>) {
     bare ? SINGLE_VALUE_DEFAULT_H : DEFAULT_CHART_H,
   );
   return (
-    <Box
+    <div
       {...{ [AST_PATH_ATTR]: astPath }}
-      className="mx-chart-fill"
-      position="relative"
-      width="100%"
-      height={`${h}px`}
-      {...(bare ? {} : { bg: 'bg.subtle', borderWidth: '1px', borderColor: 'border.default', borderRadius: 'md' })}
-      overflow="hidden"
-      display="flex"
-      flexDirection="column"
+      aria-label="Question embed"
+      className={`relative ${bare ? EMBED_BARE_CLASSES : EMBED_CARD_CLASSES}`}
+      style={{ width: '100%', height: `${h}px` }}
     >
       <EmbeddedQuestionContainer
         question={inlineEmbedToQuestionContent(embed)}
@@ -258,7 +253,7 @@ function QuestionEmbedAdapter(props: Record<string, unknown>) {
         enableDrilldown={false}
         filePath={ctx.filePath}
       />
-    </Box>
+    </div>
   );
 }
 

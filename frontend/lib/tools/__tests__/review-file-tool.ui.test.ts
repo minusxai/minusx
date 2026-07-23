@@ -6,7 +6,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/screenshot/capture', () => ({
-  captureFileViewBlob: vi.fn(async () => new Blob(['img'], { type: 'image/jpeg' })),
+  captureFileViewWithReadiness: vi.fn(async () => ({
+    blob: new Blob(['img'], { type: 'image/jpeg' }),
+    readiness: { settled: true, busyCount: 0 },
+  })),
 }));
 // The render→capture handshake polls the live DOM for the FileView to settle (12s
 // bound). No FileView exists here and readiness isn't under test — without this
@@ -36,7 +39,7 @@ vi.mock('@/store/store', () => ({
   getStore: () => ({ getState: () => ({ files: { files: FILES } }) }),
 }));
 
-import { captureFileViewBlob } from '@/lib/screenshot/capture';
+import { captureFileViewWithReadiness } from '@/lib/screenshot/capture';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { FilesAPI } from '@/lib/data/files';
 import { executeToolCall } from '../tool-handlers';
@@ -51,7 +54,7 @@ describe('ReviewFile tool (frontend bridge)', () => {
 
   it('captures with the current colorMode and returns rubric status text + an image_url block', async () => {
     const res = await exec({ fileId: 42 }, 'dark');
-    expect(captureFileViewBlob).toHaveBeenCalledWith(42, expect.objectContaining({ colorMode: 'dark' }));
+    expect(captureFileViewWithReadiness).toHaveBeenCalledWith(42, expect.objectContaining({ colorMode: 'dark' }));
     expect(uploadBlobOrEmbed).toHaveBeenCalledWith(expect.any(Blob), 'screenshot.jpg', 'image/jpeg');
     // The combined rubric is fetched for the captured screenshot, graded on the merged content.
     expect(FilesAPI.getRubric).toHaveBeenCalledWith(42, expect.objectContaining({ screenshotUrl: 'https://cdn.example/screenshot.jpg' }));
@@ -68,13 +71,13 @@ describe('ReviewFile tool (frontend bridge)', () => {
 
   it('captures full height by default; an explicit fullHeight: false is honored', async () => {
     await exec({ fileId: 7 }, 'light');
-    expect(captureFileViewBlob).toHaveBeenCalledWith(7, expect.objectContaining({ fullHeight: true, colorMode: 'light' }));
+    expect(captureFileViewWithReadiness).toHaveBeenCalledWith(7, expect.objectContaining({ fullHeight: true, colorMode: 'light' }));
     await exec({ fileId: 7, fullHeight: false }, 'light');
-    expect(captureFileViewBlob).toHaveBeenLastCalledWith(7, expect.objectContaining({ fullHeight: false }));
+    expect(captureFileViewWithReadiness).toHaveBeenLastCalledWith(7, expect.objectContaining({ fullHeight: false }));
   });
 
   it('degrades to the rules-only rubric (no image) when the file view is not rendered', async () => {
-    (captureFileViewBlob as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('FileView with id 42 not found'));
+    (captureFileViewWithReadiness as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('FileView with id 42 not found'));
     const res = await exec({ fileId: 42 }, 'light');
     const content = res.content as Array<{ type: string; text?: string }>;
     const status = JSON.parse(content[0].text!);

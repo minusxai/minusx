@@ -102,10 +102,11 @@ export interface AgentHtmlHandle {
   serialize: () => string | null;
 }
 
-// Placeholder sizing floors/defaults (same contract as the dashboard grid).
+// Placeholder sizing floors/defaults (same contract as the dashboard grid, and the default the
+// skill documents: "Missing height defaults to 430px").
 const MIN_CHART_W = 320;
 const MIN_CHART_H = 340;
-const DEFAULT_CHART_H = 400;
+const DEFAULT_CHART_H = 430;
 const SINGLE_VALUE_MIN_H = 48;
 const SINGLE_VALUE_DEFAULT_H = 120;
 

@@ -43,7 +43,7 @@ beforeEach(() => {
   // Capture is the multi-second blocker in production — here it's a fake we can count.
   _internal.capture = vi.fn(async () => {
     captureCalls++;
-    return new Blob(['x'], { type: 'image/jpeg' });
+    return { blob: new Blob(['x'], { type: 'image/jpeg' }), readiness: { settled: true, busyCount: 0 } };
   });
   _internal.upload = vi.fn(async () => {
     uploadCalls++;
@@ -107,6 +107,20 @@ describe('appStateWithFileScreenshot (the ONLY capture path — lazy, on send)',
     const out = await appStateWithFileScreenshot(fileAppState(3, 'q'), 'light', false);
     expect(imageOf(out)).toBeUndefined();
     expect(out).toBeTruthy();
+  });
+
+  it('a MID-LOAD capture (readiness not settled) is sent but never cached — the next send recaptures', async () => {
+    // The cache key hashes content + query results, which may not change again once the pending
+    // renders finish — caching a spinner shot would re-send it for every later message.
+    _internal.capture = vi.fn(async () => {
+      captureCalls++;
+      return { blob: new Blob(['x'], { type: 'image/jpeg' }), readiness: { settled: false, busyCount: 2 } };
+    });
+    const app = fileAppState(4, 'story');
+    const first = await appStateWithFileScreenshot(app, 'light', false);
+    expect(imageOf(first)?.url).toBe('https://cdn/1.jpg'); // still attached (true at send time)
+    await appStateWithFileScreenshot(app, 'light', false);
+    expect(captureCalls).toBe(2); // no cache hit for the unsettled shot
   });
 });
 

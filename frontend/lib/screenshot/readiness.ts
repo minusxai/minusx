@@ -27,6 +27,20 @@ export interface ReadinessOptions {
   pollMs?: number;
 }
 
+/**
+ * What the wait actually observed — consumers that feed the capture to an LLM (agent review,
+ * app-state image) MUST branch on `settled`: a timed-out capture shows spinners/blank embeds,
+ * and a model that isn't told will read them as broken content and "fix" them (the staging
+ * overcorrection: the agent deleted healthy embeds because its review image caught them
+ * mid-load).
+ */
+export interface FileViewReadiness {
+  /** True when a calm settle window was observed; false when the wait hit its timeout. */
+  settled: boolean;
+  /** Busy markers still present at the final check (0 when settled). */
+  busyCount: number;
+}
+
 const BUSY_SELECTOR = '[data-mx-busy="true"]';
 
 /**
@@ -51,9 +65,10 @@ function iframeDocs(root: ParentNode): Document[] {
   return docs;
 }
 
-/** True when the view (or a same-origin iframe within it) shows a busy marker or is still loading. */
-function isFileViewBusy(view: Element): boolean {
-  if (view.querySelector(BUSY_SELECTOR)) return true;
+/** Busy markers in the view (or its same-origin iframes) — 0 means calm. A still-loading iframe
+ *  document counts as one marker (its content can't be inspected yet). */
+function fileViewBusyCount(view: Element): number {
+  let count = view.querySelectorAll(BUSY_SELECTOR).length;
   for (const iframe of Array.from(view.querySelectorAll('iframe'))) {
     let doc: Document | null = null;
     try {
@@ -62,39 +77,44 @@ function isFileViewBusy(view: Element): boolean {
       continue; // cross-origin — not ours
     }
     if (!doc) continue;
-    if (doc.readyState === 'loading') return true;
-    if (doc.querySelector(BUSY_SELECTOR)) return true;
+    if (doc.readyState === 'loading') count += 1;
+    count += doc.querySelectorAll(BUSY_SELECTOR).length;
     // one nested level (embeds don't nest iframes today, but stay safe)
     for (const inner of iframeDocs(doc)) {
-      if (inner.readyState === 'loading' || inner.querySelector(BUSY_SELECTOR)) return true;
+      if (inner.readyState === 'loading') count += 1;
+      count += inner.querySelectorAll(BUSY_SELECTOR).length;
     }
   }
-  return false;
+  return count;
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
  * Wait until the `[data-file-id]` view exists and has been non-busy for `settleMs`,
- * resolving unconditionally at `timeoutMs`.
+ * resolving unconditionally at `timeoutMs` — the RESULT says which of the two happened
+ * (see FileViewReadiness; LLM-facing captures must surface an unsettled result).
  */
 export async function waitForFileViewReady(
   fileId: number,
   { timeoutMs = 10000, settleMs = 250, pollMs = 100 }: ReadinessOptions = {},
-): Promise<void> {
+): Promise<FileViewReadiness> {
   const deadline = Date.now() + timeoutMs;
   let calmSince: number | null = null;
+  let lastBusy = 0;
   while (Date.now() < deadline) {
     // Re-broadcast every poll (cheap no-op when nothing is windowed): the view can REMOUNT while
     // settling (EditFile rebuild), and freshly remounted ghosts must also be force-mounted.
     document.dispatchEvent(new CustomEvent(FORCE_MOUNT_TILES_EVENT));
     const view = document.querySelector(`[data-file-id="${fileId}"]`);
-    if (!view || isFileViewBusy(view)) {
+    lastBusy = view ? fileViewBusyCount(view) : 1;
+    if (!view || lastBusy > 0) {
       calmSince = null;
     } else {
       calmSince = calmSince ?? Date.now();
-      if (Date.now() - calmSince >= settleMs) return;
+      if (Date.now() - calmSince >= settleMs) return { settled: true, busyCount: 0 };
     }
     await sleep(Math.min(pollMs, Math.max(1, deadline - Date.now())));
   }
+  return { settled: false, busyCount: Math.max(lastBusy, 1) };
 }

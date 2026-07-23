@@ -366,6 +366,15 @@ function QuestionVisualizationInner({
                 <div aria-label="Loading" className="size-10 animate-spin rounded-full border-[3px] border-primary/25 border-t-primary" />
                 <QueryLoadingIndicator estimatedDurationMs={queryEstimatedDurationMs} />
               </div>
+            ) : !data && !config.showHeader && (currentState.query && currentState.connection_name || currentState.spreadsheet) ? (
+              // Headerless embed with an executable source but NO result yet: the pre-query
+              // window (mount → effect → semaphore slot) renders a blank card whose `loading`
+              // flag is still false. Stamp it BUSY so a capture never settles on blank embeds —
+              // an unstamped blank here is what fed the LLM judge "missing evidence" findings
+              // and made the agent delete healthy embeds. Errors and source-less embeds stay
+              // unstamped (genuine states the capture must show); the workbench idle state
+              // (showHeader) is user-paced, not pending.
+              <div className="flex-1" data-mx-busy="true" />
             ) : data ? (
               <>
                 {data.finalQuery && showJson && (
