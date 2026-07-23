@@ -35,6 +35,33 @@ const fetchedColumns = new Map<string, ColumnInfo[]>();
 const cacheKey = (table: TableRef, databaseName?: string): string =>
   `${table.connection || databaseName || ''}|${table.schema || ''}|${table.name}`;
 
+/**
+ * Imperative fetch of one table's columns, sharing the session cache with
+ * `useTableColumns`. For non-render call sites that need columns at event time
+ * (e.g. inferring join columns the moment a source is picked). Returns `[]` on
+ * failure without caching it, so a later call retries.
+ */
+export async function getTableColumns(table: TableRef, databaseName?: string): Promise<ColumnInfo[]> {
+  const key = cacheKey(table, databaseName);
+  const cached = fetchedColumns.get(key);
+  if (cached) return cached;
+  try {
+    const result = await CompletionsAPI.getColumnSuggestions({
+      databaseName: table.connection || databaseName || '',
+      table: table.name,
+      schema: table.schema,
+    });
+    if (result.success && result.columns) {
+      const columns = result.columns.map((c) => ({ name: c.name, type: c.type || '' }));
+      fetchedColumns.set(key, columns);
+      return columns;
+    }
+  } catch {
+    // Leave uncached so a later call retries.
+  }
+  return [];
+}
+
 export function useTableColumns(
   table: TableRef | null,
   localColumns: ColumnInfo[],
@@ -48,21 +75,9 @@ export function useTableColumns(
   useEffect(() => {
     if (!needsFetch || !table) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const result = await CompletionsAPI.getColumnSuggestions({
-          databaseName: table.connection || databaseName || '',
-          table: table.name,
-          schema: table.schema,
-        });
-        if (result.success && result.columns) {
-          fetchedColumns.set(key, result.columns.map((c) => ({ name: c.name, type: c.type || '' })));
-          if (!cancelled) setFetchCount((n) => n + 1);
-        }
-      } catch {
-        // Leave uncached so a later mount retries.
-      }
-    })();
+    getTableColumns(table, databaseName).then((columns) => {
+      if (columns.length > 0 && !cancelled) setFetchCount((n) => n + 1);
+    });
     return () => { cancelled = true; };
   }, [key, needsFetch]); // eslint-disable-line react-hooks/exhaustive-deps
 

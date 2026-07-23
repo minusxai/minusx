@@ -6,7 +6,7 @@
  */
 
 import { renderHook, waitFor } from '@testing-library/react';
-import { useTableColumns, clearTableColumnsCache } from '@/lib/hooks/use-table-columns';
+import { useTableColumns, getTableColumns, clearTableColumnsCache } from '@/lib/hooks/use-table-columns';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 
 vi.mock('@/lib/data/completions/completions', () => ({
@@ -104,6 +104,21 @@ describe('useTableColumns', () => {
     });
   });
 
+  it('shares one cache with getTableColumns (imperative prefetch, hook reads it)', async () => {
+    getColumnSuggestions.mockResolvedValue({
+      success: true,
+      columns: [{ name: 'id', type: 'integer', displayName: 'id' }],
+    });
+    await getTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' });
+
+    const { result } = renderHook(() =>
+      useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, []),
+    );
+    // Cached by the imperative call: available synchronously, no second request.
+    expect(result.current).toEqual([{ name: 'id', type: 'integer' }]);
+    expect(getColumnSuggestions).toHaveBeenCalledTimes(1);
+  });
+
   it('returns [] on fetch failure without throwing (and does not cache the failure)', async () => {
     getColumnSuggestions.mockRejectedValueOnce(new Error('boom'));
 
@@ -123,5 +138,50 @@ describe('useTableColumns', () => {
       useTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }, []),
     );
     await waitFor(() => expect(retry.result.current).toEqual([{ name: 'id', type: 'integer' }]));
+  });
+});
+
+describe('getTableColumns (imperative)', () => {
+  it('fetches, caches, and returns columns', async () => {
+    getColumnSuggestions.mockResolvedValue({
+      success: true,
+      columns: [
+        { name: 'id', type: 'integer', displayName: 'id' },
+        { name: 'total', type: 'double', displayName: 'total' },
+      ],
+    });
+
+    const first = await getTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' });
+    expect(first).toEqual([{ name: 'id', type: 'integer' }, { name: 'total', type: 'double' }]);
+
+    const second = await getTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' });
+    expect(second).toEqual(first);
+    expect(getColumnSuggestions).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the databaseName argument when the table has no connection', async () => {
+    getColumnSuggestions.mockResolvedValue({
+      success: true,
+      columns: [{ name: 'id', type: 'integer', displayName: 'id' }],
+    });
+    await getTableColumns({ name: 'orders', schema: 'main' }, 'fallback_db');
+    expect(getColumnSuggestions).toHaveBeenCalledWith({
+      databaseName: 'fallback_db',
+      table: 'orders',
+      schema: 'main',
+    });
+  });
+
+  it('returns [] on failure without caching it (a later call retries)', async () => {
+    getColumnSuggestions.mockRejectedValueOnce(new Error('boom'));
+    expect(await getTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' })).toEqual([]);
+
+    getColumnSuggestions.mockResolvedValue({
+      success: true,
+      columns: [{ name: 'id', type: 'integer', displayName: 'id' }],
+    });
+    expect(await getTableColumns({ name: 'orders', schema: 'main', connection: 'mxfood' }))
+      .toEqual([{ name: 'id', type: 'integer' }]);
+    expect(getColumnSuggestions).toHaveBeenCalledTimes(2);
   });
 });

@@ -17,13 +17,13 @@ describe('QueryModeSelector', () => {
     );
     expect(screen.getByLabelText('SQL')).toBeTruthy();
     expect(screen.getByLabelText('Viz')).toBeTruthy();
-    expect(screen.queryByLabelText('GUI')).toBeNull();
+    expect(screen.queryByLabelText('Semantic')).toBeNull();
     unmount();
 
     renderWithProviders(
       <QueryModeSelector mode="sql" onModeChange={vi.fn()} showSemanticTab />
     );
-    expect(screen.getByLabelText('GUI')).toBeTruthy();
+    expect(screen.getByLabelText('Semantic')).toBeTruthy();
   });
 
   it('switches to Semantic when enabled', () => {
@@ -31,7 +31,7 @@ describe('QueryModeSelector', () => {
     renderWithProviders(
       <QueryModeSelector mode="sql" onModeChange={onModeChange} showSemanticTab canUseSemantic />
     );
-    fireEvent.click(screen.getByLabelText('GUI'));
+    fireEvent.click(screen.getByLabelText('Semantic'));
     expect(onModeChange).toHaveBeenCalledWith('semantic');
   });
 
@@ -46,7 +46,7 @@ describe('QueryModeSelector', () => {
         semanticError="This SQL is not expressible with the semantic model"
       />
     );
-    const semantic = screen.getByLabelText('GUI');
+    const semantic = screen.getByLabelText('Semantic');
     expect(semantic.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(semantic);
     expect(onModeChange).not.toHaveBeenCalled();
