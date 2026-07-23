@@ -12,6 +12,7 @@ import {
   assertTutorialMode,
   createDashboard,
   addFirstQuestion,
+  dashboardFrame,
   saveDraft,
   e2eUrl,
   QA_MODE,
@@ -35,16 +36,20 @@ test('themed dashboard: data-theme stamped, theme tokens live, rendered in the s
   });
   expect(patch.ok()).toBeTruthy();
 
-  // Reopen and verify the RENDERER end-to-end.
+  // Reopen and verify the RENDERER end-to-end. The dashboard renders inside its
+  // self-contained iframe surface (Phase 8), so in-dashboard locators go through the frame.
   await page.goto(e2eUrl(`/f/${dashboardId}`));
-  const region = page.getByLabel('Dashboard', { exact: true });
+  const frame = dashboardFrame(page);
+  const region = frame.getByLabel('Dashboard', { exact: true });
   await expect(region).toHaveAttribute('data-theme', 'nocturne', { timeout: 30_000 });
 
-  // The theme's token set actually applies: --chart-1 departs from the app-default palette.
+  // The theme's token set actually applies: --chart-1 departs from the app-default palette —
+  // resolved from the CHROME stylesheet inside the iframe (self-containment, not app css).
   const chart1 = await region.evaluate((el) => getComputedStyle(el).getPropertyValue('--chart-1').trim());
   expect(chart1).not.toBe('');
   expect(chart1.toLowerCase()).not.toBe('#16a085');
 
-  // And the themed region lives inside the live-svg surface (B2), inside the capture anchor.
-  await expect(page.locator('[data-file-id] svg[data-mx-surface-svg] foreignObject [aria-label="Dashboard"]')).toBeVisible();
+  // And the themed region lives inside the iframe's svg surface, inside the capture anchor.
+  await expect(page.locator('[data-file-id] iframe[title="Dashboard"]')).toBeVisible();
+  await expect(frame.locator('svg[data-mx-story-svg] foreignObject [aria-label="Dashboard"]')).toBeVisible();
 });

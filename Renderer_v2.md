@@ -704,3 +704,128 @@ permanent fixtures.
 5. ~~B2 core feasibility~~ — **de-risked (§7.2: drag/resize/capture pass on three engines)**.
    The popover-over-surface check and the real-chrome re-proof are Phase 4 checkboxes (§7.3
    item 2), with a clear bar: menus must work normally and stay out of captures.
+
+---
+
+## 10. Phase 8 — Self-contained dashboards (post-campaign, user-directed 2026-07-23)
+
+**Directive:** replace the environment-snapshot patching for dashboard captures with structural
+self-containment, "just like stories". Decision rationale: the main-document capture path
+re-injects the environment a detached copy loses (inherited styles, html-class CSS vars,
+sheet-relative font urls — §3b); each class is closed and tested, but self-containment converts
+the test burden into a guarantee. Scope: dashboards only. Questions/notebooks/reports stay on
+`serialize-element` + the environment snapshot (iframe-izing Monaco-bearing workbenches is high
+cost / low capture value — user accepted this split).
+
+**Design: the dashboard becomes a story-style iframe surface.**
+Partial self-containment (injecting styles into the main-doc surface) is NOT enough — the live
+render would still see app-document CSS the capture doesn't, flipping the fidelity gap's
+direction. Shadow DOM leaks too (inherited props + vars pierce). The iframe is the only boundary
+where live == capture by construction.
+
+Reused story machinery (all proven): `mountStorySurface`/`autoSizeStorySurface` (svg surface +
+sizing contract), `StoryEmbedProviders` (nested-root Redux/Chakra/ark-environment re-provide),
+`mirrorAppStyles` (fonts + guards residue), `serializeStorySvg`+`findStorySvg` (capture),
+readiness (already scans same-origin iframes; FORCE_MOUNT event already dispatches/listens on
+the TOP document).
+
+### Steps
+
+- **8a — Dashboard chrome CSS artifact.** Dashboards have NO authored classes — all chrome comes
+  from our components (closed set) — so ONE static compiled stylesheet covers every dashboard.
+  Script `scripts/generate-dashboard-chrome-css.ts` (`tsx --conditions react-server`, same trick
+  as generate-app-theme-css): candidates = kit recipe union ∪ extract(dashboard chrome sources:
+  DashboardView, WindowedTile, TextBlockCard, ParameterRow/selectors, QuestionBrowserPanel,
+  empty-states) compiled through the same TW_INPUT_JSX (tokens under `:root`/`.dark`, app chart
+  palette, theme blocks) + react-grid-layout's static CSS appended. Output:
+  `lib/dashboard-surface/chrome-css.gen.ts` (string export). Freshness test à la
+  recipe-classes.test.ts fails when stale.
+- **8b — `DashboardSurface` host.** New `lib/dashboard-surface/` + host component: same-origin
+  iframe (fluid width, height synced), doc skeleton + html.dark/light sync, in-root injected
+  styles (app-styles mirror, chrome css), `mountStorySurface(doc,'svg',width)` +
+  `autoSizeStorySurface({fluid:true})`, nested React root portaling children into the surface
+  root under `StoryEmbedProviders`, busy stamp until first commit, translateZ repaint nudge.
+  The in-iframe svg carries STORY_SVG_ATTR (from mountStorySurface) → capture unifies free.
+- **8c — Iframe-aware windowing.** WindowedTile's gBCR check must compose the frameElement's
+  rect (tile rect is iframe-relative; the scroller and viewport are the TOP document's) and
+  listen capture-phase on the top document — otherwise every tile measures "visible" (iframe is
+  content-height) and windowing silently dies.
+- **8d — Wire the container.** DashboardContainerV2 renders `data-file-id` wrapper +
+  PageMarkerDevOverlay + `<DashboardSurface>` around `<DashboardView>` (view stays pure, loses
+  its own SvgPageSurface wrap; marker gutter pl-10 stays in-view). Publish-highlights context is
+  read at the main-tree boundary and re-provided inside the nested root (context does not cross
+  roots).
+- **8e — Capture unification + deletions.** `captureFromSvgStory` now handles dashboards
+  (findStorySvg finds the iframe's svg). DELETE `serialize-surface.ts`, `captureFromSvgSurface`,
+  `SvgPageSurface`, their tests. `serialize-element` (+ snapshotInheritedStyle etc.) stays for
+  question/notebook/report captures.
+- **8f — Matrix re-host + the money test.** b2 fixtures mount via the real DashboardSurface
+  (drag/resize/edit/sticky/windowing/dark/staleness kept). NEW self-containment guard: strip ALL
+  top-document stylesheets → serialize → capture must render identically (the structural
+  guarantee, asserted in a real browser, 3 engines).
+- **8g — Battery + browser verify.** validate, full suite, capture-matrix, e2e/QA; side-by-side
+  DOM vs Context-panel image on Top Level Metrics (f/11, tutorial). Update memory + this doc.
+
+### Known risks / accepted deltas
+- RGL drag with the cursor exiting the iframe mid-drag pauses until re-entry (document-level
+  listeners stop at the iframe edge) — same class of edge behavior as dragging out the window.
+- Region-select crops on iframe surfaces inherit the story path's coordinate mapping as-is.
+- Bundle carries the compiled chrome CSS string (same order of size as a story compiledCss).
+
+### Phase 8 execution notes (2026-07-23)
+
+- **8a** `lib/dashboard-surface/chrome-css.gen.ts` (102KB): react-grid-layout css + react-day-picker
+  css + compiled chrome utilities (kit ∪ EMBED_CHROME_FILES ∪ DASHBOARD_CHROME_FILES, 3856
+  candidates) + token layer + theme blocks, via new `compileChromeCss` (story pipeline MINUS the
+  banned partition — chrome legitimately uses `sticky`; asserted in the freshness test).
+  `npm run generate-dashboard-chrome-css`; freshness + content-contract tests in
+  `lib/dashboard-surface/__tests__/chrome-css.test.ts`.
+- **8b** `components/views/shared/DashboardSurface.tsx`: iframe host reusing
+  mountStorySurface/autoSizeStorySurface (fluid), StoryEmbedProviders nested root, in-root
+  injected styles (app mirror + chrome css), busy-stamp-until-commit, translateZ repaint nudge.
+  The surface svg carries STORY_SVG_ATTR → the story capture path handles dashboards with zero
+  new code.
+- **8c** WindowedTile: `tileViewportRect` composes gBCR up the frame chain and measures against
+  the TOP viewport; scroll/resize listeners attach to every same-origin window in the chain
+  (else every tile inside a content-height iframe is always "visible" and windowing dies silently).
+- **8d** DashboardContainerV2 owns [data-file-id] + PageMarkerDevOverlay + surface; publish
+  highlights context read in the main tree and re-provided inside the nested root (context
+  never crosses React root boundaries). DashboardView is now purely the surface's content.
+- **8e** DELETED: serialize-surface.ts, SvgPageSurface.tsx, captureFromSvgSurface, their tests.
+  serialize-element.ts (+ env snapshot) stays for question/notebook/report captures.
+- **Portal fixes surfaced by the iframe move:** DatePicker calendar+backdrop portal to the
+  ANCHOR's document body (fixed-in-foreignObject backdrop was broken; top-body target was the
+  wrong coordinate space); DrillDownState gained `doc` (TableV2 passes td.ownerDocument) — card
+  portals/clamps/dismisses against the click's document. react-day-picker css moved into the
+  chrome sheet (its app-global import never reaches the iframe).
+- **Region-crop fix (pre-existing, stories too):** cropFromSvgStory compared a TOP-viewport
+  selection against the svg's IFRAME-relative box — new `svgBoxInTopViewport` composes the
+  frame offset (unit-tested).
+- **appState fix (user question):** ui.openModal now carries `dashboardId` for EXISTING
+  questions opened from a dashboard, not just create-question (`openModalForTop`, unit-tested).
+- **Matrix**: fixture pages now carry ZERO css — the whole b2 suite doubles as the structural
+  self-containment proof; drivers mount the real DashboardSurface; checks pierce via
+  frameLocator/contentDocument; esbuild `.css → empty` loader (chrome sheet supplies styles).
+
+### Phase 8 hardening (user live-testing round, 2026-07-23)
+
+- **Clipped/non-adaptive dashboards (user-reported):** react-grid-layout's `WidthProvider` is
+  DEAF inside the iframe — resize-observer-polyfill's refresh triggers bind to the top document
+  realm, so the grid measured once and never re-laid out (items placed for a stale width,
+  clipped at the pane edge). Fix: WidthProvider deleted from the dashboard; the surface provides
+  its measured width via `SurfaceWidthContext` (host RO on the iframe element, 60ms trailing
+  debounce) and the grid takes `width = surfaceWidth − MARKER_GUTTER_CSS_PX` directly.
+  Verified live both directions (fit at 1074, expand to 1277 edge-to-edge on sidebar collapse).
+- **Firefox windowing (matrix catch):** FF returns an all-zero rect for not-yet-reflowed iframe
+  content; zero rect read as "visible" → every below-fold tile hydrated at mount. Fix:
+  `tileViewportRect` flags empty rects; the check retries (bounded) instead of mounting, then
+  falls through to the plain predicate (jsdom semantics preserved).
+- **Matrix bundle:** pulling the real app tree needs `define: {'process.env...'}` +
+  `loader: {'.css':'empty'}` — a top-level `process is not defined` throw made every fixture
+  time out silently. Self-contained check re-scoped to "no LOADED css anywhere + iframe
+  inline-only" (Chakra/emotion runtime tags in the top head are allowed noise that provably
+  never crosses). Matrix: ALL CHECKS PASS on chromium + webkit + firefox with ZERO css in the
+  fixture pages.
+- **Side-by-side (Context panel Get image, f/11 tutorial):** captured image is 1:1 with the DOM
+  at the live pane width — same title truncations, numeral scale, captions, palettes; markers
+  in-gutter.

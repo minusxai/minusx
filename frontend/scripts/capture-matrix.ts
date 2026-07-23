@@ -343,6 +343,14 @@ async function main(): Promise<void> {
     platform: 'browser',
     jsx: 'automatic',
     alias: { '@': ROOT },
+    // The B2 drivers pull the real dashboard surface tree, which imports app-global css
+    // (react-day-picker). In the fixture world those styles come from the chrome stylesheet
+    // INSIDE the iframe — drop the imports rather than teaching the bundle to emit css.
+    loader: { '.css': 'empty' },
+    // The surface tree also pulls lib/constants (process.env.NEXT_PUBLIC_* reads) and the Redux
+    // store. Next inlines these at build time; this raw bundle must do the same or the IIFE
+    // throws `process is not defined` at load and EVERY fixture times out silently.
+    define: { 'process.env.NODE_ENV': '"production"', 'process.env': '{}' },
   });
   const bundleJs = bundle.outputFiles[0].text;
 

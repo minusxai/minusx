@@ -89,15 +89,21 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
         </button>
       </div>
 
-      {isOpen && (
+      {isOpen && buttonRef && (
         <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-50"
-            onClick={() => setIsOpen(false)}
-          />
-          {/* Calendar — portaled to body (fixed-position; carries its own theme
-              host so kit tokens resolve outside the app-shell host). */}
+          {/* Backdrop + calendar — portaled to the ANCHOR's document body (Phase 8): inside the
+              dashboard iframe surface the anchor rect is iframe-relative, so the top document.body
+              is the wrong coordinate space — and fixed positioning is broken inside the
+              <svg><foreignObject> surface, so the backdrop must escape it too. In the main
+              document ownerDocument.body IS document.body (behavior unchanged). The calendar
+              carries its own theme host so kit tokens resolve outside the app-shell host. */}
+          {createPortal(
+            <div
+              className="fixed inset-0 z-50"
+              onClick={() => setIsOpen(false)}
+            />,
+            buttonRef.ownerDocument.body
+          )}
           {createPortal(
             <div data-mx-theme-host="">
               <div
@@ -184,7 +190,7 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
                 </div>
               </div>
             </div>,
-            document.body
+            buttonRef.ownerDocument.body
           )}
         </>
       )}

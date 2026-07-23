@@ -221,9 +221,18 @@ export async function createDashboard(page: Page): Promise<number> {
   return Number(new URL(page.url()).pathname.split('/f/')[1]);
 }
 
+/**
+ * The dashboard's self-contained iframe surface (Renderer_v2 Phase 8): the dashboard view —
+ * grid, params, the add-question panel — renders inside this frame, so locators for
+ * in-dashboard controls must go through it. Header/save/create chrome stays in the page.
+ */
+export function dashboardFrame(page: Page) {
+  return page.frameLocator('iframe[title="Dashboard"]');
+}
+
 /** Add the first available tutorial question to the open dashboard via its panel. */
 export async function addFirstQuestion(page: Page): Promise<void> {
-  await page.getByLabel('Add to dashboard').first().click({ timeout: 20_000 });
+  await dashboardFrame(page).getByLabel('Add to dashboard').first().click({ timeout: 20_000 });
 }
 
 /** Save a draft via the header Save → SaveFileModal (name + confirm). */

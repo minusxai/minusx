@@ -48,8 +48,12 @@ vi.mock('@/lib/navigation/NavigationGuardProvider', () => ({
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
 import React, { useEffect, useRef } from 'react';
-import { screen, waitFor, within, act } from '@testing-library/react';
+import { screen, waitFor, within, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+// Renderer_v2 Phase 8: the dashboard view renders inside DashboardSurface's same-origin IFRAME
+// (nested React root, commits asynchronously) — dashboard content is queried through
+// withinDashboardSurface(); top-document chrome (FileHeader) stays on `screen`.
+import { withinDashboardSurface } from '@/test/helpers/dashboard-surface';
 import { NextRequest } from 'next/server';
 
 import * as storeModule from '@/store/store';
@@ -798,9 +802,12 @@ describe('Add question to existing dashboard and save', () => {
       { store: testStore }
     );
 
-    const questionCard = await screen.findByLabelText(QUESTION_NAME);
+    // The question browser panel lives inside the dashboard surface iframe.
+    const questionCard = await withinDashboardSurface().findByLabelText(QUESTION_NAME, undefined, { timeout: 10000 });
     const addButton = within(questionCard).getByLabelText('Add to dashboard');
-    await user.click(addButton);
+    // fireEvent (not userEvent): userEvent's realm checks misbehave for elements owned by the
+    // surface iframe's document; fireEvent dispatches on the element directly.
+    fireEvent.click(addButton);
 
     await waitForReduxState(
       testStore,
@@ -875,7 +882,8 @@ describe('Dashboard edit/cancel mode toggle', () => {
       { store: testStore }
     );
 
-    expect(await screen.findByLabelText('Dashboard')).toBeInTheDocument();
+    // The dashboard region renders inside the surface iframe (async nested-root commit).
+    expect(await withinDashboardSurface().findByLabelText('Dashboard', undefined, { timeout: 10000 })).toBeInTheDocument();
 
     await user.click(screen.getByLabelText('Edit'));
     expect(testStore.getState().ui.fileEditMode?.[DASHBOARD_ID]).toBe(true);
@@ -1353,9 +1361,16 @@ describe('Multiple questions in dashboard', () => {
       { store: testStore }
     );
 
-    const removeBtns = await screen.findAllByLabelText('Remove from dashboard');
-    expect(removeBtns).toHaveLength(2);
-    await user.click(removeBtns[0]);
+    // The question tiles (and their remove buttons) live inside the dashboard surface iframe,
+    // and the two tiles can commit in separate nested-root flushes — findAllBy* resolves on the
+    // FIRST match, so wait until BOTH remove buttons are present (same 2-button assertion).
+    await waitFor(() => {
+      expect(withinDashboardSurface().getAllByLabelText('Remove from dashboard')).toHaveLength(2);
+    }, { timeout: 10000 });
+    const removeBtns = withinDashboardSurface().getAllByLabelText('Remove from dashboard');
+    // fireEvent (not userEvent): userEvent's realm checks misbehave for elements owned by the
+    // surface iframe's document; fireEvent dispatches on the element directly.
+    fireEvent.click(removeBtns[0]);
 
     await waitForReduxState(
       testStore,
@@ -1447,10 +1462,11 @@ describe('Dashboard parameter merging', () => {
   it('two questions sharing :start_date render exactly one merged date parameter input', async () => {
     renderWithProviders(<DashboardContainerV2 fileId={DASHBOARD_ID} />, { store: testStore });
 
+    // The merged parameter row renders inside the dashboard surface iframe.
     await waitFor(() => {
-      expect(screen.getAllByLabelText('start_date')).toHaveLength(1);
-      expect(screen.getAllByLabelText('region')).toHaveLength(1);
-    });
+      expect(withinDashboardSurface().getAllByLabelText('start_date')).toHaveLength(1);
+      expect(withinDashboardSurface().getAllByLabelText('region')).toHaveLength(1);
+    }, { timeout: 10000 });
   });
 
   it('parameterValues submitted via setEdit persist in dashboard content after publishAll', async () => {

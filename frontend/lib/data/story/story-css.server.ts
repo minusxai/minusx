@@ -281,6 +281,25 @@ async function compileStoryCssUncached(story: string, opts?: { force?: boolean }
 }
 
 /**
+ * Compile CHROME CSS (Renderer_v2 Phase 8a — self-contained dashboards): the closed set of
+ * component classes that render inside the dashboard iframe surface. Same pipeline as the story
+ * compile (TW_INPUT_JSX token layer, salvaging build, flattened layers, theme blocks appended)
+ * with exactly ONE difference: no banned-candidate partition. The fixed/sticky and external-url
+ * bans exist for AUTHORED story CSS (exfiltration + capture-taint guards on user content);
+ * chrome is our own code, and dashboard tables legitimately use sticky headers (b2 matrix
+ * proof: sticky works inside the foreignObject surface).
+ */
+export async function compileChromeCss(candidates: string[]): Promise<string> {
+  const compiler = await compile(TW_INPUT_JSX, { base: process.cwd(), onDependency: () => {} });
+  const sorted = [...new Set(candidates)].sort();
+  const { css, dropped } = buildSalvaging(c => compiler.build(c), sorted);
+  if (dropped.length > 0) {
+    console.warn(`[chrome-css] dropped ${dropped.length} uncompilable candidate(s):`, dropped.join(' '));
+  }
+  return `${flattenCssLayers(css)}\n${storyThemeCss()}`;
+}
+
+/**
  * Version of the compile ENVIRONMENT a `compiledCss` was produced under: a hash of the recipe
  * union (kit + embed-chrome classes) + the theme token emitter output. When either grows (a new
  * embed component is re-skinned, a theme changes), every previously-saved story is STALE — the

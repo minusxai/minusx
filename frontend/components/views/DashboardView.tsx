@@ -5,12 +5,12 @@ import { getAssetLayoutKey, getLayoutableAssets, getLayoutSignature, computeDash
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
 import ParameterRow from '../params/ParameterRow';
-import { PageMarkerDevOverlay } from '@/components/views/story/PageMarkerDevOverlay';
-import { SvgPageSurface } from '@/components/views/shared/SvgPageSurface';
 import { WindowedTile } from '@/components/views/dashboard/WindowedTile';
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
+import { Layout, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
+import { useSurfaceWidth } from '@/lib/dashboard-surface/surface-width';
+import { MARKER_GUTTER_CSS_PX } from '@/lib/screenshot/draw-markers';
 import { DashboardEmptyState } from '@/components/views/shared/empty-states';
 import type { FileState } from '@/store/filesSlice';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
@@ -27,7 +27,14 @@ const GRID_MARGIN = 6;
 const parseLayoutItemId = (key: string): number | string =>
   /^\d+$/.test(key) ? Number(key) : key;
 
-const ResponsiveGridLayout = WidthProvider(Responsive);
+// NO WidthProvider (Phase 8): its resize-observer-polyfill never fires inside the surface
+// iframe (refresh triggers are bound to the top document's realm), so it measured once at mount
+// and went deaf — pane toggles left the grid at a stale width, clipped at the pane edge. The
+// surface tracks its width authoritatively (SurfaceWidthContext); the grid consumes it directly.
+const ResponsiveGridLayout = Responsive;
+
+/** Fallback grid width when no surface provides one (legacy mounts, jsdom) — WidthProvider's old default. */
+const FALLBACK_GRID_WIDTH = 1280;
 
 interface DashboardViewProps {
   // Data props (all from Redux via smart component)
@@ -55,10 +62,6 @@ interface DashboardViewProps {
   onAddQuestion: (questionId: number) => void;
   onAddTextBlock: () => void;
 
-  // Dev-only page-marker preview (Renderer_v2 Phase 1): dashboards are marker-flagged, so the
-  // container passes devMode + colorMode and the same overlay stories use mounts on this root.
-  showDevMarkers?: boolean;
-  colorMode?: 'light' | 'dark';
   /** Design theme (Renderer_v2 Phase 3): stamps [data-theme] so the six story token sets apply. */
   theme?: string | null;
 }
@@ -80,8 +83,6 @@ export default function DashboardView({
   onParamSubmit,
   onAddQuestion,
   onAddTextBlock,
-  showDevMarkers,
-  colorMode,
   theme,
 }: DashboardViewProps) {
   // Ref to always have the latest document for callbacks that may fire with stale closures
@@ -90,6 +91,11 @@ export default function DashboardView({
 
   // Track current columns for responsive grid background
   const [currentCols, setCurrentCols] = useState(12);
+
+  // The grid's layout width: the surface's measured width minus the reserved marker gutter
+  // (pl-10 on the region below — the grid's containing block is the region's CONTENT box).
+  const surfaceWidth = useSurfaceWidth();
+  const gridWidth = Math.max(320, (surfaceWidth ?? FALLBACK_GRID_WIDTH) - MARKER_GUTTER_CSS_PX);
 
   // Text blocks that a viewer has expanded via "Read more" → extra grid rows.
   // View-only (not persisted); restored to null on collapse or entering edit mode.
@@ -453,22 +459,16 @@ export default function DashboardView({
   };
 
   return (
-    // Overlay sits OUTSIDE the captured [data-file-id] subtree (same contract as StoryView):
-    // it is a live-DOM dev preview and must never leak into serialized/rasterized captures.
-    <div className="relative flex-1">
-      <PageMarkerDevOverlay enabled={!!showDevMarkers} colorMode={colorMode ?? 'light'} />
-    {/* B2 surface (Renderer_v2 Phase 4): the [data-file-id] capture anchor wraps the live-svg
-        surface; the dashboard region — including the [data-theme] stamp — renders INSIDE the
-        foreignObject so the serialized copy carries the theme with it. */}
-    <div data-file-id={fileId}>
-    <SvgPageSurface>
-    {/* pl-10 = the marker column's home (MARKER_GUTTER_PX): badges — live overlay AND captured
-        image — draw INSIDE this padding instead of widening the canvas, so the agent image keeps
-        the reader's geometry 1:1. */}
+    // Phase 8: this view renders INSIDE the self-contained iframe surface (DashboardSurface);
+    // the [data-file-id] capture anchor, dev marker overlay, and the surface itself are the
+    // CONTAINER's (DashboardContainerV2) — the view is the surface's content, nothing more.
+    // pl-10 = the marker column's home (MARKER_GUTTER_PX): badges — live overlay AND captured
+    // image — draw INSIDE this padding instead of widening the canvas, so the agent image keeps
+    // the reader's geometry 1:1.
     <div role="region" aria-label="Dashboard" className="pl-10" {...(theme ? { 'data-theme': theme } : {})}>
     {/* Inside the foreignObject surface, transform TRANSITIONS freeze mid-animation (Chromium
         does not incrementally repaint transformed foreignObject content — the stale-tiles bug).
-        Tiles snap to their positions instead; SvgPageSurface's resize nudge forces the repaint. */}
+        Tiles snap to their positions instead; DashboardSurface's resize nudge forces the repaint. */}
     <style>{'[aria-label="Dashboard"] .react-grid-item { transition: none; }'}</style>
 
       {/* Visual View (the Code view is rendered upstream by FileView) */}
@@ -500,6 +500,7 @@ export default function DashboardView({
               <ResponsiveGridLayout
                 key={`grid-v${gridVersion}`}
                 className="layout"
+                width={gridWidth}
                 layouts={layouts}
                 breakpoints={{ lg: 1024, md: 768, sm: 0 }}
                 cols={{ lg: 12, md: 12, sm: 6 }}
@@ -556,9 +557,6 @@ export default function DashboardView({
         </>
       )}
 
-    </div>
-    </SvgPageSurface>
-    </div>
     </div>
   );
 }

@@ -16,6 +16,12 @@ export interface DrillDownState {
   filterTypes?: Record<string, string>
   yColumn: string
   position: { x: number; y: number }
+  /**
+   * The document the drill click happened in (Phase 8): `position` is in ITS viewport space, so
+   * the card portals to THIS document's body — inside the dashboard iframe surface, the top
+   * `document.body` is the wrong coordinate space. Omitted → top document (main-doc questions).
+   */
+  doc?: Document
 }
 
 interface DrillDownCardProps {
@@ -42,7 +48,10 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
     setAskFocused(false)
   }, [drillDown])
 
-  // Close on click outside or Escape
+  // Close on click outside or Escape. Listens on BOTH the card's own document and the top
+  // document: iframe events never bubble across the frame boundary, so a card inside the
+  // dashboard surface must hear iframe clicks directly — while clicks on the app chrome
+  // (top document) should still dismiss it.
   useEffect(() => {
     if (!drillDown) return
     const handleClickOutside = (e: MouseEvent) => {
@@ -53,11 +62,16 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleEscape)
+    const docs = drillDown.doc && drillDown.doc !== document ? [drillDown.doc, document] : [document]
+    docs.forEach(d => {
+      d.addEventListener('mousedown', handleClickOutside)
+      d.addEventListener('keydown', handleEscape)
+    })
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleEscape)
+      docs.forEach(d => {
+        d.removeEventListener('mousedown', handleClickOutside)
+        d.removeEventListener('keydown', handleEscape)
+      })
     }
   }, [drillDown, onClose])
 
@@ -91,11 +105,14 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
 
   if (!drillDown) return null
 
-  // Compute card position: clamp to stay within viewport
+  // Compute card position: clamp to stay within the viewport OF THE DOCUMENT the click
+  // happened in (the iframe surface's own viewport when the table lives there).
+  const targetDoc = drillDown.doc ?? document
+  const targetWin = targetDoc.defaultView ?? window
   const cardW = askFocused ? 440 : 320
   const cardH = 320
-  const vw = window.innerWidth
-  const vh = window.innerHeight
+  const vw = targetWin.innerWidth
+  const vh = targetWin.innerHeight
 
   const spaceRight = vw - drillDown.position.x
   const anchorRight = spaceRight < cardW + 8
@@ -110,9 +127,10 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
 
   const filterEntries = Object.entries(drillDown.filters)
 
-  // Portaled to body (floating card at click coordinates). data-mx-theme-host is
-  // REQUIRED: shadcn token classes don't resolve outside the app-shell theme host,
-  // and `.dark` on <html> makes the dark token block match here too.
+  // Portaled to the CLICK document's body (floating card at click coordinates).
+  // data-mx-theme-host is REQUIRED: shadcn token classes don't resolve outside the app-shell
+  // theme host in the main document (inside the surface, the chrome sheet's :root tokens cover
+  // it and the host attr is harmless).
   return createPortal(
     <div
       ref={cardRef}
@@ -182,6 +200,6 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
         </div>
       </div>
     </div>,
-    document.body
+    targetDoc.body
   )
 }

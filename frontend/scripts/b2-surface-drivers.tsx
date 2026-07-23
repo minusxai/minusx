@@ -1,21 +1,29 @@
 /**
- * In-page drivers for the B2 dashboard-surface matrix (Renderer_v2 Phase 4) — bundled into the
- * capture-matrix browser bundle. Everything here drives the REAL shipped modules: the actual
- * `SvgPageSurface` component, the actual `serializeSurfaceSvg` capture path, and the dashboard's
- * actual grid library (`WidthProvider(Responsive)` from react-grid-layout) — only the tile
- * content is fixture markup. This is the §7.2 spike, promoted to a permanent fixture and
- * re-proven through the production code path instead of a hand-rolled svg mount.
+ * In-page drivers for the B2 dashboard-surface matrix (Renderer_v2 Phase 4, re-hosted on the
+ * Phase 8 self-contained iframe surface) — bundled into the capture-matrix browser bundle.
+ * Everything here drives the REAL shipped modules: the actual `DashboardSurface` host (iframe +
+ * svg surface + nested root + chrome stylesheet), the actual story-serializer capture path the
+ * production dashboard uses (`findStorySvg`/`serializeStorySvg`), the real `WindowedTile`, and
+ * the dashboard's actual grid library (`WidthProvider(Responsive)` from react-grid-layout) —
+ * only the tile content is fixture markup.
+ *
+ * SELF-CONTAINMENT IS THE FIXTURE'S PREMISE: the harness pages carry ZERO stylesheets (no RGL
+ * css, no token css — see b2-surface-matrix.ts). Everything the fixtures need must come from
+ * the iframe's own chrome stylesheet; a token-backed tile that rasterizes empty means the
+ * surface depended on the environment after all.
  */
-import React, { useState } from 'react';
-import { createRoot } from 'react-dom/client';
+import React from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { createPortal } from 'react-dom';
-import { Responsive, WidthProvider, type Layout } from 'react-grid-layout';
-import { SvgPageSurface } from '@/components/views/shared/SvgPageSurface';
+import { Responsive, type Layout } from 'react-grid-layout';
+import DashboardSurface from '@/components/views/shared/DashboardSurface';
 import { WindowedTile } from '@/components/views/dashboard/WindowedTile';
-import { findSurfaceSvg, serializeSurfaceSvg } from '@/lib/screenshot/serialize-surface';
-import { svgToImage } from '@/lib/story-surface/serialize';
+import { useSurfaceWidth } from '@/lib/dashboard-surface/surface-width';
+import { findStorySvg, serializeStorySvg, svgToImage } from '@/lib/story-surface/serialize';
 
-const RGL = WidthProvider(Responsive);
+// Same contract as production DashboardView (Phase 8): NO WidthProvider — its polyfill observer
+// is deaf inside the iframe realm; the grid consumes the surface-provided width directly.
+const RGL = Responsive;
 
 const INITIAL: Layout[] = [
   { i: 'a', x: 0, y: 0, w: 6, h: 2 },
@@ -24,9 +32,10 @@ const INITIAL: Layout[] = [
   { i: 'd', x: 4, y: 2, w: 8, h: 2 },
 ];
 
-// Tile 'a' is deliberately TOKEN-backed (--chart-1, the app palette teal #16a085, declared under
-// [data-mx-theme-host] in theme-tokens.css): if the token chain breaks in the live surface or in
-// the serialized copy, tile 'a' rasterizes transparent and the pixel check fails.
+// Tile 'a' is deliberately TOKEN-backed (--chart-1, the app palette teal #16a085, declared by
+// the chrome stylesheet's :root block INSIDE the iframe): if the self-contained token chain
+// breaks — live or in the serialized copy — tile 'a' rasterizes transparent and the pixel
+// check fails.
 const TILE_BG: Record<string, string> = {
   a: 'var(--chart-1)',
   b: 'rgb(41, 128, 185)',
@@ -37,19 +46,27 @@ const TILE_BG: Record<string, string> = {
 interface B2State { layout: Array<{ i: string; x: number; y: number; w: number; h: number }>; tileClicks: number; popClicks: number }
 const state: B2State = { layout: INITIAL, tileClicks: 0, popClicks: 0 };
 
-function GridApp() {
+// Mount/drag transitions are cosmetic and make position probes time-dependent — off for the
+// fixture, INSIDE the surface (the top page carries no css by design). Production does the same
+// inside DashboardView's region.
+const NoTransitions = () => <style>{'.react-grid-item { transition: none !important; }'}</style>;
+
+function GridBody() {
+  const width = useSurfaceWidth() ?? 940;
   const record = (layout: Layout[]) => {
     state.layout = layout.map(({ i, x, y, w, h }) => ({ i, x, y, w, h }));
   };
   return (
-    <SvgPageSurface>
-      {/* Mode-differing token probe: --muted is light-gray in light mode, near-black in dark.
-          A dark-mode capture must resolve `.dark [data-mx-theme-host]` — the same-element-stamp
-          bug rasterized this strip light in every dark capture. */}
+    <>
+      <NoTransitions />
+      {/* Mode-differing token probe: --muted is light-gray in light mode, near-black in dark —
+          resolved by the CHROME stylesheet inside the iframe, keyed off the iframe html's mode
+          class (DashboardSurface colorMode prop). */}
       <div id="mode-probe" style={{ height: 24, background: 'var(--muted)' }} />
       <div style={{ position: 'relative', minHeight: 400 }}>
         <RGL
           className="layout"
+          width={width}
           layouts={{ lg: INITIAL }}
           breakpoints={{ lg: 0 }}
           cols={{ lg: 12 }}
@@ -74,60 +91,55 @@ function GridApp() {
           ))}
         </RGL>
       </div>
-    </SvgPageSurface>
+    </>
   );
 }
 
-function EditApp() {
+function EditBody() {
   return (
-    <SvgPageSurface>
-      <div role="region" aria-label="B2 fixture region" style={{ padding: 16, font: '14px sans-serif' }}>
-        <input id="b2input" type="text" style={{ width: 240, display: 'block', marginBottom: 12 }} />
-        <div
-          id="b2ce"
-          contentEditable
-          suppressContentEditableWarning
-          style={{ minHeight: 40, border: '1px solid #999', marginBottom: 12, padding: 4 }}
-        >
-          seed
-        </div>
-        <p id="b2p" style={{ userSelect: 'text' }}>
-          selectable paragraph text for the selection check spanning enough words to be unambiguous
-        </p>
+    <div role="region" aria-label="B2 fixture region" style={{ padding: 16, font: '14px sans-serif' }}>
+      <input id="b2input" type="text" style={{ width: 240, display: 'block', marginBottom: 12 }} />
+      <div
+        id="b2ce"
+        contentEditable
+        suppressContentEditableWarning
+        style={{ minHeight: 40, border: '1px solid #999', marginBottom: 12, padding: 4 }}
+      >
+        seed
       </div>
-    </SvgPageSurface>
+      <p id="b2p" style={{ userSelect: 'text' }}>
+        selectable paragraph text for the selection check spanning enough words to be unambiguous
+      </p>
+    </div>
   );
 }
 
-function StickyApp() {
+function StickyBody() {
   return (
-    <SvgPageSurface>
-      <div id="b2scroll" style={{ height: 200, overflow: 'auto' }}>
-        <div id="b2sticky" style={{ position: 'sticky', top: 0, height: 30, background: 'rgb(30, 30, 200)', color: '#fff' }}>
-          pinned row
-        </div>
-        <div style={{ height: 1200, background: 'linear-gradient(rgb(240,240,240), rgb(200,200,200))' }}>tall content</div>
+    <div id="b2scroll" style={{ height: 200, overflow: 'auto' }}>
+      <div id="b2sticky" style={{ position: 'sticky', top: 0, height: 30, background: 'rgb(30, 30, 200)', color: '#fff' }}>
+        pinned row
       </div>
-    </SvgPageSurface>
+      <div style={{ height: 1200, background: 'linear-gradient(rgb(240,240,240), rgb(200,200,200))' }}>tall content</div>
+    </div>
   );
 }
 
-function PopoverApp() {
-  const [, force] = useState(0);
+function PopoverBody() {
   return (
     <>
-      <SvgPageSurface>
-        <div
-          id="b2tile"
-          onClick={() => { state.tileClicks++; force((n) => n + 1); }}
-          style={{ height: 220, background: 'rgb(22, 160, 133)', color: '#fff', padding: 8 }}
-        >
-          tile under the portal
-        </div>
-      </SvgPageSurface>
+      <div
+        id="b2tile"
+        onClick={() => { state.tileClicks++; }}
+        style={{ height: 220, background: 'rgb(22, 160, 133)', color: '#fff', padding: 8 }}
+      >
+        tile under the portal
+      </div>
+      {/* A fixed overlay in the TOP document (chat panel / app modal over the dashboard): must
+          stay clickable above the iframe, must never land in the surface capture. */}
       {createPortal(
         <div style={{ position: 'fixed', top: 30, left: 30, zIndex: 50, background: '#fff', border: '1px solid #333', padding: 8 }}>
-          <button id="b2pop" onClick={() => { state.popClicks++; force((n) => n + 1); }}>popover action</button>
+          <button id="b2pop" onClick={() => { state.popClicks++; }}>popover action</button>
           <span>PORTAL_ONLY_TEXT</span>
         </div>,
         document.body,
@@ -137,43 +149,59 @@ function PopoverApp() {
 }
 
 // The REAL WindowedTile inside the REAL surface: a below-fold tile must be a busy ghost, then
-// hydrate on scroll. This is exactly the fixture jsdom can't provide (no layout): the original
-// IntersectionObserver implementation passed every jsdom test and was silently dead in real
-// engines (IO callbacks never fire for foreignObject descendants).
-function WindowedApp() {
+// hydrate when the TOP page scrolls — the tile's own gBCR is iframe-relative, so this is the
+// real-engine proof of the Phase 8c frame-composed visibility math (jsdom can't provide it).
+function WindowedBody() {
   return (
-    <SvgPageSurface>
+    <>
       <div style={{ height: 1800, background: 'rgb(238,238,238)' }}>spacer above the fold</div>
       <div style={{ height: 200 }}>
         <WindowedTile>
           <div id="b2wcontent" style={{ height: 200, background: 'rgb(22, 160, 133)' }}>hydrated tile</div>
         </WindowedTile>
       </div>
-    </SvgPageSurface>
+    </>
   );
 }
 
-const APPS: Record<string, () => React.ReactElement> = {
-  grid: GridApp,
-  edit: EditApp,
-  sticky: StickyApp,
-  popover: PopoverApp,
-  windowed: WindowedApp,
+const BODIES: Record<string, () => React.ReactElement> = {
+  grid: GridBody,
+  edit: EditBody,
+  sticky: StickyBody,
+  popover: PopoverBody,
+  windowed: WindowedBody,
 };
 
+let mounted: { root: Root; kind: string } | null = null;
+
+function renderApp(kind: string, root: Root, mode: 'light' | 'dark'): void {
+  const Body = BODIES[kind];
+  root.render(
+    <DashboardSurface colorMode={mode}>
+      <Body />
+    </DashboardSurface>,
+  );
+}
+
 function mount(kind: string, container: HTMLElement): void {
-  const App = APPS[kind];
-  createRoot(container).render(<App />);
+  mounted = { root: createRoot(container), kind };
+  renderApp(kind, mounted.root, 'light');
+}
+
+/** Switch the surface's color mode WITHOUT a rebuild (drives the prop, like the app does). */
+function setMode(mode: 'light' | 'dark'): void {
+  if (mounted) renderApp(mounted.kind, mounted.root, mode);
 }
 
 /**
- * Serialize the page's live surface, rasterize it (getImageData THROWS on taint), and report
- * which of the wanted [r,g,b] colors are present plus the captured dimensions.
+ * Serialize the live surface through the PRODUCTION dashboard capture path (story serializer —
+ * Phase 8 unified them), rasterize it (getImageData THROWS on taint), and report which of the
+ * wanted [r,g,b] colors are present plus the captured dimensions.
  */
 async function captureProbe(colors: Array<[number, number, number]>): Promise<{ untainted: boolean; found: boolean[]; w: number; h: number; xml: string }> {
-  const svg = findSurfaceSvg(document.body);
+  const svg = findStorySvg(document.body);
   if (!svg) throw new Error('no surface svg on page');
-  const xml = await serializeSurfaceSvg(svg);
+  const xml = await serializeStorySvg(svg);
   const img = await svgToImage(xml);
   const w = img.naturalWidth, h = img.naturalHeight;
   const c = document.createElement('canvas');
@@ -192,4 +220,4 @@ async function captureProbe(colors: Array<[number, number, number]>): Promise<{ 
   return { untainted: true, found, w, h, xml };
 }
 
-export const B2_DRIVER = { mount, captureProbe, state };
+export const B2_DRIVER = { mount, setMode, captureProbe, state };

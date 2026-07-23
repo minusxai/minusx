@@ -254,6 +254,9 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
       filterTypes: { [colId]: colType },
       yColumn: colId,
       position: { x: e.clientX, y: e.clientY },
+      // The click's coordinate space (Phase 8): inside the dashboard iframe surface the card
+      // must portal to THIS document's body, where clientX/Y are meaningful.
+      doc: td.ownerDocument,
     })
   }, [tableRows, colIndexMap, columnTypes])
 

@@ -26,6 +26,9 @@ import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile } from '@/lib/file-state/file-state';
 import { pushView, selectFileEditMode } from '@/store/uiSlice';
 import DashboardView from '@/components/views/DashboardView';
+import DashboardSurface from '@/components/views/shared/DashboardSurface';
+import { PageMarkerDevOverlay } from '@/components/views/story/PageMarkerDevOverlay';
+import { DashboardPublishHighlightsContext, useDashboardPublishHighlights } from '@/lib/context/dashboard-publish-highlights';
 import { DocumentContent, QuestionContent } from '@/lib/types';
 import { useCallback } from 'react';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
@@ -101,6 +104,11 @@ export default function DashboardContainerV2({ fileId, mode }: DashboardContaine
   const colorMode = useAppSelector(state => state.ui.colorMode);
   const dirtyFiles = useAppSelector(selectDirtyFiles, shallowEqual);
 
+  // Publish-highlights context is provided in the MAIN tree (PublishModal preview pane), but the
+  // view renders in the surface's NESTED React root — context never crosses root boundaries, so
+  // read it here and re-provide it around the view inside the surface (Phase 8).
+  const publishHighlights = useDashboardPublishHighlights();
+
   const handleChange = useCallback((updates: Partial<DocumentContent>) => {
     if (readOnly) return;
     editFile({ fileId, changes: { content: updates } });
@@ -147,26 +155,36 @@ export default function DashboardContainerV2({ fileId, mode }: DashboardContaine
   if (typeof fileId !== 'number') return null;
 
   return (
-    <DashboardView
-      document={mergedContent}
-      folderPath={folderPath}
-      fileId={fileId}
-      onChange={handleChange}
-      editMode={editMode}
-      isDirty={isDirty}
-      paramValues={paramValues}
-      lastExecutedParams={lastExecutedParams}
-      questionContents={questionContents}
-      fileState={fileState}
-      dirtyFiles={dirtyFiles}
-      onTextBlockContentChange={onTextBlockContentChange}
-      onQuestionEdit={onQuestionEdit}
-      onParamSubmit={onParamSubmit}
-      onAddQuestion={onAddQuestion}
-      onAddTextBlock={onAddTextBlock}
-      showDevMarkers={devMode}
-      colorMode={colorMode}
-      theme={(mergedContent as { theme?: string | null } | undefined)?.theme ?? null}
-    />
+    // Phase 8 (self-contained dashboards): the view renders inside DashboardSurface's iframe —
+    // live render and capture share one style universe. The dev marker overlay stays OUTSIDE the
+    // captured [data-file-id] subtree (live-DOM preview only, same contract as StoryView).
+    <div className="relative flex-1">
+      <PageMarkerDevOverlay enabled={devMode} colorMode={colorMode} />
+      <div data-file-id={fileId}>
+        <DashboardSurface colorMode={colorMode}>
+          <DashboardPublishHighlightsContext.Provider value={publishHighlights}>
+            <DashboardView
+              document={mergedContent}
+              folderPath={folderPath}
+              fileId={fileId}
+              onChange={handleChange}
+              editMode={editMode}
+              isDirty={isDirty}
+              paramValues={paramValues}
+              lastExecutedParams={lastExecutedParams}
+              questionContents={questionContents}
+              fileState={fileState}
+              dirtyFiles={dirtyFiles}
+              onTextBlockContentChange={onTextBlockContentChange}
+              onQuestionEdit={onQuestionEdit}
+              onParamSubmit={onParamSubmit}
+              onAddQuestion={onAddQuestion}
+              onAddTextBlock={onAddTextBlock}
+              theme={(mergedContent as { theme?: string | null } | undefined)?.theme ?? null}
+            />
+          </DashboardPublishHighlightsContext.Provider>
+        </DashboardSurface>
+      </div>
+    </div>
   );
 }

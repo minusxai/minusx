@@ -120,6 +120,23 @@ export const selectAppState = createSelector(
 );
 
 /**
+ * The ui.openModal payload for the top view-stack entry. Pure → unit-testable. dashboardId is
+ * carried for BOTH entry kinds whenever present: a question opened FROM a dashboard must tell
+ * the agent which dashboard it lives in (it was previously dropped for 'question' entries).
+ */
+export function openModalForTop(
+  top: import('./uiSlice').ViewStackItem,
+  fileState: import('@/lib/types').CompressedFileState | undefined,
+): NonNullable<import('@/lib/appState').AppStateUI['openModal']> {
+  return {
+    type: top.type,
+    fileId: top.fileId,
+    ...(top.dashboardId !== undefined ? { dashboardId: top.dashboardId } : {}),
+    ...(fileState ? { fileState } : {}),
+  };
+}
+
+/**
  * Attaches ui.openModal to appState when a question overlay is active (edit or create).
  * Includes the question's current CompressedFileState so the agent can read
  * its content for oldMatch values without calling ReadFiles.
@@ -141,14 +158,7 @@ export const selectAppStateWithUI = createSelector(
     return {
       appState: {
         ...appState,
-        ui: {
-          openModal: {
-            type: top.type,
-            fileId: top.fileId,
-            ...(top.type === 'create-question' ? { dashboardId: top.dashboardId } : {}),
-            ...(fileState ? { fileState } : {}),
-          },
-        },
+        ui: { openModal: openModalForTop(top, fileState) },
       },
       loading,
     };

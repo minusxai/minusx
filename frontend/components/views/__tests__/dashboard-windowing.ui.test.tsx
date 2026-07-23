@@ -15,8 +15,9 @@
  * ghost path explicitly.
  */
 import React from 'react';
-import { screen, act } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
+import { dashboardSurfaceDoc, withinDashboardSurface, dashboardViewBusy } from '@/test/helpers/dashboard-surface';
 import * as storeModule from '@/store/store';
 import DashboardContainerV2 from '@/components/containers/DashboardContainerV2';
 import { setFile } from '@/store/filesSlice';
@@ -89,10 +90,30 @@ function setup() {
   return testStore;
 }
 
+/** The raw jsdom top window. Inside the surface iframe, WindowedTile's frame-chain walk lands on
+ *  `iframeWindow.parent` — which in the vitest jsdom environment is NOT the same object as the
+ *  global `window` (a wrapper), so stamping innerHeight on `window` alone never reaches the
+ *  visibility check. A throwaway probe iframe's `contentWindow.parent` resolves the same raw
+ *  top-window object the walk sees (verified: identical to the surface iframe's parent). */
+let rawTopWin: Window | null = null;
+function rawTopWindow(): Window {
+  if (rawTopWin) return rawTopWin;
+  const probe = document.createElement('iframe');
+  document.body.appendChild(probe);
+  rawTopWin = probe.contentWindow!.parent;
+  probe.remove();
+  return rawTopWin;
+}
+
 /** jsdom rects are all-zero — a hugely NEGATIVE viewport makes `top < vh + overscan` false,
- *  so tiles read as off-screen and stay ghosts until scrolled/forced. */
-const setViewportHeight = (h: number) =>
-  Object.defineProperty(window, 'innerHeight', { value: h, configurable: true, writable: true });
+ *  so tiles read as off-screen and stay ghosts until scrolled/forced. Stamped on BOTH the global
+ *  `window` and the raw top window (see rawTopWindow) so the check inside the surface iframe
+ *  reads the same value. */
+const setViewportHeight = (h: number) => {
+  for (const w of new Set<Window>([window, rawTopWindow()])) {
+    Object.defineProperty(w, 'innerHeight', { value: h, configurable: true, writable: true });
+  }
+};
 
 beforeEach(() => {
   setViewportHeight(-10_000);
@@ -103,53 +124,69 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** Wait for the ghost to commit inside the surface iframe (Renderer_v2 Phase 8: the dashboard
+ *  renders in DashboardSurface's iframe via a nested React root that commits ASYNCHRONOUSLY —
+ *  waiting for the ghost first makes the tile-content absence checks non-vacuous). */
+async function findGhost(): Promise<Element> {
+  await waitFor(() => {
+    expect(dashboardSurfaceDoc()?.querySelector('[data-mx-tile-ghost]')).toBeTruthy();
+  });
+  return dashboardSurfaceDoc()!.querySelector('[data-mx-tile-ghost]')!;
+}
+
 describe('dashboard tile windowing', () => {
-  it('off-viewport question tiles render as BUSY ghosts (no tile content, data-mx-busy stamped)', () => {
+  it('off-viewport question tiles render as BUSY ghosts (no tile content, data-mx-busy stamped)', async () => {
     const store = setup();
     renderWithProviders(<DashboardContainerV2 fileId={DASH_ID} mode="view" />, { store });
 
-    expect(screen.queryByLabelText(`Question content ${Q1_ID}`)).not.toBeInTheDocument();
-    const ghost = document.querySelector('[data-mx-tile-ghost]');
-    expect(ghost).toBeTruthy();
-    expect(ghost!.getAttribute('data-mx-busy')).toBe('true');
+    const ghost = await findGhost();
+    expect(withinDashboardSurface().queryByLabelText(`Question content ${Q1_ID}`)).not.toBeInTheDocument();
+    expect(ghost.getAttribute('data-mx-busy')).toBe('true');
   });
 
   it('mounts the real tile when a scroll brings it into the overscan window', async () => {
     const store = setup();
     renderWithProviders(<DashboardContainerV2 fileId={DASH_ID} mode="view" />, { store });
-    expect(screen.queryByLabelText(`Question content ${Q1_ID}`)).not.toBeInTheDocument();
+    await findGhost();
+    expect(withinDashboardSurface().queryByLabelText(`Question content ${Q1_ID}`)).not.toBeInTheDocument();
 
     setViewportHeight(768);
+    // WindowedTile listens capture-phase on every document up the frame chain — a scroll on the
+    // TOP document still reaches tiles inside the surface iframe.
     act(() => { document.dispatchEvent(new Event('scroll')); });
     // The scroll check is rAF-throttled — let the frame fire.
     await act(async () => { await new Promise((r) => requestAnimationFrame(() => r(null))); });
 
-    expect(await screen.findByLabelText(`Question content ${Q1_ID}`)).toBeInTheDocument();
-    expect(document.querySelector('[data-mx-tile-ghost]')).toBeNull();
+    expect(await withinDashboardSurface().findByLabelText(`Question content ${Q1_ID}`)).toBeInTheDocument();
+    expect(dashboardSurfaceDoc()!.querySelector('[data-mx-tile-ghost]')).toBeNull();
   });
 
   it('the force-mount event hydrates every ghost (the capture contract)', async () => {
     const store = setup();
     renderWithProviders(<DashboardContainerV2 fileId={DASH_ID} mode="view" />, { store });
-    expect(screen.queryByLabelText(`Question content ${Q1_ID}`)).not.toBeInTheDocument();
+    await findGhost();
+    expect(withinDashboardSurface().queryByLabelText(`Question content ${Q1_ID}`)).not.toBeInTheDocument();
 
+    // Ghosts listen for the force-mount broadcast on the TOP document (readiness.ts contract).
     act(() => { document.dispatchEvent(new CustomEvent(FORCE_MOUNT_TILES_EVENT)); });
 
-    expect(await screen.findByLabelText(`Question content ${Q1_ID}`)).toBeInTheDocument();
-    expect(document.querySelector('[data-mx-tile-ghost]')).toBeNull();
+    expect(await withinDashboardSurface().findByLabelText(`Question content ${Q1_ID}`)).toBeInTheDocument();
+    expect(dashboardSurfaceDoc()!.querySelector('[data-mx-tile-ghost]')).toBeNull();
   });
 
   it('waitForFileViewReady force-mounts ghosts and only settles once they are gone', async () => {
     const store = setup();
     renderWithProviders(<DashboardContainerV2 fileId={DASH_ID} mode="view" />, { store });
-    expect(screen.queryByLabelText(`Question content ${Q1_ID}`)).not.toBeInTheDocument();
+    await findGhost();
+    expect(withinDashboardSurface().queryByLabelText(`Question content ${Q1_ID}`)).not.toBeInTheDocument();
 
     await act(async () => {
       await waitForFileViewReady(DASH_ID, { timeoutMs: 3000, settleMs: 30, pollMs: 15 });
     });
 
-    expect(screen.getByLabelText(`Question content ${Q1_ID}`)).toBeInTheDocument();
-    // Settled means NO busy markers remain in the view (the mounted stand-in is not busy).
-    expect(document.querySelector('[data-file-id] [data-mx-busy="true"]')).toBeNull();
+    expect(withinDashboardSurface().getByLabelText(`Question content ${Q1_ID}`)).toBeInTheDocument();
+    // Settled means NO busy markers remain in the view — top document OR inside the surface
+    // iframe (the mounted stand-in is not busy).
+    expect(dashboardViewBusy()).toBe(false);
   });
 });
