@@ -53,16 +53,30 @@ export default function ImageAnnotatorDialog({ isOpen, onClose, imageSrc, title 
   const [note, setNote] = useState('');
   const [brushColor, setBrushColor] = useState<string>(DEFAULT_BRUSH);
 
+  // Reset per-crop session state the instant a NEW crop opens — during render (React's "adjust
+  // state when a prop changes" pattern), NOT in the image-load effect below. Resetting in a
+  // passive effect is racy: the effect can be flushed AFTER the user has already typed a note —
+  // the dialog body mounts through a <Portal>, so its note field becomes queryable/typeable in a
+  // commit before the effect runs — and its `setNote('')` then silently clobbers that note. A
+  // render-phase reset runs before any effect or event, so typed input can never be wiped by it.
+  const sessionRef = useRef<string | null>(null);
+  const activeSrc = isOpen ? imageSrc : null;
+  if (activeSrc !== sessionRef.current) {
+    sessionRef.current = activeSrc;
+    if (activeSrc) {
+      setNote('');
+      setBrushColor(DEFAULT_BRUSH);
+      setReady(false);
+      setLoadError(false);
+      undoStackRef.current = [];
+    }
+  }
+
   // Load the image whenever the dialog opens, then draw once BOTH the image and the
   // canvas exist. The dialog content mounts asynchronously (portal + presence), so the
   // image can finish loading before the canvas is in the DOM — poll a few frames for it.
   useEffect(() => {
     if (!isOpen || !imageSrc) return;
-    setReady(false);
-    setLoadError(false);
-    setNote('');
-    setBrushColor(DEFAULT_BRUSH);
-    undoStackRef.current = [];
     let cancelled = false;
     let attempts = 0;
     const img = new Image();
