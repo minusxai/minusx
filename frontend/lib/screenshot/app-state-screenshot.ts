@@ -18,7 +18,8 @@
  */
 import type { AppState } from '@/lib/appState';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
-import { captureFileViewBlob } from './capture';
+import { captureFileViewWithReadiness } from './capture';
+import type { FileViewReadiness } from './readiness';
 import { AGENT_IMAGE_MAX_PX } from './constants';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { facetHash } from '@/lib/projection/facets';
@@ -37,8 +38,8 @@ let lastShot: Shot | null = null;
  * swap the browser-only capture+upload for fakes.
  */
 export const _internal = {
-  capture: (id: number, colorMode: ColorMode, markers: boolean): Promise<Blob> =>
-    captureFileViewBlob(id, { colorMode, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg', markers }),
+  capture: (id: number, colorMode: ColorMode, markers: boolean): Promise<{ blob: Blob; readiness: FileViewReadiness }> =>
+    captureFileViewWithReadiness(id, { colorMode, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg', markers }),
   upload: (blob: Blob): Promise<string> => uploadBlobOrEmbed(blob, 'file.jpg', 'image/jpeg'),
   reset(): void {
     lastShot = null;
@@ -101,9 +102,12 @@ async function captureNow(appState: AppState, colorMode: ColorMode): Promise<str
   const info = appStateShotKey(appState, colorMode);
   if (!info) return null;
   if (lastShot?.key === info.key) return lastShot.url;
-  const blob = await _internal.capture(info.id, colorMode, markersEnabledForAppState(appState));
+  const { blob, readiness } = await _internal.capture(info.id, colorMode, markersEnabledForAppState(appState));
   const url = await _internal.upload(blob);
-  lastShot = { key: info.key, url };
+  // Never CACHE a mid-load capture: the cache key hashes content + query results, which may not
+  // change again after the pending renders finish — a cached spinner shot would then be re-sent
+  // for every subsequent message. An unsettled shot is used once and recaptured next send.
+  if (readiness.settled) lastShot = { key: info.key, url };
   return url;
 }
 
