@@ -113,6 +113,6 @@ describe('CreateQuestionModalContainer — context path resolution', () => {
       { store: testStore },
     );
 
-    expect(await screen.findByLabelText('GUI')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Semantic Query')).toBeInTheDocument();
   });
 });

@@ -810,10 +810,13 @@ function ModelCard({
   const metricRow = (mt: SemanticMetricV2, j: number) => (
     <VStack key={j} align="stretch" gap={1} px={canEdit ? 2 : 0} py={canEdit ? 1 : 0}
       borderBottom="1px solid" borderColor="border.muted" _last={{ borderBottom: 'none' }}>
-      <HStack gap={2} align="center" flexWrap="wrap">
+      {/* Controls wrap INSIDE the left container; the delete button stays
+          pinned top-right instead of drifting onto a wrapped line. */}
+      <HStack gap={2} align={canEdit ? 'start' : 'center'}>
+        <HStack gap={2} align="center" flexWrap="wrap" flex={1} minW={0}>
         {canEdit ? (
           <>
-            <DraftInput aria-label={`semantic-model-${i}-metric-${j}-name`} maxW="180px"
+            <DraftInput aria-label={`semantic-model-${i}-metric-${j}-name`} maxW="140px"
               value={mt.name} placeholder="name" onCommit={(v) => patchMetric(j, { ...mt, name: v })} />
             <Text fontSize="xs" color="fg.subtle">=</Text>
             <SchemaOptionPicker label={`semantic-model-${i}-metric-${j}-type`} value={mt.type} minW="96px"
@@ -856,9 +859,6 @@ function ModelCard({
               </>
             )}
             {mt.verified === false && <UnverifiedBadge label={`semantic-model-${i}-metric-${j}-unverified`} />}
-            <Box flex={1} />
-            <DeleteRowButton label={`semantic-model-${i}-metric-${j}-delete`}
-              onClick={() => patchModel({ metrics: m.metrics.filter((_, k) => k !== j) })} />
           </>
         ) : (
           <Box flex={1}>
@@ -866,6 +866,13 @@ function ModelCard({
               mt.verified === false
                 ? <UnverifiedBadge label={`semantic-model-${i}-metric-${j}-unverified`} />
                 : undefined)}
+          </Box>
+        )}
+        </HStack>
+        {canEdit && (
+          <Box pt={1.5}>
+            <DeleteRowButton label={`semantic-model-${i}-metric-${j}-delete`}
+              onClick={() => patchModel({ metrics: m.metrics.filter((_, k) => k !== j) })} />
           </Box>
         )}
       </HStack>
