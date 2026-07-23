@@ -24,50 +24,45 @@ const WIDTH = 640;
 const HEIGHT = 400;
 
 /**
- * The canonical sample fragment: heading + prose, a Card-recipe stat pair, a Badge, table
- * rows, and a fake bar chart of divs colored by the chart tokens — representative shadcn
- * markup exercising exactly the tokens a theme swaps. Plain HTML with the shadcn utility
- * classes (the recipe classes are unioned into every jsx compile anyway).
+ * The specimen fragment (claude.ai/design-style theme card): kicker with the font pairing,
+ * the theme name huge in its display face, the themed <hr> (structural css layer), a swatch
+ * ramp read straight from the token contract, and a card + button + chart-token duo — the
+ * theme card shows the SYSTEM (type, tokens, radius, rules), not a fake report.
  */
-const SAMPLE = `
-<div class="bg-background text-foreground p-5 space-y-4" style="width:${WIDTH}px;min-height:${HEIGHT}px">
-  <div class="space-y-1">
-    <span class="inline-block rounded-md border border-border bg-secondary px-2 py-0.5 text-xs font-semibold text-secondary-foreground">Q3 REVIEW</span>
-    <h1 class="text-2xl font-bold tracking-tight">Revenue held while churn fell</h1>
-    <p class="text-sm text-muted-foreground">Monthly recurring revenue grew 8% as churn dropped to a two-year low.</p>
+function specimen(t: (typeof STORY_THEMES)[number]): string {
+  const fontLabel = t.fonts.body === t.fonts.display ? t.fonts.display : `${t.fonts.display} / ${t.fonts.body}`;
+  const swatches = ['--background', '--muted', '--border', '--chart-4', '--chart-3', '--chart-2', '--chart-5', '--chart-1', '--primary']
+    .map((v) => `<div class="h-6 flex-1 rounded-md border border-border" style="background:var(${v})"></div>`)
+    .join('');
+  const bars = [
+    ['--chart-2', 40], ['--chart-3', 62], ['--chart-4', 50], ['--chart-1', 95], ['--chart-5', 72],
+  ].map(([v, h]) => `<div class="flex-1 rounded-sm" style="height:${h}%;background:var(${v})"></div>`).join('');
+  return `
+<div class="bg-background text-foreground p-6" style="width:${WIDTH}px;min-height:${HEIGHT}px">
+  <div class="flex items-baseline justify-between">
+    <span class="text-xs font-semibold tracking-wide text-primary">${fontLabel}</span>
+    <span class="text-xs text-muted-foreground">radius ${t.cssVars.light['--radius']}</span>
   </div>
-  <div class="grid grid-cols-2 gap-3">
-    <div class="rounded-lg border border-border bg-card p-3 text-card-foreground">
-      <p class="text-xs text-muted-foreground">MRR</p>
-      <p class="text-xl font-bold text-primary">$412k</p>
+  <h1 class="mt-1 text-6xl font-bold tracking-tight">${t.label}</h1>
+  <hr class="my-5" />
+  <div class="flex gap-1.5">${swatches}</div>
+  <div class="mt-5 grid grid-cols-5 gap-4">
+    <div class="col-span-3 rounded-lg border border-border bg-card p-4 text-card-foreground">
+      <p class="text-sm text-muted-foreground">The quick brown fox jumps over the lazy dog.</p>
+      <div class="mt-4 flex items-center gap-2">
+        <span class="inline-block rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">Continue</span>
+        <span class="inline-block rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-secondary-foreground">Q3</span>
+      </div>
     </div>
-    <div class="rounded-lg border border-border bg-card p-3 text-card-foreground">
-      <p class="text-xs text-muted-foreground">Churn</p>
-      <p class="text-xl font-bold">1.9%</p>
-    </div>
+    <div class="col-span-2 flex items-end gap-1.5 rounded-lg border border-border bg-card p-3">${bars}</div>
   </div>
-  <div class="flex items-end gap-2 h-24">
-    <div class="flex-1 rounded-sm" style="height:45%;background:var(--chart-1)"></div>
-    <div class="flex-1 rounded-sm" style="height:70%;background:var(--chart-2)"></div>
-    <div class="flex-1 rounded-sm" style="height:55%;background:var(--chart-3)"></div>
-    <div class="flex-1 rounded-sm" style="height:90%;background:var(--chart-4)"></div>
-    <div class="flex-1 rounded-sm" style="height:65%;background:var(--chart-5)"></div>
-  </div>
-  <table class="w-full text-sm">
-    <thead><tr class="border-b border-border text-left text-muted-foreground">
-      <th class="py-1 font-medium">Region</th><th class="py-1 font-medium">MRR</th><th class="py-1 font-medium">Change</th>
-    </tr></thead>
-    <tbody>
-      <tr class="border-b border-border"><td class="py-1">EMEA</td><td class="py-1">$168k</td><td class="py-1 text-primary font-semibold">+12%</td></tr>
-      <tr><td class="py-1">Americas</td><td class="py-1">$244k</td><td class="py-1">+5%</td></tr>
-    </tbody>
-  </table>
 </div>`;
+}
 
 /** Nocturne is dark-first (§5) — its preview shows the dark variant; the rest render light. */
 const DARK_PREVIEW = new Set(['nocturne']);
 
-function pageHtml(themeName: string, compiledCss: string, dark: boolean): string {
+function pageHtml(themeName: string, sample: string, compiledCss: string, dark: boolean): string {
   return `<!DOCTYPE html>
 <html class="${dark ? 'dark' : 'light'}">
 <head><meta charset="utf-8">
@@ -75,15 +70,15 @@ function pageHtml(themeName: string, compiledCss: string, dark: boolean): string
 <style>${compiledCss}</style>
 <style>html,body{margin:0;padding:0}</style>
 </head>
-<body><div data-theme="${themeName}">${SAMPLE}</div></body>
+<body><div data-theme="${themeName}">${sample}</div></body>
 </html>`;
 }
 
 async function main(): Promise<void> {
   // The REAL compile path (force = the format:'jsx' pipeline): shadcn token layer + recipe
   // classes + the [data-theme] token blocks — exactly what a saved story's compiledCss holds.
-  const compiledCss = await compileStoryCss(SAMPLE, { force: true });
-  if (!compiledCss) throw new Error('compileStoryCss returned no CSS for the sample fragment');
+  const compiledCss = await compileStoryCss(STORY_THEMES.map(specimen).join('\n'), { force: true });
+  if (!compiledCss) throw new Error('compileStoryCss returned no CSS for the specimen fragments');
 
   await fs.mkdir(OUT_DIR, { recursive: true });
   const browser = await chromium.launch();
@@ -98,7 +93,7 @@ async function main(): Promise<void> {
     for (const theme of STORY_THEMES) {
       const dark = DARK_PREVIEW.has(theme.name);
       await page.route('**/preview.html', (route) =>
-        route.fulfill({ body: pageHtml(theme.name, compiledCss, dark), contentType: 'text/html' }),
+        route.fulfill({ body: pageHtml(theme.name, specimen(theme), compiledCss, dark), contentType: 'text/html' }),
       );
       await page.goto('http://story-theme-preview.local/preview.html');
       await page.evaluate(() => document.fonts.ready);
