@@ -21,6 +21,10 @@ export const AppEvents = {
   FEEDBACK:                 'user:feedback',
   SHARE_LEAD:               'share:lead',
   SHARE_OPEN:               'share:open',
+  // Credit management: a user was blocked by an enforced limit; and a credit
+  // window was reset (manual by an admin, or the automatic weekly boundary).
+  RATE_LIMIT_HIT:           'credit:rate_limit_hit',
+  CREDIT_RESET:             'credit:reset',
 } as const;
 
 export type AppEventName = typeof AppEvents[keyof typeof AppEvents];
@@ -58,4 +62,9 @@ export interface AppEventPayloads {
   'share:lead':               BaseEventPayload & { fileId: number; nonce: string; storyName: string; name: string; email: string; userEmail: string; folderPath: string };
   // First open of a public share by a new visitor. `anonymous` = no lead captured.
   'share:open':               BaseEventPayload & { fileId: number; nonce: string; storyName: string; folderPath: string; anonymous: boolean; uid: number; userEmail?: string };
+  // A user hit an enforced credit limit (0-token usage event for auditing).
+  'credit:rate_limit_hit':    BaseEventPayload & { userId?: number; userEmail?: string; userRole?: string; window?: 'reset' | 'billing' };
+  // A credit window was reset. `scope`+`target` say what was reset (a user id,
+  // a role name, or 'company'); `auto` marks the weekly-boundary auto-reset.
+  'credit:reset':             BaseEventPayload & { scope: 'user' | 'role' | 'company'; target: string; auto?: boolean; actorUserId?: number; actorEmail?: string };
 }

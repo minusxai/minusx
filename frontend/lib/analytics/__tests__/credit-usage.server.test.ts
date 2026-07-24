@@ -107,9 +107,9 @@ describe('getCreditUsage', () => {
   });
 
   it('reset usage is a subset of billing usage (reset window ⊆ billing window)', async () => {
-    // An older row anchored to the start of the billing month: always inside the
-    // billing window, and (except on the 1st) outside the daily reset window.
-    await seed({ userId: 5, provider: 'openai', model: 'r', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 1.0, createdAtSql: "date_trunc('month', NOW()) + INTERVAL '1 second'" });
+    // An older row anchored to the start of the billing week: always inside the
+    // weekly billing window, and (except on the week's first day) outside the daily reset window.
+    await seed({ userId: 5, provider: 'openai', model: 'r', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 1.0, createdAtSql: "date_trunc('week', NOW()) + INTERVAL '1 second'" });
     // A row now: inside both windows.
     await seed({ userId: 5, provider: 'openai', model: 'r', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 0.5, createdAtSql: 'NOW()' });
 

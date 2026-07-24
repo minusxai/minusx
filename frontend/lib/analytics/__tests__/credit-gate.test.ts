@@ -1,7 +1,7 @@
-// Enforcement ON: mock @/lib/config so ENFORCE_CREDIT_LIMITS is true and the
-// individual allowances are tiny, then verify checkCreditGate blocks over-limit
-// users and allows under-limit ones. (The enforcement-OFF path is covered in
-// credit-usage.server.test.ts with the real, unset env.)
+// Enforcement ON: mock the org credit policy (getRawConfig) so limits are
+// ENFORCED with a tiny daily cap (100 credits) and an effectively-unreachable
+// weekly cap, then verify checkCreditGate blocks over-limit users. (The
+// enforcement-OFF path is covered in credit-usage.server.test.ts.)
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
@@ -9,15 +9,11 @@ vi.mock('@/lib/database/db-config', () => ({
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
 }));
-vi.mock('@/lib/config', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/config')>();
-  return {
-    ...actual,
-    ENFORCE_CREDIT_LIMITS: true,
-    resolveIndividualAllowance: () => 100_000,      // billing: effectively unreachable here
-    resolveIndividualResetAllowance: () => 100,     // reset: 100 credits ($0.10)
-  };
-});
+vi.mock('@/lib/data/configs.server', () => ({
+  getRawConfig: vi.fn(async () => ({
+    credits: { enforced: true, limits: { company: { daily: 100, weekly: 100_000 } } },
+  })),
+}));
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { checkCreditGate, creditEnforcer, CreditLimitError } from '@/lib/analytics/credit-usage.server';

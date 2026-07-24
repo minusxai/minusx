@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { costToCredits, remainingCredits, remainingInWindow } from '@/lib/analytics/credits';
 import type { CreditScope } from '@/lib/analytics/credits.types';
 import { parseBillingCycle, cycleStartSql, cycleNextResetSql, resolveCreditConfig, CREDIT_BUDGETS, CYCLE_MODE } from '@/lib/analytics/credit-budgets';
@@ -112,67 +112,5 @@ describe('parseBillingCycle', () => {
     expect(CYCLE_MODE).toBe('calendar');
     expect(cycleNextResetSql(parseBillingCycle('1d'))).toBe("date_trunc('day', NOW()) + INTERVAL '1 day'");
     expect(cycleNextResetSql(parseBillingCycle('1m'))).toBe("date_trunc('month', NOW()) + INTERVAL '1 month'");
-  });
-});
-
-describe('allowance resolvers', () => {
-  const ORIGINAL = process.env.CREDIT_ALLOWANCES;
-
-  beforeEach(() => {
-    vi.resetModules();
-  });
-  const ORIGINAL_RESET = process.env.CREDIT_RESET_ALLOWANCES;
-  afterEach(() => {
-    if (ORIGINAL === undefined) delete process.env.CREDIT_ALLOWANCES;
-    else process.env.CREDIT_ALLOWANCES = ORIGINAL;
-    if (ORIGINAL_RESET === undefined) delete process.env.CREDIT_RESET_ALLOWANCES;
-    else process.env.CREDIT_RESET_ALLOWANCES = ORIGINAL_RESET;
-    vi.resetModules();
-  });
-
-  it('defaults to 5,000 per user and 5,000 for org when unset', async () => {
-    delete process.env.CREDIT_ALLOWANCES;
-    const { resolveIndividualAllowance, resolveOrgAllowance } = await import('@/lib/config');
-    expect(resolveIndividualAllowance('admin')).toBe(5_000);
-    expect(resolveIndividualAllowance('viewer')).toBe(5_000);
-    expect(resolveOrgAllowance()).toBe(5_000);
-  });
-
-  it('applies role-wise overrides from CREDIT_ALLOWANCES', async () => {
-    process.env.CREDIT_ALLOWANCES = JSON.stringify({ admin: 5000, editor: 3000, viewer: 2000, org: 50000 });
-    const { resolveIndividualAllowance, resolveOrgAllowance } = await import('@/lib/config');
-    expect(resolveIndividualAllowance('admin')).toBe(5000);
-    expect(resolveIndividualAllowance('editor')).toBe(3000);
-    expect(resolveIndividualAllowance('viewer')).toBe(2000);
-    expect(resolveOrgAllowance()).toBe(50000);
-  });
-
-  it('falls back to the default for a role missing from the override', async () => {
-    process.env.CREDIT_ALLOWANCES = JSON.stringify({ admin: 5000 });
-    const { resolveIndividualAllowance, resolveOrgAllowance } = await import('@/lib/config');
-    expect(resolveIndividualAllowance('viewer')).toBe(5_000);
-    expect(resolveOrgAllowance()).toBe(5_000);
-  });
-
-  it('falls back to defaults when CREDIT_ALLOWANCES is invalid JSON', async () => {
-    process.env.CREDIT_ALLOWANCES = 'not-json';
-    const { resolveIndividualAllowance, resolveOrgAllowance } = await import('@/lib/config');
-    expect(resolveIndividualAllowance('admin')).toBe(5_000);
-    expect(resolveOrgAllowance()).toBe(5_000);
-  });
-
-  it('resolves reset-cycle allowances independently (default 1,000 / 1,000)', async () => {
-    delete process.env.CREDIT_RESET_ALLOWANCES;
-    const cfg = await import('@/lib/config');
-    expect(cfg.resolveIndividualResetAllowance('viewer')).toBe(1_000);
-    expect(cfg.resolveOrgResetAllowance()).toBe(1_000);
-  });
-
-  it('applies role-wise CREDIT_RESET_ALLOWANCES overrides', async () => {
-    process.env.CREDIT_RESET_ALLOWANCES = JSON.stringify({ viewer: 200, org: 3000 });
-    const cfg = await import('@/lib/config');
-    expect(cfg.resolveIndividualResetAllowance('viewer')).toBe(200);
-    expect(cfg.resolveIndividualResetAllowance('admin')).toBe(1_000); // default fallback
-    expect(cfg.resolveOrgResetAllowance()).toBe(3000);
   });
 });

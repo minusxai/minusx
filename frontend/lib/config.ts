@@ -2,7 +2,6 @@ import 'server-only';
 import { join, resolve } from 'path';
 import { parseFrameAncestors } from '@/lib/auth/embed';
 import { parseTelemetryLevel } from '@/lib/telemetry';
-import { CREDIT_BUDGETS, resolveCreditConfig, parseBillingCycle, type BillingCycle, type CreditConfig } from '@/lib/analytics/credit-budgets';
 
 /**
  * Server-only environment configuration.
@@ -52,7 +51,6 @@ interface EnvironmentConfig {
    *  Off by default — when off (or when Chromium can't launch) renderStoryToImage returns
    *  { ok: false, reason: 'unavailable' } and callers degrade to today's no-image behavior. */
   HEADLESS_CAPTURE: boolean;
-  CREDITS_ENABLED: boolean;
   SHARE_GUEST_CHAT_ENABLED: boolean;
   LOCAL_UPLOAD_PATH: string;
   MXFOOD_DUCKDB_URL: string;
@@ -155,7 +153,6 @@ const config: EnvironmentConfig = {
   HEADLESS_CAPTURE: process.env.HEADLESS_CAPTURE === '1' || process.env.HEADLESS_CAPTURE === 'true',
   // Whether the credits usage module (Settings card + sidebar donuts) is shown.
   // Off unless explicitly enabled per deploy.
-  CREDITS_ENABLED: process.env.CREDITS_ENABLED === 'true',
   // Anonymous guest chat on public shares is OFF by default — an open link drives real
   // LLM spend, so it's opt-in per deploy and acts as an instant kill-switch.
   SHARE_GUEST_CHAT_ENABLED: process.env.SHARE_GUEST_CHAT_ENABLED === 'true',
@@ -263,77 +260,6 @@ function parseEventForwardRules(raw: string | undefined): EventForwardRule[] {
 /** Webhook fan-out rules for app-events (Slack channels, central ingest, etc.). */
 export const EVENTS_FORWARD_RULES: EventForwardRule[] = parseEventForwardRules(config.EVENTS_FORWARD_RULES);
 
-// --- Credits / billing allowances -----------------------------------------
-/**
- * Effective credit config: the CREDIT_BUDGETS defaults deep-merged with the
- * CREDIT_CONFIG env JSON (a partial with any of the CREDIT_BUDGETS fields —
- * weights, cycles, default allowances, max). Invalid JSON logs + falls back.
- */
-function parseCreditConfig(raw: string | undefined): CreditConfig {
-  if (!raw || !raw.trim()) return CREDIT_BUDGETS;
-  try {
-    return resolveCreditConfig(JSON.parse(raw));
-  } catch (e) {
-    console.error('[config] CREDIT_CONFIG is not valid JSON — using defaults:', e);
-    return CREDIT_BUDGETS;
-  }
-}
-export const CREDIT_CONFIG: CreditConfig = parseCreditConfig(process.env.CREDIT_CONFIG);
-
-/**
- * Parse a role-wise JSON of credit allowances, e.g.
- * { "admin": 10000, "editor": 10000, "viewer": 10000, "org": 100000 }.
- * The special key "org" sets the org-wide allowance. Invalid JSON is logged
- * and ignored (callers fall back to the CREDIT_BUDGETS defaults).
- */
-function parseCreditAllowances(raw: string | undefined, envName: string): Record<string, number> {
-  if (!raw || !raw.trim()) return {};
-  try {
-    const obj = JSON.parse(raw);
-    const out: Record<string, number> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      const n = Number(value);
-      if (Number.isFinite(n)) out[key] = n;
-    }
-    return out;
-  } catch (e) {
-    console.error(`[config] ${envName} is not valid JSON ({ "<role>": <credits> }):`, e);
-    return {};
-  }
-}
-
-/** Role-wise BILLING-cycle allowance overrides (empty when unset). */
-export const CREDIT_ALLOWANCES: Record<string, number> = parseCreditAllowances(process.env.CREDIT_ALLOWANCES, 'CREDIT_ALLOWANCES');
-/** Role-wise RESET-cycle allowance overrides (empty when unset). */
-export const CREDIT_RESET_ALLOWANCES: Record<string, number> = parseCreditAllowances(process.env.CREDIT_RESET_ALLOWANCES, 'CREDIT_RESET_ALLOWANCES');
-
-/** Billing-cycle allowance for an individual user, keyed by role. */
-export function resolveIndividualAllowance(role: string): number {
-  return CREDIT_ALLOWANCES[role] ?? CREDIT_CONFIG.defaultIndividualAllowance;
-}
-/** Billing-cycle allowance for the whole org. */
-export function resolveOrgAllowance(): number {
-  return CREDIT_ALLOWANCES.org ?? CREDIT_CONFIG.defaultOrgAllowance;
-}
-/** Reset-cycle allowance for an individual user, keyed by role. */
-export function resolveIndividualResetAllowance(role: string): number {
-  return CREDIT_RESET_ALLOWANCES[role] ?? CREDIT_CONFIG.defaultIndividualResetAllowance;
-}
-/** Reset-cycle allowance for the whole org. */
-export function resolveOrgResetAllowance(): number {
-  return CREDIT_RESET_ALLOWANCES.org ?? CREDIT_CONFIG.defaultOrgResetAllowance;
-}
-
-/**
- * Whether credit limits are ENFORCED (block/gate over-limit usage) vs. only
- * tracked + displayed. Off unless CREDIT limits are explicitly enabled.
- */
-export const ENFORCE_CREDIT_LIMITS: boolean = process.env.ENFORCE_CREDIT_LIMITS === 'true';
-
-/** BILLING-cycle window: CREDIT_BILLING_CYCLE env > CREDIT_CONFIG.defaultBillingCycle > default. */
-export const BILLING_CYCLE: BillingCycle = parseBillingCycle(process.env.CREDIT_BILLING_CYCLE, CREDIT_CONFIG.defaultBillingCycle, CREDIT_CONFIG.maxBillingCycleDays);
-/** RESET-cycle window: CREDIT_RESET_CYCLE env > CREDIT_CONFIG.defaultResetCycle > default. */
-export const RESET_CYCLE: BillingCycle = parseBillingCycle(process.env.CREDIT_RESET_CYCLE, CREDIT_CONFIG.defaultResetCycle, CREDIT_CONFIG.maxBillingCycleDays);
 export const DB_TYPE = config.DB_TYPE;
 export const DATABASE_URL = config.DATABASE_URL;
 export const PGLITE_DATA_DIR_ENV = config.PGLITE_DATA_DIR;
@@ -355,7 +281,6 @@ export const OBJECT_STORE_PUBLIC_URL = config.OBJECT_STORE_PUBLIC_URL;
 export const USE_BASE64_UPLOADS = config.USE_BASE64_UPLOADS;
 export const DISABLE_APP_STATE_IMAGES = config.DISABLE_APP_STATE_IMAGES;
 export const HEADLESS_CAPTURE = config.HEADLESS_CAPTURE;
-export const CREDITS_ENABLED = config.CREDITS_ENABLED;
 export const SHARE_GUEST_CHAT_ENABLED = config.SHARE_GUEST_CHAT_ENABLED;
 export const MAX_CONCURRENT_QUERIES = config.MAX_CONCURRENT_QUERIES;
 export const QUERY_SERVER_TIMEOUT_MS = config.QUERY_SERVER_TIMEOUT_MS;

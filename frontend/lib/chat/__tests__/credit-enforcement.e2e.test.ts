@@ -1,20 +1,20 @@
-// Deep credit enforcement: with ENFORCE_CREDIT_LIMITS on (config mocked) and a
-// user over their reset allowance, a real conversation turn must be blocked at
-// the orchestrator's universal LLM call site (`beforeLlmCall`) — erroring with
-// the credit message and making NO LLM call — not at any entry-point check.
+// Deep credit enforcement: with the org credit policy ENFORCING a 100-credit
+// daily cap (getRawConfig mocked) and a user over it, a real conversation turn
+// must be blocked at the orchestrator's universal LLM call site (`beforeLlmCall`)
+// — erroring with the credit message and making NO LLM call.
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
 }));
-vi.mock('@/lib/config', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/config')>();
+vi.mock('@/lib/data/configs.server', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/data/configs.server')>();
   return {
     ...actual,
-    ENFORCE_CREDIT_LIMITS: true,
-    resolveIndividualResetAllowance: () => 100,   // 100-credit daily cap
-    resolveIndividualAllowance: () => 1_000_000,  // billing effectively unreachable
+    getRawConfig: vi.fn(async () => ({
+      credits: { enforced: true, limits: { company: { daily: 100, weekly: 1_000_000 } } },
+    })),
   };
 });
 

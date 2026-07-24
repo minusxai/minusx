@@ -137,6 +137,40 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
 
   if (config.llm !== undefined && validateLlmConfig(config.llm) != null) return false;
 
+  if (config.credits !== undefined && !validateCreditsConfig(config.credits)) return false;
+
+  return true;
+}
+
+/** Validate the `credits` config section (admin credit levers). Lenient shape check. */
+function validateCreditsConfig(credits: unknown): boolean {
+  if (typeof credits !== 'object' || credits === null) return false;
+  const c = credits as Record<string, unknown>;
+  for (const flag of ['enabled', 'enforced'] as const) {
+    if (c[flag] !== undefined && typeof c[flag] !== 'boolean') return false;
+  }
+  for (const cyc of ['dailyCycle', 'weeklyCycle'] as const) {
+    if (c[cyc] !== undefined && typeof c[cyc] !== 'string') return false;
+  }
+  if (c.weights !== undefined && (typeof c.weights !== 'object' || c.weights === null)) return false;
+  if (c.limits !== undefined) {
+    if (typeof c.limits !== 'object' || c.limits === null) return false;
+    const limits = c.limits as Record<string, unknown>;
+    const okScopeLimits = (v: unknown): boolean => {
+      if (typeof v !== 'object' || v === null) return false;
+      const s = v as Record<string, unknown>;
+      return ['daily', 'weekly'].every((k) => s[k] === undefined || typeof s[k] === 'number');
+    };
+    if (limits.company !== undefined && !okScopeLimits(limits.company)) return false;
+    for (const bucket of ['roles', 'users'] as const) {
+      if (limits[bucket] !== undefined) {
+        if (typeof limits[bucket] !== 'object' || limits[bucket] === null) return false;
+        for (const v of Object.values(limits[bucket] as Record<string, unknown>)) {
+          if (!okScopeLimits(v)) return false;
+        }
+      }
+    }
+  }
   return true;
 }
 
