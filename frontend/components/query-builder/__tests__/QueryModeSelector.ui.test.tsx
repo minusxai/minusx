@@ -26,6 +26,14 @@ describe('QueryModeSelector', () => {
     expect(screen.getByLabelText('Semantic')).toBeTruthy();
   });
 
+  it('gives SQL the same tooltip treatment as the other modes', async () => {
+    renderWithProviders(
+      <QueryModeSelector mode="sql" onModeChange={vi.fn()} showVizTab={false} />
+    );
+    fireEvent.focus(screen.getByLabelText('SQL'));
+    expect(await screen.findByText('Write and run SQL against the selected live connection')).toBeInTheDocument();
+  });
+
   it('switches to Semantic when enabled', () => {
     const onModeChange = vi.fn();
     renderWithProviders(

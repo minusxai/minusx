@@ -29,7 +29,7 @@ function resolveAccent(color: string): string {
 export default function TabSwitcher({ tabs, activeTab, onTabChange, accentColor = 'accent.teal' }: TabSwitcherProps) {
   const accent = resolveAccent(accentColor);
   return (
-    <TooltipProvider delayDuration={200}>
+    <TooltipProvider>
       <div className="flex items-center gap-0.5 rounded-md border border-border bg-card p-0.5">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.value;

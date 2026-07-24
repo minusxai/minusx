@@ -30,7 +30,7 @@ import {
   IconButton,
   Collapsible,
 } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import {
   LuUpload,
   LuRefreshCw,

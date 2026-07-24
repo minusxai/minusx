@@ -378,7 +378,7 @@ function QuestionVisualizationInner({
             ) : data ? (
               <>
                 {data.finalQuery && showJson && (
-                  <TooltipProvider delayDuration={200}>
+                  <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger className="absolute top-1 right-1 z-[5] cursor-help text-muted-foreground outline-none transition-colors duration-100 hover:text-primary">
                       <LuCode size={14} />
