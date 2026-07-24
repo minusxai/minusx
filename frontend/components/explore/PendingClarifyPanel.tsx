@@ -5,8 +5,9 @@ import { Box, HStack, Text, VStack } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
 import { selectConversation } from '@/store/chatSlice';
 import UserInputComponent from './UserInputComponent';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 
-const CLARIFY_TOOLS: ReadonlySet<string> = new Set(['Clarify', 'ClarifyFrontend']);
+const CLARIFY_TOOLS: ReadonlySet<string> = immutableSet(['Clarify', 'ClarifyFrontend']);
 
 interface PendingClarifyPanelProps {
   conversationID: number;
