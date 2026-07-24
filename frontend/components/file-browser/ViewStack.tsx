@@ -22,6 +22,7 @@ export default function ViewStackOverlay() {
     <>
       <style>{SLIDE_IN_CSS}</style>
       <Box
+        data-mx-theme-host=""
         position="absolute"
         inset="0"
         zIndex={50}

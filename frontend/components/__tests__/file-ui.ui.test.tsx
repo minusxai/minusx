@@ -369,7 +369,9 @@ describe('ViewStack navigation cleanup', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Content stack')).toBeInTheDocument();
+      const overlay = screen.getByLabelText('Content stack');
+      expect(overlay).toBeInTheDocument();
+      expect(overlay).toHaveAttribute('data-mx-theme-host');
     });
   });
 
