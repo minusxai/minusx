@@ -41,7 +41,7 @@ vi.mock('@/lib/story-surface', async (importOriginal) => {
 });
 
 import AgentHtml from '../AgentHtml';
-import { STORY_SVG_ATTR } from '@/lib/story-surface';
+import { STORY_FLUID_SHIM_CSS, STORY_SVG_ATTR } from '@/lib/story-surface';
 
 const STORY = '<h1>Headline</h1><p>Body copy that would reflow at a narrower width.</p>';
 
@@ -76,6 +76,13 @@ const fireResize = () => {
 };
 
 describe('fluid: the surface tracks the MEASURED container width, not the logical canvas', () => {
+  it('removes the historical max-width from the authored story shell only', () => {
+    expect(STORY_FLUID_SHIM_CSS).toContain(
+      '[data-mx-story-root]>[data-design="tw"]{width:100%!important;max-width:none!important}',
+    );
+    expect(STORY_FLUID_SHIM_CSS).not.toContain('[data-mx-story-root] *');
+  });
+
   it('applies the measured width at mount (svg + foreignObject), overriding the width prop', async () => {
     measured = 1104;
     render(<AgentHtml html={STORY} fluid width={1280} colorMode="light" />);
