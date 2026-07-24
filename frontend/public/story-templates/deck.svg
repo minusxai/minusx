@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" fill="none">
+  <!-- Deck: one full slide (huge spoken headline, one chart, footer with page number) + the next slide peeking -->
+  <rect width="640" height="400" fill="#f8f7f5"/>
+  <!-- the slide -->
+  <rect x="40" y="32" width="560" height="312" rx="6" stroke="#26251f" stroke-width="2.5" fill="#ffffff"/>
+  <!-- eyebrow -->
+  <rect x="76" y="66" width="96" height="8" rx="2" fill="#d64a33"/>
+  <!-- spoken headline: huge, flush left, few words -->
+  <rect x="76" y="90" width="356" height="30" rx="3" fill="#26251f"/>
+  <rect x="76" y="128" width="252" height="30" rx="3" fill="#26251f"/>
+  <!-- ONE chart -->
+  <g>
+    <rect x="76" y="184" width="356" height="102" rx="4" stroke="#dcd9d2" stroke-width="2" fill="#fdfdfc"/>
+    <rect x="100" y="252" width="34" height="22" rx="2" fill="#c9c6bf"/>
+    <rect x="152" y="238" width="34" height="36" rx="2" fill="#c9c6bf"/>
+    <rect x="204" y="244" width="34" height="30" rx="2" fill="#c9c6bf"/>
+    <rect x="256" y="222" width="34" height="52" rx="2" fill="#c9c6bf"/>
+    <rect x="308" y="204" width="34" height="70" rx="2" fill="#d64a33"/>
+    <rect x="360" y="228" width="34" height="46" rx="2" fill="#c9c6bf"/>
+  </g>
+  <!-- takeaway line under the chart -->
+  <rect x="76" y="298" width="222" height="8" rx="2" fill="#a8a49c"/>
+  <!-- footer: deck title · page number -->
+  <line x1="76" y1="318" x2="564" y2="318" stroke="#e8e6e1" stroke-width="2"/>
+  <rect x="76" y="326" width="98" height="6" rx="2" fill="#c9c6bf"/>
+  <text x="564" y="333" text-anchor="end" font-family="system-ui, sans-serif" font-size="15" font-weight="700" fill="#26251f">07</text>
+  <!-- the giant divider numeral bleeding in from the slide's right (next act) -->
+  <text x="472" y="150" font-family="system-ui, sans-serif" font-size="96" font-weight="800" fill="#f0eeea">02</text>
+  <!-- next slide peeking below -->
+  <rect x="40" y="360" width="560" height="40" rx="6" stroke="#dcd9d2" stroke-width="2" fill="#ffffff"/>
+  <rect x="76" y="378" width="180" height="10" rx="2" fill="#e8e6e1"/>
+</svg>

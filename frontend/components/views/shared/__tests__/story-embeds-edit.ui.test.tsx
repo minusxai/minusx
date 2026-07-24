@@ -69,11 +69,11 @@ describe('StoryEmbeds — question edit affordances', () => {
       />,
     );
     fireEvent.click(screen.getByLabelText('Edit saved 42-1'));
-    expect(onEditQuestion).toHaveBeenLastCalledWith({ kind: 'saved', questionId: 42, occurrence: 1, vizOverride: OVERRIDE });
+    expect(onEditQuestion).toHaveBeenLastCalledWith({ kind: 'saved', questionId: 42, vizOverride: OVERRIDE, ref: { format: 'html', occurrence: 1 } });
     fireEvent.click(screen.getByLabelText('Edit saved 7-0'));
-    expect(onEditQuestion).toHaveBeenLastCalledWith({ kind: 'saved', questionId: 7, occurrence: 0, vizOverride: OVERRIDE });
+    expect(onEditQuestion).toHaveBeenLastCalledWith({ kind: 'saved', questionId: 7, vizOverride: OVERRIDE, ref: { format: 'html', occurrence: 0 } });
     fireEvent.click(screen.getByLabelText('Edit saved 42-0'));
-    expect(onEditQuestion).toHaveBeenLastCalledWith({ kind: 'saved', questionId: 42, occurrence: 0, vizOverride: null });
+    expect(onEditQuestion).toHaveBeenLastCalledWith({ kind: 'saved', questionId: 42, vizOverride: null, ref: { format: 'html', occurrence: 0 } });
   });
 
   it('inline embeds get the SAME "Card actions" menu as saved cards, with an Edit question item', async () => {
@@ -100,7 +100,7 @@ describe('StoryEmbeds — question edit affordances', () => {
     expect(triggers).toHaveLength(2);
     fireEvent.click(triggers[1]);
     fireEvent.click(await screen.findByLabelText('Edit question'));
-    expect(onEditQuestion).toHaveBeenLastCalledWith({ kind: 'inline', index: 1, embed: embedB });
+    expect(onEditQuestion).toHaveBeenLastCalledWith({ kind: 'inline', embed: embedB, ref: { format: 'html', occurrence: 1 } });
   });
 
   it('shows no inline actions menu outside edit mode', () => {

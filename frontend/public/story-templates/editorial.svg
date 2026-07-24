@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" fill="none">
+  <!-- Editorial: hero (eyebrow, headline, standfirst) → chapter numeral + prose → wide chart → inverted interlude -->
+  <rect width="640" height="400" fill="#f8f7f5"/>
+  <!-- eyebrow -->
+  <rect x="48" y="42" width="86" height="9" rx="2" fill="#d64a33"/>
+  <!-- claim headline, two big lines -->
+  <rect x="48" y="66" width="400" height="26" rx="3" fill="#26251f"/>
+  <rect x="48" y="100" width="312" height="26" rx="3" fill="#26251f"/>
+  <!-- standfirst, narrow measure -->
+  <rect x="48" y="144" width="292" height="9" rx="2" fill="#a8a49c"/>
+  <rect x="48" y="160" width="248" height="9" rx="2" fill="#a8a49c"/>
+  <!-- chapter numeral + section prose -->
+  <text x="48" y="234" font-family="Georgia, serif" font-size="58" font-weight="700" fill="#dcd9d2">01</text>
+  <rect x="130" y="196" width="238" height="13" rx="2" fill="#4a4840"/>
+  <rect x="130" y="218" width="204" height="8" rx="2" fill="#c9c6bf"/>
+  <rect x="130" y="232" width="222" height="8" rx="2" fill="#c9c6bf"/>
+  <!-- wide evidence chart (breaks wider than the prose) -->
+  <rect x="48" y="262" width="544" height="86" rx="4" stroke="#dcd9d2" stroke-width="2" fill="#ffffff"/>
+  <polyline points="66,330 140,316 214,322 288,296 362,302 436,282 510,288 574,272" stroke="#d64a33" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="66,336 140,332 214,334 288,324 362,328 436,318 510,322 574,314" stroke="#c9c6bf" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 6"/>
+  <!-- inverted interlude band: one huge number -->
+  <rect x="0" y="368" width="640" height="32" fill="#26251f"/>
+  <rect x="252" y="380" width="92" height="9" rx="2" fill="#f8f7f5"/>
+  <rect x="354" y="382" width="42" height="5" rx="2" fill="#7a776e"/>
+  <!-- right column: the rest of the page is air on purpose -->
+  <rect x="470" y="66" width="122" height="8" rx="2" fill="#e8e6e1"/>
+  <rect x="470" y="82" width="102" height="8" rx="2" fill="#e8e6e1"/>
+  <rect x="470" y="98" width="114" height="8" rx="2" fill="#e8e6e1"/>
+</svg>

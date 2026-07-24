@@ -32,7 +32,10 @@ import { parseJsx, type JsxNode, type JsxElement } from '@/lib/jsx';
 import {
   STORY_UI_COMPONENTS, TooltipProvider, renderStoryNodes, AST_PATH_ATTR,
 } from '@/lib/story-ui';
-import { StoryEmbedProviders } from '@/components/views/shared/StoryEmbeds';
+import {
+  StoryEmbedProviders, InlineCardActionsMenu, type StoryQuestionEditRequest,
+} from '@/components/views/shared/StoryEmbeds';
+import type { NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
 import EmbeddedQuestionContainer from '@/components/containers/EmbeddedQuestionContainer';
 import StoryParamControl from '@/components/views/story/StoryParamControl';
@@ -80,6 +83,10 @@ export interface StoryJsxBodyProps {
   editable?: boolean;
   /** Fired with the updated JSX SOURCE after each blur-commit (AST write-back, never DOM scrape). */
   onChange?: (story: string) => void;
+  /** Edit mode: opens the question-embed modal (saved / override / ephemeral) with a jsx AST-path ref. */
+  onEditQuestion?: (req: StoryQuestionEditRequest) => void;
+  /** Edit mode: requests an inline `<Number>` query edit, carrying the embed's AST path. */
+  onEditNumber?: (req: NumberQueryEditRequest) => void;
   /** Imperative pending-edit access for AgentHtml's serialize() handle. */
   editApiRef?: RefObject<StoryJsxEditApi | null>;
 }
@@ -181,12 +188,17 @@ interface StoryJsxEmbedContextValue {
   /** Reader's current param values. */
   values: Record<string, unknown>;
   setParamValue: (name: string, v: unknown) => void;
+  /** Story edit mode — gates the embeds' edit affordances (actions menus, number edit). */
+  editable: boolean;
+  onEditQuestion?: (req: StoryQuestionEditRequest) => void;
+  onEditNumber?: (req: NumberQueryEditRequest) => void;
 }
 
 const StoryJsxEmbedContext = createContext<StoryJsxEmbedContextValue>({
   readOnly: true,
   values: {},
   setParamValue: () => {},
+  editable: false,
 });
 
 /** "300px" | 300 → clamped px height for an embed card (legacy sizeEmbedEl contract). */
@@ -205,9 +217,13 @@ function QuestionEmbedAdapter(props: Record<string, unknown>) {
   const extParams = ctx.externalParameters?.length ? ctx.externalParameters : undefined;
   const extValues = ctx.externalParameters?.length ? ctx.values : undefined;
   const astPath = props[AST_PATH_ATTR];
+  // Edit affordances need the write-back target: only a real AST path qualifies.
+  const editPath = ctx.editable && typeof astPath === 'string' ? astPath : undefined;
 
   // Saved question by id — the `data-question-id` placeholder's equivalent.
   if (typeof props.id === 'number') {
+    const questionId = props.id;
+    const vizOverride = vizEnvelopeFromAttr(props.viz) ?? null;
     return (
       <div
         {...{ [AST_PATH_ATTR]: astPath }}
@@ -216,14 +232,17 @@ function QuestionEmbedAdapter(props: Record<string, unknown>) {
         style={{ width: '100%', height: `${embedHeightPx(props.height, MIN_CHART_H, DEFAULT_CHART_H)}px` }}
       >
         <SmartEmbeddedQuestionContainer
-          questionId={props.id}
-          vizOverride={vizEnvelopeFromAttr(props.viz) ?? null}
+          questionId={questionId}
+          vizOverride={vizOverride}
           showTitle={true}
           readOnly={ctx.readOnly}
-          showActionsMenu={false}
+          showActionsMenu={ctx.editable}
           enableDrilldown={false}
           externalParameters={extParams}
           externalParamValues={extValues}
+          onEdit={ctx.onEditQuestion && editPath ? () => ctx.onEditQuestion!({
+            kind: 'saved', questionId, vizOverride, ref: { format: 'jsx', astPath: editPath },
+          }) : undefined}
         />
       </div>
     );
@@ -253,6 +272,12 @@ function QuestionEmbedAdapter(props: Record<string, unknown>) {
         enableDrilldown={false}
         filePath={ctx.filePath}
       />
+      {/* Same "Card actions" menu the saved cards get — inline cards have no title bar. */}
+      {ctx.onEditQuestion && editPath && (
+        <InlineCardActionsMenu
+          onEdit={() => ctx.onEditQuestion!({ kind: 'inline', embed, ref: { format: 'jsx', astPath: editPath } })}
+        />
+      )}
     </div>
   );
 }
@@ -261,14 +286,23 @@ function QuestionEmbedAdapter(props: Record<string, unknown>) {
 function NumberEmbedAdapter(props: Record<string, unknown>) {
   const ctx = useContext(StoryJsxEmbedContext);
   const embed = numberFromJsxAttrs(props);
+  const astPath = props[AST_PATH_ATTR];
   if (!embed) return null;
   const extValues = ctx.externalParameters?.length ? ctx.values : undefined;
+  // Jsx path: the edit request carries the AST path — the story view owns the source
+  // write-back (updateNumberQueryInJsx), unlike the legacy path's DOM-attribute apply.
+  const canEdit = ctx.editable && !!ctx.onEditNumber && !!embed.query && typeof astPath === 'string';
   return (
     <InlineNumber
       embed={embed}
       externalParamValues={extValues}
-      editable={false}
+      editable={ctx.editable}
       filePath={ctx.filePath}
+      onRequestEdit={canEdit ? () => ctx.onEditNumber!({
+        query: embed.query!,
+        connection: embed.connection,
+        astPath: astPath as string,
+      }) : undefined}
     />
   );
 }
@@ -317,7 +351,8 @@ function collectStoryParams(nodes: JsxNode[]): StoryParam[] {
 const NO_NODES: JsxNode[] = [];
 
 export default function StoryJsxBody({
-  doc, jsx, readOnly, paramValues, onParamValuesChange, filePath, colorMode, editable, onChange, editApiRef,
+  doc, jsx, readOnly, paramValues, onParamValuesChange, filePath, colorMode, editable, onChange,
+  onEditQuestion, onEditNumber, editApiRef,
 }: StoryJsxBodyProps) {
   const parsed = useMemo(() => parseJsx(jsx), [jsx]);
 
@@ -366,6 +401,9 @@ export default function StoryJsxBody({
     externalParameters: externalParameters.length ? externalParameters : undefined,
     values,
     setParamValue,
+    editable: !!editable && !readOnly,
+    onEditQuestion,
+    onEditNumber,
   };
 
   if (!parsed.ok) {

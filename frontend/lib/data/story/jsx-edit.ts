@@ -22,7 +22,7 @@
  */
 import {
   parseJsx, serializeJsx,
-  type JsxNode, type JsxElement, type JsxAttribute, type ValidationError,
+  type JsxNode, type JsxElement, type JsxAttribute, type JsonValue, type ValidationError,
 } from '@/lib/jsx';
 import { validateJsx, hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
@@ -81,6 +81,45 @@ function resolveByPath(roots: JsxNode[], path: string): JsxNode | null {
     list = node.type === 'element' ? node.children : [];
   }
   return node;
+}
+
+// ---------------------------------------------------------------------------
+// Attribute-level write-back (the question/number edit modals' commit path)
+// ---------------------------------------------------------------------------
+
+/**
+ * Set / replace / remove a STATIC attribute on an element, in place. `json === undefined`
+ * removes the attribute; any other value sets it (replacing an existing attr in position,
+ * appending a new one at the end).
+ */
+export function setStaticJsxAttr(el: JsxElement, name: string, json: JsonValue | undefined): void {
+  const idx = el.attributes.findIndex(a => a.name === name);
+  if (json === undefined) {
+    if (idx !== -1) el.attributes.splice(idx, 1);
+    return;
+  }
+  const attr: JsxAttribute = { name, value: { static: true, json }, start: 0, end: 0 };
+  if (idx !== -1) el.attributes[idx] = attr;
+  else el.attributes.push(attr);
+}
+
+/**
+ * Attribute-level write-back for the story-embed edit modals: parse `source`, resolve the
+ * element at `astPath` (the interpreter's `data-mx-ast` path), verify it is a `<tag>` component,
+ * hand it to `mutate` for attribute edits, and re-serialize the whole tree. Returns `source`
+ * UNCHANGED when the path doesn't resolve to a matching element, `mutate` returns false (its
+ * own staleness guard), or the source doesn't parse — a stale/hostile path must never corrupt
+ * a story body.
+ */
+export function updateJsxElementAtPath(
+  source: string, astPath: string, tag: string, mutate: (el: JsxElement) => boolean | void,
+): string {
+  const parsed = parseJsx(source);
+  if (!parsed.ok) return source;
+  const node = resolveByPath(parsed.nodes, astPath);
+  if (!node || node.type !== 'element' || !node.isComponent || node.tag !== tag) return source;
+  if (mutate(node) === false) return source;
+  return serializeJsx(parsed.nodes);
 }
 
 // ---------------------------------------------------------------------------

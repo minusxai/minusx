@@ -82,12 +82,12 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe('StoryView — question edit write-back', () => {
+describe('StoryView — question edit write-back (legacy html body)', () => {
   it('stages the viz override on the right saved-placeholder occurrence', () => {
     renderStory();
     const props = h.editorProps.at(-1)!;
     (props.onApplySavedViz as (req: unknown, viz: VizEnvelope) => void)(
-      { kind: 'saved', questionId: 42, occurrence: 1, vizOverride: null },
+      { kind: 'saved', questionId: 42, vizOverride: null, ref: { format: 'html', occurrence: 1 } },
       OVERRIDE,
     );
     expect(h.staged).toHaveLength(1);
@@ -104,12 +104,59 @@ describe('StoryView — question edit write-back', () => {
     const props = h.editorProps.at(-1)!;
     const edited = inlineEmbedToQuestionContent({ ...inlineEmbed, query: 'SELECT 2' });
     (props.onApplyInline as (req: unknown, content: unknown) => void)(
-      { kind: 'inline', index: 0, embed: inlineEmbed },
+      { kind: 'inline', embed: inlineEmbed, ref: { format: 'html', occurrence: 0 } },
       edited,
     );
     expect(h.staged).toHaveLength(1);
     const embeds = extractInlineQuestions(h.staged[0].story);
     // the projection's default table envelope is omitted on the way back — viz-less stays viz-less
     expect(embeds).toEqual([{ query: 'SELECT 2', connection: 'duckdb', height: '250px' }]);
+  });
+});
+
+// Paths: div=0 → [h1=0.0, saved Question=0.1, inline Question=0.2]
+const JSX_STORY = '<div className="s"><h1>T</h1><Question id={42} height="500px" /><Question query={`SELECT 1`} connection="duckdb" height="250px" /></div>';
+
+function renderJsxStory() {
+  return renderWithProviders(
+    <StoryView
+      content={{ description: null, story: JSX_STORY, format: 'jsx' } as StoryContent}
+      fileId={9}
+      headerEditMode
+      storyPath="/org/reports/growth"
+      storyName="Growth"
+      colorMode="light"
+    />,
+  );
+}
+
+describe('StoryView — question edit write-back (jsx body)', () => {
+  it('stages the viz override on the <Question> at the AST path', () => {
+    renderJsxStory();
+    const props = h.editorProps.at(-1)!;
+    (props.onApplySavedViz as (req: unknown, viz: VizEnvelope) => void)(
+      { kind: 'saved', questionId: 42, vizOverride: null, ref: { format: 'jsx', astPath: '0.1' } },
+      OVERRIDE,
+    );
+    expect(h.staged).toHaveLength(1);
+    const story = h.staged[0].story;
+    expect(story).toContain('id={42}');
+    expect(story).toContain('"version":2'); // the envelope landed as a viz attr
+    expect(story).toContain('height="500px"'); // sizing preserved
+  });
+
+  it('replaces the inline <Question> at the AST path with the edited content', () => {
+    renderJsxStory();
+    const props = h.editorProps.at(-1)!;
+    const edited = inlineEmbedToQuestionContent({ query: 'SELECT 2', connection: 'duckdb', height: '250px' });
+    (props.onApplyInline as (req: unknown, content: unknown) => void)(
+      { kind: 'inline', embed: { query: 'SELECT 1', connection: 'duckdb', height: '250px' }, ref: { format: 'jsx', astPath: '0.2' } },
+      edited,
+    );
+    expect(h.staged).toHaveLength(1);
+    const story = h.staged[0].story;
+    expect(story).toContain('SELECT 2');
+    expect(story).not.toContain('SELECT 1');
+    expect(story).toContain('id={42}'); // the saved embed is untouched
   });
 });

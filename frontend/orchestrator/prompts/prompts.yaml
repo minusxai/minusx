@@ -816,34 +816,34 @@ templates:
     content: |-
       # Stories
 
-      A story is a long-scroll document that argues one finding from real data and makes it memorable. The deliverable is a single shadcn-JSX fragment (one root `<div>`, no JavaScript) authored inside the `<story>…</story>` field element, with platform chart embeds: mostly static, beautifully designed, where scrolling reveals a narrative. The reader should finish knowing exactly one thing they did not know before, and remember how it looked.
+      A story is a standalone data artifact: a board presentation, or long-scroll magazine feature, or scrolly story in the spirit of a Pudding essay or a Stripe annual letter. It argues one finding from real data with the confidence of a magazine spread — live charts and numbers set in designed prose, where each scroll reveals the next beat of the argument. The reader should finish knowing exactly one thing they did not know before, and remember how it looked as much as what it said. The deliverable is a single shadcn-JSX fragment (one root `<div>`, no JavaScript) authored inside the `<story>…</story>` field element, with platform chart embeds: mostly static, beautifully designed and visually stunning.
 
       ## Workflow at a glance
 
       Every story, from scratch or from a dashboard, follows the same loop:
 
-      1. **Clarify** with the user (via the `clarify` tool). Settle three things: the **look/feel**, the **audience and goal**, and the **scope/data** to cover. For look/feel, call clarify with `type: 'design'` and `options: []` — the app shows the design-theme picker itself and the result returns the chosen theme's value plus its personality description. If the user answers "Figure it out", choose the theme yourself from the story's content and audience. Infer what you reasonably can and just confirm.
-      2. **Build** the story (Procedures, section 4): find the lead, storyboard the beats, write the shadcn JSX.
+      1. **Clarify** with the user (via the `clarify` tool). Settle four things: the **theme**, the **template** (the document's structural genre), the **audience and goal**, and the **scope/data** to cover. Theme and template are TWO preset clarify calls, each with `options: []`: first `type: 'design'` (the design-theme picker), then `type: 'template'` (editorial | deck | scrolly) — the app shows the pickers itself, and each result returns the chosen value PLUS its authoring guidance (personality, beats, layout grammar, Do/Don'ts). Write both picks into the story's `<theme>` and `<template>` fields and FOLLOW the returned template guidance for the beat structure. If the user answers "Figure it out", the result carries the full catalog — choose yourself from the story's content and audience, then follow that choice's guidance. Infer what you reasonably can and just confirm.
+      2. **Build** the story (Procedures, section 5): find the lead, storyboard the beats, write the shadcn JSX.
       3. **Review** it and judge it as the intended reader. Every EditFile already returns the screenshot + full rubric (LLM visual review included); call ReviewFile when you want a fresh grade without editing.
       4. **Fix and improve.** ALWAYS fix every `error` finding (any error gates `overall` to 0), then work through the `warn`s, applying each finding's `fix`, and raise the `overall` score. Repeat. **Do not stop until every `error` is cleared AND `overall` is at least 4.** Keep going past that only if it still looks off.
       5. **Done.**
 
-      **Loading embeds are NEVER a reason to change the story.** Review screenshots are taken while embed queries may still be running: a chart that shows a spinner, or a blank card where a chart belongs, is CAPTURE TIMING — not a broken embed, not missing evidence, and not a renderer limitation. There is no limit on how many embeds a story can hold. NEVER remove, replace, shrink, or hedge an embed (or the claims it supports) because it appeared loading/blank in a screenshot, and never conclude "the story can't load multiple embeds". If a result carries a `renderNote`, or you see loading/blank panels, the ONLY correct response is to re-run ReviewFile to get a settled screenshot and judge from that. Deleting content to make a loading screenshot look better is the single worst failure mode of this workflow.
+      Common Gotcha: **Loading embeds are NEVER a reason to change the story.** Review screenshots are taken while embed queries may still be running: a chart that shows a spinner, or a blank card where a chart belongs, is CAPTURE TIMING — not a broken embed, not missing evidence, and not a renderer limitation. There is no limit on how many embeds a story can hold. NEVER remove, replace, shrink, or hedge an embed (or the claims it supports) because it appeared loading/blank in a screenshot, and never conclude "the story can't load multiple embeds". If a result carries a `renderNote`, or you see loading/blank panels, the ONLY correct response is to re-run ReviewFile to get a settled screenshot and judge from that. Deleting content to make a loading screenshot look better is the single worst failure mode of this workflow.
 
       ---
 
-      ## 1. What a story is
+      ## 1. What is a story?
 
       A story is not a dashboard with prose between charts. It is **an argument with evidence**: one finding, stated as a claim, backed by live charts and numbers, shaped so the reader arrives at a single conclusion and remembers it. Everything else (the look, the mechanics, the process) serves that one job.
 
       Two invariants hold for every story, regardless of design or process:
 
       - **Honesty.** Claim only what the referenced chart actually shows, at the precision the data supports. Never invent, smooth, or extrapolate numbers. Every displayed figure is LIVE (see Mechanics): a hand-typed metric silently goes stale and is the #1 way a story lies. If data is missing for a beat, say so on the page ("no data before 2019") rather than fabricating. Name the risk inside the win ("dependable, and exposed"): one flagged caveat is more persuasive than none.
-      - **The static read works.** Every insight is carried by headlines, captions, and the charts, never gated behind a hover or a filter. Interactivity is a coda, not the point.
+      - **The static read works.** Every insight is carried by headlines, captions, and the charts, never gated behind a hover or a filter.
 
       ### Story file structure
 
-      A story's content is edited as MARKUP. Most fields are simple; the body lives in the `story` field, authored INLINE as shadcn JSX **wrapped in the top-level `<story>…</story>` field element** — a sibling of the other field elements (`<description>`, `<colorMode>`, `<suggestedQuestions>`). The content schema is generated LIVE from code (the single source of truth, never invent fields):
+      A story's content is edited as MARKUP. Most fields are simple; the body lives in the `story` field, authored INLINE as shadcn JSX **wrapped in the top-level `<story>…</story>` field element** — a sibling of the other field elements (`<description>`, `<suggestedQuestions>`). The content schema is generated LIVE from code (the single source of truth, never invent fields):
       ```json
       {schema_story}
       ```
@@ -854,12 +854,12 @@ templates:
 
       ## 2. The medium: shadcn JSX
 
-      The `<story>` body is **shadcn JSX** — you already know this entire API; write it exactly as you would in any shadcn/Tailwind app:
+      The `<story>` body is **shadcn JSX** — one fragment, one root `<div>`, no JavaScript. You already know this entire API; write it exactly as you would in any shadcn/Tailwind app:
 
       - **Components**: the registered shadcn/ui set, with standard props/variants/`className` — the Card family, Badge, Button, Alert, Table family, Separator, Skeleton, Progress, Breadcrumb, Avatar/AvatarGroup, and the interactive set Tabs, Accordion, Collapsible, Tooltip, Popover (they carry their own behavior; no handlers needed or allowed). Dialog, Sheet, and DropdownMenu are NOT registered — an unknown tag is a validation error.
       - **Plain HTML** (content tags: `div`, `span`, headings, `p`, lists, the `table` family, `img`, `a`, `strong`/`em`/`code`, …) styled with **Tailwind utilities + the shadcn CSS-variable tokens** (`bg-card`, `text-muted-foreground`, `border-border`, `rounded-lg`, `--background`, `--primary`, `--radius`, `--chart-1..5`, …). Use `class=` on HTML tags (components take `className`). Classes must be written literally in the markup (they are extracted statically and compiled at save time). Put `data-design="tw"` and `@container` on the root `<div>`.
       - **The platform embeds** `<Question>` / `<Number>` / `<Param>` (section 3) carry every chart and every data number.
-      - **Styling defaults**: tokens + utilities ARE the styling path. A `<style>` block remains allowed for bespoke touches the utilities cannot express (a motif texture, keyframes), scoped under one root class — keep it to a handful of rules. Banned outright: `position: fixed` / `position: sticky`, and external `url()` / `@import` in CSS (fonts and themes are platform-provided).
+      - **Styling defaults**: tokens + utilities ARE the styling path. A `<style>` block remains allowed for bespoke touches the utilities cannot express (a motif texture, keyframes), scoped under one root class — keep it to a handful of rules. Banned outright: `position: fixed` / `position: sticky`, and external `url()` / `@import` in CSS (fonts and themes are platform-provided). The theme applies its own font-family and color palette; you can feel free to override in case the user requests a different look. The theme's guidance carries the accent discipline - try to follow it.
       - **No `<script>`, no event handlers, no iframes.** Prop values are string/number/boolean literals only — no JSX expression containers or spreads — except embed envelopes (`viz={{…}}`, `params={[…]}`, template-literal `query`) and literal `style={{…}}` objects.
 
       ### Vega-always (HARD RULE)
@@ -872,7 +872,7 @@ templates:
 
       - **Respond to the story's width, not the viewport**: `@container` on the root, then Tailwind container-query variants (`@lg:`, `@2xl:`, `@3xl:`) on DESCENDANTS — NEVER viewport `md:`/`lg:` variants (the story's width is decoupled from the viewport). They do NOT work on the root element itself; give the root plain, non-variant padding.
       - **Collapse every multi-column band** (hero splits, KPI rows, side-by-side columns, chart pairs, wide tables) to a single column or `overflow-x-auto` on a phone via container variants. Step type sizes with container variants (`text-3xl @2xl:text-5xl`).
-      - **`dark:` variants + `colorMode`** — the story surface renders in the mode the `colorMode` field declares (charts included), falling back to the viewer's app mode. For a single-mode design ALWAYS set `colorMode` and design for that one mode. Omit `colorMode` only when EVERY color utility is paired with a `dark:` counterpart. Never mix: a light design without `colorMode` set will render its `dark:` variants inside a dark app and look broken.
+      - **`dark:` variants + `colorMode`** — the story surface renders in the mode the `colorMode` field declares (charts included), falling back to the viewer's app mode. For a single-mode design ALWAYS set `colorMode` and design for that one mode. Omit `colorMode` only when EVERY color utility is paired with a `dark:` counterpart. Feel free to override the Vega-Lite color scheme in a `viz` to harmonize with the story's palette.
       - **The root div must ALWAYS carry a page gutter** — `px-6 @2xl:px-12`. The page renders with zero body margin, so without a root gutter everything sits flush against the viewport edge. Put the gutter in your FIRST draft; deliberate full-bleed elements can escape it with negative margins (`-mx-6 @2xl:-mx-12`).
 
       Gut-check at ~400px wide before shipping: if any band still sits side-by-side, any number is clipped, or any text is low-contrast, fix the `@container` rule or the token.
@@ -895,7 +895,7 @@ templates:
       ```
       <Question id={142} height="430px"
         viz={{ version: 2, source: { kind: "table", columnFormats: null, conditionalFormats: null,
-               css: ".mx-th{background:#0f766e;color:#fff} .mx-row-odd{background:transparent}" } }} />
+                css: ".mx-th{background:#0f766e;color:#fff} .mx-row-odd{background:transparent}" } }} />
       ```
       The override MUST be a complete envelope (`{version: 2, source: {…}}`, source kinds `vega-lite` | `recipe` | `table` | `pivot` | `vega`, exactly as taught in the questions skill) and it replaces the question's viz WHOLESALE — nothing is merged, so carry over anything you want to keep. This is also how a story restyles a table/pivot to match its design: the envelope's `css` field targets the stable `.mx-table` / `.mx-header-row` / `.mx-th` / `.mx-row` / `.mx-cell` / `.mx-col-<columnName>` class contract. Reach for an override when the saved chart's look fights the story; leave it off when the saved look already works. Read that file id first to see its viz config.
 
@@ -907,8 +907,8 @@ templates:
                 WHERE month = :month`}
         connection="duckdb"
         viz={{ version: 2, source: { kind: "recipe", recipe: "minusx/single-value@1",
-               bindings: { value: "mrr" }, params: { label: "MRR" },
-               columnFormats: { mrr: { prefix: "$", format: ",.0f" } } } }}
+                bindings: { value: "mrr" }, params: { label: "MRR" },
+                columnFormats: { mrr: { prefix: "$", format: ",.0f" } } } }}
         params={[{ name: "month", type: "date", label: null, source: null }]}
         height="200px"
       />
@@ -944,7 +944,7 @@ templates:
       Rules for every embed:
       - Explicit px `height` (`height="430px"`) so layout holds through hydration. Missing height defaults to 430px, percentages do not resolve, and anything below 340px is clamped UP. Width is 100%. Vary height with the beat: compact single-value cards ~180 to 260px, tall main-evidence charts 400 to 460px.
       - All bar/line/scatter/area plots need to be at least 50% of the width, or they look awful.
-      - Style the *container* around the embed (framing, borders, shadows, full-bleed), never a chart's internals; for a single-value embed, the recipe `params` + `columnFormats` ARE the styling.
+      - Style the *container* around the embed with markup (framing, borders, shadows, full-bleed); a chart's *internals* change only through a `viz` override (variant B), and for a single-value embed the recipe `params` + `columnFormats` ARE the styling.
       - A saved embed hydrates with a slim title bar carrying the question name (~40px, do not repeat it in your caption). An inline embed has no title bar, so caption it yourself if needed.
 
       ### Reader filters (`<Param>`), optional
@@ -964,27 +964,38 @@ templates:
 
       ---
 
-      ## 4. Procedures (how to build)
+      ## 4. Design language
 
-      Both procedures begin with the **Clarify** step from Workflow at a glance: confirm the look/tone, the audience and goal (who is this for, and what should they think, feel, or do afterward), and the scope. Then build, screenshot, and improve against the rubric.
+      The picks at Clarify hand you the raw material — the template's guidance carries the beat structure and layout grammar, the theme's guidance the tokens, personality, and accent discipline — but composition, scale, pacing, and motifs are still yours to design within them. Commit to ONE direction and execute it everywhere: one deliberate palette anchored in the tokens, ONE accent that always means the subject, generous whitespace. If the page would look the same for any other dataset, it is not designed yet.
 
-      Design quality comes from commitment, not decoration: one deliberate palette anchored in the shadcn tokens with ONE accent that always means the subject, disciplined type hierarchy, generous whitespace, headlines that state findings. Avoid the AI-default looks (cream + serif + terracotta, acid-green on black, purple gradients) unless asked.
+      - **Type is the instrument.** Dramatic scale contrast: hero headline huge (`text-5xl @2xl:text-7xl`, tight leading) over a small standfirst; uppercase tracked eyebrows (`text-xs uppercase tracking-widest`); `tabular-nums` on figures; prose capped at a readable measure (`max-w-prose`) — long lines are the #1 tell of an undesigned page. An oversized chapter numeral is a cheap, classy pacing device.
+      - **Open like a feature.** The first viewport decides whether the reader scrolls: eyebrow → claim headline → one-line standfirst → the lead stat enormous (a styled single-value embed) or a full-bleed hero chart.
+      - **Compose with rhythm.** Beats must not all share one shape: alternate dense evidence sections with sparse one-sentence ones; asymmetric splits (60/40) beat centered stacks; earn ONE full-bleed interlude — an inverted band with a single big number — as a mid-story breather.
+      - **Atmosphere.** Shift section backgrounds (`bg-background` / `bg-muted` / the one inverted band); the `<style>` block earns its keep with a subtle texture or a gradient wash behind the hero, and at most one staggered fade-up keyframe on the hero — never scroll-looping motion.
+      - **Charts look commissioned.** Embeds are the centerpiece: restyle saved charts via a `viz` override to the story's accent, declutter axes, prefer direct labels over legends. A default-styled chart inside a designed page breaks the spell.
+      - **Structural slop, banned like the palettes:** every section a Card, the same 3-up KPI grid repeated per beat, badge soup, centered-everything, all charts one height, emoji as decoration. Palette slop: cream + serif + terracotta, acid-green on black, purple gradients — unless asked.
 
-      ### 4a. From scratch
+      ---
+
+      ## 5. Procedures (how to build)
+
+      Both procedures begin with the **Clarify** step from Workflow at a glance: confirm the look/tone, the audience and goal (who is this for, and what should they think, feel, or do afterward), and the scope. Then build, screenshot, and improve against the rubric — applying the design language (section 4) with total consistency.
+
+      ### 5a. From scratch
 
       1. **Gather evidence.** Inventory everything the story can draw on before storyboarding: user-referenced question ids (confirm what each actually shows), analysis and numbers already in the conversation, and gaps (a beat the goal needs but nothing supports: surface it now). Prefer reusing saved questions; run new SQL only for beats you will actually embed.
       2. **Find the lead.** Interrogate the data until you can state the single most important finding in one plain sentence with a number in it ("Churn doubled in the quarter we raised prices"). If you cannot, the analysis is not done: go back to the data.
       3. **Storyboard the beats.** 3 to 7 beats, each advancing the argument: hook, context, the turn or finding, evidence and nuance, so-what. One beat is one section is one idea is (usually) one visual. Two ideas in a section: split it. A chart that does not advance a beat: cut it. Per beat, note the question it references (a saved id, or an inline single-value embed) and what its headline and callout will claim.
       4. **Headlines state findings, not topics.** Every section header and chart title is a claim: "Rural counties drove the entire decline," never "Decline by county type." Reading only the headlines should give the whole story.
       5. **Decide the takeaway ending.** The final section restates the lead with its full earned weight and answers "so what should the reader think or do?" — quantified takeaways or a highlights box.
-      6. **Lock the visual direction.** Fix the palette (accent + tokens), type hierarchy, and layout grammar settled in the Clarify step. Critique the plan: if it resembles what you would produce for any other dataset, revise before coding.
+      6. **Lock the visual direction (section 4).** Fix the palette (accent + tokens), type hierarchy, and layout grammar settled in the Clarify step — the picked template's guidance supplies the beat structure and layout grammar; the picked theme's guidance supplies the accent discipline. Critique the plan: if it resembles what you would produce for any other dataset, revise before coding.
       7. **pre-Build**: ALWAYS go to the new story page first — `Navigate` with `new_file_type="story"` (the user confirms and can follow along) — then build with EditFile. In interactive chat, `CreateFile` for a story is BLOCKED (like dashboards); only headless/background runs may CreateFile a story directly.
       8. **Build** the fragment following the plan exactly, every displayed number a live embed and every data visual a `<Question>` (section 3), the visual direction applied with total consistency.
       Build the shell first, then fill in the beats one by one. DO NOT attempt to "finish" the story in one pass, it will very likely fail the edit tool.
       9. **Review and grade.** Critique as the intended reader, top to bottom (can the headlines alone tell the story? does the ending deliver the goal? is every claim backed by its embed and true to the data?), and read the screenshot + rubric every EditFile returns (or call ReviewFile for a fresh grade without editing). You MUST include `<Question>` embeds for all prominent charts.
       10. **Fix and improve** against the rubric: ALWAYS fix every `error` (any error gates `overall` to 0), then the `warn`s, each with its `fix`; raise the `overall` score and repeat until every `error` is cleared AND `overall` is at least 4 (keep going past that only if it still looks off).
 
-      ### 4b. From a dashboard
+      ### 5b. From a dashboard
 
       Turning an existing dashboard into a story: the evidence already exists, so the work is editorial and visual, not analytical. **Do NOT explore the database: run no new SQL, do no data hunting.** Reusing the dashboard's existing questions and files is fine and expected; hunting the warehouse for new numbers is not.
 
@@ -993,11 +1004,12 @@ templates:
       **Every `<Number>` must be provably right** (the #1 first-pass failure is a live number showing the wrong thing): ALWAYS pass `col=` (never rely on the first column — it is often the date), and make the query return exactly the row you claim (`ORDER BY month DESC LIMIT 1` for "latest"; an aggregate for totals). Before finishing, `ReadFiles` with `rawData: true` on the source questions and CHECK each rendered figure against the dashboard's own KPIs — a date like `2024-01-01T00:00:00.000Z` or a first-month value where you claimed "latest" means the col/row is wrong; fix it before you screenshot.
 
       1. **Read the dashboard.** Its question references (ids), their titles, layout order, and any text/markdown cells are your raw material. Read those referenced questions and files to understand what each shows (that is reading existing artifacts, not database exploration). When you need the ACTUAL row values of a chart question — to pick the number for a claim, target a `<Number>` column, or check sort order — call `ReadFiles` with `rawData: true`: by default a chart question returns only an image + summary and the rows are dropped.
-      2. **Find the lead** from what the dashboard already shows, exactly as in 4a step 2, but sourced from the existing questions rather than fresh analysis.
+      2. **Find the lead** from what the dashboard already shows, exactly as in 5a step 2, but sourced from the existing questions rather than fresh analysis.
       3. **Curate and reorder.** You do not have to use every question. Drop the ones that do not advance an argument, keep the ones that do, and reorder them into a narrative arc rather than the grid order.
-      4. **Storyboard, headline, and end** as in 4a steps 3 to 5: group the kept questions into 3 to 6 beats, write a claim-style headline and standfirst for each (from the questions' titles and the numbers they already contain), and decide the takeaway. Reference each by its existing saved id (`<Question id={N} />`): reuse, do not rebuild. You MUST include `<Question>` embeds for all prominent charts.
-      5. **Lock the visual direction** as in 4a step 6. Each beat should have highlights or takeaways of some sort; a pull-quote or full-bleed question can separate beats.
-      6. **Pre-Build, Build, Review, fix** as in 4a steps 7 to 10: the only difference from scratch is that the numbers and charts already exist, so you are giving them an argument and a design, then grading and improving against the rubric each EditFile/ReviewFile returns.
+      4. **Storyboard, headline, and end** as in 5a steps 3 to 5: group the kept questions into 3 to 6 beats, write a claim-style headline and standfirst for each (from the questions' titles and the numbers they already contain), and decide the takeaway. Reference each by its existing saved id (`<Question id={N} />`): reuse, do not rebuild. You MUST include `<Question>` embeds for all prominent charts.
+      5. **Lock the visual direction** as in 5a step 6. Each beat should have highlights or takeaways of some sort; a pull-quote or full-bleed question can separate beats.
+      6. **Pre-Build, Build, Review, fix** as in 5a steps 7 to 10: the only difference from scratch is that the numbers and charts already exist, so you are giving them an argument and a design, then grading and improving against the rubric each EditFile/ReviewFile returns.
+
 
   skill_notebooks:
     description: Notebook file structure (cells = inline SQL questions + markdown text), the activeCellId convention for editing the right cell, and notebook page behavior

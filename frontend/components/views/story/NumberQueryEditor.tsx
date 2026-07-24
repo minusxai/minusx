@@ -12,10 +12,11 @@ import { Dialog, Portal, Box, Button, HStack } from '@chakra-ui/react';
 import SqlEditor from '@/components/query-builder/SqlEditor';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { useConnections } from '@/lib/hooks/useConnections';
-import type { NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
+import type { NumberQueryEdit } from '@/components/views/shared/AgentHtml';
 
 export default function NumberQueryEditor({ request, filePath, onClose }: {
-  request: NumberQueryEditRequest | null;
+  /** Always the applyable form — the story view normalizes jsx AST-path requests before opening. */
+  request: NumberQueryEdit | null;
   filePath?: string;
   onClose: () => void;
 }) {
@@ -35,7 +36,7 @@ export default function NumberQueryEditor({ request, filePath, onClose }: {
 
 /** Separate body so the schema/connection hooks only run while the editor is actually open. */
 function EditorBody({ request, filePath, onClose }: {
-  request: NumberQueryEditRequest; filePath?: string; onClose: () => void;
+  request: NumberQueryEdit; filePath?: string; onClose: () => void;
 }) {
   const [draft, setDraft] = useState(request.query);
   // Same schema + connection sources the question editor uses → real autocomplete.

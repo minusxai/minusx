@@ -499,3 +499,22 @@ describe('story <theme> field round-trip', () => {
     expect(markup).toContain('<theme>organic</theme>');
   });
 });
+
+// StoryContent.template (structural genre — story templates feature): `<template>deck</template>`
+// is a plain schema field like <theme> — the generic codec round-trips it, no special-casing.
+describe('story <template> field round-trip', () => {
+  it('markupToContent parses <template> into content.template (jsx pipeline)', () => {
+    const markup = '<template>deck</template>\n<story><div className="p-2"><h1>Hi</h1></div></story>';
+    const back = markupToContent('story', markup);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      expect(back.content.template).toBe('deck');
+      expect(back.content.format).toBe('jsx');
+    }
+  });
+
+  it('fileToMarkup emits <template> for a jsx story content', () => {
+    const markup = fileToMarkup('story', { format: 'jsx', template: 'editorial', story: '<div><h1>Hi</h1></div>' });
+    expect(markup).toContain('<template>editorial</template>');
+  });
+});

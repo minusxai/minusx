@@ -196,7 +196,16 @@ function horizontalPadding(el: HTMLElement): number {
 export function autoSizeStorySurface(
   { surface, iframe, doc, fluid, fixedHeight }: AutoSizeStorySurfaceOptions,
 ): () => void {
+  // The host (app) window — where the READER's viewport lives. The iframe itself is content-sized,
+  // so vh units inside the story are useless (100vh = the whole story's height); `--mx-vh` is the
+  // bridge that lets deck-style sections fill the real viewport (`min-h-[var(--mx-vh,760px)]`).
+  // Stamped on the story ROOT (inside the serialized subtree) so captures keep the value.
+  const hostWin = iframe.ownerDocument.defaultView;
   const sync = () => {
+    const viewportH = hostWin?.innerHeight;
+    if (viewportH && viewportH > 0) {
+      surface.root.style.setProperty('--mx-vh', `${Math.round(viewportH)}px`);
+    }
     if (fluid) {
       // The story's containing block is the iframe's body; the iframe element is the same-document
       // fallback for when the inner document hasn't laid out yet. Never apply a 0 — a detached or
@@ -231,5 +240,11 @@ export function autoSizeStorySurface(
     // its mount width forever.
     ro.observe(iframe);
   }
-  return () => ro?.disconnect();
+  // Host-window height changes don't resize a content-sized iframe (no ResizeObserver delivery),
+  // so --mx-vh needs its own listener.
+  hostWin?.addEventListener('resize', sync);
+  return () => {
+    ro?.disconnect();
+    hostWin?.removeEventListener('resize', sync);
+  };
 }

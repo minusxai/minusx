@@ -31,6 +31,14 @@ const NullableD = <T extends TSchema>(schema: T, description: string) =>
 export const STORY_THEME_NAMES = ['modernist', 'classical', 'nocturne', 'organic', 'broadsheet', 'industry'] as const;
 export type StoryThemeName = (typeof STORY_THEME_NAMES)[number];
 
+/**
+ * The four story templates — the document's structural GENRE (beat structure + layout grammar),
+ * orthogonal to the design theme. Same pattern as STORY_THEME_NAMES: the enum lives here; the
+ * registry (`lib/data/story/story-templates.ts`) types its entries against it.
+ */
+export const STORY_TEMPLATE_NAMES = ['editorial', 'deck', 'scrolly'] as const;
+export type StoryTemplateName = (typeof STORY_TEMPLATE_NAMES)[number];
+
 // ============================================================================
 // Visualization Settings
 // ============================================================================
@@ -578,6 +586,12 @@ export const StoryContent = Type.Object({
     'radius, fonts, chart palette) the story renders with. One of the six built-in themes; omit/null for ' +
     'the neutral default. Set it from the design the user picked (the Clarify design dialog returns the ' +
     'theme name); components and utility classes are identical across themes, only the tokens change.'))),
+  template: Type.Optional(Nullable(StringEnum(STORY_TEMPLATE_NAMES,
+    "Story template (format:'jsx' only) — the document's structural genre: 'editorial' (long-read magazine " +
+    "feature), 'deck' (slide-section presentation), 'scrolly' (playful scrollytelling). Set it from the " +
+    'Clarify template pick (the result returns that template\'s authoring ' +
+    'guidance — follow it for the beat structure). METADATA ONLY: it records intent and drives the structure ' +
+    'YOU write; no automatic CSS or layout is applied.'))),
   colorMode: Type.Optional(Nullable(StringEnum(['light', 'dark'],
     'Pins the STORY SURFACE (embedded chart theming, design-system `dark:` variants, tile chrome) to the ' +
     'mode the design was authored for — everywhere it renders, including inside an app set to the other ' +

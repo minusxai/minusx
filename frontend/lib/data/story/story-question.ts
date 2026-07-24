@@ -15,6 +15,8 @@ import type { QuestionParameter, VizSettings, QuestionContent, VizEnvelope, Spre
 import { vizSettingsToEnvelopeStatic } from '@/lib/viz/from-vizsettings';
 import { isSpreadsheetSource } from '@/lib/spreadsheet/materialize';
 import { escAttr, escTemplate, serializeJsonAttr, parseJsonAttr } from './html-attr';
+import { updateJsxElementAtPath, setStaticJsxAttr } from './jsx-edit';
+import type { JsonValue } from '@/lib/jsx';
 
 /** An inline question embedded directly in a story body (no saved file). Its data comes from
  *  EITHER an inline SQL `query` (against `connection`) OR an inline `spreadsheet` (direct rows,
@@ -194,6 +196,40 @@ export function updateInlineQuestionInHtml(html: string, index: number, embed: I
   let seen = 0;
   return html.replace(INLINE_Q_DIV_RE, (whole) =>
     seen++ === index ? inlineQuestionToPlaceholder(embed) : whole);
+}
+
+/**
+ * Set / replace / remove (viz=null) the viz override on the `<Question id={questionId}>` at
+ * `astPath` in a jsx story body. The jsx counterpart of {@link updateSavedQuestionVizInHtml}:
+ * the modal's write-back for a saved embed's story-level viz override. Returns the source
+ * unchanged when the path doesn't resolve to a `<Question>` with that id (stale path).
+ */
+export function updateSavedQuestionVizInJsx(
+  source: string, astPath: string, questionId: number, viz: VizEnvelope | null,
+): string {
+  return updateJsxElementAtPath(source, astPath, 'Question', (el) => {
+    const id = el.attributes.find(a => a.name === 'id');
+    if (!id?.value.static || id.value.json !== questionId) return false;
+    setStaticJsxAttr(el, 'viz', viz === null ? undefined : (viz as unknown as JsonValue));
+  });
+}
+
+/**
+ * Replace the inline `<Question>` at `astPath` with `embed`'s definition, preserving unrelated
+ * attributes (className, height when the embed carries none, …). The jsx counterpart of
+ * {@link updateInlineQuestionInHtml}: the modal's write-back for an ephemeral question edit.
+ * Returns the source unchanged when the path resolves to a saved (`id`) embed or nothing.
+ */
+export function updateInlineQuestionInJsx(source: string, astPath: string, embed: InlineQuestionEmbed): string {
+  return updateJsxElementAtPath(source, astPath, 'Question', (el) => {
+    if (el.attributes.some(a => a.name === 'id')) return false; // saved embed — not this transform's target
+    setStaticJsxAttr(el, 'query', embed.query);
+    setStaticJsxAttr(el, 'spreadsheet', embed.spreadsheet as unknown as JsonValue | undefined);
+    setStaticJsxAttr(el, 'connection', embed.connection);
+    setStaticJsxAttr(el, 'viz', embed.viz as unknown as JsonValue | undefined);
+    setStaticJsxAttr(el, 'params', embed.parameters as unknown as JsonValue | undefined);
+    setStaticJsxAttr(el, 'height', embed.height);
+  });
 }
 
 /** Reverse of {@link inlineEmbedToQuestionContent}: an edited QuestionContent (from the modal's

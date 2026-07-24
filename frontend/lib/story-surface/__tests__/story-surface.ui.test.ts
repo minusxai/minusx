@@ -9,7 +9,7 @@
  * covered by the story-render parity check).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { mountStorySurface, STORY_ROOT_ATTR, STORY_SVG_ATTR } from '@/lib/story-surface';
+import { mountStorySurface, autoSizeStorySurface, STORY_ROOT_ATTR, STORY_SVG_ATTR } from '@/lib/story-surface';
 
 const XHTML_NS = 'http://www.w3.org/1999/xhtml';
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -135,5 +135,39 @@ describe('svg surface', () => {
     const h1 = doc.getElementById('t');
     expect(h1).not.toBeNull();
     expect(h1!.closest('foreignObject')).not.toBeNull();
+  });
+});
+
+// The iframe is CONTENT-sized (its height IS the story height), so vh units inside it are useless
+// for full-viewport slides — one slide would be as tall as the whole deck. The surface therefore
+// stamps the HOST window's viewport height on the story root as `--mx-vh`; deck-style sections use
+// `min-h-[var(--mx-vh,760px)]`. On the root (inside the serialized subtree) so captures keep it.
+describe('autoSizeStorySurface — host viewport height var (--mx-vh)', () => {
+  const mountHosted = () => {
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const idoc = iframe.contentDocument!;
+    const surface = mountStorySurface(idoc, 'svg', 1280);
+    const dispose = autoSizeStorySurface({ surface, iframe, doc: idoc, fluid: true });
+    return { iframe, surface, dispose };
+  };
+
+  it('stamps the host window innerHeight as --mx-vh on the story root at mount', () => {
+    const { iframe, surface, dispose } = mountHosted();
+    expect(surface.root.style.getPropertyValue('--mx-vh')).toBe(`${window.innerHeight}px`);
+    dispose();
+    iframe.remove();
+  });
+
+  it('re-stamps on host window resize, and stops after dispose', () => {
+    const { iframe, surface, dispose } = mountHosted();
+    (window as unknown as { innerHeight: number }).innerHeight = 555;
+    window.dispatchEvent(new Event('resize'));
+    expect(surface.root.style.getPropertyValue('--mx-vh')).toBe('555px');
+    dispose();
+    (window as unknown as { innerHeight: number }).innerHeight = 777;
+    window.dispatchEvent(new Event('resize'));
+    expect(surface.root.style.getPropertyValue('--mx-vh')).toBe('555px');
+    iframe.remove();
   });
 });

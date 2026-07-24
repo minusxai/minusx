@@ -8,7 +8,8 @@
  *  - the emitter: `[data-theme="<name>"]` light block, `.dark`-scoped dark block, font rules.
  */
 import { describe, it, expect } from 'vitest';
-import { STORY_THEMES, STORY_THEME_NAMES, getStoryTheme, storyThemeCss } from '../story-themes';
+import { STORY_THEMES, STORY_THEME_NAMES, getStoryTheme, storyThemeCss, storyThemeMode } from '../story-themes';
+import { getStoryThemeGuidance } from '../story-templates';
 
 /** Exactly the CSS variables TW_INPUT_JSX maps utilities onto, plus --radius. */
 const REQUIRED_VARS = [
@@ -39,23 +40,32 @@ describe('STORY_THEMES registry', () => {
     }
   });
 
-  it('every theme defines the FULL token contract in BOTH modes', () => {
+  // Guidance lives in story-guidance.yaml, accessed via story-templates.ts — NOT on the
+  // StoryTheme entries — because this module must stay importable by tsx scripts
+  // (generate-theme-previews), which cannot parse native YAML imports.
+  it("every theme has authoring guidance (accent discipline Do/Don'ts for the Clarify pick)", () => {
+    for (const name of STORY_THEME_NAMES) {
+      const guidance = getStoryThemeGuidance(name);
+      expect(guidance, `${name} guidance`).toBeDefined();
+      expect(guidance!.length, `${name} guidance`).toBeGreaterThan(200);
+      expect(guidance, `${name} Don't section`).toContain("Don't");
+    }
+  });
+
+  it('every theme defines the FULL token contract (one canonical, self-contained palette)', () => {
     for (const t of STORY_THEMES) {
-      for (const mode of ['light', 'dark'] as const) {
-        const vars = t.cssVars[mode];
-        for (const name of REQUIRED_VARS) {
-          expect(vars[name], `${t.name}.${mode} ${name}`).toBeTruthy();
-        }
-        // No stray keys outside the contract — the emitter ships exactly these.
-        expect(Object.keys(vars).sort()).toEqual([...REQUIRED_VARS].sort());
+      for (const name of REQUIRED_VARS) {
+        expect(t.cssVars[name], `${t.name} ${name}`).toBeTruthy();
       }
+      // No stray keys outside the contract — the emitter ships exactly these.
+      expect(Object.keys(t.cssVars).sort()).toEqual([...REQUIRED_VARS].sort());
     }
   });
 
   it('radius expresses each personality (§5 table): modernist 0, organic ≥ 1rem, industry ≤ 0.125rem', () => {
-    expect(getStoryTheme('modernist')!.cssVars.light['--radius']).toBe('0rem');
-    expect(parseFloat(getStoryTheme('organic')!.cssVars.light['--radius'])).toBeGreaterThanOrEqual(1);
-    expect(parseFloat(getStoryTheme('industry')!.cssVars.light['--radius'])).toBeLessThanOrEqual(0.125);
+    expect(getStoryTheme('modernist')!.cssVars['--radius']).toBe('0rem');
+    expect(parseFloat(getStoryTheme('organic')!.cssVars['--radius'])).toBeGreaterThanOrEqual(1);
+    expect(parseFloat(getStoryTheme('industry')!.cssVars['--radius'])).toBeLessThanOrEqual(0.125);
   });
 
   it('getStoryTheme resolves by name and is undefined for unknown/null', () => {
@@ -73,18 +83,16 @@ describe('storyThemeCss emitter', () => {
     for (const t of STORY_THEMES) {
       const at = css.indexOf(`[data-theme="${t.name}"]`);
       expect(at, t.name).toBeGreaterThanOrEqual(0);
-      expect(css).toContain(`--primary: ${t.cssVars.light['--primary']}`);
+      expect(css).toContain(`--primary: ${t.cssVars['--primary']}`);
     }
   });
 
-  it('emits .dark-scoped dark blocks matching how AgentHtml stamps .dark on the iframe html', () => {
-    // The iframe stamps .dark on <html>, an ANCESTOR of the story root carrying data-theme —
-    // so the dark selector must be `.dark [data-theme=…]` (plus the same-element form).
-    for (const t of STORY_THEMES) {
-      expect(css).toContain(`.dark [data-theme="${t.name}"]`);
-      expect(css).toContain(`[data-theme="${t.name}"].dark`);
-      expect(css).toContain(t.cssVars.dark['--primary']);
-    }
+  it('themes are SELF-CONTAINED: one canonical palette, never re-keyed by the app color mode', () => {
+    // A themed story is a fixed design (a printed page doesn't invert with the OS): the emitted
+    // sheet must carry NO `.dark`-scoped variable overrides — the surface mode follows the
+    // theme's designed mode (storyThemeMode) instead.
+    expect(css).not.toContain('.dark [data-theme');
+    expect(css).not.toContain('].dark');
   });
 
   it('emits font-family rules from the registry fonts (body on the root, display on headings)', () => {
@@ -100,5 +108,45 @@ describe('storyThemeCss emitter', () => {
     const withMono = STORY_THEMES.find(t => t.fonts.mono);
     expect(withMono).toBeTruthy();
     expect(css).toContain(`[data-theme="${withMono!.name}"] :is(code, pre, kbd, samp)`);
+  });
+
+  // Structural layer (beyond tokens): every theme ships restrained element-level rules —
+  // an hr identity and a ::selection tint at minimum — scoped inside its [data-theme] block
+  // via the `&` placeholder in StoryTheme.css.
+  it('every theme carries a structural css layer, scoped to its data-theme selector', () => {
+    for (const t of STORY_THEMES) {
+      expect(t.css, `${t.name}.css`).toBeTruthy();
+      expect(t.css, `${t.name} uses & scope placeholder`).toContain('&');
+      expect(css, `${t.name} hr rule emitted`).toContain(`[data-theme="${t.name}"] hr`);
+      expect(css, `${t.name} selection rule emitted`).toContain(`[data-theme="${t.name}"] ::selection`);
+      // No unresolved placeholder leaks into the emitted sheet.
+      expect(css).not.toContain('& hr');
+    }
+  });
+
+  it('structural css expresses personality: modernist 2px ink rules, organic short rounded rule', () => {
+    expect(getStoryTheme('modernist')!.css).toContain('2px');
+    expect(getStoryTheme('organic')!.css).toContain('999px');
+  });
+
+  // Themes must PAINT, not just define tokens: without this rule a themed story root renders
+  // transparent (the app canvas bleeds through) because nothing consumes --background.
+  it('paints the themed root with the theme background and foreground', () => {
+    expect(css).toMatch(/\[data-theme\]\s*\{[^}]*background-color:\s*var\(--background\)/);
+    expect(css).toMatch(/\[data-theme\]\s*\{[^}]*color:\s*var\(--foreground\)/);
+  });
+});
+
+describe('theme designed mode (self-contained themes)', () => {
+  it('derives each theme\'s mode from its canonical background; nocturne is the dark one', () => {
+    // The palette is designed against ONE mode; the surface (iframe .dark class, chart ink,
+    // embed chrome) must follow it — a themed story ignores the app color mode. No declared
+    // field: dark simply means the canonical --background is dark-toned.
+    for (const t of STORY_THEMES) {
+      expect(storyThemeMode(t.name), t.name).toBe(t.name === 'nocturne' ? 'dark' : 'light');
+    }
+    expect(storyThemeMode(null)).toBeUndefined();
+    expect(storyThemeMode(undefined)).toBeUndefined();
+    expect(storyThemeMode('bogus')).toBeUndefined();
   });
 });
