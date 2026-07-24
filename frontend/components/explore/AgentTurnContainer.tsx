@@ -8,6 +8,7 @@ import AgentTurnDetailPane from './AgentTurnDetailPane';
 import CompactTimelineBar from './CompactTimelineBar';
 import VerticalTimelineRail from './VerticalTimelineRail';
 import TimelineNavFooter from './TimelineNavFooter';
+import PendingClarifyPanel from './PendingClarifyPanel';
 import { buildTimeline, parseFileToolContent, FILE_LABELS } from './agentTurnTimeline';
 import { useAppSelector } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
@@ -101,17 +102,20 @@ function AgentTurnContainerImpl({
     )),
     [timeline],
   );
-  const hasPendingClarify = useMemo(() =>
-    timeline.some(n => n.messages.some(m => {
-      const name = (m as any).function?.name || '';
-      if (name !== 'ClarifyFrontend' && name !== 'Clarify') return false;
-      // Only tall when clarify is still unresolved (no content yet)
-      const content = (m as any).content;
-      return !content || content === '(executing...)';
-    })),
-    [timeline],
+  const rightPaneH = hasMultipleCharts ? '450px' : hasChartContent ? '400px' : 'auto';
+
+  // Clarify tool calls in this turn — the interactive forms render in a prominent
+  // panel OUTSIDE the working area (PendingClarifyPanel), never inside the carousel.
+  const clarifyToolCallIds = useMemo(() =>
+    turn.agentMessages
+      .filter(m => {
+        if (m.role !== 'tool') return false;
+        const name = (m as any).function?.name || '';
+        return name === 'ClarifyFrontend' || name === 'Clarify';
+      })
+      .map(m => (m as any).tool_call_id as string),
+    [turn.agentMessages],
   );
-  const rightPaneH = hasPendingClarify ? '400px' : hasMultipleCharts ? '450px' : hasChartContent ? '400px' : 'auto';
 
   // Scroll active horizontal timeline chip into view
 
@@ -197,6 +201,11 @@ function AgentTurnContainerImpl({
             <TimelineNavFooter safeIdx={safeIdx} timeline={timeline} setSelectedIdx={setSelectedIdx} />
           )}
         </Box>
+      )}
+
+      {/* Pending clarifications — prominent, outside the working area, all visible at once */}
+      {conversationID !== undefined && !readOnly && clarifyToolCallIds.length > 0 && (
+        <PendingClarifyPanel conversationID={conversationID} toolCallIds={clarifyToolCallIds} />
       )}
 
       {/* Final chat message — AI's last reply, below the working area */}
