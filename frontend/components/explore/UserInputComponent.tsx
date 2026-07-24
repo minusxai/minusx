@@ -275,8 +275,7 @@ export default function UserInputComponent({
                           src={option.imageUrl}
                           alt={`${option.label} preview`}
                           w="100%"
-                          aspectRatio="4 / 3"
-                          objectFit="cover"
+                          h="auto"
                           display="block"
                           bg="bg.muted"
                         />

@@ -8,7 +8,6 @@ import { useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
 import { makeSelectConversationByToolCallId } from '@/store/chatSlice';
-import UserInputComponent from '../UserInputComponent';
 
 // ─── Shared helpers ───────────────────────────────────────────────
 
@@ -49,29 +48,13 @@ export function ClarifyDetailCard({ msg }: DetailCardProps) {
   const { success, selection, message } = parseClarifySelection(content);
   const { question, options = [] } = args;
 
-  // Check for pending user input in Redux (interactive clarification)
+  // Check for pending user input in Redux. The interactive form itself renders in
+  // PendingClarifyPanel (outside the working area) — this card only shows a summary.
   const selectConversation = useMemo(() => makeSelectConversationByToolCallId(), []);
   const conversation = useSelector((state: RootState) => selectConversation(state, toolCallId));
   const pendingTool = conversation?.pending_tool_calls.find(p => p.toolCall.id === toolCallId);
   const pendingUserInputs = pendingTool?.userInputs?.filter(ui => ui.result === undefined);
-
-  // If there's a pending user input, render the interactive UI
-  if (pendingUserInputs && pendingUserInputs.length > 0 && conversation) {
-    return (
-      <Box mx={3} mb={2}>
-        {pendingUserInputs.map(userInput => (
-          <UserInputComponent
-            key={userInput.id}
-            conversationID={conversation.conversationID}
-            tool_call_id={toolCallId}
-            userInput={userInput}
-            toolName={toolMsg.function?.name}
-            toolArgs={args}
-          />
-        ))}
-      </Box>
-    );
-  }
+  const hasUnresolvedInputs = !!pendingUserInputs && pendingUserInputs.length > 0;
 
   // If tool is still executing but user already submitted, extract selection from resolved user input
   const resolvedUserInput = pendingTool?.userInputs?.find(ui => ui.result !== undefined);
@@ -83,6 +66,7 @@ export function ClarifyDetailCard({ msg }: DetailCardProps) {
 
   const getStatusMessage = () => {
     if (isProcessing) return 'Processing your selection…';
+    if (hasUnresolvedInputs) return 'Waiting for your response below…';
     if (isPending) return 'Waiting for response…';
     if (!success) return message || 'Cancelled';
     if (isFigureItOut) return 'Agent will figure it out';
@@ -102,9 +86,12 @@ export function ClarifyDetailCard({ msg }: DetailCardProps) {
     );
   }
 
-  // Completed or non-interactive pending state
+  // Completed or pending summary (the answerable form lives in PendingClarifyPanel)
   return (
-    <Box mx={3} mb={2} py={3} px={4} border="1px solid" borderColor="border.default" borderRadius="md" bg="bg.subtle">
+    <Box
+      mx={3} mb={2} py={3} px={4} border="1px solid" borderColor="border.default" borderRadius="md" bg="bg.subtle"
+      aria-label={hasUnresolvedInputs ? 'Clarification waiting for response' : undefined}
+    >
       <VStack gap={2} align="stretch">
         {/* Question */}
         {question && (
