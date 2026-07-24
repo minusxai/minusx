@@ -224,7 +224,7 @@ function EventsFeed({ events }: { events: CreditEvent[] }) {
 }
 
 /**
- * Admin credit controls (Settings → Usage): the LEVERS — configure limits by
+ * Admin-only credit controls below the usage summary in Settings → Usage: configure limits by
  * company/role/user, reset windows, and see the rate-limit/reset audit feed.
  * Analytics live in the reusable Question stack: the seeded internals-mode
  * "Credit Usage" dashboard (linked below), which admins can slice/re-chart
