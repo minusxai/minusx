@@ -88,6 +88,43 @@ describe('Settings Usage tab', () => {
     expect(screen.getByLabelText('Settings tab: General')).toBeInTheDocument();
     expect(screen.queryByLabelText('Settings tab: Usage')).not.toBeInTheDocument();
   });
+
+  it('groups settings in a dedicated navigation index', () => {
+    renderWithProviders(<SettingsPage />, { store: storeWith() });
+
+    const navigation = screen.getByRole('navigation', { name: 'Settings navigation' });
+    expect(navigation).toHaveTextContent('Workspace');
+    expect(navigation).toHaveTextContent('Management');
+    expect(navigation).toHaveTextContent('General');
+    expect(navigation).toHaveTextContent('AI Models');
+  });
+
+  it('does not expose the retired Viz V2 format toggle', () => {
+    renderWithProviders(<SettingsPage />, { store: storeWith() });
+
+    expect(screen.queryByText('Viz V2 Format (Beta)')).not.toBeInTheDocument();
+  });
+
+  it('searches setting labels and descriptions across sections', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />, { store: storeWith() });
+
+    await user.type(screen.getByLabelText('Search settings'), 'confidence');
+
+    expect(screen.getByLabelText('Settings search results')).toBeInTheDocument();
+    expect(screen.getByLabelText('Settings > General > Trust Score')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Settings > General > Confirm Actions')).not.toBeInTheDocument();
+  });
+
+  it('finds nested settings destinations such as Slack', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />, { store: storeWith() });
+
+    await user.type(screen.getByLabelText('Search settings'), 'signing secret');
+
+    expect(screen.getByLabelText('Open Integrations: Slack')).toBeInTheDocument();
+    expect(screen.getByText('Connect a Slack app using OAuth or manual credentials.')).toBeInTheDocument();
+  });
 });
 
 describe('Sidebar usage donuts', () => {
