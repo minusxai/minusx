@@ -741,7 +741,9 @@ function SettingsContent() {
       label: 'Usage',
       description: 'Review individual and organization credit usage.',
       group: 'workspace',
-      visible: creditsEnabled,
+      // Admins always see Usage — the credits on/off switch lives inside it (Credit
+      // controls), so gating purely on creditsEnabled would make it unreachable.
+      visible: creditsEnabled || isAdmin,
       custom: isAdmin ? <AdminUsageDashboard /> : <CreditsUsageCards />,
       searchItems: [
         { title: 'Credits', description: 'Review allowances, usage, resets, and breakdowns.', keywords: 'billing individual organization limits' },

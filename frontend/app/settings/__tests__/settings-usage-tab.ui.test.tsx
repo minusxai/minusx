@@ -95,11 +95,19 @@ describe('Settings Usage tab', () => {
     expect(screen.queryByLabelText('Credits usage')).not.toBeInTheDocument();
   });
 
-  it('hides the Usage tab when the credits module is off', () => {
-    renderWithProviders(<SettingsPage />, { store: storeWith({ creditsEnabled: false }) });
+  it('hides the Usage tab from non-admins when the credits module is off', () => {
+    renderWithProviders(<SettingsPage />, { store: storeWith({ creditsEnabled: false, role: 'viewer' }) });
 
     expect(screen.getByLabelText('Settings tab: General')).toBeInTheDocument();
     expect(screen.queryByLabelText('Settings tab: Usage')).not.toBeInTheDocument();
+  });
+
+  it('still shows the Usage tab to admins when credits is off, so they can turn it on', () => {
+    // The credits on/off switch lives INSIDE this tab (Credit controls); gating the tab
+    // purely on creditsEnabled would deadlock — an admin could never reach the toggle.
+    renderWithProviders(<SettingsPage />, { store: storeWith({ creditsEnabled: false, role: 'admin' }) });
+
+    expect(screen.getByLabelText('Settings tab: Usage')).toBeInTheDocument();
   });
 
   it('groups settings in a dedicated navigation index', () => {
