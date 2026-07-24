@@ -37,7 +37,7 @@ import PublishModal from '../modals/PublishModal';
 import SaveFileModal from '../modals/SaveFileModal';
 import { useFileToolbar } from '../file-toolbar/FileToolbarContext';
 import { usePresentation } from '../file-toolbar/PresentationContext';
-import { Tooltip } from '../ui/tooltip';
+import { Tooltip } from '../kit/tooltip';
 
 // File types whose content reads well fullscreen — the generic Present toggle is
 // offered for these. Individual views adapt their own layout via usePresentation().

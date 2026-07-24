@@ -118,7 +118,7 @@ export function InlineSqlDropdownWidget({ source, paramType, currentValue, param
   return (
     <div className="flex items-center gap-1" ref={rootRef}>
       {(error || (values !== null && values.length === 0 && !loading)) && (
-        <TooltipProvider delayDuration={200}>
+        <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild={false} className="flex items-center text-[#f39c12] outline-none">
               <LuTriangleAlert size={14} />

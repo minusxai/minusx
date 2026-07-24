@@ -229,7 +229,7 @@ export function VizTypeSelector({
   const isHorizontal = orientation === 'horizontal';
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <TooltipProvider>
       <div
         className={`flex h-full items-center gap-0.5 ${
           isHorizontal

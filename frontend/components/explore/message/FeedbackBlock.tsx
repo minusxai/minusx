@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Box, HStack, IconButton, Textarea, Button, Text, Dialog, VStack } from '@chakra-ui/react';
 import { LuThumbsUp, LuThumbsDown, LuCheck, LuCopy } from 'react-icons/lu';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 
 interface FeedbackBlockProps {
   conversationID: number;

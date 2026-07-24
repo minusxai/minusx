@@ -2,7 +2,7 @@
 
 import { Box, GridItem, Text, Badge, Link, Flex, HStack } from '@chakra-ui/react';
 import { LuChevronRight, LuChevronDown } from 'react-icons/lu';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import { DisplayProps } from '@/lib/types';
 import Markdown from '../../Markdown';
 import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
@@ -143,12 +143,7 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
                     </Box>
                   }
                   contentProps={{
-                    bg: "bg.panel",
-                    color: "fg",
-                    px: 3,
-                    py: 2,
-                    borderRadius: "md",
-                    boxShadow: "lg"
+                    className: "max-w-[640px] bg-foreground p-2.5 text-background [&_*]:!text-background"
                   }}
                 >
                   <Link

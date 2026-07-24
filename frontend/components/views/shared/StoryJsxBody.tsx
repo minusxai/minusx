@@ -414,7 +414,7 @@ export default function StoryJsxBody({
   return (
     <StoryEmbedProviders doc={doc} colorMode={colorMode}>
       <StoryJsxEmbedContext.Provider value={ctx}>
-        <TooltipProvider>
+        <TooltipProvider portalled={false}>
           {renderStoryNodes(nodes, { components: STORY_JSX_REGISTRY, decorateElement })}
         </TooltipProvider>
       </StoryJsxEmbedContext.Provider>

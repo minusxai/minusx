@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { shallowEqual } from 'react-redux';
 import { Box, Center, Dialog, Flex, HStack, Icon, Portal, Spinner, Text } from '@chakra-ui/react';
 import { LuChevronRight, LuMessageSquare, LuX } from 'react-icons/lu';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setUser } from '@/store/authSlice';

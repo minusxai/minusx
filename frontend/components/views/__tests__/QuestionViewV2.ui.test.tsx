@@ -151,6 +151,9 @@ describe('QuestionViewV2 (mounted via QuestionContainerV2) — Redux integration
     expect(await screen.findByLabelText('SQL editor')).toBeInTheDocument();
     expect(screen.getByLabelText('Database selector')).toBeInTheDocument();
     expect(screen.getByLabelText('Spreadsheet')).toBeInTheDocument();
+
+    fireEvent.focus(screen.getByLabelText('Spreadsheet'));
+    expect(await screen.findByText('Enter or paste rows. Scratch data is saved with this question and does not refresh.')).toBeInTheDocument();
   });
 
   it('switches an empty source to Spreadsheet and hides query controls after data exists', async () => {

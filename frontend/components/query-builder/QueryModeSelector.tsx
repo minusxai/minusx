@@ -58,7 +58,7 @@ export function QueryModeSelector({
   const sm = size === 'sm';
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <TooltipProvider>
       <div className="flex items-center rounded-md bg-muted p-[2px]">
         {tabs.map(({ key, label, gated, Icon }) => {
           const isActive = active && mode === key;
@@ -68,7 +68,7 @@ export function QueryModeSelector({
             gated === 'semantic'
               ? (canUseSemantic ? 'Query curated metrics and dimensions' : (semanticError || 'This SQL is not expressible with the semantic model'))
             : gated === 'viz' ? (vizError || (canUseViz ? 'Configure chart' : 'Run the query to configure a chart'))
-            : undefined;
+            : 'Write and run SQL against the selected live connection';
 
           const button = (
             <button
@@ -98,7 +98,7 @@ export function QueryModeSelector({
           return (
             <Tooltip key={key}>
               <TooltipTrigger asChild>{button}</TooltipTrigger>
-              <TooltipContent side="top">{tooltip}</TooltipContent>
+              <TooltipContent side="bottom">{tooltip}</TooltipContent>
             </Tooltip>
           );
         })}

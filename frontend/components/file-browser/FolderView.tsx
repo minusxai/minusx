@@ -21,7 +21,7 @@ import {
   LuRefreshCw,
   LuFolderOpen,
 } from 'react-icons/lu';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import { readFolder } from '@/lib/file-state/file-state';
 import type { IconType } from 'react-icons';
 import { useFolder } from '@/lib/hooks/file-state-hooks';

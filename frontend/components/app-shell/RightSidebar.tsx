@@ -16,7 +16,7 @@ import DevToolsPanel from '../dev/DevToolsPanel';
 
 import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import type { Mode } from '@/lib/mode/mode-types';
-import { Tooltip } from '../ui/tooltip';
+import { Tooltip } from '../kit/tooltip';
 import { useContext } from '@/lib/hooks/useContext';
 import { formatContextDocsSection } from '@/lib/sql/context-docs';
 import { useAppState } from '@/lib/hooks/file-state-hooks';

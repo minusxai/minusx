@@ -2,7 +2,7 @@
 
 import { HStack, Icon, Text, VStack } from '@chakra-ui/react';
 import { LuLayoutDashboard } from 'react-icons/lu';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 
 interface DashboardInfo {
   id: number;

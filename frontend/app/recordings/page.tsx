@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Box, VStack, HStack, Text, Spinner, Table, IconButton } from '@chakra-ui/react';
 import { LuPlay, LuTrash2 } from 'react-icons/lu';
 import { useRouter } from '@/lib/navigation/use-navigation';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import { fetchWithCache } from '@/lib/http/fetch-wrapper';
 import { API } from '@/lib/http/declarations';
 

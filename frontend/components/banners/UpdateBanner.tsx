@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Flex, Text, Icon, IconButton, Code } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import { LuRefreshCw, LuX, LuCopy, LuCheck } from 'react-icons/lu';
 import { GIT_COMMIT_SHA, BUILD_TIME, DISABLE_UPDATE_BANNER } from '@/lib/constants';
 import { useAppSelector } from '@/store/hooks';

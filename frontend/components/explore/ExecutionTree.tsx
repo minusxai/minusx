@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { Box, HStack, Text } from '@chakra-ui/react';
 import { Button } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import { LuGitFork, LuClock, LuTerminal, LuX } from 'react-icons/lu';
 import ToolCallListModal from './ToolCallListModal';
 import ToolInspectModal from './ToolInspectModal';

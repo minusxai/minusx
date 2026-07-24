@@ -13,7 +13,7 @@ import {
   Collapsible,
   Icon,
 } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import {
   LuTriangleAlert,
   LuTable,

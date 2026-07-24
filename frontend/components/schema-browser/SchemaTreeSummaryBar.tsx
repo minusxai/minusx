@@ -1,7 +1,7 @@
 'use client';
 
 import { HStack, Icon, IconButton, Text } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import { LuDatabase, LuRefreshCw, LuTable } from 'react-icons/lu';
 
 export interface SchemaTreeStats {

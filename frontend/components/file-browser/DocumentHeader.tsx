@@ -11,7 +11,7 @@ import {
   VStack,
   Icon,
 } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import { LuSave, LuPencil, LuTriangleAlert, LuCircleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import TabSwitcher from '../selectors/TabSwitcher';

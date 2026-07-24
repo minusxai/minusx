@@ -1,6 +1,6 @@
 import { Button } from '@chakra-ui/react';
 import { LuSparkles } from 'react-icons/lu';
-import { Tooltip } from './tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 
 /**
  * The "✨ Auto" chip — a small "generate with AI" affordance shown next to an
