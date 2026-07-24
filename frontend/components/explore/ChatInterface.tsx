@@ -1031,7 +1031,7 @@ export default function ChatInterface({
 
       {/* Sticky streaming progress badge above input */}
       {isStreaming && viewMode === 'compact' && !streamingInfo.isAnswering && streamingInfo.totalCount > 0 && (
-        <Box display="flex" justifyContent="center" pb={1}>
+        <Box display="flex" justifyContent="center" pb={1} bg="bg.canvas">
           <StreamingProgressSticky
             completedCount={streamingInfo.completedCount}
             totalCount={streamingInfo.totalCount}
