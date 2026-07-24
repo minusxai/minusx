@@ -1,7 +1,10 @@
 
 import { randomUUID } from 'crypto';
 import { EventStream, streamSimple } from '@/orchestrator/llm';
-import type { Api, AssistantMessage, Context, Message, Model, TextContent, ToolCall, ToolResultMessage } from '@/orchestrator/llm';
+import type { Api, AssistantMessage, AssistantMessageEvent, Context, Message, Model, TextContent, ToolCall, ToolResultMessage } from '@/orchestrator/llm';
+import {
+  isContentStreamEvent, shouldRetryLlmCall, abortableDelay, retryBackoffMs, MAX_LLM_CALL_RETRIES,
+} from '@/orchestrator/llm/retry';
 import {
   MXAgent,
   MXTool,
@@ -144,9 +147,6 @@ export class Orchestrator {
     callOptions?: Record<string, unknown>,
     selector: LlmPlanSelector = { agent: 'analyst' },
   ): Promise<AssistantMessage> {
-    const callId = randomUUID();
-    const t0 = Date.now();
-
     // Pre-call gate (e.g. per-user credit enforcement). Runs BEFORE the
     // concurrency slot / provider socket, so a blocked call spends nothing.
     // Throwing aborts this call and the run (surfaced as a run error event).
@@ -167,51 +167,85 @@ export class Orchestrator {
     await llmSemaphore.acquire();
     this.onActivity?.({ phase: 'llm', status: 'start' });
     try {
-      // Spread `callOptions` blindly into the model stream options. We treat it
-      // as an opaque blob (`SimpleStreamOptions`-shaped) so adding new stream
-      // options (`thinkingBudgets`, `metadata`, …) never touches this code.
-      const modelStream = streamSimple(effectiveModel, context, {
-        // Default prompt-cache retention (overridable by an explicit `callOptions.cacheRetention`,
-        // which is spread AFTER this and wins). Applies to every agent — this is the one universal
-        // LLM call site.
-        cacheRetention: DEFAULT_CACHE_RETENTION,
-        ...(effectiveOptions ?? {}),
-        headers: {
-          ...((effectiveOptions?.headers as Record<string, string> | undefined) ?? {}),
-          'X-MX-Request-Call-ID': callId,
-        },
-        signal: this.controller?.signal,
-      });
+      // Retry loop: a transient stream drop (e.g. an upstream SSE close before the first token — the
+      // failure behind the "stream ended before a terminal response event" flood) re-issues THIS call
+      // rather than failing the turn. Retrying the single call (not the whole turn) means no tool
+      // re-execution and works identically for fresh and resume turns. Bounded, abort-aware, and only
+      // when nothing has streamed yet (a re-issue after content would garble the in-progress message).
+      // See orchestrator/llm/retry.ts. Deterministic failures (context too large) exhaust the budget
+      // and surface — the real fix for those is infra (raise the proxy idle timeout), not retries.
+      for (let attempt = 0; ; attempt++) {
+        const callId = randomUUID();
+        const t0 = Date.now();
+        // Spread `callOptions` blindly into the model stream options. We treat it
+        // as an opaque blob (`SimpleStreamOptions`-shaped) so adding new stream
+        // options (`thinkingBudgets`, `metadata`, …) never touches this code.
+        const modelStream = streamSimple(effectiveModel, context, {
+          // Default prompt-cache retention (overridable by an explicit `callOptions.cacheRetention`,
+          // which is spread AFTER this and wins). Applies to every agent — this is the one universal
+          // LLM call site.
+          cacheRetention: DEFAULT_CACHE_RETENTION,
+          ...(effectiveOptions ?? {}),
+          headers: {
+            ...((effectiveOptions?.headers as Record<string, string> | undefined) ?? {}),
+            'X-MX-Request-Call-ID': callId,
+          },
+          signal: this.controller?.signal,
+        });
 
-      let result: AssistantMessage | null = null;
-      let errored = false;
-      try {
-        for await (const ev of modelStream) {
-          this.stream?.push({ ...ev, parent_id: agentId });
-          if (ev.type === 'done') result = ev.message;
-          else if (ev.type === 'error') {
-            result = ev.error;
-            errored = true;
+        let result: AssistantMessage | null = null;
+        let errored = false;
+        let errorReason: 'aborted' | 'error' | undefined;
+        let errorEv: Extract<AssistantMessageEvent, { type: 'error' }> | null = null;
+        let emitted = false; // did any visible/committable content reach the client this attempt?
+        try {
+          for await (const ev of modelStream) {
+            // The transient error is the terminal event; HOLD it instead of pushing downstream, so a
+            // re-issue can supersede it without the turn runner latching its first `runError`.
+            if (ev.type === 'error') { result = ev.error; errored = true; errorReason = ev.reason; errorEv = ev; }
+            else {
+              this.stream?.push({ ...ev, parent_id: agentId });
+              if (ev.type === 'done') result = ev.message;
+              else if (isContentStreamEvent(ev.type)) emitted = true;
+            }
+          }
+        } finally {
+          if (result) {
+            const durationSec = (Date.now() - t0) / 1000;
+            const firstTool = result.content?.find((c: unknown) => (c as { type?: string }).type === 'toolCall') as Record<string, unknown> | undefined;
+            const target = firstTool ?? (result as unknown as Record<string, unknown>);
+            target['_duration'] = durationSec;
+            target['_lllmCallId'] = callId;
           }
         }
-      } finally {
-        if (result) {
-          const durationSec = (Date.now() - t0) / 1000;
-          const firstTool = result.content?.find((c: unknown) => (c as { type?: string }).type === 'toolCall') as Record<string, unknown> | undefined;
-          const target = firstTool ?? (result as unknown as Record<string, unknown>);
-          target['_duration'] = durationSec;
-          target['_lllmCallId'] = callId;
+
+        if (errored) {
+          const aborted = this.controller?.signal?.aborted ?? false;
+          const willRetry = shouldRetryLlmCall({
+            reason: errorReason, emitted, aborted,
+            errorMessage: result?.errorMessage, attempt, maxRetries: MAX_LLM_CALL_RETRIES,
+          });
+          // Measurement: log every drop with whether content had streamed + whether we retried, so
+          // production reveals the pre-/post-first-token split (informs whether a delta-reset is worth it).
+          console.warn(`[callLLM] LLM stream drop (agent=${agentId}, attempt=${attempt}, emitted=${emitted}, reason=${errorReason}, willRetry=${willRetry}): ${result?.errorMessage ?? ''}`);
+          if (willRetry) {
+            await abortableDelay(retryBackoffMs(attempt), this.controller?.signal);
+            if (!this.controller?.signal?.aborted) continue; // re-issue; the held error event is dropped
+          }
         }
+
+        // Not retrying: forward the (deferred) terminal error event downstream, exactly as before.
+        if (errorEv) this.stream?.push({ ...errorEv, parent_id: agentId });
+        if (!result) {
+          throw new Error(`callLLM: LLM stream ended without done/error event (agent=${agentId})`);
+        }
+        if (errored) {
+          throw new Error(
+            `callLLM: LLM stream errored (agent=${agentId}, reason='${result.stopReason}'): ${result.errorMessage ?? ''}`,
+          );
+        }
+        return result;
       }
-      if (!result) {
-        throw new Error(`callLLM: LLM stream ended without done/error event (agent=${agentId})`);
-      }
-      if (errored) {
-        throw new Error(
-          `callLLM: LLM stream errored (agent=${agentId}, reason='${result.stopReason}'): ${result.errorMessage ?? ''}`,
-        );
-      }
-      return result;
     } finally {
       this.onActivity?.({ phase: 'llm', status: 'end' });
       llmSemaphore.release();
