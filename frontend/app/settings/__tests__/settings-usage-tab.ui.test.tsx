@@ -39,20 +39,15 @@ const individual: CreditUsageResponse['individual'] = {
   reset: { label: 'today', used: 20, allowance: 1_000, resetsAt: '2026-07-04T00:00:00.000Z' },
 };
 
-const adminBreakdown = {
-  windowLabel: 'this month', totalCredits: 1959, totalRequests: 138, activeUsers: 1,
-  byGrade: [], byProvider: [], byModel: [], byAgent: [], byUser: [], byRole: [], overTime: [], events: [],
-};
-
-// Branch by URL: the admin dashboard hits /admin-usage, the user card hits /usage.
+// Branch by URL: admin controls hit /credits/events + /api/configs; the user card hits /credits/usage.
 function mockUsageFetch() {
   vi.stubGlobal(
     'fetch',
     vi.fn().mockImplementation((url: string) => Promise.resolve({
       ok: true,
       status: 200,
-      json: async () => url.includes('/admin-usage')
-        ? { success: true, data: adminBreakdown }
+      json: async () => url.includes('/credits/events') ? { success: true, data: { events: [] } }
+        : url.includes('/api/configs') ? { success: true, data: { config: { credits: {} } } }
         : { success: true, data: { individual, org: null, enabled: false } satisfies CreditUsageResponse },
     })),
   );
@@ -82,12 +77,14 @@ describe('Settings Usage tab', () => {
     await waitFor(() => expect(screen.getByLabelText('Your usage')).toBeInTheDocument());
   });
 
-  it('shows the org usage dashboard on the Usage tab for an admin', async () => {
+  it('shows the credit controls panel on the Usage tab for an admin', async () => {
     mockSearch = 'tab=usage';
     renderWithProviders(<SettingsPage />, { store: storeWith({ role: 'admin' }) });
 
     expect(screen.getByLabelText('Settings tab: Usage')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByLabelText('Org usage dashboard')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('Credit controls')).toBeInTheDocument());
+    // The analytics link points at the seeded internals dashboard, not a bespoke breakdown.
+    expect(screen.getByLabelText('Open credit analytics')).toBeInTheDocument();
   });
 
   it('does not render the credits card on the General tab', async () => {

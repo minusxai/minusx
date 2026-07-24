@@ -2,17 +2,16 @@ import { NextRequest } from 'next/server';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { withAuth } from '@/lib/http/with-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import { getAdminUsageBreakdown } from '@/lib/analytics/admin-usage.server';
+import { getRecentCreditEvents } from '@/lib/analytics/credit-usage.server';
 
 /**
- * GET /api/credits/admin-usage — the org-wide usage "full picture" over the
- * current billing window, sliced by grade/provider/model/agent/user/role plus a
- * per-day timeseries. Admin-only (a non-admin gets 403).
+ * GET /api/credits/events — recent credit lifecycle events (rate-limit hits +
+ * manual/auto resets) from app_events, for the admin levers panel. Admin-only.
  */
 export const GET = withAuth(async (_req: NextRequest, user) => {
   try {
     if (!isAdmin(user.role)) return ApiErrors.forbidden('Admin access required');
-    return await successResponse(await getAdminUsageBreakdown());
+    return await successResponse({ events: await getRecentCreditEvents() });
   } catch (error) {
     return handleApiError(error);
   }

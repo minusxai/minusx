@@ -1,112 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, VStack, HStack, Text, SimpleGrid, Spinner, Table, IconButton, Input, Button } from '@chakra-ui/react';
-import { LuRefreshCw, LuX } from 'react-icons/lu';
+import { useCallback, useEffect, useState } from 'react';
+import { VStack, HStack, Text, SimpleGrid, Table, IconButton, Input, Button, Link } from '@chakra-ui/react';
+import { LuX, LuExternalLink } from 'react-icons/lu';
 import { toaster } from '@/components/ui/toaster';
-import { useAppSelector } from '@/store/hooks';
-import VegaChart from '@/components/viz/VegaChart';
-import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import type { AdminUsageBreakdown, UsageBreakdownEntry, UsageTimePoint, CreditEvent } from '@/lib/analytics/admin-usage.server';
+import type { CreditEvent } from '@/lib/analytics/credits.types';
 
-const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-
-/** Fetch the org-wide admin usage breakdown. */
-function useAdminUsage() {
-  const [data, setData] = useState<AdminUsageBreakdown | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refetch = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/credits/admin-usage');
-      if (!res.ok) throw new Error(`Failed to load usage (${res.status})`);
-      const body = await res.json();
-      setData(body.data as AdminUsageBreakdown);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load usage');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void refetch(); }, [refetch]);
-  return { data, loading, error, refetch };
-}
-
-function Kpi({ label, value }: { label: string; value: string }) {
-  return (
-    <VStack align="start" gap={0.5} p={4} borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface">
-      <Text fontSize="xs" color="fg.muted" fontFamily="mono" textTransform="uppercase" letterSpacing="0.05em">{label}</Text>
-      <Text fontSize="2xl" fontWeight="semibold" fontFamily="mono">{value}</Text>
-    </VStack>
-  );
-}
-
-// A vega-lite bar spec rendered through the shared VegaChart (query rows bind as
-// dataset "main"). Using the raw-spec escape hatch keeps full control while reusing
-// the app's one chart renderer (SVG-forced, design-theme chart tokens).
-const TREND_ENVELOPE = {
-  version: 2,
-  source: {
-    kind: 'vega-lite',
-    grammar: 'vega-lite@6',
-    spec: {
-      data: { name: 'main' },
-      mark: { type: 'bar', tooltip: true, cornerRadiusEnd: 2 },
-      encoding: {
-        x: { field: 'date', type: 'ordinal', axis: { labelAngle: 0, title: null } },
-        y: { field: 'credits', type: 'quantitative', axis: { title: 'credits' } },
-      },
-    },
-    detachedFrom: null,
-  },
-} as unknown as VizEnvelope;
-
-/** Credits-per-day trend via the shared VegaChart (vega-lite bar spec). */
-function DailyTrendChart({ points }: { points: UsageTimePoint[] }) {
-  const colorMode = useAppSelector((s) => s.ui.colorMode);
-  const rows = useMemo(() => points.map((p) => ({ date: p.date.slice(5), credits: p.credits })), [points]);
-  // VegaChart's root is `flex-1` — it fills a flex COLUMN parent; give it one with a fixed height.
-  return (
-    <Box h="220px" w="100%" display="flex" flexDirection="column">
-      <VegaChart envelope={TREND_ENVELOPE} rows={rows} colorMode={colorMode} />
-    </Box>
-  );
-}
-
-/** A compact top-N table for a dimension breakdown. */
-function BreakdownTable({ title, rows }: { title: string; rows: UsageBreakdownEntry[] }) {
-  return (
-    <VStack align="stretch" gap={2} p={4} borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface" minW={0}>
-      <Text fontSize="sm" fontWeight="medium" fontFamily="mono">{title}</Text>
-      {rows.length === 0
-        ? <Text fontSize="sm" color="fg.muted">No usage yet</Text>
-        : (
-          <Table.Root size="sm" variant="line">
-            <Table.Header>
-              <Table.Row>
-                <Table.ColumnHeader fontFamily="mono" fontSize="xs">Name</Table.ColumnHeader>
-                <Table.ColumnHeader fontFamily="mono" fontSize="xs" textAlign="end">Credits</Table.ColumnHeader>
-                <Table.ColumnHeader fontFamily="mono" fontSize="xs" textAlign="end">Requests</Table.ColumnHeader>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {rows.slice(0, 8).map((r) => (
-                <Table.Row key={r.key}>
-                  <Table.Cell fontFamily="mono" fontSize="xs" truncate maxW="180px">{r.key}</Table.Cell>
-                  <Table.Cell fontFamily="mono" fontSize="xs" textAlign="end">{nf.format(r.credits)}</Table.Cell>
-                  <Table.Cell fontFamily="mono" fontSize="xs" textAlign="end">{nf.format(r.requests)}</Table.Cell>
-                </Table.Row>
-              ))}
-            </Table.Body>
-          </Table.Root>
-        )}
-    </VStack>
-  );
-}
+// The seeded internals-mode "Credit Usage" dashboard (workspace-template.json id 61) —
+// the reusable Question stack over llm_call_events for slicing/charting credit usage.
+const CREDIT_DASHBOARD_HREF = '/f/61?mode=internals';
 
 type Limits = { daily?: number; weekly?: number };
 type CreditsCfg = {
@@ -115,7 +17,7 @@ type CreditsCfg = {
 };
 const ROLES = ['admin', 'editor', 'viewer'] as const;
 
-/** Admin editor for the credit levers: enabled/enforced + daily/weekly limits by company and role. */
+/** Admin editor for the credit levers: on/off + daily/weekly limits by company, role, and user. */
 function LimitsEditor() {
   const [cfg, setCfg] = useState<CreditsCfg | null>(null);
   const [busy, setBusy] = useState(false);
@@ -300,55 +202,32 @@ function EventsFeed({ events }: { events: CreditEvent[] }) {
 }
 
 /**
- * Admin org-wide usage dashboard: the "full picture" over the billing window,
- * sliced by grade / provider / agent / model / user / role, with a per-day
- * credits trend. Reads GET /api/credits/admin-usage (admin-gated).
+ * Admin credit controls (Settings → Usage): the LEVERS — configure limits by
+ * company/role/user, reset windows, and see the rate-limit/reset audit feed.
+ * Analytics live in the reusable Question stack: the seeded internals-mode
+ * "Credit Usage" dashboard (linked below), which admins can slice/re-chart
+ * over `llm_call_events` — no bespoke breakdown UI.
  */
 export default function AdminUsageDashboard() {
-  const { data, loading, error, refetch } = useAdminUsage();
-
-  if (loading && !data) return <HStack justify="center" py={16}><Spinner /></HStack>;
-  if (error) return <Box p={4}><Text color="accent.danger" fontFamily="mono" fontSize="sm">{error}</Text></Box>;
-  if (!data) return null;
+  const [events, setEvents] = useState<CreditEvent[]>([]);
+  const refetch = useCallback(() => {
+    void fetch('/api/credits/events').then((r) => r.json()).then((b) => setEvents((b?.data?.events as CreditEvent[]) ?? []));
+  }, []);
+  useEffect(() => { refetch(); }, [refetch]);
 
   return (
-    <VStack align="stretch" gap={5} aria-label="Org usage dashboard">
+    <VStack align="stretch" gap={5} aria-label="Credit controls">
       <HStack justify="space-between">
-        <Text fontSize="sm" color="fg.muted" fontFamily="mono">Org usage · {data.windowLabel}</Text>
-        <IconButton aria-label="Refresh usage" size="xs" variant="ghost" onClick={() => void refetch()}><LuRefreshCw /></IconButton>
+        <Text fontSize="sm" color="fg.muted" fontFamily="mono">Credit controls</Text>
+        <Link href={CREDIT_DASHBOARD_HREF} aria-label="Open credit analytics" fontSize="sm" fontFamily="mono" color="accent.teal">
+          <HStack gap={1}><Text>Credit analytics</Text><LuExternalLink /></HStack>
+        </Link>
       </HStack>
-
-      <SimpleGrid columns={{ base: 2, md: 4 }} gap={3}>
-        <Kpi label="Total credits" value={nf.format(data.totalCredits)} />
-        <Kpi label="Requests" value={nf.format(data.totalRequests)} />
-        <Kpi label="Active users" value={nf.format(data.activeUsers)} />
-        <Kpi label="Window" value={data.windowLabel} />
-      </SimpleGrid>
-
-      <VStack align="stretch" gap={2} p={4} borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface" minW={0}>
-        <Text fontSize="sm" fontWeight="medium" fontFamily="mono">Credits per day</Text>
-        {data.overTime.length === 0
-          ? <HStack h="120px" justify="center"><Text fontSize="sm" color="fg.muted">No usage yet</Text></HStack>
-          : <DailyTrendChart points={data.overTime} />}
-      </VStack>
-
-      <SimpleGrid columns={{ base: 1, lg: 3 }} gap={3}>
-        <BreakdownTable title="By grade" rows={data.byGrade} />
-        <BreakdownTable title="By provider" rows={data.byProvider} />
-        <BreakdownTable title="By agent" rows={data.byAgent} />
-      </SimpleGrid>
-
-      <SimpleGrid columns={{ base: 1, lg: 3 }} gap={3}>
-        <BreakdownTable title="Top users" rows={data.byUser} />
-        <BreakdownTable title="By model" rows={data.byModel} />
-        <BreakdownTable title="By role" rows={data.byRole} />
-      </SimpleGrid>
-
       <SimpleGrid columns={{ base: 1, lg: 2 }} gap={3}>
         <LimitsEditor />
         <VStack align="stretch" gap={3}>
           <ResetControls onDone={refetch} />
-          <EventsFeed events={data.events} />
+          <EventsFeed events={events} />
         </VStack>
       </SimpleGrid>
     </VStack>

@@ -12,7 +12,7 @@ import { appEventRegistry } from '@/lib/app-event-registry';
 import { AppEvents } from '@/lib/app-event-registry/events';
 import type { CreditWeights } from './credit-budgets';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { UNKNOWN_TRIGGER, type CreditBreakdownRow, type CreditScope, type CreditUsageResponse } from './credits.types';
+import { UNKNOWN_TRIGGER, type CreditBreakdownRow, type CreditScope, type CreditUsageResponse, type CreditEvent } from './credits.types';
 
 /**
  * Aggregate credit usage from `llm_call_events` over two windows resolved from
@@ -238,6 +238,22 @@ export async function checkCreditGate(user: EffectiveUser): Promise<CreditGate> 
     return { allowed: false, exceeded: 'reset', message: `Credit limit reached for ${resetCycle.label} (${policy.daily.limit.toLocaleString()} credits). It resets soon.` };
   }
   return ALLOWED;
+}
+
+/** Recent credit lifecycle events (rate-limit hits + resets) for the admin audit feed. */
+export async function getRecentCreditEvents(limit = 20): Promise<CreditEvent[]> {
+  const n = Math.min(100, Math.max(1, Math.floor(limit)));
+  const { rows } = await getModules().db.exec<Record<string, unknown>>(
+    `SELECT event_type, created_at, payload FROM app_events
+     WHERE event_type IN ('credit:rate_limit_hit', 'credit:reset')
+     ORDER BY created_at DESC LIMIT ${n}`,
+  );
+  const toIso = (v: unknown): string => v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString();
+  return rows.map((r) => ({
+    type: String(r['event_type']) === 'credit:reset' ? 'reset' : 'rate_limit_hit',
+    at: toIso(r['created_at']),
+    detail: (r['payload'] as Record<string, unknown>) ?? {},
+  }));
 }
 
 /** Thrown by the orchestrator credit gate when a user is over their enforced limit. */
