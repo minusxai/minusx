@@ -4,16 +4,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Box, VStack, HStack, Text, Icon, IconButton, Progress, ProgressCircle, AbsoluteCenter, Table, Spinner } from '@chakra-ui/react';
 import { LuZap, LuRefreshCw } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
-import { selectCreditsEnabled } from '@/store/configsSlice';
 import type { CreditBreakdownRow, CreditScope, CreditUsageResponse, CreditWindow } from '@/lib/analytics/credits.types';
 
 const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
 /**
  * Fetch the current user's (and, for admins, the org's) credit usage.
- * Skips the network call entirely when `enabled` is false (credits module off).
  */
-function useCreditUsage(enabled: boolean) {
+function useCreditUsage() {
   const [data, setData] = useState<CreditUsageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +31,7 @@ function useCreditUsage(enabled: boolean) {
     }
   }, []);
 
-  useEffect(() => { if (enabled) void refetch(); }, [enabled, refetch]);
+  useEffect(() => { void refetch(); }, [refetch]);
 
   return { data, loading, error, refetch };
 }
@@ -154,16 +152,13 @@ function BreakdownTable({ rows, total }: { rows: CreditBreakdownRow[]; total: nu
 }
 
 /**
- * Settings → General credits card. One card with reset + billing bars per scope
+ * Settings → Usage credits card. One card with reset + billing bars per scope
  * (yours + org for admins). The full per-(provider, model, trigger) breakdown
  * table is shown only when dev mode is on.
  */
 export function CreditsUsageCards() {
-  const creditsEnabled = useAppSelector(selectCreditsEnabled);
-  const { data, loading, error, refetch } = useCreditUsage(creditsEnabled);
+  const { data, loading, error, refetch } = useCreditUsage();
   const devMode = useAppSelector((s) => s.ui.devMode);
-
-  if (!creditsEnabled) return null;
 
   return (
     <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" px={6} py={4} aria-label="Credits usage">
@@ -215,12 +210,14 @@ export function CreditsUsageCards() {
 /**
  * Compact credit usage for the sidebar user menu (under "Signed in as"): two
  * tiny donuts for YOUR usage only (credit window + billing cycle). Org usage is
- * intentionally omitted here — it lives in Settings → General.
+ * intentionally omitted here — it lives in Settings → Usage.
+ *
+ * Like the full Usage tab, this mirrors the always-available `/usage` command
+ * and reads the usage endpoint even when credit enforcement is off.
  */
 export function CreditsUsageBars({ onClick }: { onClick?: () => void }) {
-  const creditsEnabled = useAppSelector(selectCreditsEnabled);
-  const { data, loading } = useCreditUsage(creditsEnabled);
-  if (!creditsEnabled || loading || !data) return null;
+  const { data, loading } = useCreditUsage();
+  if (loading || !data) return null;
   return (
     <HStack
       gap={3}

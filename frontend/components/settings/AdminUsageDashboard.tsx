@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { VStack, HStack, Text, SimpleGrid, Table, IconButton, Input, Button, Link } from '@chakra-ui/react';
+import { VStack, HStack, Text, SimpleGrid, Table, IconButton, Input, Button, Link, Portal, createListCollection } from '@chakra-ui/react';
 import { LuX, LuExternalLink } from 'react-icons/lu';
 import { toaster } from '@/components/ui/toaster';
+import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useUsers } from '@/lib/hooks/useUsers';
 import type { CreditEvent } from '@/lib/analytics/credits.types';
 
@@ -11,20 +12,49 @@ import type { CreditEvent } from '@/lib/analytics/credits.types';
 // the reusable Question stack over llm_call_events for slicing/charting credit usage.
 const CREDIT_DASHBOARD_HREF = '/f/61?mode=internals';
 
-// Native <select> styled to match the surrounding mono/surface controls (Chakra's
-// Select is heavier than needed for these small enum/user pickers).
-const SELECT_STYLE: React.CSSProperties = {
-  fontFamily: 'monospace', fontSize: '0.875rem', padding: '4px 8px',
-  border: '1px solid var(--chakra-colors-border-default)', borderRadius: '6px',
-  background: 'var(--chakra-colors-bg-surface)',
-};
-
 type Limits = { daily?: number; weekly?: number };
 type CreditsCfg = {
   enabled?: boolean;
   limits?: { company?: Limits; roles?: Record<string, Limits>; users?: Record<string, Limits> };
 };
 const ROLES = ['admin', 'editor', 'viewer'] as const;
+
+interface ControlSelectProps {
+  ariaLabel: string;
+  value: string;
+  placeholder: string;
+  items: Array<{ label: string; value: string }>;
+  onValueChange: (value: string) => void;
+  width?: string;
+}
+
+/** Compact app-standard select used by the credit controls. */
+function ControlSelect({ ariaLabel, value, placeholder, items, onValueChange, width = '160px' }: ControlSelectProps) {
+  const collection = createListCollection({ items });
+  return (
+    <SelectRoot
+      collection={collection}
+      value={value ? [value] : []}
+      onValueChange={(e) => onValueChange(e.value[0] ?? '')}
+      size="sm"
+      positioning={{ sameWidth: true, placement: 'bottom-start' }}
+      width={width}
+    >
+      <SelectTrigger aria-label={ariaLabel} cursor="pointer">
+        <SelectValueText placeholder={placeholder} fontFamily="mono" fontSize="xs" />
+      </SelectTrigger>
+      <Portal>
+        <SelectPositioner>
+          <SelectContent maxH="260px" overflowY="auto" fontFamily="mono" fontSize="xs">
+            {items.map((item) => (
+              <SelectItem key={item.value} item={item.value}>{item.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </SelectPositioner>
+      </Portal>
+    </SelectRoot>
+  );
+}
 
 /** Admin editor for the credit levers: on/off + daily/weekly limits by company, role, and user. */
 function LimitsEditor() {
@@ -117,17 +147,16 @@ function LimitsEditor() {
           <Table.Row>
             <Table.Cell colSpan={3}>
               <HStack gap={2}>
-                <select
-                  aria-label="Add user for limit"
-                  style={{ ...SELECT_STYLE, fontSize: '0.75rem', maxWidth: '200px' }}
+                <ControlSelect
+                  ariaLabel="Add user for limit"
                   value={newUser}
-                  onChange={(e) => setNewUser(e.target.value)}
-                >
-                  <option value="">Select a user…</option>
-                  {users
+                  onValueChange={setNewUser}
+                  placeholder="Select a user…"
+                  width="200px"
+                  items={users
                     .filter((u) => u.email && !(u.email in (cfg.limits?.users ?? {})))
-                    .map((u) => <option key={u.email} value={u.email}>{u.email}</option>)}
-                </select>
+                    .map((u) => ({ label: u.email, value: u.email }))}
+                />
                 <Button aria-label="Add user limit" size="xs" variant="outline" onClick={addUser} disabled={!newUser.trim()}>Add user</Button>
               </HStack>
             </Table.Cell>
@@ -168,27 +197,35 @@ function ResetControls({ onDone }: { onDone: () => void }) {
     <VStack align="stretch" gap={2} p={4} borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface">
       <Text fontSize="sm" fontWeight="medium" fontFamily="mono">Reset credits</Text>
       <HStack gap={2} flexWrap="wrap">
-        <select
-          aria-label="Reset scope"
+        <ControlSelect
+          ariaLabel="Reset scope"
           value={scope}
-          onChange={(e) => { setScope(e.target.value as 'company' | 'role' | 'user'); setTarget(''); }}
-          style={SELECT_STYLE}
-        >
-          <option value="company">Company</option>
-          <option value="role">Role</option>
-          <option value="user">User</option>
-        </select>
+          onValueChange={(value) => { setScope(value as 'company' | 'role' | 'user'); setTarget(''); }}
+          placeholder="Select a scope…"
+          items={[
+            { label: 'Company', value: 'company' },
+            { label: 'Role', value: 'role' },
+            { label: 'User', value: 'user' },
+          ]}
+        />
         {scope === 'role' && (
-          <select aria-label="Reset target role" value={target} onChange={(e) => setTarget(e.target.value)} style={SELECT_STYLE}>
-            <option value="">Select a role…</option>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
+          <ControlSelect
+            ariaLabel="Reset target role"
+            value={target}
+            onValueChange={setTarget}
+            placeholder="Select a role…"
+            items={ROLES.map((role) => ({ label: role, value: role }))}
+          />
         )}
         {scope === 'user' && (
-          <select aria-label="Reset target user" value={target} onChange={(e) => setTarget(e.target.value)} style={{ ...SELECT_STYLE, maxWidth: '240px' }}>
-            <option value="">Select a user…</option>
-            {users.filter((u) => u.email).map((u) => <option key={u.email} value={u.email}>{u.email}</option>)}
-          </select>
+          <ControlSelect
+            ariaLabel="Reset target user"
+            value={target}
+            onValueChange={setTarget}
+            placeholder="Select a user…"
+            width="240px"
+            items={users.filter((u) => u.email).map((u) => ({ label: u.email, value: u.email }))}
+          />
         )}
         <Button aria-label="Apply reset" size="sm" colorPalette="teal" loading={busy} disabled={scope !== 'company' && !target.trim()} onClick={submit}>
           Reset
@@ -224,7 +261,7 @@ function EventsFeed({ events }: { events: CreditEvent[] }) {
 }
 
 /**
- * Admin credit controls (Settings → Usage): the LEVERS — configure limits by
+ * Admin-only credit controls below the usage summary in Settings → Usage: configure limits by
  * company/role/user, reset windows, and see the rate-limit/reset audit feed.
  * Analytics live in the reusable Question stack: the seeded internals-mode
  * "Credit Usage" dashboard (linked below), which admins can slice/re-chart

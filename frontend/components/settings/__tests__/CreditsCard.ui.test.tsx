@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
-import { makeStore } from '@/store/store';
 import { CreditsUsageCards } from '@/components/settings/CreditsCard';
 import type { CreditUsageResponse } from '@/lib/analytics/credits.types';
 
@@ -10,11 +9,6 @@ function mockUsage(data: CreditUsageResponse) {
     'fetch',
     vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true, data }) }),
   );
-}
-
-/** Store with the credits module turned on (CREDITS_ENABLED=true at SSR). */
-function enabledStore() {
-  return makeStore({ configs: { creditsEnabled: true } } as never);
 }
 
 const individual: CreditUsageResponse['individual'] = {
@@ -34,7 +28,7 @@ describe('CreditsUsageCards', () => {
 
   it('renders only the individual card when org is null (non-admin)', async () => {
     mockUsage({ individual, org: null, enabled: false });
-    renderWithProviders(<CreditsUsageCards />, { store: enabledStore() });
+    renderWithProviders(<CreditsUsageCards />);
 
     await waitFor(() => expect(screen.getByLabelText('Your usage')).toBeInTheDocument());
     expect(screen.queryByLabelText('Organization usage')).not.toBeInTheDocument();
@@ -49,22 +43,19 @@ describe('CreditsUsageCards', () => {
         reset: { label: 'today', used: 40, allowance: 10_000, resetsAt: '2026-07-04T00:00:00.000Z' },
       },
     });
-    renderWithProviders(<CreditsUsageCards />, { store: enabledStore() });
+    renderWithProviders(<CreditsUsageCards />);
 
     await waitFor(() => expect(screen.getByLabelText('Your usage')).toBeInTheDocument());
     expect(screen.getByLabelText('Organization usage')).toBeInTheDocument();
   });
 
-  it('renders nothing and does not fetch usage when CREDITS_ENABLED is off (default)', async () => {
+  it('shows usage when credit enforcement is off, matching the /usage command', async () => {
     const fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true, data: { individual, org: null, enabled: false } }) });
     vi.stubGlobal('fetch', fetchSpy);
 
-    // Default store — creditsEnabled defaults to false.
-    const { container } = renderWithProviders(<CreditsUsageCards />);
+    renderWithProviders(<CreditsUsageCards />);
 
-    expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByLabelText('Credits usage')).not.toBeInTheDocument();
-    // Module is off — it must not hit /api/credits/usage.
-    await waitFor(() => expect(fetchSpy).not.toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByLabelText('Your usage')).toBeInTheDocument());
+    expect(fetchSpy).toHaveBeenCalledWith('/api/credits/usage');
   });
 });

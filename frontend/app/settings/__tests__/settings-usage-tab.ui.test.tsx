@@ -75,14 +75,17 @@ describe('Settings Usage tab', () => {
     expect(screen.getByLabelText('Settings tab: Usage')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText('Credits usage')).toBeInTheDocument());
     await waitFor(() => expect(screen.getByLabelText('Your usage')).toBeInTheDocument());
+    expect(screen.queryByLabelText('Credit controls')).not.toBeInTheDocument();
   });
 
-  it('shows the credit controls panel on the Usage tab for an admin', async () => {
+  it('shows usage followed by credit controls for an admin', async () => {
     mockSearch = 'tab=usage';
     renderWithProviders(<SettingsPage />, { store: storeWith({ role: 'admin' }) });
 
     expect(screen.getByLabelText('Settings tab: Usage')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByLabelText('Credit controls')).toBeInTheDocument());
+    const usage = await screen.findByLabelText('Credits usage');
+    const controls = await screen.findByLabelText('Credit controls');
+    expect(usage.compareDocumentPosition(controls) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The analytics link points at the seeded internals dashboard, not a bespoke breakdown.
     expect(screen.getByLabelText('Open credit analytics')).toBeInTheDocument();
   });
@@ -95,29 +98,48 @@ describe('Settings Usage tab', () => {
     expect(screen.queryByLabelText('Credits usage')).not.toBeInTheDocument();
   });
 
-  it('hides the Usage tab from non-admins when the credits module is off', () => {
-    renderWithProviders(<SettingsPage />, { store: storeWith({ creditsEnabled: false, role: 'viewer' }) });
+  it('does not expose credit controls to non-admins', async () => {
+    mockSearch = 'tab=usage';
+    renderWithProviders(<SettingsPage />, { store: storeWith({ role: 'viewer' }) });
 
-    expect(screen.getByLabelText('Settings tab: General')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Settings tab: Usage')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Settings tab: Usage')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Your usage')).toBeInTheDocument());
+    expect(screen.queryByLabelText('Credit controls')).not.toBeInTheDocument();
   });
 
-  it('still shows the Usage tab to admins when credits is off, so they can turn it on', () => {
-    // The credits on/off switch lives INSIDE this tab (Credit controls); gating the tab
-    // purely on creditsEnabled would deadlock — an admin could never reach the toggle.
+  it('shows Usage to non-admins when credit enforcement is off', async () => {
+    mockSearch = 'tab=usage';
+    renderWithProviders(<SettingsPage />, { store: storeWith({ creditsEnabled: false, role: 'viewer' }) });
+
+    expect(screen.getByLabelText('Settings tab: Usage')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Your usage')).toBeInTheDocument());
+  });
+
+  it('shows admin controls when credit enforcement is off, so admins can turn it on', async () => {
+    mockSearch = 'tab=usage';
     renderWithProviders(<SettingsPage />, { store: storeWith({ creditsEnabled: false, role: 'admin' }) });
 
     expect(screen.getByLabelText('Settings tab: Usage')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Credit controls')).toBeInTheDocument());
   });
 
   it('groups settings in a dedicated navigation index', () => {
     renderWithProviders(<SettingsPage />, { store: storeWith() });
 
     const navigation = screen.getByRole('navigation', { name: 'Settings navigation' });
-    expect(navigation).toHaveTextContent('Workspace');
+    expect(navigation).not.toHaveTextContent('Workspace');
     expect(navigation).toHaveTextContent('Management');
     expect(navigation).toHaveTextContent('General');
+    expect(navigation).toHaveTextContent('Usage');
     expect(navigation).toHaveTextContent('AI Models');
+  });
+
+  it('places General and Usage in Management', () => {
+    renderWithProviders(<SettingsPage />, { store: storeWith() });
+
+    expect(screen.getByText('Management').parentElement).toHaveTextContent('General');
+    expect(screen.getByText('Management').parentElement).toHaveTextContent('Usage');
+    expect(screen.queryByText('Workspace')).not.toBeInTheDocument();
   });
 
   it('does not expose the retired Viz V2 format toggle', () => {
@@ -165,5 +187,16 @@ describe('Sidebar usage donuts', () => {
     await user.click(donuts);
 
     expect(navigateSpy).toHaveBeenCalledWith('/settings?tab=usage');
+  });
+
+  it('shows usage when credit enforcement is off, matching the /usage command', async () => {
+    const fetchSpy = vi.mocked(fetch);
+    const user = userEvent.setup();
+    renderWithProviders(<Sidebar />, { store: storeWith({ creditsEnabled: false }) });
+
+    await user.click(screen.getByLabelText('Account menu'));
+
+    expect(await screen.findByLabelText('Credits usage bars')).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledWith('/api/credits/usage');
   });
 });

@@ -31,10 +31,9 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
-import { selectCreditsEnabled } from '@/store/configsSlice';
 import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 type TabId = 'general' | 'usage' | 'homepage' | 'dev' | 'data' | 'users' | 'appearance' | 'configs' | 'styles' | 'messaging' | 'integrations' | 'models';
-type SettingsGroupId = 'workspace' | 'management' | 'advanced';
+type SettingsGroupId = 'management' | 'advanced';
 
 interface SettingEntry {
   tab: TabId;
@@ -62,7 +61,6 @@ interface TabEntry {
 }
 
 const SETTINGS_GROUPS: Array<{ id: SettingsGroupId; label: string }> = [
-  { id: 'workspace', label: 'Workspace' },
   { id: 'management', label: 'Management' },
   { id: 'advanced', label: 'Advanced' },
 ];
@@ -392,7 +390,6 @@ function SettingsContent() {
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
   const showExpandedMessages = useAppSelector((state) => state.ui.showExpandedMessages ?? false);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
-  const creditsEnabled = useAppSelector(selectCreditsEnabled);
   const { config } = useConfigs();
 
   const searchParams = useSearchParams();
@@ -677,7 +674,7 @@ function SettingsContent() {
       id: 'general',
       label: 'General',
       description: 'Everyday agent behavior and feature controls.',
-      group: 'workspace',
+      group: 'management',
     },
     {
       id: 'appearance',
@@ -739,14 +736,21 @@ function SettingsContent() {
     {
       id: 'usage',
       label: 'Usage',
-      description: 'Review individual and organization credit usage.',
-      group: 'workspace',
-      // Admins always see Usage — the credits on/off switch lives inside it (Credit
-      // controls), so gating purely on creditsEnabled would make it unreachable.
-      visible: creditsEnabled || isAdmin,
-      custom: isAdmin ? <AdminUsageDashboard /> : <CreditsUsageCards />,
+      description: isAdmin
+        ? 'Review usage and manage credit limits, enforcement, and resets.'
+        : 'Review your current credit usage and allowances.',
+      group: 'management',
+      custom: (
+        <VStack align="stretch" gap={5}>
+          <CreditsUsageCards />
+          {isAdmin && <AdminUsageDashboard />}
+        </VStack>
+      ),
       searchItems: [
-        { title: 'Credits', description: 'Review allowances, usage, resets, and breakdowns.', keywords: 'billing individual organization limits' },
+        { title: 'Credit usage', description: 'Review daily and weekly usage, allowances, and reset dates.', keywords: 'billing limits credits' },
+        ...(isAdmin ? [
+          { title: 'Credit controls', description: 'Configure limits, enforcement, resets, and audit events.', keywords: 'billing company role user allowances' },
+        ] : []),
       ],
     },
     {
@@ -857,7 +861,7 @@ function SettingsContent() {
       group: 'advanced',
       visible: isAdvancedAdmin,
     },
-  ], [isAdmin, isAdvancedAdmin, mode, creditsEnabled, config.branding.displayName]);
+  ], [isAdmin, isAdvancedAdmin, mode, config.branding.displayName]);
 
   const breadcrumbItems = [
     { label: 'Home', href: '/' },
