@@ -21,7 +21,7 @@ import { extractTextFromDocument, SUPPORTED_DOC_EXTENSIONS } from '@/lib/utils/a
 import { handlePastedText } from '@/lib/chat/paste-attachment';
 import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import type { LlmGrade } from '@/lib/llm/llm-config-types';
 
 const CHAT_PRO_TIPS = [
