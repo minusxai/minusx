@@ -28,7 +28,7 @@ export default function SqlEditorToolbar({
   }
 
   return (
-    <TooltipProvider delayDuration={300}>
+    <TooltipProvider>
       <div className="flex flex-col items-center justify-start gap-2 py-2">
         {showFormatButton && (
           <Tooltip>

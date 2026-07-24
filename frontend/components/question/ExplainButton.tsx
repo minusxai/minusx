@@ -36,7 +36,7 @@ export default function ExplainButton({
   };
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <TooltipProvider>
       <Tooltip>
         <TooltipTrigger
           onClick={handleClick}

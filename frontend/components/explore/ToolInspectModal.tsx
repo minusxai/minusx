@@ -13,7 +13,7 @@ import {
   Spinner,
   IconButton,
 } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import { LuRotateCcw } from 'react-icons/lu';
 import Editor from '@monaco-editor/react';
 import type { ToolCall, ToolMessage } from '@/lib/types';
