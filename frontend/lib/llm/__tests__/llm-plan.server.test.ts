@@ -202,6 +202,21 @@ describe('resolveLlmPlan', () => {
       .toThrow(/model id/);
   });
 
+  it('ignores a stale model on a minusx grade mapping — always sends the minusx-auto sentinel', () => {
+    // Repro of the Settings → Models bug: switching a grade's provider to MinusX
+    // left the previous provider's model id on the choice. The gateway routes by
+    // grade, so any stored model is meaningless and must never reach it (a real
+    // model id like this would 400 the gateway). See llm-config-types: the model
+    // is documented as "ignored for minusx".
+    const step = buildPlanStep(
+      { name: 'mx', provider: 'minusx', apiKey: 'mx-key' },
+      { providerName: 'mx', model: 'gpt-5.6-terra' },
+      'core',
+    );
+    expect((step.model as { provider: string; id: string }).provider).toBe('minusx');
+    expect((step.model as { id: string }).id).toBe(MINUSX_AUTO_MODEL);
+  });
+
   it('resolves a grade mapping with secret-resolved API keys and options passthrough', async () => {
     await setLlmConfig({
       providers: [{ name: 'main-anthropic', provider: 'anthropic', apiKey: 'sk-ant-raw-key' }],

@@ -616,7 +616,11 @@ function GradeSlotEditor({ grade, choice, providers, modelsFor, onChange }: {
               <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Provider</Text>
               <SearchableSelect
                 value={choice.providerName}
-                onChange={(providerName) => setChoice({ providerName })}
+                // Changing the provider clears the model: a model id is
+                // provider-specific, so carrying it over leaves a stale id
+                // (e.g. an OpenAI model on a MinusX grade, which 400s the
+                // gateway). Mirrors the provider-row handler's `delete model`.
+                onChange={(providerName) => setChoice({ providerName, model: undefined })}
                 options={providerOptions}
                 placeholder="Provider…"
                 label={`${meta.title} provider`}
