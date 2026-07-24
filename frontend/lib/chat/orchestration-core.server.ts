@@ -650,6 +650,8 @@ export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: numbe
         // Never empty — a conversation surface (explore/question/…), else 'unknown'.
         trigger: source && source.length > 0 ? source : UNKNOWN_TRIGGER,
         userId,
+        grade: detail.grade,
+        agent: detail.agent,
       });
 
       // The request row was written when the call was made; fill in the

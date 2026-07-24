@@ -358,7 +358,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     const body = await response.json();
     expect(body.success).toBe(true);
     // Only /tutorial + /internals seed docs are (re)created.
-    expect(body.documentsCreated).toBe(55);
+    expect(body.documentsCreated).toBe(61);
 
     const db = getModules().db;
 
@@ -483,7 +483,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
-    expect(body.documentsCreated).toBe(55);
+    expect(body.documentsCreated).toBe(61);
 
     // The template doc is restored at that path under its template id (11), drift gone.
     const pathResult = await db.exec<{ id: number }>(
@@ -500,19 +500,19 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(driftedResult.rows[0].count).toBe(0);
   });
 
-  it('should be idempotent — second call also returns 55 docs', async () => {
+  it('should be idempotent — second call also returns 61 docs', async () => {
     const request1 = createResetRequest();
     const response1 = await resetTutorialHandler(request1, {} as any);
     expect(response1.status).toBe(200);
     const body1 = await response1.json();
-    expect(body1.documentsCreated).toBe(55);
+    expect(body1.documentsCreated).toBe(61);
 
     const request2 = createResetRequest();
     const response2 = await resetTutorialHandler(request2, {} as any);
     expect(response2.status).toBe(200);
     const body2 = await response2.json();
     expect(body2.success).toBe(true);
-    expect(body2.documentsCreated).toBe(55);
+    expect(body2.documentsCreated).toBe(61);
 
     const result = await getModules().db.exec<{ count: number }>(
       "SELECT COUNT(*) as count FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%')",

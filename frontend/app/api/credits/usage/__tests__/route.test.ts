@@ -47,7 +47,7 @@ describe('GET /api/credits/usage', () => {
     const body = await res.json();
     const data = body.data as CreditUsageResponse;
 
-    expect(data.enforced).toBe(false); // ENFORCE_CREDIT_LIMITS unset → not enforced
+    expect(data.enabled).toBe(false); // no credits config → off
     expect(data.individual.billing.used).toBeCloseTo(51, 6);
     expect(data.individual.billing.allowance).toBe(5_000);
     expect(data.individual.reset.allowance).toBe(1_000);

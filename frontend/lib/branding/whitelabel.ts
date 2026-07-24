@@ -6,6 +6,7 @@
 import type { FileType } from '@/lib/ui/file-metadata';
 import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient, ConfigBot, VisualizationType } from '@/lib/types';
 import type { LlmConfig } from '@/lib/llm/llm-config-types';
+import type { CreditsConfig } from '@/lib/analytics/credit-policy';
 import { MINUSX_TAGLINE } from '@/lib/og/og-helpers';
 
 export interface SetupWizard {
@@ -83,6 +84,10 @@ export interface OrgConfig {
    *  per-agent grade policies (see lib/llm/llm-config-types.ts).
    *  `apiKey` values are @SECRETS/… refs at rest. */
   llm?: LlmConfig;
+  /** Credit management: enabled/enforced flags + daily/weekly limits by
+   *  user/role/company (see lib/analytics/credit-policy.ts). Replaces the
+   *  CREDIT_* / CREDITS_ENABLED / ENFORCE_CREDIT_LIMITS env vars. */
+  credits?: CreditsConfig;
 }
 
 /**
@@ -176,6 +181,7 @@ export function mergeConfig(
     analytics: overrides.analytics ?? defaults.analytics,
     remoteAgentsEnabled: overrides.remoteAgentsEnabled ?? defaults.remoteAgentsEnabled,
     llm: overrides.llm ?? defaults.llm,
+    credits: overrides.credits ?? defaults.credits,
   };
 }
 

@@ -1,51 +1,65 @@
 import 'server-only';
 import { getModules } from '@/lib/modules/registry';
 import { costToCredits } from './credits';
+import { parseBillingCycle, cycleStartSql, cycleNextResetSql, type BillingCycle } from './credit-budgets';
 import {
-  BILLING_CYCLE, RESET_CYCLE, ENFORCE_CREDIT_LIMITS, CREDIT_CONFIG,
-  resolveIndividualAllowance, resolveOrgAllowance,
-  resolveIndividualResetAllowance, resolveOrgResetAllowance,
-} from '@/lib/config';
-import { cycleStartSql, cycleNextResetSql } from './credit-budgets';
+  resolveCreditPolicy, resolveOrgCreditPolicy,
+  type CreditsConfig, type ResolvedCreditPolicy,
+} from './credit-policy';
+import { getRawConfig } from '@/lib/data/configs.server';
+import { DEFAULT_MODE } from '@/lib/mode/mode-types';
+import { appEventRegistry } from '@/lib/app-event-registry';
+import { AppEvents } from '@/lib/app-event-registry/events';
+import type { CreditWeights } from './credit-budgets';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { UNKNOWN_TRIGGER, type CreditBreakdownRow, type CreditScope, type CreditUsageResponse } from './credits.types';
+import { UNKNOWN_TRIGGER, type CreditBreakdownRow, type CreditScope, type CreditUsageResponse, type CreditEvent } from './credits.types';
 
 /**
- * Aggregate credit usage from `llm_call_events` over two DECOUPLED rolling
- * windows: the longer BILLING cycle (which carries the breakdown) and a shorter
- * RESET cycle (e.g. a daily cap). Both are rolling (`created_at >= NOW() - Nd`),
- * with the day counts configured in `lib/config.ts` (BILLING_CYCLE / RESET_CYCLE).
- *
- * Both conversation-bound chat turns AND headless runs (micro-tasks, Slack,
- * feed-summary, eval) record into this table, so it is the complete usage
- * ledger. Credits are computed in JS via `costToCredits` (the single source of
- * truth). The reset window is a subset of the billing window, so a single query
- * computes both — the reset total via a FILTER on the same rows.
+ * Aggregate credit usage from `llm_call_events` over two windows resolved from
+ * the admin-configured credit policy (org config `credits` section — NOT env):
+ *   - WEEKLY (billing) window, which carries the per-(provider, model, trigger) breakdown
+ *   - DAILY (reset) window, a subset via a FILTER on the same rows
+ * Both are calendar-aligned (this week / today). Credits are computed in JS via
+ * `costToCredits` with the policy weights, so gate, card, and dashboard agree.
+ * A manual/auto CREDIT_RESET moves the window start forward (see resetFloorExpr).
  */
 
-// Window boundaries are mode-aware SQL (calendar-aligned or rolling) built from
-// the configured cycles — safe to interpolate (strict-parsed ints + whitelisted
-// unit words, never raw input). Billing is the outer window; reset is a FILTER
-// subset. Non-cached input = prompt - cached, floored at 0. Numeric aggregates
-// come back as strings — always Number()-wrap.
-const BILLING_START = cycleStartSql(BILLING_CYCLE);
-const RESET_START = cycleStartSql(RESET_CYCLE);
-const NEXT_RESET_SQL = `SELECT ${cycleNextResetSql(BILLING_CYCLE)} AS billing_next, ${cycleNextResetSql(RESET_CYCLE)} AS reset_next`;
+const NONCACHED = `GREATEST(COALESCE(prompt_tokens, 0) - COALESCE(cached_tokens, 0), 0)`;
 
-/** When the billing/reset windows next reset, as ISO strings (null in rolling mode). */
-async function loadNextResets(): Promise<{ billingNext: string | null; resetNext: string | null }> {
-  const { rows } = await getModules().db.exec<{ billing_next: unknown; reset_next: unknown }>(NEXT_RESET_SQL);
-  const toIso = (v: unknown): string | null =>
-    v == null ? null : v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString();
-  return { billingNext: toIso(rows[0]?.billing_next), resetNext: toIso(rows[0]?.reset_next) };
+/** Load the org's credit policy config (mode-independent — workspace-level). */
+async function loadCreditsConfig(): Promise<CreditsConfig | undefined> {
+  try {
+    const cfg = await getRawConfig(DEFAULT_MODE);
+    return cfg.credits as CreditsConfig | undefined;
+  } catch {
+    return undefined;
+  }
 }
 
-// The `mode` filter counts only user-facing usage — org + tutorial — and excludes
-// the internal 'internals' mode. Legacy null-mode rows default to 'org' so they
-// aren't dropped. (Kept as a JS comment, NOT an inline SQL `--` comment: an
-// apostrophe inside a SQL comment breaks PGLite's no-param query path.)
-const NONCACHED = `GREATEST(COALESCE(prompt_tokens, 0) - COALESCE(cached_tokens, 0), 0)`;
-const usageSql = (userFilter: string) => `
+/**
+ * Scalar SQL that yields the latest applicable CREDIT_RESET timestamp for a user
+ * (a reset scoped to that user, their role, or the whole company), or a far-past
+ * value when none. The window start is GREATEST(calendar-start, this) so a manual
+ * reset zeroes usage immediately without waiting for the calendar boundary.
+ */
+function resetFloorExpr(userId: number | null, role: string | null): string {
+  const uid = userId == null ? "''" : `'${String(userId)}'`;
+  const r = role == null ? "''" : `'${role.replace(/'/g, "''")}'`;
+  return `COALESCE((
+    SELECT MAX(created_at) FROM app_events
+    WHERE event_type = 'credit:reset'
+      AND ( payload->>'scope' = 'company'
+         OR (payload->>'scope' = 'role' AND payload->>'target' = ${r})
+         OR (payload->>'scope' = 'user' AND payload->>'target' = ${uid}) )
+  ), TIMESTAMPTZ '1970-01-01')`;
+}
+
+/** Window start honoring both the calendar cycle and the latest reset event. */
+function windowStart(cycle: BillingCycle, userId: number | null, role: string | null): string {
+  return `GREATEST(${cycleStartSql(cycle)}, ${resetFloorExpr(userId, role)})`;
+}
+
+const usageSql = (userFilter: string, billingStart: string, resetStart: string) => `
 SELECT
   COALESCE(provider, '')                                                     AS provider,
   model                                                                      AS model,
@@ -55,30 +69,47 @@ SELECT
   SUM(COALESCE(completion_tokens, 0))                                        AS "outputTokens",
   SUM(COALESCE(cost, 0))                                                     AS cost,
   COUNT(*)                                                                   AS requests,
-  SUM(${NONCACHED}) FILTER (WHERE created_at >= ${RESET_START})              AS "resetNonCachedInputTokens",
-  SUM(COALESCE(cached_tokens, 0)) FILTER (WHERE created_at >= ${RESET_START})     AS "resetCachedTokens",
-  SUM(COALESCE(completion_tokens, 0)) FILTER (WHERE created_at >= ${RESET_START}) AS "resetOutputTokens",
-  SUM(COALESCE(cost, 0)) FILTER (WHERE created_at >= ${RESET_START})         AS "resetCost",
-  COUNT(*) FILTER (WHERE created_at >= ${RESET_START})                       AS "resetRequests"
+  SUM(${NONCACHED}) FILTER (WHERE created_at >= ${resetStart})               AS "resetNonCachedInputTokens",
+  SUM(COALESCE(cached_tokens, 0)) FILTER (WHERE created_at >= ${resetStart})      AS "resetCachedTokens",
+  SUM(COALESCE(completion_tokens, 0)) FILTER (WHERE created_at >= ${resetStart})  AS "resetOutputTokens",
+  SUM(COALESCE(cost, 0)) FILTER (WHERE created_at >= ${resetStart})          AS "resetCost",
+  COUNT(*) FILTER (WHERE created_at >= ${resetStart})                        AS "resetRequests"
 FROM llm_call_events
-WHERE created_at >= ${BILLING_START}
+WHERE created_at >= ${billingStart}
   AND COALESCE(mode, 'org') IN ('org', 'tutorial')
   ${userFilter}
 GROUP BY COALESCE(provider, ''), model, COALESCE(NULLIF(trigger, ''), 'unknown')
 ORDER BY cost DESC
 `;
 
-async function loadScope(
-  billingAllowance: number,
-  resetAllowance: number,
-  nextResets: { billingNext: string | null; resetNext: string | null },
-  userId?: number,
-): Promise<CreditScope> {
+async function loadNextResets(billingCycle: BillingCycle, resetCycle: BillingCycle): Promise<{ billingNext: string | null; resetNext: string | null }> {
+  const sql = `SELECT ${cycleNextResetSql(billingCycle)} AS billing_next, ${cycleNextResetSql(resetCycle)} AS reset_next`;
+  const { rows } = await getModules().db.exec<{ billing_next: unknown; reset_next: unknown }>(sql);
+  const toIso = (v: unknown): string | null =>
+    v == null ? null : v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString();
+  return { billingNext: toIso(rows[0]?.billing_next), resetNext: toIso(rows[0]?.reset_next) };
+}
+
+interface ScopeParams {
+  billingCycle: BillingCycle;
+  resetCycle: BillingCycle;
+  weights: CreditWeights;
+  billingAllowance: number;
+  resetAllowance: number;
+  nextResets: { billingNext: string | null; resetNext: string | null };
+  userId?: number;
+  role?: string;
+}
+
+async function loadScope(p: ScopeParams): Promise<CreditScope> {
   const db = getModules().db;
-  const sql = userId === undefined ? usageSql('') : usageSql('AND user_id = $1');
-  const result = userId === undefined
+  const uid = p.userId ?? null;
+  const billingStart = windowStart(p.billingCycle, uid, p.role ?? null);
+  const resetStart = windowStart(p.resetCycle, uid, p.role ?? null);
+  const sql = p.userId === undefined ? usageSql('', billingStart, resetStart) : usageSql('AND user_id = $1', billingStart, resetStart);
+  const result = p.userId === undefined
     ? await db.exec<Record<string, unknown>>(sql)
-    : await db.exec<Record<string, unknown>>(sql, [userId]);
+    : await db.exec<Record<string, unknown>>(sql, [p.userId]);
 
   let billingUsed = 0;
   let resetUsed = 0;
@@ -90,117 +121,139 @@ async function loadScope(
     const outputTokens = Number(row['outputTokens'] ?? 0);
     const cost = Number(row['cost'] ?? 0);
     const requests = Number(row['requests'] ?? 0);
-    const credits = costToCredits(
-      { provider, model, cachedTokens, nonCachedTokens: nonCachedInputTokens, outputTokens, cost, requests },
-      CREDIT_CONFIG.weights,
-    );
+    const credits = costToCredits({ provider, model, cachedTokens, nonCachedTokens: nonCachedInputTokens, outputTokens, cost, requests }, p.weights);
     billingUsed += credits;
-    // Reset window is a subset — weight its own filtered token/cost/request sums.
-    resetUsed += costToCredits(
-      {
-        provider, model,
-        cachedTokens: Number(row['resetCachedTokens'] ?? 0),
-        nonCachedTokens: Number(row['resetNonCachedInputTokens'] ?? 0),
-        outputTokens: Number(row['resetOutputTokens'] ?? 0),
-        cost: Number(row['resetCost'] ?? 0),
-        requests: Number(row['resetRequests'] ?? 0),
-      },
-      CREDIT_CONFIG.weights,
-    );
-    return {
-      provider,
-      model,
-      trigger: String(row['trigger'] ?? UNKNOWN_TRIGGER),
-      nonCachedInputTokens,
-      cachedTokens,
-      outputTokens,
-      requests,
-      credits,
-    };
+    resetUsed += costToCredits({
+      provider, model,
+      cachedTokens: Number(row['resetCachedTokens'] ?? 0),
+      nonCachedTokens: Number(row['resetNonCachedInputTokens'] ?? 0),
+      outputTokens: Number(row['resetOutputTokens'] ?? 0),
+      cost: Number(row['resetCost'] ?? 0),
+      requests: Number(row['resetRequests'] ?? 0),
+    }, p.weights);
+    return { provider, model, trigger: String(row['trigger'] ?? UNKNOWN_TRIGGER), nonCachedInputTokens, cachedTokens, outputTokens, requests, credits };
   });
 
   return {
-    billing: { label: BILLING_CYCLE.label, used: billingUsed, allowance: billingAllowance, resetsAt: nextResets.billingNext, rows },
-    reset: { label: RESET_CYCLE.label, used: resetUsed, allowance: resetAllowance, resetsAt: nextResets.resetNext },
+    billing: { label: p.billingCycle.label, used: billingUsed, allowance: p.billingAllowance, resetsAt: p.nextResets.billingNext, rows },
+    reset: { label: p.resetCycle.label, used: resetUsed, allowance: p.resetAllowance, resetsAt: p.nextResets.resetNext },
   };
 }
 
 /**
- * Credit usage for a user across the billing + reset windows.
- * @param includeOrg when true, also returns org-wide totals (admins only — gated by the caller).
+ * Credit usage for a user across the weekly (billing) + daily (reset) windows,
+ * with limits resolved from the org credit policy.
+ * @param includeOrg when true, also returns company-wide totals (admins only — gated by the caller).
  */
-export async function getCreditUsage(
-  userId: number,
-  role: string,
-  includeOrg: boolean,
-): Promise<CreditUsageResponse> {
-  const nextResets = await loadNextResets();
-  const individual = await loadScope(resolveIndividualAllowance(role), resolveIndividualResetAllowance(role), nextResets, userId);
-  const org = includeOrg ? await loadScope(resolveOrgAllowance(), resolveOrgResetAllowance(), nextResets) : null;
-  return { individual, org, enforced: ENFORCE_CREDIT_LIMITS };
+export async function getCreditUsage(userId: number, role: string, includeOrg: boolean): Promise<CreditUsageResponse> {
+  const cfg = await loadCreditsConfig();
+  const policy = resolveCreditPolicy(cfg, { userId, role });
+  const billingCycle = parseBillingCycle(policy.weekly.cycle);
+  const resetCycle = parseBillingCycle(policy.daily.cycle);
+  const nextResets = await loadNextResets(billingCycle, resetCycle);
+
+  const individual = await loadScope({
+    billingCycle, resetCycle, weights: policy.weights,
+    billingAllowance: policy.weekly.limit, resetAllowance: policy.daily.limit,
+    nextResets, userId, role,
+  });
+
+  let org: CreditScope | null = null;
+  if (includeOrg) {
+    const orgPolicy = resolveOrgCreditPolicy(cfg);
+    org = await loadScope({
+      billingCycle, resetCycle, weights: policy.weights,
+      billingAllowance: orgPolicy.weekly.limit, resetAllowance: orgPolicy.daily.limit,
+      nextResets,
+    });
+  }
+  return { individual, org, enabled: policy.enabled };
 }
 
-// Lightweight per-user usage for the gate: the same weighted inputs as usageSql
-// (token buckets + cost + request count), per window, so gate and card agree.
-// No GROUP BY — one aggregate row for the user. $1 = user_id.
-const GATE_SQL = `
+// Credits for ONE conversation for a user (user-scoped, no cross-user leak).
+const CONVO_SQL = `
 SELECT
-  SUM(${NONCACHED})                    AS b_noncached,
-  SUM(COALESCE(cached_tokens, 0))      AS b_cached,
-  SUM(COALESCE(completion_tokens, 0))  AS b_output,
-  SUM(COALESCE(cost, 0))               AS b_cost,
-  COUNT(*)                             AS b_requests,
-  SUM(${NONCACHED}) FILTER (WHERE created_at >= ${RESET_START})                   AS r_noncached,
-  SUM(COALESCE(cached_tokens, 0)) FILTER (WHERE created_at >= ${RESET_START})     AS r_cached,
-  SUM(COALESCE(completion_tokens, 0)) FILTER (WHERE created_at >= ${RESET_START}) AS r_output,
-  SUM(COALESCE(cost, 0)) FILTER (WHERE created_at >= ${RESET_START})              AS r_cost,
-  COUNT(*) FILTER (WHERE created_at >= ${RESET_START})                            AS r_requests
+  SUM(${NONCACHED})                    AS noncached,
+  SUM(COALESCE(cached_tokens, 0))      AS cached,
+  SUM(COALESCE(completion_tokens, 0))  AS output,
+  SUM(COALESCE(cost, 0))               AS cost,
+  COUNT(*)                             AS requests
 FROM llm_call_events
-WHERE created_at >= ${BILLING_START}
-  AND COALESCE(mode, 'org') IN ('org', 'tutorial')
-  AND user_id = $1
+WHERE conversation_id = $1 AND user_id = $2
 `;
+
+/** Total credits attributed to one conversation for the given user. */
+export async function getConversationCredits(conversationId: number, userId: number): Promise<number> {
+  const cfg = await loadCreditsConfig();
+  const weights = resolveCreditPolicy(cfg, { userId }).weights;
+  const { rows } = await getModules().db.exec<Record<string, unknown>>(CONVO_SQL, [conversationId, userId]);
+  const r = rows[0] ?? {};
+  const n = (k: string) => Number(r[k] ?? 0);
+  return costToCredits({ nonCachedTokens: n('noncached'), cachedTokens: n('cached'), outputTokens: n('output'), cost: n('cost'), requests: n('requests') }, weights);
+}
 
 export interface CreditGate {
   allowed: boolean;
-  /** Which window was exceeded (null when allowed / not enforced). */
   exceeded: 'reset' | 'billing' | null;
-  /** User-facing block message (null when allowed). */
   message: string | null;
 }
-
 const ALLOWED: CreditGate = { allowed: true, exceeded: null, message: null };
 
 /**
  * Preflight credit check for one user before a turn runs. Returns `allowed`
- * unless credit limits are ENFORCED and the user has hit their reset-cycle or
- * billing-cycle allowance. Cheap (a single 2-SUM query); call at orchestration
- * entry points, not per LLM hop.
+ * unless the policy ENFORCES limits and the user has hit their daily or weekly
+ * allowance. Cheap (a single 2-SUM query); call at orchestration entry points.
  */
 export async function checkCreditGate(user: EffectiveUser): Promise<CreditGate> {
-  if (!ENFORCE_CREDIT_LIMITS || typeof user.userId !== 'number') return ALLOWED;
+  if (typeof user.userId !== 'number') return ALLOWED;
+  const cfg = await loadCreditsConfig();
+  const policy = resolveCreditPolicy(cfg, { userId: user.userId, role: user.role, email: user.email });
+  if (!policy.enabled) return ALLOWED;
 
-  const { rows } = await getModules().db.exec<Record<string, unknown>>(GATE_SQL, [user.userId]);
+  const billingCycle = parseBillingCycle(policy.weekly.cycle);
+  const resetCycle = parseBillingCycle(policy.daily.cycle);
+  const billingStart = windowStart(billingCycle, user.userId, user.role ?? null);
+  const resetStart = windowStart(resetCycle, user.userId, user.role ?? null);
+  const gateSql = `
+    SELECT
+      SUM(${NONCACHED}) AS b_noncached, SUM(COALESCE(cached_tokens,0)) AS b_cached,
+      SUM(COALESCE(completion_tokens,0)) AS b_output, SUM(COALESCE(cost,0)) AS b_cost, COUNT(*) AS b_requests,
+      SUM(${NONCACHED}) FILTER (WHERE created_at >= ${resetStart}) AS r_noncached,
+      SUM(COALESCE(cached_tokens,0)) FILTER (WHERE created_at >= ${resetStart}) AS r_cached,
+      SUM(COALESCE(completion_tokens,0)) FILTER (WHERE created_at >= ${resetStart}) AS r_output,
+      SUM(COALESCE(cost,0)) FILTER (WHERE created_at >= ${resetStart}) AS r_cost,
+      COUNT(*) FILTER (WHERE created_at >= ${resetStart}) AS r_requests
+    FROM llm_call_events
+    WHERE created_at >= ${billingStart} AND COALESCE(mode,'org') IN ('org','tutorial') AND user_id = $1`;
+  const { rows } = await getModules().db.exec<Record<string, unknown>>(gateSql, [user.userId]);
   const r = rows[0] ?? {};
   const n = (k: string) => Number(r[k] ?? 0);
-  const billingUsed = costToCredits(
-    { nonCachedTokens: n('b_noncached'), cachedTokens: n('b_cached'), outputTokens: n('b_output'), cost: n('b_cost'), requests: n('b_requests') },
-    CREDIT_CONFIG.weights,
-  );
-  const resetUsed = costToCredits(
-    { nonCachedTokens: n('r_noncached'), cachedTokens: n('r_cached'), outputTokens: n('r_output'), cost: n('r_cost'), requests: n('r_requests') },
-    CREDIT_CONFIG.weights,
-  );
+  const billingUsed = costToCredits({ nonCachedTokens: n('b_noncached'), cachedTokens: n('b_cached'), outputTokens: n('b_output'), cost: n('b_cost'), requests: n('b_requests') }, policy.weights);
+  const resetUsed = costToCredits({ nonCachedTokens: n('r_noncached'), cachedTokens: n('r_cached'), outputTokens: n('r_output'), cost: n('r_cost'), requests: n('r_requests') }, policy.weights);
 
-  const billingAllowance = resolveIndividualAllowance(user.role);
-  if (billingUsed >= billingAllowance) {
-    return { allowed: false, exceeded: 'billing', message: `Credit limit reached for ${BILLING_CYCLE.label} (${billingAllowance.toLocaleString()} credits).` };
+  if (billingUsed >= policy.weekly.limit) {
+    return { allowed: false, exceeded: 'billing', message: `Credit limit reached for ${billingCycle.label} (${policy.weekly.limit.toLocaleString()} credits).` };
   }
-  const resetAllowance = resolveIndividualResetAllowance(user.role);
-  if (resetUsed >= resetAllowance) {
-    return { allowed: false, exceeded: 'reset', message: `Credit limit reached for ${RESET_CYCLE.label} (${resetAllowance.toLocaleString()} credits). It resets soon.` };
+  if (resetUsed >= policy.daily.limit) {
+    return { allowed: false, exceeded: 'reset', message: `Credit limit reached for ${resetCycle.label} (${policy.daily.limit.toLocaleString()} credits). It resets soon.` };
   }
   return ALLOWED;
+}
+
+/** Recent credit lifecycle events (rate-limit hits + resets) for the admin audit feed. */
+export async function getRecentCreditEvents(limit = 20): Promise<CreditEvent[]> {
+  const n = Math.min(100, Math.max(1, Math.floor(limit)));
+  const { rows } = await getModules().db.exec<Record<string, unknown>>(
+    `SELECT event_type, created_at, payload FROM app_events
+     WHERE event_type IN ('credit:rate_limit_hit', 'credit:reset')
+     ORDER BY created_at DESC LIMIT ${n}`,
+  );
+  const toIso = (v: unknown): string => v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString();
+  return rows.map((r) => ({
+    type: String(r['event_type']) === 'credit:reset' ? 'reset' : 'rate_limit_hit',
+    at: toIso(r['created_at']),
+    detail: (r['payload'] as Record<string, unknown>) ?? {},
+  }));
 }
 
 /** Thrown by the orchestrator credit gate when a user is over their enforced limit. */
@@ -212,14 +265,24 @@ export class CreditLimitError extends Error {
 }
 
 /**
- * Build the `Orchestrator.beforeLlmCall` hook for a user: a pre-LLM-call gate
- * that throws `CreditLimitError` (message surfaces to the run) when limits are
- * enforced and exceeded. No-op when enforcement is off. Set this on every
- * user-facing orchestrator so enforcement lives at the one universal call site.
+ * Build the `Orchestrator.beforeLlmCall` hook: a pre-LLM-call gate that throws
+ * `CreditLimitError` (surfaced to the run) when the policy enforces limits and
+ * the user is over. Records the block as a RATE_LIMIT_HIT app event.
  */
 export function creditEnforcer(user: EffectiveUser): () => Promise<void> {
   return async () => {
     const gate = await checkCreditGate(user);
-    if (!gate.allowed) throw new CreditLimitError(gate.message!, gate.exceeded!);
+    if (!gate.allowed) {
+      appEventRegistry.publish(AppEvents.RATE_LIMIT_HIT, {
+        mode: user.mode,
+        userId: typeof user.userId === 'number' ? user.userId : undefined,
+        userEmail: user.email,
+        userRole: user.role,
+        window: gate.exceeded ?? undefined,
+      });
+      throw new CreditLimitError(gate.message!, gate.exceeded!);
+    }
   };
 }
+
+export type { ResolvedCreditPolicy };

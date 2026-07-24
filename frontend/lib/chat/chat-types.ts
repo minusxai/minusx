@@ -81,4 +81,6 @@ export interface LLMCallDetail {
   stream?: boolean;
   finish_reason?: string | null;
   trigger?: string | null;  // What initiated this LLM call: "user_message", "tool_result", etc.
+  grade?: string | null;    // Resolved capability grade (lite/core/advanced) from the LLM plan.
+  agent?: string | null;    // Consuming agent (analyst/web-analyst/slack/report/micro).
 }

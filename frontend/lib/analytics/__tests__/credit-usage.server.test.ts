@@ -107,9 +107,9 @@ describe('getCreditUsage', () => {
   });
 
   it('reset usage is a subset of billing usage (reset window ⊆ billing window)', async () => {
-    // An older row anchored to the start of the billing month: always inside the
-    // billing window, and (except on the 1st) outside the daily reset window.
-    await seed({ userId: 5, provider: 'openai', model: 'r', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 1.0, createdAtSql: "date_trunc('month', NOW()) + INTERVAL '1 second'" });
+    // An older row anchored to the start of the billing week: always inside the
+    // weekly billing window, and (except on the week's first day) outside the daily reset window.
+    await seed({ userId: 5, provider: 'openai', model: 'r', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 1.0, createdAtSql: "date_trunc('week', NOW()) + INTERVAL '1 second'" });
     // A row now: inside both windows.
     await seed({ userId: 5, provider: 'openai', model: 'r', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 0.5, createdAtSql: 'NOW()' });
 
@@ -173,5 +173,19 @@ describe('getCreditUsage', () => {
 
     // user 2's usage is absent from the individual scope
     expect(individual.billing.used).toBeCloseTo(53, 6);
+  });
+
+  it('floors usage at the latest CREDIT_RESET event (sum-since-reset)', async () => {
+    // A pre-reset row (2h ago) and a post-reset row (now) for a fresh user.
+    await seed({ userId: 20, provider: 'openai', model: 'z', promptTokens: 0, cachedTokens: 0, completionTokens: 0, cost: 5.0, createdAtSql: "NOW() - INTERVAL '2 hours'" });
+    await seed({ userId: 20, provider: 'openai', model: 'z', promptTokens: 0, cachedTokens: 0, completionTokens: 0, cost: 0.5, createdAtSql: 'NOW()' });
+    // An admin reset for this user 1h ago → the 2h-ago row falls outside the window.
+    await getModules().db.exec(
+      `INSERT INTO app_events (event_type, mode, payload, created_at) VALUES ('credit:reset', 'org', $1::jsonb, NOW() - INTERVAL '1 hour')`,
+      [JSON.stringify({ scope: 'user', target: '20' })],
+    );
+    const { individual } = await getCreditUsage(20, 'viewer', false);
+    // Only the post-reset row: 0.5*100 + 1 request = 51 credits.
+    expect(individual.billing.used).toBeCloseTo(51, 6);
   });
 });

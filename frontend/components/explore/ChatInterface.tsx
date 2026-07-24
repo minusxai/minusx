@@ -7,6 +7,7 @@ import { LuPlus, LuChevronDown } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem, Attachment, SkillMention } from '@/lib/types';
 import ConvoDebugContainer from './ConvoDebugContainer';
+import UsageDialog from './UsageDialog';
 import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-commands';
 import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
@@ -409,6 +410,7 @@ export default function ChatInterface({
   // offer a clean replay. `errorRetryability` is only set for conversation runtime errors.
   const isTerminalError = conversation?.error != null && conversation.errorRetryability === 'terminal';
   const [debugVizOpen, setDebugVizOpen] = useState(false);
+  const [usageOpen, setUsageOpen] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -646,7 +648,15 @@ export default function ChatInterface({
     setDebugVizOpen(true);
   }, [conversationID]);
 
-  const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container, onDebugViz: handleDebugViz });
+  const handleUsage = useCallback(() => {
+    if (!conversationID) {
+      toaster.create({ title: 'Preparing chat. Try again in a moment.', type: 'info' });
+      return;
+    }
+    setUsageOpen(true);
+  }, [conversationID]);
+
+  const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container, onDebugViz: handleDebugViz, onUsage: handleUsage });
 
   useEffect(() => {
     if (container !== 'sidebar') return;
@@ -1099,6 +1109,10 @@ export default function ChatInterface({
               buildProbeBody={buildContextProbeBody}
               onClose={() => setDebugVizOpen(false)}
             />
+          )}
+
+          {usageOpen && conversationID && (
+            <UsageDialog conversationID={conversationID} onClose={() => setUsageOpen(false)} />
           )}
 
 {tokenLimitExceeded && !isAgentRunning && !isStreaming ? (

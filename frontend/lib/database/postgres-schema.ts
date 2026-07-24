@@ -308,6 +308,13 @@ export const POSTGRES_SCHEMA = `
   ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS cache_creation_tokens BIGINT NOT NULL DEFAULT 0;
   ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS reasoning_tokens      BIGINT NOT NULL DEFAULT 0;
   ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS stream                BOOLEAN NOT NULL DEFAULT false;
+  -- Model-settings axes (Models page): the resolved capability grade (lite/core/advanced)
+  -- and the consuming agent (analyst/web-analyst/slack/report/micro), stamped at call time
+  -- from the LLM plan. Old rows stay NULL → read as 'unknown'. Additive, no backfill.
+  ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS grade                 VARCHAR;
+  ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS agent                 VARCHAR;
+  -- Per-user usage over a window (daily/weekly credit aggregation) is the hot query path.
+  CREATE INDEX IF NOT EXISTS idx_llm_user_ts ON llm_call_events(user_id, created_at);
 
   -- Raw pi-format request/response per LLM call, for debugging. Stored LOCALLY
   -- only (never forwarded). Keyed by the same call id the conversation links to

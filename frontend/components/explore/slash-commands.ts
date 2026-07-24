@@ -42,10 +42,12 @@ export function useSlashCommands({
   appState,
   container,
   onDebugViz,
+  onUsage,
 }: {
   appState?: AppState | null;
   container?: 'page' | 'sidebar';
   onDebugViz?: () => void;
+  onUsage?: () => void;
 }) {
   const clearChat = useClearChat(container);
   const fileId = appState?.type === 'file' ? appState.state?.fileState?.id : null;
@@ -63,6 +65,7 @@ export function useSlashCommands({
           isDraft ? { disabled: true, disabledReason: 'Use the save button to name this file first' } :
           !isDirty ? { disabled: true, disabledReason: 'No unsaved changes' } : {}),
     },
+    { type: 'command', name: 'usage', label: '/usage', description: 'Your credit usage (this chat, daily, weekly)' },
     ...(showDebug ? [{
       type: 'command', name: 'debug', label: '/debug', description: 'Visualize conversation tokens & cost',
     } satisfies SlashCommand] : []),
@@ -86,8 +89,11 @@ export function useSlashCommands({
       case 'debug':
         onDebugViz?.();
         break;
+      case 'usage':
+        onUsage?.();
+        break;
     }
-  }, [clearChat, fileId, onDebugViz]);
+  }, [clearChat, fileId, onDebugViz, onUsage]);
 
   return { availableCommands, handleCommandExecute };
 }

@@ -109,15 +109,6 @@ function TinyDonut({ window, color, caption }: { window: CreditWindow; color: st
   );
 }
 
-/** Footer note shown when credit limits are tracked but not enforced. */
-function NotEnforcedNote() {
-  return (
-    <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
-      Credit limits are not enforced — usage is tracked but not blocked.
-    </Text>
-  );
-}
-
 /** Per (provider, model, trigger) breakdown table — shown only in dev mode. */
 function BreakdownTable({ rows, total }: { rows: CreditBreakdownRow[]; total: number }) {
   if (rows.length === 0) {
@@ -214,7 +205,6 @@ export function CreditsUsageCards() {
                 )}
               </VStack>
             )}
-            {!data.enforced && <NotEnforcedNote />}
           </>
         )}
       </VStack>

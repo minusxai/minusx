@@ -67,9 +67,18 @@ export interface CreditScope {
  * Usage payload returned by `GET /api/credits/usage`.
  * `org` is only populated for admins (org totals across all users).
  */
+/** A recorded credit lifecycle event (rate-limit hit or reset) for the audit feed. */
+export interface CreditEvent {
+  type: 'rate_limit_hit' | 'reset';
+  at: string;
+  detail: Record<string, unknown>;
+}
+
 export interface CreditUsageResponse {
   individual: CreditScope;
   org: CreditScope | null;
-  /** Whether credit limits are enforced (gated) or only tracked/displayed. */
-  enforced: boolean;
+  /** Whether the credits module is on (tracked + enforced). */
+  enabled: boolean;
+  /** Credits used by the requested conversation (present only when `?conversationId=` was passed). */
+  conversation?: { credits: number } | null;
 }
