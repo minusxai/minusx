@@ -88,6 +88,9 @@ function SelectContent({
         )}
         position={position}
         {...props}
+        // Select option lists are body-portalled just like dropdown menus.
+        // Keep their surface tokens defined so the list can never become transparent.
+        data-mx-theme-host=""
       >
         <SelectScrollUpButton />
         <SelectPrimitive.Viewport

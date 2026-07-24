@@ -141,7 +141,10 @@ export function InlineCardActionsMenu({ onEdit }: { onEdit: () => void }) {
         </Menu.Trigger>
         <Portal>
           <Menu.Positioner>
-            <Menu.Content className="z-50 min-w-[180px] rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
+            <Menu.Content
+              data-mx-theme-host=""
+              className="z-50 min-w-[180px] rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none"
+            >
               <Menu.Item
                 value="edit"
                 onClick={onEdit}

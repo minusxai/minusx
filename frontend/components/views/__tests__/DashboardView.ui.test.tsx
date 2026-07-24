@@ -437,6 +437,7 @@ describe('DashboardView via DashboardContainerV2', () => {
       renderWithProviders(<DashboardContainerV2 fileId={DASH_ID} mode="view" />, { store });
       const region = await withinDashboardSurface().findByLabelText('Dashboard');
       expect(region.hasAttribute('data-theme')).toBe(false);
+      expect(region).toHaveStyle({ paddingBottom: '40px' });
     });
   });
 

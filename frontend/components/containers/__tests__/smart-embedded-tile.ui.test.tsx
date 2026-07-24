@@ -85,7 +85,9 @@ describe('SmartEmbeddedQuestionContainer chrome', () => {
     );
     const user = userEvent.setup();
     await user.click(await screen.findByLabelText('Card actions'));
-    await user.click(await screen.findByLabelText('Explain chart'));
+    const explainItem = await screen.findByLabelText('Explain chart');
+    expect(explainItem.closest('[data-slot="dropdown-menu-content"]')).toHaveAttribute('data-mx-theme-host');
+    await user.click(explainItem);
     const explainSpy = (explainModule as unknown as { __explainSpy: ReturnType<typeof vi.fn> }).__explainSpy;
     expect(explainSpy).toHaveBeenCalledWith(Q_ID);
 
@@ -103,6 +105,11 @@ describe('SmartEmbeddedQuestionContainer chrome', () => {
     );
     await screen.findByText('Revenue by Region');
     expect(screen.queryByLabelText('Card actions')).not.toBeInTheDocument();
+    const actionBar = screen.getByLabelText('Edit question').parentElement;
+    expect(actionBar).not.toHaveClass('opacity-0');
+    expect(actionBar).toHaveClass('bg-popover', 'border-border');
+    expect(screen.getByLabelText('Edit question')).toHaveClass('text-muted-foreground');
+    expect(screen.getByLabelText('Remove from dashboard')).toHaveClass('hover:text-destructive');
     fireEvent.click(screen.getByLabelText('Edit question'));
     expect(onEdit).toHaveBeenCalled();
     fireEvent.click(screen.getByLabelText('Remove from dashboard'));

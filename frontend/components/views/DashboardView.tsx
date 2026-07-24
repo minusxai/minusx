@@ -466,7 +466,13 @@ export default function DashboardView({
     // overlay AND captured image, draw INSIDE it instead of widening the canvas, so the agent
     // image keeps the reader's geometry 1:1. The RIGHT gutter mirrors it purely for visual
     // balance (a left-only gutter read as lopsided padding).
-    <div role="region" aria-label="Dashboard" className="px-10" {...(theme ? { 'data-theme': theme } : {})}>
+    <div
+      role="region"
+      aria-label="Dashboard"
+      className="px-10"
+      style={{ paddingBottom: '40px' }}
+      {...(theme ? { 'data-theme': theme } : {})}
+    >
     {/* Inside the foreignObject surface, transform TRANSITIONS freeze mid-animation (Chromium
         does not incrementally repaint transformed foreignObject content — the stale-tiles bug).
         Tiles snap to their positions instead; DashboardSurface's resize nudge forces the repaint. */}

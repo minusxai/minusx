@@ -64,6 +64,9 @@ function DropdownMenuContent({
           className
         )}
         {...props}
+        // Radix portals to document.body, outside the file/dashboard token scope.
+        // Carry a local scope so bg-popover, borders, radii, and item states always resolve.
+        data-mx-theme-host=""
       />
     </DropdownMenuPrimitive.Portal>
   )
@@ -239,6 +242,7 @@ function DropdownMenuSubContent({
         className
       )}
       {...props}
+      data-mx-theme-host=""
     />
   )
 }
