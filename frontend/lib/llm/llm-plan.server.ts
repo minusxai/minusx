@@ -57,8 +57,12 @@ export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, g
 
   if (entry.provider === MINUSX_PROVIDER) {
     // Managed gateway: OpenAI-compatible endpoint; the gateway owns model
-    // routing + system-prompt policy per grade (X-MX-Use-Case header).
-    const model = buildMinusxModel(entry.baseUrl, choice.model || MINUSX_AUTO_MODEL);
+    // routing + system-prompt policy per grade (X-MX-Use-Case header). The
+    // model is ALWAYS the `minusx-auto` sentinel — `choice.model` is ignored
+    // (the gateway routes by grade). Honoring a stored model here would let a
+    // stale id linger from a grade that was remapped away from another provider
+    // in Settings → Models, and that non-sentinel id 400s the gateway.
+    const model = buildMinusxModel(entry.baseUrl, MINUSX_AUTO_MODEL);
     return { model, callOptions: { ...options, ...minusxCallOptions(grade, entry.headers) } };
   }
 
