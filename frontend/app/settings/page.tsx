@@ -11,6 +11,7 @@ import RecordingControl from '@/components/dev/RecordingControl';
 import DataManagementSection from '@/components/settings/DataManagementSection';
 import { ChannelsSection } from '@/components/settings/ChannelsSection';
 import { CreditsUsageCards } from '@/components/settings/CreditsCard';
+import AdminUsageDashboard from '@/components/settings/AdminUsageDashboard';
 import { SlackIntegration } from '@/components/settings/integrations/SlackIntegration';
 import { McpIntegration } from '@/components/settings/integrations/McpIntegration';
 import { RemoteAgentsSection } from '@/components/settings/RemoteAgentsSection';
@@ -741,7 +742,7 @@ function SettingsContent() {
       description: 'Review individual and organization credit usage.',
       group: 'workspace',
       visible: creditsEnabled,
-      custom: <CreditsUsageCards />,
+      custom: isAdmin ? <AdminUsageDashboard /> : <CreditsUsageCards />,
       searchItems: [
         { title: 'Credits', description: 'Review allowances, usage, resets, and breakdowns.', keywords: 'billing individual organization limits' },
       ],
