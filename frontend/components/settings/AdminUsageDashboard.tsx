@@ -1,9 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, VStack, HStack, Text, SimpleGrid, Spinner, Table, IconButton, Input, Button } from '@chakra-ui/react';
 import { LuRefreshCw } from 'react-icons/lu';
 import { toaster } from '@/components/ui/toaster';
+import { useAppSelector } from '@/store/hooks';
+import VegaChart from '@/components/viz/VegaChart';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { AdminUsageBreakdown, UsageBreakdownEntry, UsageTimePoint, CreditEvent } from '@/lib/analytics/admin-usage.server';
 
 const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
@@ -42,42 +45,34 @@ function Kpi({ label, value }: { label: string; value: string }) {
   );
 }
 
-/**
- * Credits-per-day trend as a self-contained responsive SVG bar chart. Hand-rolled
- * (not the question Vega bridge) so a small ad-hoc dashboard series renders reliably;
- * theme-aware via the design chart token, with a hover tooltip per bar.
- */
-function DailyTrendChart({ points }: { points: UsageTimePoint[] }) {
-  const W = 900;
-  const H = 200;
-  const pad = { top: 12, right: 8, bottom: 22, left: 8 };
-  const plotW = W - pad.left - pad.right;
-  const plotH = H - pad.top - pad.bottom;
-  const max = Math.max(1, ...points.map((p) => p.credits));
-  const n = points.length;
-  const slot = plotW / Math.max(1, n);
-  const barW = Math.max(1, Math.min(28, slot * 0.7));
-  const fmt = (d: string) => d.slice(5); // MM-DD
+// A vega-lite bar spec rendered through the shared VegaChart (query rows bind as
+// dataset "main"). Using the raw-spec escape hatch keeps full control while reusing
+// the app's one chart renderer (SVG-forced, design-theme chart tokens).
+const TREND_ENVELOPE = {
+  version: 2,
+  source: {
+    kind: 'vega-lite',
+    grammar: 'vega-lite@6',
+    spec: {
+      data: { name: 'main' },
+      mark: { type: 'bar', tooltip: true, cornerRadiusEnd: 2 },
+      encoding: {
+        x: { field: 'date', type: 'ordinal', axis: { labelAngle: 0, title: null } },
+        y: { field: 'credits', type: 'quantitative', axis: { title: 'credits' } },
+      },
+    },
+    detachedFrom: null,
+  },
+} as unknown as VizEnvelope;
 
+/** Credits-per-day trend via the shared VegaChart (vega-lite bar spec). */
+function DailyTrendChart({ points }: { points: UsageTimePoint[] }) {
+  const colorMode = useAppSelector((s) => s.ui.colorMode);
+  const rows = useMemo(() => points.map((p) => ({ date: p.date.slice(5), credits: p.credits })), [points]);
+  // VegaChart's root is `flex-1` — it fills a flex COLUMN parent; give it one with a fixed height.
   return (
-    <Box color="accent.success" w="100%">
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="200" preserveAspectRatio="none" role="img" aria-label="Credits per day">
-        {points.map((p, i) => {
-          const h = (p.credits / max) * plotH;
-          const x = pad.left + i * slot + (slot - barW) / 2;
-          const y = pad.top + (plotH - h);
-          return (
-            <g key={p.date}>
-              <rect x={x} y={y} width={barW} height={Math.max(0, h)} rx={2} fill="currentColor" opacity={0.85}>
-                <title>{`${p.date}: ${nf.format(p.credits)} credits`}</title>
-              </rect>
-              {(n <= 14 || i === 0 || i === n - 1 || i % Math.ceil(n / 10) === 0) && (
-                <text x={pad.left + i * slot + slot / 2} y={H - 6} fontSize="10" textAnchor="middle" fill="var(--chakra-colors-fg-muted, #888)" fontFamily="monospace">{fmt(p.date)}</text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
+    <Box h="220px" w="100%" display="flex" flexDirection="column">
+      <VegaChart envelope={TREND_ENVELOPE} rows={rows} colorMode={colorMode} />
     </Box>
   );
 }
