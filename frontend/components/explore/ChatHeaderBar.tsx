@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { Box, HStack, Text, Icon, Button, Menu, Portal, Input } from '@chakra-ui/react';
 import { LuPlus, LuChevronDown, LuRefreshCw, LuPin, LuShare2, LuExpand, LuPencil, LuUnplug } from 'react-icons/lu';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import { toaster } from '@/components/ui/toaster';
 import { useAppDispatch } from '@/store/hooks';
 import { setActiveConversation, setConversationTitle, setRemoteSession, createConversation } from '@/store/chatSlice';
