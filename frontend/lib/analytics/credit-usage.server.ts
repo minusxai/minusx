@@ -161,6 +161,31 @@ WHERE created_at >= ${BILLING_START}
   AND user_id = $1
 `;
 
+// Credits consumed by ONE conversation for a given user (user-scoped so a caller
+// only ever sees their own conversation's total — no cross-user leak). Same
+// weighted inputs as the gate/card so the number reconciles.
+const CONVO_SQL = `
+SELECT
+  SUM(${NONCACHED})                    AS noncached,
+  SUM(COALESCE(cached_tokens, 0))      AS cached,
+  SUM(COALESCE(completion_tokens, 0))  AS output,
+  SUM(COALESCE(cost, 0))               AS cost,
+  COUNT(*)                             AS requests
+FROM llm_call_events
+WHERE conversation_id = $1 AND user_id = $2
+`;
+
+/** Total credits attributed to one conversation for the given user. */
+export async function getConversationCredits(conversationId: number, userId: number): Promise<number> {
+  const { rows } = await getModules().db.exec<Record<string, unknown>>(CONVO_SQL, [conversationId, userId]);
+  const r = rows[0] ?? {};
+  const n = (k: string) => Number(r[k] ?? 0);
+  return costToCredits(
+    { nonCachedTokens: n('noncached'), cachedTokens: n('cached'), outputTokens: n('output'), cost: n('cost'), requests: n('requests') },
+    CREDIT_CONFIG.weights,
+  );
+}
+
 export interface CreditGate {
   allowed: boolean;
   /** Which window was exceeded (null when allowed / not enforced). */

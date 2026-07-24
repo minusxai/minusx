@@ -72,4 +72,6 @@ export interface CreditUsageResponse {
   org: CreditScope | null;
   /** Whether credit limits are enforced (gated) or only tracked/displayed. */
   enforced: boolean;
+  /** Credits used by the requested conversation (present only when `?conversationId=` was passed). */
+  conversation?: { credits: number } | null;
 }
