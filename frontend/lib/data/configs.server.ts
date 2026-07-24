@@ -5,7 +5,7 @@ import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, mergeConfig } from '@/lib/branding/whitelabel';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { Mode, DEFAULT_MODE } from '@/lib/mode/mode-types';
-import { validateOrgConfig } from '@/lib/validation/config-validators';
+import { sanitizeOrgConfig } from '@/lib/validation/config-sanitizer';
 import { extractConfigSecrets } from '@/lib/secrets/config-secrets.server';
 import { restoreRedactedConfigSecrets } from '@/lib/secrets/config-secret-specs';
 export { validateOrgConfig } from '@/lib/validation/config-validators';
@@ -85,15 +85,15 @@ class ConfigsDataLayerServer {
       const doc = await DocumentDB.getByPath(configPath);
 
       if (doc && doc.content && typeof doc.content === 'object') {
-        const dbContent = doc.content as Partial<OrgConfig>;
-
-        // Validate structure
-        if (validateOrgConfig(dbContent)) {
-          // Merge with defaults (database overrides defaults)
-          config = mergeConfig(DEFAULT_CONFIG, dbContent);
-        } else {
-          console.warn('[Configs] Invalid config structure in database, using defaults');
+        // Heal per-section: strip inert schema-drift (retired file/viz types, the
+        // old `llm.assignments`) and drop any section still invalid to its default.
+        // The whole document is NEVER discarded — a bad section can't reset the
+        // setup wizard or wipe unrelated branding/webhooks/access rules.
+        const { config: healed, warnings } = sanitizeOrgConfig(doc.content, { dropInvalidSections: true });
+        if (warnings.length > 0) {
+          console.warn(`[Configs] Healed config at ${configPath}:`, warnings.join(' '));
         }
+        config = mergeConfig(DEFAULT_CONFIG, healed);
       }
     } catch (error) {
       console.log('[Configs] Using default config (document not found)', error);

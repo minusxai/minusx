@@ -3,6 +3,28 @@
 import { describe, it, expect } from 'vitest';
 import { validateFileState } from '../content-validators';
 
+describe('content-validators: config file heals inert schema-drift', () => {
+  it('accepts a config that only trips retired file/viz types + llm.assignments (heals, does not reject)', () => {
+    const content = {
+      branding: { displayName: 'Acme', agentName: 'Agent', favicon: '/f.ico' },
+      supportedFileTypes: ['question', 'conversation'],           // conversation retired
+      accessRules: { admin: { createTypes: ['question', 'conversation'] } },
+      llm: { providers: [{ name: 'openai', provider: 'openai' }], assignments: { analyst: {} } }, // retired shape
+      setupWizard: { status: 'complete' },
+    };
+    expect(validateFileState({ type: 'config', content })).toBeNull();
+  });
+
+  it('still REJECTS a genuinely malformed config, with a specific reason (not the canned message)', () => {
+    const err = validateFileState({
+      type: 'config',
+      content: { llm: { providers: [{ name: 'a', provider: 'openai' }], grades: { core: { providerName: 'ghost' } } } },
+    }) ?? '';
+    expect(err).toMatch(/references provider 'ghost', which does not exist/);
+    expect(err).not.toBe('Invalid config structure');
+  });
+});
+
 describe('content-validators: actionable error messages', () => {
   it('reports expected-vs-got and drops the Nullable anyOf noise (xCols/yCols as objects)', () => {
     // The exact mistake the agent makes: per-series {name,color,label} objects

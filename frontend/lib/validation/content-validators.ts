@@ -6,7 +6,7 @@
 import Ajv from 'ajv';
 import { atlasSchema } from './atlas-json-schemas';
 import type { FileType, QuestionContent, DashboardContent, StoryContent, NotebookContent } from '@/lib/types';
-import { validateOrgConfig } from '@/lib/validation/config-validators';
+import { sanitizeOrgConfig } from '@/lib/validation/config-sanitizer';
 
 // `verbose` so each error carries the received `data` — needed to report
 // expected-vs-got in formatErrors() below.
@@ -119,8 +119,12 @@ export function validateFileState(file: {
     return validateContent({ type: 'StoryContent', data: file.content as StoryContent });
   if (file.type === 'notebook')
     return validateContent({ type: 'NotebookContent', data: file.content as NotebookContent });
-  if (file.type === 'config')
-    return validateOrgConfig(file.content) ? null : 'Invalid config structure';
+  if (file.type === 'config') {
+    // Heal inert schema-drift (retired file/viz types, the old `llm.assignments`),
+    // then reject only a genuinely malformed section — with its SPECIFIC reason.
+    const { errors } = sanitizeOrgConfig(file.content, { dropInvalidSections: false });
+    return errors.length > 0 ? errors.join('; ') : null;
+  }
   if (file.type === 'connection') {
     const conn = file.content as any;
     if (!conn?.type || !conn?.config) return 'Connection must have type and config';

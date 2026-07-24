@@ -5,7 +5,7 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
 import type { VisualizationType } from '@/lib/types';
 import { LLM_AGENT_KEYS, LLM_GRADES } from '@/lib/llm/llm-config-types';
 
-const VALID_VIZ_TYPES: readonly VisualizationType[] = [
+export const VALID_VIZ_TYPES: readonly VisualizationType[] = [
   'table', 'bar', 'row', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot', 'trend', 'waterfall', 'combo', 'radar', 'geo'
 ];
 
@@ -15,8 +15,8 @@ function validateAllowedVizTypes(value: unknown): value is VisualizationType[] {
 }
 
 const VALID_ROLES = ['admin', 'editor', 'viewer'] as const;
-const VALID_ACCESS_FIELDS = ['allowedTypes', 'createTypes', 'viewTypes'] as const;
-const VALID_FILE_TYPES = immutableSet(Object.keys(FILE_TYPE_METADATA));
+export const VALID_ACCESS_FIELDS = ['allowedTypes', 'createTypes', 'viewTypes'] as const;
+export const VALID_FILE_TYPES = immutableSet(Object.keys(FILE_TYPE_METADATA));
 
 function validateFileTypeArray(value: unknown): boolean {
   if (value === '*') return true;

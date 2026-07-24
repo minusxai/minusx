@@ -18,6 +18,8 @@ import { ConfigContent } from '@/lib/types';
 import { useMemo, useCallback, useState, useEffect } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { FilesAPI } from '@/lib/data/files';
+import { sanitizeOrgConfig } from '@/lib/validation/config-sanitizer';
+import { toaster } from '@/components/ui/toaster';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
 
 interface ConfigContainerV2Props {
@@ -66,8 +68,16 @@ export default function ConfigContainerV2({
 
     dispatch(setSaving({ id: fileId, saving: true }));
 
+    // Heal inert schema-drift (retired file/viz types, the old `llm.assignments`)
+    // before persisting, so the stored config self-cleans instead of staying dirty.
+    // A genuinely malformed section is left in place for the server to reject.
+    const { config: healed, warnings } = sanitizeOrgConfig(currentContent, { dropInvalidSections: false });
+
     try {
-      const result = await FilesAPI.saveFile(fileId, effectiveName, newPath, currentContent, []);
+      const result = await FilesAPI.saveFile(fileId, effectiveName, newPath, healed as ConfigContent, []);
+      if (warnings.length > 0) {
+        toaster.create({ title: 'Config cleaned up on save', description: warnings.join(' '), type: 'info' });
+      }
       dispatch(updateFileContent({ id: fileId, file: result.data }));
       dispatch(clearEdits(fileId));
 
