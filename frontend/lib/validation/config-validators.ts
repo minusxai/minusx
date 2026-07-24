@@ -149,8 +149,8 @@ function validateCreditsConfig(credits: unknown): boolean {
   for (const flag of ['enabled', 'enforced'] as const) {
     if (c[flag] !== undefined && typeof c[flag] !== 'boolean') return false;
   }
-  for (const cyc of ['dailyCycle', 'weeklyCycle'] as const) {
-    if (c[cyc] !== undefined && typeof c[cyc] !== 'string') return false;
+  for (const s of ['dailyCycle', 'weeklyCycle', 'dailyResetCron', 'weeklyResetCron', 'resetTimeZone'] as const) {
+    if (c[s] !== undefined && typeof c[s] !== 'string') return false;
   }
   if (c.weights !== undefined && (typeof c.weights !== 'object' || c.weights === null)) return false;
   if (c.limits !== undefined) {

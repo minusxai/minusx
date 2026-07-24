@@ -13,6 +13,7 @@ import { withCronAuth } from '@/lib/http/with-auth';
 import { successResponse, handleApiError } from '@/lib/http/api-responses';
 import { JobRunsDB } from '@/lib/database/job-runs-db';
 import { runForOrg } from '@/lib/jobs/cron-scan';
+import { runCreditResets } from '@/lib/jobs/credit-reset';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -20,8 +21,11 @@ export const runtime = 'nodejs';
 export const POST = withCronAuth(async (_request: NextRequest) => {
   try {
     await JobRunsDB.ensureTable();
-    const result = await runForOrg(new Date());
-    return successResponse({ results: { 0: result } });
+    const now = new Date();
+    const result = await runForOrg(now);
+    // Global auto credit-resets (daily/weekly) — same tick, same JobRunsDB dedup.
+    const credits = await runCreditResets(now);
+    return successResponse({ results: { 0: result }, credits });
   } catch (error) {
     return handleApiError(error);
   }

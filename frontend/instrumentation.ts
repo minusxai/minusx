@@ -52,6 +52,13 @@ export async function register() {
       void logTaggedRejection(reason);
     });
 
+    // In-app cron scheduler: the external service that used to POST /api/jobs/cron
+    // is gone, so run the scan (alerts, reports, sheets-sync, credit resets) on an
+    // in-process timer instead. Dedups across instances via JobRunsDB.
+    // eslint-disable-next-line no-restricted-syntax
+    const { startCronScheduler } = await import('./lib/jobs/scheduler.server');
+    startCronScheduler();
+
     // Boot-warm the heavy chat runtime so the FIRST chat request doesn't pay the
     // module load + JIT-parse cost on a cold Node process (the DB is already
     // warmed by db.init() above). Non-blocking: the server starts serving

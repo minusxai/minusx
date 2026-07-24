@@ -23,6 +23,32 @@ describe('validateOrgConfig - supportedFileTypes', () => {
   });
 });
 
+describe('validateOrgConfig - credits section', () => {
+  it('accepts a full valid credits config', () => {
+    expect(validateOrgConfig({
+      credits: {
+        enabled: true, enforced: false,
+        weights: { cost: 100 }, dailyCycle: '1d', weeklyCycle: '1w',
+        dailyResetCron: '59 23 * * *', weeklyResetCron: '59 23 * * 0', resetTimeZone: 'America/Los_Angeles',
+        limits: { company: { daily: 1000, weekly: 5000 }, roles: { viewer: { daily: 50 } }, users: { '7': { weekly: 10 } } },
+      },
+    })).toBe(true);
+  });
+
+  it('accepts an empty/partial credits config', () => {
+    expect(validateOrgConfig({ credits: {} })).toBe(true);
+    expect(validateOrgConfig({ credits: { enabled: true } })).toBe(true);
+  });
+
+  it('rejects wrong-typed flags and limits', () => {
+    expect(validateOrgConfig({ credits: { enabled: 'yes' } })).toBe(false);
+    expect(validateOrgConfig({ credits: { limits: { company: { daily: '1000' } } } })).toBe(false);
+    expect(validateOrgConfig({ credits: { limits: { roles: { viewer: { weekly: 'lots' } } } } })).toBe(false);
+    expect(validateOrgConfig({ credits: { dailyResetCron: 123 } })).toBe(false);
+    expect(validateOrgConfig({ credits: 'on' })).toBe(false);
+  });
+});
+
 describe('orgConfigValidationError — llm section reasons', () => {
   it('names the dangling provider reference (the rename-without-cascade case)', () => {
     const error = orgConfigValidationError({

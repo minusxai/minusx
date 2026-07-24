@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  resolveCreditPolicy, resolveOrgCreditPolicy, DEFAULT_DAILY_LIMIT, DEFAULT_WEEKLY_LIMIT,
+  resolveCreditPolicy, resolveOrgCreditPolicy, resolveResetSchedule,
+  DEFAULT_DAILY_LIMIT, DEFAULT_WEEKLY_LIMIT,
+  DEFAULT_DAILY_RESET_CRON, DEFAULT_WEEKLY_RESET_CRON, DEFAULT_RESET_TIMEZONE,
   type CreditsConfig,
 } from '@/lib/analytics/credit-policy';
 
@@ -43,6 +45,28 @@ describe('resolveCreditPolicy', () => {
     const p = resolveCreditPolicy(cfg, { role: 'viewer' });
     expect(p.weights.cost).toBe(200);
     expect(p.weekly.cycle).toBe('2w');
+  });
+});
+
+describe('resolveResetSchedule', () => {
+  it('defaults to LA-time 11:59 PM daily and Sunday 11:59 PM weekly', () => {
+    expect(resolveResetSchedule(undefined)).toEqual({
+      dailyCron: DEFAULT_DAILY_RESET_CRON, weeklyCron: DEFAULT_WEEKLY_RESET_CRON, timeZone: DEFAULT_RESET_TIMEZONE,
+    });
+    expect(DEFAULT_DAILY_RESET_CRON).toBe('59 23 * * *');
+    expect(DEFAULT_WEEKLY_RESET_CRON).toBe('59 23 * * 0');
+    expect(DEFAULT_RESET_TIMEZONE).toBe('America/Los_Angeles');
+  });
+
+  it('honors valid overrides', () => {
+    expect(resolveResetSchedule({ dailyResetCron: '0 6 * * *', weeklyResetCron: '0 6 * * 1', resetTimeZone: 'UTC' }))
+      .toEqual({ dailyCron: '0 6 * * *', weeklyCron: '0 6 * * 1', timeZone: 'UTC' });
+  });
+
+  it('falls back to defaults on invalid cron', () => {
+    const s = resolveResetSchedule({ dailyResetCron: 'not a cron', weeklyResetCron: '1 2 3' /* 3 fields */ });
+    expect(s.dailyCron).toBe(DEFAULT_DAILY_RESET_CRON);
+    expect(s.weeklyCron).toBe(DEFAULT_WEEKLY_RESET_CRON);
   });
 });
 

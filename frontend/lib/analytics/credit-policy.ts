@@ -27,6 +27,12 @@ export interface CreditsConfig {
   /** Cycle specs `<N><unit>` (d|w|m). Defaults: daily '1d', weekly '1w'. */
   dailyCycle?: string;
   weeklyCycle?: string;
+  /** Auto-reset cron schedules (5-field), evaluated in `resetTimeZone`.
+   *  Defaults: daily '59 23 * * *' (11:59 PM), weekly '59 23 * * 0' (Sun 11:59 PM). */
+  dailyResetCron?: string;
+  weeklyResetCron?: string;
+  /** IANA timezone for the reset crons. Default 'America/Los_Angeles'. */
+  resetTimeZone?: string;
   /** Limits by scope. Most specific wins: users → roles → company. */
   limits?: {
     company?: CreditScopeLimits;
@@ -78,6 +84,27 @@ export function resolveCreditPolicy(cfg: CreditsConfig | undefined, user: Credit
     weights: { ...CREDIT_BUDGETS.weights, ...(c.weights ?? {}) },
     daily: { cycle: c.dailyCycle ?? '1d', limit: pickLimit(c, user, 'daily', DEFAULT_DAILY_LIMIT) },
     weekly: { cycle: c.weeklyCycle ?? '1w', limit: pickLimit(c, user, 'weekly', DEFAULT_WEEKLY_LIMIT) },
+  };
+}
+
+export const DEFAULT_DAILY_RESET_CRON = '59 23 * * *';   // 11:59 PM
+export const DEFAULT_WEEKLY_RESET_CRON = '59 23 * * 0';  // Sunday 11:59 PM
+export const DEFAULT_RESET_TIMEZONE = 'America/Los_Angeles';
+
+/** A 5-field cron with numeric/./,-/* fields — good enough to reject obvious garbage. */
+function isValidCron(expr: unknown): expr is string {
+  if (typeof expr !== 'string') return false;
+  const parts = expr.trim().split(/\s+/);
+  return parts.length === 5 && parts.every((p) => /^[\d*,\-/]+$/.test(p));
+}
+
+/** Resolve the auto-reset schedule (crons + timezone), falling back to LA-time defaults on invalid input. */
+export function resolveResetSchedule(cfg: CreditsConfig | undefined): { dailyCron: string; weeklyCron: string; timeZone: string } {
+  const c = cfg ?? {};
+  return {
+    dailyCron: isValidCron(c.dailyResetCron) ? c.dailyResetCron : DEFAULT_DAILY_RESET_CRON,
+    weeklyCron: isValidCron(c.weeklyResetCron) ? c.weeklyResetCron : DEFAULT_WEEKLY_RESET_CRON,
+    timeZone: typeof c.resetTimeZone === 'string' && c.resetTimeZone.trim() ? c.resetTimeZone : DEFAULT_RESET_TIMEZONE,
   };
 }
 
