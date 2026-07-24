@@ -108,28 +108,29 @@ async function cropFromSvgStory(
   const svg = findStorySvg(host);
   if (!svg) return null;
   const box = svgBoxInTopViewport(svg);
-  const inside = selection.x >= box.left && selection.y >= box.top
-    && selection.x + selection.width <= box.left + box.width && selection.y + selection.height <= box.top + box.height;
-  if (!inside) return null;
   if (!box.width || !box.height) return null;
+  // Cheap pre-gate (viewport space, no serialize): only bail to the generic path when the selection
+  // is ENTIRELY off the surface. A selection that straddles the edge is cropped here and its margins
+  // filled with bg below — the whole point is to never fall through to the iframe-clone black.
+  const overlapW = Math.min(selection.x + selection.width, box.left + box.width) - Math.max(selection.x, box.left);
+  const overlapH = Math.min(selection.y + selection.height, box.top + box.height) - Math.max(selection.y, box.top);
+  if (overlapW <= 0 || overlapH <= 0) return null;
 
   const img = await svgToImage(await serializeStorySvg(svg));
   // The rasterized image is the SVG at its intrinsic size; map viewport → image space through the
-  // svg's own box (NOT the page target), then downscale to the output cap.
+  // svg's own box (NOT the page target). Clamp the crop to the box so any out-of-bounds margin is
+  // painted with the background, not the black an un-renderable iframe clone produces.
   const ratio = (img.naturalWidth || box.width) / box.width;
-  const sx = (selection.x - box.left) * ratio;
-  const sy = (selection.y - box.top) * ratio;
-  const sw = selection.width * ratio;
-  const sh = selection.height * ratio;
-  const { w, h } = cappedOutputDims(sw, sh, maxOutputPx);
+  const rects = clampedSvgCropRects(selection, box, ratio, maxOutputPx);
+  if (!rects) return null;
   const out = document.createElement('canvas');
-  out.width = w;
-  out.height = h;
+  out.width = rects.canvas.w;
+  out.height = rects.canvas.h;
   const ctx = out.getContext('2d');
   if (!ctx) return null;
   ctx.fillStyle = opts.backgroundColor ?? bgFor(opts.colorMode);
-  ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+  ctx.fillRect(0, 0, rects.canvas.w, rects.canvas.h);
+  ctx.drawImage(img, rects.src.sx, rects.src.sy, rects.src.sw, rects.src.sh, rects.dst.dx, rects.dst.dy, rects.dst.dw, rects.dst.dh);
   return canvasToBlob(out, mimeFor(opts.format), opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
 }
 
@@ -199,6 +200,52 @@ export function cropSourceRect(
     sy: Math.max(0, (selection.y - targetBox.top) * pixelRatio),
     sw: Math.max(1, selection.width * pixelRatio),
     sh: Math.max(1, selection.height * pixelRatio),
+  };
+}
+
+/**
+ * Geometry for cropping a viewport selection out of an SVG surface, CLAMPED to the surface box.
+ * The output canvas always covers the FULL selection (so it matches what the user dragged); the
+ * part inside the surface is drawn from the rasterized svg, and any margin that strays outside the
+ * surface is left for the caller to fill with the background — never the black an un-renderable
+ * iframe clone produces. Returns null when the selection doesn't overlap the surface at all (a
+ * genuine off-surface region → caller falls back to the generic path).
+ *
+ * `ratio` maps viewport px → rasterized-image px (image intrinsic width / box width). Pure → testable.
+ */
+export function clampedSvgCropRects(
+  selection: { x: number; y: number; width: number; height: number },
+  box: { left: number; top: number; width: number; height: number },
+  ratio: number,
+  maxOutputPx: number,
+): {
+  canvas: { w: number; h: number };
+  src: { sx: number; sy: number; sw: number; sh: number };
+  dst: { dx: number; dy: number; dw: number; dh: number };
+} | null {
+  // Intersection of the selection with the surface box, in viewport space.
+  const ix = Math.max(selection.x, box.left);
+  const iy = Math.max(selection.y, box.top);
+  const iw = Math.min(selection.x + selection.width, box.left + box.width) - ix;
+  const ih = Math.min(selection.y + selection.height, box.top + box.height) - iy;
+  if (iw <= 0 || ih <= 0) return null; // no overlap → not a surface crop
+
+  const fullW = selection.width * ratio;
+  const fullH = selection.height * ratio;
+  const { w, h } = cappedOutputDims(fullW, fullH, maxOutputPx);
+  const outScale = fullW > 0 ? w / fullW : 1;
+
+  return {
+    canvas: { w, h },
+    // Source: the intersection, in rasterized-image space (offset from the surface's own origin).
+    src: { sx: (ix - box.left) * ratio, sy: (iy - box.top) * ratio, sw: iw * ratio, sh: ih * ratio },
+    // Destination: the intersection placed at its offset WITHIN the full selection, at output scale.
+    dst: {
+      dx: (ix - selection.x) * ratio * outScale,
+      dy: (iy - selection.y) * ratio * outScale,
+      dw: iw * ratio * outScale,
+      dh: ih * ratio * outScale,
+    },
   };
 }
 

@@ -8,7 +8,7 @@
  * without any network traffic. Results are memoized by story text so repeated renders and
  * edit keystrokes don't re-hit the API.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { hasDesignSystemMarker, type CompiledCssStoryContent } from '@/lib/data/story/story-css';
 
 // eslint-disable-next-line no-restricted-syntax -- client-only hook: the cache lives in one browser tab (keyed by story text), never across server requests
@@ -23,6 +23,15 @@ function remember(story: string, css: string | null) {
   cache.set(story, css);
 }
 
+/** The design CSS for the current story, plus whether it actually corresponds to
+ *  that story. `ready` is false ONLY while we serve a stale/persisted placeholder
+ *  because the CURRENT story's compile is still in flight — the caller uses it to
+ *  hold the previous styled frame until the new one's CSS lands (no unstyled flash). */
+export interface StoryPreviewCss {
+  css: string | null;
+  ready: boolean;
+}
+
 /**
  * @param content the story content being rendered (merged: saved + staged edits)
  * @param dirty   whether the content differs from the last save (persisted CSS may be stale)
@@ -30,7 +39,7 @@ function remember(story: string, css: string | null) {
 export function useStoryPreviewCss(
   content: CompiledCssStoryContent | undefined,
   dirty: boolean,
-): string | null {
+): StoryPreviewCss {
   const story = content?.story ?? '';
   const persisted = content?.compiledCss ?? null;
   const isJsx = content?.format === 'jsx';
@@ -62,9 +71,40 @@ export function useStoryPreviewCss(
     return () => { cancelled = true; clearTimeout(t); };
   }, [needsPreview, cached, story, isJsx]);
 
-  if (!marked) return null;
-  if (!needsPreview) return persisted;
-  if (cached !== undefined) return cached;
-  if (fetched && fetched.story === story) return fetched.css;
-  return persisted;
+  // `ready` = the returned css belongs to THIS story. Only the final fallback
+  // (serving persisted/null while the current story's compile is in flight) is not ready.
+  // `ready` = the returned css belongs to THIS story. Only the final fallback
+  // (serving persisted/null while the current story's compile is in flight) is not ready.
+  if (!marked) return { css: null, ready: true };
+  if (!needsPreview) return { css: persisted, ready: true };
+  if (cached !== undefined) return { css: cached, ready: true };
+  if (fetched && fetched.story === story) return { css: fetched.css, ready: true };
+  return { css: persisted, ready: false };
+}
+
+/**
+ * The story body + design CSS to actually RENDER, holding the swap until the two are
+ * in sync. An agent edit changes the story; its recompiled Tailwind lands one async
+ * round-trip later — rendering the new story before its CSS is ready flashes unstyled.
+ * So in VIEW mode we keep serving the previous {story, css} pair until the new story's
+ * CSS is `ready`, then swap both together → the surface rebuilds once, already styled.
+ *
+ * In EDIT mode the story flows live (the WYSIWYG inline-edit transforms read the current
+ * story, and a stale body there would be silent data loss). Theme / param values are NOT
+ * held — the caller keeps passing those live (a theme pick is an instant attribute change).
+ */
+export function useHeldStoryRender(
+  content: CompiledCssStoryContent | undefined,
+  dirty: boolean,
+  editing: boolean,
+): { story: string; css: string | null } {
+  const { css, ready } = useStoryPreviewCss(content, dirty);
+  const liveStory = content?.story ?? '';
+  const [committed, setCommitted] = useState<{ story: string; css: string | null }>({ story: liveStory, css });
+  // Adjust-state-during-render (React re-renders synchronously) — advance only when the
+  // pair is in sync (or we're editing, where the story must not lag).
+  if ((editing || ready) && (committed.story !== liveStory || committed.css !== css)) {
+    setCommitted({ story: liveStory, css });
+  }
+  return useMemo(() => committed, [committed.story, committed.css]);
 }

@@ -365,7 +365,31 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       tearingDown = true;
       if (root) setTimeout(() => { try { root.unmount(); } catch { /* detached doc nodes */ } }, 0);
     };
-  }, [bodySource, isJsx, sanitized, fluid, height, compiledCss, surfaceKind, width]); // colorMode + theme handled separately so they don't rebuild the doc
+  }, [bodySource, isJsx, sanitized, fluid, height, surfaceKind, width]); // colorMode + theme + compiledCss handled separately so they don't rebuild the doc
+
+  // Keep the design-system stylesheet (server-compiled Tailwind) in sync WITHOUT rebuilding the
+  // document. New/updated CSS after an agent edit or a Save-recompute is a textContent swap on the
+  // in-root data-mx-tw node — not a full iframe rebuild (which flashes unstyled and resets scroll).
+  // The build effect only creates that node when compiledCss is truthy, so create-if-missing here
+  // (and remove if it goes null), inserted right after the app-styles mirror to match build order.
+  useEffect(() => {
+    const root = surfaceRef.current?.root;
+    const doc = docRef.current;
+    if (!root || !doc) return;
+    let el = root.querySelector<HTMLStyleElement>('style[data-mx-tw]');
+    if (compiledCss) {
+      if (!el) {
+        el = doc.createElement('style');
+        el.setAttribute('data-mx-tw', '');
+        const appStyles = root.querySelector('style[data-mx-app-styles]');
+        if (appStyles && appStyles.parentNode === root) appStyles.after(el);
+        else root.prepend(el);
+      }
+      if (el.textContent !== compiledCss) el.textContent = compiledCss;
+    } else if (el) {
+      el.remove();
+    }
+  }, [compiledCss]);
 
   // Keep the story root's design theme in sync without rebuilding the document — a theme switch
   // is an attribute change only (all [data-theme] token blocks already ship in compiledCss).

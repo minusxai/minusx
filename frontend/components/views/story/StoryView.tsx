@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 
 import AgentHtml, { type NumberQueryEdit, type NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
@@ -19,6 +19,7 @@ import {
 import { updateNumberQueryInJsx } from '@/lib/data/story/story-number';
 import { STORY_W } from './ScaledStoryFrame';
 import { PageMarkerDevOverlay } from './PageMarkerDevOverlay';
+import { usePresentation } from '@/components/file-toolbar/PresentationContext';
 
 // Max on-screen width of the reading column. Stories render FLUID (no transform
 // scale): full-bleed on mobile, capped + centered here on desktop. Authored
@@ -36,6 +37,53 @@ function hashStory(s: string): number {
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
   return h;
+}
+
+/**
+ * Keep page scroll steady across the intentional iframe remount. An agent edit remounts
+ * <AgentHtml> (keyed on the story hash), tearing down the iframe; it regrows from height 0,
+ * so the page content briefly shrinks and the browser clamps scroll toward the top. We pin
+ * the story box's min-height to its last measured height right BEFORE the rebuild
+ * (adjust-state-during-render, so the style lands in the SAME commit as the child's rebuild —
+ * no visible collapse), and release once the new content settles. Timing-based by nature (the
+ * iframe regrows async), so it's verified in-browser, not jsdom.
+ */
+function usePinHeightAcrossRebuild(
+  boxRef: React.RefObject<HTMLDivElement | null>,
+  renderKey: string,
+): number | null {
+  const [pinHeight, setPinHeight] = useState<number | null>(null);
+  // State (not refs): the render-phase branch below reads these, and refs can't be read
+  // during render. `lastHeight` is the last STABLE measured height; the observer records
+  // it only on settle, so this stays one update per resize-burst (no render storm).
+  const [lastHeight, setLastHeight] = useState(0);
+  const [prevKey, setPrevKey] = useState(renderKey);
+  const settleRef = useRef(0);
+
+  // Adjust-state-during-render: the instant the render key changes (imminent iframe remount),
+  // pin to the last stable height so the box can't collapse in this same commit.
+  if (prevKey !== renderKey) {
+    setPrevKey(renderKey);
+    if (lastHeight > 0) setPinHeight(lastHeight);
+  }
+
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      // Debounce to when the (re)built content stops resizing, then record the stable
+      // height and release the pin — one state update per settle, not per resize frame.
+      if (settleRef.current) window.clearTimeout(settleRef.current);
+      settleRef.current = window.setTimeout(() => {
+        const h = box.querySelector('iframe')?.offsetHeight ?? box.offsetHeight;
+        if (h > 0) setLastHeight(h);
+        setPinHeight(null);
+      }, 150);
+    });
+    ro.observe(box.querySelector('iframe') ?? box);
+    return () => { ro.disconnect(); if (settleRef.current) window.clearTimeout(settleRef.current); };
+  }, [boxRef, renderKey]); // re-observe the fresh iframe after each remount
+  return pinHeight;
 }
 
 interface StoryViewProps {
@@ -76,6 +124,11 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
   // (serializeEditedStory); jsx stories commit by AST write-back (applyDomEditsToJsx via
   // AgentHtml/StoryJsxBody) — the onChange contract is identical either way.
   const editing = canEdit && headerEditMode;
+
+  // Present (full-view) mode is the generic fullscreen flag (shared header Present button).
+  // The story drops its 1280px reading cap and goes full-bleed so it fills the viewport —
+  // mirroring how NotebookView widens its layout while presenting.
+  const presenting = usePresentation()?.isPresenting ?? false;
 
   // Inline <Number> query editing opens the full SqlEditor in a light-DOM modal (Monaco can't live
   // in the story iframe). The story's path feeds schema/connection autocomplete.
@@ -134,6 +187,12 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
   }
   const htmlForRender = session.editing ? session.snapshot : liveStory;
 
+  // Keyed to remount AgentHtml on content change (see hashStory); the same key drives the
+  // scroll-preservation pin so it fires exactly when the iframe rebuilds.
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const renderKey = `${session.key}:${hashStory(htmlForRender)}`;
+  const pinHeight = usePinHeightAcrossRebuild(canvasRef, renderKey);
+
   const onStoryChange = useCallback((story: string) => {
     // Record our own serialized echo so the render-phase logic above doesn't mistake it for an
     // external edit and needlessly rebuild the iframe mid-typing (which would drop the cursor).
@@ -176,7 +235,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
         {/* Relative wrapper anchors the DEV marker overlay OVER the captured box without being INSIDE
             it — so the serialized capture sees the story alone, and the app-state screenshot's baked
             gutter is the only numbering in the image (no double markers). */}
-        <Box position="relative" w="100%" maxW={STORY_MAX_W}>
+        <Box position="relative" w="100%" aria-label="Story canvas" ref={canvasRef} style={{ maxWidth: presenting ? '100%' : STORY_MAX_W, minHeight: pinHeight ? `${pinHeight}px` : undefined }}>
         {/* data-story-capture → OG share-card preview; data-file-id → the standard FileView capture
             (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
         <Box w="100%" {...(numericId !== undefined ? { 'data-story-capture': numericId, 'data-file-id': numericId } : {})}>
@@ -184,7 +243,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
               <svg><foreignObject> in the iframe, so the capture serializes the live surface. */}
           <AgentHtml
             // Remount on external content change (viewing) AND once per edit-session exit (see above).
-            key={`${session.key}:${hashStory(htmlForRender)}`}
+            key={renderKey}
             html={htmlForRender}
             format={storyFormat}
             width={STORY_W}

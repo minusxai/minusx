@@ -16,7 +16,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { LuGlobe, LuPalette } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectIsDirty } from '@/store/filesSlice';
-import { useStoryPreviewCss } from '@/lib/hooks/use-story-preview-css';
+import { useHeldStoryRender } from '@/lib/hooks/use-story-preview-css';
 import { selectFileEditMode } from '@/store/uiSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -40,7 +40,13 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
   const devMode = useAppSelector(state => state.ui.devMode);
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   // Persisted compiledCss for clean saved stories; preview-compiled for drafts/staged edits.
-  const compiledCss = useStoryPreviewCss(mergedContent, isDirty);
+  // Held together with the story body so an agent edit swaps in ONE styled build (no unstyled
+  // flash) — view mode only; edit mode flows the story live. theme/params stay live below.
+  const { story: renderStory, css: compiledCss } = useHeldStoryRender(mergedContent, isDirty, headerEditMode);
+  const renderContent = useMemo(
+    () => (mergedContent ? { ...mergedContent, story: renderStory } : undefined),
+    [mergedContent, renderStory],
+  );
   // The story SURFACE renders in the mode of its DESIGN, not the app: a themed story is
   // self-contained (one canonical palette — storyThemeMode derives its designed mode), and an
   // unthemed story may declare a colorMode (a light board deck stays light in a dark app).
@@ -78,7 +84,7 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
   return (
     <>
       <StoryView
-        content={mergedContent}
+        content={renderContent ?? mergedContent}
         fileId={numericId}
         headerEditMode={headerEditMode}
         storyPath={numericId !== undefined ? file.path : undefined}
