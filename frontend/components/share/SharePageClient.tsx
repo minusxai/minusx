@@ -21,6 +21,7 @@ import ShareLeadGate from './ShareLeadGate';
 import ShareFloatingChat from './ShareFloatingChat';
 import { StoryContent } from '@/lib/types';
 import type { CompiledCssStoryContent } from '@/lib/data/story/story-css';
+import { storyThemeMode } from '@/lib/data/story/story-themes';
 import type { AppState } from '@/lib/appState';
 import type { Mode } from '@/lib/mode/mode-types';
 
@@ -125,11 +126,12 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
     [storyContent?.suggestedQuestions],
   );
 
-  // Public viewers can't toggle light/dark, so honor the mode the story was
-  // authored for. Charts/tiles/chat all read ui.colorMode from Redux, so a
-  // single dispatch themes the whole page; ColorModeSync mirrors it to the
-  // <html> class. No-op (viewer default) when the story doesn't set one.
-  const storyColorMode = storyContent?.colorMode ?? undefined;
+  // Public viewers can't toggle light/dark, so honor the story's designed mode: its theme's
+  // (themes are self-contained; storyThemeMode derives it), else its declared colorMode.
+  // Charts/tiles/chat all read ui.colorMode from Redux, so a single dispatch
+  // themes the whole page; ColorModeSync mirrors it to the <html> class.
+  // No-op (viewer default) when neither the theme nor the story sets one.
+  const storyColorMode = storyThemeMode(storyContent?.theme) ?? storyContent?.colorMode ?? undefined;
   useEffect(() => {
     if (storyColorMode) dispatch(setColorMode(storyColorMode));
   }, [storyColorMode, dispatch]);
@@ -367,9 +369,11 @@ function SharedStory({ fileId }: { fileId: number }) {
   // guard rejects any query without one ("Guests must execute within a shared page") before
   // it can check the page's query allowlist — shares need the path for live charts to run.
   // Published render: the persisted compiledCss is always fresh (recomputed on every save).
-  // The story's declared colorMode pins the surface (the page-level dispatch also syncs the app
+  // The story's designed mode — its theme's (self-contained; storyThemeMode derives it), else
+  // its declared colorMode — pins the surface (the page-level dispatch also syncs the app
   // chrome, but this keeps the iframe correct even before that effect lands).
-  const effectiveColorMode = (mergedContent.colorMode as 'light' | 'dark' | null | undefined) ?? colorMode;
+  const effectiveColorMode = storyThemeMode(mergedContent.theme)
+    ?? (mergedContent.colorMode as 'light' | 'dark' | null | undefined) ?? colorMode;
   const storyPath = (file as { path?: string } | undefined)?.path;
   return <StoryView content={mergedContent} readOnly headerEditMode={false} storyPath={storyPath} storyName={undefined} colorMode={effectiveColorMode} compiledCss={(mergedContent as CompiledCssStoryContent).compiledCss} />;
 }

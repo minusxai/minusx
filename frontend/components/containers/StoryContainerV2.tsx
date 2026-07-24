@@ -25,7 +25,7 @@ import StoryView from '@/components/views/story/StoryView';
 import StoryThemePicker from '@/components/views/story/StoryThemePicker';
 import ShareModal from '@/components/share/ShareModal';
 import { editFile } from '@/lib/file-state/file-state';
-import { STORY_THEMES } from '@/lib/data/story/story-themes';
+import { STORY_THEMES, storyThemeMode } from '@/lib/data/story/story-themes';
 import { useFileToolbarActions, type FileToolbarAction } from '@/components/file-toolbar/FileToolbarContext';
 import { StoryContent } from '@/lib/types';
 import { type FileComponentProps } from '@/lib/ui/fileComponents';
@@ -41,11 +41,13 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   // Persisted compiledCss for clean saved stories; preview-compiled for drafts/staged edits.
   const compiledCss = useStoryPreviewCss(mergedContent, isDirty);
-  // The story SURFACE renders in the mode the story declares (a light board deck stays light in
-  // a dark app): the declared mode drives the iframe's .dark/.light class (design-system `dark:`
-  // variants + mirrored token CSS) AND the embedded chart stack (via StoryEmbeds' store
-  // override). Falls back to the app mode when the story doesn't declare one.
-  const effectiveColorMode = (mergedContent?.colorMode as 'light' | 'dark' | null | undefined) ?? colorMode;
+  // The story SURFACE renders in the mode of its DESIGN, not the app: a themed story is
+  // self-contained (one canonical palette — storyThemeMode derives its designed mode), and an
+  // unthemed story may declare a colorMode (a light board deck stays light in a dark app).
+  // The resolved mode drives the iframe's .dark/.light class (design-system `dark:` variants +
+  // mirrored token CSS) AND the embedded chart stack (via StoryEmbeds' store override).
+  const effectiveColorMode = storyThemeMode(mergedContent?.theme)
+    ?? (mergedContent?.colorMode as 'light' | 'dark' | null | undefined) ?? colorMode;
 
   // Publishing is admin-only; published via a toolbar action + the ShareModal.
   const canShare = numericId !== undefined && isAdmin(effectiveUser?.role || 'viewer');
