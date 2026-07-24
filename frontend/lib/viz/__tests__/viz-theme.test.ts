@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getVegaLiteConfig, getVegaParserConfig } from '@/lib/viz/theme';
-import { COLOR_PALETTE, DARK_THEME, LIGHT_THEME } from '@/lib/chart/chart-theme';
+import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 
 describe('getVegaLiteConfig', () => {
   it('uses JetBrains Mono across text roles in both modes', () => {
@@ -67,10 +67,8 @@ describe('getVegaLiteConfig', () => {
 });
 
 describe('getVegaParserConfig', () => {
-  it('uses each mode surface color for the trend readability plate', () => {
+  it('carries no trend readability-plate style — the trend KPI never sits over the chart', () => {
     const light = getVegaParserConfig('light') as Record<string, any>;
-    const dark = getVegaParserConfig('dark') as Record<string, any>;
-    expect(light.style['mx-trend-focus'].fill).toBe(LIGHT_THEME.bgSurface);
-    expect(dark.style['mx-trend-focus'].fill).toBe(DARK_THEME.bgSurface);
+    expect(light.style?.['mx-trend-focus']).toBeUndefined();
   });
 });

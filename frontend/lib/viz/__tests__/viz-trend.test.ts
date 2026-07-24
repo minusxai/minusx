@@ -57,14 +57,13 @@ describe('minusx/trend@1 build', () => {
     expect(json).toContain('__mx_pct');         // percent change computed in-spec
   });
 
-  it('sizes the KPI readability plate to the widest text so the date line never overflows it', () => {
+  it('the sparkline lives BELOW the KPI block — no readability plate, no chart behind text', () => {
     const json = specJson(trendSource());
-    // The plate width is measured off the ACTUAL rendered text (value number + date line),
-    // not a static slot fraction that a long "Nov 30, 2025 vs Oct 31, 2025" overshoots.
-    expect(json).toContain('__mx_datelabel');               // date label is materialized as a field
-    expect(json).toContain('length(datum.__mx_datelabel)'); // …and feeds the plate width
-    expect(json).toContain('length(datum.__mx_valuetext)');  // as does the big value number
-    expect(json).not.toContain("bandwidth('slot') * 0.28");  // the fixed-fraction plate is gone
+    // The plot band starts under the KPI text block and runs to the card bottom,
+    // so no mask/plate is needed to keep the number readable.
+    expect(json).not.toContain('__mx_kpi_plate');
+    expect(json).not.toContain('mx-trend-focus');
+    expect(json).toContain('kpiCenter + valueSize');  // plotTop derives from the KPI block
   });
 
   it("compareMode 'last' bases on the final point; 'previous' skips the partial period (3+ points)", () => {
@@ -83,7 +82,7 @@ describe('minusx/trend@1 build', () => {
     expect(without).not.toContain('__mx_spark');
   });
 
-  it('uses the plot as a clean full-height visual field without y-axis guides', () => {
+  it('uses a clean plot band without y-axis guides', () => {
     const json = specJson(trendSource());
     expect(json).toContain('plotTop');
     expect(json).toContain('plotBottom');
@@ -100,20 +99,35 @@ describe('minusx/trend@1 build', () => {
     expect(json).toContain('__mx_value');
   });
 
-  it('uses a crisp line, translucent area, and endpoint markers behind the KPI', () => {
+  it('draws a smooth basis spline with a single beacon endpoint — no compare ring, no glow', () => {
     const json = specJson(trendSource());
+    expect(json).toContain('"interpolate":{"value":"basis"}');
+    expect(json).not.toContain('"interpolate":{"value":"monotone"}');
     expect(json).not.toContain('__mx_spark_glow');
     expect(json).toContain('__mx_spark_area');
     expect(json).toContain('__mx_latest_point');
-    expect(json).toContain('__mx_compare_point');
+    expect(json).toContain('__mx_latest_core');
+    expect(json).not.toContain('__mx_compare_point');
   });
 
-  it('uses a compact surface plate to keep the centered KPI readable', () => {
+  it("smooth:false falls back to a monotone (through-the-points) line", () => {
+    const json = specJson(trendSource({ params: { smooth: false } }));
+    expect(json).toContain('"interpolate":{"value":"monotone"}');
+    expect(json).not.toContain('"interpolate":{"value":"basis"}');
+  });
+
+  it('the line stroke fades in from the past — horizontal gradient ending at full series color', () => {
     const json = specJson(trendSource());
-    expect(json).toContain('__mx_kpi_plate');
-    expect(json).toContain('mx-trend-focus');
-    expect(json).toContain('"cornerRadius":{"value":10}');
-    expect(json).toContain('"fillOpacity":{"value":0.86}');
+    expect(json).toContain('__mx_spark_line');
+    // history fade: a left→right gradient stroke, not a flat scale color
+    expect(json).toContain("gradient: 'linear', x1: 0, y1: 0, x2: 1, y2: 0");
+  });
+
+  it('renders the delta as a tinted pill chip sized from the rendered delta text', () => {
+    const json = specJson(trendSource());
+    expect(json).toContain('__mx_delta_pill');
+    expect(json).toContain('length(datum.__mx_deltatext)'); // pill width measured off the text
+    expect(json).not.toContain('__mx_kpi_plate');
     expect(json).not.toContain('__mx_kpi_aura');
     expect(json).not.toContain('__mx_value_glow');
     expect(json).not.toContain("gradient: 'radial'");
@@ -122,7 +136,7 @@ describe('minusx/trend@1 build', () => {
   it('fades the area from the series color to zero-alpha series color, never transparent black', () => {
     const json = specJson(trendSource());
     expect(json).toContain('__mx_spark_area');
-    expect(json).toContain('"fillOpacity":{"value":0.22}');
+    expect(json).toContain('"fillOpacity":{"value":0.16}');
     expect(json).toContain("gradient: 'linear'");
     expect(json).toContain('rgba(');
     expect(json).not.toContain("color: 'transparent'");

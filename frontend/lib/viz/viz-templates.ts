@@ -469,8 +469,15 @@ const radar: VizTemplate = {
 // ORDER (SQL owns semantics — ORDER BY the date ascending).
 //
 // Params: compareMode ('last'|'previous'), sparkline (boolean, default true),
+// smooth (boolean, default true — basis spline; false = monotone through points),
 // valueFontSize/deltaFontSize/labelFontSize/dateFontSize (numbers — §17 requires
 // independently adjustable sizes; defaults are responsive signals).
+//
+// Composition: the KPI block (label / value / delta pill / period) sits at the
+// top of the card; the sparkline is a smooth spline confined to its own band
+// below it — never behind the text, so no readability mask is needed. The line
+// stroke fades in from the past (near-transparent history → full series color
+// at the latest point) and terminates in a single beacon dot.
 const trend: VizTemplate = {
   id: 'minusx/trend@1',
   vizType: 'trend',
@@ -510,13 +517,14 @@ const trend: VizTemplate = {
     // The period label under the KPI ("Nov 30, 2025 vs Oct 31, 2025"). Materialized as a
     // field so the readability plate can measure its width (below).
     const dateLabelExpr = `${fmtDate('datum.__mx_date')} + (isValid(datum.__mx_prev_date) ? ' vs ' + ${fmtDate('datum.__mx_prev_date')} : '')`;
-    // The plate MUST always fully cover the widest KPI line — the big value number OR the
-    // date label — else the date overflows a fixed-fraction box. JetBrains Mono is
-    // monospace (≈0.62em advance), so each line's pixel width is length × fontSize × 0.62;
-    // size the plate to whichever is wider (+12px padding), clamped to the card.
+    // The delta pill hugs its rendered text. JetBrains Mono is monospace
+    // (≈0.62em advance), so the text's pixel width is length × fontSize × 0.62.
     const MONO_ADVANCE = 0.62;
-    const plateHalfExpr =
-      `min(max(length(datum.__mx_valuetext) * valueSize, length(datum.__mx_datelabel) * dateSize) * ${MONO_ADVANCE} / 2 + 12, bandwidth('slot') / 2 - 4)`;
+    const pillHalfExpr = `length(datum.__mx_deltatext) * deltaSize * ${MONO_ADVANCE} / 2 + 10`;
+    const deltaTextExpr = "!isValid(datum.__mx_pct) ? '—' : (datum.__mx_pct > 0 ? '↗ ' : (datum.__mx_pct < 0 ? '↘ ' : '→ ')) + format(abs(datum.__mx_pct), '.1f') + '%'";
+    // History-fade + area-veil gradients need rgba stops of the series color.
+    const seriesRgba = (alpha: number) =>
+      `'rgba(' + rgb(scale('color', datum.__mx_series)).r + ',' + rgb(scale('color', datum.__mx_series)).g + ',' + rgb(scale('color', datum.__mx_series)).b + ',${alpha})'`;
 
     // Folded series names ARE column names — remap aliased ones for display (same
     // chained-ternary idiom as radar). __mx_col keeps the original for formats.
@@ -535,11 +543,13 @@ const trend: VizTemplate = {
       update: typeof override === 'number' && Number.isFinite(override) ? String(override) : responsive,
     });
 
-    // Treat the full card as one data field: the area chart fills the vertical
-    // canvas and the KPI sits inside it. This keeps tall dashboard tiles from
-    // turning into a small sparkline stranded under a large block of empty space.
+    // The KPI block anchors to the top of the card; the sparkline band takes
+    // everything below it, so tall dashboard tiles grow the chart, not the
+    // empty space, and the number never needs a mask.
     const pctExpr = "(isValid(datum.__mx_prev) && datum.__mx_prev !== 0) ? (datum.__mx_value - datum.__mx_prev) / abs(datum.__mx_prev) * 100 : null";
     const deltaColor = { up: '#27ae60', down: '#c0392b', flat: '#8b949e' };
+    const deltaTint = { up: 'rgba(39,174,96,0.12)', down: 'rgba(192,57,43,0.12)', flat: 'rgba(139,148,158,0.12)' };
+    const interp = p.smooth === false ? 'monotone' : 'basis';
 
     return {
       autosize: { type: 'fit', contains: 'padding' },
@@ -548,9 +558,10 @@ const trend: VizTemplate = {
         sizeSignal('deltaSize', p.deltaFontSize, 'clamp(valueSize * 0.40, 13, 26)'),
         sizeSignal('labelSize', p.labelFontSize, 'clamp(valueSize * 0.30, 11, 17)'),
         sizeSignal('dateSize', p.dateFontSize, 'clamp(valueSize * 0.27, 11, 16)'),
-        { name: 'plotTop', update: 'max(18, height * 0.08)' },
-        { name: 'plotBottom', update: 'min(height - 22, height * 0.9)' },
-        { name: 'kpiCenter', update: 'height * 0.42' },
+        // Top-anchored KPI block when a sparkline shares the card; centered when alone.
+        { name: 'kpiCenter', update: sparkline ? 'valueSize * 0.95 + labelSize * 0.5 + 16' : 'height * 0.42' },
+        { name: 'plotTop', update: 'kpiCenter + valueSize * 1.78' },
+        { name: 'plotBottom', update: 'max(height - 14, plotTop + 20)' },
       ],
       data: [
         { name: 'main' },
@@ -592,9 +603,8 @@ const trend: VizTemplate = {
               transform: [
                 { type: 'filter', expr: baseExpr },
                 { type: 'formula', as: '__mx_pct', expr: pctExpr },
-                // Materialize the rendered value + date strings so the plate can measure them.
-                { type: 'formula', as: '__mx_valuetext', expr: valueTextExpr },
-                { type: 'formula', as: '__mx_datelabel', expr: dateLabelExpr },
+                // Materialize the rendered delta string so the pill can measure it.
+                { type: 'formula', as: '__mx_deltatext', expr: deltaTextExpr },
               ],
             },
             {
@@ -613,7 +623,7 @@ const trend: VizTemplate = {
           ...(sparkline
             ? {
                 scales: [
-                  { name: '__mx_spark_x', type: 'point', domain: { data: 'card', field: '__mx_idx' }, range: [{ signal: "bandwidth('slot') * 0.075" }, { signal: "bandwidth('slot') * 0.95" }] },
+                  { name: '__mx_spark_x', type: 'point', domain: { data: 'card', field: '__mx_idx' }, range: [{ signal: "bandwidth('slot') * 0.04" }, { signal: "bandwidth('slot') * 0.96" }] },
                   { name: '__mx_spark_y', type: 'linear', domain: { data: 'card', field: '__mx_value' }, nice: true, zero: false, range: [{ signal: 'plotBottom' }, { signal: 'plotTop' }] },
                 ],
               }
@@ -627,12 +637,12 @@ const trend: VizTemplate = {
                     from: { data: 'card' },
                     encode: {
                       update: {
-                        interpolate: { value: 'monotone' },
+                        interpolate: { value: interp },
                         x: { scale: '__mx_spark_x', field: '__mx_idx' },
                         y: { scale: '__mx_spark_y', field: '__mx_value' },
                         y2: { signal: 'plotBottom' },
-                        fill: { signal: "{gradient: 'linear', x1: 0, y1: 0, x2: 0, y2: 1, stops: [{offset: 0, color: scale('color', datum.__mx_series)}, {offset: 0.62, color: scale('color', datum.__mx_series)}, {offset: 1, color: 'rgba(' + rgb(scale('color', datum.__mx_series)).r + ',' + rgb(scale('color', datum.__mx_series)).g + ',' + rgb(scale('color', datum.__mx_series)).b + ',0)'}]}" },
-                        fillOpacity: { value: 0.22 },
+                        fill: { signal: `{gradient: 'linear', x1: 0, y1: 0, x2: 0, y2: 1, stops: [{offset: 0, color: scale('color', datum.__mx_series)}, {offset: 1, color: ${seriesRgba(0)}}]}` },
+                        fillOpacity: { value: 0.16 },
                       },
                     },
                   },
@@ -642,15 +652,17 @@ const trend: VizTemplate = {
                     from: { data: 'card' },
                     encode: {
                       update: {
-                        interpolate: { value: 'monotone' },
+                        interpolate: { value: interp },
                         x: { scale: '__mx_spark_x', field: '__mx_idx' },
                         y: { scale: '__mx_spark_y', field: '__mx_value' },
-                        stroke: { scale: 'color', field: '__mx_series' },
-                        strokeWidth: { value: 3 },
+                        // History fades in from the past: near-transparent at the
+                        // oldest point, full series color at the latest.
+                        stroke: { signal: `{gradient: 'linear', x1: 0, y1: 0, x2: 1, y2: 0, stops: [{offset: 0, color: ${seriesRgba(0.14)}}, {offset: 0.55, color: ${seriesRgba(0.55)}}, {offset: 1, color: scale('color', datum.__mx_series)}]}` },
+                        strokeWidth: { value: 2.5 },
                         strokeCap: { value: 'round' },
                         strokeJoin: { value: 'round' },
                       },
-                      hover: { strokeWidth: { value: 4 } },
+                      hover: { strokeWidth: { value: 3.5 } },
                     },
                   },
                   // Large transparent hit targets preserve the clean chart while
@@ -675,33 +687,20 @@ const trend: VizTemplate = {
                       },
                     },
                   },
-                  {
-                    type: 'symbol',
-                    name: '__mx_compare_point',
-                    from: { data: 'kpi' },
-                    encode: {
-                      update: {
-                        x: { signal: "scale('__mx_spark_x', datum.__mx_idx - 1)" },
-                        y: { scale: '__mx_spark_y', field: '__mx_prev' },
-                        fillOpacity: { value: 0 },
-                        stroke: { scale: 'color', field: '__mx_series' },
-                        strokeWidth: { value: 1.5 },
-                        opacity: { signal: 'isValid(datum.__mx_prev) ? 0.65 : 0' },
-                        size: { value: 95 },
-                      },
-                    },
-                  },
+                  // The beacon: a soft halo + solid core marking "now" at the
+                  // end of the fading-history ribbon.
                   {
                     type: 'symbol',
                     name: '__mx_latest_point',
                     from: { data: '__mx_latest' },
+                    interactive: false,
                     encode: {
                       update: {
                         x: { scale: '__mx_spark_x', field: '__mx_idx' },
                         y: { scale: '__mx_spark_y', field: '__mx_value' },
                         fill: { scale: 'color', field: '__mx_series' },
-                        fillOpacity: { value: 0.2 },
-                        size: { value: 240 },
+                        fillOpacity: { value: 0.14 },
+                        size: { value: 300 },
                       },
                     },
                   },
@@ -714,32 +713,31 @@ const trend: VizTemplate = {
                         x: { scale: '__mx_spark_x', field: '__mx_idx' },
                         y: { scale: '__mx_spark_y', field: '__mx_value' },
                         fill: { scale: 'color', field: '__mx_series' },
-                        size: { value: 54 },
+                        size: { value: 60 },
                       },
                       hover: { size: { value: 90 } },
                     },
                   },
-                  // This is a readability mask, not decorative chrome: it uses the
-                  // current theme surface and sits above the chart, below KPI text.
-                  {
-                    type: 'rect',
-                    name: '__mx_kpi_plate',
-                    from: { data: 'kpi' },
-                    style: 'mx-trend-focus',
-                    interactive: false,
-                    encode: {
-                      update: {
-                        x: { signal: `bandwidth('slot') / 2 - (${plateHalfExpr})` },
-                        x2: { signal: `bandwidth('slot') / 2 + (${plateHalfExpr})` },
-                        y: { signal: 'kpiCenter - valueSize * 1.55' },
-                        y2: { signal: 'kpiCenter + valueSize * 1.68' },
-                        cornerRadius: { value: 10 },
-                        fillOpacity: { value: 0.86 },
-                      },
-                    },
-                  },
                 ]
               : []),
+            // The delta pill: the KPI's one piece of chrome — a tinted chip
+            // hugging the delta text, colored by direction.
+            {
+              type: 'rect',
+              name: '__mx_delta_pill',
+              from: { data: 'kpi' },
+              interactive: false,
+              encode: {
+                update: {
+                  x: { signal: `bandwidth('slot') / 2 - (${pillHalfExpr})` },
+                  x2: { signal: `bandwidth('slot') / 2 + (${pillHalfExpr})` },
+                  y: { signal: 'kpiCenter + valueSize * 0.80 - deltaSize * 0.82' },
+                  y2: { signal: 'kpiCenter + valueSize * 0.80 + deltaSize * 0.82' },
+                  cornerRadius: { signal: 'deltaSize * 0.82' },
+                  fill: { signal: `!isValid(datum.__mx_pct) ? '${deltaTint.flat}' : (datum.__mx_pct > 0 ? '${deltaTint.up}' : (datum.__mx_pct < 0 ? '${deltaTint.down}' : '${deltaTint.flat}'))` },
+                },
+              },
+            },
             // KPI marks deliberately render last so the data can pass behind them
             // without compromising the number's hierarchy.
             {
@@ -784,10 +782,10 @@ const trend: VizTemplate = {
               encode: {
                 update: {
                   x: { signal: "bandwidth('slot') / 2" },
-                  y: { signal: 'kpiCenter + valueSize * 0.72' },
+                  y: { signal: 'kpiCenter + valueSize * 0.80' },
                   baseline: { value: 'middle' },
                   align: { value: 'center' },
-                  text: { signal: "!isValid(datum.__mx_pct) ? '—' : (datum.__mx_pct > 0 ? '↗ ' : (datum.__mx_pct < 0 ? '↘ ' : '→ ')) + format(abs(datum.__mx_pct), '.1f') + '%'" },
+                  text: { field: '__mx_deltatext' },
                   fontSize: { signal: 'deltaSize' },
                   fontWeight: { value: 'bold' },
                   fill: { signal: `!isValid(datum.__mx_pct) ? '${deltaColor.flat}' : (datum.__mx_pct > 0 ? '${deltaColor.up}' : (datum.__mx_pct < 0 ? '${deltaColor.down}' : '${deltaColor.flat}'))` },
@@ -801,7 +799,7 @@ const trend: VizTemplate = {
               encode: {
                 update: {
                   x: { signal: "bandwidth('slot') / 2" },
-                  y: { signal: 'kpiCenter + valueSize * 1.18' },
+                  y: { signal: 'kpiCenter + valueSize * 1.45' },
                   baseline: { value: 'middle' },
                   align: { value: 'center' },
                   text: { signal: dateLabelExpr },
