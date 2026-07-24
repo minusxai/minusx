@@ -6,8 +6,10 @@ import {
   extractInlineQuestions, placeholdersToInlineQuestionJsx, inlineEmbedToQuestionContent,
   savedQuestionToPlaceholder, savedQuestionVizFromEl, embeddedQuestionCount, applyVizOverride,
   updateSavedQuestionVizInHtml, updateInlineQuestionInHtml, questionContentToInlineEmbed,
+  updateSavedQuestionVizInJsx, updateInlineQuestionInJsx,
   type InlineQuestionEmbed,
 } from '../story-question';
+import { parseJsx } from '@/lib/jsx';
 import type { VizEnvelope, SpreadsheetSource, VizSettings, QuestionContent } from '@/lib/validation/atlas-schemas';
 import { serializeJsonAttr } from '../html-attr';
 
@@ -303,5 +305,107 @@ describe('story-question — embed → QuestionContent projection (for rendering
     expect(c.vizSettings ?? null).toBeNull();
     expect(c.connection_name).toBe('');
     expect(c.parameters).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Jsx write-back (the story-embed edit modal's commit path on format:'jsx' stories)
+// ---------------------------------------------------------------------------
+
+/** Static attrs of the component element at an interpreter AST path (test read-back helper). */
+function componentAttrsAt(source: string, path: string): Record<string, unknown> {
+  const parsed = parseJsx(source);
+  expect(parsed.ok, `parse: ${!parsed.ok ? parsed.error : ''}`).toBe(true);
+  if (!parsed.ok) return {};
+  let list = parsed.nodes;
+  let node = null as (typeof list)[number] | null;
+  for (const idx of path.split('.').map(Number)) {
+    node = list[idx] ?? null;
+    expect(node, `node at ${path}`).toBeTruthy();
+    if (!node) return {};
+    list = node.type === 'element' ? node.children : [];
+  }
+  expect(node?.type).toBe('element');
+  const attrs: Record<string, unknown> = {};
+  if (node?.type === 'element') for (const a of node.attributes) if (a.value.static) attrs[a.name] = a.value.json;
+  return attrs;
+}
+
+const barEnvelope = {
+  version: 2,
+  source: { kind: 'recipe', recipe: 'minusx/bar@1', bindings: { x: 'month', y: 'mrr' }, params: {}, columnFormats: null },
+} as VizEnvelope;
+
+// Paths: div=0 → [h1=0.0, saved Question=0.1, Card=0.2 (inline Question=0.2.0), Number=0.3]
+const JSX_DOC = `<div className="p-8"><h1>Report</h1><Question id={42} height="500px" className="mt-4" /><Card><Question query={\`SELECT a, b
+FROM t WHERE label = 'q"uote'\`} connection="duckdb" viz={${JSON.stringify(svEnvelope)}} height="340px" className="rounded" /></Card><Number query={\`SELECT count(*) FROM t\`} connection="duckdb" prefix="$" /></div>`;
+
+describe('story-question — updateSavedQuestionVizInJsx', () => {
+  it('sets a viz override on the saved <Question> at the path, preserving its other attrs', () => {
+    const out = updateSavedQuestionVizInJsx(JSX_DOC, '0.1', 42, barEnvelope);
+    expect(out).not.toBe(JSX_DOC);
+    const attrs = componentAttrsAt(out, '0.1');
+    expect(attrs.viz).toEqual(barEnvelope);
+    expect(attrs.id).toBe(42);
+    expect(attrs.height).toBe('500px');
+    expect(attrs.className).toBe('mt-4');
+  });
+
+  it('replaces an existing override, and viz=null removes it', () => {
+    const withViz = updateSavedQuestionVizInJsx(JSX_DOC, '0.1', 42, svEnvelope);
+    const replaced = updateSavedQuestionVizInJsx(withViz, '0.1', 42, barEnvelope);
+    expect(componentAttrsAt(replaced, '0.1').viz).toEqual(barEnvelope);
+    const removed = updateSavedQuestionVizInJsx(replaced, '0.1', 42, null);
+    expect(componentAttrsAt(removed, '0.1').viz).toBeUndefined();
+    expect(componentAttrsAt(removed, '0.1').id).toBe(42);
+  });
+
+  it('refuses a stale path: wrong id, non-Question element, inline (id-less) Question, bad path', () => {
+    expect(updateSavedQuestionVizInJsx(JSX_DOC, '0.1', 99, barEnvelope)).toBe(JSX_DOC);
+    expect(updateSavedQuestionVizInJsx(JSX_DOC, '0.0', 42, barEnvelope)).toBe(JSX_DOC);
+    expect(updateSavedQuestionVizInJsx(JSX_DOC, '0.2.0', 42, barEnvelope)).toBe(JSX_DOC);
+    expect(updateSavedQuestionVizInJsx(JSX_DOC, '9.9', 42, barEnvelope)).toBe(JSX_DOC);
+  });
+
+  it('returns a non-parsing source unchanged', () => {
+    expect(updateSavedQuestionVizInJsx('<div', '0', 42, barEnvelope)).toBe('<div');
+  });
+});
+
+describe('story-question — updateInlineQuestionInJsx', () => {
+  const edited: InlineQuestionEmbed = {
+    query: "SELECT c\nFROM u WHERE note = 'it''s \"fine\"'",
+    connection: 'postgres',
+    viz: barEnvelope,
+    parameters: [{ name: 'day', type: 'date', label: null, source: null }],
+    height: '340px',
+  };
+
+  it('replaces the inline <Question> definition at the path and round-trips through jsx attrs', () => {
+    const out = updateInlineQuestionInJsx(JSX_DOC, '0.2.0', edited);
+    expect(out).not.toBe(JSX_DOC);
+    const attrs = componentAttrsAt(out, '0.2.0');
+    expect(inlineQuestionFromJsxAttrs(attrs)).toEqual(edited);
+    expect(attrs.className).toBe('rounded'); // unrelated attr preserved
+  });
+
+  it('drops viz/params attrs when the edited embed no longer carries them', () => {
+    const out = updateInlineQuestionInJsx(JSX_DOC, '0.2.0', { query: 'SELECT 1', connection: 'duckdb', height: '340px' });
+    const attrs = componentAttrsAt(out, '0.2.0');
+    expect(attrs.viz).toBeUndefined();
+    expect(attrs.params).toBeUndefined();
+    expect(inlineQuestionFromJsxAttrs(attrs)).toEqual({ query: 'SELECT 1', connection: 'duckdb', height: '340px' });
+  });
+
+  it('refuses a saved (id) embed, a non-Question element, and a bad path', () => {
+    expect(updateInlineQuestionInJsx(JSX_DOC, '0.1', edited)).toBe(JSX_DOC);
+    expect(updateInlineQuestionInJsx(JSX_DOC, '0.3', edited)).toBe(JSX_DOC);
+    expect(updateInlineQuestionInJsx(JSX_DOC, '4', edited)).toBe(JSX_DOC);
+  });
+
+  it('the rest of the document survives the round-trip (saved embed + prose intact)', () => {
+    const out = updateInlineQuestionInJsx(JSX_DOC, '0.2.0', edited);
+    expect(componentAttrsAt(out, '0.1')).toEqual({ id: 42, height: '500px', className: 'mt-4' });
+    expect(out).toContain('Report');
   });
 });

@@ -54,7 +54,7 @@ afterEach(() => vi.restoreAllMocks());
 describe('StoryQuestionEditor — saved embeds', () => {
   it('opens the modal on the real file in saved-override mode when the embed has an override', async () => {
     const onApplySavedViz = vi.fn();
-    const req = { kind: 'saved' as const, questionId: 42, occurrence: 1, vizOverride: OVERRIDE };
+    const req = { kind: 'saved' as const, questionId: 42, vizOverride: OVERRIDE, ref: { format: 'html' as const, occurrence: 1 } };
     renderWithProviders(
       <StoryQuestionEditor
         request={req}
@@ -79,7 +79,7 @@ describe('StoryQuestionEditor — saved embeds', () => {
   it('opens id-only embeds WITHOUT override mode (dashboard semantics: viz edits go to the file)', async () => {
     renderWithProviders(
       <StoryQuestionEditor
-        request={{ kind: 'saved', questionId: 7, occurrence: 0, vizOverride: null }}
+        request={{ kind: 'saved', questionId: 7, vizOverride: null, ref: { format: 'html', occurrence: 0 } }}
         onClose={vi.fn()}
         onApplySavedViz={vi.fn()}
         onApplyInline={vi.fn()}
@@ -98,7 +98,7 @@ describe('StoryQuestionEditor — inline (ephemeral) embeds', () => {
 
   it('creates a draft seeded with the embed content and opens the modal in ephemeral mode', async () => {
     const onApplyInline = vi.fn();
-    const req = { kind: 'inline' as const, index: 2, embed };
+    const req = { kind: 'inline' as const, embed, ref: { format: 'html' as const, occurrence: 2 } };
     renderWithProviders(
       <StoryQuestionEditor
         request={req}

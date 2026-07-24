@@ -76,3 +76,51 @@ describe('story-number — placeholder → <Number/> jsx', () => {
     expect(numberToJsx({ id: 1026, prefix: '$' })).toBe('<Number id={1026} prefix="$" />');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Jsx write-back (the number query editor's commit path on format:'jsx' stories)
+// ---------------------------------------------------------------------------
+import { updateNumberQueryInJsx } from '../story-number';
+import { parseJsx } from '@/lib/jsx';
+
+/** Static attrs of the component element at an interpreter AST path (test read-back helper). */
+function componentAttrsAt(source: string, path: string): Record<string, unknown> {
+  const parsed = parseJsx(source);
+  expect(parsed.ok).toBe(true);
+  if (!parsed.ok) return {};
+  let list = parsed.nodes;
+  let node = null as (typeof list)[number] | null;
+  for (const idx of path.split('.').map(Number)) {
+    node = list[idx] ?? null;
+    if (!node) return {};
+    list = node.type === 'element' ? node.children : [];
+  }
+  const attrs: Record<string, unknown> = {};
+  if (node?.type === 'element') for (const a of node.attributes) if (a.value.static) attrs[a.name] = a.value.json;
+  return attrs;
+}
+
+describe('story-number — updateNumberQueryInJsx', () => {
+  // Paths: div=0 → [p=0.0 (inline Number=0.0.1), saved Number=0.1]
+  const DOC = `<div className="p-8"><p>MRR is <Number query={\`SELECT SUM(mrr) FROM m\`} connection="duckdb" prefix="$" style={{"fontWeight":700}} /></p><Number id={7} suffix="%" /></div>`;
+
+  it('replaces the query on the inline <Number> at the path, preserving decoration attrs', () => {
+    const out = updateNumberQueryInJsx(DOC, '0.0.1', "SELECT SUM(mrr) FROM m WHERE month = 'Jan'");
+    expect(out).not.toBe(DOC);
+    const attrs = componentAttrsAt(out, '0.0.1');
+    expect(numberFromJsxAttrs(attrs)).toEqual({
+      query: "SELECT SUM(mrr) FROM m WHERE month = 'Jan'",
+      connection: 'duckdb', prefix: '$', style: { fontWeight: 700 },
+    });
+  });
+
+  it('refuses a saved (id) number, a non-Number element, and a bad path', () => {
+    expect(updateNumberQueryInJsx(DOC, '0.1', 'SELECT 1')).toBe(DOC);
+    expect(updateNumberQueryInJsx(DOC, '0.0', 'SELECT 1')).toBe(DOC);
+    expect(updateNumberQueryInJsx(DOC, '9', 'SELECT 1')).toBe(DOC);
+  });
+
+  it('returns a non-parsing source unchanged', () => {
+    expect(updateNumberQueryInJsx('<div', '0', 'SELECT 1')).toBe('<div');
+  });
+});

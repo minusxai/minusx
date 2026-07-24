@@ -339,8 +339,9 @@ describe('compileStoryCss — theme token blocks (format:jsx)', () => {
       expect(css).toContain(`[data-theme="${t.name}"]`);
     }
     const nocturne = STORY_THEMES.find(t => t.name === 'nocturne')!;
-    expect(css).toContain(`--primary: ${nocturne.cssVars.light['--primary']}`);
-    expect(css).toContain(`.dark [data-theme="nocturne"]`);
+    expect(css).toContain(`--primary: ${nocturne.cssVars['--primary']}`);
+    // Self-contained themes: one canonical palette, no `.dark`-scoped re-skin.
+    expect(css).not.toContain(`.dark [data-theme="nocturne"]`);
   });
 
   it('theme blocks come AFTER the neutral :root defaults (document order beats equal specificity)', async () => {
