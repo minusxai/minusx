@@ -39,21 +39,29 @@ const individual: CreditUsageResponse['individual'] = {
   reset: { label: 'today', used: 20, allowance: 1_000, resetsAt: '2026-07-04T00:00:00.000Z' },
 };
 
+const adminBreakdown = {
+  windowLabel: 'this month', totalCredits: 1959, totalRequests: 138, activeUsers: 1,
+  byGrade: [], byProvider: [], byModel: [], byAgent: [], byUser: [], byRole: [], overTime: [],
+};
+
+// Branch by URL: the admin dashboard hits /admin-usage, the user card hits /usage.
 function mockUsageFetch() {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue({
+    vi.fn().mockImplementation((url: string) => Promise.resolve({
       ok: true,
       status: 200,
-      json: async () => ({ success: true, data: { individual, org: null, enforced: false } satisfies CreditUsageResponse }),
-    }),
+      json: async () => url.includes('/admin-usage')
+        ? { success: true, data: adminBreakdown }
+        : { success: true, data: { individual, org: null, enforced: false } satisfies CreditUsageResponse },
+    })),
   );
 }
 
-function storeWith({ creditsEnabled = true } = {}) {
+function storeWith({ creditsEnabled = true, role = 'admin' } = {}) {
   return makeStore({
     configs: { creditsEnabled, config: DEFAULT_CONFIG },
-    auth: { user: { name: 'Test User', email: 'test@example.com', role: 'admin', mode: 'org' }, loading: false },
+    auth: { user: { name: 'Test User', email: 'test@example.com', role, mode: 'org' }, loading: false },
   } as never);
 }
 
@@ -65,13 +73,21 @@ describe('Settings Usage tab', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('shows a Usage tab and renders the credits card inside it', async () => {
+  it('shows a Usage tab with the personal credits card for a non-admin', async () => {
     mockSearch = 'tab=usage';
-    renderWithProviders(<SettingsPage />, { store: storeWith() });
+    renderWithProviders(<SettingsPage />, { store: storeWith({ role: 'viewer' }) });
 
     expect(screen.getByLabelText('Settings tab: Usage')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText('Credits usage')).toBeInTheDocument());
     await waitFor(() => expect(screen.getByLabelText('Your usage')).toBeInTheDocument());
+  });
+
+  it('shows the org usage dashboard on the Usage tab for an admin', async () => {
+    mockSearch = 'tab=usage';
+    renderWithProviders(<SettingsPage />, { store: storeWith({ role: 'admin' }) });
+
+    expect(screen.getByLabelText('Settings tab: Usage')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Org usage dashboard')).toBeInTheDocument());
   });
 
   it('does not render the credits card on the General tab', async () => {

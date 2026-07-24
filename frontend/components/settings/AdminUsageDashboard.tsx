@@ -125,7 +125,7 @@ export default function AdminUsageDashboard() {
   if (!data) return null;
 
   return (
-    <VStack align="stretch" gap={5}>
+    <VStack align="stretch" gap={5} aria-label="Org usage dashboard">
       <HStack justify="space-between">
         <Text fontSize="sm" color="fg.muted" fontFamily="mono">Org usage · {data.windowLabel}</Text>
         <IconButton aria-label="Refresh usage" size="xs" variant="ghost" onClick={() => void refetch()}><LuRefreshCw /></IconButton>
