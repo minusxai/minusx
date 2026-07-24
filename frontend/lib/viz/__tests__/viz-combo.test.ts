@@ -127,24 +127,53 @@ describe('minusx/combo@1 build', () => {
     expect(svg).toContain('Margin');
   });
 
-  it('renders an ordinal date axis after choosing a d3 time format', async () => {
+  // A date-valued x column gets a real TEMPORAL scale (nice auto-spaced ticks, like a
+  // plain bar/line), detected from the column KIND — not from whether a format is set.
+  it('uses a temporal x scale when the x column kind is temporal', () => {
+    const result = materializeRecipe(
+      source({ bindings: { x: 'week', bar: 'revenue', line: 'orders' } }) as never,
+      [{ name: 'week', kind: 'temporal' }, { name: 'revenue', kind: 'quantitative' }, { name: 'orders', kind: 'quantitative' }],
+    );
+    expect(result.ok).toBe(true);
+    const spec = (result as { spec: Record<string, unknown> }).spec as unknown as ComboSpec;
+    const xEnc = (spec.layer[0].encoding as Record<string, { type?: string; sort?: unknown; axis?: Record<string, unknown> }>).x;
+    expect(xEnc.type).toBe('temporal');
+    // no ordinal-only crutches: no sort:null, no labelExpr date hack, no forced axis format
+    expect(xEnc.sort).toBeUndefined();
+    expect(xEnc.axis?.labelExpr).toBeUndefined();
+    expect(xEnc.axis?.format).toBeUndefined();
+  });
+
+  it('keeps an ordinal x scale for a categorical (nominal) x column', () => {
+    const result = materializeRecipe(
+      source() as never,
+      [{ name: 'month', kind: 'nominal' }, { name: 'revenue', kind: 'quantitative' }, { name: 'margin', kind: 'quantitative' }],
+    );
+    const spec = (result as { spec: Record<string, unknown> }).spec as unknown as ComboSpec;
+    const xEnc = (spec.layer[0].encoding as Record<string, { type?: string }>).x;
+    expect(xEnc.type).toBe('ordinal');
+  });
+
+  it('renders a date x combo on a temporal scale with NO format, never printing raw ISO', async () => {
     const envelope = {
       version: 2,
       source: {
         kind: 'recipe', recipe: 'minusx/combo@1',
-        bindings: { x: 'week_start', bar: 'revenue', line: 'orders' },
+        bindings: { x: 'week', bar: 'revenue', line: 'orders' },
         params: null,
-        columnFormats: { week_start: { format: '%b %Y' } },
+        columnFormats: null,
       },
     } as unknown as VizEnvelope;
     const svg = await renderEnvelopeToSvg(envelope, [
-      { week_start: '2025-01-01T00:00:00.000Z', revenue: 100, orders: 12 },
-      { week_start: '2025-02-01T00:00:00.000Z', revenue: 140, orders: 18 },
+      { week: '2024-01-01T00:00:00.000Z', revenue: 100, orders: 12 },
+      { week: '2024-07-01T00:00:00.000Z', revenue: 200, orders: 20 },
+      { week: '2025-01-01T00:00:00.000Z', revenue: 300, orders: 30 },
     ], 'light', { width: 640, height: 360 });
     expect(svg).toContain('mark-rect');
     expect(svg).toContain('mark-line');
-    expect(svg).toContain('Jan 2025');
-    expect(svg).toContain('Feb 2025');
+    // temporal scale auto-formats to bare year ticks and NEVER prints the raw timestamp
+    expect(svg).not.toContain('2024-01-01T00:00:00');
+    expect(svg).toContain('2024');
   });
 
   it('renders split-series legends and grouped lines headlessly', async () => {

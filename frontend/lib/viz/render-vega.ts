@@ -23,6 +23,8 @@ import { annotationSplit } from './encoding-edit';
 import { getVegaLiteConfig, getVegaParserConfig, getSurfaceColor } from './theme';
 import { createVegaTooltipHandler } from './vega-tooltip-handler';
 import { materializeRecipe } from './viz-templates';
+import { inferVizColumnsFromRows } from './query-data';
+import type { VizResultColumn } from './types';
 import { VIZ_DATASET_MAIN } from './types';
 import { loadGeoFeatures } from './geo-assets';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
@@ -36,10 +38,10 @@ export type ResolvedEnvelopeSpec =
  * spec, recipe sources materialize from the shipped registry (render-time, never stored).
  * A recipe's declared boundary/lookup `assets` (RFC §9) ride along for the injection step.
  */
-export function resolveEnvelopeSpec(envelope: VizEnvelope): ResolvedEnvelopeSpec {
+export function resolveEnvelopeSpec(envelope: VizEnvelope, columns?: VizResultColumn[]): ResolvedEnvelopeSpec {
   const source = envelope.source as unknown as Record<string, unknown>;
   if (source.kind === 'recipe') {
-    return materializeRecipe(source as unknown as { recipe: string; bindings: Record<string, string> });
+    return materializeRecipe(source as unknown as { recipe: string; bindings: Record<string, string> }, columns);
   }
   // Detached native-Vega spec (RFC §21.10): render as-is on the vega engine, carrying
   // any named boundary/lookup datasets for injection (geo maps keep working post-detach).
@@ -561,7 +563,7 @@ export async function renderEnvelopeToCanvas(
   mode: 'light' | 'dark',
   opts: { width?: number; height?: number; pixelRatio?: number } = {},
 ): Promise<HTMLCanvasElement> {
-  const resolved = resolveEnvelopeSpec(envelope);
+  const resolved = resolveEnvelopeSpec(envelope, inferVizColumnsFromRows(rows));
   if (!resolved.ok) throw new Error(resolved.error);
   const xLabelAngle = resolved.engine === 'vega-lite'
     ? computeXLabelAngle(resolved.spec, rows, opts.width ?? 640)
@@ -586,7 +588,7 @@ export async function renderEnvelopeToSvg(
   mode: 'light' | 'dark',
   size?: { width?: number; height?: number },
 ): Promise<string> {
-  const resolved = resolveEnvelopeSpec(envelope);
+  const resolved = resolveEnvelopeSpec(envelope, inferVizColumnsFromRows(rows));
   if (!resolved.ok) throw new Error(resolved.error);
   const xLabelAngle = resolved.engine === 'vega-lite'
     ? computeXLabelAngle(resolved.spec, rows, size?.width ?? 640)

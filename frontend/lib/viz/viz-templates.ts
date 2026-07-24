@@ -10,6 +10,7 @@
  */
 import type { ColumnFormatConfig } from '@/lib/validation/atlas-schemas';
 import { VIZ_DATASET_MAIN } from './types';
+import type { VizResultColumn } from './types';
 import { GEO_ASSETS, GEO_BOUNDARY_DATASET, resolveGeoAsset } from './geo-assets';
 
 export interface VizTemplateBinding {
@@ -56,8 +57,12 @@ export interface VizTemplate {
   /** Grammar of the materialized spec ('vega' skips the VL compile). */
   engine: VizTemplateEngine;
   bindings: ReadonlyArray<VizTemplateBinding>;
-  /** Materialize the full spec from bound column names (+ optional column formats and recipe params). */
-  build(bindings: Record<string, string | string[]>, formats?: VizFormats, params?: VizParams): Record<string, unknown>;
+  /**
+   * Materialize the full spec from bound column names (+ optional column formats and recipe
+   * params). `columns` carries the query-result column KINDS when known at render time, so a
+   * recipe can pick a temporal vs. discrete axis from the actual type rather than guessing.
+   */
+  build(bindings: Record<string, string | string[]>, formats?: VizFormats, params?: VizParams, columns?: VizResultColumn[]): Record<string, unknown>;
   /**
    * Named boundary/lookup datasets this recipe references by local name (RFC §9/§12):
    * `{localDatasetName: assetId}`. The renderer resolves each asset id from the geo
@@ -946,7 +951,7 @@ const combo: VizTemplate = {
     { name: 'line', label: 'Line', accepts: ['quantitative'] },
     { name: 'series', label: 'Color / Split', accepts: ['nominal'], optional: true },
   ],
-  build(bindings, formats, params) {
+  build(bindings, formats, params, columns) {
     const x = String(bindings.x);
     const bar = String(bindings.bar);
     const line = String(bindings.line);
@@ -970,32 +975,34 @@ const combo: VizTemplate = {
       ...(formats?.[column]?.format ? { format: formats[column].format } : {}),
       ...extra,
     });
-    // Combo deliberately uses an ordinal X scale so weekly/monthly periods keep
-    // equal spacing. Vega otherwise treats a `%b %Y` axis.format on that ordinal
-    // scale as a NUMBER format and aborts rendering. Date patterns therefore use
-    // a label expression that explicitly parses the category value as a date.
-    const xAxis = {
-      title: xTitle,
-      labelOverlap: true,
-      ...(xFormat
-        ? isTimeFormat
-          ? { labelExpr: `utcFormat(toDate(datum.value), '${xFormat.replace(/'/g, '')}')` }
-          : { format: xFormat }
-        : {}),
-    };
-    const xEncoding = {
-      field: x,
-      type: 'ordinal',
-      sort: null,
-      axis: xAxis,
-    };
-    const xTooltip = {
-      field: x,
-      type: isTimeFormat ? 'temporal' : 'ordinal',
-      title: xTitle,
-      ...(xFormat ? { format: xFormat } : {}),
-      ...(isTimeFormat ? { formatType: 'utc' } : {}),
-    };
+    // A DATE x gets a real TEMPORAL scale — auto-spaced, auto-formatted ticks (bare
+    // years/months), exactly like a plain bar/line — decided from the column KIND when it's
+    // known at render time. Fall back to a time-format signal only when kinds aren't threaded
+    // (validate/detach with no data). Everything else keeps the ordinal category axis: combo
+    // compares aligned periods/categories and must support a nominal x.
+    const xKind = columns?.find(c => c.name === x)?.kind;
+    const xTemporal = xKind === 'temporal' || (xKind == null && isTimeFormat);
+    const xEncoding = xTemporal
+      ? { field: x, type: 'temporal', axis: { title: xTitle, labelOverlap: true } }
+      : {
+          field: x,
+          type: 'ordinal',
+          sort: null,
+          // An ordinal date axis can't take axis.format (Vega reads a `%b %Y` pattern as a
+          // NUMBER format and aborts); a labelExpr parses the category value as a date instead.
+          axis: {
+            title: xTitle,
+            labelOverlap: true,
+            ...(xFormat
+              ? isTimeFormat
+                ? { labelExpr: `utcFormat(toDate(datum.value), '${xFormat.replace(/'/g, '')}')` }
+                : { format: xFormat }
+              : {}),
+          },
+        };
+    const xTooltip = xTemporal
+      ? { field: x, type: 'temporal', title: xTitle, ...(xFormat ? { format: xFormat, formatType: 'utc' } : {}) }
+      : { field: x, type: 'ordinal', title: xTitle, ...(xFormat ? { format: xFormat } : {}) };
     const tooltip = (column: string, title: string) => [
       xTooltip,
       ...(series ? [{ field: series, type: 'nominal', title: seriesTitle }] : []),
@@ -1490,7 +1497,7 @@ export function materializeRecipe(source: {
   bindings: Record<string, string | string[]>;
   columnFormats?: Record<string, ColumnFormatConfig> | null;
   params?: Record<string, unknown> | null;
-}): MaterializeResult {
+}, columns?: VizResultColumn[]): MaterializeResult {
   const template = getTemplate(source.recipe);
   if (!template) {
     return { ok: false, error: `unknown recipe "${source.recipe}" — available: ${Object.keys(VIZ_TEMPLATES).join(', ')}` };
@@ -1507,7 +1514,7 @@ export function materializeRecipe(source: {
   const assets = template.assets?.(source.bindings, source.params);
   return {
     ok: true,
-    spec: template.build(source.bindings, source.columnFormats ?? undefined, source.params),
+    spec: template.build(source.bindings, source.columnFormats ?? undefined, source.params, columns),
     engine: template.engine,
     ...(assets && Object.keys(assets).length > 0 ? { assets } : {}),
   };
