@@ -30,6 +30,9 @@ function fauxAssistantMessage() {
     usage: { totalTokens: 150, input: 100, output: 50, cacheRead: 10, cacheWrite: 0, cost: { total: 0.02 } },
     _lllmCallId: 'call_headless_1',
     _duration: 1.2,
+    // Model-plan axes stamped by the orchestrator at call time.
+    _grade: 'lite',
+    _agent: 'micro',
   };
 }
 
@@ -40,7 +43,7 @@ describe('recordHeadlessLlmCalls', () => {
 
     const { rows } = await getModules().db.exec<Record<string, unknown>>(
       `SELECT conversation_id, trigger, provider, model, prompt_tokens, cached_tokens,
-              completion_tokens, cost, user_id, mode
+              completion_tokens, cost, user_id, mode, grade, agent
        FROM llm_call_events WHERE llm_call_id = 'call_headless_1'`,
     );
 
@@ -56,5 +59,8 @@ describe('recordHeadlessLlmCalls', () => {
     expect(Number(r['cost'])).toBeCloseTo(0.02, 6);
     expect(Number(r['user_id'])).toBe(7);
     expect(r['mode']).toBe('org');
+    // Model-settings axes stamped from the plan and persisted for usage analytics.
+    expect(r['grade']).toBe('lite');
+    expect(r['agent']).toBe('micro');
   });
 });

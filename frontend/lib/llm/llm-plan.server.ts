@@ -180,9 +180,10 @@ export async function resolveLlmPlan(
     // Live catalog only matters for model ids newer than the baked registry;
     // fetch is cached in-process and null-safe (baked-only fallback).
     const catalog = await getModelCatalog();
-    return planFromConfig(resolved, agent, grade, catalog);
+    // Stamp the resolved grade on the step so the orchestrator can record it per call.
+    return { ...planFromConfig(resolved, agent, grade, catalog), grade };
   }
-  return isTestEnv() ? null : minusxDefaultPlan(grade);
+  return isTestEnv() ? null : { ...minusxDefaultPlan(grade), grade };
 }
 
 /** Orchestrator hook: per-call plan resolution (workspace-level, mode-independent). */

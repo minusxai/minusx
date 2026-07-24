@@ -216,6 +216,11 @@ export class Orchestrator {
             const target = firstTool ?? (result as unknown as Record<string, unknown>);
             target['_duration'] = durationSec;
             target['_lllmCallId'] = callId;
+            // Model-plan axes for usage analytics: the consuming agent (from the selector) and the
+            // resolved capability grade (from the plan, falling back to any explicit selector grade).
+            target['_agent'] = selector.agent;
+            const resolvedGrade = plan?.grade ?? selector.grade;
+            if (resolvedGrade) target['_grade'] = resolvedGrade;
           }
         }
 

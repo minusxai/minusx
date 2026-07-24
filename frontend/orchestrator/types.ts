@@ -43,6 +43,9 @@ export interface LlmPlanStep {
   /** Call-time stream options (apiKey, reasoning, headers, …).
    *  Merged OVER the agent's own callOptions. */
   callOptions?: Record<string, unknown>;
+  /** The capability grade this plan resolved to (lite/core/advanced) — recorded per
+   *  call for usage analytics. Absent when no plan resolver is installed. */
+  grade?: string;
 }
 
 // `parameters` and `context` are bivariant `any` so RegistrableClass is

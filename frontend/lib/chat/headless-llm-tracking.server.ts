@@ -52,6 +52,8 @@ export function buildLlmCallDetail(msg: AssistantMessage): { callId: string; det
       cost: u?.cost?.total ?? 0,
       stream: true,
       finish_reason: msg.stopReason,
+      grade: (meta['_grade'] as string | undefined) ?? null,
+      agent: (meta['_agent'] as string | undefined) ?? null,
     },
   };
 }
@@ -94,6 +96,8 @@ export async function recordHeadlessLlmCalls(piDiff: PiLogEntry[], user: Effecti
         stream: detail.stream ?? true,
         finishReason: detail.finish_reason,
         userId,
+        grade: detail.grade,
+        agent: detail.agent,
       });
 
       try {
