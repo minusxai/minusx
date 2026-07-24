@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, ReactNode, useMemo, Suspense, useCallback } from 'react';
-import { Box, VStack, Text, Flex, Switch, Button, Heading, Tabs, Badge, HStack, Icon, IconButton, Input, Textarea } from '@chakra-ui/react';
-import { LuRefreshCw, LuUser, LuX } from 'react-icons/lu';
+import { Box, VStack, Text, Flex, Switch, Button, Heading, Badge, HStack, Icon, IconButton, Input, Textarea } from '@chakra-ui/react';
+import { LuChevronRight, LuRefreshCw, LuSearch, LuUser, LuX } from 'react-icons/lu';
 import { ColorModeSwitch } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowAdvanced, setVizV2, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
 import { canEdit } from '@/lib/auth/role-helpers';
 import RecordingControl from '@/components/dev/RecordingControl';
 import DataManagementSection from '@/components/settings/DataManagementSection';
@@ -33,6 +33,7 @@ import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { selectCreditsEnabled } from '@/store/configsSlice';
 import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 type TabId = 'general' | 'usage' | 'homepage' | 'dev' | 'data' | 'users' | 'appearance' | 'configs' | 'styles' | 'messaging' | 'integrations' | 'models';
+type SettingsGroupId = 'workspace' | 'management' | 'advanced';
 
 interface SettingEntry {
   tab: TabId;
@@ -46,9 +47,32 @@ interface SettingEntry {
 interface TabEntry {
   id: TabId;
   label: string;
+  description: string;
+  group: SettingsGroupId;
   visible?: boolean;
   /** Custom content instead of rendering settings rows */
   custom?: ReactNode;
+  /** Searchable destinations rendered inside custom tab content. */
+  searchItems?: Array<{
+    title: string;
+    description: string;
+    keywords?: string;
+  }>;
+}
+
+const SETTINGS_GROUPS: Array<{ id: SettingsGroupId; label: string }> = [
+  { id: 'workspace', label: 'Workspace' },
+  { id: 'management', label: 'Management' },
+  { id: 'advanced', label: 'Advanced' },
+];
+
+function matchesSearch(query: string, ...values: Array<string | undefined>) {
+  const haystack = values.filter(Boolean).join(' ').toLocaleLowerCase();
+  return query
+    .toLocaleLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((token) => haystack.includes(token));
 }
 
 function SettingRow({ title, description, control, section }: { title: string; description: string; control: ReactNode; section: string }) {
@@ -354,12 +378,12 @@ function AppearanceSettings() {
 
 function SettingsContent() {
   const dispatch = useAppDispatch();
+  const [searchQuery, setSearchQuery] = useState('');
   const askForConfirmation = useAppSelector((state) => state.ui.askForConfirmation);
   const user = useAppSelector((state) => state.auth.user);
   const [isClearing, setIsClearing] = useState(false);
   const [isTestingError, setIsTestingError] = useState(false);
   const showAdvanced = useAppSelector((state) => state.ui.showAdvanced);
-  const vizV2 = useAppSelector((state) => state.ui.vizV2);
   const allowChatQueue = useAppSelector((state) => state.ui.allowChatQueue ?? false);
   const queueStrategy = useAppSelector((state) => state.ui.queueStrategy ?? 'end-of-turn');
   const devMode = useAppSelector((state) => state.ui.devMode);
@@ -391,7 +415,7 @@ function SettingsContent() {
   const isEditorOrAdmin = user?.role ? canEdit(user.role) : false;
   const isAdvancedAdmin = isAdmin && showAdvanced;
 
-  const handleClearCache = async () => {
+  const handleClearCache = useCallback(async () => {
     setIsClearing(true);
     try {
       const data = await fetchWithCache('/api/cache/clear', {
@@ -420,9 +444,9 @@ function SettingsContent() {
     } finally {
       setIsClearing(false);
     }
-  };
+  }, []);
 
-  const handleTestError = async () => {
+  const handleTestError = useCallback(async () => {
     setIsTestingError(true);
     try {
       const res = await fetch('/api/test-error', { method: 'POST' });
@@ -455,7 +479,7 @@ function SettingsContent() {
     } finally {
       setIsTestingError(false);
     }
-  };
+  }, []);
 
   const handleTelemetryToggle = useCallback(async (enabled: boolean) => {
     await updateConfig({ analytics: { enabled } });
@@ -523,19 +547,6 @@ function SettingsContent() {
         <SwitchControl
           checked={unrestrictedMode}
           onChange={(checked) => dispatch(setUnrestrictedMode(checked))}
-        />
-      ),
-      visible: isEditorOrAdmin,
-    },
-    {
-      tab: 'general',
-      section: 'Experimental Flags',
-      title: 'Viz V2 Format (Beta)',
-      description: 'Treat saved V2 viz (envelopes) as the source of truth for rendering and editing. When off, classic viz settings stay authoritative and charts are just-in-time converted for the Vega renderer.',
-      control: (
-        <SwitchControl
-          checked={vizV2}
-          onChange={(checked) => dispatch(setVizV2(checked))}
         />
       ),
       visible: isEditorOrAdmin,
@@ -657,26 +668,89 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, vizV2, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [
-    { id: 'general', label: 'General' },
-    { id: 'users', label: 'Users', visible: isAdmin, custom: <UsersContent /> },
+    {
+      id: 'general',
+      label: 'General',
+      description: 'Everyday agent behavior and feature controls.',
+      group: 'workspace',
+    },
+    {
+      id: 'appearance',
+      label: 'Appearance',
+      description: 'Colors and visual defaults for your workspace.',
+      group: 'advanced',
+      visible: isAdvancedAdmin,
+      custom: <AppearanceSettings />,
+      searchItems: [
+        { title: 'Chart Color Palette', description: 'Choose the colors used for chart series.', keywords: 'theme visualization series hex' },
+      ],
+    },
+    {
+      id: 'homepage',
+      label: 'Home Page',
+      description: 'Choose the sections and summaries shown on Home.',
+      group: 'advanced',
+      visible: isAdvancedAdmin,
+      custom: <HomePageSettings />,
+      searchItems: [
+        { title: 'Feed Summary', description: 'Show and configure the AI-generated feed summary.', keywords: 'prompt question ids' },
+        { title: 'Recent Questions', description: 'Show recently viewed question charts.' },
+        { title: 'Recent Dashboards', description: 'Show recently viewed dashboards.' },
+        { title: 'Recent Stories', description: 'Show recently viewed stories.' },
+        { title: 'Recent Conversations', description: 'Show recent conversations.' },
+        { title: 'Suggested Prompts', description: 'Show prompts that quickly start a conversation.' },
+      ],
+    },
+    {
+      id: 'users',
+      label: 'Users',
+      description: 'Manage workspace members, roles, and access.',
+      group: 'management',
+      visible: isAdmin,
+      custom: <UsersContent />,
+      searchItems: [
+        { title: 'Members and Roles', description: 'Add, edit, or remove users and assign viewer, editor, or admin access.', keywords: 'name email password permissions' },
+        { title: 'Two-factor Authentication', description: 'Configure phone-based 2FA for workspace members.', keywords: 'phone security sms' },
+        { title: 'Home Folders', description: 'Choose the default home folder for a user.', keywords: 'path directory' },
+      ],
+    },
     {
       id: 'models',
-      label: 'Models',
+      label: 'AI Models',
+      description: 'Configure model providers, grades, and agent routing.',
+      group: 'management',
       visible: isAdmin,
       custom: (
         <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" p={6}>
           <LlmModelsSection />
         </Box>
       ),
+      searchItems: [
+        { title: 'Model Providers', description: 'Configure provider credentials, API keys, regions, and base URLs.', keywords: 'openai anthropic bedrock llm test' },
+        { title: 'Model Grades', description: 'Assign models to capability and cost grades.', keywords: 'smart fast cheap routing' },
+        { title: 'Agent Models', description: 'Choose allowed grades and defaults for each agent.', keywords: 'analyst default model assignment' },
+      ],
     },
-    { id: 'usage', label: 'Usage', visible: creditsEnabled, custom: <CreditsUsageCards /> },
+    {
+      id: 'usage',
+      label: 'Usage',
+      description: 'Review individual and organization credit usage.',
+      group: 'workspace',
+      visible: creditsEnabled,
+      custom: <CreditsUsageCards />,
+      searchItems: [
+        { title: 'Credits', description: 'Review allowances, usage, resets, and breakdowns.', keywords: 'billing individual organization limits' },
+      ],
+    },
     {
       id: 'integrations',
       label: 'Integrations',
+      description: `Connect external services to your ${config.branding.displayName} workspace.`,
+      group: 'management',
       visible: isAdmin,
       custom: (
         <VStack align="stretch" gap={3}>
@@ -688,11 +762,17 @@ function SettingsContent() {
           <RemoteAgentsSection />
         </VStack>
       ),
+      searchItems: [
+        { title: 'Slack', description: 'Connect a Slack app using OAuth or manual credentials.', keywords: 'bot token signing secret manifest workspace' },
+        { title: 'MCP', description: 'Connect clients through the Model Context Protocol.', keywords: 'endpoint server token tools' },
+        { title: 'Remote Agents', description: 'Allow external AI agents to operate a chat session.', keywords: 'codex claude copy link session' },
+      ],
     },
-    { id: 'appearance', label: 'Appearance', visible: isAdvancedAdmin, custom: <AppearanceSettings /> },
     {
       id: 'messaging',
       label: 'Messaging',
+      description: 'Configure outbound channels and operational alerts.',
+      group: 'advanced',
       visible: isAdvancedAdmin,
       custom: (
         <VStack align="stretch" gap={4}>
@@ -704,10 +784,16 @@ function SettingsContent() {
           </Box>
         </VStack>
       ),
+      searchItems: [
+        { title: 'Channels', description: 'Configure webhook and Slack messaging destinations.', keywords: 'properties url channel id' },
+        { title: 'Error Notifications', description: 'Choose where server, tool, and stream errors are delivered.', keywords: 'alerts recipients delivery failures' },
+      ],
     },
     {
       id: 'configs',
       label: 'Configs',
+      description: 'Edit the workspace configuration file.',
+      group: 'advanced',
       visible: isAdvancedAdmin,
       custom: (
         <FileTabContent
@@ -717,10 +803,15 @@ function SettingsContent() {
           createType="config"
         />
       ),
+      searchItems: [
+        { title: 'Workspace Config', description: 'Edit organization-level configuration values.', keywords: 'config file yaml' },
+      ],
     },
     {
       id: 'styles',
       label: 'Styles',
+      description: 'Edit workspace-wide style definitions.',
+      group: 'advanced',
       visible: isAdvancedAdmin,
       custom: (
         <FileTabContent
@@ -730,32 +821,79 @@ function SettingsContent() {
           createType="styles"
         />
       ),
+      searchItems: [
+        { title: 'Workspace Styles', description: 'Edit organization-level style definitions.', keywords: 'css theme file' },
+      ],
     },
-    { id: 'dev', label: 'Developer Tools', visible: isAdvancedAdmin },
     {
       id: 'data',
       label: 'Data Management',
+      description: 'Export, validate, migrate, import, and repair workspace data.',
+      group: 'advanced',
       visible: isAdvancedAdmin,
       custom: (
         <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
           <DataManagementSection />
         </Box>
       ),
+      searchItems: [
+        { title: 'Export Workspace Data', description: 'Download workspace data as compressed JSON.', keywords: 'backup json gzip' },
+        { title: 'Validate Data', description: 'Check data integrity and schema versions.', keywords: 'errors version status' },
+        { title: 'Run Migrations', description: 'Apply pending database migrations.', keywords: 'schema upgrade' },
+        { title: 'Backfill Viz V2 Envelopes', description: 'Derive V2 visualization envelopes for existing questions.', keywords: 'charts classic visualization' },
+        { title: 'Import Workspace Data', description: 'Restore or import workspace data.', keywords: 'upload backup json' },
+        { title: 'Backfill Conversations to v3', description: 'Port older conversation files into v3 tables.', keywords: 'chat history migrate' },
+        { title: 'Reset Tutorial & Other Modes', description: 'Reset non-organization workspace modes.', keywords: 'delete clear' },
+        { title: 'LLM Debug Logs', description: 'Clear stored model request and response logs.', keywords: 'raw chat logs delete' },
+      ],
     },
-    { id: 'homepage', label: 'Home Page', visible: isAdvancedAdmin, custom: <HomePageSettings /> },
-  ], [isAdmin, isAdvancedAdmin, mode, creditsEnabled]);
+    {
+      id: 'dev',
+      label: 'Developer Tools',
+      description: 'Debugging, telemetry, cache, and test controls.',
+      group: 'advanced',
+      visible: isAdvancedAdmin,
+    },
+  ], [isAdmin, isAdvancedAdmin, mode, creditsEnabled, config.branding.displayName]);
 
   const breadcrumbItems = [
     { label: 'Home', href: '/' },
     { label: 'Settings', href: undefined }
   ];
 
+  const visibleTabs = useMemo(() => tabs.filter((tab) => tab.visible !== false), [tabs]);
+  const activeTabEntry = visibleTabs.find((tab) => tab.id === activeTab) ?? visibleTabs[0];
+  const normalizedSearch = searchQuery.trim();
+
+  const matchedSettings = useMemo(() => {
+    if (!normalizedSearch) return [];
+    return settings.filter((setting) => {
+      if (setting.visible === false || !visibleTabs.some((tab) => tab.id === setting.tab)) return false;
+      const tab = visibleTabs.find((entry) => entry.id === setting.tab);
+      return matchesSearch(normalizedSearch, tab?.label, setting.section, setting.title, setting.description);
+    });
+  }, [normalizedSearch, settings, visibleTabs]);
+
+  const matchedDestinations = useMemo(() => {
+    if (!normalizedSearch) return [];
+
+    return visibleTabs.flatMap((tab) => {
+      const results: Array<{ tab: TabEntry; title: string; description: string }> = [];
+      if (matchesSearch(normalizedSearch, tab.label, tab.description)) {
+        results.push({ tab, title: tab.label, description: tab.description });
+      }
+      for (const item of tab.searchItems ?? []) {
+        if (matchesSearch(normalizedSearch, tab.label, item.title, item.description, item.keywords)) {
+          results.push({ tab, title: item.title, description: item.description });
+        }
+      }
+      return results;
+    });
+  }, [normalizedSearch, visibleTabs]);
+
   if (!user) {
     return null;
   }
-
-  const visibleTabs = tabs.filter((t) => t.visible !== false);
-  const needsWideLayout = activeTab === 'users';
 
   const renderTabContent = (tab: TabEntry) => {
     if (tab.custom) return tab.custom;
@@ -812,53 +950,311 @@ function SettingsContent() {
     );
   };
 
+  const renderSearchResults = () => {
+    const groupedSettings = new Map<string, { tab: TabEntry; section: string; entries: SettingEntry[] }>();
+    for (const setting of matchedSettings) {
+      const tab = visibleTabs.find((entry) => entry.id === setting.tab);
+      if (!tab) continue;
+      const section = setting.section ?? '';
+      const key = `${tab.id}:${section}`;
+      const group = groupedSettings.get(key) ?? { tab, section, entries: [] };
+      group.entries.push(setting);
+      groupedSettings.set(key, group);
+    }
+
+    const resultCount = matchedSettings.length + matchedDestinations.length;
+
+    return (
+      <Box aria-label="Settings search results" aria-live="polite">
+        <Flex justify="space-between" align="end" gap={4} mb={5}>
+          <Box>
+            <Heading fontSize={{ base: 'xl', md: '2xl' }} letterSpacing="-0.02em">
+              Search results
+            </Heading>
+            <Text fontSize="sm" color="fg.muted" mt={1}>
+              {resultCount} {resultCount === 1 ? 'match' : 'matches'} for “{normalizedSearch}”
+            </Text>
+          </Box>
+        </Flex>
+
+        {resultCount === 0 ? (
+          <Box borderTopWidth="1px" borderColor="border" py={12} textAlign="center">
+            <Heading fontSize="lg" mb={2}>No settings found</Heading>
+            <Text color="fg.muted" fontSize="sm">Try a feature name, action, or description.</Text>
+          </Box>
+        ) : (
+          <VStack align="stretch" gap={5}>
+            {[...groupedSettings.values()].map(({ tab, section, entries }) => (
+              <Box key={`${tab.id}:${section}`} bg="bg.surface" borderRadius="xl" borderWidth="1px" borderColor="border" overflow="hidden">
+                <Box px={6} py={3} borderBottomWidth="1px" borderColor="border">
+                  <HStack gap={2}>
+                    <Text fontSize="xs" fontWeight="semibold" color="fg.default" fontFamily="mono">
+                      {tab.label}
+                    </Text>
+                    {section && (
+                      <>
+                        <Text color="fg.subtle" fontSize="xs">/</Text>
+                        <Text fontSize="xs" color="fg.muted" fontFamily="mono">{section}</Text>
+                      </>
+                    )}
+                  </HStack>
+                </Box>
+                <VStack align="stretch" gap={0} divideY="1px">
+                  {entries.map((setting) => (
+                    <SettingRow
+                      key={`${tab.id}:${setting.title}`}
+                      title={setting.title}
+                      description={setting.description}
+                      control={setting.control}
+                      section={tab.label}
+                    />
+                  ))}
+                </VStack>
+              </Box>
+            ))}
+
+            {matchedDestinations.length > 0 && (
+              <Box bg="bg.surface" borderRadius="xl" borderWidth="1px" borderColor="border" overflow="hidden">
+                <Box px={6} py={3} borderBottomWidth="1px" borderColor="border">
+                  <Text fontSize="xs" fontWeight="semibold" color="fg.muted" fontFamily="mono" textTransform="uppercase" letterSpacing="wider">
+                    Settings areas
+                  </Text>
+                </Box>
+                <VStack align="stretch" gap={0} divideY="1px">
+                  {matchedDestinations.map(({ tab, title, description }, index) => (
+                    <Button
+                      key={`${tab.id}:${title}:${index}`}
+                      variant="ghost"
+                      h="auto"
+                      minH="72px"
+                      borderRadius="0"
+                      px={6}
+                      py={4}
+                      justifyContent="space-between"
+                      textAlign="left"
+                      fontWeight="normal"
+                      onClick={() => {
+                        setActiveTab(tab.id);
+                        setSearchQuery('');
+                      }}
+                      aria-label={`Open ${tab.label}: ${title}`}
+                    >
+                      <Box minW={0}>
+                        <HStack gap={2} mb={1}>
+                          <Text fontSize="sm" fontWeight="medium" fontFamily="mono">{title}</Text>
+                          <Badge size="xs" variant="subtle" colorPalette="gray" fontFamily="mono">{tab.label}</Badge>
+                        </HStack>
+                        <Text fontSize="xs" color="fg.muted" fontFamily="mono" whiteSpace="normal">{description}</Text>
+                      </Box>
+                      <Icon as={LuChevronRight} boxSize={4} color="fg.subtle" ml={4} flexShrink={0} />
+                    </Button>
+                  ))}
+                </VStack>
+              </Box>
+            )}
+          </VStack>
+        )}
+      </Box>
+    );
+  };
+
   return (
-    <Box minH="90vh" bg="bg.canvas" display="flex">
-      <VStack flex="1" minW="0" position="relative" align="stretch">
-        <Box w="100%" flex="1" mx="auto" px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }} pb={{ base: 6, md: 8, lg: 10 }}>
+    <Box
+      h={{ base: 'calc(100dvh - 80px)', md: '100dvh' }}
+      minH={0}
+      bg="bg.canvas"
+      display="flex"
+      overflow="hidden"
+    >
+      <VStack flex="1" minW="0" minH={0} position="relative" align="stretch" overflow="hidden">
+        <Box
+          w="100%"
+          h="100%"
+          minH={0}
+          mx="auto"
+          px={{ base: 4, md: 8, lg: 12 }}
+          pt={{ base: 3, md: 4, lg: 5 }}
+          pb={{ base: 3, md: 5, lg: 6 }}
+          display="flex"
+          flexDirection="column"
+          overflow="hidden"
+        >
           <Flex justify="space-between" align="center" mb={4} gap={4}>
             <Box flex="1" minW={0}>
               <Breadcrumb items={breadcrumbItems} />
             </Box>
           </Flex>
 
-        <Heading
-          fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
-          fontWeight="900"
-          letterSpacing="-0.03em"
-          mt={10}
-          mb={2}
-          color="fg.default"
-        >
-          Settings
-        </Heading>
+          <Heading
+            fontSize={{ base: '3xl', md: '4xl' }}
+            fontWeight="900"
+            letterSpacing="-0.035em"
+            mt={{ base: 7, md: 9 }}
+            color="fg.default"
+          >
+            Settings
+          </Heading>
+          <Text mt={1} color="fg.muted" fontSize="sm">
+            Manage your preferences and workspace configuration.
+          </Text>
 
-        <Tabs.Root
-          value={activeTab}
-          onValueChange={(details) => setActiveTab(details.value as TabId)}
-          variant="line"
-          colorPalette="teal"
-          lazyMount
-          unmountOnExit
-        >
-          <Tabs.List mb={6} overflowX="auto" flexWrap="nowrap" css={{ '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}>
-            {visibleTabs.map((tab) => (
-              <Tabs.Trigger key={tab.id} value={tab.id} fontFamily="mono" fontSize="sm" flexShrink={0} aria-label={`Settings tab: ${tab.label}`}>
-                {tab.label}
-              </Tabs.Trigger>
-            ))}
-          </Tabs.List>
+          <Box position="relative" mt={6} mb={{ base: 7, lg: 9 }}>
+            <Icon
+              as={LuSearch}
+              position="absolute"
+              left={4}
+              top="50%"
+              transform="translateY(-50%)"
+              boxSize={4.5}
+              color="fg.muted"
+              pointerEvents="none"
+              zIndex={1}
+            />
+            <Input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search settings by name or description…"
+              aria-label="Search settings"
+              h="48px"
+              pl={11}
+              pr={searchQuery ? 12 : 4}
+              bg="bg.surface"
+              borderColor="border"
+              borderRadius="lg"
+              fontFamily="mono"
+              fontSize="sm"
+              shadow="xs"
+              _focusVisible={{ borderColor: 'accent.teal', boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)' }}
+            />
+            {searchQuery && (
+              <IconButton
+                aria-label="Clear settings search"
+                variant="ghost"
+                size="sm"
+                position="absolute"
+                right={2}
+                top="50%"
+                transform="translateY(-50%)"
+                onClick={() => setSearchQuery('')}
+              >
+                <LuX />
+              </IconButton>
+            )}
+          </Box>
 
-          {visibleTabs.map((tab) => (
-            <Tabs.Content key={tab.id} value={tab.id} aria-label={`Settings section: ${tab.label}`}>
-              {renderTabContent(tab)}
-            </Tabs.Content>
-          ))}
-        </Tabs.Root>
+          <Flex
+            direction={{ base: 'column', lg: 'row' }}
+            gap={{ base: 5, lg: 10 }}
+            align="stretch"
+            flex="1"
+            minH={0}
+            overflow="hidden"
+          >
+            <Box
+              as="nav"
+              aria-label="Settings navigation"
+              w={{ base: 'full', lg: '228px' }}
+              flexShrink={0}
+              pr={{ lg: 5 }}
+              borderRightWidth={{ lg: '1px' }}
+              borderColor="border"
+            >
+              <Box
+                display={{ base: 'flex', lg: 'block' }}
+                gap={{ base: 5, lg: 0 }}
+                overflowX={{ base: 'auto', lg: 'visible' }}
+                pb={{ base: 2, lg: 0 }}
+                css={{ '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}
+              >
+                {SETTINGS_GROUPS.map((group) => {
+                  const groupTabs = visibleTabs.filter((tab) => tab.group === group.id);
+                  if (groupTabs.length === 0) return null;
+                  return (
+                    <Box key={group.id} mb={{ lg: 6 }} minW={{ base: '178px', lg: 0 }}>
+                      <Text
+                        px={3}
+                        mb={1.5}
+                        fontSize="2xs"
+                        fontWeight="semibold"
+                        color="fg.subtle"
+                        fontFamily="mono"
+                        textTransform="uppercase"
+                        letterSpacing="0.12em"
+                      >
+                        {group.label}
+                      </Text>
+                      <VStack align="stretch" gap={0.5}>
+                        {groupTabs.map((tab) => {
+                          const selected = activeTabEntry?.id === tab.id;
+                          return (
+                            <Button
+                              key={tab.id}
+                              variant="ghost"
+                              size="sm"
+                              h="34px"
+                              px={3}
+                              justifyContent="flex-start"
+                              borderRadius="md"
+                              bg={selected ? 'accent.teal/10' : 'transparent'}
+                              color={selected ? 'fg.default' : 'fg.muted'}
+                              fontFamily="mono"
+                              fontSize="sm"
+                              fontWeight={selected ? 'semibold' : 'normal'}
+                              transition="background 120ms ease, color 120ms ease"
+                              _hover={{ bg: selected ? 'accent.teal/15' : 'bg.subtle', color: 'fg.default' }}
+                              onClick={() => {
+                                setActiveTab(tab.id);
+                                setSearchQuery('');
+                              }}
+                              aria-label={`Settings tab: ${tab.label}`}
+                              aria-current={selected ? 'page' : undefined}
+                            >
+                              {tab.label}
+                            </Button>
+                          );
+                        })}
+                      </VStack>
+                    </Box>
+                  );
+                })}
+              </Box>
+            </Box>
 
-        <Text fontSize="xs" color="fg.subtle" fontFamily="mono" mt={8} mb={2}>
-          Build: {GIT_COMMIT_SHA}
-        </Text>
+            <Box
+              key={normalizedSearch ? 'search-results' : activeTabEntry?.id}
+              flex="1"
+              minW={0}
+              minH={0}
+              w="full"
+              overflowY="auto"
+              overscrollBehavior="contain"
+              pr={{ lg: 2 }}
+              pb={6}
+              css={{ scrollbarGutter: 'stable' }}
+            >
+              {normalizedSearch ? renderSearchResults() : (
+                <>
+                  <Box mb={5}>
+                    <Heading fontSize={{ base: 'xl', md: '2xl' }} letterSpacing="-0.02em">
+                      {activeTabEntry?.label}
+                    </Heading>
+                    <Text fontSize="sm" color="fg.muted" mt={1}>
+                      {activeTabEntry?.description}
+                    </Text>
+                  </Box>
+                  {activeTabEntry && (
+                    <Box aria-label={`Settings section: ${activeTabEntry.label}`}>
+                      {renderTabContent(activeTabEntry)}
+                    </Box>
+                  )}
+                </>
+              )}
+
+              <Text fontSize="xs" color="fg.subtle" fontFamily="mono" mt={8} mb={2}>
+                Build: {GIT_COMMIT_SHA}
+              </Text>
+            </Box>
+          </Flex>
 
         </Box>
       </VStack>
