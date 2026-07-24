@@ -113,6 +113,86 @@ function BreakdownTable({ title, rows }: { title: string; rows: UsageBreakdownEn
   );
 }
 
+type Limits = { daily?: number; weekly?: number };
+type CreditsCfg = {
+  enabled?: boolean; enforced?: boolean;
+  limits?: { company?: Limits; roles?: Record<string, Limits> };
+};
+const ROLES = ['admin', 'editor', 'viewer'] as const;
+
+/** Admin editor for the credit levers: enabled/enforced + daily/weekly limits by company and role. */
+function LimitsEditor() {
+  const [cfg, setCfg] = useState<CreditsCfg | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void fetch('/api/configs').then((r) => r.json()).then((b) => setCfg((b?.data?.config?.credits as CreditsCfg) ?? {}));
+  }, []);
+
+  const num = (v: string): number | undefined => (v.trim() === '' ? undefined : Number(v));
+  const setCompany = (k: keyof Limits, v: string) =>
+    setCfg((c) => ({ ...c, limits: { ...c?.limits, company: { ...c?.limits?.company, [k]: num(v) } } }));
+  const setRole = (role: string, k: keyof Limits, v: string) =>
+    setCfg((c) => ({ ...c, limits: { ...c?.limits, roles: { ...c?.limits?.roles, [role]: { ...c?.limits?.roles?.[role], [k]: num(v) } } } }));
+
+  const save = useCallback(async () => {
+    if (!cfg) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/configs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credits: cfg }) });
+      if (!res.ok) throw new Error(`Save failed (${res.status})`);
+      toaster.create({ title: 'Limits saved', type: 'success' });
+    } catch (e) {
+      toaster.create({ title: e instanceof Error ? e.message : 'Save failed', type: 'error' });
+    } finally { setBusy(false); }
+  }, [cfg]);
+
+  if (!cfg) return null;
+  const numCell = (val: number | undefined, onCh: (v: string) => void, ph: string) => (
+    <Input aria-label={ph} type="number" size="xs" maxW="90px" fontFamily="mono" placeholder="—" value={val ?? ''} onChange={(e) => onCh(e.target.value)} />
+  );
+
+  return (
+    <VStack align="stretch" gap={3} p={4} borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface">
+      <HStack justify="space-between">
+        <Text fontSize="sm" fontWeight="medium" fontFamily="mono">Credit limits</Text>
+        <Button aria-label="Save limits" size="xs" colorPalette="teal" loading={busy} onClick={save}>Save</Button>
+      </HStack>
+      <HStack gap={4} flexWrap="wrap">
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+          <input aria-label="Credits enabled" type="checkbox" checked={cfg.enabled ?? false} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} /> enabled
+        </label>
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+          <input aria-label="Credits enforced" type="checkbox" checked={cfg.enforced ?? false} onChange={(e) => setCfg((c) => ({ ...c, enforced: e.target.checked }))} /> enforced
+        </label>
+      </HStack>
+      <Table.Root size="sm" variant="line">
+        <Table.Header>
+          <Table.Row>
+            <Table.ColumnHeader fontFamily="mono" fontSize="xs">Scope</Table.ColumnHeader>
+            <Table.ColumnHeader fontFamily="mono" fontSize="xs">Daily</Table.ColumnHeader>
+            <Table.ColumnHeader fontFamily="mono" fontSize="xs">Weekly</Table.ColumnHeader>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          <Table.Row>
+            <Table.Cell fontFamily="mono" fontSize="xs">Company</Table.Cell>
+            <Table.Cell>{numCell(cfg.limits?.company?.daily, (v) => setCompany('daily', v), 'Company daily limit')}</Table.Cell>
+            <Table.Cell>{numCell(cfg.limits?.company?.weekly, (v) => setCompany('weekly', v), 'Company weekly limit')}</Table.Cell>
+          </Table.Row>
+          {ROLES.map((role) => (
+            <Table.Row key={role}>
+              <Table.Cell fontFamily="mono" fontSize="xs">{role}</Table.Cell>
+              <Table.Cell>{numCell(cfg.limits?.roles?.[role]?.daily, (v) => setRole(role, 'daily', v), `${role} daily limit`)}</Table.Cell>
+              <Table.Cell>{numCell(cfg.limits?.roles?.[role]?.weekly, (v) => setRole(role, 'weekly', v), `${role} weekly limit`)}</Table.Cell>
+            </Table.Row>
+          ))}
+        </Table.Body>
+      </Table.Root>
+    </VStack>
+  );
+}
+
 /** Manual credit reset: pick a scope + target and record a CREDIT_RESET (zeroes usage since). */
 function ResetControls({ onDone }: { onDone: () => void }) {
   const [scope, setScope] = useState<'company' | 'role' | 'user'>('company');
@@ -240,8 +320,11 @@ export default function AdminUsageDashboard() {
       </SimpleGrid>
 
       <SimpleGrid columns={{ base: 1, lg: 2 }} gap={3}>
-        <ResetControls onDone={refetch} />
-        <EventsFeed events={data.events} />
+        <LimitsEditor />
+        <VStack align="stretch" gap={3}>
+          <ResetControls onDone={refetch} />
+          <EventsFeed events={data.events} />
+        </VStack>
       </SimpleGrid>
     </VStack>
   );
