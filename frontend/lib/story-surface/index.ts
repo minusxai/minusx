@@ -31,10 +31,10 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const XHTML_NS = 'http://www.w3.org/1999/xhtml';
 
 /**
- * The LOGICAL canvas width a story is authored against (StoryView's reading column caps here, and
- * the story prompt's container-query breakpoints are written for it). Lives in the surface module
- * because it is a story-domain sizing fact, not a component detail: server-side capture needs it to
- * render the layout a READER sees, and importing a component just for a number would be worse.
+ * The fallback canvas width used before a fluid story has a measurable parent, and by deterministic
+ * server-side capture. Live StoryView rendering is not capped here: it measures its parent and
+ * replaces this initial width with the available width. This lives in the surface module because it
+ * is a story-domain sizing fact, not a component detail.
  */
 export const STORY_CANVAS_WIDTH = 1280;
 
@@ -145,6 +145,10 @@ function svgSurface(doc: Document, width: number): StorySurface {
  * tracks the container's width, and this keeps the authored content inside it.
  */
 export const STORY_FLUID_SHIM_CSS =
+  // Story roots used to be authored with `mx-auto max-w-[1280px]`. The live surface now owns the
+  // available-width contract, so remove that historical cap at the document shell only. Nested
+  // readable measures (`max-w-prose`, chart plates, etc.) remain authored design choices.
+  '[data-mx-story-root]>[data-design="tw"]{width:100%!important;max-width:none!important}' +
   // Block chart embeds — saved (data-question-id) AND inline (data-question-inline). The inline
   // selector was missing, so an inline chart authored wider than the viewport (e.g. width:1100px)
   // overflowed the canvas and got cut off with the chat panel open; cap it like the saved kind.

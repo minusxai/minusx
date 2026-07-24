@@ -12,7 +12,6 @@ import { waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import DashboardView from '../DashboardView';
 import { SurfaceWidthContext } from '@/lib/dashboard-surface/surface-width';
-import { MARKER_GUTTER_CSS_PX } from '@/lib/screenshot/draw-markers';
 import type { DocumentContent } from '@/lib/types';
 
 vi.mock('@/components/containers/SmartEmbeddedQuestionContainer', () => {
@@ -64,20 +63,17 @@ function itemWidth(container: HTMLElement): number {
 }
 
 describe('dashboard grid width is surface-driven', () => {
-  it('reserves a SYMMETRIC gutter: px-10 on the region, grid width = surface − 2×gutter', async () => {
+  it('uses the full surface width without a stale reserved gutter', async () => {
     const { container } = renderAt(1240);
     await waitFor(() => expect(container.querySelector('.react-grid-item')).not.toBeNull());
-    // The left gutter is the markers' home; the right one mirrors it so the dashboard doesn't
-    // read as lopsided (user-reported). Both come off the grid's layout width.
     const region = container.querySelector('[aria-label="Dashboard"]') as HTMLElement;
-    expect(region.className).toContain('px-10');
-    expect(region.className).not.toContain('pl-10');
-    // 6 of 12 cols of (1240 − 80) with 6px margins ≈ 589; jsdom has no layout, so the inline
+    expect(region.className).not.toContain('px-10');
+    // 6 of 12 cols of the full 1240px surface with 6px margins ≈ 617; jsdom has no layout, so the inline
     // style IS the contract. A WidthProvider self-measure in jsdom collapses to its 1280
     // default regardless of the provided width — the range below rules that out.
     const w = itemWidth(container as HTMLElement);
-    expect(w).toBeGreaterThan(550);
-    expect(w).toBeLessThan(630);
+    expect(w).toBeGreaterThan(600);
+    expect(w).toBeLessThan(640);
   });
 
   it('re-lays out when the provided surface width changes (the polyfill never did)', async () => {
@@ -92,9 +88,5 @@ describe('dashboard grid width is surface-driven', () => {
     await waitFor(() => expect(second.container.querySelector('.react-grid-item')).not.toBeNull());
     const wide = itemWidth(second.container as HTMLElement);
     expect(wide).toBeGreaterThan(narrow + 200);
-  });
-
-  it('gutter constant matches the reserved pl-10 (coupling guard)', () => {
-    expect(MARKER_GUTTER_CSS_PX).toBe(40);
   });
 });

@@ -129,7 +129,7 @@ function SmartEmbeddedQuestionContainerInner({
   return (
     <div className="group relative flex flex-1 flex-col overflow-hidden">
       {showTitle && (
-        <div className="flex items-center justify-between bg-muted/60 px-5 pt-3">
+        <div className="flex items-center justify-between bg-muted/60 px-5 py-2">
           <div className="mr-2 flex-1">
             {readOnly ? (
               // Public viewers can't open /f/<id> (auth-gated) — show a plain title.
@@ -208,13 +208,13 @@ function SmartEmbeddedQuestionContainerInner({
             className="drag-handle absolute inset-0 z-[1] cursor-move"
             style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%)' }}
           />
-          <div className="absolute top-2 right-2 z-[2] flex gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          <div className="absolute top-2 right-2 z-[2] flex items-center gap-0.5 rounded-md border border-border bg-popover p-0.5 text-popover-foreground shadow-sm">
             {onEdit && (
               <button
                 type="button"
                 onClick={onEdit}
                 aria-label="Edit question"
-                className="inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-primary outline-none transition-transform duration-100 hover:scale-125"
+                className="inline-flex size-6 cursor-pointer items-center justify-center rounded-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground"
               >
                 <LuPencil size={14} />
               </button>
@@ -224,7 +224,7 @@ function SmartEmbeddedQuestionContainerInner({
                 type="button"
                 onClick={onRemove}
                 aria-label="Remove from dashboard"
-                className="inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-destructive outline-none transition-transform duration-100 hover:scale-125"
+                className="inline-flex size-6 cursor-pointer items-center justify-center rounded-sm text-muted-foreground outline-none transition-colors hover:bg-destructive/10 hover:text-destructive"
               >
                 <LuTrash2 size={14} />
               </button>

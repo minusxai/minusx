@@ -19,13 +19,6 @@ import {
 import { updateNumberQueryInJsx } from '@/lib/data/story/story-number';
 import { STORY_W } from './ScaledStoryFrame';
 import { PageMarkerDevOverlay } from './PageMarkerDevOverlay';
-import { usePresentation } from '@/components/file-toolbar/PresentationContext';
-
-// Max on-screen width of the reading column. Stories render FLUID (no transform
-// scale): full-bleed on mobile, capped + centered here on desktop. Authored
-// against a ~1280px canvas, so cap at the same so desktop matches the design
-// while everything below reflows responsively (container queries + cqi).
-const STORY_MAX_W = '1280px';
 
 /**
  * Cheap stable hash of the story HTML, used to KEY (and thus remount) AgentHtml whenever the
@@ -107,8 +100,8 @@ interface StoryViewProps {
 }
 
 /**
- * Story view: a single-page scrolling story — one agent-authored HTML document on a fixed
- * 1280px-wide canvas (any height), with live chart embeds. Editing is driven by the SHARED file
+ * Story view: a single-page scrolling story — one agent-authored, fluid HTML document with live
+ * chart embeds. Editing is driven by the SHARED file
  * header's Edit/Save/Cancel (the file's `fileEditMode`), exactly like questions/dashboards — there is
  * no story-specific Edit button. While editing, inline edits stream into the file's dirty content via
  * `onChange` (so the header's Save persists them and Cancel reverts them); the html is frozen during
@@ -124,11 +117,6 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
   // (serializeEditedStory); jsx stories commit by AST write-back (applyDomEditsToJsx via
   // AgentHtml/StoryJsxBody) — the onChange contract is identical either way.
   const editing = canEdit && headerEditMode;
-
-  // Present (full-view) mode is the generic fullscreen flag (shared header Present button).
-  // The story drops its 1280px reading cap and goes full-bleed so it fills the viewport —
-  // mirroring how NotebookView widens its layout while presenting.
-  const presenting = usePresentation()?.isPresenting ?? false;
 
   // Inline <Number> query editing opens the full SqlEditor in a light-DOM modal (Monaco can't live
   // in the story iframe). The story's path feeds schema/connection autocomplete.
@@ -227,15 +215,15 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
     return <StoryEmptyState />;
   }
 
-  // Render the story as a FLUID responsive document — no transform scale. Full-bleed on mobile;
-  // capped at STORY_MAX_W and centered on desktop so it matches its ~1280px design canvas.
+  // Render the story as a FLUID responsive document — no transform scale or artificial reading
+  // cap. AgentHtml measures this canvas and reflows the story to the width supplied by its parent.
   return (
     <Box aria-label="Story page" w="100%" minH="420px">
       <Box display="flex" justifyContent="center">
         {/* Relative wrapper anchors the DEV marker overlay OVER the captured box without being INSIDE
             it — so the serialized capture sees the story alone, and the app-state screenshot's baked
             gutter is the only numbering in the image (no double markers). */}
-        <Box position="relative" w="100%" aria-label="Story canvas" ref={canvasRef} style={{ maxWidth: presenting ? '100%' : STORY_MAX_W, minHeight: pinHeight ? `${pinHeight}px` : undefined }}>
+        <Box position="relative" w="100%" aria-label="Story canvas" ref={canvasRef} style={{ minHeight: pinHeight ? `${pinHeight}px` : undefined }}>
         {/* data-story-capture → OG share-card preview; data-file-id → the standard FileView capture
             (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
         <Box w="100%" {...(numericId !== undefined ? { 'data-story-capture': numericId, 'data-file-id': numericId } : {})}>

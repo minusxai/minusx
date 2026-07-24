@@ -216,7 +216,7 @@ export const SingleValueConfig = Type.Object({
   suffix: Nullable(Type.String({ description: "text shown immediately after the number, e.g. '%' or ' MRR'" })),
   valueSize: Nullable(Type.String({ description: "CSS font-size for the number, e.g. '4rem' or 'clamp(2rem, 10cqi, 6rem)'. Omit for the responsive default." })),
   valueColor: Nullable(Type.String({ description: 'CSS color for the number, e.g. "#16a34a" (a CSS color string, not a theme token)' })),
-  valueWeight: Nullable(Type.Integer({ description: 'font weight for the number (100–900)' })),
+  valueWeight: Nullable(Type.Integer({ description: 'font weight for the number (100-900)' })),
   labelColor: Nullable(Type.String({ description: 'CSS color for the label' })),
   align: Nullable(StringEnum(['left', 'center', 'right'], 'horizontal alignment of the value block (default center)')),
 }, { title: 'SingleValueConfig' });
@@ -517,9 +517,10 @@ export const StoryContent = Type.Object({
   story: NullableD(Type.String({ format: 'jsx' }),
     'One self-contained, FLUID RESPONSIVE HTML document rendered as a single scrolling story page (height ' +
     'unlimited — the page scrolls). It is NOT a fixed canvas and is NOT scaled: it renders full-bleed on a phone ' +
-    '(~390–430px wide) and capped ~1280px wide, centered, on desktop. The SAME document must look great at BOTH. ' +
+    '(~390-430px wide) and fills the width supplied by its parent on desktop. The SAME document must look great at BOTH. ' +
     'STYLING — use the built-in DESIGN SYSTEM (the default): put `data-design="tw"` and the `@container` class on ' +
-    'your root wrapper (e.g. <div data-design="tw" class="@container mx-auto max-w-[1280px] …">). Every Tailwind ' +
+    'your full-width root wrapper (e.g. <div data-design="tw" class="@container w-full …">). Do NOT cap or center ' +
+    'the root with `max-w-*`; apply readable max-widths only to nested prose or intentional content bands. Every Tailwind ' +
     'v4 utility then works (arbitrary values like text-[13px] included) — the platform compiles exactly the ' +
     'classes you use at save time. Responsiveness: Tailwind CONTAINER-QUERY variants (`@lg:`, `@2xl:`, `@3xl:` — ' +
     'NEVER viewport `md:`/`lg:`), collapsing every multi-column band to one column on narrow widths; wrap wide ' +

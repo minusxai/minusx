@@ -10,7 +10,6 @@ import { useState, useMemo, useCallback, useRef } from 'react';
 import { Layout, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { useSurfaceWidth } from '@/lib/dashboard-surface/surface-width';
-import { MARKER_GUTTER_CSS_PX } from '@/lib/screenshot/draw-markers';
 import { DashboardEmptyState } from '@/components/views/shared/empty-states';
 import type { FileState } from '@/store/filesSlice';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
@@ -92,10 +91,9 @@ export default function DashboardView({
   // Track current columns for responsive grid background
   const [currentCols, setCurrentCols] = useState(12);
 
-  // The grid's layout width: the surface's measured width minus BOTH reserved gutters
-  // (px-10 on the region below — the grid's containing block is the region's CONTENT box).
+  // The grid lays out against the full measured dashboard surface width.
   const surfaceWidth = useSurfaceWidth();
-  const gridWidth = Math.max(320, (surfaceWidth ?? FALLBACK_GRID_WIDTH) - MARKER_GUTTER_CSS_PX * 2);
+  const gridWidth = Math.max(320, surfaceWidth ?? FALLBACK_GRID_WIDTH);
 
   // Text blocks that a viewer has expanded via "Read more" → extra grid rows.
   // View-only (not persisted); restored to null on collapse or entering edit mode.
@@ -462,11 +460,12 @@ export default function DashboardView({
     // Phase 8: this view renders INSIDE the self-contained iframe surface (DashboardSurface);
     // the [data-file-id] capture anchor, dev marker overlay, and the surface itself are the
     // CONTAINER's (DashboardContainerV2) — the view is the surface's content, nothing more.
-    // px-10: the LEFT gutter is the marker column's home (MARKER_GUTTER_CSS_PX) — badges, live
-    // overlay AND captured image, draw INSIDE it instead of widening the canvas, so the agent
-    // image keeps the reader's geometry 1:1. The RIGHT gutter mirrors it purely for visual
-    // balance (a left-only gutter read as lopsided padding).
-    <div role="region" aria-label="Dashboard" className="px-10" {...(theme ? { 'data-theme': theme } : {})}>
+    <div
+      role="region"
+      aria-label="Dashboard"
+      style={{ paddingBottom: '40px' }}
+      {...(theme ? { 'data-theme': theme } : {})}
+    >
     {/* Inside the foreignObject surface, transform TRANSITIONS freeze mid-animation (Chromium
         does not incrementally repaint transformed foreignObject content — the stale-tiles bug).
         Tiles snap to their positions instead; DashboardSurface's resize nudge forces the repaint. */}

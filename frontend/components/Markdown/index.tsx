@@ -113,10 +113,15 @@ function LinkButton({ href, icon, children, bg = 'accent.primary' }: {
     <Box
       asChild
       display="inline-flex"
+      maxW="100%"
+      minW={0}
       alignItems="center"
+      verticalAlign="middle"
       gap="1"
       px="2"
       py="0.5"
+      overflow="hidden"
+      whiteSpace="nowrap"
       bg={bg}
       borderRadius="sm"
       fontSize={'sm'}
@@ -126,9 +131,23 @@ function LinkButton({ href, icon, children, bg = 'accent.primary' }: {
       transition="all 0.15s ease"
       _hover={{ opacity: 0.8 }}
     >
-      <Link href={href} style={{ textDecoration: 'none', color: 'white', fontWeight: 400, fontSize: 'small' }}>
-        {icon}
-        {children}
+      <Link
+        href={href}
+        style={{
+          textDecoration: 'none',
+          color: 'white',
+          fontWeight: 400,
+          fontSize: 'small',
+          maxWidth: '100%',
+          minWidth: 0,
+          overflow: 'hidden',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <span style={{ display: 'inline-flex', flexShrink: 0 }}>{icon}</span>
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {children}
+        </span>
       </Link>
     </Box>
   );

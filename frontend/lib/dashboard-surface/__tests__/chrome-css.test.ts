@@ -47,8 +47,6 @@ describe('dashboard chrome css artifact', () => {
     // Sticky table headers (TableV2/PivotTable): the story compile BANS sticky for authored
     // CSS, but chrome is our own code — the chrome compile must NOT run the banned partition.
     expect(DASHBOARD_CHROME_CSS).toMatch(/\.sticky\s*\{/);
-    // The symmetric gutter (px-10) reserved on the dashboard region (left = marker home).
-    expect(DASHBOARD_CHROME_CSS).toContain('.px-10');
   });
 
   it('carries the design-theme token blocks (data-theme dashboards, Phase 3 parity)', () => {
