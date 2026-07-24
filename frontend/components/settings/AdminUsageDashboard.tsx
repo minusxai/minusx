@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, VStack, HStack, Text, SimpleGrid, Spinner, Table, IconButton, Input, Button } from '@chakra-ui/react';
-import { LuRefreshCw } from 'react-icons/lu';
+import { LuRefreshCw, LuX } from 'react-icons/lu';
 import { toaster } from '@/components/ui/toaster';
 import { useAppSelector } from '@/store/hooks';
 import VegaChart from '@/components/viz/VegaChart';
@@ -111,7 +111,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: UsageBreakdownEn
 type Limits = { daily?: number; weekly?: number };
 type CreditsCfg = {
   enabled?: boolean; enforced?: boolean;
-  limits?: { company?: Limits; roles?: Record<string, Limits> };
+  limits?: { company?: Limits; roles?: Record<string, Limits>; users?: Record<string, Limits> };
 };
 const ROLES = ['admin', 'editor', 'viewer'] as const;
 
@@ -119,6 +119,7 @@ const ROLES = ['admin', 'editor', 'viewer'] as const;
 function LimitsEditor() {
   const [cfg, setCfg] = useState<CreditsCfg | null>(null);
   const [busy, setBusy] = useState(false);
+  const [newUser, setNewUser] = useState('');
 
   useEffect(() => {
     void fetch('/api/configs').then((r) => r.json()).then((b) => setCfg((b?.data?.config?.credits as CreditsCfg) ?? {}));
@@ -129,6 +130,16 @@ function LimitsEditor() {
     setCfg((c) => ({ ...c, limits: { ...c?.limits, company: { ...c?.limits?.company, [k]: num(v) } } }));
   const setRole = (role: string, k: keyof Limits, v: string) =>
     setCfg((c) => ({ ...c, limits: { ...c?.limits, roles: { ...c?.limits?.roles, [role]: { ...c?.limits?.roles?.[role], [k]: num(v) } } } }));
+  const setUser = (key: string, k: keyof Limits, v: string) =>
+    setCfg((c) => ({ ...c, limits: { ...c?.limits, users: { ...c?.limits?.users, [key]: { ...c?.limits?.users?.[key], [k]: num(v) } } } }));
+  const removeUser = (key: string) =>
+    setCfg((c) => { const users = { ...c?.limits?.users }; delete users[key]; return { ...c, limits: { ...c?.limits, users } }; });
+  const addUser = () => {
+    const key = newUser.trim();
+    if (!key) return;
+    setCfg((c) => ({ ...c, limits: { ...c?.limits, users: { ...c?.limits?.users, [key]: c?.limits?.users?.[key] ?? {} } } }));
+    setNewUser('');
+  };
 
   const save = useCallback(async () => {
     if (!cfg) return;
@@ -182,6 +193,28 @@ function LimitsEditor() {
               <Table.Cell>{numCell(cfg.limits?.roles?.[role]?.weekly, (v) => setRole(role, 'weekly', v), `${role} weekly limit`)}</Table.Cell>
             </Table.Row>
           ))}
+          {Object.keys(cfg.limits?.users ?? {}).map((key) => (
+            <Table.Row key={`u:${key}`}>
+              <Table.Cell fontFamily="mono" fontSize="xs">
+                <HStack gap={1} justify="space-between">
+                  <Text truncate maxW="120px">{key}</Text>
+                  <IconButton aria-label={`Remove ${key}`} size="2xs" variant="ghost" onClick={() => removeUser(key)}><LuX /></IconButton>
+                </HStack>
+              </Table.Cell>
+              <Table.Cell>{numCell(cfg.limits?.users?.[key]?.daily, (v) => setUser(key, 'daily', v), `${key} daily limit`)}</Table.Cell>
+              <Table.Cell>{numCell(cfg.limits?.users?.[key]?.weekly, (v) => setUser(key, 'weekly', v), `${key} weekly limit`)}</Table.Cell>
+            </Table.Row>
+          ))}
+          <Table.Row>
+            <Table.Cell colSpan={3}>
+              <HStack gap={2}>
+                <Input aria-label="Add user for limit" size="xs" maxW="200px" fontFamily="mono" placeholder="user id or email"
+                  value={newUser} onChange={(e) => setNewUser(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') addUser(); }} />
+                <Button aria-label="Add user limit" size="xs" variant="outline" onClick={addUser} disabled={!newUser.trim()}>Add user</Button>
+              </HStack>
+            </Table.Cell>
+          </Table.Row>
         </Table.Body>
       </Table.Root>
     </VStack>
