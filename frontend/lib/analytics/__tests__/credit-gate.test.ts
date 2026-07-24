@@ -11,7 +11,7 @@ vi.mock('@/lib/database/db-config', () => ({
 }));
 vi.mock('@/lib/data/configs.server', () => ({
   getRawConfig: vi.fn(async () => ({
-    credits: { enforced: true, limits: { company: { daily: 100, weekly: 100_000 } } },
+    credits: { enabled: true, limits: { company: { daily: 100, weekly: 100_000 } } },
   })),
 }));
 

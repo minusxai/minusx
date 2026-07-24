@@ -13,7 +13,7 @@ vi.mock('@/lib/data/configs.server', async (importOriginal) => {
   return {
     ...actual,
     getRawConfig: vi.fn(async () => ({
-      credits: { enforced: true, limits: { company: { daily: 100, weekly: 1_000_000 } } },
+      credits: { enabled: true, limits: { company: { daily: 100, weekly: 1_000_000 } } },
     })),
   };
 });

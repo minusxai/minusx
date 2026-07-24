@@ -18,10 +18,9 @@ export interface CreditScopeLimits {
 
 /** The `credits` section of the org config document (admin-editable). */
 export interface CreditsConfig {
-  /** Show the credits UI (Usage tab, /usage, sidebar). Replaces CREDITS_ENABLED. */
+  /** Credits on: show the UI (Usage tab, /usage, sidebar), track usage, AND enforce
+   *  limits (block over-limit users). Replaces CREDITS_ENABLED + ENFORCE_CREDIT_LIMITS. */
   enabled?: boolean;
-  /** Block over-limit usage (vs. only track/display). Replaces ENFORCE_CREDIT_LIMITS. */
-  enforced?: boolean;
   /** costToCredits weights; defaults to 1 credit per $0.01 (cost×100). */
   weights?: Partial<CreditWeights>;
   /** Cycle specs `<N><unit>` (d|w|m). Defaults: daily '1d', weekly '1w'. */
@@ -49,7 +48,6 @@ export interface ResolvedCreditWindow {
 
 export interface ResolvedCreditPolicy {
   enabled: boolean;
-  enforced: boolean;
   weights: CreditWeights;
   daily: ResolvedCreditWindow;
   weekly: ResolvedCreditWindow;
@@ -80,7 +78,6 @@ export function resolveCreditPolicy(cfg: CreditsConfig | undefined, user: Credit
   const c = cfg ?? {};
   return {
     enabled: c.enabled ?? false,
-    enforced: c.enforced ?? false,
     weights: { ...CREDIT_BUDGETS.weights, ...(c.weights ?? {}) },
     daily: { cycle: c.dailyCycle ?? '1d', limit: pickLimit(c, user, 'daily', DEFAULT_DAILY_LIMIT) },
     weekly: { cycle: c.weeklyCycle ?? '1w', limit: pickLimit(c, user, 'weekly', DEFAULT_WEEKLY_LIMIT) },

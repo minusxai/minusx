@@ -53,7 +53,7 @@ function mockUsageFetch() {
       status: 200,
       json: async () => url.includes('/admin-usage')
         ? { success: true, data: adminBreakdown }
-        : { success: true, data: { individual, org: null, enforced: false } satisfies CreditUsageResponse },
+        : { success: true, data: { individual, org: null, enabled: false } satisfies CreditUsageResponse },
     })),
   );
 }

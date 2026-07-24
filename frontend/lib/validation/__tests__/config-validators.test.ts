@@ -27,7 +27,7 @@ describe('validateOrgConfig - credits section', () => {
   it('accepts a full valid credits config', () => {
     expect(validateOrgConfig({
       credits: {
-        enabled: true, enforced: false,
+        enabled: true,
         weights: { cost: 100 }, dailyCycle: '1d', weeklyCycle: '1w',
         dailyResetCron: '59 23 * * *', weeklyResetCron: '59 23 * * 0', resetTimeZone: 'America/Los_Angeles',
         limits: { company: { daily: 1000, weekly: 5000 }, roles: { viewer: { daily: 50 } }, users: { '7': { weekly: 10 } } },

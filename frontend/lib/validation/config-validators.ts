@@ -146,9 +146,7 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
 function validateCreditsConfig(credits: unknown): boolean {
   if (typeof credits !== 'object' || credits === null) return false;
   const c = credits as Record<string, unknown>;
-  for (const flag of ['enabled', 'enforced'] as const) {
-    if (c[flag] !== undefined && typeof c[flag] !== 'boolean') return false;
-  }
+  if (c.enabled !== undefined && typeof c.enabled !== 'boolean') return false;
   for (const s of ['dailyCycle', 'weeklyCycle', 'dailyResetCron', 'weeklyResetCron', 'resetTimeZone'] as const) {
     if (c[s] !== undefined && typeof c[s] !== 'string') return false;
   }

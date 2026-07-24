@@ -167,7 +167,7 @@ export async function getCreditUsage(userId: number, role: string, includeOrg: b
       nextResets,
     });
   }
-  return { individual, org, enforced: policy.enforced };
+  return { individual, org, enabled: policy.enabled };
 }
 
 // Credits for ONE conversation for a user (user-scoped, no cross-user leak).
@@ -208,7 +208,7 @@ export async function checkCreditGate(user: EffectiveUser): Promise<CreditGate> 
   if (typeof user.userId !== 'number') return ALLOWED;
   const cfg = await loadCreditsConfig();
   const policy = resolveCreditPolicy(cfg, { userId: user.userId, role: user.role, email: user.email });
-  if (!policy.enforced) return ALLOWED;
+  if (!policy.enabled) return ALLOWED;
 
   const billingCycle = parseBillingCycle(policy.weekly.cycle);
   const resetCycle = parseBillingCycle(policy.daily.cycle);

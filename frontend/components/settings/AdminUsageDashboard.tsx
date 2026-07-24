@@ -110,7 +110,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: UsageBreakdownEn
 
 type Limits = { daily?: number; weekly?: number };
 type CreditsCfg = {
-  enabled?: boolean; enforced?: boolean;
+  enabled?: boolean;
   limits?: { company?: Limits; roles?: Record<string, Limits>; users?: Record<string, Limits> };
 };
 const ROLES = ['admin', 'editor', 'viewer'] as const;
@@ -166,10 +166,7 @@ function LimitsEditor() {
       </HStack>
       <HStack gap={4} flexWrap="wrap">
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontFamily: 'monospace', fontSize: '0.8rem' }}>
-          <input aria-label="Credits enabled" type="checkbox" checked={cfg.enabled ?? false} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} /> enabled
-        </label>
-        <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontFamily: 'monospace', fontSize: '0.8rem' }}>
-          <input aria-label="Credits enforced" type="checkbox" checked={cfg.enforced ?? false} onChange={(e) => setCfg((c) => ({ ...c, enforced: e.target.checked }))} /> enforced
+          <input aria-label="Credits enabled" type="checkbox" checked={cfg.enabled ?? false} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} /> enabled (tracks + enforces)
         </label>
       </HStack>
       <Table.Root size="sm" variant="line">

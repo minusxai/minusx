@@ -10,7 +10,6 @@ describe('resolveCreditPolicy', () => {
   it('falls back to built-in defaults when nothing is configured', () => {
     const p = resolveCreditPolicy(undefined, { role: 'viewer', userId: 1 });
     expect(p.enabled).toBe(false);
-    expect(p.enforced).toBe(false);
     expect(p.daily).toEqual({ cycle: '1d', limit: DEFAULT_DAILY_LIMIT });
     expect(p.weekly).toEqual({ cycle: '1w', limit: DEFAULT_WEEKLY_LIMIT });
     expect(p.weights.cost).toBe(100); // 1 credit per $0.01
@@ -19,7 +18,6 @@ describe('resolveCreditPolicy', () => {
   it('resolves limits by specificity: user > role > company > default', () => {
     const cfg: CreditsConfig = {
       enabled: true,
-      enforced: true,
       limits: {
         company: { daily: 100, weekly: 500 },
         roles: { viewer: { daily: 50 }, admin: { daily: 999, weekly: 9999 } },

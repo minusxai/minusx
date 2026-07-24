@@ -80,9 +80,6 @@ export default function UsageDialog({ conversationID, onClose }: { conversationI
                     </Box>
                     <WindowRow label={data.individual.reset.label} window={data.individual.reset} />
                     <WindowRow label={data.individual.billing.label} window={data.individual.billing} />
-                    {!data.enforced && (
-                      <Text fontSize="xs" color="fg.muted" fontFamily="mono">Limits are tracked, not enforced.</Text>
-                    )}
                   </VStack>
                 ) : null}
             </Dialog.Body>
