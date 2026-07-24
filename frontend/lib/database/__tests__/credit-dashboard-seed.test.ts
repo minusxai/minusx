@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { applyNoneParams } from '@/lib/sql/none-params';
+import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import type { QuestionContent } from '@/lib/types';
 
 /**
@@ -62,6 +63,16 @@ describe('seeded Credit Usage dashboard', () => {
         expect(p.source?.type).toBe('sql'); // query-populated dropdown
         expect((c.parameterValues ?? {})[p.name]).toBeNull(); // default None → all rows
       }
+    }
+  });
+
+  it('sync against SQL keeps all five params (so the dashboard merges them into filter controls)', () => {
+    for (const id of CREDIT_QUESTION_IDS) {
+      const c = byId.get(id)!.content as QuestionContent;
+      const synced = syncParametersWithSQL(c.query!, c.parameters ?? []);
+      expect(synced.map((p) => p.name).sort()).toEqual([...CREDIT_FILTER_PARAMS].sort());
+      // Sources must survive the sync — otherwise the dropdowns lose their query population.
+      for (const p of synced) expect(p.source?.type).toBe('sql');
     }
   });
 
