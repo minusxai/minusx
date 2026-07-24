@@ -32,6 +32,13 @@ export interface UsageTimePoint {
   credits: number;
 }
 
+/** A recorded credit lifecycle event (rate-limit hit or reset) for the audit feed. */
+export interface CreditEvent {
+  type: 'rate_limit_hit' | 'reset';
+  at: string;
+  detail: Record<string, unknown>;
+}
+
 export interface AdminUsageBreakdown {
   windowLabel: string;
   totalCredits: number;
@@ -44,6 +51,7 @@ export interface AdminUsageBreakdown {
   byUser: UsageBreakdownEntry[];
   byRole: UsageBreakdownEntry[];
   overTime: UsageTimePoint[];
+  events: CreditEvent[];
 }
 
 // All columns are aliased to `e` so the optional `users` join (which also has a
@@ -104,6 +112,22 @@ async function loadOverTime(weights: CreditWeights, billingStart: string): Promi
   }));
 }
 
+/** Recent credit lifecycle events (rate-limit hits + resets) for the audit feed. */
+async function loadRecentEvents(limit = 20): Promise<CreditEvent[]> {
+  const n = Math.min(100, Math.max(1, Math.floor(limit)));
+  const { rows } = await getModules().db.exec<Record<string, unknown>>(
+    `SELECT event_type, created_at, payload FROM app_events
+     WHERE event_type IN ('credit:rate_limit_hit', 'credit:reset')
+     ORDER BY created_at DESC LIMIT ${n}`,
+  );
+  const toIso = (v: unknown): string => v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString();
+  return rows.map((r) => ({
+    type: String(r['event_type']) === 'credit:reset' ? 'reset' : 'rate_limit_hit',
+    at: toIso(r['created_at']),
+    detail: (r['payload'] as Record<string, unknown>) ?? {},
+  }));
+}
+
 /** The org-wide admin usage picture over the current weekly (billing) window. */
 export async function getAdminUsageBreakdown(): Promise<AdminUsageBreakdown> {
   let credits: CreditsConfig | undefined;
@@ -113,7 +137,7 @@ export async function getAdminUsageBreakdown(): Promise<AdminUsageBreakdown> {
   const billingStart = cycleStartSql(billingCycle);
   const usersJoin = `LEFT JOIN users u ON u.id = e.user_id`;
 
-  const [byGrade, byProvider, byModel, byAgent, byUser, byRole, overTime] = await Promise.all([
+  const [byGrade, byProvider, byModel, byAgent, byUser, byRole, overTime, events] = await Promise.all([
     loadBreakdown(`COALESCE(NULLIF(grade, ''), 'unknown')`, weights, billingStart),
     loadBreakdown(`COALESCE(NULLIF(provider, ''), 'unknown')`, weights, billingStart),
     loadBreakdown(`model`, weights, billingStart),
@@ -121,11 +145,12 @@ export async function getAdminUsageBreakdown(): Promise<AdminUsageBreakdown> {
     loadBreakdown(`COALESCE(u.email, 'unknown')`, weights, billingStart, { join: usersJoin }),
     loadBreakdown(`COALESCE(u.role, 'unknown')`, weights, billingStart, { join: usersJoin }),
     loadOverTime(weights, billingStart),
+    loadRecentEvents(),
   ]);
 
   const totalCredits = overTime.reduce((s, p) => s + p.credits, 0);
   const totalRequests = byProvider.reduce((s, r) => s + r.requests, 0);
   const activeUsers = byUser.filter((u) => u.key !== 'unknown').length;
 
-  return { windowLabel: billingCycle.label, totalCredits, totalRequests, activeUsers, byGrade, byProvider, byModel, byAgent, byUser, byRole, overTime };
+  return { windowLabel: billingCycle.label, totalCredits, totalRequests, activeUsers, byGrade, byProvider, byModel, byAgent, byUser, byRole, overTime, events };
 }

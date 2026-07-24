@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Box, VStack, HStack, Text, SimpleGrid, Spinner, Table, IconButton } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, SimpleGrid, Spinner, Table, IconButton, Input, Button } from '@chakra-ui/react';
 import { LuRefreshCw } from 'react-icons/lu';
-import type { AdminUsageBreakdown, UsageBreakdownEntry, UsageTimePoint } from '@/lib/analytics/admin-usage.server';
+import { toaster } from '@/components/ui/toaster';
+import type { AdminUsageBreakdown, UsageBreakdownEntry, UsageTimePoint, CreditEvent } from '@/lib/analytics/admin-usage.server';
 
 const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
@@ -112,6 +113,87 @@ function BreakdownTable({ title, rows }: { title: string; rows: UsageBreakdownEn
   );
 }
 
+/** Manual credit reset: pick a scope + target and record a CREDIT_RESET (zeroes usage since). */
+function ResetControls({ onDone }: { onDone: () => void }) {
+  const [scope, setScope] = useState<'company' | 'role' | 'user'>('company');
+  const [target, setTarget] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = useCallback(async () => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/credits/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(scope === 'company' ? { scope } : { scope, target }),
+      });
+      if (!res.ok) throw new Error(`Reset failed (${res.status})`);
+      toaster.create({ title: `Reset ${scope}${scope === 'company' ? '' : ` "${target}"`}`, type: 'success' });
+      setTarget('');
+      onDone();
+    } catch (e) {
+      toaster.create({ title: e instanceof Error ? e.message : 'Reset failed', type: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  }, [scope, target, onDone]);
+
+  return (
+    <VStack align="stretch" gap={2} p={4} borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface">
+      <Text fontSize="sm" fontWeight="medium" fontFamily="mono">Reset credits</Text>
+      <HStack gap={2} flexWrap="wrap">
+        <select
+          aria-label="Reset scope"
+          value={scope}
+          onChange={(e) => setScope(e.target.value as 'company' | 'role' | 'user')}
+          style={{ fontFamily: 'monospace', fontSize: '0.875rem', padding: '4px 8px', border: '1px solid var(--chakra-colors-border-default)', borderRadius: '6px', background: 'var(--chakra-colors-bg-surface)' }}
+        >
+          <option value="company">Company</option>
+          <option value="role">Role</option>
+          <option value="user">User</option>
+        </select>
+        {scope !== 'company' && (
+          <Input
+            aria-label="Reset target"
+            placeholder={scope === 'role' ? 'admin / editor / viewer' : 'user id or email'}
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            size="sm" maxW="240px" fontFamily="mono"
+          />
+        )}
+        <Button aria-label="Apply reset" size="sm" colorPalette="teal" loading={busy} disabled={scope !== 'company' && !target.trim()} onClick={submit}>
+          Reset
+        </Button>
+      </HStack>
+    </VStack>
+  );
+}
+
+/** Recent rate-limit hits + resets (audit feed from app_events). */
+function EventsFeed({ events }: { events: CreditEvent[] }) {
+  return (
+    <VStack align="stretch" gap={2} p={4} borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface" aria-label="Credit events feed">
+      <Text fontSize="sm" fontWeight="medium" fontFamily="mono">Recent events</Text>
+      {events.length === 0
+        ? <Text fontSize="sm" color="fg.muted">No rate-limit hits or resets yet</Text>
+        : (
+          <VStack align="stretch" gap={1}>
+            {events.map((ev, i) => (
+              <HStack key={i} justify="space-between" fontSize="xs" fontFamily="mono">
+                <Text color={ev.type === 'rate_limit_hit' ? 'accent.danger' : 'accent.teal'}>
+                  {ev.type === 'rate_limit_hit' ? 'rate-limit hit' : 'reset'}
+                  {' · '}
+                  {String(ev.detail['userEmail'] ?? ev.detail['target'] ?? ev.detail['scope'] ?? '')}
+                </Text>
+                <Text color="fg.muted">{new Date(ev.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</Text>
+              </HStack>
+            ))}
+          </VStack>
+        )}
+    </VStack>
+  );
+}
+
 /**
  * Admin org-wide usage dashboard: the "full picture" over the billing window,
  * sliced by grade / provider / agent / model / user / role, with a per-day
@@ -155,6 +237,11 @@ export default function AdminUsageDashboard() {
         <BreakdownTable title="Top users" rows={data.byUser} />
         <BreakdownTable title="By model" rows={data.byModel} />
         <BreakdownTable title="By role" rows={data.byRole} />
+      </SimpleGrid>
+
+      <SimpleGrid columns={{ base: 1, lg: 2 }} gap={3}>
+        <ResetControls onDone={refetch} />
+        <EventsFeed events={data.events} />
       </SimpleGrid>
     </VStack>
   );

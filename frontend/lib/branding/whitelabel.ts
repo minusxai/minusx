@@ -181,6 +181,7 @@ export function mergeConfig(
     analytics: overrides.analytics ?? defaults.analytics,
     remoteAgentsEnabled: overrides.remoteAgentsEnabled ?? defaults.remoteAgentsEnabled,
     llm: overrides.llm ?? defaults.llm,
+    credits: overrides.credits ?? defaults.credits,
   };
 }
 

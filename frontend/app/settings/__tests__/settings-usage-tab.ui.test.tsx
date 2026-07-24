@@ -41,7 +41,7 @@ const individual: CreditUsageResponse['individual'] = {
 
 const adminBreakdown = {
   windowLabel: 'this month', totalCredits: 1959, totalRequests: 138, activeUsers: 1,
-  byGrade: [], byProvider: [], byModel: [], byAgent: [], byUser: [], byRole: [], overTime: [],
+  byGrade: [], byProvider: [], byModel: [], byAgent: [], byUser: [], byRole: [], overTime: [], events: [],
 };
 
 // Branch by URL: the admin dashboard hits /admin-usage, the user card hits /usage.
