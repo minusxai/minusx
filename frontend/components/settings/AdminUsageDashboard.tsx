@@ -4,11 +4,20 @@ import { useCallback, useEffect, useState } from 'react';
 import { VStack, HStack, Text, SimpleGrid, Table, IconButton, Input, Button, Link } from '@chakra-ui/react';
 import { LuX, LuExternalLink } from 'react-icons/lu';
 import { toaster } from '@/components/ui/toaster';
+import { useUsers } from '@/lib/hooks/useUsers';
 import type { CreditEvent } from '@/lib/analytics/credits.types';
 
 // The seeded internals-mode "Credit Usage" dashboard (workspace-template.json id 61) —
 // the reusable Question stack over llm_call_events for slicing/charting credit usage.
 const CREDIT_DASHBOARD_HREF = '/f/61?mode=internals';
+
+// Native <select> styled to match the surrounding mono/surface controls (Chakra's
+// Select is heavier than needed for these small enum/user pickers).
+const SELECT_STYLE: React.CSSProperties = {
+  fontFamily: 'monospace', fontSize: '0.875rem', padding: '4px 8px',
+  border: '1px solid var(--chakra-colors-border-default)', borderRadius: '6px',
+  background: 'var(--chakra-colors-bg-surface)',
+};
 
 type Limits = { daily?: number; weekly?: number };
 type CreditsCfg = {
@@ -22,6 +31,7 @@ function LimitsEditor() {
   const [cfg, setCfg] = useState<CreditsCfg | null>(null);
   const [busy, setBusy] = useState(false);
   const [newUser, setNewUser] = useState('');
+  const { users } = useUsers();
 
   useEffect(() => {
     void fetch('/api/configs').then((r) => r.json()).then((b) => setCfg((b?.data?.config?.credits as CreditsCfg) ?? {}));
@@ -107,9 +117,17 @@ function LimitsEditor() {
           <Table.Row>
             <Table.Cell colSpan={3}>
               <HStack gap={2}>
-                <Input aria-label="Add user for limit" size="xs" maxW="200px" fontFamily="mono" placeholder="user id or email"
-                  value={newUser} onChange={(e) => setNewUser(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') addUser(); }} />
+                <select
+                  aria-label="Add user for limit"
+                  style={{ ...SELECT_STYLE, fontSize: '0.75rem', maxWidth: '200px' }}
+                  value={newUser}
+                  onChange={(e) => setNewUser(e.target.value)}
+                >
+                  <option value="">Select a user…</option>
+                  {users
+                    .filter((u) => u.email && !(u.email in (cfg.limits?.users ?? {})))
+                    .map((u) => <option key={u.email} value={u.email}>{u.email}</option>)}
+                </select>
                 <Button aria-label="Add user limit" size="xs" variant="outline" onClick={addUser} disabled={!newUser.trim()}>Add user</Button>
               </HStack>
             </Table.Cell>
@@ -125,6 +143,7 @@ function ResetControls({ onDone }: { onDone: () => void }) {
   const [scope, setScope] = useState<'company' | 'role' | 'user'>('company');
   const [target, setTarget] = useState('');
   const [busy, setBusy] = useState(false);
+  const { users } = useUsers();
 
   const submit = useCallback(async () => {
     setBusy(true);
@@ -152,21 +171,24 @@ function ResetControls({ onDone }: { onDone: () => void }) {
         <select
           aria-label="Reset scope"
           value={scope}
-          onChange={(e) => setScope(e.target.value as 'company' | 'role' | 'user')}
-          style={{ fontFamily: 'monospace', fontSize: '0.875rem', padding: '4px 8px', border: '1px solid var(--chakra-colors-border-default)', borderRadius: '6px', background: 'var(--chakra-colors-bg-surface)' }}
+          onChange={(e) => { setScope(e.target.value as 'company' | 'role' | 'user'); setTarget(''); }}
+          style={SELECT_STYLE}
         >
           <option value="company">Company</option>
           <option value="role">Role</option>
           <option value="user">User</option>
         </select>
-        {scope !== 'company' && (
-          <Input
-            aria-label="Reset target"
-            placeholder={scope === 'role' ? 'admin / editor / viewer' : 'user id or email'}
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            size="sm" maxW="240px" fontFamily="mono"
-          />
+        {scope === 'role' && (
+          <select aria-label="Reset target role" value={target} onChange={(e) => setTarget(e.target.value)} style={SELECT_STYLE}>
+            <option value="">Select a role…</option>
+            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        )}
+        {scope === 'user' && (
+          <select aria-label="Reset target user" value={target} onChange={(e) => setTarget(e.target.value)} style={{ ...SELECT_STYLE, maxWidth: '240px' }}>
+            <option value="">Select a user…</option>
+            {users.filter((u) => u.email).map((u) => <option key={u.email} value={u.email}>{u.email}</option>)}
+          </select>
         )}
         <Button aria-label="Apply reset" size="sm" colorPalette="teal" loading={busy} disabled={scope !== 'company' && !target.trim()} onClick={submit}>
           Reset

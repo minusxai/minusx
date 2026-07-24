@@ -1216,7 +1216,7 @@
       "version": 1,
       "docs": [
        {
-        "content": "# internals\n\nAll tables live in the document DB (PGLite / Postgres). Use `created_at` for timestamps.\n\n## file_events\nTracks every file operation in MinusX.\n- `event_type`: integer \u2014 0=created, 1=read_direct, 2=read_as_reference, 3=updated, 4=deleted\n- `file_id`: FK \u2192 `files.id`\n- `user_id`: FK \u2192 `users.id`\n- `created_at`: timestamp\n\nUseful joins:\n- `JOIN files fi ON fi.id = fe.file_id` \u2192 `fi.name`, `fi.path`, `fi.type`\n- Mode from path: `SPLIT_PART(fi.path, '/', 2)` e.g. `org`, `tutorial`, `internals`\n- `LEFT JOIN users u ON u.id = fe.user_id` \u2192 `u.email`, `u.role`\n\n## llm_call_events\nTracks every LLM API call made by the agent.\n- `model`: e.g. `claude-sonnet-4-6`\n- `total_tokens`, `prompt_tokens`, `completion_tokens`\n- `cost` (USD float8 \u2014 cast to numeric for ROUND: `ROUND(SUM(cost)::numeric, 4)`)\n- `duration_s` (seconds float8)\n- `finish_reason`, `conversation_id`\n- `created_at`: timestamp\n\n## query_execution_events\nTracks every query run via /api/query.\n- `query_hash`: hash of query + params + connection\n- `file_id`: FK \u2192 `files.id` (the question file that ran the query, if any)\n- `database_name`: connection name\n- `duration_ms`, `row_count`, `col_count`\n- `was_cache_hit`: boolean\n- `error`: text (null on success)\n- `created_at`: timestamp\n"
+        "content": "# internals\n\nAll tables live in the document DB (PGLite / Postgres). Use `created_at` for timestamps.\n\n## file_events\nTracks every file operation in MinusX.\n- `event_type`: integer — 0=created, 1=read_direct, 2=read_as_reference, 3=updated, 4=deleted\n- `file_id`: FK → `files.id`\n- `user_id`: FK → `users.id`\n- `created_at`: timestamp\n\nUseful joins:\n- `JOIN files fi ON fi.id = fe.file_id` → `fi.name`, `fi.path`, `fi.type`\n- Mode from path: `SPLIT_PART(fi.path, '/', 2)` e.g. `org`, `tutorial`, `internals`\n- `LEFT JOIN users u ON u.id = fe.user_id` → `u.email`, `u.role`\n\n## llm_call_events\nTracks every LLM API call made by the agent.\n- `model`: e.g. `claude-sonnet-4-6`\n- `total_tokens`, `prompt_tokens`, `completion_tokens`\n- `cost` (USD float8 — cast to numeric for ROUND: `ROUND(SUM(cost)::numeric, 4)`)\n- `duration_s` (seconds float8)\n- `finish_reason`, `conversation_id`\n- `created_at`: timestamp\n\n## query_execution_events\nTracks every query run via /api/query.\n- `query_hash`: hash of query + params + connection\n- `file_id`: FK → `files.id` (the question file that ran the query, if any)\n- `database_name`: connection name\n- `duration_ms`, `row_count`, `col_count`\n- `was_cache_hit`: boolean\n- `error`: text (null on success)\n- `created_at`: timestamp\n"
        }
       ],
       "createdAt": "{{TIMESTAMP}}",
@@ -2678,7 +2678,7 @@
       }
      ]
     },
-    "description": "Sample MX Food data \u2014 add your own CSV, xlsx, or Google Sheets tables here"
+    "description": "Sample MX Food data — add your own CSV, xlsx, or Google Sheets tables here"
    },
    "created_at": "{{TIMESTAMP}}",
    "updated_at": "{{TIMESTAMP}}",
@@ -2868,7 +2868,7 @@
     "name": "internals",
     "type": "internal_db",
     "config": {},
-    "description": "Document DB \u2014 read-only analytics access (file_events, llm_call_events, query_execution_events)"
+    "description": "Document DB — read-only analytics access (file_events, llm_call_events, query_execution_events)"
    },
    "created_at": "{{TIMESTAMP}}",
    "updated_at": "{{TIMESTAMP}}",
@@ -3220,7 +3220,7 @@
    "references": [],
    "content": {
     "description": "Credit spend per day (1 credit = $0.01)",
-    "query": "SELECT TO_CHAR(created_at, 'YYYY-MM-DD') AS day, SUM(cost) * 100 + COUNT(*) AS credits\nFROM llm_call_events WHERE COALESCE(mode, 'org') IN ('org', 'tutorial')\nGROUP BY day ORDER BY day",
+    "query": "SELECT TO_CHAR(e.created_at, 'YYYY-MM-DD') AS day, SUM(e.cost) * 100 + COUNT(*) AS credits\nFROM llm_call_events e LEFT JOIN users u ON u.id = e.user_id\nWHERE COALESCE(e.mode, 'org') <> 'internals'\n  AND COALESCE(NULLIF(e.grade, ''), 'unknown') = :grade\n  AND COALESCE(NULLIF(e.provider, ''), 'unknown') = :provider\n  AND e.model = :model\n  AND COALESCE(u.email, 'unknown') = :user_email\n  AND u.role = :role\nGROUP BY day ORDER BY day",
     "connection_name": "internals",
     "vizSettings": {
      "type": "bar",
@@ -3231,7 +3231,53 @@
       "credits"
      ]
     },
-    "parameters": [],
+    "parameters": [
+     {
+      "name": "grade",
+      "type": "text",
+      "label": "Grade",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(NULLIF(grade, ''), 'unknown') AS grade FROM llm_call_events ORDER BY 1"
+      }
+     },
+     {
+      "name": "provider",
+      "type": "text",
+      "label": "Provider",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(NULLIF(provider, ''), 'unknown') AS provider FROM llm_call_events ORDER BY 1"
+      }
+     },
+     {
+      "name": "model",
+      "type": "text",
+      "label": "Model",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT model FROM llm_call_events WHERE model IS NOT NULL AND model <> '' ORDER BY 1"
+      }
+     },
+     {
+      "name": "user_email",
+      "type": "text",
+      "label": "User",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(u.email, 'unknown') AS user_email FROM llm_call_events e LEFT JOIN users u ON u.id = e.user_id ORDER BY 1"
+      }
+     },
+     {
+      "name": "role",
+      "type": "text",
+      "label": "Role",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT role FROM users WHERE role IS NOT NULL AND role <> '' ORDER BY 1"
+      }
+     }
+    ],
     "viz": {
      "version": 2,
      "source": {
@@ -3253,6 +3299,13 @@
        }
       }
      }
+    },
+    "parameterValues": {
+     "grade": null,
+     "provider": null,
+     "model": null,
+     "user_email": null,
+     "role": null
     }
    },
    "created_at": "{{TIMESTAMP}}",
@@ -3268,7 +3321,7 @@
    "references": [],
    "content": {
     "description": "Credit spend and requests per model",
-    "query": "SELECT model, SUM(cost) * 100 + COUNT(*) AS credits, COUNT(*) AS requests\nFROM llm_call_events WHERE COALESCE(mode, 'org') IN ('org', 'tutorial')\nGROUP BY model ORDER BY credits DESC",
+    "query": "SELECT e.model AS model, SUM(e.cost) * 100 + COUNT(*) AS credits, COUNT(*) AS requests\nFROM llm_call_events e LEFT JOIN users u ON u.id = e.user_id\nWHERE COALESCE(e.mode, 'org') <> 'internals'\n  AND COALESCE(NULLIF(e.grade, ''), 'unknown') = :grade\n  AND COALESCE(NULLIF(e.provider, ''), 'unknown') = :provider\n  AND e.model = :model\n  AND COALESCE(u.email, 'unknown') = :user_email\n  AND u.role = :role\nGROUP BY model ORDER BY credits DESC",
     "connection_name": "internals",
     "vizSettings": {
      "type": "bar",
@@ -3279,7 +3332,53 @@
       "credits"
      ]
     },
-    "parameters": [],
+    "parameters": [
+     {
+      "name": "grade",
+      "type": "text",
+      "label": "Grade",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(NULLIF(grade, ''), 'unknown') AS grade FROM llm_call_events ORDER BY 1"
+      }
+     },
+     {
+      "name": "provider",
+      "type": "text",
+      "label": "Provider",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(NULLIF(provider, ''), 'unknown') AS provider FROM llm_call_events ORDER BY 1"
+      }
+     },
+     {
+      "name": "model",
+      "type": "text",
+      "label": "Model",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT model FROM llm_call_events WHERE model IS NOT NULL AND model <> '' ORDER BY 1"
+      }
+     },
+     {
+      "name": "user_email",
+      "type": "text",
+      "label": "User",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(u.email, 'unknown') AS user_email FROM llm_call_events e LEFT JOIN users u ON u.id = e.user_id ORDER BY 1"
+      }
+     },
+     {
+      "name": "role",
+      "type": "text",
+      "label": "Role",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT role FROM users WHERE role IS NOT NULL AND role <> '' ORDER BY 1"
+      }
+     }
+    ],
     "viz": {
      "version": 2,
      "source": {
@@ -3301,6 +3400,13 @@
        }
       }
      }
+    },
+    "parameterValues": {
+     "grade": null,
+     "provider": null,
+     "model": null,
+     "user_email": null,
+     "role": null
     }
    },
    "created_at": "{{TIMESTAMP}}",
@@ -3316,7 +3422,7 @@
    "references": [],
    "content": {
     "description": "Credit spend by capability grade",
-    "query": "SELECT COALESCE(NULLIF(grade, ''), 'unknown') AS grade, SUM(cost) * 100 + COUNT(*) AS credits\nFROM llm_call_events WHERE COALESCE(mode, 'org') IN ('org', 'tutorial')\nGROUP BY grade ORDER BY credits DESC",
+    "query": "SELECT COALESCE(NULLIF(e.grade, ''), 'unknown') AS grade, SUM(e.cost) * 100 + COUNT(*) AS credits\nFROM llm_call_events e LEFT JOIN users u ON u.id = e.user_id\nWHERE COALESCE(e.mode, 'org') <> 'internals'\n  AND COALESCE(NULLIF(e.grade, ''), 'unknown') = :grade\n  AND COALESCE(NULLIF(e.provider, ''), 'unknown') = :provider\n  AND e.model = :model\n  AND COALESCE(u.email, 'unknown') = :user_email\n  AND u.role = :role\nGROUP BY grade ORDER BY credits DESC",
     "connection_name": "internals",
     "vizSettings": {
      "type": "bar",
@@ -3327,7 +3433,53 @@
       "credits"
      ]
     },
-    "parameters": [],
+    "parameters": [
+     {
+      "name": "grade",
+      "type": "text",
+      "label": "Grade",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(NULLIF(grade, ''), 'unknown') AS grade FROM llm_call_events ORDER BY 1"
+      }
+     },
+     {
+      "name": "provider",
+      "type": "text",
+      "label": "Provider",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(NULLIF(provider, ''), 'unknown') AS provider FROM llm_call_events ORDER BY 1"
+      }
+     },
+     {
+      "name": "model",
+      "type": "text",
+      "label": "Model",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT model FROM llm_call_events WHERE model IS NOT NULL AND model <> '' ORDER BY 1"
+      }
+     },
+     {
+      "name": "user_email",
+      "type": "text",
+      "label": "User",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(u.email, 'unknown') AS user_email FROM llm_call_events e LEFT JOIN users u ON u.id = e.user_id ORDER BY 1"
+      }
+     },
+     {
+      "name": "role",
+      "type": "text",
+      "label": "Role",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT role FROM users WHERE role IS NOT NULL AND role <> '' ORDER BY 1"
+      }
+     }
+    ],
     "viz": {
      "version": 2,
      "source": {
@@ -3349,6 +3501,13 @@
        }
       }
      }
+    },
+    "parameterValues": {
+     "grade": null,
+     "provider": null,
+     "model": null,
+     "user_email": null,
+     "role": null
     }
    },
    "created_at": "{{TIMESTAMP}}",
@@ -3364,7 +3523,7 @@
    "references": [],
    "content": {
     "description": "Credit spend by provider",
-    "query": "SELECT COALESCE(NULLIF(provider, ''), 'unknown') AS provider, SUM(cost) * 100 + COUNT(*) AS credits\nFROM llm_call_events WHERE COALESCE(mode, 'org') IN ('org', 'tutorial')\nGROUP BY provider ORDER BY credits DESC",
+    "query": "SELECT COALESCE(NULLIF(e.provider, ''), 'unknown') AS provider, SUM(e.cost) * 100 + COUNT(*) AS credits\nFROM llm_call_events e LEFT JOIN users u ON u.id = e.user_id\nWHERE COALESCE(e.mode, 'org') <> 'internals'\n  AND COALESCE(NULLIF(e.grade, ''), 'unknown') = :grade\n  AND COALESCE(NULLIF(e.provider, ''), 'unknown') = :provider\n  AND e.model = :model\n  AND COALESCE(u.email, 'unknown') = :user_email\n  AND u.role = :role\nGROUP BY provider ORDER BY credits DESC",
     "connection_name": "internals",
     "vizSettings": {
      "type": "bar",
@@ -3375,7 +3534,53 @@
       "credits"
      ]
     },
-    "parameters": [],
+    "parameters": [
+     {
+      "name": "grade",
+      "type": "text",
+      "label": "Grade",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(NULLIF(grade, ''), 'unknown') AS grade FROM llm_call_events ORDER BY 1"
+      }
+     },
+     {
+      "name": "provider",
+      "type": "text",
+      "label": "Provider",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(NULLIF(provider, ''), 'unknown') AS provider FROM llm_call_events ORDER BY 1"
+      }
+     },
+     {
+      "name": "model",
+      "type": "text",
+      "label": "Model",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT model FROM llm_call_events WHERE model IS NOT NULL AND model <> '' ORDER BY 1"
+      }
+     },
+     {
+      "name": "user_email",
+      "type": "text",
+      "label": "User",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(u.email, 'unknown') AS user_email FROM llm_call_events e LEFT JOIN users u ON u.id = e.user_id ORDER BY 1"
+      }
+     },
+     {
+      "name": "role",
+      "type": "text",
+      "label": "Role",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT role FROM users WHERE role IS NOT NULL AND role <> '' ORDER BY 1"
+      }
+     }
+    ],
     "viz": {
      "version": 2,
      "source": {
@@ -3397,6 +3602,13 @@
        }
       }
      }
+    },
+    "parameterValues": {
+     "grade": null,
+     "provider": null,
+     "model": null,
+     "user_email": null,
+     "role": null
     }
    },
    "created_at": "{{TIMESTAMP}}",
@@ -3412,7 +3624,7 @@
    "references": [],
    "content": {
     "description": "Highest credit spenders",
-    "query": "SELECT COALESCE(u.email, 'unknown') AS user_email, SUM(e.cost) * 100 + COUNT(*) AS credits, COUNT(*) AS requests\nFROM llm_call_events e LEFT JOIN users u ON u.id = e.user_id\nWHERE COALESCE(e.mode, 'org') IN ('org', 'tutorial')\nGROUP BY u.email ORDER BY credits DESC",
+    "query": "SELECT COALESCE(u.email, 'unknown') AS user_email, SUM(e.cost) * 100 + COUNT(*) AS credits, COUNT(*) AS requests\nFROM llm_call_events e LEFT JOIN users u ON u.id = e.user_id\nWHERE COALESCE(e.mode, 'org') <> 'internals'\n  AND COALESCE(NULLIF(e.grade, ''), 'unknown') = :grade\n  AND COALESCE(NULLIF(e.provider, ''), 'unknown') = :provider\n  AND e.model = :model\n  AND COALESCE(u.email, 'unknown') = :user_email\n  AND u.role = :role\nGROUP BY user_email ORDER BY credits DESC",
     "connection_name": "internals",
     "vizSettings": {
      "type": "bar",
@@ -3423,7 +3635,53 @@
       "credits"
      ]
     },
-    "parameters": [],
+    "parameters": [
+     {
+      "name": "grade",
+      "type": "text",
+      "label": "Grade",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(NULLIF(grade, ''), 'unknown') AS grade FROM llm_call_events ORDER BY 1"
+      }
+     },
+     {
+      "name": "provider",
+      "type": "text",
+      "label": "Provider",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(NULLIF(provider, ''), 'unknown') AS provider FROM llm_call_events ORDER BY 1"
+      }
+     },
+     {
+      "name": "model",
+      "type": "text",
+      "label": "Model",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT model FROM llm_call_events WHERE model IS NOT NULL AND model <> '' ORDER BY 1"
+      }
+     },
+     {
+      "name": "user_email",
+      "type": "text",
+      "label": "User",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT COALESCE(u.email, 'unknown') AS user_email FROM llm_call_events e LEFT JOIN users u ON u.id = e.user_id ORDER BY 1"
+      }
+     },
+     {
+      "name": "role",
+      "type": "text",
+      "label": "Role",
+      "source": {
+       "type": "sql",
+       "query": "SELECT DISTINCT role FROM users WHERE role IS NOT NULL AND role <> '' ORDER BY 1"
+      }
+     }
+    ],
     "viz": {
      "version": 2,
      "source": {
@@ -3445,6 +3703,13 @@
        }
       }
      }
+    },
+    "parameterValues": {
+     "grade": null,
+     "provider": null,
+     "model": null,
+     "user_email": null,
+     "role": null
     }
    },
    "created_at": "{{TIMESTAMP}}",
@@ -3542,6 +3807,13 @@
        "h": 4
       }
      ]
+    },
+    "parameterValues": {
+     "grade": null,
+     "provider": null,
+     "model": null,
+     "user_email": null,
+     "role": null
     }
    },
    "created_at": "{{TIMESTAMP}}",
