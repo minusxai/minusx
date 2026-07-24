@@ -12,7 +12,7 @@ describe('app Tooltip', () => {
     fireEvent.focus(screen.getByLabelText('app trigger'));
     const tip = await screen.findByRole('tooltip');
     expect(tip).toHaveAttribute('data-slot', 'tooltip-content');
-    expect(tip).toHaveClass('max-w-xs', 'bg-foreground', 'text-background');
+    expect(tip).toHaveClass('w-max', 'max-w-[min(28rem,calc(100vw-1rem))]', 'bg-foreground', 'text-background');
     expect(tip.closest('[data-mx-theme-host]')).not.toBeNull();
   });
 });
