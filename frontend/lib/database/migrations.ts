@@ -178,6 +178,76 @@ function v37AddVizEnvelopes(data: InitData): InitData {
   return { ...data, documents };
 }
 
+/**
+ * V38 — Strip retired schema-drift from stored config documents.
+ *
+ * Config types evolve; existing stored configs can reference values we've
+ * retired, which then fail validation and (pre-fix) bricked the whole config.
+ * This migration cleans the KNOWN retired values in place, once:
+ *   - retired file types (denylist below) removed from `supportedFileTypes`
+ *     and every `accessRules.<role>.{allowedTypes,createTypes,viewTypes}`;
+ *   - the retired `llm.assignments` shape dropped (its `providers` are kept).
+ * When you retire another file type, add it to the denylist (or write a V39).
+ */
+const V38_RETIRED_FILE_TYPES = immutableSet(['conversation']);
+
+function v38StripRetired(arr: unknown): { value: unknown; changed: boolean } {
+  if (!Array.isArray(arr)) return { value: arr, changed: false };
+  const filtered = arr.filter(t => !(typeof t === 'string' && V38_RETIRED_FILE_TYPES.has(t)));
+  return { value: filtered, changed: filtered.length !== arr.length };
+}
+
+function v38ConfigContent(content: unknown): Record<string, unknown> | null {
+  if (!content || typeof content !== 'object') return null;
+  const next: Record<string, unknown> = { ...(content as Record<string, unknown>) };
+  let changed = false;
+
+  if (Array.isArray(next.supportedFileTypes)) {
+    const r = v38StripRetired(next.supportedFileTypes);
+    if (r.changed) { next.supportedFileTypes = r.value; changed = true; }
+  }
+
+  if (next.accessRules && typeof next.accessRules === 'object') {
+    const roles: Record<string, unknown> = { ...(next.accessRules as Record<string, unknown>) };
+    let accessChanged = false;
+    for (const [role, override] of Object.entries(roles)) {
+      if (!override || typeof override !== 'object') continue;
+      const o: Record<string, unknown> = { ...(override as Record<string, unknown>) };
+      let roleChanged = false;
+      for (const field of ['allowedTypes', 'createTypes', 'viewTypes']) {
+        if (field in o) {
+          const r = v38StripRetired(o[field]);
+          if (r.changed) { o[field] = r.value; roleChanged = true; }
+        }
+      }
+      if (roleChanged) { roles[role] = o; accessChanged = true; }
+    }
+    if (accessChanged) { next.accessRules = roles; changed = true; }
+  }
+
+  if (next.llm && typeof next.llm === 'object' && 'assignments' in (next.llm as Record<string, unknown>)) {
+    const llm = { ...(next.llm as Record<string, unknown>) };
+    delete llm.assignments;
+    next.llm = llm;
+    changed = true;
+  }
+
+  return changed ? next : null;
+}
+
+function v38MigrateRowContent(row: RowMigrationRow): unknown | null {
+  if (row.type === 'config') return v38ConfigContent(row.content);
+  return null;
+}
+
+function v38StripRetiredConfigDrift(data: InitData): InitData {
+  const documents = (data.documents ?? []).map(doc => {
+    const next = v38MigrateRowContent(doc);
+    return next != null ? { ...doc, content: next as typeof doc.content } : doc;
+  });
+  return { ...data, documents };
+}
+
 export const MIGRATIONS: MigrationEntry[] = [
   {
     dataVersion: 36,
@@ -189,6 +259,12 @@ export const MIGRATIONS: MigrationEntry[] = [
     description: 'Viz Arch V2: add file-level `viz` envelopes to questions and notebook SQL cells (vizSettings untouched; existing viz preserved)',
     dataMigration: v37AddVizEnvelopes,
     rowMigration: { types: ['question', 'notebook'], migrateContent: v37MigrateRowContent },
+  },
+  {
+    dataVersion: 38,
+    description: 'Strip retired config drift: remove retired file types (conversation) from supportedFileTypes/accessRules and drop the retired llm.assignments shape',
+    dataMigration: v38StripRetiredConfigDrift,
+    rowMigration: { types: ['config'], migrateContent: v38MigrateRowContent },
   },
 ];
 

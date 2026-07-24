@@ -53,14 +53,14 @@ function initData(documents: DbFile[], version = 35): InitData {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('Migration registry', () => {
-  it('contains exactly the V36 and V37 migrations, in order', () => {
-    expect(MIGRATIONS).toHaveLength(2);
-    expect(MIGRATIONS.map(m => m.dataVersion)).toEqual([36, 37]);
+  it('contains exactly the V36, V37 and V38 migrations, in order', () => {
+    expect(MIGRATIONS).toHaveLength(3);
+    expect(MIGRATIONS.map(m => m.dataVersion)).toEqual([36, 37, 38]);
   });
 
   it('MINIMUM_SUPPORTED_DATA_VERSION stays 35 (v35 exports migrate through the chain)', () => {
     expect(MINIMUM_SUPPORTED_DATA_VERSION).toBe(35);
-    expect(LATEST_DATA_VERSION).toBe(37);
+    expect(LATEST_DATA_VERSION).toBe(38);
   });
 });
 
@@ -142,9 +142,9 @@ describe('V36: shift all non-system file IDs to ≥ 1000', () => {
     expect(byOldId[112].id).toBe(1009); // /org/logs/conversations/context — shifted
   });
 
-  it('bumps data version to the latest (37) from 35 through the chain', () => {
+  it('bumps data version to the latest (38) from 35 through the chain', () => {
     const result = applyMigrations(initData([makeDoc(500)]), 35);
-    expect(result.version).toBe(37);
+    expect(result.version).toBe(38);
   });
 
   // ── ID remapping ─────────────────────────────────────────────────────────────
