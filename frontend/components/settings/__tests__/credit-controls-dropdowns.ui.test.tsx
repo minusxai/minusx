@@ -38,39 +38,50 @@ function store() {
 }
 
 describe('Credit controls — user & role dropdowns', () => {
-  beforeEach(() => { vi.clearAllMocks(); mockFetch(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.HTMLElement.prototype.scrollTo = vi.fn();
+    mockFetch();
+  });
   afterEach(() => vi.unstubAllGlobals());
+
+  async function choose(user: ReturnType<typeof userEvent.setup>, label: string, option: string) {
+    const trigger = screen.getByLabelText(label);
+    expect(trigger.tagName).toBe('BUTTON');
+    await user.click(trigger);
+    const listbox = await screen.findByRole('listbox');
+    expect(screen.getByLabelText('Credit controls')).not.toContainElement(listbox);
+    await user.click(await screen.findByRole('option', { name: option }));
+    return trigger;
+  }
 
   it('reset target is a user dropdown enumerating real users (scope=user)', async () => {
     const user = userEvent.setup();
     renderWithProviders(<AdminUsageDashboard />, { store: store() });
 
-    await user.selectOptions(screen.getByLabelText('Reset scope'), 'user');
-    const target = (await screen.findByLabelText('Reset target user')) as HTMLSelectElement;
-    expect(target.tagName).toBe('SELECT');
+    await choose(user, 'Reset scope', 'User');
+    const target = await screen.findByLabelText('Reset target user');
     // The user's email is a real, selectable option (not free text).
-    await user.selectOptions(target, 'ben@example.com');
-    expect(target.value).toBe('ben@example.com');
+    await choose(user, 'Reset target user', 'ben@example.com');
+    expect(target).toHaveTextContent('ben@example.com');
   });
 
   it('reset target is a role dropdown (scope=role)', async () => {
     const user = userEvent.setup();
     renderWithProviders(<AdminUsageDashboard />, { store: store() });
 
-    await user.selectOptions(screen.getByLabelText('Reset scope'), 'role');
-    const target = (await screen.findByLabelText('Reset target role')) as HTMLSelectElement;
-    expect(target.tagName).toBe('SELECT');
-    await user.selectOptions(target, 'editor');
-    expect(target.value).toBe('editor');
+    await choose(user, 'Reset scope', 'Role');
+    const target = await screen.findByLabelText('Reset target role');
+    await choose(user, 'Reset target role', 'editor');
+    expect(target).toHaveTextContent('editor');
   });
 
   it('add-user-limit is a user dropdown, and adding one creates a limit row', async () => {
     const user = userEvent.setup();
     renderWithProviders(<AdminUsageDashboard />, { store: store() });
 
-    const add = (await screen.findByLabelText('Add user for limit')) as HTMLSelectElement;
-    expect(add.tagName).toBe('SELECT');
-    await user.selectOptions(add, 'ada@example.com');
+    await screen.findByLabelText('Add user for limit');
+    await choose(user, 'Add user for limit', 'ada@example.com');
     await user.click(screen.getByLabelText('Add user limit'));
 
     // The new per-user limit row exposes its daily-limit cell, labelled by the email.
