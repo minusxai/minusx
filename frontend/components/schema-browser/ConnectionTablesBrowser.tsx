@@ -12,7 +12,7 @@ import {
   Spinner,
   IconButton,
 } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/kit/tooltip';
 import { LuTriangleAlert, LuTable, LuRefreshCw } from 'react-icons/lu';
 import { SchemaTreeItem } from './SchemaTreeView';
 import { useRouter } from '@/lib/navigation/use-navigation';

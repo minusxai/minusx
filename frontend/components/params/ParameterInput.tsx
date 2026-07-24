@@ -82,7 +82,7 @@ export default function ParameterInput({
       onMouseLeave={() => onHoverParam?.(null)}
     >
       {/* Param label — shows the friendly display name; tooltip reveals the raw :name binding */}
-      <TooltipProvider delayDuration={200}>
+      <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild={false} className="h-full shrink-0 outline-none">
           <span
@@ -150,7 +150,7 @@ export default function ParameterInput({
 
       {/* Actions */}
       {!isNone && (
-        <TooltipProvider delayDuration={200}>
+        <TooltipProvider>
         <Tooltip>
           <TooltipTrigger
             className="flex h-full cursor-pointer items-center px-1.5 text-muted-foreground outline-none transition-colors duration-100 hover:bg-destructive/10 hover:text-destructive"

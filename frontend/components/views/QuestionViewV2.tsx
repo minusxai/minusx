@@ -735,7 +735,7 @@ export default function QuestionViewV2({
                       </div>
                     )}
                     {queryActive && (
-                      <TooltipProvider delayDuration={200}>
+                      <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <div
@@ -746,7 +746,7 @@ export default function QuestionViewV2({
                               <span className="font-mono text-[10px] font-bold tracking-[0.04em] text-[#2980b9]">LIVE</span>
                             </div>
                           </TooltipTrigger>
-                          <TooltipContent side="top">GUI &amp; SQL run live against this connection — results reflect current warehouse data</TooltipContent>
+                          <TooltipContent side="bottom">Uses the selected live connection. Results reflect current warehouse data.</TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                     )}
@@ -761,7 +761,7 @@ export default function QuestionViewV2({
                      persistent "Scratch" label and the grey LOCAL chip once active — not
                      by a dashed border, which reads as unfinished next to the live group.
                      Fills solid teal when it's the active surface. */
-                  <TooltipProvider delayDuration={300}>
+                  <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button
@@ -782,7 +782,7 @@ export default function QuestionViewV2({
                           </span>
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="top" portalled>Scratch data — type or paste rows. Not a live connection; saved inside this question.</TooltipContent>
+                      <TooltipContent side="bottom">Enter or paste rows. Scratch data is saved with this question and does not refresh.</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}
@@ -791,7 +791,7 @@ export default function QuestionViewV2({
                     itself the "not live" signal. Shown only while the spreadsheet is
                     the active surface. */}
                 {spreadsheetActive && (
-                  <TooltipProvider delayDuration={200}>
+                  <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div
@@ -804,7 +804,7 @@ export default function QuestionViewV2({
                           <span className="font-mono text-[10px] font-bold tracking-[0.04em] text-muted-foreground">LOCAL</span>
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent side="top" portalled>Local data — typed or pasted and saved in this question. It doesn&apos;t refresh from a connection.</TooltipContent>
+                      <TooltipContent side="bottom">Local data is saved with this question and does not refresh from a connection.</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}

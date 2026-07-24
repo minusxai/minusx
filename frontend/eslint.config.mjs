@@ -345,12 +345,11 @@ const eslintConfig = defineConfig([
                 "imports. Use components/kit primitives and Tailwind classes instead.",
             },
             {
-              // The Chakra-wrapper snippets in components/ui — banned from migrated trees so a
+              // The remaining Chakra-wrapper snippets in components/ui — banned from migrated trees so a
               // regression can't sneak Chakra DOM back in. (`ui/toaster` — an imperative service
               // whose DOM lives in the app shell — and the Chakra-free `ui/Link`/`ui/Dither`
               // stay allowed.)
               group: [
-                "@/components/ui/tooltip",
                 "@/components/ui/checkbox",
                 "@/components/ui/select",
                 "@/components/ui/close-button",

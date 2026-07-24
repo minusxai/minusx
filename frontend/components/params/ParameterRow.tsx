@@ -106,7 +106,7 @@ export default function ParameterRow({
         />
       ))}
       {isDirty && (
-        <TooltipProvider delayDuration={200}>
+        <TooltipProvider>
         <Tooltip>
           <TooltipTrigger
             aria-label="Run query"

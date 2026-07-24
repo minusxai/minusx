@@ -108,7 +108,7 @@ export function StatusBanner({
           {suppressed ? (
             <div className="flex items-center gap-1">
               <span className="text-xs font-semibold" style={{ color: ORANGE }}>{suppressedDisplay}</span>
-              <TooltipProvider delayDuration={200}>
+              <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger
                     aria-label="Clear suppression"
