@@ -41,7 +41,7 @@ function specimen(t: (typeof STORY_THEMES)[number]): string {
 <div class="bg-background text-foreground p-6" style="width:${WIDTH}px;min-height:${HEIGHT}px">
   <div class="flex items-baseline justify-between">
     <span class="text-xs font-semibold tracking-wide text-primary">${fontLabel}</span>
-    <span class="text-xs text-muted-foreground">radius ${t.cssVars.light['--radius']}</span>
+    <span class="text-xs text-muted-foreground">radius ${t.cssVars['--radius']}</span>
   </div>
   <h1 class="mt-1 text-6xl font-bold tracking-tight">${t.label}</h1>
   <hr class="my-5" />
