@@ -57,10 +57,15 @@ export interface InlineChartTarget {
 }
 export interface ParamTarget { el: HTMLElement; param: StoryParam; }
 
+/** Locates a question embed's element in the story body, for the edit modal's write-back. */
+export type StoryEmbedRef =
+  | { format: 'html'; occurrence: number } // legacy body: nth matching placeholder in document order
+  | { format: 'jsx'; astPath: string };    // jsx body: the interpreter's data-mx-ast path
+
 /** A request to edit a question embed in the story-level modal (see StoryQuestionEditor). */
 export type StoryQuestionEditRequest =
-  | { kind: 'saved'; questionId: number; occurrence: number; vizOverride: VizEnvelope | null }
-  | { kind: 'inline'; index: number; embed: InlineQuestionEmbed };
+  | { kind: 'saved'; questionId: number; vizOverride: VizEnvelope | null; ref: StoryEmbedRef }
+  | { kind: 'inline'; embed: InlineQuestionEmbed; ref: StoryEmbedRef };
 
 export interface StoryEmbedsProps {
   /** The iframe's document — portal targets live here; ark-ui floats against it. */
@@ -113,6 +118,47 @@ export function StoryEmbedProviders({ doc, colorMode, children }: {
   );
 }
 
+/**
+ * The floating "Card actions" menu an inline question card gets in edit mode (inline cards have
+ * no title bar, so it floats top-right inside the card's `relative` wrapper). Shared by the
+ * legacy placeholder path (below) and the jsx interpreter path (StoryJsxBody). The ark-ui Menu
+ * (via EnvironmentProvider) portals into and positions against the IFRAME document — but its
+ * Chakra recipe styles never reach the iframe, so every visual is a token class compiled into
+ * the story CSS.
+ */
+export function InlineCardActionsMenu({ onEdit }: { onEdit: () => void }) {
+  return (
+    <div className="absolute right-2 top-2 z-[2]">
+      <Menu.Root>
+        <Menu.Trigger asChild>
+          <button
+            type="button"
+            aria-label="Card actions"
+            className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground"
+          >
+            <LuEllipsis className="size-4" />
+          </button>
+        </Menu.Trigger>
+        <Portal>
+          <Menu.Positioner>
+            <Menu.Content className="z-50 min-w-[180px] rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
+              <Menu.Item
+                value="edit"
+                onClick={onEdit}
+                aria-label="Edit question"
+                className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+              >
+                <LuExternalLink className="size-4" />
+                <span>Edit question</span>
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Positioner>
+        </Portal>
+      </Menu.Root>
+    </div>
+  );
+}
+
 export default function StoryEmbeds({
   doc, targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, storyPath, colorMode,
 }: StoryEmbedsProps) {
@@ -156,10 +202,10 @@ export default function StoryEmbeds({
                 onEdit={onEditQuestion ? () => onEditQuestion({
                   kind: 'saved',
                   questionId: t.questionId,
+                  vizOverride: t.vizOverride ?? null,
                   // nth placeholder with this id in document order — the write-back transform
                   // (updateSavedQuestionVizInHtml) targets the same occurrence.
-                  occurrence: targets.slice(0, i).filter(x => x.questionId === t.questionId).length,
-                  vizOverride: t.vizOverride ?? null,
+                  ref: { format: 'html', occurrence: targets.slice(0, i).filter(x => x.questionId === t.questionId).length },
                 }) : undefined}
               />
             </div>,
@@ -182,37 +228,9 @@ export default function StoryEmbeds({
               {/* Same "Card actions" menu the saved cards get (SmartEmbeddedQuestionContainer) —
                   inline cards have no title bar, so it floats top-right. */}
               {editable && onEditQuestion && t.embed && (
-                <div className="absolute right-2 top-2 z-[2]">
-                  {/* ark-ui Menu (via EnvironmentProvider) portals into and positions against the
-                      IFRAME document — but its Chakra recipe styles never reach the iframe, so
-                      every visual is a token class compiled into the story CSS. */}
-                  <Menu.Root>
-                    <Menu.Trigger asChild>
-                      <button
-                        type="button"
-                        aria-label="Card actions"
-                        className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground"
-                      >
-                        <LuEllipsis className="size-4" />
-                      </button>
-                    </Menu.Trigger>
-                    <Portal>
-                      <Menu.Positioner>
-                        <Menu.Content className="z-50 min-w-[180px] rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
-                          <Menu.Item
-                            value="edit"
-                            onClick={() => onEditQuestion({ kind: 'inline', index: i, embed: t.embed! })}
-                            aria-label="Edit question"
-                            className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
-                          >
-                            <LuExternalLink className="size-4" />
-                            <span>Edit question</span>
-                          </Menu.Item>
-                        </Menu.Content>
-                      </Menu.Positioner>
-                    </Portal>
-                  </Menu.Root>
-                </div>
+                <InlineCardActionsMenu
+                  onEdit={() => onEditQuestion({ kind: 'inline', embed: t.embed!, ref: { format: 'html', occurrence: i } })}
+                />
               )}
             </div>,
             t.el,

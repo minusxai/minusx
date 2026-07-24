@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 
-import AgentHtml, { type NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
+import AgentHtml, { type NumberQueryEdit, type NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
 import NumberQueryEditor from '@/components/views/story/NumberQueryEditor';
 import StoryQuestionEditor from '@/components/views/story/StoryQuestionEditor';
 import type { StoryQuestionEditRequest } from '@/components/views/shared/StoryEmbeds';
@@ -14,7 +14,9 @@ import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 import { applyStoryHtmlEdit } from '@/lib/file-state/file-state';
 import {
   updateSavedQuestionVizInHtml, updateInlineQuestionInHtml, questionContentToInlineEmbed,
+  updateSavedQuestionVizInJsx, updateInlineQuestionInJsx,
 } from '@/lib/data/story/story-question';
+import { updateNumberQueryInJsx } from '@/lib/data/story/story-number';
 import { STORY_W } from './ScaledStoryFrame';
 import { PageMarkerDevOverlay } from './PageMarkerDevOverlay';
 
@@ -77,9 +79,26 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
 
   // Inline <Number> query editing opens the full SqlEditor in a light-DOM modal (Monaco can't live
   // in the story iframe). The story's path feeds schema/connection autocomplete.
-  const [numberEdit, setNumberEdit] = useState<NumberQueryEditRequest | null>(null);
+  const [numberEdit, setNumberEdit] = useState<NumberQueryEdit | null>(null);
+  // Jsx-path number requests carry an AST path instead of an apply closure (the legacy path's
+  // apply writes the placeholder's DOM attribute) — normalize by binding the source write-back
+  // here, so the editor modal always receives an applyable request.
+  const onEditNumber = useCallback((req: NumberQueryEditRequest) => {
+    if ('apply' in req) {
+      setNumberEdit(req);
+      return;
+    }
+    setNumberEdit({
+      query: req.query,
+      connection: req.connection,
+      apply: (newQuery) => {
+        if (numericId === undefined) return;
+        applyStoryHtmlEdit({ fileId: numericId, story: updateNumberQueryInJsx(content.story ?? '', req.astPath, newQuery) });
+      },
+    });
+  }, [numericId, content.story]);
   // Question-embed editing (saved / override / ephemeral) opens the shared question modal at the
-  // StoryView level (see StoryQuestionEditor); applies land as pure story-HTML transforms.
+  // StoryView level (see StoryQuestionEditor); applies land as pure story transforms (html or jsx).
   const [questionEdit, setQuestionEdit] = useState<StoryQuestionEditRequest | null>(null);
   // Select-to-chat provenance: only for an owned story (canEdit); the popover itself is gated to edit
   // mode inside AgentHtml. The selection is rich-text (HTML).
@@ -122,18 +141,27 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
     if (numericId !== undefined) applyStoryHtmlEdit({ fileId: numericId, story });
   }, [numericId]);
 
-  // Question-modal write-backs: pure transforms over the CURRENT story body, staged like any other
+  // Question-modal write-backs: pure transforms over the CURRENT story body — the request's ref
+  // picks the html (placeholder occurrence) or jsx (AST path) transform — staged like any other
   // story edit (header Save persists, Cancel reverts). The content change makes StoryView adopt the
-  // new html and cleanly rebuild the iframe — exactly what we want after a modal apply.
+  // new body and cleanly rebuild the iframe — exactly what we want after a modal apply.
   const onApplySavedViz = useCallback((req: Extract<StoryQuestionEditRequest, { kind: 'saved' }>, viz: VizEnvelope) => {
     if (numericId === undefined) return;
-    applyStoryHtmlEdit({ fileId: numericId, story: updateSavedQuestionVizInHtml(content.story ?? '', req.questionId, req.occurrence, viz) });
+    const story = content.story ?? '';
+    const next = req.ref.format === 'jsx'
+      ? updateSavedQuestionVizInJsx(story, req.ref.astPath, req.questionId, viz)
+      : updateSavedQuestionVizInHtml(story, req.questionId, req.ref.occurrence, viz);
+    applyStoryHtmlEdit({ fileId: numericId, story: next });
   }, [numericId, content.story]);
 
   const onApplyInline = useCallback((req: Extract<StoryQuestionEditRequest, { kind: 'inline' }>, edited: QuestionContent) => {
     if (numericId === undefined) return;
     const embed = questionContentToInlineEmbed(edited, req.embed.height);
-    applyStoryHtmlEdit({ fileId: numericId, story: updateInlineQuestionInHtml(content.story ?? '', req.index, embed) });
+    const story = content.story ?? '';
+    const next = req.ref.format === 'jsx'
+      ? updateInlineQuestionInJsx(story, req.ref.astPath, embed)
+      : updateInlineQuestionInHtml(story, req.ref.occurrence, embed);
+    applyStoryHtmlEdit({ fileId: numericId, story: next });
   }, [numericId, content.story]);
 
   if (!content.story) {
@@ -168,7 +196,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             compiledCss={compiledCss}
             filePath={storyPath}
             paramValues={content.parameterValues ?? undefined}
-            onEditNumber={setNumberEdit}
+            onEditNumber={onEditNumber}
             onEditQuestion={editing ? setQuestionEdit : undefined}
             onChange={onStoryChange}
             selectionSource={selectionSource}

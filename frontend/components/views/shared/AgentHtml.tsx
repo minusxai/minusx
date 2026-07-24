@@ -91,11 +91,22 @@ interface AgentHtmlProps {
   compiledCss?: string | null;
 }
 
-export interface NumberQueryEditRequest {
+/** A number-edit request the editor modal can commit: the `apply` closure owns the write-back. */
+export interface NumberQueryEdit {
   query: string;
   connection?: string;
   apply: (newQuery: string) => void;
 }
+
+/**
+ * Request to edit an inline `<Number>`'s query. The legacy html path hands back an `apply`
+ * closure (the placeholder's DOM attribute is the working copy); the jsx path hands back the
+ * embed's AST path instead — the story view owns the source write-back there
+ * (updateNumberQueryInJsx) and normalizes to a {@link NumberQueryEdit} before opening the modal.
+ */
+export type NumberQueryEditRequest =
+  | NumberQueryEdit
+  | { query: string; connection?: string; astPath: string };
 
 export interface AgentHtmlHandle {
   /** Serialize the live (edited) iframe DOM back to a clean content.story string. */
@@ -390,6 +401,8 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
             colorMode={colorMode}
             editable={editable && !readOnly}
             onChange={onChange}
+            onEditNumber={onEditNumber}
+            onEditQuestion={onEditQuestion}
             editApiRef={jsxEditApiRef}
           />,
           surfaceRoot,

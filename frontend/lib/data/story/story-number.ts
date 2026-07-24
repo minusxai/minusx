@@ -11,6 +11,7 @@
  */
 import { escAttr, escTemplate, styleAttr, serializeJsonAttr, parseJsonAttr } from './html-attr';
 import { normalizeInlineQuery } from './story-question';
+import { updateJsxElementAtPath, setStaticJsxAttr } from './jsx-edit';
 
 /** An inline number embedded directly in a story body. One of `id` / `query` is required. */
 export interface InlineNumberEmbed {
@@ -93,6 +94,19 @@ export function numberToJsx(e: InlineNumberEmbed): string {
   if (e.suffix != null) a.push(`suffix="${escAttr(e.suffix)}"`);
   if (e.style) a.push(`style={${JSON.stringify(e.style)}}`);
   return `<Number ${a.join(' ')} />`;
+}
+
+/**
+ * Replace the query on the inline `<Number>` at `astPath` in a jsx story body — the number
+ * editor's write-back on the jsx path (the legacy path writes the placeholder's DOM attribute
+ * instead). Returns the source unchanged when the path doesn't resolve to a `<Number>` with an
+ * inline query (a saved `id` number has no query to edit).
+ */
+export function updateNumberQueryInJsx(source: string, astPath: string, query: string): string {
+  return updateJsxElementAtPath(source, astPath, 'Number', (el) => {
+    if (!el.attributes.some(a => a.name === 'query')) return false; // saved (id) number — no query to edit
+    setStaticJsxAttr(el, 'query', query);
+  });
 }
 
 /** Rewrite a story HTML's number placeholders back to `<Number/>` jsx (for buildStoryJsx). */

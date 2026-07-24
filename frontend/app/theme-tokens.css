@@ -82,6 +82,10 @@
   --chart-4: #f1c40f;
   --chart-5: #9b59b6;
 }
+[data-theme] {
+  background-color: var(--background);
+  color: var(--foreground);
+}
 [data-theme="modernist"] {
   font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
   --radius: 0rem;
