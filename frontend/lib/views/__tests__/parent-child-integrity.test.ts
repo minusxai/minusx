@@ -266,6 +266,56 @@ describe('parent → child view integrity (real save/load path)', () => {
     expect(viewsSchemaOf(after).sort()).toEqual(['top_zones', 'zone_revenue']);
   });
 
+  it('9. a child may DECLINE an inherited view — it leaves the exposed schema', async () => {
+    const org = await loadContext(orgId);
+    await saveContext(orgId, '/org/context', {
+      ...org,
+      versions: [{ ...org.versions![0], views: [{ name: 'zone_revenue', connection: 'warehouse', sql: ZONE_REVENUE_SQL }] }],
+    });
+
+    const sales = await loadContext(salesId);
+    await saveContext(salesId, '/org/sales/context', {
+      ...sales,
+      versions: [{ ...sales.versions![0], viewWhitelist: [] }],
+    });
+
+    const after = await loadContext(salesId);
+    expect(after.parentViews?.map((v) => v.name)).toEqual(['zone_revenue']); // still on offer
+    expect(after.fullViews).toEqual([]);                                     // but not taken
+    expect(viewsSchemaOf(after)).toEqual([]);
+    expect(await getViewsForPath('/org/sales/anything', 'warehouse', admin)).toEqual([]);
+  });
+
+  it('10. declining an inherited view does NOT free its name — a sibling still resolves the parent\'s', async () => {
+    // Two definitions of one name in one tree is exactly what view naming forbids
+    // ("two people running `revenue` must never get different numbers"). Declining
+    // says "I don't want to use it", never "its name is available".
+    const org = await loadContext(orgId);
+    await saveContext(orgId, '/org/context', {
+      ...org,
+      versions: [{ ...org.versions![0], views: [{ name: 'zone_revenue', connection: 'warehouse', sql: ZONE_REVENUE_SQL }] }],
+    });
+
+    const sales = await loadContext(salesId);
+    const shadow: ContextVersion = {
+      ...sales.versions![0],
+      viewWhitelist: [],
+      views: [{ name: 'zone_revenue', connection: 'warehouse', sql: 'SELECT zone_name FROM mxfood.zones' }],
+    };
+
+    await expect(saveContext(salesId, '/org/sales/context', {
+      ...sales, versions: [shadow],
+    })).rejects.toThrow(/already used/i);
+
+    // …and it must hold when the client sends NO computed fields at all (the raw
+    // JSON editor / agent EditFile shape). The check has to run off what the
+    // SERVER computes the parent offers, never off a client-supplied `fullViews`.
+    const { fullViews, parentViews, fullSchema, parentSchema, ...bare } = sales;
+    await expect(saveContext(salesId, '/org/sales/context', {
+      ...bare, versions: [shadow],
+    } as ContextContent)).rejects.toThrow(/already used/i);
+  });
+
   it('8. the ROOT context may read anything — it has full authority', async () => {
     const org = await loadContext(orgId);
     await saveContext(orgId, '/org/context', {

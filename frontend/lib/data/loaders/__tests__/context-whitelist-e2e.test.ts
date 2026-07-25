@@ -61,6 +61,8 @@ import type {
   DatabaseWithSchema,
   ConnectionContent,
   WhitelistNode,
+  ViewDef,
+  SemanticModelV2,
 } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
@@ -731,5 +733,237 @@ describe('Delete protection', () => {
     expect(await DocumentDB.getByPath('/org/parent/child')).toBeNull();
     expect(await DocumentDB.getByPath('/org/parent/context')).toBeNull();
     expect(await DocumentDB.getByPath('/org/parent/child/context')).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 15  Data models & semantic models inherit like tables
+//
+// Two independent controls on ONE inheritance edge:
+//   · the PARENT chooses who receives a model     → `childPaths` on the model
+//   · the CHILD chooses what it takes of that      → a name whitelist on its version
+// `parentViews`/`parentSemanticModels` are what was OFFERED (childPaths applied);
+// `fullViews`/`fullSemanticModels` are what was KEPT (exclusions applied) and are
+// therefore what cascades further down.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Data models & semantic models — childPaths + child exclusions', () => {
+  const READS_USERS = { tables: [{ schema: 'public', table: 'users' }], views: [] };
+
+  /** A minimal, valid data model on duckdb_main reading public.users. */
+  const view = (name: string, extra: Partial<ViewDef> = {}): ViewDef => ({
+    name,
+    connection: 'duckdb_main',
+    sql: 'SELECT * FROM public.users',
+    reads: READS_USERS,
+    columns: [{ name: 'id', type: 'INTEGER' }],
+    ...extra,
+  });
+
+  /** A minimal semantic model on duckdb_main over public.users. */
+  const model = (name: string, extra: Partial<SemanticModelV2> = {}): SemanticModelV2 => ({
+    name,
+    connection: 'duckdb_main',
+    primary: { kind: 'table', schema: 'public', table: 'users' },
+    dimensions: [],
+    metrics: [],
+    ...extra,
+  } as SemanticModelV2);
+
+  const version = (v: Partial<ContextVersion>): ContextVersion => ({
+    version: 1, whitelist: '*', docs: [],
+    createdAt: new Date().toISOString(), createdBy: 1,
+    ...v,
+  });
+
+  const makeContext = (path: string, v: Partial<ContextVersion>) =>
+    DocumentDB.create('context', path, 'context',
+      { versions: [version(v)], published: { all: 1 } } as ContextContent,
+      [], undefined, false);
+
+  /** Load a context and return its computed content. */
+  async function loadContext(id: number): Promise<ContextContent> {
+    const { data: [loaded] } = await FilesAPI.loadFiles([id], viewer);
+    return loaded.content as ContextContent;
+  }
+
+  /** Table names in the injected `_views` schema of duckdb_main. */
+  const injectedViewTables = (content: ContextContent): string[] =>
+    content.fullSchema!
+      .find(db => db.databaseName === 'duckdb_main')!
+      .schemas.find(s => s.schema === '_views')?.tables.map(t => t.table) ?? [];
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await getModules().db.exec('DELETE FROM files', []);
+
+    mockGetSchema.mockResolvedValue({
+      schemas: [{
+        schema: 'public',
+        tables: [
+          { table: 'users',  columns: [{ name: 'id', type: 'INTEGER' }] },
+          { table: 'orders', columns: [{ name: 'id', type: 'INTEGER' }] },
+        ],
+      }],
+      updated_at: new Date().toISOString(),
+    } as DatabaseSchema);
+
+    const connContent: ConnectionContent = { type: 'duckdb', config: { file_path: '../data/test.duckdb' }, description: '' };
+    await DocumentDB.create('duckdb_main', '/org/database/duckdb_main', 'connection', connContent, [], undefined, false);
+  });
+
+  // ── childPaths on data models ────────────────────────────────────────────
+
+  it('a data model with childPaths reaches only the named child subtree', async () => {
+    await makeContext('/org/context', {
+      views: [
+        view('for_all'),                                 // undefined → every child
+        view('for_a',    { childPaths: ['/org/team_a'] }),
+        view('for_b',    { childPaths: ['/org/team_b'] }),
+        view('for_none', { childPaths: [] }),            // [] → no child at all
+      ],
+    });
+    const teamAId = await makeContext('/org/team_a/context', {});
+    const teamBId = await makeContext('/org/team_b/context', {});
+
+    const teamA = await loadContext(teamAId);
+    const teamB = await loadContext(teamBId);
+
+    expect(teamA.parentViews!.map(v => v.name).sort()).toEqual(['for_a', 'for_all']);
+    expect(teamB.parentViews!.map(v => v.name).sort()).toEqual(['for_all', 'for_b']);
+
+    // With no exclusions, what was offered is what is kept — and what the agent
+    // sees as `_views` tables.
+    expect(teamA.fullViews!.map(v => v.name).sort()).toEqual(['for_a', 'for_all']);
+    expect(injectedViewTables(teamA).sort()).toEqual(['for_a', 'for_all']);
+    expect(injectedViewTables(teamB)).not.toContain('for_a');
+  });
+
+  it("a data model's childPaths keeps applying to grandchildren (subtree, not one level)", async () => {
+    await makeContext('/org/context', {
+      views: [view('for_a', { childPaths: ['/org/team_a'] }), view('for_b', { childPaths: ['/org/team_b'] })],
+    });
+    await makeContext('/org/team_a/context', {});
+    const deepId = await makeContext('/org/team_a/deep/context', {});
+
+    const deep = await loadContext(deepId);
+    expect(deep.parentViews!.map(v => v.name)).toEqual(['for_a']);
+    expect(deep.fullViews!.map(v => v.name)).toEqual(['for_a']);
+  });
+
+  // ── childPaths on semantic models ────────────────────────────────────────
+
+  it('a semantic model with childPaths reaches only the named child subtree', async () => {
+    await makeContext('/org/context', {
+      semanticModels: [
+        model('m_all'),
+        model('m_a',    { childPaths: ['/org/team_a'] }),
+        model('m_none', { childPaths: [] }),
+      ],
+    });
+    const teamAId = await makeContext('/org/team_a/context', {});
+    const teamBId = await makeContext('/org/team_b/context', {});
+
+    const teamA = await loadContext(teamAId);
+    const teamB = await loadContext(teamBId);
+
+    expect(teamA.parentSemanticModels!.map(m => m.name).sort()).toEqual(['m_a', 'm_all']);
+    expect(teamA.fullSemanticModels!.map(m => m.name).sort()).toEqual(['m_a', 'm_all']);
+    expect(teamB.parentSemanticModels!.map(m => m.name)).toEqual(['m_all']);
+  });
+
+  // ── the child's whitelist over what it was offered ──────────────────────
+
+  it('a child can leave an offered data model out, and it stays visible as an offer', async () => {
+    await makeContext('/org/context', { views: [view('kept'), view('declined')] });
+    const childId = await makeContext('/org/team_a/context', { viewWhitelist: ['kept'] });
+
+    const child = await loadContext(childId);
+
+    // Still OFFERED — the editor renders it as an unchecked row it can take back.
+    expect(child.parentViews!.map(v => v.name).sort()).toEqual(['declined', 'kept']);
+    // But NOT kept: gone from what the agent and the query pipeline resolve.
+    expect(child.fullViews!.map(v => v.name)).toEqual(['kept']);
+    expect(injectedViewTables(child)).toEqual(['kept']);
+  });
+
+  it('a data model the child did not take is not passed on to grandchildren', async () => {
+    await makeContext('/org/context', { views: [view('kept'), view('declined')] });
+    await makeContext('/org/team_a/context', { viewWhitelist: ['kept'] });
+    const deepId = await makeContext('/org/team_a/deep/context', {});
+
+    const deep = await loadContext(deepId);
+    expect(deep.parentViews!.map(v => v.name)).toEqual(['kept']);
+    expect(deep.fullViews!.map(v => v.name)).toEqual(['kept']);
+  });
+
+  it('a child can leave an offered semantic model out, and it stays visible as an offer', async () => {
+    await makeContext('/org/context', { semanticModels: [model('kept'), model('declined')] });
+    const childId = await makeContext('/org/team_a/context', { semanticModelWhitelist: ['kept'] });
+
+    const child = await loadContext(childId);
+    expect(child.parentSemanticModels!.map(m => m.name).sort()).toEqual(['declined', 'kept']);
+    expect(child.fullSemanticModels!.map(m => m.name)).toEqual(['kept']);
+  });
+
+  it('a semantic model the child did not take is not passed on to grandchildren', async () => {
+    await makeContext('/org/context', { semanticModels: [model('kept'), model('declined')] });
+    await makeContext('/org/team_a/context', { semanticModelWhitelist: ['kept'] });
+    const deepId = await makeContext('/org/team_a/deep/context', {});
+
+    const deep = await loadContext(deepId);
+    expect(deep.parentSemanticModels!.map(m => m.name)).toEqual(['kept']);
+  });
+
+  it("the '*' wildcard accepts models added LATER; an explicit list does not", async () => {
+    // The whole reason this is a whitelist with a wildcard rather than a list of
+    // exclusions — and the same trade-off the table whitelist makes.
+    await makeContext('/org/context', { views: [view('v1')] });
+    const wildcardId = await makeContext('/org/team_a/context', { viewWhitelist: '*' });
+    const explicitId = await makeContext('/org/team_b/context', { viewWhitelist: ['v1'] });
+
+    // The parent publishes a second model afterwards.
+    const parent = await DocumentDB.getByPath('/org/context');
+    const parentContent = parent!.content as ContextContent;
+    await DocumentDB.update(parent!.id, 'context', '/org/context', {
+      ...parentContent,
+      versions: [{ ...parentContent.versions![0], views: [view('v1'), view('v2')] }],
+    }, [], 'add-v2');
+
+    expect((await loadContext(wildcardId)).fullViews!.map(v => v.name).sort()).toEqual(['v1', 'v2']);
+    expect((await loadContext(explicitId)).fullViews!.map(v => v.name)).toEqual(['v1']);
+    // …but it IS on offer there, so the editor shows it unchecked, ready to take.
+    expect((await loadContext(explicitId)).parentViews!.map(v => v.name).sort()).toEqual(['v1', 'v2']);
+  });
+
+  it('no whitelist means take everything (regression guard)', async () => {
+    await makeContext('/org/context', {
+      views: [view('v1'), view('v2')],
+      semanticModels: [model('m1')],
+    });
+    const childId = await makeContext('/org/team_a/context', {});
+
+    const child = await loadContext(childId);
+    expect(child.fullViews!.map(v => v.name).sort()).toEqual(['v1', 'v2']);
+    expect(child.fullSemanticModels!.map(m => m.name)).toEqual(['m1']);
+  });
+
+  // ── fail-closed: an own model reading a declined one is DISABLED ─────────
+
+  it("a child's own data model that reads a model it left out is DISABLED, not silently broken", async () => {
+    await makeContext('/org/context', { views: [view('base')] });
+    const childId = await makeContext('/org/team_a/context', {
+      viewWhitelist: [],
+      views: [view('derived', {
+        sql: 'SELECT * FROM _views.base',
+        reads: { tables: [], views: ['base'] },
+      })],
+    });
+
+    const child = await loadContext(childId);
+
+    expect(child.viewProblems!.map(p => p.view)).toEqual(['derived']);
+    expect(child.viewProblems![0].reason).toContain('_views.base');
+    expect(injectedViewTables(child)).not.toContain('derived');
   });
 });

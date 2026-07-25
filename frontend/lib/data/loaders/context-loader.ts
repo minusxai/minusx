@@ -4,11 +4,11 @@
  * Supports versioning - each user sees their published version
  */
 
-import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, ViewDef, ViewProblem, SemanticModelV2, VIEWS_SCHEMA } from '@/lib/types';
+import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, ViewDef, ViewProblem, VIEWS_SCHEMA } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getPublishedVersionForUser as getPublishedVersionForUserId, resolveVersionWhitelist } from '@/lib/context/context-utils';
 import { CustomLoader } from './types';
-import { computeSchemaFromWhitelist } from './context-loader-utils';
+import { computeSchemaFromWhitelist, type ComputedContextSchema } from './context-loader-utils';
 import { boundSchema, boundFullSchema } from '@/lib/context/schema-bounding';
 import { checkViewAvailability } from '@/lib/views/integrity';
 import { exposedColumns } from '@/lib/types/views';
@@ -117,6 +117,9 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
   // second time tagged "inherited". (DERIVED draft models are separate:
   // lib/semantic/models.server.ts.)
   const fullSemanticModels = computed.fullSemanticModels;
+  // What the parent OFFERED, before this context's own exclusions — the editor
+  // needs it to render a declined model as an unchecked row (peer of parentSchema).
+  const { parentViews, parentSemanticModels } = computed;
 
   if (user.role === 'admin') {
     // Admins see all versions + metadata
@@ -131,6 +134,8 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         fullAnnotations,
         fullViews,
         fullSemanticModels,
+        parentViews,
+        parentSemanticModels,
         viewProblems,
         fullSkills
       }
@@ -150,6 +155,8 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         fullAnnotations,
         fullViews,
         fullSemanticModels,
+        parentViews,
+        parentSemanticModels,
         viewProblems,
         fullSkills
       }
@@ -189,9 +196,10 @@ async function computeSchemaFromVersion(
   version: ContextVersion,
   contextPath: string,
   user: EffectiveUser
-): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullMetrics: MetricDef[], fullAnnotations: TableAnnotation[], fullViews: ViewDef[], fullSemanticModels: SemanticModelV2[], fullSkills: SkillEntry[] }> {
+): Promise<ComputedContextSchema> {
   // fullDocs/fullMetrics already include inherited values (computed in context-loader-utils)
   // Root contexts get empty inherited values (no parent to inherit from)
-  // Child contexts get parent.full* + parent.own (filtered by childPaths)
-  return computeSchemaFromWhitelist(version.whitelist, contextPath, user);
+  // Child contexts get parent.full* + parent.own (filtered by childPaths), minus
+  // whatever this version declines (excludedViews / excludedSemanticModels)
+  return computeSchemaFromWhitelist(version, contextPath, user);
 }

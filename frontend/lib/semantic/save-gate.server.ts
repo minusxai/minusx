@@ -69,11 +69,15 @@ export async function validateSemanticModelsGate(
   let fullSchema: DatabaseWithSchema[] = [];
   let inheritedViews: ViewDef[] = content.fullViews ?? [];
   let inheritedModels: SemanticModelV2[] = content.fullSemanticModels ?? [];
+  // Resolution uses what this context KEEPS; the name namespace uses what the
+  // parent OFFERS — declining a model does not release its name.
+  let offeredModels: SemanticModelV2[] = inheritedModels;
   try {
-    const computed = await computeSchemaFromWhitelist(resolveVersionWhitelist(live), contextPath, user);
+    const computed = await computeSchemaFromWhitelist({ ...live, whitelist: resolveVersionWhitelist(live) }, contextPath, user);
     fullSchema = computed.fullSchema;
     inheritedViews = computed.fullViews;
     inheritedModels = computed.fullSemanticModels;
+    offeredModels = computed.parentSemanticModels;
   } catch {
     // keep fallbacks
   }
@@ -90,7 +94,7 @@ export async function validateSemanticModelsGate(
     const nextModels: SemanticModelV2[] = [];
     for (const model of models) {
       const otherModelNames = [
-        ...inheritedModels.map((m) => m.name),
+        ...offeredModels.map((m) => m.name),
         ...models.filter((m) => m !== model).map((m) => m.name),
       ];
       const ctx = { fullSchema, views, otherModelNames };
@@ -144,7 +148,7 @@ export async function testSemanticModel(
   let inheritedViews: ViewDef[] = content?.fullViews ?? [];
   let inheritedModels: SemanticModelV2[] = content?.fullSemanticModels ?? [];
   try {
-    const computed = await computeSchemaFromWhitelist(resolveVersionWhitelist(live), contextPath, user);
+    const computed = await computeSchemaFromWhitelist({ ...live, whitelist: resolveVersionWhitelist(live) }, contextPath, user);
     fullSchema = computed.fullSchema;
     inheritedViews = computed.fullViews;
     inheritedModels = computed.fullSemanticModels;
@@ -351,10 +355,15 @@ async function dialectFor(connection: string, user: EffectiveUser): Promise<stri
  * Names of every semantic model visible in this content (inherited + all
  * versions') — the reverse half of the shared model/view namespace: the VIEWS
  * gate calls this to refuse a view named like a model.
+ *
+ * `offered` is what the parent OFFERS (the loader's `parentSemanticModels`),
+ * which the caller should pass whenever it has computed it: a name stays taken
+ * even by a model this context declined, and unlike `content.fullSemanticModels`
+ * it is not client-supplied.
  */
-export function semanticModelNames(content: ContextContent): Set<string> {
+export function semanticModelNames(content: ContextContent, offered?: SemanticModelV2[]): Set<string> {
   const names = new Set<string>();
-  for (const m of content.fullSemanticModels ?? []) names.add(m.name.toLowerCase());
+  for (const m of offered ?? content.fullSemanticModels ?? []) names.add(m.name.toLowerCase());
   for (const v of content.versions ?? []) {
     for (const m of v.semanticModels ?? []) names.add(m.name.toLowerCase());
   }

@@ -40,10 +40,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Box, VStack, HStack, Text, Input, Icon, Button, SimpleGrid } from '@chakra-ui/react';
 import {
-  LuPlus, LuTrash2, LuBoxes, LuTriangleAlert, LuPencil, LuKeyRound, LuFlaskConical,
+  LuPlus, LuBoxes, LuTriangleAlert, LuPencil, LuKeyRound, LuFlaskConical,
   LuCircleCheck, LuChevronRight, LuChevronDown, LuTag, LuCalendarDays, LuSigma, LuLink2,
 } from 'react-icons/lu';
 import SchemaOptionPicker, { SchemaPickerOption } from '@/components/schema-browser/SchemaOptionPicker';
+import ChildPathSelector from '@/components/selectors/ChildPathSelector';
+import { nameWhitelisted, toggleNameWhitelist } from '@/lib/context/name-whitelist';
+import DeleteRowButton from '@/components/context/DeleteRowButton';
+import { Checkbox } from '@/components/ui/checkbox';
 import { getTableColumns, type ColumnInfo } from '@/lib/hooks/use-table-columns';
 import { exposedColumns } from '@/lib/types/views';
 import { deriveSemanticModels, humanizeName } from '@/lib/semantic/derive';
@@ -52,7 +56,7 @@ import { fieldChecksTrustworthy } from '@/lib/semantic/edit-check';
 import { testSemanticModel } from '@/lib/semantic/models-client';
 import { inferToOneOn, inferM2MThrough, inferPrimaryKey, singularize } from '@/lib/semantic/infer-join';
 import type {
-  DatabaseWithSchema, ViewDef,
+  DatabaseWithSchema, NameWhitelist, ViewDef,
   SemanticModelV2, SemanticSource, SemanticReference, SemanticReferenceM2M, SemanticMetricV2,
   SemanticDimensionV2,
 } from '@/lib/types';
@@ -66,10 +70,25 @@ interface SemanticModelsSectionProps {
   views: ViewDef[];
   /** THIS CONNECTION's authored models (the parent owns the full array). */
   models: SemanticModelV2[];
-  /** Inherited models on this connection (read-only rows). */
+  /**
+   * Models this connection OFFERS from above (the loader's
+   * `parentSemanticModels`). Their definitions are read-only — but whether this
+   * context takes them is its own call, via the row checkbox.
+   */
   inheritedModels?: SemanticModelV2[];
   editMode: boolean;
   onChange: (next: SemanticModelV2[]) => void;
+  /** This context's selection out of the offered models; absent = '*' = all. */
+  semanticModelWhitelist?: NameWhitelist;
+  onWhitelistChange?: (next: NameWhitelist) => void;
+  /**
+   * Every offered model name across ALL connections. Model names are unique
+   * tree-wide, so the whitelist is ONE list — expanding '*' against only this
+   * section's names would silently drop the other connections' models.
+   */
+  offeredNames?: string[];
+  /** Child folders an own model can be scoped to; empty hides the picker. */
+  availableChildPaths?: string[];
   /** Save-gate issues (all of them — this section attributes its own). */
   issues?: string[];
   /** Path of the context file — the Test button validates against it. */
@@ -312,17 +331,6 @@ function FieldPanel({ children, ...rest }: React.ComponentProps<typeof Box>) {
   );
 }
 
-function DeleteRowButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <Box as="button" aria-label={label}
-      onClick={(e: React.MouseEvent) => { e.stopPropagation(); onClick(); }}
-      color="fg.subtle" cursor="pointer"
-      _hover={{ color: 'accent.danger' }} flexShrink={0} lineHeight={1}>
-      <Icon as={LuTrash2} boxSize={3.5} />
-    </Box>
-  );
-}
-
 function UnverifiedBadge({ label }: { label: string }) {
   return (
     <HStack aria-label={label} gap={1} px={1.5} py={0.5} bg="accent.warning/10" borderRadius="sm" flexShrink={0}
@@ -487,12 +495,19 @@ interface ModelCardProps {
   onPrimaryPicked: (value: string) => void;
   openJoins: Set<string>;
   toggleJoinOpen: (j: number) => void;
+  /** Inherited rows only: is this offered model declined here? */
+  declined: boolean;
+  /** Inherited rows only: take it / decline it. Absent → the checkbox is locked. */
+  onToggleInclude?: () => void;
+  /** Own rows only: child folders this model can be scoped to. */
+  availableChildPaths: string[];
 }
 
 function ModelCard({
   m, i, inherited, open, onToggle, editMode, connection, options,
   modelIssues, metricIssues, testStatus, onTest, canTest,
   patchModel, commitName, onDelete, onPrimaryPicked, openJoins, toggleJoinOpen,
+  declined, onToggleInclude, availableChildPaths,
 }: ModelCardProps) {
   const canEdit = editMode && !inherited;
   const columnsOf = useModelColumns(m, options, connection, canEdit && open);
@@ -916,6 +931,19 @@ function ModelCard({
         >
           <Icon as={open ? LuChevronDown : LuChevronRight} boxSize={3} transition="transform 0.15s" />
         </Box>
+        {/* Only inherited rows get a checkbox, and it answers ONE question: do we
+            take what the parent offered? An own model has no such question —
+            deleting it is the way to not have it. */}
+        {inherited && (
+          <Box onClick={(e: React.MouseEvent) => e.stopPropagation()} flexShrink={0}>
+            <Checkbox
+              aria-label={`include-semantic-model-${m.name}`}
+              checked={!declined}
+              onCheckedChange={onToggleInclude}
+              disabled={!onToggleInclude}
+            />
+          </Box>
+        )}
         <Icon as={LuBoxes} boxSize={3} color="accent.teal" flexShrink={0} />
         <Text fontSize="xs" fontWeight="600" fontFamily="mono" flexShrink={0}
           textOverflow="ellipsis" overflow="hidden" whiteSpace="nowrap" maxW="240px" title={m.name}>
@@ -949,6 +977,16 @@ function ModelCard({
               <Icon as={LuFlaskConical} boxSize={3} />
               {testStatus === 'running' ? 'Testing…' : 'Test'}
             </Box>
+          )}
+          {/* Which children receive this model — the parent's half of
+              inheritance, the same control a schema/table row carries. */}
+          {canEdit && availableChildPaths.length > 0 && (
+            <ChildPathSelector
+              subject={`semantic model ${m.name}`}
+              availablePaths={availableChildPaths}
+              selectedPaths={m.childPaths}
+              onChange={(paths) => patchModel({ childPaths: paths })}
+            />
           )}
           <Text fontSize="10px" fontWeight="600" color="fg.subtle" fontFamily="mono">{counts}</Text>
           {inherited && (
@@ -1087,6 +1125,7 @@ function ModelCard({
 
 export default function SemanticModelsSection({
   connection, database, views, models, inheritedModels = [], editMode, onChange, issues = [], contextPath,
+  semanticModelWhitelist, onWhitelistChange, offeredNames, availableChildPaths = [],
 }: SemanticModelsSectionProps) {
   const options = useMemo(() => sourceOptionsFor(database, connection, views), [database, connection, views]);
 
@@ -1235,6 +1274,11 @@ export default function SemanticModelsSection({
   const visibleInherited = inheritedModels.filter((im) => !models.some((m) => m.name === im.name));
   if (!editMode && models.length === 0 && visibleInherited.length === 0) return null;
 
+  /** Taking / dropping an offered model narrows the whitelist; the row stays. */
+  const toggleInclude = (name: string) => onWhitelistChange?.(
+    toggleNameWhitelist(semanticModelWhitelist, offeredNames ?? inheritedModels.map((m) => m.name), name),
+  );
+
   const renderModel = (m: SemanticModelV2, i: number, inherited: boolean) => {
     const modelIssues = inherited ? [] : attributed.byModel.get(i) ?? [];
     const metricIssues = (j: number) => (inherited ? [] : attributed.byMetric.get(`${i}:${j}`) ?? []);
@@ -1259,6 +1303,9 @@ export default function SemanticModelsSection({
         commitName={(name) => commitName(i, name)}
         onDelete={() => emit(models.filter((_, idx) => idx !== i))}
         onPrimaryPicked={(value) => pickPrimary(i, value)}
+        declined={!nameWhitelisted(semanticModelWhitelist, m.name)}
+        onToggleInclude={editMode && onWhitelistChange ? () => toggleInclude(m.name) : undefined}
+        availableChildPaths={availableChildPaths}
         openJoins={openJoins}
         toggleJoinOpen={(j) => setOpenJoins((prev) => {
           const next = new Set(prev);

@@ -15,9 +15,20 @@
  *
  * The eye button — mirroring the table row's "Preview" affordance — opens the
  * view's definition in the real question editor (ViewWorkbench): editable in
- * edit mode, read-only when just inspecting (view mode / inherited). Inherited
- * views are read-only (disabled checkbox + badge); a view the loader had to
- * DISABLE (an ancestor pulled a table it reads) shows its reason.
+ * edit mode, read-only when just inspecting (view mode / inherited). A view the
+ * loader had to DISABLE (an ancestor pulled a table it reads) shows its reason.
+ *
+ * INHERITANCE works exactly as it does for tables, in both directions:
+ *  · `inheritedViews` is what the parent OFFERS (the loader's `parentViews`), and
+ *    its checkbox is the CHILD's say — a whitelist over the offered names
+ *    (`viewWhitelist`, '*' by default), same shape as the table whitelist. An
+ *    unchecked row stays listed, so it can be taken back.
+ *  · an own view's "Apply to:" picker is the PARENT's say — which child paths
+ *    receive it (`childPaths`), the same control a schema/table row carries.
+ *
+ * DELETE lives on the row (edit mode, own views), not only in the workbench
+ * footer: a DISABLED view opens read-only, and a delete reachable only from that
+ * footer left it unremovable.
  */
 
 import React, { useState } from 'react';
@@ -25,17 +36,26 @@ import { Box, VStack, HStack, Text, Button, Icon } from '@chakra-ui/react';
 import { LuPlus, LuEye, LuEyeOff, LuTable, LuChevronRight, LuChevronDown, LuBan } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
 import SchemaColumnRow from '@/components/schema-browser/SchemaColumnRow';
+import ChildPathSelector from '@/components/selectors/ChildPathSelector';
+import DeleteRowButton from '@/components/context/DeleteRowButton';
 import ViewWorkbench from './ViewWorkbench';
+import { nameWhitelisted, toggleNameWhitelist } from '@/lib/context/name-whitelist';
 import { VIEWS_SCHEMA } from '@/lib/types';
-import type { ViewDef, ViewProblem } from '@/lib/types';
+import type { NameWhitelist, ViewDef, ViewProblem } from '@/lib/types';
 
 interface ViewsSectionProps {
   contextPath: string;
   connection: string;
   views: ViewDef[];
+  /** What the parent OFFERS this context (the loader's `parentViews`). */
   inheritedViews: ViewDef[];
   problems?: ViewProblem[];
   onViewsChange?: (next: ViewDef[]) => void;
+  /** This context's selection out of `inheritedViews`; absent = '*' = all. */
+  viewWhitelist?: NameWhitelist;
+  onViewWhitelistChange?: (next: NameWhitelist) => void;
+  /** Child folders an own view can be scoped to; empty hides the picker. */
+  availableChildPaths?: string[];
   namePrefix?: string;
 }
 
@@ -46,7 +66,8 @@ type Editing =
   | null;
 
 export default function ViewsSection({
-  contextPath, connection, views, inheritedViews, problems = [], onViewsChange, namePrefix,
+  contextPath, connection, views, inheritedViews, problems = [], onViewsChange,
+  viewWhitelist, onViewWhitelistChange, availableChildPaths = [], namePrefix,
 }: ViewsSectionProps) {
   const [editing, setEditing] = useState<Editing>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -78,6 +99,20 @@ export default function ViewsSection({
   const toggleView = (index: number, v: ViewDef) => {
     const isOn = exposed(v).length > 0;
     patch(index, { whitelistedColumns: isOn ? [] : undefined });
+  };
+
+  /**
+   * An INHERITED row's checkbox is a different question from an own row's: not
+   * "which columns are exposed" (we cannot rewrite the ancestor's definition) but
+   * "do we take this at all" — a whitelist over the offered names. Unchecking
+   * narrows the whitelist; the row stays listed either way.
+   */
+  const taken = (v: ViewDef) => nameWhitelisted(viewWhitelist, v.name);
+  const toggleInherited = (v: ViewDef) => {
+    // Offered names across ALL connections, not just this section's: model names
+    // are unique tree-wide, so the whitelist is ONE list. Expanding '*' against
+    // only this connection's names would silently drop every other connection's.
+    onViewWhitelistChange?.(toggleNameWhitelist(viewWhitelist, inheritedViews.map((x) => x.name), v.name));
   };
 
   const toggleColumn = (index: number, v: ViewDef, column: string) => {
@@ -112,7 +147,11 @@ export default function ViewsSection({
     const cols = v.columns ?? [];
     const on = exposed(v);
     const isExpanded = expanded.has(v.name);
-    const canToggle = editable && index !== null && !disabled;
+    const isOwn = index !== null;
+    const canToggle = inheritedRow
+      ? editable && !!onViewWhitelistChange
+      : editable && isOwn && !disabled;
+    const checked = inheritedRow ? taken(v) : on.length > 0;
 
     return (
       <React.Fragment key={`${inheritedRow ? 'inh' : 'own'}-${v.name}`}>
@@ -140,8 +179,10 @@ export default function ViewsSection({
               <Box onClick={(e: React.MouseEvent) => e.stopPropagation()} flexShrink={0}>
                 <Checkbox
                   aria-label={`Expose view ${v.name}`}
-                  checked={on.length > 0}
-                  onCheckedChange={canToggle ? () => toggleView(index!, v) : undefined}
+                  checked={checked}
+                  onCheckedChange={canToggle
+                    ? () => (inheritedRow ? toggleInherited(v) : toggleView(index!, v))
+                    : undefined}
                   disabled={!canToggle}
                 />
               </Box>
@@ -168,6 +209,18 @@ export default function ViewsSection({
           </Text>
 
           <HStack gap={2} flexShrink={0}>
+            {/* Which children receive this model — the parent's half of
+                inheritance, same control (and placement) a schema row carries. */}
+            {editable && isOwn && availableChildPaths.length > 0 && (
+              <Box onClick={(e: React.MouseEvent) => e.stopPropagation()} flexShrink={0}>
+                <ChildPathSelector
+                  subject={`data model ${v.name}`}
+                  availablePaths={availableChildPaths}
+                  selectedPaths={v.childPaths}
+                  onChange={(paths) => patch(index!, { childPaths: paths })}
+                />
+              </Box>
+            )}
             {(() => {
               const open = isDefOpen(v, index);
               return (
@@ -196,6 +249,11 @@ export default function ViewsSection({
               <Text fontSize="10px" fontWeight="600" color="accent.teal" fontFamily="mono">
                 inherited
               </Text>
+            )}
+            {/* Deliberately NOT gated on `disabled`: a model DISABLED by an
+                ancestor's narrowing is exactly the one you most need to remove. */}
+            {editable && isOwn && (
+              <DeleteRowButton label={`Delete view ${v.name}`} onClick={() => remove(index!)} />
             )}
           </HStack>
         </HStack>

@@ -10,19 +10,26 @@ import { getPublishedVersion } from '../context/context-utils';
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Check whether a whitelist node's childPaths restriction allows the given currentPath.
+ * Check whether a `childPaths` restriction allows the given currentPath.
  * - undefined childPaths → no restriction (always passes)
  * - empty array → blocks all paths
  * - non-empty array → currentPath must be exactly one of the listed paths or a descendant
+ *
+ * ONE predicate for every inheritable thing that carries `childPaths` — whitelist
+ * nodes, docs, data models (views) and semantic models — so "which children
+ * receive this?" means exactly the same everywhere.
  */
-function childPathAllowed(node: WhitelistNode, currentPath?: string): boolean {
-  if (!node.childPaths) return true;       // no restriction
+export function appliesToChildPath(childPaths: string[] | null | undefined, currentPath?: string): boolean {
+  if (!childPaths) return true;            // no restriction
   if (!currentPath) return true;           // no path given → include all
-  if (node.childPaths.length === 0) return false;  // empty → nowhere
-  return node.childPaths.some(cp =>
+  if (childPaths.length === 0) return false;  // empty → nowhere
+  return childPaths.some(cp =>
     currentPath === cp || currentPath.startsWith(cp + '/')
   );
 }
+
+const childPathAllowed = (node: WhitelistNode, currentPath?: string): boolean =>
+  appliesToChildPath(node.childPaths, currentPath);
 
 /**
  * Apply a single connection-level WhitelistNode to a DatabaseSchema.

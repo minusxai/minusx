@@ -792,7 +792,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
         // Compute fullSchema, parentSchema and fullDocs using the new whitelist loader
         // New contexts default to whitelist:'*' (expose all available schemas)
         const { fullSchema, parentSchema, fullDocs, fullSkills } = await computeSchemaFromWhitelist(
-          '*',
+          { whitelist: '*' },
           contextPath,
           user
         );

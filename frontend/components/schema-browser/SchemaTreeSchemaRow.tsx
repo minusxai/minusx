@@ -207,6 +207,7 @@ export default function SchemaTreeSchemaRow({
           {showPathFilter && availableChildPaths.length > 0 && isSchemaWhitelisted(schemaItem.schema) && (
             <Box onClick={(e: React.MouseEvent) => e.stopPropagation()} flexShrink={0}>
               <ChildPathSelector
+                subject={`schema ${schemaItem.schema}`}
                 availablePaths={availableChildPaths}
                 selectedPaths={(() => {
                   const item = whitelist.find(
@@ -372,6 +373,7 @@ export default function SchemaTreeSchemaRow({
                       {showPathFilter && availableChildPaths.length > 0 && tableWL && !schemaWL && (
                         <Box onClick={(e: React.MouseEvent) => e.stopPropagation()} flexShrink={0}>
                           <ChildPathSelector
+                            subject={`table ${schemaItem.schema}.${table.table}`}
                             availablePaths={availableChildPaths}
                             selectedPaths={(() => {
                               const item = whitelist.find(
