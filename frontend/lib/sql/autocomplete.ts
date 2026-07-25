@@ -3,6 +3,7 @@
  */
 import { init, parse, Dialect } from '@polyglot-sql/sdk';
 import type { DatabaseWithSchema } from '@/lib/types';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 
 let initialized = false;
 
@@ -293,9 +294,22 @@ function getColumnCompletions(
   return suggestions;
 }
 
+/**
+ * Dialects where an unqualified table name is always an error. BigQuery has no default
+ * dataset (bigquery-connector.ts never sets one), so `FROM app_events` is rejected with
+ * `Table "app_events" must be qualified with a dataset (e.g. dataset.table)` — suggesting
+ * the bare name only walks the user into that error.
+ */
+const DIALECTS_REQUIRING_QUALIFIED_TABLES = immutableSet(['bigquery']);
+
+function requiresQualifiedTables(connectionType?: string): boolean {
+  return DIALECTS_REQUIRING_QUALIFIED_TABLES.has((connectionType ?? '').toLowerCase());
+}
+
 function getTableCompletions(
   ast: any,
   schemaData: DatabaseWithSchema[],
+  qualifiedOnly: boolean,
 ): CompletionItem[] {
   const suggestions: CompletionItem[] = [];
   let idx = 0;
@@ -318,14 +332,16 @@ function getTableCompletions(
       }
 
       for (const table of schema.tables ?? []) {
-        suggestions.push({
-          label: table.table,
-          kind: 'table',
-          detail: `  ${schemaName}`,
-          insert_text: table.table,
-          sort_text: String(idx).padStart(5, '0'),
-        });
-        idx++;
+        if (!qualifiedOnly) {
+          suggestions.push({
+            label: table.table,
+            kind: 'table',
+            detail: `  ${schemaName}`,
+            insert_text: table.table,
+            sort_text: String(idx).padStart(5, '0'),
+          });
+          idx++;
+        }
 
         const qualifiedName = `${schemaName}.${table.table}`;
         suggestions.push({
@@ -513,7 +529,10 @@ function getAllColumnsUnfiltered(schemaData: DatabaseWithSchema[]): CompletionIt
   return suggestions;
 }
 
-function getAllTablesUnfiltered(schemaData: DatabaseWithSchema[]): CompletionItem[] {
+function getAllTablesUnfiltered(
+  schemaData: DatabaseWithSchema[],
+  qualifiedOnly: boolean,
+): CompletionItem[] {
   const suggestions: CompletionItem[] = [];
   let idx = 0;
   const seenSchemas = new Set<string>();
@@ -533,11 +552,12 @@ function getAllTablesUnfiltered(schemaData: DatabaseWithSchema[]): CompletionIte
         seenSchemas.add(schemaName);
       }
       for (const table of schema.tables ?? []) {
+        const name = qualifiedOnly ? `${schemaName}.${table.table}` : table.table;
         suggestions.push({
-          label: table.table,
+          label: name,
           kind: 'table',
-          detail: `  ${schemaName}`,
-          insert_text: table.table,
+          detail: qualifiedOnly ? '  (qualified)' : `  ${schemaName}`,
+          insert_text: name,
           sort_text: String(idx).padStart(5, '0'),
         });
         idx++;
@@ -585,6 +605,7 @@ export async function getCompletionsLocal(
   await ensureInit();
 
   const dialect = (connectionType ?? 'duckdb') as Dialect;
+  const qualifiedOnly = requiresQualifiedTables(connectionType);
 
   // Error-tolerant parse — polyglot returns null AST for incomplete SQL,
   // so we try progressively stripped versions of the query.
@@ -638,7 +659,7 @@ export async function getCompletionsLocal(
     } else if (isColumnContext && schemaData.length > 0) {
       return getAllColumnsUnfiltered(schemaData);
     } else if (isTableContext && schemaData.length > 0) {
-      return getAllTablesUnfiltered(schemaData);
+      return getAllTablesUnfiltered(schemaData, qualifiedOnly);
     }
     return [];
   }
@@ -655,7 +676,7 @@ export async function getCompletionsLocal(
     }
     return suggestions;
   } else if (isTableContext) {
-    return getTableCompletions(ast, schemaData);
+    return getTableCompletions(ast, schemaData, qualifiedOnly);
   }
 
   return [];
