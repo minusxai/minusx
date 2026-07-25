@@ -33,7 +33,7 @@
 
 import React, { useState } from 'react';
 import { Box, VStack, HStack, Text, Button, Icon } from '@chakra-ui/react';
-import { LuPlus, LuEye, LuEyeOff, LuTable, LuChevronRight, LuChevronDown, LuBan } from 'react-icons/lu';
+import { LuPlus, LuEye, LuEyeOff, LuBox, LuChevronRight, LuChevronDown, LuBan } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
 import SchemaColumnRow from '@/components/schema-browser/SchemaColumnRow';
 import ChildPathSelector from '@/components/selectors/ChildPathSelector';
@@ -115,6 +115,11 @@ export default function ViewsSection({
     onViewWhitelistChange?.(toggleNameWhitelist(viewWhitelist, inheritedViews.map((x) => x.name), v.name));
   };
 
+  /** How many data models actually reach an agent — a DISABLED one never does. */
+  const exposedCount =
+    mine.filter(({ v }) => !problemOf(v.name) && exposed(v).length > 0).length +
+    inherited.filter((v) => !problemOf(v.name) && taken(v)).length;
+
   const toggleColumn = (index: number, v: ViewDef, column: string) => {
     const all = (v.columns ?? []).map((c) => c.name);
     const current = new Set(exposed(v));
@@ -189,9 +194,9 @@ export default function ViewsSection({
             )}
 
             <Icon
-              as={disabled ? LuBan : LuTable}
+              as={disabled ? LuBan : LuBox}
               boxSize={3}
-              color={disabled ? 'accent.danger' : 'fg.muted'}
+              color={disabled ? 'accent.danger' : 'accent.teal'}
               flexShrink={0}
             />
             <Text
@@ -310,11 +315,19 @@ export default function ViewsSection({
 
   return (
     <VStack align="stretch" gap={0} onClick={(e) => e.stopPropagation()}>
-      <Box px={3} py={1} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted">
+      <HStack px={3} py={1} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted" gap={1.5}>
+        <Icon as={LuBox} boxSize={3} color="accent.teal" />
         <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.02em">
           Data Models
         </Text>
-      </Box>
+        {/* Like the schema/table counters, the number is exposed-of-total — a plain
+            total would hide that an unchecked data model reaches no agent. */}
+        {inherited.length + mine.length > 0 && (
+          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+            {exposedCount}/{inherited.length + mine.length}
+          </Text>
+        )}
+      </HStack>
 
       {inherited.map((v) => renderRow(v, null, true))}
       {mine.map(({ v, index }) => renderRow(v, index, false))}
