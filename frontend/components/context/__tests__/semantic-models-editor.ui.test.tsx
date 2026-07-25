@@ -593,3 +593,104 @@ describe('the Test button', () => {
     expect(screen.queryByLabelText('semantic-model-0-test')).toBeNull();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inheritance controls — a semantic model is distributed and declined exactly
+// like a table: the parent picks who receives it (childPaths on the model), the
+// child whitelists what it takes of that (semanticModelWhitelist on its version).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('inheritance controls', () => {
+  const PATHS = ['/org/team_a', '/org/team_b'];
+
+  describe('whitelisting the inherited models', () => {
+    it('starts wildcarded (everything offered is taken), with a live checkbox in edit mode', async () => {
+      const onWhitelistChange = vi.fn();
+      renderSection({
+        models: [], inheritedModels: [ORDERS_MODEL], onWhitelistChange,
+        offeredNames: ['Orders', 'Zones'],
+      });
+      const box = screen.getByLabelText('include-semantic-model-Orders') as HTMLInputElement;
+      expect(box.checked).toBe(true);
+      expect(box.disabled).toBe(false);
+
+      // Unchecking materialises the selection out of ALL offered names — including
+      // models shown in another connection's section, which share this one list.
+      fireEvent.click(box);
+      await waitFor(() => expect(onWhitelistChange).toHaveBeenCalledWith(['Zones']));
+    });
+
+    it('re-checks the last missing model back to the wildcard, not a frozen full list', async () => {
+      const onWhitelistChange = vi.fn();
+      renderSection({
+        models: [], inheritedModels: [ORDERS_MODEL], onWhitelistChange,
+        offeredNames: ['Orders', 'Zones'], semanticModelWhitelist: ['Zones'],
+      });
+      const box = screen.getByLabelText('include-semantic-model-Orders') as HTMLInputElement;
+      expect(box.checked).toBe(false);
+
+      fireEvent.click(box);
+      await waitFor(() => expect(onWhitelistChange).toHaveBeenCalledWith('*'));
+    });
+
+    it('locks the checkbox in view mode, and gives own models none (delete them instead)', () => {
+      renderSection({ models: [], inheritedModels: [ORDERS_MODEL], editMode: false });
+      expect((screen.getByLabelText('include-semantic-model-Orders') as HTMLInputElement).disabled).toBe(true);
+
+      cleanup();
+      renderSection({ models: [ORDERS_MODEL] });
+      expect(screen.queryByLabelText('include-semantic-model-Orders')).toBeNull();
+    });
+  });
+
+  describe('childPaths', () => {
+    /** Stateful: picking a path depends on the previous emit landing back as props. */
+    const renderLive = () => {
+      const onChange = vi.fn();
+      const Harness = () => {
+        const [models, setModels] = React.useState<SemanticModelV2[]>([ORDERS_MODEL]);
+        return (
+          <SemanticModelsSection
+            connection="warehouse" database={DATABASE} views={[ZONE_VIEW]}
+            models={models} editMode contextPath="/org/context"
+            availableChildPaths={PATHS}
+            onChange={(next) => { onChange(next); setModels(next); }}
+          />
+        );
+      };
+      renderWithProviders(<Harness />);
+      return { onChange };
+    };
+
+    it('an own model carries an "Apply to:" picker, defaulting to all children', () => {
+      renderSection({ availableChildPaths: PATHS });
+      const trigger = screen.getByLabelText('Child paths for semantic model Orders');
+      expect(trigger.textContent).toContain('All child paths');
+    });
+
+    it('scoping a model to one child path patches its childPaths', async () => {
+      const { onChange } = renderLive();
+      fireEvent.click(screen.getByLabelText('Child paths for semantic model Orders'));
+
+      // Turning off "all children" first — same two-step as the schema tree.
+      fireEvent.click(await screen.findByLabelText('All child paths for semantic model Orders'));
+      await waitFor(() => expect(onChange).toHaveBeenCalledWith([{ ...ORDERS_MODEL, childPaths: [] }]));
+
+      fireEvent.click(screen.getByLabelText('Child path /org/team_a for semantic model Orders'));
+      await waitFor(() => expect(onChange).toHaveBeenLastCalledWith([{ ...ORDERS_MODEL, childPaths: ['/org/team_a'] }]));
+    });
+
+    it('shows no picker with no child folders, in view mode, or on an inherited row', () => {
+      renderSection({ availableChildPaths: [] });
+      expect(screen.queryByLabelText('Child paths for semantic model Orders')).toBeNull();
+
+      cleanup();
+      renderSection({ availableChildPaths: PATHS, editMode: false });
+      expect(screen.queryByLabelText('Child paths for semantic model Orders')).toBeNull();
+
+      cleanup();
+      renderSection({ models: [], inheritedModels: [ORDERS_MODEL], availableChildPaths: PATHS });
+      expect(screen.queryByLabelText('Child paths for semantic model Orders')).toBeNull();
+    });
+  });
+});

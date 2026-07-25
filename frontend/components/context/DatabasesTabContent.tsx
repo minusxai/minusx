@@ -71,9 +71,15 @@ export function DatabasesTabContent({
   onYamlChange,
   semanticIssues = [],
 }: DatabasesTabContentProps) {
+  // What the parent OFFERS — `parent*` includes models this context has declined,
+  // so a declined row still renders (unchecked) and can be taken back. `full*` is
+  // the post-exclusion set and would make an unchecked row vanish instead.
+  const offeredViews = content.parentViews ?? content.fullViews ?? [];
+  const offeredModels = content.parentSemanticModels ?? content.fullSemanticModels ?? [];
+
   // Route each semantic issue to the database section owning the model it
   // names; issues naming no known model surface ONCE, in the first section.
-  const allModels = [...(content.semanticModels || []), ...(content.fullSemanticModels || [])];
+  const allModels = [...(content.semanticModels || []), ...offeredModels];
   const issueConnection = (issue: string): string | null => {
     const m = /^Semantic model "([^"]+)"/.exec(issue);
     return (m && allModels.find((x) => x.name === m[1])?.connection) ?? null;
@@ -345,13 +351,17 @@ export function DatabasesTabContent({
                               contextPath={contextPath}
                               views={[...(content.fullViews || []), ...(content.views || [])]}
                               models={(content.semanticModels || []).filter((m) => m.connection === database.databaseName)}
-                              inheritedModels={(content.fullSemanticModels || []).filter((m) => m.connection === database.databaseName)}
+                              inheritedModels={offeredModels.filter((m) => m.connection === database.databaseName)}
                               editMode={editMode}
                               issues={issuesForSection(database.databaseName, availableDatabases[0]?.databaseName === database.databaseName)}
                               onChange={(nextForConnection) => {
                                 const others = (content.semanticModels || []).filter((m) => m.connection !== database.databaseName);
                                 onChange({ semanticModels: [...nextForConnection, ...others] });
                               }}
+                              semanticModelWhitelist={content.semanticModelWhitelist}
+                              onWhitelistChange={editMode ? (next) => onChange({ semanticModelWhitelist: next }) : undefined}
+                              offeredNames={offeredModels.map((m) => m.name)}
+                              availableChildPaths={availableChildPaths}
                             />
                             {/* Views: curated SQL that behaves like a table. Sits
                                 above the raw schema — it's the layer people should
@@ -361,9 +371,12 @@ export function DatabasesTabContent({
                                 contextPath={contextPath}
                                 connection={database.databaseName}
                                 views={content.views || []}
-                                inheritedViews={content.fullViews || []}
+                                inheritedViews={offeredViews}
                                 problems={content.viewProblems || []}
                                 onViewsChange={editMode ? (next) => onChange({ views: next }) : undefined}
+                                viewWhitelist={content.viewWhitelist}
+                                onViewWhitelistChange={editMode ? (next) => onChange({ viewWhitelist: next }) : undefined}
+                                availableChildPaths={availableChildPaths}
                                 namePrefix={contextPath.split('/').filter(Boolean).slice(-2, -1)[0]}
                               />
                             </Box>

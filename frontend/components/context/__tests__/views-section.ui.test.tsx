@@ -7,10 +7,10 @@
  * read-only (disabled checkbox + badge); disabled views show their reason.
  */
 import React from 'react';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import ViewsSection from '@/components/context/ViewsSection';
-import type { ViewDef } from '@/lib/types';
+import type { NameWhitelist, ViewDef } from '@/lib/types';
 
 const ZONE_REVENUE: ViewDef = {
   name: 'zone_revenue',
@@ -22,9 +22,11 @@ const ZONE_REVENUE: ViewDef = {
 
 function renderSection(overrides: Partial<React.ComponentProps<typeof ViewsSection>> & { editable?: boolean } = {}) {
   const onViewsChange = vi.fn();
+  const onViewWhitelistChange = vi.fn();
   const editable = overrides.editable !== false;
   function Harness() {
     const [views, setViews] = React.useState<ViewDef[]>((overrides.views as ViewDef[]) ?? []);
+    const [whitelist, setWhitelist] = React.useState<NameWhitelist | undefined>(overrides.viewWhitelist);
     return (
       <ViewsSection
         contextPath="/org/context"
@@ -32,12 +34,14 @@ function renderSection(overrides: Partial<React.ComponentProps<typeof ViewsSecti
         inheritedViews={[]}
         {...overrides}
         views={views}
+        viewWhitelist={whitelist}
         onViewsChange={editable ? (next) => { onViewsChange(next); setViews(next); } : undefined}
+        onViewWhitelistChange={editable ? (next) => { onViewWhitelistChange(next); setWhitelist(next); } : undefined}
       />
     );
   }
   renderWithProviders(<Harness />);
-  return { onViewsChange };
+  return { onViewsChange, onViewWhitelistChange };
 }
 
 describe('ViewsSection', () => {
@@ -61,11 +65,12 @@ describe('ViewsSection', () => {
     expect(screen.getByLabelText('Definition of zone_revenue')).toBeTruthy();
   });
 
-  it('shows inherited views read-only — a disabled checkbox + an "inherited" badge', () => {
-    renderSection({ views: [], inheritedViews: [ZONE_REVENUE] });
+  it('marks inherited views with an "inherited" badge, and locks their checkbox in VIEW mode', () => {
+    renderSection({ views: [], inheritedViews: [ZONE_REVENUE], editable: false });
     const row = screen.getByLabelText('View zone_revenue');
     expect(row.textContent).toContain('inherited');
     const box = screen.getByLabelText('Expose view zone_revenue') as HTMLInputElement;
+    expect(box.checked).toBe(true);
     expect(box.disabled).toBe(true);
   });
 
@@ -99,5 +104,113 @@ describe('ViewsSection', () => {
   it('scopes views to the connection', () => {
     renderSection({ views: [{ ...ZONE_REVENUE, connection: 'other' }] });
     expect(screen.queryByLabelText('View zone_revenue')).toBeNull();
+  });
+
+  // ── Deleting a data model from its row ──────────────────────────────────
+  // Delete used to live ONLY in the workbench footer, below a 480px editor —
+  // and vanished entirely for a DISABLED model (which opens read-only), leaving
+  // it unremovable. It belongs on the row, like semantic models.
+
+  describe('row-level delete', () => {
+    it('deletes an own view straight from its row in edit mode', () => {
+      const { onViewsChange } = renderSection({ views: [ZONE_REVENUE] });
+      fireEvent.click(screen.getByLabelText('Delete view zone_revenue'));
+      expect(onViewsChange).toHaveBeenCalledWith([]);
+      expect(screen.queryByLabelText('View zone_revenue')).toBeNull();
+    });
+
+    it('deletes a DISABLED view — the reason it broke must not trap it here', () => {
+      const { onViewsChange } = renderSection({
+        views: [ZONE_REVENUE],
+        problems: [{ view: 'zone_revenue', reason: 'reads mxfood.orders, which is not offered by the parent knowledge base' }],
+      });
+      const row = screen.getByLabelText('View zone_revenue');
+      expect(row.textContent).toContain('DISABLED');
+      fireEvent.click(screen.getByLabelText('Delete view zone_revenue'));
+      expect(onViewsChange).toHaveBeenCalledWith([]);
+    });
+
+    it('offers no delete in view mode, nor on an inherited row (it is not ours to delete)', () => {
+      renderSection({ views: [ZONE_REVENUE], editable: false });
+      expect(screen.queryByLabelText('Delete view zone_revenue')).toBeNull();
+
+      cleanup();
+      renderSection({ views: [], inheritedViews: [ZONE_REVENUE] });
+      expect(screen.queryByLabelText('Delete view zone_revenue')).toBeNull();
+    });
+  });
+
+  // ── The child's half of inheritance: declining an offered model ──────────
+
+  describe('whitelisting the inherited views', () => {
+    const OTHER: ViewDef = { name: 'other', connection: 'warehouse', sql: 'SELECT 1', columns: [] };
+
+    it('starts wildcarded (everything offered is taken), and the child gets a say', async () => {
+      const { onViewWhitelistChange } = renderSection({ views: [], inheritedViews: [ZONE_REVENUE, OTHER] });
+      const box = screen.getByLabelText('Expose view zone_revenue') as HTMLInputElement;
+      expect(box.checked).toBe(true);
+      expect(box.disabled).toBe(false);
+
+      // Unchecking materialises the selection — the same two-step tables take.
+      fireEvent.click(box);
+      await waitFor(() => expect(onViewWhitelistChange).toHaveBeenCalledWith(['other']));
+    });
+
+    it('re-checks the last missing view back to the wildcard, not a frozen full list', async () => {
+      // A full explicit list would look identical but silently refuse models
+      // added upstream later.
+      const { onViewWhitelistChange } = renderSection({
+        views: [], inheritedViews: [ZONE_REVENUE, OTHER], viewWhitelist: ['other'],
+      });
+      const box = screen.getByLabelText('Expose view zone_revenue') as HTMLInputElement;
+      expect(box.checked).toBe(false);  // still listed — not taking is not hiding
+
+      fireEvent.click(box);
+      await waitFor(() => expect(onViewWhitelistChange).toHaveBeenCalledWith('*'));
+    });
+
+    it('leaves an own view\'s checkbox meaning column exposure, not inheritance', async () => {
+      const { onViewsChange, onViewWhitelistChange } = renderSection({ views: [ZONE_REVENUE] });
+      fireEvent.click(screen.getByLabelText('Expose view zone_revenue'));
+      await waitFor(() => expect(onViewsChange).toHaveBeenCalledWith([{ ...ZONE_REVENUE, whitelistedColumns: [] }]));
+      expect(onViewWhitelistChange).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── The parent's half: which children receive this model ────────────────
+
+  describe('childPaths', () => {
+    const PATHS = ['/org/team_a', '/org/team_b'];
+
+    it('an own view carries an "Apply to:" picker, defaulting to all children', () => {
+      renderSection({ views: [ZONE_REVENUE], availableChildPaths: PATHS });
+      const trigger = screen.getByLabelText('Child paths for data model zone_revenue');
+      expect(trigger.textContent).toContain('All child paths');
+    });
+
+    it('scoping a view to one child path patches its childPaths', async () => {
+      const { onViewsChange } = renderSection({ views: [ZONE_REVENUE], availableChildPaths: PATHS });
+      fireEvent.click(screen.getByLabelText('Child paths for data model zone_revenue'));
+
+      // Turning off "all children" first — same two-step as the schema tree.
+      fireEvent.click(await screen.findByLabelText('All child paths for data model zone_revenue'));
+      await waitFor(() => expect(onViewsChange).toHaveBeenCalledWith([{ ...ZONE_REVENUE, childPaths: [] }]));
+
+      fireEvent.click(screen.getByLabelText('Child path /org/team_a for data model zone_revenue'));
+      await waitFor(() => expect(onViewsChange).toHaveBeenLastCalledWith([{ ...ZONE_REVENUE, childPaths: ['/org/team_a'] }]));
+    });
+
+    it('shows no picker when there are no child folders, in view mode, or on inherited rows', () => {
+      renderSection({ views: [ZONE_REVENUE], availableChildPaths: [] });
+      expect(screen.queryByLabelText('Child paths for data model zone_revenue')).toBeNull();
+
+      cleanup();
+      renderSection({ views: [ZONE_REVENUE], availableChildPaths: PATHS, editable: false });
+      expect(screen.queryByLabelText('Child paths for data model zone_revenue')).toBeNull();
+
+      cleanup();
+      renderSection({ views: [], inheritedViews: [ZONE_REVENUE], availableChildPaths: PATHS });
+      expect(screen.queryByLabelText('Child paths for data model zone_revenue')).toBeNull();
+    });
   });
 });

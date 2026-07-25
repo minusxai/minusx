@@ -9,6 +9,10 @@ import type { ContextContent, ContextVersion } from '@/lib/types';
 /** Content fields that live ON THE VERSION (not at the content root). */
 const VERSION_SCOPED_FIELDS = [
   'docs', 'metrics', 'annotations', 'views', 'semanticModels',
+  // This version's selection out of the models it inherits. Version-scoped for
+  // the same reason as `whitelist`: the loader reads it off the published version
+  // to decide what this context exposes and passes down.
+  'viewWhitelist', 'semanticModelWhitelist',
 ] as const;
 type VersionScopedField = (typeof VERSION_SCOPED_FIELDS)[number];
 

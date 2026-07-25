@@ -539,6 +539,7 @@ export default function ContextDocsEditor({
                   {showChildPaths && availableChildPaths.length > 0 && (
                     <Box px={3} py={2} bg="bg.muted" borderBottom="1px solid" borderColor="border.default">
                       <ChildPathSelector
+                        subject={`doc ${docEntry.title || index + 1}`}
                         availablePaths={availableChildPaths}
                         selectedPaths={docEntry.childPaths}
                         onChange={(paths) => handleChildPathsChange(index, paths)}

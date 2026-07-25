@@ -4,34 +4,47 @@
  * Used by both context loader and file template generation
  */
 
-import { DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, Whitelist, ViewDef, SemanticModelV2 } from '@/lib/types';
+import { DatabaseWithSchema, ContextContent, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, ViewDef, SemanticModelV2 } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
-import { applyWhitelistToConnections } from '@/lib/sql/schema-filter';
+import { applyWhitelistToConnections, appliesToChildPath } from '@/lib/sql/schema-filter';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { getPublishedVersionForUser as getPublishedVersionForUserId, mergeSkillsByName } from '@/lib/context/context-utils';
+import { applyNameWhitelist } from '@/lib/context/name-whitelist';
+
+/** Keep only the entries whose `childPaths` reach `currentPath`. */
+function inheritedBy<T extends { childPaths?: string[] | null }>(entries: T[], currentPath: string): T[] {
+  return entries.filter((e) => appliesToChildPath(e.childPaths, currentPath));
+}
 
 /**
- * Filter doc entries by childPaths for a specific child path
- * Similar to filterSchemaByWhitelist but for docs
+ * What the inheritance computation needs off a context version: the table
+ * whitelist it offers downward, plus its selections out of what it inherits.
  */
-function filterDocsByChildPaths(docs: DocEntry[], currentPath: string): DocEntry[] {
-  return docs.filter(docEntry => {
-    // If childPaths is undefined/null, apply to all children (backward compatible)
-    // If childPaths is [] (empty array), apply to NO children (only this folder)
-    if (!docEntry.childPaths) {
-      return true;
-    }
-    if (docEntry.childPaths.length === 0) {
-      return false;
-    }
+export type InheritanceSource = Pick<ContextVersion, 'whitelist' | 'viewWhitelist' | 'semanticModelWhitelist'>;
 
-    // Check if currentPath matches any childPaths (exact or nested)
-    return docEntry.childPaths.some(childPath =>
-      currentPath === childPath || currentPath.startsWith(childPath + '/')
-    );
-  });
+/** Everything a context inherits + resolves, as computed from its own version. */
+export interface ComputedContextSchema {
+  fullSchema: DatabaseWithSchema[];
+  parentSchema: DatabaseWithSchema[];
+  fullDocs: DocEntry[];
+  fullMetrics: MetricDef[];
+  fullAnnotations: TableAnnotation[];
+  /** Inherited data models ON OFFER (childPaths applied, own whitelist NOT). */
+  parentViews: ViewDef[];
+  /** Inherited data models TAKEN (`parentViews` × this version's viewWhitelist). */
+  fullViews: ViewDef[];
+  /** Inherited semantic models ON OFFER (childPaths applied, whitelist NOT). */
+  parentSemanticModels: SemanticModelV2[];
+  /** Inherited semantic models TAKEN (`parentSemanticModels` × the whitelist). */
+  fullSemanticModels: SemanticModelV2[];
+  fullSkills: SkillEntry[];
 }
+
+const EMPTY_COMPUTED: ComputedContextSchema = {
+  fullSchema: [], parentSchema: [], fullDocs: [], fullMetrics: [], fullAnnotations: [],
+  parentViews: [], fullViews: [], parentSemanticModels: [], fullSemanticModels: [], fullSkills: [],
+};
 
 /**
  * Compute fullSchema and fullDocs from a Whitelist value and the context path.
@@ -50,15 +63,16 @@ function filterDocsByChildPaths(docs: DocEntry[], currentPath: string): DocEntry
  *       to ancestor's fullSchema → "parent offering" (respects childPaths)
  *     - Apply own whitelist to the parent offering → fullSchema
  *
- * @param whitelist   - The context's own whitelist ('*' or node array)
+ * @param version     - The context's own version: whitelist it offers + what it declines
  * @param contextPath - Full path to context file (e.g., /org/sales/context)
  * @param user        - Effective user for permissions
  */
 export async function computeSchemaFromWhitelist(
-  whitelist: Whitelist,
+  version: InheritanceSource,
   contextPath: string,
   user: EffectiveUser
-): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullMetrics: MetricDef[], fullAnnotations: TableAnnotation[], fullViews: ViewDef[], fullSemanticModels: SemanticModelV2[], fullSkills: SkillEntry[] }> {
+): Promise<ComputedContextSchema> {
+  const { whitelist } = version;
   const contextDir = contextPath.substring(0, contextPath.lastIndexOf('/')) || '/';
   const pathSegments = contextPath.split('/').filter(Boolean);
   const isRoot = pathSegments.length === 2; // e.g., /org/context
@@ -70,7 +84,7 @@ export async function computeSchemaFromWhitelist(
     // Apply own whitelist (no currentPath for root — childPaths has no effect at root level)
     const fullSchema = applyWhitelistToConnections(allConnections, whitelist);
     // parentSchema for root = all connections (what is available to select from)
-    return { fullSchema, parentSchema: allConnections, fullDocs: [], fullMetrics: [], fullAnnotations: [], fullViews: [], fullSemanticModels: [], fullSkills: [] };
+    return { ...EMPTY_COMPUTED, fullSchema, parentSchema: allConnections };
   }
 
   // Child: Find nearest ancestor context
@@ -83,21 +97,21 @@ export async function computeSchemaFromWhitelist(
 
   if (!ancestorContext) {
     // No ancestor found — nothing to inherit
-    return { fullSchema: [], parentSchema: [], fullDocs: [], fullMetrics: [], fullAnnotations: [], fullViews: [], fullSemanticModels: [], fullSkills: [] };
+    return EMPTY_COMPUTED;
   }
 
   // Load ancestor (triggers its own loader recursively)
   const { data: loadedAncestors } = await FilesAPI.loadFiles([ancestorContext.id], user);
-  const ancestorContent = loadedAncestors[0].content as any;
+  const ancestorContent = loadedAncestors[0].content as ContextContent;
 
   // Get ancestor's published version to access its whitelist (with childPaths)
   const publishedVersionNum = getPublishedVersionForUserId(ancestorContent, user.userId);
   const publishedVersion = ancestorContent.versions?.find(
-    (v: ContextVersion) => v.version === publishedVersionNum
+    (v) => v.version === publishedVersionNum
   );
 
   if (!publishedVersion) {
-    return { fullSchema: [], parentSchema: [], fullDocs: [], fullMetrics: [], fullAnnotations: [], fullViews: [], fullSemanticModels: [], fullSkills: [] };
+    return EMPTY_COMPUTED;
   }
 
   // The ancestor's fullSchema is what the ancestor exposes (already filtered by its own whitelist).
@@ -114,8 +128,8 @@ export async function computeSchemaFromWhitelist(
   const fullSchema = applyWhitelistToConnections(parentOffering, whitelist);
 
   // Accumulate parent's fullDocs + parent's own docs, both filtered by childPaths
-  const parentFullDocs = filterDocsByChildPaths(ancestorContent.fullDocs || [], contextDir);
-  const parentOwnDocs = filterDocsByChildPaths(publishedVersion.docs || [], contextDir);
+  const parentFullDocs = inheritedBy(ancestorContent.fullDocs || [], contextDir);
+  const parentOwnDocs = inheritedBy(publishedVersion.docs || [], contextDir);
   const fullDocs = [...parentFullDocs, ...parentOwnDocs];
   const fullSkills = mergeSkillsByName(ancestorContent.fullSkills || [], ancestorContent.skills || []);
 
@@ -127,21 +141,36 @@ export async function computeSchemaFromWhitelist(
   // what makes the guarantee recursive: each level validates only its own views,
   // and refuses to pass on what it had to disable.
   const ancestorBroken = new Set<string>(
-    ((ancestorContent.viewProblems ?? []) as Array<{ view: string }>).map((p) => p.view),
+    (ancestorContent.viewProblems ?? []).map((p) => p.view),
   );
-  const fullViews = [
+  //
+  // Both halves of the inheritance decision apply here, in this order:
+  //   1. `childPaths` on each model — the PARENT's choice of who receives it,
+  //      re-checked at every level so a grandparent's restriction keeps binding
+  //      (same shape as docs above, same predicate as whitelist nodes).
+  //   2. `viewWhitelist` / `semanticModelWhitelist` on THIS version — the child's
+  //      selection out of that, the exact analogue of re-selecting tables out of
+  //      `parentSchema` (and absent = '*' = take it all, like a fresh context).
+  // What survives both is what cascades: a model this context did not take is
+  // absent from `fullViews`, so the next level down never sees it either.
+  const parentViews = inheritedBy([
     ...(ancestorContent.fullViews || []),
-    ...((publishedVersion.views || []) as ViewDef[]).filter((v) => !ancestorBroken.has(v.name)),
-  ];
+    ...(publishedVersion.views || []).filter((v) => !ancestorBroken.has(v.name)),
+  ], contextDir);
+  const fullViews = applyNameWhitelist(parentViews, version.viewWhitelist);
   // Authored semantic models inherit exactly like views (ancestor's inherited +
   // ancestor's own published models); validity gating happens at save, not load.
-  const fullSemanticModels = [
+  const parentSemanticModels = inheritedBy([
     ...(ancestorContent.fullSemanticModels || []),
-    ...((publishedVersion.semanticModels || []) as SemanticModelV2[]),
-  ];
+    ...(publishedVersion.semanticModels || []),
+  ], contextDir);
+  const fullSemanticModels = applyNameWhitelist(parentSemanticModels, version.semanticModelWhitelist);
 
   // parentOffering = what the parent makes available to this context (before own whitelist)
-  return { fullSchema, parentSchema: parentOffering, fullDocs, fullMetrics, fullAnnotations, fullViews, fullSemanticModels, fullSkills };
+  return {
+    fullSchema, parentSchema: parentOffering, fullDocs, fullMetrics, fullAnnotations,
+    parentViews, fullViews, parentSemanticModels, fullSemanticModels, fullSkills,
+  };
 }
 
 /**

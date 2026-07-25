@@ -41,6 +41,19 @@ export interface WhitelistNode {
  */
 export type Whitelist = '*' | WhitelistNode[];
 
+/**
+ * Whitelist over NAMED inheritable things — data models and semantic models,
+ * which are addressed by a name unique across the context tree rather than by a
+ * connection/schema/table path.
+ *
+ * '*'   = everything offered, INCLUDING what is added later (the default a
+ *         context gets when the field is absent — same as a fresh table whitelist)
+ * [...] = exactly these; a model added upstream later does NOT arrive
+ *
+ * Semantics live in lib/context/name-whitelist.ts.
+ */
+export type NameWhitelist = '*' | string[];
+
 /** @deprecated Use WhitelistNode instead. Kept for backward compatibility during migration. */
 export interface WhitelistItem {
   name: string;              // table or schema name
@@ -116,6 +129,12 @@ export interface ContextVersion {
   annotations?: TableAnnotation[];   // Editorial table/column descriptions
   views?: ViewDef[];                 // Curated SQL exposed as tables under the `_views` schema
   semanticModels?: SemanticModelV2[]; // Authored semantic models (Semantic_Model_v2.md)
+  // This context's own selection out of what it INHERITED — the exact analogue of
+  // re-selecting tables from `parentSchema`, and the mirror of `childPaths` (the
+  // parent choosing who is offered a model). Absent = '*' = take everything,
+  // which is why existing contexts are unaffected.
+  viewWhitelist?: NameWhitelist;          // inherited data models this context takes
+  semanticModelWhitelist?: NameWhitelist; // inherited semantic models this context takes
   createdAt: string;                 // ISO timestamp
   createdBy: number;                 // User ID who created version
   lastEditedAt?: string;             // ISO timestamp of last edit
@@ -138,8 +157,13 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   fullDocs?: DocEntry[];               // Computed by loader - inherited docs
   fullMetrics?: MetricDef[];           // Computed by loader - inherited + own metrics
   fullAnnotations?: TableAnnotation[]; // Computed by loader - inherited + own annotations
-  fullViews?: ViewDef[];               // Computed by loader - inherited views (valid ones only)
-  fullSemanticModels?: SemanticModelV2[]; // Computed by loader - inherited + own authored semantic models
+  fullViews?: ViewDef[];               // Computed by loader - inherited views (valid ones only), THIS context's exclusions applied
+  fullSemanticModels?: SemanticModelV2[]; // Computed by loader - inherited authored semantic models, THIS context's exclusions applied
+  // What the parent OFFERS, before this context's own exclusions — the editor's
+  // available-to-pick menu, so a declined model still renders (unchecked) and can
+  // be taken back. Exact peers of parentSchema vs fullSchema.
+  parentViews?: ViewDef[];             // Computed by loader - inherited views on offer
+  parentSemanticModels?: SemanticModelV2[]; // Computed by loader - inherited semantic models on offer
   viewProblems?: ViewProblem[];        // Computed by loader - views DISABLED here, and why
   fullSkills?: SkillEntry[];           // Computed by loader - inherited user-defined skills
 
@@ -150,6 +174,8 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   annotations?: TableAnnotation[];   // Current version's annotations (container only)
   views?: ViewDef[];                 // Current version's views (container only)
   semanticModels?: SemanticModelV2[]; // Current version's authored semantic models (container only)
+  viewWhitelist?: NameWhitelist;          // Current version's inherited-view selection (container only)
+  semanticModelWhitelist?: NameWhitelist; // Current version's inherited-model selection (container only)
 
   // Evals (stored at content level, independent of versions)
   evals?: Test[];

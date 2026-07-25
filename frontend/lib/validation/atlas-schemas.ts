@@ -842,6 +842,9 @@ export const SemanticModelV2 = Type.Object({
   references: Nullable(Type.Array(SemanticReference)),
   dimensions: Type.Array(SemanticDimensionV2),
   metrics: Type.Array(SemanticMetricV2),
+  childPaths: Nullable(Type.Array(Type.String(), {
+    description: 'child context paths that inherit this model (omit = all children, [] = none) — a HUMAN distribution choice made in the Databases tab; preserve it verbatim, never invent or drop it',
+  })),
 }, { title: 'SemanticModelV2' });
 export type SemanticModelV2 = Static<typeof SemanticModelV2>;
 

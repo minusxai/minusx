@@ -224,6 +224,8 @@ export default function ContextContainerV2({
       annotations: sourceVersion.annotations ? JSON.parse(JSON.stringify(sourceVersion.annotations)) : undefined,
       views: sourceVersion.views ? JSON.parse(JSON.stringify(sourceVersion.views)) : undefined,
       semanticModels: sourceVersion.semanticModels ? JSON.parse(JSON.stringify(sourceVersion.semanticModels)) : undefined,
+      viewWhitelist: Array.isArray(sourceVersion.viewWhitelist) ? [...sourceVersion.viewWhitelist] : sourceVersion.viewWhitelist,
+      semanticModelWhitelist: Array.isArray(sourceVersion.semanticModelWhitelist) ? [...sourceVersion.semanticModelWhitelist] : sourceVersion.semanticModelWhitelist,
       createdAt: new Date().toISOString(),
       createdBy: user.id,
       description: description || ''
@@ -406,6 +408,8 @@ export default function ContextContainerV2({
       annotations: currentVersionContent.annotations,
       views: currentVersionContent.views,
       semanticModels: currentVersionContent.semanticModels,
+      viewWhitelist: currentVersionContent.viewWhitelist,
+      semanticModelWhitelist: currentVersionContent.semanticModelWhitelist,
       published: currentContent.published // Ensure published is always present
     };
   }, [currentContent, currentVersionContent]);

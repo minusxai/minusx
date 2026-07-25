@@ -38,6 +38,22 @@ describe('applyContextContentChange', () => {
     expect(next.versions![0].lastEditedBy).toBe(7);
   });
 
+  it('folds the inherited-model whitelists into the version too', () => {
+    // These decide what the loader hands DOWNWARD; at the content root they
+    // would be silently ignored, so the context would keep serving a model the
+    // editor shows as unchecked.
+    const next = applyContextContentChange(
+      content(), 2,
+      { viewWhitelist: ['kept_model'], semanticModelWhitelist: '*' },
+      1,
+    );
+    expect(next.versions![1].viewWhitelist).toEqual(['kept_model']);
+    expect(next.versions![1].semanticModelWhitelist).toBe('*');
+    expect(next.versions![0].viewWhitelist).toBeUndefined();
+    expect((next as Record<string, unknown>).viewWhitelist).toBeUndefined();
+    expect((next as Record<string, unknown>).semanticModelWhitelist).toBeUndefined();
+  });
+
   it('passes non-version fields through at the content level', () => {
     const next = applyContextContentChange(content(), 1, { skills: [] }, 1);
     expect((next as Record<string, unknown>).skills).toEqual([]);

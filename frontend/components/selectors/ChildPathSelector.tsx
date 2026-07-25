@@ -19,15 +19,22 @@ interface ChildPathSelectorProps {
   /** List of available paths to choose from */
   availablePaths: string[];
 
-  /** Currently selected paths (undefined = all paths, [] = none) */
-  selectedPaths?: string[];
+  /** Currently selected paths (undefined/null = all paths, [] = none) */
+  selectedPaths?: string[] | null;
 
   /** Called when selection changes */
   onChange: (paths: string[] | undefined) => void;
+
+  /**
+   * What this picker scopes, e.g. `data model revenue` / `schema public`. Several
+   * pickers share a page, so it is what makes each control addressable
+   * ("Child paths for <subject>").
+   */
+  subject: string;
 }
 
-function getSummaryLabel(selectedPaths: string[] | undefined, totalPaths: number): string {
-  if (selectedPaths === undefined) return 'All child paths';
+function getSummaryLabel(selectedPaths: string[] | null | undefined, totalPaths: number): string {
+  if (selectedPaths == null) return 'All child paths';
   if (selectedPaths.length === 0) return 'Only this folder, no children';
   if (selectedPaths.length === 1) return selectedPaths[0];
   return `${selectedPaths.length}/${totalPaths} child paths`;
@@ -37,6 +44,7 @@ export default function ChildPathSelector({
   availablePaths,
   selectedPaths,
   onChange,
+  subject,
 }: ChildPathSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -45,8 +53,8 @@ export default function ChildPathSelector({
     return null;
   }
 
-  // undefined = all, array (even empty) = specific selection
-  const isAll = selectedPaths === undefined;
+  // absent (undefined/null) = all, array (even empty) = specific selection
+  const isAll = selectedPaths == null;
   const summaryLabel = getSummaryLabel(selectedPaths, availablePaths.length);
 
   const handleAllToggle = (checked: boolean) => {
@@ -69,7 +77,7 @@ export default function ChildPathSelector({
   return (
     <Collapsible.Root open={isOpen} onOpenChange={(e) => setIsOpen(e.open)}>
       <Collapsible.Trigger asChild>
-        <HStack gap={1.5} cursor="pointer" py={0.5}>
+        <HStack aria-label={`Child paths for ${subject}`} gap={1.5} cursor="pointer" py={0.5}>
           <Icon
             as={isOpen ? LuChevronDown : LuChevronRight}
             boxSize={3}
@@ -100,6 +108,7 @@ export default function ChildPathSelector({
         <VStack align="stretch" gap={1} pl={4} pt={2}>
           {/* All child paths (default) checkbox */}
           <Checkbox
+            aria-label={`All child paths for ${subject}`}
             size="sm"
             checked={isAll}
             onCheckedChange={(e) => handleAllToggle(e.checked)}
@@ -113,6 +122,7 @@ export default function ChildPathSelector({
             return (
               <Checkbox
                 key={path}
+                aria-label={`Child path ${path} for ${subject}`}
                 size="sm"
                 checked={isChecked}
                 disabled={isAll}

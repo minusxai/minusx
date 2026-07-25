@@ -23,7 +23,7 @@ import { computeViewReads, checkViewAvailability, findViewCycle } from '@/lib/vi
 import { validateViews } from '@/lib/views/resolve';
 import { semanticModelNames } from '@/lib/semantic/save-gate.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { ContextContent, DatabaseWithSchema, ViewDef } from '@/lib/types';
+import type { ContextContent, DatabaseWithSchema, SemanticModelV2, ViewDef } from '@/lib/types';
 
 export class ViewSaveError extends Error {
   constructor(message: string) {
@@ -66,17 +66,25 @@ export async function stampAndValidateViews(
   // the root admin has full authority.
   const live = versions.find((v) => v.version === getPublishedVersionForUser(content, user.userId)) ?? versions[0];
   let offered: DatabaseWithSchema[] = [];
+  // Name checks run against what the parent OFFERS, not what this context keeps:
+  // declining an inherited model must never free its name, or a child could
+  // define its own `revenue` while a sibling still resolves the parent's.
+  // Server-computed for the same reason `reads` is — a client-sent `fullViews`
+  // is not evidence (it is only the fallback when the computation itself fails).
+  let inherited: ViewDef[] = content.fullViews ?? [];
+  let offeredModels: SemanticModelV2[] | undefined;
   try {
     const computed = await computeSchemaFromWhitelist(
-      resolveVersionWhitelist(live),
+      { ...live, whitelist: resolveVersionWhitelist(live) },
       contextPath,
       user,
     );
     offered = computed.parentSchema;
+    inherited = computed.parentViews;
+    offeredModels = computed.parentSemanticModels;
   } catch {
     offered = [];
   }
-  const inherited = content.fullViews ?? [];
 
   const problems: string[] = [];
   const nextVersions = await Promise.all(versions.map(async (version) => {
@@ -89,7 +97,7 @@ export async function stampAndValidateViews(
 
     // Views and semantic models share ONE name namespace (references address
     // views by bare name) — the reverse direction of the semantic gate's check.
-    const modelNames = semanticModelNames(content);
+    const modelNames = semanticModelNames(content, offeredModels);
     for (const v of views) {
       if (modelNames.has(v.name.toLowerCase())) {
         problems.push(`View "${v.name}": name is already used by a semantic model — views and semantic models share one namespace`);
