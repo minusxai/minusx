@@ -23,6 +23,9 @@ function NewFileRedirect({ type }: { type: FileType }) {
     if (creating.current) return;
     creating.current = true;
 
+    // The Create menu / Navigate tool link here with the folder the user is browsing —
+    // without it the draft falls back to the user's home folder.
+    const folder = searchParams.get('folder') ?? undefined;
     const databaseName = searchParams.get('databaseName') ?? undefined;
     const queryB64 = searchParams.get('queryB64') ?? undefined;
     let query: string | undefined;
@@ -36,7 +39,7 @@ function NewFileRedirect({ type }: { type: FileType }) {
       }
     }
 
-    createDraftFile(type, { databaseName, query })
+    createDraftFile(type, { folder, databaseName, query })
       .then(id => {
         router.replace(preserveModeParam(`/f/${id}`));
       })
