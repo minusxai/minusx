@@ -13,7 +13,7 @@ import {
 } from '@chakra-ui/react';
 import { Tooltip } from '@/components/kit/tooltip';
 import { LuSave, LuPencil, LuTriangleAlert, LuCircleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize } from 'react-icons/lu';
-import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
+import { getFileTypeMetadata, getFileDisplayName } from '@/lib/ui/file-metadata';
 import TabSwitcher from '../selectors/TabSwitcher';
 import FileTypeBadge from './FileTypeBadge';
 import ExplainButton from '@/components/question/ExplainButton';
@@ -261,12 +261,12 @@ export default function DocumentHeader({
                 // While presenting, show the full title (no one-line ellipsis) — the
                 // fullscreen surface has room and the header is the only chrome.
                 lineClamp={isPresenting ? undefined : 1}
-                aria-label={name.trim() || `Untitled ${metadata.label}`}
-                title={name.trim() || `Untitled ${metadata.label}`}
+                aria-label={getFileDisplayName({ name, type: fileType })}
+                title={getFileDisplayName({ name, type: fileType })}
                 onDoubleClick={readOnlyName ? undefined : onEditModeToggle}
                 cursor={readOnlyName ? 'default' : 'text'}
               >
-                {name.trim() || `Untitled ${metadata.label}`}
+                {getFileDisplayName({ name, type: fileType })}
               </Heading>
             )}
 

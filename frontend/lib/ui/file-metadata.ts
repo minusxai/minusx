@@ -260,6 +260,35 @@ export function getFileTypeMetadata(type: FileType) {
 }
 
 /**
+ * The label to render for a file — its name, or a readable placeholder when the name is
+ * empty. A nameless file must never render as a blank string: in grids/lists it collapses
+ * to a bare icon with nothing under it.
+ *
+ * The fallback is `Untitled <Type Label> #<id>`. The id is what makes two untitled files
+ * of the same type tellable apart, and it is the file's real identity (`/f/{id}`), so the
+ * placeholder matches the URL the row opens. Callers with no id (e.g. DocumentHeader,
+ * which renders a single file) get the plain `Untitled <Type Label>`.
+ */
+export function getFileDisplayName(file: {
+  name?: string | null;
+  type: FileType;
+  id?: number | null;
+}): string {
+  const name = (file.name ?? '').trim();
+  if (name) return name;
+  const label = FILE_TYPE_METADATA[file.type]?.label ?? 'File';
+  return file.id == null ? `Untitled ${label}` : `Untitled ${label} #${file.id}`;
+}
+
+/**
+ * Whether a file is nameless — i.e. what `getFileDisplayName` returns is a placeholder,
+ * not a real title. UI uses this to render the placeholder in a muted tone.
+ */
+export function isFileUntitled(file: { name?: string | null }): boolean {
+  return !(file.name ?? '').trim();
+}
+
+/**
  * Hex values for accent colors (matching theme.ts)
  * Used for non-Chakra contexts like Lexical editor mentions
  */
