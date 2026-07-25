@@ -57,14 +57,12 @@ describe('minusx/trend@1 build', () => {
     expect(json).toContain('__mx_pct');         // percent change computed in-spec
   });
 
-  it('sizes the KPI readability plate to the widest text so the date line never overflows it', () => {
+  it('the sparkline clears the right context stack while the oversized value may overlap its quiet left edge', () => {
     const json = specJson(trendSource());
-    // The plate width is measured off the ACTUAL rendered text (value number + date line),
-    // not a static slot fraction that a long "Nov 30, 2025 vs Oct 31, 2025" overshoots.
-    expect(json).toContain('__mx_datelabel');               // date label is materialized as a field
-    expect(json).toContain('length(datum.__mx_datelabel)'); // …and feeds the plate width
-    expect(json).toContain('length(datum.__mx_valuetext)');  // as does the big value number
-    expect(json).not.toContain("bandwidth('slot') * 0.28");  // the fixed-fraction plate is gone
+    // Plot placement follows the compact context stack, not the much larger value.
+    expect(json).not.toContain('__mx_kpi_plate');
+    expect(json).not.toContain('mx-trend-focus');
+    expect(json).toContain('contextCenter + contextHeight'); // plot clears only the right context stack
   });
 
   it("compareMode 'last' bases on the final point; 'previous' skips the partial period (3+ points)", () => {
@@ -73,7 +71,7 @@ describe('minusx/trend@1 build', () => {
     expect(last).toContain('datum.__mx_idx === datum.__mx_n');
     // previous: base is n-1 when 3+ points exist, else n (the 2-point special case)
     expect(previous).toContain('datum.__mx_n >= 3 ? datum.__mx_n - 1 : datum.__mx_n');
-    expect(last).not.toContain('datum.__mx_n >= 3');
+    expect(last).not.toContain('datum.__mx_n >= 3 ?');
   });
 
   it('sparkline renders by default and is removable via params', () => {
@@ -83,7 +81,7 @@ describe('minusx/trend@1 build', () => {
     expect(without).not.toContain('__mx_spark');
   });
 
-  it('uses the plot as a clean full-height visual field without y-axis guides', () => {
+  it('uses a clean plot band without y-axis guides', () => {
     const json = specJson(trendSource());
     expect(json).toContain('plotTop');
     expect(json).toContain('plotBottom');
@@ -100,29 +98,82 @@ describe('minusx/trend@1 build', () => {
     expect(json).toContain('__mx_value');
   });
 
-  it('uses a crisp line, translucent area, and endpoint markers behind the KPI', () => {
+  it('draws a smooth basis spline with a single beacon endpoint — no compare ring, no glow', () => {
     const json = specJson(trendSource());
+    expect(json).toContain('"interpolate":{"value":"basis"}');
+    expect(json).not.toContain('"interpolate":{"value":"monotone"}');
     expect(json).not.toContain('__mx_spark_glow');
     expect(json).toContain('__mx_spark_area');
     expect(json).toContain('__mx_latest_point');
-    expect(json).toContain('__mx_compare_point');
+    expect(json).toContain('__mx_latest_core');
+    expect(json).not.toContain('__mx_compare_point');
   });
 
-  it('uses a compact surface plate to keep the centered KPI readable', () => {
+  it("smooth:false falls back to a monotone (through-the-points) line", () => {
+    const json = specJson(trendSource({ params: { smooth: false } }));
+    expect(json).toContain('"interpolate":{"value":"monotone"}');
+    expect(json).not.toContain('"interpolate":{"value":"basis"}');
+  });
+
+  it('the line stroke fades in from the past — horizontal gradient ending at full series color', () => {
     const json = specJson(trendSource());
-    expect(json).toContain('__mx_kpi_plate');
-    expect(json).toContain('mx-trend-focus');
-    expect(json).toContain('"cornerRadius":{"value":10}');
-    expect(json).toContain('"fillOpacity":{"value":0.86}');
+    expect(json).toContain('__mx_spark_line');
+    // history fade: a left→right gradient stroke, not a flat scale color
+    expect(json).toContain("gradient: 'linear', x1: 0, y1: 0, x2: 1, y2: 0");
+  });
+
+  it('renders the delta as a tinted pill chip sized from the rendered delta text', () => {
+    const json = specJson(trendSource());
+    expect(json).toContain('__mx_delta_pill');
+    expect(json).toContain('length(datum.__mx_deltatext)'); // pill width measured off the text
+    expect(json).not.toContain('__mx_kpi_plate');
     expect(json).not.toContain('__mx_kpi_aura');
     expect(json).not.toContain('__mx_value_glow');
     expect(json).not.toContain("gradient: 'radial'");
   });
 
+  it('centers the KPI header as an inward-aligned two-column lockup', () => {
+    const json = specJson(trendSource());
+    expect(json).toContain("bandwidth('slot') * 0.56");        // value right-aligns to the center-left edge
+    expect(json).toContain("bandwidth('slot') * 0.62");        // context left-aligns across the center gutter
+    expect(json).toContain('contextHeight');                    // plot placement follows the compact right stack
+    expect(json).toContain('+ datum.__mx_pillw');               // pill grows rightward from the context edge
+    expect(json).toContain('length(datum.__mx_valuetext)');     // long formatted values fit rather than cross columns
+    expect(json).toContain("bandwidth('slot') * 0.54");        // value gets the larger share of the centered lockup
+    expect(json).toContain('datum.__mx_valuetext) * 0.57');     // tighter value tracking unlocks more vertical scale
+    expect(json).toContain(') * -0.05');                        // negative tracking preserves the center gutter
+    expect(json).toContain("height * 0.6");                     // only the left value grows into poster scale
+    expect(json).toContain(', 32, 176)');                       // poster ceiling high enough that width-fit binds first
+  });
+
+  it('prettifies raw column labels — underscores become spaces on the card', () => {
+    const json = specJson(trendSource());
+    expect(json).toContain("replace(datum.__mx_series, /_/g, ' ')");
+  });
+
+  it('calms dense series: the ribbon rides a centered moving average once n ≥ 30; tooltips keep TRUE values', () => {
+    const json = specJson(trendSource());
+    expect(json).toContain('__mx_ma');                    // centered mean, per series
+    expect(json).toContain('"frame":[-2,2]');
+    expect(json).toContain('datum.__mx_n >= 30');         // sparse series draw raw values
+    // every drawn spark mark rides the display series…
+    expect(json).toContain('"y":{"scale":"__mx_spark_y","field":"__mx_disp"}');
+    expect(json).not.toContain('"y":{"scale":"__mx_spark_y","field":"__mx_value"}');
+    // …while the hover tooltip reports the true value
+    expect(json).toContain("'Value': ");
+    expect(json).toContain('datum.__mx_value');
+  });
+
+  it('the period label defaults to a SHORT date format; tooltips keep the full date', () => {
+    const json = specJson(trendSource());
+    expect(json).toContain("'%b %d'");        // label dates: "Nov 30 vs Oct 31"
+    expect(json).toContain("'%b %d, %Y'");    // tooltip dates stay unambiguous
+  });
+
   it('fades the area from the series color to zero-alpha series color, never transparent black', () => {
     const json = specJson(trendSource());
     expect(json).toContain('__mx_spark_area');
-    expect(json).toContain('"fillOpacity":{"value":0.22}');
+    expect(json).toContain('"fillOpacity":{"value":0.16}');
     expect(json).toContain("gradient: 'linear'");
     expect(json).toContain('rgba(');
     expect(json).not.toContain("color: 'transparent'");
@@ -152,6 +203,8 @@ describe('minusx/trend@1 build', () => {
     const defaults = specJson(trendSource());
     // responsive default when no override: derived from card bandwidth/height
     expect(defaults).toContain("bandwidth('slot')");
+    expect(defaults).toContain('"name":"deltaSize","update":"clamp(min(bandwidth(\'slot\') * 0.04');
+    expect(defaults).toContain('"name":"dateSize","update":"clamp(min(bandwidth');
   });
 
   it('single measure binding works without fold', () => {

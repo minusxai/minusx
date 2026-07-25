@@ -13,6 +13,7 @@ import { ChartError } from '@/components/plotx/ChartError';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, computeXLabelAngle, injectNamedAssets } from '@/lib/viz/render-vega';
+import { inferVizColumnsFromRows } from '@/lib/viz/query-data';
 import { chartTokenRangeFromElement } from '@/lib/viz/chart-tokens';
 import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/viz-templates';
 import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
@@ -154,7 +155,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         // producing crowded/overlapping ticks. Wait for fonts before the first layout.
         if (typeof document !== 'undefined' && document.fonts?.ready) await document.fonts.ready;
         if (cancelled) return;
-        const resolved = resolveEnvelopeSpec(envelope);
+        const resolved = resolveEnvelopeSpec(envelope, inferVizColumnsFromRows(rowsRef.current));
         if (!resolved.ok) throw new Error(resolved.error);
         vlSpecRef.current = resolved.engine === 'vega-lite' ? resolved.spec : null;
         const legendPlan = vlSpecRef.current

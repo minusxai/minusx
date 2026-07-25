@@ -62,8 +62,16 @@ function itemWidth(container: HTMLElement): number {
   return parseFloat(item!.style.width);
 }
 
+function itemRight(container: HTMLElement): number {
+  const item = container.querySelector('.react-grid-item') as HTMLElement | null;
+  expect(item).not.toBeNull();
+  const translateX = item!.style.transform.match(/translate\(([-\d.]+)px/)?.[1];
+  expect(translateX).toBeDefined();
+  return Number(translateX) + parseFloat(item!.style.width);
+}
+
 describe('dashboard grid width is surface-driven', () => {
-  it('uses the full surface width without a stale reserved gutter', async () => {
+  it('uses the current surface width rather than a stale pane-width reservation', async () => {
     const { container } = renderAt(1240);
     await waitFor(() => expect(container.querySelector('.react-grid-item')).not.toBeNull());
     const region = container.querySelector('[aria-label="Dashboard"]') as HTMLElement;
@@ -88,5 +96,40 @@ describe('dashboard grid width is surface-driven', () => {
     await waitFor(() => expect(second.container.querySelector('.react-grid-item')).not.toBeNull());
     const wide = itemWidth(second.container as HTMLElement);
     expect(wide).toBeGreaterThan(narrow + 200);
+  });
+
+  it('keeps a rightmost card border inside the clipped surface', async () => {
+    const rightEdgeDoc = {
+      ...doc,
+      layout: { columns: 12, items: [{ id: Q1_ID, x: 9, y: 0, w: 3, h: 2 }] },
+    } as DocumentContent;
+    const { container } = renderWithProviders(
+      <SurfaceWidthContext.Provider value={740}>
+        <DashboardView
+          document={rightEdgeDoc}
+          folderPath="/tutorial"
+          fileId={100}
+          onChange={noop}
+          editMode={false}
+          isDirty={false}
+          paramValues={{}}
+          lastExecutedParams={{}}
+          questionContents={[undefined]}
+          fileState={undefined}
+          dirtyFiles={[]}
+          onTextBlockContentChange={noop}
+          onQuestionEdit={noop}
+          onParamSubmit={noop}
+          onAddQuestion={noop}
+          onAddTextBlock={noop}
+        />
+      </SurfaceWidthContext.Provider>,
+    );
+
+    await waitFor(() => expect(container.querySelector('.react-grid-item')).not.toBeNull());
+    // With zero grid padding RGL's independent rounding produces 741px here. The dashboard
+    // surface is exactly 740px wide and clips overflow, so that extra pixel used to erase the
+    // card's right border.
+    expect(itemRight(container as HTMLElement)).toBeLessThanOrEqual(740);
   });
 });

@@ -1155,9 +1155,9 @@ const BADGE_LIFT_PX = 13;  // vertical distance from the rule to the badge cente
 
 /**
  * The badge layers for a reference-line label: an OPAQUE surface backing (the
- * `mx-annotation-plate` theme style supplies the mode-aware surface fill, like the
- * trend recipe's `mx-trend-focus` plate) under a tinted color plate, under the text —
- * so the badge stays readable over gridlines and data in both color modes.
+ * `mx-annotation-plate` theme style supplies the mode-aware surface fill) under a
+ * tinted color plate, under the text — so the badge stays readable over gridlines
+ * and data in both color modes.
  */
 function badgeLayers(
   axis: 'x' | 'y',

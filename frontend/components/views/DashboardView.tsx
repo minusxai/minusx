@@ -510,7 +510,11 @@ export default function DashboardView({
                 onDragStop={handleLayoutChange}
                 onResizeStop={handleLayoutChange}
                 draggableHandle=".drag-handle"
-                containerPadding={[0, 0]}
+                // Keep the outer card border inside the SVG/foreignObject clip. RGL rounds a
+                // rightmost item's x-position and width independently, so at some surface widths
+                // their sum is one pixel wider than the grid. A 1px horizontal paint gutter
+                // absorbs that rounding pixel without changing the dashboard's measured width.
+                containerPadding={[1, 0]}
                 margin={[6, 6]}
                 isDraggable={editMode}
                 isResizable={editMode}
