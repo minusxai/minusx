@@ -18,10 +18,10 @@ import type { TopLevelSpec } from 'vega-lite';
 import { parse, View } from 'vega';
 import type { Spec as VegaSpec } from 'vega';
 import { expressionInterpreter } from 'vega-interpreter';
-import { Handler as TooltipHandler } from 'vega-tooltip';
 import { prepareVegaLiteSpec } from './prepare';
 import { annotationSplit } from './encoding-edit';
 import { getVegaLiteConfig, getVegaParserConfig, getSurfaceColor } from './theme';
+import { createVegaTooltipHandler } from './vega-tooltip-handler';
 import { materializeRecipe } from './viz-templates';
 import { VIZ_DATASET_MAIN } from './types';
 import { loadGeoFeatures } from './geo-assets';
@@ -524,7 +524,7 @@ export function createVegaView(
     hover: opts.renderer !== 'none',
     ...(opts.container ? { container: opts.container } : {}),
     ...(opts.container && opts.tooltipTheme
-      ? { tooltip: new TooltipHandler({ theme: opts.tooltipTheme }).call }
+      ? { tooltip: createVegaTooltipHandler(opts.container, opts.tooltipTheme) }
       : {}),
   });
   setMainData(view, rows);

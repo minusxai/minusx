@@ -5,17 +5,22 @@
  * The card content (all series at x, color swatches) is built by the pure `tooltip-plan`
  * module; this only positions and shows/hides. Browser-only.
  */
+import { ensureTooltipStyles } from './tooltip-styles';
+
 export class SharedTooltip {
   private el: HTMLElement;
+  private doc: Document;
 
-  constructor(private theme: 'light' | 'dark') {
+  constructor(private theme: 'light' | 'dark', doc: Document = document) {
+    this.doc = doc;
+    ensureTooltipStyles(doc);
     // Our OWN element (not Vega's `#vg-tooltip-element`) — sharing it fought the default
     // per-mark tooltip that pie/scatter/maps still use, leaving that one stuck hidden.
-    let el = document.getElementById('mx-shared-tooltip');
+    let el = doc.getElementById('mx-shared-tooltip');
     if (!el) {
-      el = document.createElement('div');
+      el = doc.createElement('div');
       el.id = 'mx-shared-tooltip';
-      document.body.appendChild(el);
+      (doc.fullscreenElement ?? doc.body).appendChild(el);
     }
     this.el = el;
   }
@@ -35,8 +40,9 @@ export class SharedTooltip {
     const r = el.getBoundingClientRect();
     let x = cursorX + pad;
     let y = cursorY + pad;
-    if (x + r.width > window.innerWidth) x = cursorX - r.width - pad;
-    if (y + r.height > window.innerHeight) y = cursorY - r.height - pad;
+    const viewport = this.doc.defaultView;
+    if (viewport && x + r.width > viewport.innerWidth) x = cursorX - r.width - pad;
+    if (viewport && y + r.height > viewport.innerHeight) y = cursorY - r.height - pad;
     el.style.left = `${Math.max(4, x)}px`;
     el.style.top = `${Math.max(4, y)}px`;
   }

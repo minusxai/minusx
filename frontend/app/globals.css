@@ -256,7 +256,8 @@ html.dark .login-card {
 /* Viz V2 (docs/Visualization Arch V2.md): tooltip elements on <body> (can't be styled
    from the chart's scoped css). `#vg-tooltip-element` = Vega's default per-mark tooltip
    (pie/scatter/maps); `#mx-shared-tooltip` = our shared multi-series tooltip. Both wear
-   the borderless "floating card" look — soft shadow + hairline ring, no 1px border. */
+   the borderless "floating card" look — soft shadow + hairline ring, no 1px border.
+   Keep this chrome in sync with lib/viz/tooltip-styles.ts, which installs it in iframe docs. */
 #vg-tooltip-element,
 #mx-shared-tooltip {
   /* Above every overlay (Chakra dialogs use zIndex 100000 — e.g. the /debug

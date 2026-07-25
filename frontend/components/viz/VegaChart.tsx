@@ -230,7 +230,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           const plan = tooltipPlan;
           // Capture LOCALS in the handler (not tooltipRef) so a StrictMode/rebuild race can't
           // null it out. `holder.data` is re-indexed on row change.
-          const controller = new SharedTooltip(colorMode);
+          const controller = new SharedTooltip(colorMode, el.ownerDocument);
           const holder = { data: buildTooltipData(rowsRef.current, plan) };
           const formatX = makeXFormatter(plan);
           const v = view; // default per-mark tooltip already suppressed pre-run (above)
