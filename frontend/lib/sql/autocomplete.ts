@@ -4,6 +4,7 @@
 import { init, parse, Dialect } from '@polyglot-sql/sdk';
 import type { DatabaseWithSchema } from '@/lib/types';
 import { immutableSet } from '@/lib/utils/immutable-collections';
+import { connectionTypeToDialect } from '@/lib/types/connections';
 
 let initialized = false;
 
@@ -604,7 +605,10 @@ export async function getCompletionsLocal(
 
   await ensureInit();
 
-  const dialect = (connectionType ?? 'duckdb') as Dialect;
+  // The connection type is not a dialect — `csv`/`google-sheets` are DuckDB-backed, and
+  // handing the parser those raw strings yields no AST at all (every query would then
+  // fall through to the degraded unparseable path).
+  const dialect = connectionTypeToDialect(connectionType ?? 'duckdb') as Dialect;
   const qualifiedOnly = requiresQualifiedTables(connectionType);
 
   // Error-tolerant parse — polyglot returns null AST for incomplete SQL,

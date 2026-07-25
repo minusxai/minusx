@@ -68,3 +68,30 @@ describe('table completion — dialects requiring dataset qualification', () => 
     expect(labels).toContain('V3minusx_prod.app_events');
   });
 });
+
+/**
+ * The connection type is not itself a parser dialect. `csv` and `google-sheets` are
+ * DuckDB-backed; handing those strings to the parser yields no AST, silently dropping
+ * every query onto the degraded unparseable-fallback path.
+ */
+describe('connection type → parser dialect', () => {
+  test('CSV connections reach the parsed path, same as DuckDB', async () => {
+    const csv = await labelsFor('select * from ', 'csv');
+    const duckdb = await labelsFor('select * from ', 'duckdb');
+
+    expect(csv).toEqual(duckdb);
+    // The qualified form is only produced by the parsed path, never by the fallback.
+    expect(csv).toContain('V3minusx_prod.app_events');
+  });
+
+  test('Google Sheets connections reach the parsed path, same as DuckDB', async () => {
+    expect(await labelsFor('select * from ', 'google-sheets'))
+      .toEqual(await labelsFor('select * from ', 'duckdb'));
+  });
+
+  test('dialects whose name differs from the connection type still parse', async () => {
+    for (const type of ['postgresql', 'athena', 'sqlite', 'clickhouse', 'bigquery']) {
+      expect(await labelsFor('select * from ', type)).toContain('V3minusx_prod.app_events');
+    }
+  });
+});
