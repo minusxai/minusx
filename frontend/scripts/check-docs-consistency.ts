@@ -20,6 +20,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { execFileSync } from 'child_process';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PROJECT_DOC = 'MinusX.md';
@@ -35,6 +36,21 @@ const exists = (p: string): boolean => {
   if (!existsSync(p)) return false;
   try { statSync(p); return true; } catch { return false; }
 };
+
+/**
+ * A gitignored path is absent from a clean checkout BY DESIGN — `frontend/.env` is
+ * created by the developer, exists on every working machine, and never in CI. Failing
+ * on it would mean documentation could not describe setup, which is exactly the kind of
+ * false alarm that gets a check deleted.
+ */
+function isGitIgnored(relPath: string): boolean {
+  try {
+    execFileSync('git', ['check-ignore', '-q', '--', relPath], { cwd: REPO_ROOT, stdio: 'ignore' });
+    return true; // exit 0 = ignored
+  } catch {
+    return false; // exit 1 = not ignored; any other failure is treated the same, conservatively
+  }
+}
 
 /** An extensionless import may name a file, a directory, or a directory/index.ts. */
 function existsAsModule(base: string): boolean {
@@ -121,6 +137,7 @@ doc.split('\n').forEach((line, i) => {
     const basename = cleaned.split('/').pop()!;
     if (existsSomewhereUnder(join(REPO_ROOT, 'frontend'), basename)) continue;
     if (existsSomewhereUnder(REPO_ROOT, basename)) continue;
+    if (isGitIgnored(cleaned)) continue; // developer-created (e.g. `frontend/.env`) — absent by design
     failures.push(`${PROJECT_DOC}:${i + 1}  dead path: \`${t}\``);
   }
 });
