@@ -3638,6 +3638,15 @@ suites (`test/e2e/`, `test/qa/`).
 (`DAB_BENCH_BASE_DIR`) and real LLM credentials. Distinct from `app/api/benchmark/import` (the
 in-app route that ingests benchmark output) — the runner writes JSONL, the route reads it.
 
+**`frontend/scripts/b2-surface-drivers.tsx`** is imported from inside a generated-code *string*
+in `frontend/scripts/b2-surface-matrix.ts`, so static analysis reports it as unused. It is not:
+it is the in-page fixture harness for `npm run capture-matrix`, driving the real `DashboardSurface`,
+`WindowedTile` and story-serializer capture path across Chromium, WebKit and Firefox. The harness
+pages deliberately carry zero stylesheets — a tile that rasterizes empty proves the surface
+depended on its environment. `npm run knip` will keep reporting it, and `tailwindcss`,
+`yaml-loader` and `@tailwindcss/oxide` (all consumed through config rather than imports). Verify
+before deleting anything knip flags.
+
 **`frontend/types/`** — ambient declaration files only (`next-auth.d.ts` augments
 `User`/`Session`/`JWT` with `userId`/`role`/`home_folder`/`tokenVersion`). No values, no runtime.
 
@@ -3935,36 +3944,6 @@ built from the repository root**, not from `docs/`.
 **Two root compose files, two different stacks — and the one named `prod` tracks the *less* stable image.** `docker-compose.yml` pulls `ghcr.io/minusxai/minusx-frontend:latest` (the semver-tagged release image) and runs fully embedded: `DB_TYPE=pglite`, `PGLITE_DATA_DIR=/app/data/pglite` on a named `pglite_data` volume, no external database. `docker-compose.prod.yml` pulls `ghcr.io/minusxai/minusx-frontend-canary:latest` — the image `publish.yml` builds from every push to main — and sets `DB_TYPE=postgres`, which requires `DATABASE_URL` in `frontend/.env` before the container will start. Both read `frontend/.env` via `env_file` and share `BASE_DUCKDB_DATA_PATH=/app` plus `ANALYTICS_DB_DIR=/app/data/analytics`. Reaching for the `.prod` file because of its name gets the canary build; the plain file is the stable one.
 
 ---
-
-## Dependency hygiene
-
-`npm run knip` (in `frontend/`) reports unused files, exports and dependencies. Verify every
-finding by hand before acting on it — knip both reports false positives and cannot see some real
-uses.
-
-### Reported but NOT dead
-
-Recorded so the next person doesn't "clean up" working code:
-
-| Reported | Why it is actually used |
-|---|---|
-| `frontend/scripts/b2-surface-drivers.tsx` | Imported from inside a generated-code string at `frontend/scripts/b2-surface-matrix.ts`, which static analysis cannot see. |
-| `tailwindcss` | Consumed through `frontend/postcss.config.mjs`, `frontend/next.config.ts`, and `frontend/app/globals.css`. |
-| `yaml-loader` | Used by the build to load prompt YAML. |
-| `@tailwindcss/oxide` | Platform-specific engine package pulled in by the Tailwind toolchain. |
-
-### Unused exports
-
-Knip reports a large number of unused exports and exported types. Most are re-exports from the
-type barrels (`frontend/lib/types.ts` and `frontend/lib/types/*.ts`) that exist to give consumers
-one import path — a barrel export with no current consumer is intentional, not rot. **Do not
-bulk-delete these.** Prune one only when touching the owning module for another reason, and only
-after confirming no consumer imports the symbol through the barrel.
-
-Two exports in `frontend/lib/chart/` are currently reachable only from their own tests —
-`getHeatGradient` (`geo-color-scale.ts`) and `computeHeatmapOptions` (`geo-heatmap-defaults.ts`).
-They were the map-heatmap path; geo now renders through Vega. They are removable along with their
-tests whenever the geo feature is next touched.
 
 ## Development philosophy
 

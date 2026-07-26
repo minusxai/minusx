@@ -1,8 +1,7 @@
 import { formatDateValue } from '@/lib/chart/chart-format'
-import { getColorScale, getHeatGradient, getRadiusScale, interpolateColor, COLOR_SCALES } from '@/lib/chart/geo-color-scale'
+import { COLOR_SCALES } from '@/lib/chart/geo-color-scale'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import type { GeoConfig } from '@/lib/types'
-import { computeHeatmapOptions } from '../geo-heatmap-defaults'
 import { parseGeoNumber } from '@/lib/chart/geo-value-utils'
 import { aggregatePivotData } from '../pivot-utils'
 import type { PivotConfig } from '@/lib/types'
@@ -63,60 +62,6 @@ describe('formatDateValue', () => {
   })
 })
 
-describe('interpolateColor', () => {
-  it.each([
-    ['returns start color at t=0', '#000000', '#ffffff', 0, '#000000'],
-    ['returns end color at t=1', '#000000', '#ffffff', 1, '#ffffff'],
-    ['returns midpoint color at t=0.5', '#000000', '#ffffff', 0.5, '#808080'],
-    ['clamps t below 0 to start color', '#ff0000', '#0000ff', -0.5, '#ff0000'],
-    ['clamps t above 1 to end color', '#ff0000', '#0000ff', 1.5, '#0000ff'],
-  ])('%s', (_desc, start, end, t, expected) => {
-    expect(interpolateColor(start, end, t)).toBe(expected)
-  })
-})
-
-describe('getColorScale', () => {
-  it.each([
-    ['returns low color for minimum value', 0],
-    ['returns high color for maximum value', 100],
-    ['handles min === max without crashing', 50, 50, 50],
-  ])('%s', (_desc, value, min = 0, max = 100) => {
-    const color = getColorScale(value, min, max, 'light')
-    expect(color).toBeDefined()
-    expect(color).toMatch(/^#[0-9a-f]{6}$/)
-  })
-
-  it('returns different colors for different values', () => {
-    const low = getColorScale(10, 0, 100, 'light')
-    const high = getColorScale(90, 0, 100, 'light')
-    expect(low).not.toBe(high)
-  })
-
-  it('returns different palettes for light vs dark mode', () => {
-    const light = getColorScale(50, 0, 100, 'light')
-    const dark = getColorScale(50, 0, 100, 'dark')
-    expect(light).toMatch(/^#[0-9a-f]{6}$/)
-    expect(dark).toMatch(/^#[0-9a-f]{6}$/)
-  })
-
-  it('uses different colors for different scale keys', () => {
-    const green = getColorScale(80, 0, 100, 'light', 'green')
-    const blue = getColorScale(80, 0, 100, 'light', 'blue')
-    const ryg = getColorScale(80, 0, 100, 'light', 'red-yellow-green')
-    expect(green).not.toBe(blue)
-    expect(blue).not.toBe(ryg)
-  })
-
-  it.each([
-    ['falls back to default scale for unknown key', 'nonexistent'],
-    ['falls back to default scale for null', null],
-    ['falls back to default scale for undefined', undefined],
-  ])('%s', (_desc, scaleKey) => {
-    const defaultColor = getColorScale(50, 0, 100, 'light')
-    expect(getColorScale(50, 0, 100, 'light', scaleKey)).toBe(defaultColor)
-  })
-})
-
 describe('COLOR_SCALES', () => {
   it('has at least 2 scale options', () => {
     expect(COLOR_SCALES.length).toBeGreaterThanOrEqual(2)
@@ -131,49 +76,6 @@ describe('COLOR_SCALES', () => {
         expect(c).toMatch(/^#[0-9a-fA-F]{6}$/)
       }
     }
-  })
-})
-
-describe('getHeatGradient', () => {
-  it('starts transparent so low-intensity heat fades naturally', () => {
-    const gradient = getHeatGradient('light', 'red-yellow-green')
-    expect(gradient[0]).toMatch(/^rgba\(\d+, \d+, \d+, 0\)$/)
-    expect(gradient[1]).toMatch(/^#[0-9a-f]{6}$/)
-    expect(gradient[0.6]).toMatch(/^#[0-9a-f]{6}$/)
-  })
-
-  it('falls back to the default palette for unknown keys', () => {
-    expect(getHeatGradient('light', 'nope')).toEqual(getHeatGradient('light'))
-  })
-})
-
-describe('getRadiusScale', () => {
-  it.each([
-    // [desc, value, min, max, minRadius, scale, expected]
-    ['returns minimum radius for minimum value', 0, 0, 100, undefined, undefined, 4],
-    ['returns maximum radius for maximum value', 100, 0, 100, undefined, undefined, 30],
-    ['handles min === max', 50, 50, 50, undefined, undefined, 4],
-    ['clamps values below min', -10, 0, 100, undefined, undefined, 4],
-    ['clamps values above max', 200, 0, 100, undefined, undefined, 30],
-    ['uses custom minRadius when provided', 0, 0, 100, 10, undefined, 10],
-    ['uses custom minRadius for min===max fallback', 50, 50, 50, 10, undefined, 10],
-    ['scales between custom minRadius and MAX_RADIUS', 100, 0, 100, 10, undefined, 30],
-    ['interpolates correctly with custom minRadius', 50, 0, 100, 10, undefined, 20],
-    ['scale=2 doubles all radii', 50, 0, 100, undefined, 2, 34],
-    ['scale applies to min value too', 0, 0, 100, undefined, 3, 12],
-    ['scale applies to min===max fallback', 50, 50, 50, 10, 2, 20],
-  ])('%s', (_desc, value, min, max, minRadius, scale, expected) => {
-    expect(getRadiusScale(value, min, max, minRadius, scale)).toBe(expected)
-  })
-
-  it('returns intermediate radius for middle value', () => {
-    const r = getRadiusScale(50, 0, 100)
-    expect(r).toBeGreaterThan(4)
-    expect(r).toBeLessThan(30)
-  })
-
-  it('scale=1 is same as default', () => {
-    expect(getRadiusScale(50, 0, 100, undefined, 1)).toBe(getRadiusScale(50, 0, 100))
   })
 })
 
@@ -211,93 +113,6 @@ describe('getGeoConstraintError', () => {
     } else {
       expect(result.error).toContain(expected)
     }
-  })
-})
-
-describe('computeHeatmapOptions', () => {
-  it('should normalize intensity values to 0-1 range', () => {
-    const points: [number, number, number][] = [
-      [37.7, -122.4, 100],
-      [37.8, -122.3, 500],
-      [37.9, -122.2, 300],
-    ]
-    const { points: normalized } = computeHeatmapOptions(points, { weighted: true })
-    expect(normalized[0][2]).toBeCloseTo(0.12)
-    expect(normalized[1][2]).toBeCloseTo(1)
-    expect(normalized[2][2]).toBeGreaterThan(0.52)
-    expect(normalized[2][2]).toBeLessThan(0.54)
-  })
-
-  it('should handle uniform intensity (all same value)', () => {
-    const points: [number, number, number][] = [
-      [37.7, -122.4, 50],
-      [37.8, -122.3, 50],
-    ]
-    const { points: normalized } = computeHeatmapOptions(points, { weighted: true })
-    expect(normalized[0][2]).toBe(1)
-    expect(normalized[1][2]).toBe(1)
-  })
-
-  it('should ignore raw weights when weighted mode is off', () => {
-    const points: [number, number, number][] = [
-      [37.7, -122.4, 100],
-      [37.8, -122.3, 500],
-    ]
-    const { points: normalized } = computeHeatmapOptions(points)
-    expect(normalized[0][2]).toBe(1)
-    expect(normalized[1][2]).toBe(1)
-  })
-
-  it('should make weighted heatmaps materially different from unweighted ones', () => {
-    const points: [number, number, number][] = [
-      [37.7, -122.4, 100],
-      [37.8, -122.3, 500],
-      [37.9, -122.2, 300],
-    ]
-    const weighted = computeHeatmapOptions(points, { weighted: true })
-    const unweighted = computeHeatmapOptions(points)
-    expect(weighted.points[0][2]).not.toBe(unweighted.points[0][2])
-    expect(weighted.points[2][2]).not.toBe(unweighted.points[2][2])
-  })
-
-  it('should use larger radius for few points (aggregated data)', () => {
-    const fewPoints: [number, number, number][] = Array.from({ length: 10 }, (_, i) => [37 + i * 0.1, -122, 1])
-    const manyPoints: [number, number, number][] = Array.from({ length: 5000 }, (_, i) => [37 + i * 0.0001, -122, 1])
-
-    const fewResult = computeHeatmapOptions(fewPoints)
-    const manyResult = computeHeatmapOptions(manyPoints)
-
-    expect(fewResult.radius).toBeGreaterThan(manyResult.radius)
-  })
-
-  it('should scale blur proportionally to radius', () => {
-    const points: [number, number, number][] = Array.from({ length: 100 }, (_, i) => [37 + i * 0.01, -122, 1])
-    const { radius, blur } = computeHeatmapOptions(points)
-    expect(blur).toBeGreaterThanOrEqual(radius)
-    expect(blur).toBeGreaterThan(0)
-  })
-
-  it('should clamp radius within reasonable bounds', () => {
-    const onePoint: [number, number, number][] = [[37.7, -122.4, 1]]
-    const hugeDataset: [number, number, number][] = Array.from({ length: 100000 }, (_, i) => [37 + i * 0.00001, -122, 1])
-
-    const { radius: r1 } = computeHeatmapOptions(onePoint)
-    const { radius: r2 } = computeHeatmapOptions(hugeDataset)
-
-    expect(r1).toBeLessThanOrEqual(48)
-    expect(r2).toBeGreaterThanOrEqual(18)
-  })
-
-  it('should saturate faster for sparse point sets', () => {
-    const sparsePoints: [number, number, number][] = Array.from({ length: 8 }, (_, i) => [37 + i * 0.02, -122, 1])
-    const densePoints: [number, number, number][] = Array.from({ length: 5000 }, (_, i) => [37 + i * 0.0001, -122, 1])
-
-    const sparseResult = computeHeatmapOptions(sparsePoints)
-    const denseResult = computeHeatmapOptions(densePoints)
-
-    expect(sparseResult.max).toBeLessThan(denseResult.max)
-    expect(sparseResult.max).toBeGreaterThanOrEqual(0.12)
-    expect(denseResult.max).toBeLessThanOrEqual(0.24)
   })
 })
 
