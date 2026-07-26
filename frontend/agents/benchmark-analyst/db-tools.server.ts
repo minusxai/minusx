@@ -52,7 +52,7 @@ import type { QueryIR } from '@/lib/sql/ir-types';
  * path (`_executeFallback` → `runQuery`) does not yet honour the query
  * timeout, so the param + its description are hidden here rather than
  * advertising a capability the production tool doesn't deliver. Wiring
- * the timeout through the production path is tracked in Tasks.md; restore
+ * the timeout through the production path is a tracked follow-up; restore
  * the full schema once that lands. `schema.name` is unchanged, so the LLM
  * still sees one consistent tool name.
  */

@@ -1,7 +1,7 @@
 /**
  * NotebookView — characterizes CURRENT (pre-move) Redux behavior of the
  * `reduxExecuted` call site ahead of the Container/View discipline move
- * (CLAUDE.md "Refactoring — Blue -> Red -> Blue").
+ * (AGENTS.md "Refactoring — Blue -> Red -> Blue").
  * NotebookView.tsx currently calls useAppDispatch + useAppSelector directly
  * (selectNotebookCellExecuted) to source a real file's per-cell "last run"
  * snapshot from Redux ephemeral state — this differs from the local-state

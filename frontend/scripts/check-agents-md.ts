@@ -183,11 +183,92 @@ for (const file of agentsFiles) {
   }
 }
 
-if (failures.length > 0) {
-  console.error(`\ncheck-agents-md: ${failures.length} dead path(s) across ${agentsFiles.length} AGENTS.md file(s):\n`);
-  for (const f of failures) console.error(`  ${f}`);
-  console.error('\nFix the path, or delete the pointer. Docs that lie are worse than no docs.\n');
+/**
+ * Second sweep: source comments that name a *.md file which no longer exists.
+ *
+ * The first sweep only reads AGENTS.md files, so when a doc is deleted, every
+ * `// See <doc>` pointer left behind in the source goes unnoticed. Deleting 19 plan
+ * docs once orphaned 70 such comments across 62 files — this is that guard.
+ */
+const SOURCE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.css', '.mdx', '.md']);
+// Two shapes only. A backticked mention may contain spaces;
+// a bare one may not, or the pattern swallows whole sentences ending in "AGENTS.md".
+const MD_MENTION_BACKTICKED = /`([A-Za-z0-9_][A-Za-z0-9_ ,&./-]*\.md)`/g;
+const MD_MENTION_BARE = /(?:^|[\s'"(\[])([A-Za-z0-9_][A-Za-z0-9_./-]*\.md)\b/g;
+
+function walkSource(dir: string, out: string[] = [], depth = 0): string[] {
+  if (depth > 8) return out;
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    if (e.isDirectory()) {
+      if (SKIP_DIRS.has(e.name) || e.name.startsWith('.')) continue;
+      walkSource(join(dir, e.name), out, depth + 1);
+    } else if (SOURCE_EXTS.has(e.name.slice(e.name.lastIndexOf('.')))) {
+      out.push(join(dir, e.name));
+    }
+  }
+  return out;
+}
+
+/** Resolve a bare doc mention: existing anywhere in the repo counts. */
+function mdExists(name: string, fromDir: string): boolean {
+  const base = name.split('/').pop()!;
+  if (exists(join(fromDir, name)) || exists(join(REPO_ROOT, name))) return true;
+  return existsSomewhereUnder(REPO_ROOT, base);
+}
+
+const orphaned: string[] = [];
+let mentions = 0;
+
+for (const file of walkSource(REPO_ROOT)) {
+  const rel = file.slice(REPO_ROOT.length + 1);
+  let text;
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    continue;
+  }
+  if (!text.includes('.md')) continue;
+
+  text.split('\n').forEach((line, i) => {
+    // URLs are the doc site's business, not ours.
+    if (line.includes('http')) return;
+    const seen = new Set<string>();
+    for (const re of [MD_MENTION_BACKTICKED, MD_MENTION_BARE]) {
+      for (const [, name] of line.matchAll(re)) {
+        const cleaned = name.trim();
+        if (seen.has(cleaned)) continue;
+        seen.add(cleaned);
+        mentions++;
+        if (!mdExists(cleaned, dirname(file))) {
+          orphaned.push(`${rel}:${i + 1}  references missing doc: ${cleaned}`);
+        }
+      }
+    }
+  });
+}
+
+if (failures.length > 0 || orphaned.length > 0) {
+  if (failures.length > 0) {
+    console.error(`\ncheck-agents-md: ${failures.length} dead path(s) across ${agentsFiles.length} AGENTS.md file(s):\n`);
+    for (const f of failures) console.error(`  ${f}`);
+    console.error('\nFix the path, or delete the pointer. Docs that lie are worse than no docs.');
+  }
+  if (orphaned.length > 0) {
+    console.error(`\ncheck-agents-md: ${orphaned.length} source comment(s) reference a .md file that does not exist:\n`);
+    for (const o of orphaned) console.error(`  ${o}`);
+    console.error('\nRepoint at the AGENTS.md that covers the claim, or drop the reference.');
+  }
+  console.error('');
   process.exit(1);
 }
 
-console.log(`check-agents-md: ${checked} path pointer(s) across ${agentsFiles.length} AGENTS.md file(s) — all resolve.`);
+console.log(
+  `check-agents-md: ${checked} pointer(s) across ${agentsFiles.length} AGENTS.md file(s) and ` +
+    `${mentions} .md mention(s) in source — all resolve.`,
+);

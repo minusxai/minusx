@@ -1,5 +1,5 @@
 // ============================================================================
-// Context domain types (Context.md — database schema whitelisting) — split out
+// Context domain types (database schema whitelisting) — split out
 // of lib/types.ts (thin barrel there re-exports everything here; see
 // lib/types.ts for the barrel).
 // ============================================================================

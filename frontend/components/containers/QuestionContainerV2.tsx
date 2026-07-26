@@ -76,7 +76,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
   const fileLoading = !file || file.loading;
 
   // --- Redux state that used to live directly inside QuestionViewV2 (a Container/View
-  // convention violation) — now read here and passed down as props. See CLAUDE.md
+  // convention violation) — now read here and passed down as props. See AGENTS.md
   // "Component Patterns". ---
   const editMode = useAppSelector(state => selectFileEditMode(state, questionId ?? -1));
   const collapsedPanel = useAppSelector(selectQuestionCollapsedPanel);

@@ -1,6 +1,6 @@
 /**
  * ReportView — characterizes CURRENT (pre-move) Redux behavior ahead of the
- * Container/View discipline move (CLAUDE.md "Refactoring — Blue -> Red -> Blue").
+ * Container/View discipline move (AGENTS.md "Refactoring — Blue -> Red -> Blue").
  * ReportView.tsx currently calls useAppSelector directly
  * at 2 sites (grep-verified, both read-only): selectFileEditMode (editMode),
  * selectIsDirty (isDirty).
@@ -19,7 +19,7 @@
  * ReportView) is mocked for the same reason as AlertView.ui.test.tsx: it
  * fires an unmocked /api/users fetch on mount with no .catch.
  *
- * All element queries by aria-label only (CLAUDE.md convention):
+ * All element queries by aria-label only (AGENTS.md convention):
  *  - editMode is observed via the "Report instructions" editor container,
  *    which only renders the Lexical editor (not the read-only viewer) when
  *    editMode is true — detected via the presence of a contenteditable node.

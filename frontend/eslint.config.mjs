@@ -47,7 +47,7 @@ const RESTRICT_PI_AI_SUBPATHS = {
   message: RESTRICT_PI_AI.message,
 };
 
-// Container/View convention (CLAUDE.md "Component Patterns"):
+// Container/View convention (AGENTS.md "Component Patterns"):
 // views must be pure presentation, containers own Redux. Widen the file list here
 // only as each view is actually migrated, never all at once.
 //
@@ -68,14 +68,14 @@ const RESTRICT_VIEW_REDUX = [
   {
     name: "@/store/hooks",
     message:
-      "Views must not read/write Redux directly (Container/View convention, CLAUDE.md " +
+      "Views must not read/write Redux directly (Container/View convention, AGENTS.md " +
       "'Component Patterns'). Move the useAppDispatch/useAppSelector call into this view's " +
       "container and pass the value/callback down as a prop instead.",
   },
   {
     name: "react-redux",
     message:
-      "Views must not read/write Redux directly (Container/View convention, CLAUDE.md " +
+      "Views must not read/write Redux directly (Container/View convention, AGENTS.md " +
       "'Component Patterns'). Move the Redux access into this view's container and pass " +
       "the value/callback down as a prop instead.",
   },
@@ -366,7 +366,7 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // Container/View convention (CLAUDE.md "Component Patterns") — these views were
+  // Container/View convention (AGENTS.md "Component Patterns") — these views were
   // migrated to pure presentation; guard against regression. See RESTRICT_VIEW_REDUX.
   {
     files: [

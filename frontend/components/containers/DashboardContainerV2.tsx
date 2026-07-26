@@ -13,7 +13,7 @@
  * - Simplified, consistent state management
  *
  * Owns all Redux access for the dashboard visual surface (Container/View convention,
- * CLAUDE.md "Component Patterns") — DashboardView is pure presentation and receives
+ * AGENTS.md "Component Patterns") — DashboardView is pure presentation and receives
  * everything (values + callbacks) as props.
  */
 import { useAppSelector, useAppDispatch } from '@/store/hooks';

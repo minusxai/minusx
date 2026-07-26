@@ -200,7 +200,7 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
 // Kept separate so the production variant (`db-tools.server.ts`) can build
 // a schema WITHOUT the benchmark-only `timeout` param — the timeout is only
 // honoured on the benchmark path today; wiring it through the production
-// `_executeFallback` → `runQuery` chain is a tracked follow-up (Tasks.md).
+// `_executeFallback` → `runQuery` chain is a tracked follow-up.
 const EXECUTE_QUERY_BASE_FIELDS = {
   connectionId: Type.String(),
   query: Type.String(),
@@ -232,7 +232,7 @@ const ExecuteQueryParams = Type.Object({
  * Production ExecuteQuery params — same as `ExecuteQueryParams` minus
  * `timeout`. Consumed by `db-tools.server.ts::ExecuteQuery`, which routes
  * through `_executeFallback` → `runQuery` (a path that does not yet honour
- * the timeout — see Tasks.md). Hiding the param keeps the production tool
+ * the timeout). Hiding the param keeps the production tool
  * from advertising a capability it doesn't deliver.
  */
 export const ExecuteQueryParamsNoTimeout = Type.Object(EXECUTE_QUERY_BASE_FIELDS);

@@ -100,7 +100,7 @@ export default function CreateQuestionModalContainer({
   const vizV2Enabled = useAppSelector(selectVizV2Active);
 
   // --- Redux state that used to live directly inside QuestionViewV2 (a Container/View
-  // convention violation) — now read here and passed down as props. See CLAUDE.md
+  // convention violation) — now read here and passed down as props. See AGENTS.md
   // "Component Patterns". This modal always dispatches setFileEditMode(true) below, but
   // reads the selector back (rather than hardcoding true) to stay faithful to the exact
   // prior behavior — false for the render before that effect fires, true afterward. ---
