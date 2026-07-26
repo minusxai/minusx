@@ -17,7 +17,7 @@
  *    boundary inspects their fields, so they alias pi internally.
  *  - RUNTIME (`getModel`, `streamSimple`, `EventStream`) is wrapped, not re-exported.
  *
- * See `Migration.md` in this folder for the full rationale and export surface.
+ * See `../AGENTS.md` for the rationale and the module map.
  */
 import {
   getModel as piGetModel,

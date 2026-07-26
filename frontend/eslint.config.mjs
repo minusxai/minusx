@@ -27,7 +27,7 @@ const RESTRICT_ADAPTER_FACTORY = {
 // pi-ai is isolated to orchestrator/llm/. Nothing else may import it — consumers
 // use the owned types + wrapped runtime from @/orchestrator/llm, faux/test
 // helpers from @/orchestrator/llm/testing, and typebox directly from "typebox".
-// See orchestrator/llm/Migration.md for the rationale.
+// See orchestrator/AGENTS.md for the rationale.
 //
 // INVARIANT: every `no-restricted-imports` override below must include
 // RESTRICT_PI_AI, EXCEPT the orchestrator/llm/** carve-out (the one place pi-ai
@@ -416,7 +416,7 @@ const eslintConfig = defineConfig([
   // (the MX proxy URL), so @/lib/config is permitted here (the app-agnostic
   // pattern ban is intentionally not applied). Must come AFTER the orchestrator/**
   // block so it wins (flat-config: last matching config replaces the rule).
-  // See orchestrator/llm/Migration.md for the rationale.
+  // See orchestrator/AGENTS.md for the rationale.
   {
     files: ["orchestrator/llm/**/*.ts"],
     rules: {

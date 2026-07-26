@@ -56,9 +56,6 @@ curl -fsSL https://minusx.ai/install.sh | bash
 
 Requires [Docker](https://docs.docker.com/get-docker/). While the image downloads, the script walks you through setup — workspace, AI model (with a live connection test), and optionally your first database — so you just log in when it finishes.
 
-## Local development
-For local development, check out [Local Dev Setup](./LOCAL_DEV.md) guide.
-
 ## Why MinusX
 
 We've spent years watching companies struggle with the same problem: they buy expensive "self-serve" BI tools, set it up over months, hire analysts, and build dashboards. And yet, most people in the company can't answer basic questions about their own data without pain and tears.
@@ -72,6 +69,69 @@ Anyone who has spent any time working with LLMs in data knows that the hard part
 
 dbt is amazing. Semantic models are great. Still, less than ~10% of fast growing companies have all their data modeled. This tech-debt only grows as you scale. MinusX is designed to work with or without dbt. Write messy SQL and have the agent clean it up!
 
+
+
+## Local development
+
+MinusX is a single Next.js application — there is no separate backend service.
+The AI chat/agent orchestration runs in-process (TypeScript orchestrator under
+`frontend/orchestrator/` + `frontend/agents/`).
+
+### 1. Install Dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+### 2. Configure Environment Variables
+
+**This is a one-time setup.**
+
+```bash
+cd frontend
+cp .env.example .env
+```
+
+Generate the required NextAuth secret:
+```bash
+openssl rand -base64 32
+```
+
+Edit `frontend/.env`:
+```bash
+NEXTAUTH_SECRET=<generated-secret-here>
+```
+
+The LLM provider is configured in the app after first launch (setup wizard
+"AI Models" step, or Settings → Models) — there are no LLM env vars.
+
+### 3. Start the App
+
+```bash
+cd frontend
+npm run dev
+```
+
+The application will be available at http://localhost:3000
+
+### 4. Run in production
+
+`docker-compose.yml` pulls the latest stable frontend image from ghcr.io and uses
+embedded PGLite for storage:
+```bash
+docker compose up -d
+```
+
+`docker-compose.prod.yml` pulls the canary image and uses an external Postgres
+database. Set `DATABASE_URL` in `frontend/.env` before starting (see
+`frontend/.env.example`):
+```bash
+# frontend/.env
+DATABASE_URL=postgresql://user:password@host:5432/dbname
+
+docker compose -f docker-compose.prod.yml up -d
+```
 
 ## License
 

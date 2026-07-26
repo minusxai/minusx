@@ -1,6 +1,27 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Repo-wide guidance for coding agents. This file is always loaded. Complex self-contained modules
+carry their own `AGENTS.md`, which loads automatically when you work on files under that directory —
+so this file stays repo-wide and the module files stay deep.
+
+## Module map
+
+| Module | `AGENTS.md` | What it owns |
+|---|---|---|
+| Orchestrator | `frontend/orchestrator/AGENTS.md` | The single-use engine over the append-only conversation log: the step loop, forking, server-vs-frontend tool tiers, and the `llm/` boundary (the only place allowed to import the LLM SDK). App-agnostic by ESLint rule. |
+| Agents & tools | `frontend/agents/AGENTS.md` | Every agent and tool definition (`analyst`, `web-analyst`, `benchmark-analyst`, `slack`, `eval`, `micro`, `report`, `onboarding`). Tool/agent contracts, TypeBox param schemas, the `Base*` vs `*.server.ts` split, and registration. |
+| SQL / IR | `frontend/lib/sql/AGENTS.md` | The SQL↔IR round-trip (`sql-to-ir` → `ir-transforms` → `ir-to-sql`), parameter application (none/inline/typed), LIMIT enforcement, whitelist resolution, and editor autocomplete. |
+| Semantic models | `frontend/lib/semantic/AGENTS.md` | The authored semantic tier: compiling a query spec to IR, the three validation tiers (static → compile → warehouse dry-run), the save gate, and derived vs authored models. |
+| Connectors | `frontend/lib/connections/AGENTS.md` | Every analytics connector (DuckDB, BigQuery, Postgres, SQLite, Athena, Mongo, ClickHouse, CSV, Sheets), the `NodeConnector` contract, streaming, schema loading, and column profiling. **Read this before adding a connector.** |
+| File health rubric | `frontend/lib/rubric/AGENTS.md` | Deterministic + LLM-judge scoring of question/dashboard/story/context files, the rule catalog, and the research grounding behind every threshold. |
+| Docs site | `docs/AGENTS.md` | The public documentation site at docs.minusx.ai — a separate app from `frontend/`, statically exported. |
+
+> **Keep these current — it is part of the change, not follow-up work.** If a PR changes a module's
+> architecture, moves or deletes a file an `AGENTS.md` points at, or invalidates a documented gotcha,
+> update that `AGENTS.md` **in the same PR**. `npm run check-agents-md` (wired into `npm run validate`)
+> fails on any pointer that no longer resolves — it catches dead paths, not stale prose, so the prose
+> is on you. These files document the code **as it is today**: no plan narratives, no migration
+> history, no changelogs. That is what git is for.
 
 ---
 
@@ -40,13 +61,6 @@ These directories hold the in-process TypeScript orchestrator and agent/tool def
 
 ---
 
-## Project Overview
-
-MinusX is an agentic, file-system based BI Tool that combines:
-- **Frontend**: Next.js 16 + React 19 + Chakra UI v3 + Redux (also hosts the in-process AI chat/agent orchestrator — no separate backend service)
-- **Storage**: PGLite (open-source) or Postgres for documents (questions, dashboards), DuckDB/BigQuery/PostgreSQL for analytics
-- **Architecture**: Dual-database system with integer ID-based file access, hierarchical permissions, and mode-based file system isolation
-
 ## Common Development Commands
 
 ### Frontend (Next.js)
@@ -84,7 +98,7 @@ A separate Playwright project (`playwright.qa.config.ts`) that drives the **real
 
 **How it runs:**
 - **Locally / in CI (no `QA_BASE_URL`):** the config **builds + starts a prod server** (`npm run build && npm run start`, `output: standalone`-style), with the build-time E2E flag OFF and the runtime e2e gate ON. The CI job is `.github/workflows/qa.yml` (`QA Flows (prod build)`) — it runs in PR CI, so QA flows gate merges. **Always prod build, never `next dev`** — the dev server compiles routes on demand and races cold builds under parallel workers (`page.goto` timeouts).
-- **Against a deployment:** set `QA_BASE_URL` (+ `QA_EMAIL`/`QA_PASSWORD`/`QA_E2E_SECRET`); the webServer is skipped and flows hit that URL. (The `deploys` repo's `qa.yml` action does this.)
+- **Against a deployment:** set `QA_BASE_URL` (+ `QA_EMAIL`/`QA_PASSWORD`/`QA_E2E_SECRET`); the webServer is skipped and flows hit that URL. (An action in the private `minusxai/deploys` repo does this.)
 
 **Non-negotiable rules for QA flows:**
 - **Tutorial mode only — never org/production.** Every navigation and `/api/files` discovery carries `mode=tutorial` (helpers `e2eUrl`/`modeUrl`/`QA_MODE` in `test/qa/flows.ts`). Mutating flows additionally `assertTutorialMode(page)` before writing and hard-assert created paths start with `/tutorial`. The system default is `org`, so tutorial is opt-in on *every* request — a missing `mode=tutorial` silently writes to production.
@@ -96,11 +110,6 @@ A separate Playwright project (`playwright.qa.config.ts`) that drives the **real
 **Adding a QA flow:** add a `*.spec.ts` under `test/qa/`, compose helpers from `flows.ts` (or add new ones there), stay in tutorial mode, drive via clicks/`getByLabel`, assert against the exposed Redux store (`window.__MX_STORE__`, via `assertRedux`). Verify with `npm run test:qa <pattern>` (builds a local prod server).
 
 ### Backend
-
-There is no separate backend service. The AI chat/agent orchestration runs
-in-process inside the Next.js app (TypeScript orchestrator under
-`frontend/orchestrator/` + `frontend/agents/`). Analytics queries run
-in the Node.js connectors (`frontend/lib/connections/`).
 
 Chat is served by `POST /api/conversations/[id]/turns` (fires `runConversationTurn` detached — does not block on the LLM call) and `GET /api/conversations/[id]/stream` (resumable SSE via Postgres LISTEN/NOTIFY), both routing through `lib/chat/conversation-turn.server.ts` → the orchestration core. Tool/skill schemas are served from TypeScript (`GET /api/tools/schema`).
 
@@ -201,7 +210,7 @@ The configs system provides per-company configuration stored as database documen
 - When loading a dashboard, referenced questions are fetched and included
 - References prevent circular dependencies at save time
 
-**Query Execution Flow** (`lib/query-cache/` — implements `docs/Query Execution, Cache, & Params Arch V2.md`)
+**Query Execution Flow** (`lib/query-cache/`)
 1. User edits SQL → Redux tracks state
 2. Execute → `POST /api/query`; client calls are funneled through `querySemaphore` (caps concurrency at `MAX_CONCURRENT_QUERIES`)
 3. Route applies params (`applyNoneParams`) and derives dialect via the lightweight `ConnectionsAPI.getRawByName` — *not* `FilesAPI.loadFile`, which can trigger schema profiling
@@ -220,17 +229,12 @@ Connection schemas are enriched with column-level metadata (category, null count
 - Dirty detection: Compare states via JSON serialization
 - After save: Update `originalState` to match `currentState`
 
-### Directory Structure
-
-- `frontend/` — Next.js 16 app (React 19, Chakra UI, Redux): `app/` (App Router pages + API routes), `components/`, `lib/` (utilities, API clients, types), `store/` (Redux slices), `orchestrator/` + `agents/` (in-process AI chat/agent engine).
-- `data/` — database files (PGLite documents, DuckDB analytics).
-
 ## Key Design Patterns
 
 ### Development Patterns & Best Practices
 
 **Deep modules (Ousterhout) — the guiding design principle for this repository.** Modules should have simple, narrow interfaces hiding substantial implementation ("A Philosophy of Software Design"). Concretely:
-- A feature's complexity belongs in ONE cohesive module (e.g. `lib/canvas-story/` owns the entire canvas-render pipeline: raster, selection model, hooks, capture); callers compose a few deep hooks/functions rather than orchestrating internals.
+- A feature's complexity belongs in ONE cohesive module (e.g. `lib/query-cache/` owns the entire cached-execution pipeline — key classification, SWR windows, lease arbitration, the JSONL blob store — behind essentially one entry point); callers compose a few deep hooks/functions rather than orchestrating internals.
 - Components should be thin compositions — if a component grows past ~150 lines of logic, extract the subsystems into hooks/pure modules under the owning `lib/` module (pure logic in plain `.ts` files so it's unit-testable without a DOM).
 - Prefer making an existing module deeper (adding capability behind the same interface) over adding a new shallow module or a pass-through layer. Classitis, tiny wrappers, and config-forwarding layers are code smells.
 
@@ -244,7 +248,7 @@ Connection schemas are enriched with column-level metadata (category, null count
   - The typed interface is the single source of truth. Only extract specific keys when the target API requires a different shape (e.g. Mixpanel's `$email` reserved field).
 
 **Component Patterns**
-- **Container/View separation (enforced)**: containers (`components/containers/`) connect to Redux and pass data/callbacks down; views (`components/views/`) are pure presentation. All 11 originally-identified candidate views — `QuestionViewV2.tsx`, `DashboardView.tsx`, `ConnectionFormV2.tsx`, `TransformationView.tsx`, `AlertView.tsx`, `ReportView.tsx`, `CodeView.tsx`, `NotebookView.tsx`, `story/StoryView.tsx`, `shared/AgentHtml.tsx`, `story/InlineNumber.tsx` — have been resolved: 10 had their Redux access (`useAppSelector`/`useAppDispatch`) moved up into their container(s) and now take the equivalent values/callbacks as props, each done Blue→Red→Blue with characterization tests proving the move preserved behavior. The ESLint rule `RESTRICT_VIEW_REDUX` (`eslint.config.mjs`) locks this in by name for those 10 files — it blocks `@/store/hooks`/`react-redux` imports there, so a regression fails `npm run validate`, not just review. `story/InlineNumber.tsx` and `shared/StoryEmbeds.tsx` are deliberate, documented exceptions to the guard (structural peer of dynamically-instantiated embed containers, and store re-provider for a nested React root in an iframe, respectively — reasons inline in `eslint.config.mjs`). `components/views/shared/empty-states.tsx` (a shared leaf used by 5 of the above views) also no longer reads Redux directly — it sources branding via the `useConfigs()` CORE hook instead of `useAppSelector(selectBranding)`. **When touching a `components/views/**` file**: the convention now holds — if you need new state in a view, add it as a prop and source it in the container, not via a direct Redux hook.
+- **Container/View separation (enforced)**: containers (`components/containers/`) connect to Redux and pass data/callbacks down; views (`components/views/`) are pure presentation. All 10 originally-identified candidate views — `QuestionViewV2.tsx`, `DashboardView.tsx`, `ConnectionFormV2.tsx`, `AlertView.tsx`, `ReportView.tsx`, `CodeView.tsx`, `NotebookView.tsx`, `story/StoryView.tsx`, `shared/AgentHtml.tsx`, `story/InlineNumber.tsx` — have been resolved: 10 had their Redux access (`useAppSelector`/`useAppDispatch`) moved up into their container(s) and now take the equivalent values/callbacks as props, each done Blue→Red→Blue with characterization tests proving the move preserved behavior. The ESLint rule `RESTRICT_VIEW_REDUX` (`eslint.config.mjs`) locks this in by name for those 10 files — it blocks `@/store/hooks`/`react-redux` imports there, so a regression fails `npm run validate`, not just review. `story/InlineNumber.tsx` and `shared/StoryEmbeds.tsx` are deliberate, documented exceptions to the guard (structural peer of dynamically-instantiated embed containers, and store re-provider for a nested React root in an iframe, respectively — reasons inline in `eslint.config.mjs`). `components/views/shared/empty-states.tsx` (a shared leaf used by 5 of the above views) also no longer reads Redux directly — it sources branding via the `useConfigs()` CORE hook instead of `useAppSelector(selectBranding)`. **When touching a `components/views/**` file**: the convention now holds — if you need new state in a view, add it as a prop and source it in the container, not via a direct Redux hook.
 - **Composition over inheritance**: Build complex UIs from simple, reusable components
 - **Single responsibility**: Each component should do one thing well
 
@@ -296,7 +300,7 @@ The chat UI has two view modes: **Compact** (inline tool rows via `SimpleChatMes
 - **Authorization**: `getEffectiveUser()` checks permissions on every request
 - **Admin users**: Can see all files and impersonate other users via `?as_user=email` URL parameter (home_folder required but not enforced)
 - **Non-admin users**: Restricted to files in their `home_folder` (hierarchical)
-- **User management**: All users managed via database and `/users` UI (legacy `users.yml` removed)
+- **User management**: All users managed via database and the `/users` UI. The legacy YAML-file user store is gone — there is no users file to edit.
 - **Required fields**: All users (including admins) must have `home_folder` set (default: `/org`)
 - **Protected paths**: System prevents creation/modification of protected files (e.g., `/config/users.yml`)
 - **Permission model**: File-path based with entity whitelisting (future)
@@ -354,7 +358,7 @@ Server-side, `applyNoneParams` (`app/api/query/route.ts`) treats **only `null`**
 - `components/question/VizTypeSelector.tsx` - Viz type icon buttons
 - `components/question/QuestionVisualization.tsx` - The render dispatcher (Vega vs DOM tier)
 
-**Rendered-document surfaces & styling (Renderer_v2).** Rendered documents (story, dashboard, question, notebook, report, alert + run outputs) are on the **Tailwind v4 + vendored shadcn kit** stack (`components/kit/*`; tokens generated into `app/theme-tokens.css` by `npm run generate-app-theme-css`, scoped under `[data-mx-theme-host]` — never bare `:root`). Admin/form surfaces (connections, users, settings) and the app shell KEEP Chakra; an ESLint `@chakra-ui` import ban (`eslint.config.mjs`) locks converted files. **Dashboards render inside a main-document live-svg surface** (Option B2: `[data-file-id] > SvgPageSurface (svg[data-mx-surface-svg] > foreignObject) > [aria-label="Dashboard"]`); capture serializes that live svg (`lib/screenshot/serialize-surface.ts`), and everything else main-document goes through `serialize-element.ts` (both stamp `chakra-theme <mode>` + `[data-mx-theme-host]` so token-backed styles resolve in the detached copy). Dashboards take an optional `content.theme` (one of the six story themes) stamped as `data-theme` on the region inside the surface. **Question tiles are windowed** (`components/views/dashboard/WindowedTile.tsx`): off-viewport tiles are busy layout ghosts; the capture readiness gate broadcasts `mx-force-mount-tiles` so captures never serialize ghosts. Cross-engine guarantees (Chromium/WebKit/Firefox) live in `npm run capture-matrix` (`scripts/capture-matrix.ts` + `b2-surface-matrix.ts` + `story-width-matrix.ts`).
+**Rendered-document surfaces & styling (Renderer_v2).** Rendered documents (story, dashboard, question, notebook, report, alert + run outputs) are on the **Tailwind v4 + vendored shadcn kit** stack (`components/kit/*`; tokens generated into `app/theme-tokens.css` by `npm run generate-app-theme-css`, scoped under `[data-mx-theme-host]` — never bare `:root`). Admin/form surfaces (connections, users, settings) and the app shell KEEP Chakra; an ESLint `@chakra-ui` import ban (`eslint.config.mjs`) locks converted files. **Dashboards render inside a same-origin iframe** (`components/views/shared/DashboardSurface.tsx`): the iframe document is self-contained — the generated chrome stylesheet (`lib/dashboard-surface/chrome-css.gen.ts`) plus the app-styles mirror are its ONLY style sources, injected inside the svg surface root so a serialized capture carries them by construction. It reuses the story machinery wholesale (`mountStorySurface`/`autoSizeStorySurface` from `lib/story-surface`, `StoryEmbedProviders` for the nested React root — iframe events don't bubble to the parent document), and because the surface svg carries `STORY_SVG_ATTR`, the story capture path picks dashboards up with no dashboard-specific code. Everything else main-document goes through `lib/screenshot/serialize-element.ts`, which stamps `chakra-theme <mode>` + `[data-mx-theme-host]` so token-backed styles resolve in the detached copy. Dashboards take an optional `content.theme` (one of the six story themes) stamped as `data-theme` on the region inside the surface. **Question tiles are windowed** (`components/views/dashboard/WindowedTile.tsx`): off-viewport tiles are busy layout ghosts; the capture readiness gate broadcasts `mx-force-mount-tiles` so captures never serialize ghosts. Cross-engine guarantees (Chromium/WebKit/Firefox) live in `npm run capture-matrix` (`scripts/capture-matrix.ts` + `b2-surface-matrix.ts` + `story-width-matrix.ts`).
 
 **File-view → LLM Image Pipeline** (`lib/screenshot/app-state-screenshot.ts`):
 The old per-chart `buildChartAttachments()` pipeline is DELETED. On message send from a file page, ONE screenshot of the whole rendered view is captured **lazily at send time** through the serialization pipeline (`captureFileViewBlob` → serialize → data-URL SVG → canvas → 512px JPEG), readiness-gated on `data-mx-busy` (never captures half-hydrated embeds) and cached in a one-slot cache keyed by content+results+color-mode. Marker-flagged types (`FILE_TYPE_METADATA[type].markers` — story, dashboard, notebook, report, alert, run outputs) get numbered position markers baked into the image plus a `<Viewport>` scroll pointer (`lib/screenshot/page-markers.ts`, gate `markersEnabledForAppState`).
@@ -397,35 +401,13 @@ Browser-side complement to `handleApiError`:
 
 ## Important Technical Details
 
-### Frontend
-- **React 19** with Next.js 16 (App Router)
-- **Chakra UI v3** with custom theme (Flat UI colors)
-- **Redux Toolkit** for state management
-- **@electric-sql/pglite** for embedded Postgres (open-source); `pg` for external Postgres (hosted)
-- **Monaco Editor** for SQL editing
-- **Vega / vega-lite** for visualizations (SVG-forced, design-theme chart tokens; ECharts is fully removed)
-- **NextAuth v5** for authentication
-
-### AI Orchestration (in-process)
-- **TypeScript orchestrator** (`frontend/orchestrator/` + `frontend/agents/`): LLM calls, append-only conversation log, tool/skill schemas — runs inside the Next.js app
-- **Analytics queries** run in the Next.js Node.js connectors (`frontend/lib/connections/`)
-- **Path Resolution**: DuckDB file paths are resolved relative to `BASE_DUCKDB_DATA_PATH` environment variable
-  - Absolute paths (starting with `/`) are used as-is
-  - Relative paths are prepended with `BASE_DUCKDB_DATA_PATH`
-  - Default `BASE_DUCKDB_DATA_PATH` is `.` (current directory)
-
-### Database
-- **PGLite** (embedded, open-source) or **Postgres** (hosted): Documents, metadata, configuration
-- **DuckDB**: Default analytics database (local)
-- **BigQuery/PostgreSQL**: Optional external data warehouses
-
 ### Environment Variables
 
 #### Frontend & Backend
 - `BASE_DUCKDB_DATA_PATH`: Base directory for resolving DuckDB file paths (default: `.`)
   - **Dev**: Set to `..` (both frontend and backend run from their respective subdirectories)
   - **Prod**: Set to `/app` (Docker container working directory)
-  - **Usage**: Relative paths in DuckDB connection configs are resolved relative to this path
+  - **Usage**: Relative paths in DuckDB connection configs are resolved relative to this path; absolute paths (starting with `/`) are used as-is
   - **Example**: With `BASE_DUCKDB_DATA_PATH=..` and `file_path: "data/default_db.duckdb"`, resolved path is `../data/default_db.duckdb`
   - **Note**: Replaces the old `DEFAULT_DUCKDB_PATH` variable which only stored the filename
 
@@ -464,10 +446,6 @@ Browser-side complement to `handleApiError`:
 
 ### Frontend State & Components
 - `frontend/store/` - Redux store with multiple domain slices:
-  - `filesSlice.ts` - File/document state management
-  - `chatSlice.ts` - Chat conversation state
-  - `queryResultsSlice.ts` - Query results cache
-  - `authSlice.ts` - Authentication state
   - `configsSlice.ts`, `usersSlice.ts`, `jobRunsSlice.ts`, `navigationSlice.ts`, `recordingsSlice.ts`, `uiSlice.ts` - remaining domain slices (see `store/store.ts` for the full reducer map)
 
   Connections and contexts are **not** Redux-slice-backed — they're loaded via SSR `preloadedState` + hooks (see "Loading Strategy" above), not a dedicated slice.
