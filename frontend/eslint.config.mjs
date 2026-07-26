@@ -373,7 +373,6 @@ const eslintConfig = defineConfig([
       "components/views/QuestionViewV2.tsx",
       "components/views/DashboardView.tsx",
       "components/views/ConnectionFormV2.tsx",
-      "components/views/TransformationView.tsx",
       "components/views/AlertView.tsx",
       "components/views/ReportView.tsx",
       "components/views/CodeView.tsx",
